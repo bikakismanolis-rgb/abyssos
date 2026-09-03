@@ -8,6 +8,7 @@ import {setNg,showBanner} from '../ui/hud.js';
 import {ring} from './effects.js';
 import {SFX} from '../audio/sfx.js';
 import {specialsUnlocked} from './progression.js';
+import {t} from '../i18n/index.js';
 
 export let G=null,P=null;
 export const cam={x:0,y:0};
@@ -41,7 +42,7 @@ export function nextTier(){
   G.tier++;applyTier();
   G.phase=0;G.phaseT=120;G.emerUsed=false;
   P.hp=P.maxHp;
-  showBanner(ngLabel(G.tier)+' · Νέο παιχνίδι',4);
+  showBanner(t('banner.newGame',{ng:ngLabel(G.tier)}),4);
   ring(P.x,P.y,340,1,'62,242,208',4);SFX.levelup();
-  if(specialsUnlocked()>before)setTimeout(function(){if(G&&G.state==='play')showBanner('Ξεκλειδώθηκαν ειδικές αναβαθμίσεις',3.5);},4300);
+  if(specialsUnlocked()>before)setTimeout(function(){if(G&&G.state==='play')showBanner(t('banner.specials'),3.5);},4300);
 }
