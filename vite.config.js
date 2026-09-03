@@ -15,7 +15,7 @@ export default defineConfig(({ mode }) => {
     build: {
       target: 'esnext',
       outDir: single ? 'release' : 'dist',
-      emptyOutDir: true
+      emptyOutDir: !single   // release/ also holds the APK; only dist/ is wiped
     },
     plugins: single
       ? [
