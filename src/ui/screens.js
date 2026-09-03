@@ -151,13 +151,24 @@ function renderShop(){
     row.appendChild(b);wrap.appendChild(row);
   });
 }
-export function openShop(){
+let shopFrom='start';
+export function openShop(from){
+  shopFrom=from||'start';
   const allMax=SHOP.every(function(s){return cost(s.key)===null;});
   say(allMax?'shop.soldout':'shop.line.'+(visitLine++%8));
-  renderShop();hide('start');show('shop');$('shop').scrollTop=0;
+  renderShop();hide(shopFrom);show('shop');$('shop').scrollTop=0;
 }
-$('shopback').addEventListener('click',function(){hide('shop');show('start');showBest();});
-$('startshop').addEventListener('click',openShop);
+$('shopback').addEventListener('click',function(){hide('shop');show(shopFrom);if(shopFrom==='start')showBest();});
+$('startshop').addEventListener('click',function(){openShop('start');});
+$('overshop').addEventListener('click',function(){openShop('over');});
+// back to the title screen after a dive: a fresh idle sea behind the menu
+function goHome(){
+  ['over','pausescr','levelup','settings','shop','ach'].forEach(hide);
+  newGame('start');hideBossBar();hideBanner();resetHud();
+  show('start');showBest();
+}
+$('overhome').addEventListener('click',goHome);
+$('pausequit').addEventListener('click',function(){if(G&&G.state==='pause'){hide('pausescr');G.state='play';gameOver();}});
 
 // ---------- settings ----------
 let settingsFrom='start';
