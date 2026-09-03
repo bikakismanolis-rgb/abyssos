@@ -8,7 +8,7 @@ import {openLevelUp} from '../ui/screens.js';
 
 export function capOf(def){return def.max+G.tier;}
 // The lamp never takes a slot; one more weapon slot opens with every new game
-export function weaponSlots(){return 4+G.tier;}
+export function weaponSlots(){return 4+G.tier+(G.extraSlots||0);}
 export function weaponSlotsUsed(){return Object.keys(G.weapons).filter(function(k){return k!=='lamp';}).length;}
 export function passiveSlots(){return 4+G.tier;}
 export function specialsUnlocked(){return Math.min(SPECIAL_ORDER.length,2*Math.floor(G.tier/5));}
@@ -29,12 +29,13 @@ export function levelOptions(){
   const extra=opts.filter(function(o){return o.lvl>=(o.kind==='w'?WEAPONS:PASSIVES)[o.key].max;});
   const normal=opts.filter(function(o){return o.lvl<(o.kind==='w'?WEAPONS:PASSIVES)[o.key].max;});
   const sp=shuffle(SPECIAL_ORDER.slice(0,specialsUnlocked()).filter(function(k){return !G.specials[k];})).map(function(k){return{kind:'s',key:k};});
+  const n=G.cardCount||3;   // a fourth card is a shop upgrade
   const out=[];
   if(sp.length)out.push(sp.shift());
   if(extra.length)out.push(extra.shift());
   const rest=normal.concat(extra,sp);
-  while(out.length<3&&rest.length)out.push(rest.shift());
-  if(out.length<3)out.push({kind:'heal'});
+  while(out.length<n&&rest.length)out.push(rest.shift());
+  if(out.length<n)out.push({kind:'heal'});
   return out;
 }
 export function pips(l,max){let s='';for(let i=0;i<max;i++)s+=i<l?'●':'○';if(l>max)s+=' +'+(l-max);return s;}

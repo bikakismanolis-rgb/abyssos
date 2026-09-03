@@ -32,7 +32,11 @@
   <p class="sub" data-i18n="start.sub">Ένα μικρό βαθυσκάφος, ένα φως, και ό,τι ζει εκεί κάτω.</p>
   <p class="how" data-i18n="start.how">Σύρε το δάχτυλό σου οπουδήποτε στην οθόνη για να κινηθείς (ή WASD στο πληκτρολόγιο). Ο προβολέας στρέφεται μόνος του στον πιο κοντινό εχθρό και τα όπλα ρίχνουν μόνα τους. Μάζεψε το φως που αφήνουν τα πλάσματα για να ανέβεις επίπεδο και να διαλέξεις νέα όπλα. Σκότωσε και τα δύο αφεντικά για να περάσεις σε νέο παιχνίδι (NG+), με πιο δυνατούς εχθρούς και νέα ταβάνια αναβαθμίσεων.</p>
   <button class="btn" id="startbtn" data-i18n="start.dive">Κατάδυση</button>
-  <button class="btn ghost" id="startsettings" data-i18n="start.settings">Ρυθμίσεις</button>
+  <div class="row">
+    <button class="btn ghost" id="startshop" data-i18n="start.shop">Κατάστημα</button>
+    <button class="btn ghost" id="startsettings" data-i18n="start.settings">Ρυθμίσεις</button>
+  </div>
+  <p class="best" id="startlight"></p>
   <p class="best" id="startbest"></p>
 </div>
 
@@ -41,6 +45,42 @@
   <p class="sub" data-i18n="levelup.pick">Διάλεξε μία αναβάθμιση</p>
   <p class="slots" id="slots"></p>
   <div class="cards" id="cards"></div>
+  <button class="btn ghost small hidden" id="rerollbtn">Άλλες κάρτες</button>
+</div>
+
+<div id="shop" class="screen hidden">
+  <div class="keeper">
+    <svg class="keeperart" viewBox="0 0 120 120" width="96" height="96" aria-hidden="true">
+      <defs>
+        <radialGradient id="kglow" cx="0.5" cy="0.45" r="0.5"><stop offset="0" stop-color="#ffd58a" stop-opacity="0.9"/><stop offset="0.5" stop-color="#ffb547" stop-opacity="0.25"/><stop offset="1" stop-color="#ffb547" stop-opacity="0"/></radialGradient>
+        <linearGradient id="krust" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6b4a2a"/><stop offset="1" stop-color="#2d1d10"/></linearGradient>
+      </defs>
+      <circle cx="60" cy="52" r="52" fill="url(#kglow)"/>
+      <!-- legs and claws, poking out under the lantern -->
+      <g stroke="#c9713a" stroke-width="4" stroke-linecap="round" fill="none">
+        <path d="M38 88 L26 100 L20 96"/><path d="M46 92 L40 106"/><path d="M74 92 L80 106"/><path d="M82 88 L94 100 L100 96"/>
+      </g>
+      <path d="M30 78 C18 74 12 84 20 92 C26 96 34 90 32 84 Z" fill="#d9834a"/>
+      <path d="M90 78 C102 74 108 84 100 92 C94 96 86 90 88 84 Z" fill="#d9834a"/>
+      <!-- the rusted ship's lantern -->
+      <rect x="36" y="22" width="48" height="66" rx="8" fill="url(#krust)" stroke="#8a6238" stroke-width="2"/>
+      <rect x="52" y="12" width="16" height="12" rx="3" fill="#4a3320" stroke="#8a6238" stroke-width="2"/>
+      <path d="M52 12 Q60 2 68 12" fill="none" stroke="#8a6238" stroke-width="3" stroke-linecap="round"/>
+      <rect x="44" y="34" width="32" height="42" rx="4" fill="#ffe2a8" opacity="0.92"/>
+      <rect x="44" y="34" width="32" height="42" rx="4" fill="none" stroke="#3a2614" stroke-width="2"/>
+      <line x1="60" y1="34" x2="60" y2="76" stroke="#3a2614" stroke-width="1.5" opacity="0.5"/>
+      <!-- the hermit, eyes on stalks looking out of the glass -->
+      <ellipse cx="60" cy="62" rx="11" ry="8" fill="#b5602c"/>
+      <line x1="55" y1="56" x2="52" y2="46" stroke="#b5602c" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="65" y1="56" x2="68" y2="46" stroke="#b5602c" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="52" cy="45" r="3.2" fill="#0b2a3c"/><circle cx="68" cy="45" r="3.2" fill="#0b2a3c"/>
+      <circle cx="53" cy="44" r="1" fill="#e8f3ff"/><circle cx="69" cy="44" r="1" fill="#e8f3ff"/>
+    </svg>
+    <div class="speech"><b data-i18n="shop.keeper">Ο Ερημίτης</b><p id="shopquote"></p></div>
+  </div>
+  <p class="light"><span data-i18n="shop.light">Φως</span> <b id="shoplight">0</b> ◆</p>
+  <div class="items" id="shopitems"></div>
+  <button class="btn" id="shopback" data-i18n="settings.back">Πίσω</button>
 </div>
 
 <div id="pausescr" class="screen hidden">
@@ -68,6 +108,7 @@
   <h2 data-i18n="over.title">Τέλος κατάδυσης</h2>
   <p class="record hidden" id="newrecord" data-i18n="over.newRecord">Νέο ρεκόρ</p>
   <div class="stats" id="stats"></div>
+  <div class="lightrow"><span data-i18n="over.light">Φως</span><b id="overlight">+0</b><small id="overlightdetail"></small></div>
   <p class="wlabel" data-i18n="over.weapons">Όπλα</p>
   <div class="wlist" id="overweapons"></div>
   <button class="btn" id="againbtn" data-i18n="over.again">Ξανά</button>
