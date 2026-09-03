@@ -7,6 +7,7 @@ import {drawBackground,drawRays,drawSnow,drawVignette,drawLamp,drawGlow,inView} 
 import {drawEnemy,ghostAlpha} from './creatures.js';
 import {drawPlayer} from './player.js';
 import {drawFx,drawParticles,drawNumbers,drawJoystick} from './fx.js';
+import {drawEventsGlow,drawEventsBody,drawFog} from './events.js';
 
 export function render(){
   const sh=G.shake,ox=sh?rnd(-sh,sh):0,oy=sh?rnd(-sh,sh):0;
@@ -20,6 +21,8 @@ export function render(){
   for(const e of G.enemies){
     if(!inView(e.x,e.y,120))continue;
     if(e.type==='angler'){drawGlow(e.lureX,e.lureY,26,e.col,0.9);drawGlow(e.x,e.y,e.r*1.4,e.col,0.12);}
+    else if(e.type==='beacon'){drawGlow(e.lureX,e.lureY,70+12*Math.sin(G.t*4+e.seed),e.col,0.9);drawGlow(e.x,e.y,e.r*2,e.col,0.3);}
+    else if(e.type==='plankton')drawGlow(e.x,e.y,e.r*2.5,e.col,0.5+0.3*Math.sin(G.t*5+e.seed));
     else if(e.ghost)drawGlow(e.x,e.y,e.r*2.6,e.col,ghostAlpha(e)*0.6);
     else if(e.mine)drawGlow(e.x,e.y,e.r*2.2,e.col,e.warn?0.35+0.35*Math.sin(G.t*16+e.seed):0.25);
     else drawGlow(e.x,e.y,e.r*(e.boss?2.4:2.1),e.col,e.boss?0.55:0.42);
@@ -31,9 +34,11 @@ export function render(){
   for(const b of G.bullets)drawGlow(b.x,b.y,12,'200,240,255',0.7);
   for(const t of G.torps)drawGlow(t.x,t.y,16,'255,200,120',0.7);
   drawGlow(P.x+Math.cos(P.aim)*P.r*0.95,P.y+Math.sin(P.aim)*P.r*0.95,22,'255,235,190',0.9);
+  drawEventsGlow();
   drawFx();
   drawParticles();
   ctx.globalCompositeOperation='source-over';
+  drawEventsBody();
 
   // bodies
   for(const mo of G.motes){if(!inView(mo.x,mo.y,20))continue;ctx.fillStyle='#e8fffa';ctx.beginPath();ctx.arc(mo.x,mo.y,2.2,0,TAU);ctx.fill();}
@@ -46,7 +51,7 @@ export function render(){
   drawNumbers();
   ctx.restore();
 
-  drawSnow(true);drawVignette();
+  drawSnow(true);drawFog();drawVignette();
   if(P.flash>0){ctx.fillStyle='rgba(255,50,70,'+(P.flash*0.22).toFixed(3)+')';ctx.fillRect(0,0,W,H);}
   if(P.hp<P.maxHp*0.3&&G.state==='play'){const a=0.12+0.1*Math.sin(clock*6);ctx.fillStyle='rgba(255,60,80,'+a.toFixed(3)+')';ctx.fillRect(0,0,W,H);}
   drawJoystick();

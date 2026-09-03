@@ -32,9 +32,24 @@ export const ET={
   angler:{hp:130,spd:48,dmg:24,r:21,xp:12,col:'200,130,255',turn:1.2,wob:0},
   urchin:{hp:60,spd:34,dmg:28,r:13,xp:5,col:'255,120,90',turn:0.6,wob:0,mine:true},
   ghost:{hp:40,spd:190,dmg:18,r:10,xp:6,col:'190,230,255',turn:2.5,wob:90,wobf:11,ghost:true},
+  // phase 3 creatures, gated by depth zone in spawnWave
+  plankton:{hp:5,spd:60,dmg:4,r:6,xp:1,col:'150,255,200',turn:2,wob:50,wobf:8},
+  beacon:{hp:40,spd:55,dmg:10,r:12,xp:5,col:'255,240,150',turn:1.5,wob:0},
+  inksquid:{hp:70,spd:60,dmg:14,r:14,xp:7,col:'120,90,170',turn:2,wob:0},
+  shrimp:{hp:50,spd:80,dmg:16,r:11,xp:8,col:'255,150,120',turn:3,wob:20},
+  // bosses: slot 1 (first of the cycle) and slot 2 (second, ends the cycle)
   boss1:{hp:1500,spd:55,dmg:30,r:44,xp:60,col:'255,120,60',turn:1,wob:0,boss:true},
-  boss2:{hp:3600,spd:50,dmg:38,r:60,xp:120,col:'255,70,120',turn:0.9,wob:0,boss:true}
+  boss2:{hp:3600,spd:50,dmg:38,r:60,xp:120,col:'255,70,120',turn:0.9,wob:0,boss:true},
+  queen:{hp:1800,spd:25,dmg:26,r:48,xp:70,col:'255,140,230',turn:0.6,wob:0,boss:true},
+  leviathan:{hp:3200,spd:95,dmg:34,r:30,xp:130,col:'120,255,190',turn:1.4,wob:0,boss:true},
+  wreck:{hp:2600,spd:30,dmg:30,r:56,xp:90,col:'190,160,110',turn:0.5,wob:0,boss:true}
 };
+// Which boss fills each slot, by depth at spawn time (1,500 m and 3,500 m keep the first cycle unchanged)
+export function bossTypeFor(slot,depth,tier){
+  const z=depth<1500?0:depth<3500?1:2;
+  if(slot===1)return z===0?'boss1':z===1?'queen':['wreck','queen','boss1'][tier%3];
+  return z===0?'boss2':z===1?'leviathan':['boss2','leviathan'][tier%2];
+}
 export const ZONES=[
   {d:0,top:[9,54,92],bot:[3,24,46]},
   {d:1000,top:[5,28,60],bot:[2,9,24]},

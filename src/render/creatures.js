@@ -122,6 +122,111 @@ export function drawGhost(e){
   ctx.fillStyle='rgba(255,255,255,0.95)';ctx.beginPath();ctx.arc(s*0.8,-s*0.15,s*0.17,0,TAU);ctx.fill();
   ctx.restore();ctx.globalAlpha=1;
 }
+// ---------- phase 3 creatures ----------
+export function drawPlankton(e){
+  const s=e.r,ph=G.t*3+e.seed;
+  ctx.fillStyle='rgba('+e.col+',0.75)';
+  for(let k=0;k<4;k++){const a=ph+k*1.57,rr=s*0.7+Math.sin(ph*1.3+k)*s*0.3;ctx.beginPath();ctx.arc(e.x+Math.cos(a)*rr,e.y+Math.sin(a)*rr,s*0.4,0,TAU);ctx.fill();}
+  ctx.fillStyle='rgba(255,255,255,0.6)';ctx.beginPath();ctx.arc(e.x,e.y,s*0.3,0,TAU);ctx.fill();
+}
+export function drawBeacon(e){
+  const s=e.r,wag=Math.sin(G.t*10+e.seed)*0.35,pul=0.7+0.3*Math.sin(G.t*4+e.seed);
+  ctx.save();ctx.translate(e.x,e.y);ctx.rotate(e.ang);
+  ctx.fillStyle='rgba(60,70,110,0.95)';
+  ctx.beginPath();ctx.ellipse(0,0,s*1.5,s*0.7,0,0,TAU);ctx.fill();
+  ctx.beginPath();ctx.moveTo(-s*1.2,0);ctx.lineTo(-s*2.2,-s*0.8+wag*s);ctx.lineTo(-s*2.2,s*0.8+wag*s);ctx.closePath();ctx.fill();
+  // the lamp on a stalk above the head
+  ctx.strokeStyle='rgba(255,240,150,0.6)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(s*0.4,-s*0.6);ctx.quadraticCurveTo(s*1.1,-s*1.6,s*1.3,-s*1.2);ctx.stroke();
+  ctx.fillStyle='rgba(255,250,200,'+pul.toFixed(2)+')';ctx.beginPath();ctx.arc(s*1.3,-s*1.2,s*0.42,0,TAU);ctx.fill();
+  ctx.fillStyle='#04101b';ctx.beginPath();ctx.arc(s*0.8,-s*0.15,s*0.16,0,TAU);ctx.fill();
+  ctx.restore();
+  e.lureX=e.x+Math.cos(e.ang)*s*1.3+Math.sin(e.ang)*s*1.2;e.lureY=e.y+Math.sin(e.ang)*s*1.3-Math.cos(e.ang)*s*1.2;
+}
+export function drawInkSquid(e){
+  const s=e.r,c=e.col;
+  ctx.save();ctx.translate(e.x,e.y);ctx.rotate(e.ang);
+  ctx.strokeStyle='rgba('+c+',0.8)';ctx.lineWidth=Math.max(1.2,s*0.16);ctx.lineCap='round';
+  for(let k=0;k<6;k++){const y0=((k/5)-0.5)*s*1.1,ph=G.t*5+e.seed+k*0.9;
+    ctx.beginPath();ctx.moveTo(-s*0.5,y0);ctx.quadraticCurveTo(-s*1.5,y0*1.6+Math.sin(ph)*s*0.4,-s*2.6,y0*2.2+Math.sin(ph+1)*s*0.5);ctx.stroke();}
+  ctx.fillStyle='rgba(40,25,70,0.96)';ctx.strokeStyle='rgba('+c+',0.9)';ctx.lineWidth=1.3;
+  ctx.beginPath();ctx.moveTo(s*2,0);ctx.quadraticCurveTo(s*0.6,-s*0.9,-s*0.5,-s*0.6);ctx.lineTo(-s*0.5,s*0.6);ctx.quadraticCurveTo(s*0.6,s*0.9,s*2,0);ctx.fill();ctx.stroke();
+  ctx.fillStyle='#e8d8ff';ctx.beginPath();ctx.arc(-s*0.4,-s*0.3,s*0.18,0,TAU);ctx.fill();ctx.beginPath();ctx.arc(-s*0.4,s*0.3,s*0.18,0,TAU);ctx.fill();
+  ctx.fillStyle='#120818';ctx.beginPath();ctx.arc(-s*0.4,-s*0.3,s*0.09,0,TAU);ctx.fill();ctx.beginPath();ctx.arc(-s*0.4,s*0.3,s*0.09,0,TAU);ctx.fill();
+  ctx.restore();
+}
+export function drawShrimp(e){
+  const s=e.r,ph=G.t*8+e.seed;
+  ctx.save();ctx.translate(e.x,e.y);ctx.rotate(e.ang);
+  ctx.fillStyle='rgba('+e.col+',0.9)';ctx.strokeStyle='rgba(255,220,200,0.5)';ctx.lineWidth=1;
+  // segmented tail curling under
+  for(let k=0;k<5;k++){const x=-s*0.3-k*s*0.42,y=Math.sin(ph+k*0.6)*s*0.15+k*k*s*0.05;ctx.beginPath();ctx.ellipse(x,y,s*0.5,s*0.38-k*s*0.04,-k*0.25,0,TAU);ctx.fill();ctx.stroke();}
+  ctx.beginPath();ctx.ellipse(s*0.4,0,s*0.9,s*0.5,0,0,TAU);ctx.fill();ctx.stroke();
+  // the big snapping claw
+  ctx.fillStyle='rgba(255,200,170,0.95)';
+  ctx.beginPath();ctx.moveTo(s*0.9,-s*0.3);ctx.lineTo(s*2.1,-s*0.9);ctx.lineTo(s*2.3,-s*0.3);ctx.lineTo(s*1.4,s*0.1);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.moveTo(s*0.9,s*0.35);ctx.lineTo(s*1.7,s*0.5);ctx.lineTo(s*1.2,s*0.7);ctx.closePath();ctx.fill();
+  ctx.strokeStyle='rgba(255,220,200,0.6)';ctx.beginPath();ctx.moveTo(s*0.8,-s*0.4);ctx.lineTo(s*1.6,-s*1.3);ctx.moveTo(s*0.9,-s*0.2);ctx.lineTo(s*1.8,-s*0.9);ctx.stroke();
+  ctx.fillStyle='#200a0a';ctx.beginPath();ctx.arc(s*0.9,-s*0.25,s*0.13,0,TAU);ctx.fill();
+  ctx.restore();
+}
+export function drawQueen(e){
+  const s=e.r,pulse=1+Math.sin(G.t*1.6+e.seed)*0.06,ss=s*pulse,c=e.col;
+  ctx.save();ctx.translate(e.x,e.y);ctx.rotate(e.ang+Math.PI/2);
+  // long tentacles; when stinging they snap straight
+  ctx.lineCap='round';
+  for(let k=0;k<11;k++){const x0=(k-5)*ss*0.19,ph=G.t*1.4+e.seed+k*0.7,len=ss*(2.2+0.5*Math.sin(ph));
+    ctx.strokeStyle='rgba('+c+','+(k%2?0.55:0.35)+')';ctx.lineWidth=k%2?2.2:1.2;
+    ctx.beginPath();ctx.moveTo(x0,ss*0.2);
+    if(e.sting>0){ctx.lineTo(x0*2.2,ss*3.4);}
+    else ctx.quadraticCurveTo(x0+Math.sin(ph)*ss*0.5,ss*1.3,x0*1.6+Math.sin(ph*0.7+1)*ss*0.6,ss*0.2+len);
+    ctx.stroke();}
+  const g=ctx.createRadialGradient(0,-ss*0.3,ss*0.1,0,0,ss);g.addColorStop(0,'rgba(255,220,250,0.7)');g.addColorStop(1,'rgba('+c+',0.35)');
+  ctx.fillStyle=g;ctx.strokeStyle='rgba('+c+',0.9)';ctx.lineWidth=1.6;
+  ctx.beginPath();ctx.arc(0,0,ss,Math.PI,0);ctx.quadraticCurveTo(ss*0.6,ss*0.45,0,ss*0.3);ctx.quadraticCurveTo(-ss*0.6,ss*0.45,-ss,0);ctx.fill();ctx.stroke();
+  // crown of lights
+  ctx.fillStyle='rgba(255,255,255,0.8)';
+  for(let k=0;k<5;k++){const a=Math.PI+k*Math.PI/4,r=ss*0.75;ctx.beginPath();ctx.arc(Math.cos(a)*r,Math.sin(a)*r,ss*0.06,0,TAU);ctx.fill();}
+  ctx.restore();
+}
+export function drawLeviathan(e){
+  const s=e.r,c=e.col,b=e.body;
+  // body: a tapering ribbon through the trail
+  ctx.lineCap='round';ctx.lineJoin='round';
+  if(b.length>2){
+    for(let i=b.length-1;i>0;i-=1){const k=i/b.length;ctx.strokeStyle='rgba('+c+','+(0.9-k*0.6).toFixed(2)+')';ctx.lineWidth=Math.max(2,s*1.5*(1-k*0.85));
+      ctx.beginPath();ctx.moveTo(b[i].x,b[i].y);ctx.lineTo(b[i-1].x,b[i-1].y);ctx.stroke();}
+    // fins along the spine
+    ctx.strokeStyle='rgba(200,255,230,0.35)';ctx.lineWidth=1.5;
+    for(let i=4;i<b.length-2;i+=5){const p=b[i],q=b[i-2];const dx=p.x-q.x,dy=p.y-q.y,d=Math.hypot(dx,dy)||1,px=-dy/d,py=dx/d,f=s*(1.4-i/b.length);
+      ctx.beginPath();ctx.moveTo(p.x+px*f*0.4,p.y+py*f*0.4);ctx.lineTo(p.x+px*f,p.y+py*f);ctx.moveTo(p.x-px*f*0.4,p.y-py*f*0.4);ctx.lineTo(p.x-px*f,p.y-py*f);ctx.stroke();}
+  }
+  // head
+  ctx.save();ctx.translate(e.x,e.y);ctx.rotate(e.ang);
+  ctx.fillStyle='rgba('+c+',0.95)';ctx.beginPath();ctx.moveTo(s*1.6,0);ctx.quadraticCurveTo(s*0.8,-s*0.9,-s*0.6,-s*0.75);ctx.lineTo(-s*0.6,s*0.75);ctx.quadraticCurveTo(s*0.8,s*0.9,s*1.6,0);ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,0.5)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(s*1.2,-s*0.1);ctx.lineTo(s*0.2,-s*0.5);ctx.stroke();
+  ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(s*0.5,-s*0.35,s*0.2,0,TAU);ctx.fill();ctx.beginPath();ctx.arc(s*0.5,s*0.35,s*0.2,0,TAU);ctx.fill();
+  ctx.fillStyle='#062018';ctx.beginPath();ctx.arc(s*0.58,-s*0.35,s*0.1,0,TAU);ctx.fill();ctx.beginPath();ctx.arc(s*0.58,s*0.35,s*0.1,0,TAU);ctx.fill();
+  ctx.restore();
+}
+export function drawWreck(e){
+  const s=e.r,c=e.col,tilt=Math.sin(G.t*0.7+e.seed)*0.08;
+  ctx.save();ctx.translate(e.x,e.y);ctx.rotate(e.ang+tilt);
+  // hull, keel down; barnacles; a broken mast
+  ctx.fillStyle='rgba(38,30,24,0.97)';ctx.strokeStyle='rgba('+c+',0.5)';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(-s*1.6,-s*0.5);ctx.lineTo(s*1.7,-s*0.5);ctx.quadraticCurveTo(s*1.9,s*0.4,s*1.1,s*0.75);ctx.lineTo(-s*1.2,s*0.75);ctx.quadraticCurveTo(-s*1.9,s*0.4,-s*1.6,-s*0.5);ctx.closePath();ctx.fill();ctx.stroke();
+  ctx.strokeStyle='rgba('+c+',0.35)';ctx.lineWidth=1;
+  for(let k=-3;k<=3;k++){ctx.beginPath();ctx.moveTo(-s*1.5,k*s*0.18);ctx.lineTo(s*1.6,k*s*0.18);ctx.stroke();}
+  ctx.strokeStyle='rgba(120,100,70,0.9)';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(s*0.1,-s*0.5);ctx.lineTo(s*0.35,-s*1.6);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(s*0.2,-s*1.25);ctx.lineTo(s*0.9,-s*1.1);ctx.stroke();
+  // portholes that still glow
+  for(let k=-2;k<=2;k++){const pul=0.6+0.4*Math.sin(G.t*2+k+e.seed);ctx.fillStyle='rgba(255,190,90,'+pul.toFixed(2)+')';ctx.beginPath();ctx.arc(k*s*0.6,s*0.05,s*0.11,0,TAU);ctx.fill();}
+  // barnacles and weed
+  ctx.fillStyle='rgba(150,160,140,0.8)';
+  for(let k=0;k<7;k++){const a=k*1.1+e.seed;ctx.beginPath();ctx.arc(Math.cos(a)*s*1.3,s*0.5+Math.sin(a)*s*0.15,s*0.07,0,TAU);ctx.fill();}
+  ctx.strokeStyle='rgba(60,140,90,0.6)';ctx.lineWidth=1.5;
+  for(let k=0;k<4;k++){const x=-s*1.2+k*s*0.8,ph=G.t*1.5+k;ctx.beginPath();ctx.moveTo(x,s*0.75);ctx.quadraticCurveTo(x+Math.sin(ph)*s*0.3,s*1.2,x+Math.sin(ph+1)*s*0.4,s*1.6);ctx.stroke();}
+  ctx.restore();
+}
 export function drawEnemy(e){
   switch(e.type){
     case 'urchin':drawUrchin(e);break;
@@ -132,5 +237,12 @@ export function drawEnemy(e){
     case 'squid':case 'boss1':drawSquid(e);break;
     case 'angler':drawAngler(e);break;
     case 'boss2':drawKraken(e);break;
+    case 'plankton':drawPlankton(e);break;
+    case 'beacon':drawBeacon(e);break;
+    case 'inksquid':drawInkSquid(e);break;
+    case 'shrimp':drawShrimp(e);break;
+    case 'queen':drawQueen(e);break;
+    case 'leviathan':drawLeviathan(e);break;
+    case 'wreck':drawWreck(e);break;
   }
 }

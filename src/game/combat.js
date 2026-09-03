@@ -32,7 +32,7 @@ export function killEnemy(e){
     for(let i=0;i<14;i++)G.motes.push(mote(e.x+rnd(-60,60),e.y+rnd(-60,60),Math.ceil(e.xp/14)));
     P.hp=Math.min(P.maxHp,P.hp+35);G.boss=null;hideBossBar();
     SFX.boom();G.shake=14;ring(e.x,e.y,260,0.8,'255,200,220',4);buzz(120);
-    if(e.type==='boss1'){G.phase=2;G.phaseT=90;showBanner(t('banner.calm'),3);}
+    if(e.slot===1){G.phase=2;G.phaseT=90;showBanner(t('banner.calm'),3);}
     else nextTier();
   }else{
     if(G.motes.length<320)G.motes.push(mote(e.x,e.y,e.xp));

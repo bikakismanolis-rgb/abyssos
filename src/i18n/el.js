@@ -218,5 +218,14 @@ export default {
   'ach.light1000.name': 'Χίλια φώτα',
   'ach.light1000.desc': 'Μάζεψε 1.000 Φως συνολικά.',
   'ach.shopAll.name': 'Τακτικός πελάτης',
-  'ach.shopAll.desc': 'Αγόρασε ό,τι πουλάει ο Ερημίτης.'
+  'ach.shopAll.desc': 'Αγόρασε ό,τι πουλάει ο Ερημίτης.',
+
+  // phase 3: zone bosses and events
+  'e.queen': 'Βασίλισσα των μεδουσών',
+  'e.leviathan': 'Λεβιάθαν',
+  'e.wreck': 'Αρχαίο ναυάγιο',
+  'event.current': 'Ρεύμα',
+  'event.vent': 'Θερμοπίδακας',
+  'event.chest': 'Ναυάγιο με κιβώτιο',
+  'event.light': '+{n} Φως'
 };
