@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#072d52"/><stop offset="1" stop-color="#03101b"/>
+    </linearGradient>
+    <radialGradient id="beam" cx="0" cy="0" r="602.1120000000001" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffdca0" stop-opacity="0.55"/>
+      <stop offset="0.5" stop-color="#ffd296" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#ffc88c" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#3ef2d0" stop-opacity="0.35"/><stop offset="1" stop-color="#3ef2d0" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="hull" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f2ca78"/><stop offset="0.5" stop-color="#c9953f"/><stop offset="1" stop-color="#6e4a1c"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#sea)"/>
+  <circle cx="256" cy="256" r="235.52" fill="url(#glow)"/>
+  <g transform="translate(256 256) rotate(-28)">
+    <path d="M0 0 L350.2 -489.8 A602.1120000000001 602.1120000000001 0 0 1 350.2 489.8 Z" fill="url(#beam)"/>
+    <line x1="-141.9264" y1="-43.008" x2="-141.9264" y2="43.008" stroke="#dcebff" stroke-opacity="0.7" stroke-width="12.9024" stroke-linecap="round"/>
+    <path d="M-60.2112 0 L-129.024 -68.81280000000001 L-129.024 17.203200000000002 Z" fill="#b3833f"/>
+    <ellipse rx="133.3248" ry="73.1136" fill="url(#hull)"/>
+    <line x1="-94.61760000000001" y1="0" x2="94.61760000000001" y2="0" stroke="#3c230a" stroke-opacity="0.5" stroke-width="6.88128"/>
+    <circle cx="17.203200000000002" cy="-8.601600000000001" r="30.96576" fill="#0b2a3c" stroke="#f6dfa8" stroke-width="9.46176"/>
+    <circle cx="10.32192" cy="-17.203200000000002" r="12.9024" fill="#82e6ff" fill-opacity="0.75"/>
+    <circle cx="47.308800000000005" cy="0" r="25.8048" fill="#8a6a34"/>
+    <circle cx="77.4144" cy="0" r="25.8048" fill="#fff3cf"/>
+    <circle cx="77.4144" cy="0" r="60.2112" fill="#ffebbe" fill-opacity="0.25"/>
+  </g>
+</svg>

@@ -1,0 +1,19 @@
+{
+  "name": "abyssos",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "build:single": "vite build --mode single",
+    "publish:web": "node scripts/publish-web.js",
+    "preview": "vite preview --host"
+  },
+  "devDependencies": {
+    "sharp": "^0.35.4",
+    "vite": "^7.1.0",
+    "vite-plugin-pwa": "^1.3.0",
+    "vite-plugin-singlefile": "^2.3.3"
+  }
+}

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+release/
+.upload-token
+.env
+.env.*
+.DS_Store
+Thumbs.db
+# never commit credentials
+*Token*.txt
+*token*.txt
