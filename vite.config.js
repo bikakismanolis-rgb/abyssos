@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => {
     base: single ? './' : (process.env.BASE_PATH || '/'),
     publicDir: single ? false : 'public',   // a lone HTML file needs no icons folder next to it
     build: {
-      target: 'esnext',
+      target: 'es2019',   // older Android WebViews must still parse the bundle
       outDir: single ? 'release' : 'dist',
       emptyOutDir: !single   // release/ also holds the APK; only dist/ is wiped
     },

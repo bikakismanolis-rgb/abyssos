@@ -1,4 +1,9 @@
 // ---------- bootstrap & main loop ----------
+// Any uncaught error is written on screen: on a phone there is no console to read.
+function fatal(msg){const el=document.getElementById('fatal');if(!el)return;el.textContent+=(el.textContent?'\n':'')+String(msg).slice(0,400);el.classList.remove('hidden');}
+window.addEventListener('error',function(e){fatal((e.message||e.error)+(e.filename?' @ '+e.filename.split('/').pop()+':'+e.lineno:''));});
+window.addEventListener('unhandledrejection',function(e){fatal('promise: '+(e.reason&&e.reason.message||e.reason));});
+
 import {load} from './save.js';
 import {applyAllSettings} from './settings.js';
 import {G,newGame,advanceClock} from './game/state.js';

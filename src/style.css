@@ -104,3 +104,4 @@ h2.mid small{font-family:var(--sans);font-size:13px;opacity:.6;margin-left:8px;f
 .ach b{font-size:14px;font-weight:600}
 .ach p{margin:1px 0 0;font-size:12px;opacity:.7;line-height:1.35}
 .wlist.gold span{border-color:rgba(255,181,71,.4);color:#ffd9a0}
+#fatal{position:fixed;left:8px;right:8px;bottom:calc(env(safe-area-inset-bottom,0px) + 8px);z-index:99;padding:10px 12px;border-radius:10px;background:rgba(120,20,40,.92);color:#fff;font:12px/1.4 monospace;white-space:pre-wrap;word-break:break-word;pointer-events:none}
