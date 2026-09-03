@@ -1,9 +1,11 @@
-// Uploads release/abyssos.html to the Supabase edge function "abyssos" (project TsigenisAppC),
-// which serves it as a download link. Run `npm run build:single` first.
+// Uploads the test builds to the Supabase edge function "abyssos" (project TsigenisAppC),
+// which serves them as download links:
+//   release/abyssos.html  (npm run build:single)          -> ...?download=1
+//   release/abyssos.apk   (android debug build, optional) -> ...?apk=1
 //   npm run publish:web
 // The upload token is read from the ABYSSOS_UPLOAD_TOKEN env var, or from the git-ignored
 // file .upload-token in the project root. Never commit the token.
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 
 const ENDPOINT = 'https://ljvyosnwsdnehlbejsvx.supabase.co/functions/v1/abyssos';
 const root = new URL('../', import.meta.url);
@@ -13,17 +15,20 @@ async function token() {
   try { return (await readFile(new URL('.upload-token', root), 'utf8')).trim(); }
   catch { console.error('No upload token: set ABYSSOS_UPLOAD_TOKEN or create .upload-token'); process.exit(1); }
 }
+const TOKEN = await token();
 
-const html = await readFile(new URL('release/abyssos.html', root));
-const up = await fetch(ENDPOINT, {
-  method: 'POST',
-  headers: { 'x-upload-token': await token(), 'Content-Type': 'text/html; charset=utf-8' },
-  body: html
-});
-console.log('upload:', up.status, await up.text());
-if (!up.ok) process.exit(1);
+async function publish(file, query, type, verifyQuery) {
+  const path = new URL('release/' + file, root);
+  try { await stat(path); } catch { console.log(file + ': not built, skipped'); return; }
+  const body = await readFile(path);
+  const up = await fetch(ENDPOINT + query, { method: 'POST', headers: { 'x-upload-token': TOKEN, 'Content-Type': type }, body: body });
+  console.log(file + ' upload:', up.status, await up.text());
+  if (!up.ok) process.exit(1);
+  const check = await fetch(ENDPOINT + verifyQuery);
+  const got = Buffer.from(await check.arrayBuffer());
+  console.log(file + ' verify:', check.status, check.headers.get('content-type'), got.length, 'bytes', got.equals(body) ? '(identical)' : '(DIFFERS!)');
+  console.log('  ' + ENDPOINT + verifyQuery);
+}
 
-const check = await fetch(ENDPOINT + '?download=1');
-const body = Buffer.from(await check.arrayBuffer());
-console.log('verify:', check.status, body.length, 'bytes', body.equals(html) ? '(identical to release/abyssos.html)' : '(DIFFERS!)');
-console.log('download: ' + ENDPOINT + '?download=1');
+await publish('abyssos.html', '', 'text/html; charset=utf-8', '?download=1');
+await publish('abyssos.apk', '?f=apk', 'application/vnd.android.package-archive', '?apk=1');
