@@ -1,36 +1,24 @@
 // ---------- data ----------
-// Pure data and formulas. No game state is imported here; passives receive the player object.
+// Pure data and formulas. No game state and no UI text here: names and descriptions live in src/i18n/
+// under the keys w.<key>.name / p.<key>.name / s.<key>.name / e.<type>.
 export const WEAPONS={
-  lamp:{name:'Προβολέας',desc:'Καίει ό,τι μπαίνει στη δέσμη φωτός μπροστά σου.',max:6,
-    lv:function(l){return{dmg:16+l*7,range:165+l*24,arc:Math.min(1.7,0.85+l*0.1)};}},
-  harpoon:{name:'Καμάκι',desc:'Ρίχνει καμάκια στον πιο κοντινό εχθρό. Διαπερνούν.',max:6,
-    lv:function(l){return{dmg:18+l*7,cd:Math.max(0.2,1.1-l*0.1),count:Math.min(6,1+Math.floor((l-1)/2)),pierce:1+Math.floor(l/2),speed:520};}},
-  field:{name:'Ηλεκτρικό πεδίο',desc:'Παλμός που χτυπά όλα όσα βρίσκονται γύρω σου.',max:6,
-    lv:function(l){return{dmg:16+l*8,cd:Math.max(0.6,2.6-l*0.22),radius:95+l*16};}},
-  orbs:{name:'Πυγολαμπίδες',desc:'Φώτα που περιστρέφονται γύρω σου και καίνε ό,τι αγγίζουν.',max:6,
-    lv:function(l){return{n:Math.min(8,1+Math.floor((l+1)/2)),dmg:22+l*5,r:62+l*6,spin:2.2+l*0.2};}},
-  torpedo:{name:'Τορπίλες',desc:'Κατευθυνόμενες τορπίλες που εκρήγνυνται σε ακτίνα.',max:6,
-    lv:function(l){return{dmg:40+l*16,cd:Math.max(0.7,2.8-l*0.25),radius:70+l*8,count:Math.min(5,1+Math.floor(l/3))};}},
-  sonar:{name:'Σόναρ',desc:'Κύμα που χτυπά, σπρώχνει μακριά και παραλύει όλους τους εχθρούς γύρω σου.',max:6,
-    lv:function(l){return{dmg:18+l*9,cd:Math.max(1.4,4.2-l*0.4),radius:190+l*25,push:460+l*50,stun:0.9+l*0.2};}}
+  lamp:{max:6,lv:function(l){return{dmg:16+l*7,range:165+l*24,arc:Math.min(1.7,0.85+l*0.1)};}},
+  harpoon:{max:6,lv:function(l){return{dmg:18+l*7,cd:Math.max(0.2,1.1-l*0.1),count:Math.min(6,1+Math.floor((l-1)/2)),pierce:1+Math.floor(l/2),speed:520};}},
+  field:{max:6,lv:function(l){return{dmg:16+l*8,cd:Math.max(0.6,2.6-l*0.22),radius:95+l*16};}},
+  orbs:{max:6,lv:function(l){return{n:Math.min(8,1+Math.floor((l+1)/2)),dmg:22+l*5,r:62+l*6,spin:2.2+l*0.2};}},
+  torpedo:{max:6,lv:function(l){return{dmg:40+l*16,cd:Math.max(0.7,2.8-l*0.25),radius:70+l*8,count:Math.min(5,1+Math.floor(l/3))};}},
+  sonar:{max:6,lv:function(l){return{dmg:18+l*9,cd:Math.max(1.4,4.2-l*0.4),radius:190+l*25,push:460+l*50,stun:0.9+l*0.2};}}
 };
 export const PASSIVES={
-  speed:{name:'Έλικες',desc:'+12% ταχύτητα κίνησης.',max:5,apply:function(P,f){P.speedMul+=0.12*f;}},
-  magnet:{name:'Μαγνήτης',desc:'+35% εμβέλεια συλλογής φωτός.',max:5,apply:function(P,f){P.magnet*=Math.pow(1.35,f);}},
-  hull:{name:'Θωράκιση',desc:'+25 μέγιστη αντοχή και άμεση επισκευή 25.',max:5,apply:function(P,f){P.maxHp+=25*f;P.hp=Math.min(P.maxHp,P.hp+25*f);}},
-  regen:{name:'Επισκευή',desc:'Η αντοχή ανεβαίνει κατά 1 κάθε δευτερόλεπτο.',max:5,apply:function(P,f){P.regen+=f;}},
-  power:{name:'Ισχύς',desc:'+12% ζημιά σε όλα τα όπλα.',max:5,apply:function(P,f){P.dmgMul+=0.12*f;}},
-  cool:{name:'Ψύξη',desc:'-10% χρόνος επαναφόρτισης όπλων.',max:4,apply:function(P,f){P.cdMul*=Math.pow(0.9,f);}}
+  speed:{max:5,apply:function(P,f){P.speedMul+=0.12*f;}},
+  magnet:{max:5,apply:function(P,f){P.magnet*=Math.pow(1.35,f);}},
+  hull:{max:5,apply:function(P,f){P.maxHp+=25*f;P.hp=Math.min(P.maxHp,P.hp+25*f);}},
+  regen:{max:5,apply:function(P,f){P.regen+=f;}},
+  power:{max:5,apply:function(P,f){P.dmgMul+=0.12*f;}},
+  cool:{max:4,apply:function(P,f){P.cdMul*=Math.pow(0.9,f);}}
 };
 // Special one-time upgrades: two unlock every 5 new games (NG+5, NG+10, NG+15)
-export const SPECIALS={
-  lamp2:{name:'Δεύτερος προβολέας',desc:'Δεύτερη δέσμη φωτός προς τα πίσω, με το 70% της ζημιάς.'},
-  emergency:{name:'Έκτακτη επισκευή',desc:'Μία φορά ανά παιχνίδι: όταν η αντοχή πέσει κάτω από 20%, το σκάφος γεμίζει.'},
-  overclock:{name:'Υπερφόρτιση',desc:'Όλα τα όπλα επαναφορτίζουν 20% γρηγορότερα.'},
-  shell:{name:'Ενισχυμένο κέλυφος',desc:'Δέχεσαι 30% λιγότερη ζημιά από κάθε χτύπημα.'},
-  deathpulse:{name:'Παλμός θανάτου',desc:'Κάθε πλάσμα που πεθαίνει τραυματίζει όσα βρίσκονται δίπλα του.'},
-  lightheal:{name:'Θεραπευτικό φως',desc:'Κάθε φως που μαζεύεις επισκευάζει 1 αντοχή.'}
-};
+export const SPECIALS={lamp2:{},emergency:{},overclock:{},shell:{},deathpulse:{},lightheal:{}};
 export const SPECIAL_ORDER=['lamp2','emergency','overclock','shell','deathpulse','lightheal'];
 // Each new game adds one level above the base cap; those extra levels give half the normal gain
 export function effLv(l,base){return l<=base?l:base+(l-base)*0.5;}
@@ -44,8 +32,8 @@ export const ET={
   angler:{hp:130,spd:48,dmg:24,r:21,xp:12,col:'200,130,255',turn:1.2,wob:0},
   urchin:{hp:60,spd:34,dmg:28,r:13,xp:5,col:'255,120,90',turn:0.6,wob:0,mine:true},
   ghost:{hp:40,spd:190,dmg:18,r:10,xp:6,col:'190,230,255',turn:2.5,wob:90,wobf:11,ghost:true},
-  boss1:{hp:1500,spd:55,dmg:30,r:44,xp:60,col:'255,120,60',turn:1,wob:0,boss:true,name:'Γιγάντιο καλαμάρι'},
-  boss2:{hp:3600,spd:50,dmg:38,r:60,xp:120,col:'255,70,120',turn:0.9,wob:0,boss:true,name:'Κράκεν'}
+  boss1:{hp:1500,spd:55,dmg:30,r:44,xp:60,col:'255,120,60',turn:1,wob:0,boss:true},
+  boss2:{hp:3600,spd:50,dmg:38,r:60,xp:120,col:'255,70,120',turn:0.9,wob:0,boss:true}
 };
 export const ZONES=[
   {d:0,top:[9,54,92],bot:[3,24,46]},

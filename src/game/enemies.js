@@ -7,6 +7,7 @@ import {showBanner,showBossBar} from '../ui/hud.js';
 import {SFX} from '../audio/sfx.js';
 import {burst} from './effects.js';
 import {hurtPlayer,mineBlast} from './combat.js';
+import {t} from '../i18n/index.js';
 
 export function spawnEnemy(type,x,y,hpMul){
   const t=ET[type];const hp=t.hp*(t.boss?(hpMul||1):G.hpScale);
@@ -35,8 +36,8 @@ export function spawnBoss(type){
   const ang=rnd(0,TAU),dist=Math.hypot(W,H)/2+120;
   const b=spawnEnemy(type,P.x+Math.cos(ang)*dist,P.y+Math.sin(ang)*dist,mul);
   b.timer=3;b.spawnT=6;G.boss=b;
-  showBanner('Κάτι μεγάλο πλησιάζει',3);
-  showBossBar(ET[type].name);
+  showBanner(t('banner.boss'),3);
+  showBossBar(t('e.'+type));
   SFX.whale();
 }
 export function nearestEnemies(n,maxD){

@@ -18,9 +18,9 @@
 <div id="xp"></div>
 <div id="hud">
   <div id="left"><div id="hpwrap"><div id="hp"></div></div><div id="time">0:00</div><div id="ng">NG</div></div>
-  <div id="depth"><span id="depthv">0</span><small>μέτρα</small></div>
+  <div id="depth"><span id="depthv">0</span><small data-i18n="hud.meters">μέτρα</small></div>
   <div id="right">
-    <button id="pausebtn" aria-label="Παύση"><svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="2" y="1" width="3.5" height="12" rx="1"/><rect x="8.5" y="1" width="3.5" height="12" rx="1"/></svg></button>
+    <button id="pausebtn" aria-label="Παύση" data-i18n-aria="hud.pause"><svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="2" y="1" width="3.5" height="12" rx="1"/><rect x="8.5" y="1" width="3.5" height="12" rx="1"/></svg></button>
     <div id="lvl">Επ. 1</div>
   </div>
 </div>
@@ -28,30 +28,49 @@
 <div id="banner"></div>
 
 <div id="start" class="screen">
-  <h1>Άβυσσος</h1>
-  <p class="sub">Ένα μικρό βαθυσκάφος, ένα φως, και ό,τι ζει εκεί κάτω.</p>
-  <p class="how">Σύρε το δάχτυλό σου οπουδήποτε στην οθόνη για να κινηθείς (ή WASD στο πληκτρολόγιο). Ο προβολέας στρέφεται μόνος του στον πιο κοντινό εχθρό και τα όπλα ρίχνουν μόνα τους. Μάζεψε το φως που αφήνουν τα πλάσματα για να ανέβεις επίπεδο και να διαλέξεις νέα όπλα. Σκότωσε και τα δύο αφεντικά για να περάσεις σε νέο παιχνίδι (NG+), με πιο δυνατούς εχθρούς και νέα ταβάνια αναβαθμίσεων.</p>
-  <button class="btn" id="startbtn">Κατάδυση</button>
+  <h1 data-i18n="app.name">Άβυσσος</h1>
+  <p class="sub" data-i18n="start.sub">Ένα μικρό βαθυσκάφος, ένα φως, και ό,τι ζει εκεί κάτω.</p>
+  <p class="how" data-i18n="start.how">Σύρε το δάχτυλό σου οπουδήποτε στην οθόνη για να κινηθείς (ή WASD στο πληκτρολόγιο). Ο προβολέας στρέφεται μόνος του στον πιο κοντινό εχθρό και τα όπλα ρίχνουν μόνα τους. Μάζεψε το φως που αφήνουν τα πλάσματα για να ανέβεις επίπεδο και να διαλέξεις νέα όπλα. Σκότωσε και τα δύο αφεντικά για να περάσεις σε νέο παιχνίδι (NG+), με πιο δυνατούς εχθρούς και νέα ταβάνια αναβαθμίσεων.</p>
+  <button class="btn" id="startbtn" data-i18n="start.dive">Κατάδυση</button>
+  <button class="btn ghost" id="startsettings" data-i18n="start.settings">Ρυθμίσεις</button>
   <p class="best" id="startbest"></p>
 </div>
 
 <div id="levelup" class="screen hidden">
   <p class="lvtitle" id="lvtitle">Επίπεδο 2</p>
-  <p class="sub">Διάλεξε μία αναβάθμιση</p>
+  <p class="sub" data-i18n="levelup.pick">Διάλεξε μία αναβάθμιση</p>
   <p class="slots" id="slots"></p>
   <div class="cards" id="cards"></div>
 </div>
 
 <div id="pausescr" class="screen hidden">
-  <h2>Παύση</h2>
-  <button class="btn" id="resumebtn">Συνέχεια</button>
-  <button class="btn ghost" id="mutebtn">Ήχος: ναι</button>
+  <h2 data-i18n="pause.title">Παύση</h2>
+  <button class="btn" id="resumebtn" data-i18n="pause.resume">Συνέχεια</button>
+  <button class="btn ghost" id="pausesettings" data-i18n="pause.settings">Ρυθμίσεις</button>
+</div>
+
+<div id="settings" class="screen hidden">
+  <h2 data-i18n="settings.title">Ρυθμίσεις</h2>
+  <div class="opts">
+    <label class="opt"><span data-i18n="settings.sfx">Ένταση εφέ</span><input type="range" id="opt-sfx" min="0" max="100" step="5"></label>
+    <label class="opt"><span data-i18n="settings.music">Ένταση μουσικής</span><input type="range" id="opt-music" min="0" max="100" step="5"></label>
+    <label class="opt"><span data-i18n="settings.vibrate">Δόνηση</span><input type="checkbox" id="opt-vibrate"></label>
+    <div class="opt"><span data-i18n="settings.joystick">Μοχλός</span><div class="seg" id="opt-joystick"><button type="button" data-v="free" data-i18n="settings.free">Ελεύθερος</button><button type="button" data-v="fixed" data-i18n="settings.fixed">Σταθερός</button></div></div>
+    <div class="opt"><span data-i18n="settings.joySide">Θέση μοχλού</span><div class="seg" id="opt-joyside"><button type="button" data-v="left" data-i18n="settings.left">Αριστερά</button><button type="button" data-v="right" data-i18n="settings.right">Δεξιά</button></div></div>
+    <label class="opt"><span data-i18n="settings.dmg">Αριθμοί ζημιάς</span><input type="checkbox" id="opt-dmg"></label>
+    <div class="opt"><span data-i18n="settings.lang">Γλώσσα</span><div class="seg" id="opt-lang"><button type="button" data-v="el">Ελληνικά</button><button type="button" data-v="en">English</button></div></div>
+  </div>
+  <button class="btn" id="settingsback" data-i18n="settings.back">Πίσω</button>
 </div>
 
 <div id="over" class="screen hidden">
-  <h2>Το φως έσβησε</h2>
+  <p class="eyebrow" data-i18n="over.sub">Το φως έσβησε</p>
+  <h2 data-i18n="over.title">Τέλος κατάδυσης</h2>
+  <p class="record hidden" id="newrecord" data-i18n="over.newRecord">Νέο ρεκόρ</p>
   <div class="stats" id="stats"></div>
-  <button class="btn" id="againbtn">Ξανά</button>
+  <p class="wlabel" data-i18n="over.weapons">Όπλα</p>
+  <div class="wlist" id="overweapons"></div>
+  <button class="btn" id="againbtn" data-i18n="over.again">Ξανά</button>
 </div>
 
 <script type="module" src="/src/main.js"></script>

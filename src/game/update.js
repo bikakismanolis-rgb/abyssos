@@ -11,12 +11,13 @@ import {bubble,burst} from './effects.js';
 import {showBanner,hideBanner} from '../ui/hud.js';
 import {SFX} from '../audio/sfx.js';
 import {rnd,lerp,angDiff} from '../util.js';
+import {t} from '../i18n/index.js';
 
 export function update(dt){
   G.t+=dt;G.depth+=DEPTH_RATE*dt;
   if(!G.boss){G.phaseT-=dt;if(G.phaseT<=0){if(G.phase===0){G.phase=1;spawnBoss('boss1');}else if(G.phase===2){G.phase=3;spawnBoss('boss2');}}}
-  if(G.zone===0&&G.depth>=1000){G.zone=1;showBanner('Ζώνη μεσονυκτίου',3);}
-  if(G.zone===1&&G.depth>=3000){G.zone=2;showBanner('Αβυσσαλέα ζώνη',3);}
+  if(G.zone===0&&G.depth>=1000){G.zone=1;showBanner(t('banner.midnight'),3);}
+  if(G.zone===1&&G.depth>=3000){G.zone=2;showBanner(t('banner.abyssal'),3);}
   if(G.bannerT>0){G.bannerT-=dt;if(G.bannerT<=0)hideBanner();}
   G.whaleT-=dt;if(G.whaleT<=0){G.whaleT=rnd(16,32);SFX.whale();}
   if(G.shake>0)G.shake=Math.max(0,G.shake-dt*30);

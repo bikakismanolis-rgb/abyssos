@@ -1,9 +1,9 @@
-// ---------- render: bolts, rings, zap, flash, particles, joystick overlay ----------
+// ---------- render: bolts, rings, zap, flash, particles, damage numbers, joystick overlay ----------
 import {ctx} from './canvas.js';
 import {G,P} from '../game/state.js';
 import {TAU} from '../util.js';
 import {drawGlow,inView} from './draw.js';
-import {joy,JR} from '../ui/input.js';
+import {joy,JR,joyFixed,joyAnchor} from '../ui/input.js';
 
 export function boltPath(x0,y0,x1,y1,jit){
   const dx=x1-x0,dy=y1-y0,d=Math.hypot(dx,dy)||1,n=Math.max(3,Math.ceil(d/15)),px=-dy/d,py=dx/d,pts=[[x0,y0]];
@@ -20,9 +20,10 @@ export function drawBolt(x0,y0,x1,y1,alpha,jit,width){
     ctx.lineWidth=width*0.7;ctx.beginPath();ctx.moveTo(bx,by);ctx.lineTo(bx+Math.cos(a)*l,by+Math.sin(a)*l);ctx.stroke();}
   ctx.globalAlpha=1;
 }
-// Glow-pass effects: G.fx entries (bolt / zap / flash / ring)
+// Glow-pass effects: G.fx entries (bolt / zap / flash / ring). Damage numbers are drawn later, in the body pass.
 export function drawFx(){
   for(const f of G.fx){const k=f.t/f.dur;
+    if(f.kind==='num')continue;
     if(f.kind==='bolt'){let x1=f.x1,y1=f.y1;if(f.tg){if(f.tg.dead){continue;}x1=f.tg.x;y1=f.tg.y;}
       let x0=P.x,y0=P.y;if(f.rel){x0+=f.dx0;y0+=f.dy0;x1=P.x+f.dx1;y1=P.y+f.dy1;}
       drawBolt(x0,y0,x1,y1,Math.min(1,1.3-k*1.3),f.jit,f.w);}
@@ -39,10 +40,23 @@ export function drawParticles(){
     else{ctx.globalAlpha=k*0.55;ctx.strokeStyle='rgba('+p.col+',1)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(p.x,p.y,p.s,0,TAU);ctx.stroke();}}
   ctx.globalAlpha=1;
 }
+// Floating damage numbers (world space, body pass)
+export function drawNumbers(){
+  let any=false;
+  for(const f of G.fx){if(f.kind!=='num')continue;
+    if(!any){any=true;ctx.font='600 12px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#fff3cf';}
+    const k=f.t/f.dur;ctx.globalAlpha=1-k*k;ctx.fillText(String(f.v),f.x,f.y-k*22);}
+  if(any){ctx.globalAlpha=1;ctx.textAlign='start';ctx.textBaseline='alphabetic';}
+}
 // Screen-space joystick overlay
 export function drawJoystick(){
-  if(joy.active&&G.state==='play'){
+  if(G.state!=='play')return;
+  if(joy.active){
     ctx.strokeStyle='rgba(255,255,255,0.25)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(joy.ox,joy.oy,JR,0,TAU);ctx.stroke();
     ctx.fillStyle='rgba(62,242,208,0.35)';ctx.beginPath();ctx.arc(joy.ox+joy.dx*JR,joy.oy+joy.dy*JR,18,0,TAU);ctx.fill();
+  }else if(joyFixed()){
+    const a=joyAnchor();
+    ctx.strokeStyle='rgba(255,255,255,0.12)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(a.x,a.y,JR,0,TAU);ctx.stroke();
+    ctx.fillStyle='rgba(62,242,208,0.15)';ctx.beginPath();ctx.arc(a.x,a.y,18,0,TAU);ctx.fill();
   }
 }

@@ -6,7 +6,7 @@ import {rnd,clamp,TAU} from '../util.js';
 import {drawBackground,drawRays,drawSnow,drawVignette,drawLamp,drawGlow,inView} from './draw.js';
 import {drawEnemy,ghostAlpha} from './creatures.js';
 import {drawPlayer} from './player.js';
-import {drawFx,drawParticles,drawJoystick} from './fx.js';
+import {drawFx,drawParticles,drawNumbers,drawJoystick} from './fx.js';
 
 export function render(){
   const sh=G.shake,ox=sh?rnd(-sh,sh):0,oy=sh?rnd(-sh,sh):0;
@@ -43,6 +43,7 @@ export function render(){
   for(const b of G.bullets){const l=Math.hypot(b.vx,b.vy)||1;ctx.beginPath();ctx.moveTo(b.x-b.vx/l*9,b.y-b.vy/l*9);ctx.lineTo(b.x+b.vx/l*7,b.y+b.vy/l*7);ctx.stroke();}
   for(const t of G.torps){ctx.save();ctx.translate(t.x,t.y);ctx.rotate(Math.atan2(t.vy,t.vx));ctx.fillStyle='#d9b675';ctx.beginPath();ctx.ellipse(0,0,9,3.5,0,0,TAU);ctx.fill();ctx.fillStyle='#ffd9a0';ctx.beginPath();ctx.arc(7,0,2.5,0,TAU);ctx.fill();ctx.restore();}
   drawPlayer();
+  drawNumbers();
   ctx.restore();
 
   drawSnow(true);drawVignette();

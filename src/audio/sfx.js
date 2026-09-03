@@ -1,16 +1,17 @@
 // ---------- audio ----------
-export const SFX={ac:null,master:null,muted:false,
+// Volume 0..1 comes from settings (effects volume); 0 silences everything, including the ambient drone.
+export const SFX={ac:null,master:null,vol:1,
   init(){
     if(this.ac)return;
     try{
       const AC=window.AudioContext||window.webkitAudioContext;
       this.ac=new AC();this.master=this.ac.createGain();
-      this.master.gain.value=this.muted?0:0.7;this.master.connect(this.ac.destination);
+      this.master.gain.value=0.7*this.vol;this.master.connect(this.ac.destination);
       this.ambient();
     }catch(e){this.ac=null;}
   },
   resume(){if(this.ac&&this.ac.state==='suspended')this.ac.resume();},
-  setMuted(m){this.muted=m;if(this.master)this.master.gain.value=m?0:0.7;},
+  setVolume(v){this.vol=Math.max(0,Math.min(1,v));if(this.master)this.master.gain.value=0.7*this.vol;},
   ambient(){
     const ac=this.ac;
     const g=ac.createGain();g.gain.value=0.16;
@@ -30,7 +31,7 @@ export const SFX={ac:null,master:null,muted:false,
     src.connect(nf);nf.connect(ng);ng.connect(this.master);src.start();
   },
   tone(f,dur,type,vol,to){
-    const ac=this.ac;if(!ac||this.muted)return;
+    const ac=this.ac;if(!ac||this.vol<=0)return;
     const t=ac.currentTime,o=ac.createOscillator();o.type=type||'sine';
     o.frequency.setValueAtTime(f,t);if(to)o.frequency.exponentialRampToValueAtTime(to,t+dur);
     const g=ac.createGain();g.gain.setValueAtTime(0.0001,t);
@@ -38,7 +39,7 @@ export const SFX={ac:null,master:null,muted:false,
     o.connect(g);g.connect(this.master);o.start(t);o.stop(t+dur+0.02);
   },
   noise(dur,vol,freq,q){
-    const ac=this.ac;if(!ac||this.muted)return;
+    const ac=this.ac;if(!ac||this.vol<=0)return;
     const t=ac.currentTime,len=Math.floor(ac.sampleRate*dur),buf=ac.createBuffer(1,len,ac.sampleRate),d=buf.getChannelData(0);
     for(let i=0;i<len;i++)d[i]=Math.random()*2-1;
     const s=ac.createBufferSource();s.buffer=buf;
