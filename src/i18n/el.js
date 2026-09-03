@@ -227,5 +227,9 @@ export default {
   'event.current': 'Ρεύμα',
   'event.vent': 'Θερμοπίδακας',
   'event.chest': 'Ναυάγιο με κιβώτιο',
-  'event.light': '+{n} Φως'
+  'event.light': '+{n} Φως',
+
+  // end-of-dive navigation
+  'over.home': 'Αρχική',
+  'pause.quit': 'Τέλος κατάδυσης'
 };

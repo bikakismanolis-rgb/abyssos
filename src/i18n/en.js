@@ -226,5 +226,9 @@ export default {
   'event.current': 'Current',
   'event.vent': 'Hydrothermal vent',
   'event.chest': 'Wreck with a chest',
-  'event.light': '+{n} Light'
+  'event.light': '+{n} Light',
+
+  // end-of-dive navigation
+  'over.home': 'Home',
+  'pause.quit': 'End the dive'
 };
