@@ -24,12 +24,23 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run build
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      # 1. web build with base '/' -> the Android debug APK
+      - name: Build Android APK
+        run: |
+          npm run build
+          npx cap sync android
+          cd android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon -q
+          cp app/build/outputs/apk/debug/app-debug.apk ../abyssos.apk
+      # 2. web build with base '/abyssos/' -> the site, with the APK next to it
+      - name: Build site
+        run: npm run build && cp abyssos.apk dist/abyssos.apk
         env:
           BASE_PATH: /abyssos/
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

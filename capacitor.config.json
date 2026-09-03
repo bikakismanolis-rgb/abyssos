@@ -1,0 +1,22 @@
+{
+  "appId": "com.bikakismanolis.abyssos",
+  "appName": "Άβυσσος",
+  "webDir": "dist",
+  "android": {
+    "backgroundColor": "#03101b",
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "backgroundColor": "#03101b",
+      "androidScaleType": "CENTER_CROP",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "overlaysWebView": true,
+      "style": "DARK",
+      "backgroundColor": "#03101b"
+    }
+  }
+}

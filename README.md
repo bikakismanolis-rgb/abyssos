@@ -37,3 +37,25 @@ src/audio/            Web Audio εφέ
 src/save.js           αποθήκευση ρεκόρ
 reference/            το αρχικό μονοαρχειακό abyssos.html, μόνο για αναφορά
 ```
+
+## Android
+
+Η εφαρμογή Android είναι το ίδιο web build μέσα σε Capacitor (`android/`).
+
+```bash
+npm run build                # dist/ με base '/'
+npx cap sync android         # αντιγράφει το dist/ και τα plugins στο android/
+npx cap open android         # ανοίγει το project στο Android Studio
+```
+
+Debug APK από τη γραμμή εντολών (θέλει JDK 21, π.χ. αυτό του Android Studio, και το Android SDK):
+
+```bash
+cd android && ./gradlew assembleDebug
+```
+
+Το APK βγαίνει στο `android/app/build/outputs/apk/debug/app-debug.apk`. Το CI χτίζει το ίδιο APK σε κάθε push και το δημοσιεύει στο `https://bikakismanolis-rgb.github.io/abyssos/abyssos.apk`.
+
+Εικονίδια και splash παράγονται από τα `assets/*.png` (που παράγονται με το sharp από το `public/icons/icon.svg`) με `npx capacitor-assets generate --android`.
+
+Για το Google Play χρειάζεται υπογεγραμμένο release bundle: Android Studio → Build → Generate Signed Bundle, με δικό σου keystore. Φύλαξε το keystore, χωρίς αυτό δεν γίνονται ενημερώσεις.
