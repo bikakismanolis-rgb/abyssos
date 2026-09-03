@@ -3,7 +3,8 @@
 // Only newGame() reassigns them.
 import {W,H} from '../render/canvas.js';
 import {rnd} from '../util.js';
-import {TIER_HP,TIER_DMG,TIER_SPD,TIER_DENSITY,xpFor,ngLabel} from './config.js';
+import {TIER_HP,TIER_DMG,TIER_SPD,TIER_DENSITY,xpFor,ngLabel,VESSELS,WEAPONS} from './config.js';
+import {save} from '../save.js';
 import {setNg,showBanner} from '../ui/hud.js';
 import {ring} from './effects.js';
 import {SFX} from '../audio/sfx.js';
@@ -23,13 +24,19 @@ export function initSnow(){
   for(let i=0;i<50;i++)snow.push({x:Math.random()*4000,y:Math.random()*4000,s:rnd(1.4,2.6),f:rnd(0.7,0.9),v:rnd(12,22)});
 }
 export function newGame(state){
-  P={x:0,y:0,vx:0,vy:0,dir:0,aim:0,hp:100,maxHp:100,r:13,speed:170,speedMul:1,magnet:95,regen:0,dmgMul:1,cdMul:1,armor:0,inv:0,flash:0,bubbleT:0};
+  const vk=save.meta.unlocks.vessels[save.meta.vessel]||save.meta.vessel==='bathy'?save.meta.vessel:'bathy';
+  const V=VESSELS[vk]||VESSELS.bathy;
+  P={x:0,y:0,vx:0,vy:0,dir:0,aim:0,hp:100,maxHp:100,r:13,speed:170,speedMul:1,magnet:95,regen:0,dmgMul:1,cdMul:1,armor:0,inv:0,flash:0,bubbleT:0,
+     vessel:vk,baseHp:V.maxHp,lampArc:V.lampArc,lampRange:V.lampRange};
+  P.speedMul=V.speed;
   G={state:state,t:0,depth:0,enemies:[],bullets:[],torps:[],motes:[],parts:[],fx:[],orbs:[],
      kills:0,level:1,xp:0,xpNext:xpFor(1),weapons:{lamp:1},passives:{},cds:{},
      spawnT:1.2,spawnEvery:1.15,phase:0,phaseT:150,boss:null,specials:{},emerUsed:false,zone:0,pendingLevels:0,
      hpScale:1,dmgScale:1,spdScale:1,tier:0,whaleT:14,orbAng:0,shake:0,lastKillSfx:0,bannerT:0,
-     extraSlots:0,cardCount:3,rerolls:0};
+     extraSlots:0,cardCount:3,rerolls:0,lampOnly1000:false,achT:0,achQueue:[],newAch:[]};
   applyUpgrades(P,G);
+  const sw=save.meta.startWeapon;
+  if(sw&&WEAPONS[sw]&&sw!=='lamp'&&save.meta.unlocks.startWeapons[sw])G.weapons[sw]=1;
   cam.x=P.x-W/2;cam.y=P.y-H/2;
   applyTier();
   initSnow();

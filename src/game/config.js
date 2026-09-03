@@ -42,5 +42,10 @@ export const ZONES=[
   {d:6000,top:[10,3,14],bot:[0,0,0]}
 ];
 export const DEPTH_RATE=7;
+// Vessels. The Dart trades hull for speed and a narrow, long searchlight; unlocked by killing the Kraken.
+export const VESSELS={
+  bathy:{maxHp:100,speed:1,lampArc:1,lampRange:1},
+  dart:{maxHp:70,speed:1.25,lampArc:0.6,lampRange:1.35}
+};
 export function ngLabel(t){if(t<=3){let s='NG';for(let i=0;i<t;i++)s+='+';return s;}return 'NG+'+t;}
 export function xpFor(l){return Math.floor(8+l*4+l*l*0.5);}

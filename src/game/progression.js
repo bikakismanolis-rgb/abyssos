@@ -5,6 +5,7 @@ import {shuffle} from '../util.js';
 import {SFX} from '../audio/sfx.js';
 import {burst} from './effects.js';
 import {openLevelUp} from '../ui/screens.js';
+import {save,saveNow} from '../save.js';
 
 export function capOf(def){return def.max+G.tier;}
 // The lamp never takes a slot; one more weapon slot opens with every new game
@@ -42,7 +43,11 @@ export function pips(l,max){let s='';for(let i=0;i<max;i++)s+=i<l?'●':'○';if
 // Applies the chosen card and consumes one pending level. The screen decides what to show next.
 export function chooseOption(o){
   if(o.kind==='heal')P.hp=P.maxHp;
-  else if(o.kind==='w')G.weapons[o.key]=(G.weapons[o.key]||0)+1;
+  else if(o.kind==='w'){
+    G.weapons[o.key]=(G.weapons[o.key]||0)+1;
+    // a weapon that reaches its base cap can be chosen as the starting weapon from then on
+    if(o.key!=='lamp'&&G.weapons[o.key]>=WEAPONS[o.key].max&&!save.meta.unlocks.startWeapons[o.key]){save.meta.unlocks.startWeapons[o.key]=true;saveNow();}
+  }
   else if(o.kind==='p'){const l=(G.passives[o.key]||0)+1;G.passives[o.key]=l;PASSIVES[o.key].apply(P,l<=PASSIVES[o.key].max?1:0.5);}
   else if(o.kind==='s'){G.specials[o.key]=true;if(o.key==='overclock')P.cdMul*=0.8;if(o.key==='shell')P.armor=0.3;}
   G.pendingLevels--;

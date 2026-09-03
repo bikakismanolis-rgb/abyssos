@@ -1,10 +1,11 @@
 // ---------- update ----------
 import {G,P,cam} from './state.js';
 import {W,H} from '../render/canvas.js';
-import {WEAPONS,effLv,DEPTH_RATE} from './config.js';
+import {DEPTH_RATE} from './config.js';
 import {readMove} from '../ui/input.js';
 import {nearestEnemies,updateEnemies,spawnWave,spawnBoss} from './enemies.js';
-import {updateWeapons} from './weapons.js';
+import {updateWeapons,lampStats} from './weapons.js';
+import {check as checkAchievements} from './achievements.js';
 import {hurtEnemy,explode} from './combat.js';
 import {collectMote} from './progression.js';
 import {bubble,burst} from './effects.js';
@@ -16,9 +17,12 @@ import {t} from '../i18n/index.js';
 export function update(dt){
   G.t+=dt;G.depth+=DEPTH_RATE*dt;
   if(!G.boss){G.phaseT-=dt;if(G.phaseT<=0){if(G.phase===0){G.phase=1;spawnBoss('boss1');}else if(G.phase===2){G.phase=3;spawnBoss('boss2');}}}
-  if(G.zone===0&&G.depth>=1000){G.zone=1;showBanner(t('banner.midnight'),3);}
+  if(G.zone===0&&G.depth>=1000){G.zone=1;if(Object.keys(G.weapons).length===1)G.lampOnly1000=true;showBanner(t('banner.midnight'),3);}
   if(G.zone===1&&G.depth>=3000){G.zone=2;showBanner(t('banner.abyssal'),3);}
   if(G.bannerT>0){G.bannerT-=dt;if(G.bannerT<=0)hideBanner();}
+  // achievements: checked twice a second, announced one at a time when the banner is free
+  G.achT-=dt;if(G.achT<=0){G.achT=0.5;const ids=checkAchievements(G,P,false);if(ids.length){G.achQueue.push.apply(G.achQueue,ids);G.newAch.push.apply(G.newAch,ids);}}
+  if(G.achQueue.length&&G.bannerT<=0){showBanner(t('ach.unlocked',{name:t('ach.'+G.achQueue.shift()+'.name')}),2.5);}
   G.whaleT-=dt;if(G.whaleT<=0){G.whaleT=rnd(16,32);SFX.whale();}
   if(G.shake>0)G.shake=Math.max(0,G.shake-dt*30);
 
@@ -29,7 +33,7 @@ export function update(dt){
   P.vx=lerp(P.vx,ix*sp,k);P.vy=lerp(P.vy,iy*sp,k);
   P.x+=P.vx*dt;P.y+=P.vy*dt;
   if(il>0.15)P.dir+=angDiff(P.dir,Math.atan2(iy,ix))*Math.min(1,7*dt);
-  const lampSt=WEAPONS.lamp.lv(effLv(G.weapons.lamp||1,WEAPONS.lamp.max));
+  const lampSt=lampStats();
   const ne=nearestEnemies(1,lampSt.range+90)[0];
   const aimTo=ne?Math.atan2(ne.y-P.y,ne.x-P.x):P.dir;
   P.aim+=angDiff(P.aim,aimTo)*Math.min(1,11*dt);
