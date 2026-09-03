@@ -217,5 +217,14 @@ export default {
   'ach.light1000.name': 'A thousand lights',
   'ach.light1000.desc': 'Gather 1,000 Light in total.',
   'ach.shopAll.name': 'Regular customer',
-  'ach.shopAll.desc': 'Buy everything the Hermit sells.'
+  'ach.shopAll.desc': 'Buy everything the Hermit sells.',
+
+  // phase 3: zone bosses and events
+  'e.queen': 'Jellyfish Queen',
+  'e.leviathan': 'Leviathan',
+  'e.wreck': 'Ancient Wreck',
+  'event.current': 'Current',
+  'event.vent': 'Hydrothermal vent',
+  'event.chest': 'Wreck with a chest',
+  'event.light': '+{n} Light'
 };

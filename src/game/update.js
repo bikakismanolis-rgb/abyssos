@@ -3,7 +3,8 @@ import {G,P,cam} from './state.js';
 import {W,H} from '../render/canvas.js';
 import {DEPTH_RATE} from './config.js';
 import {readMove} from '../ui/input.js';
-import {nearestEnemies,updateEnemies,spawnWave,spawnBoss} from './enemies.js';
+import {nearestEnemies,updateEnemies,updateEnemyBullets,spawnWave,spawnBoss} from './enemies.js';
+import {updateEvents} from './events.js';
 import {updateWeapons,lampStats} from './weapons.js';
 import {check as checkAchievements} from './achievements.js';
 import {hurtEnemy,explode} from './combat.js';
@@ -16,7 +17,8 @@ import {t} from '../i18n/index.js';
 
 export function update(dt){
   G.t+=dt;G.depth+=DEPTH_RATE*dt;
-  if(!G.boss){G.phaseT-=dt;if(G.phaseT<=0){if(G.phase===0){G.phase=1;spawnBoss('boss1');}else if(G.phase===2){G.phase=3;spawnBoss('boss2');}}}
+  if(!G.boss){G.phaseT-=dt;if(G.phaseT<=0){if(G.phase===0){G.phase=1;spawnBoss(1);}else if(G.phase===2){G.phase=3;spawnBoss(2);}}}
+  if(G.fog>0)G.fog=Math.max(0,G.fog-dt*0.35);
   if(G.zone===0&&G.depth>=1000){G.zone=1;if(Object.keys(G.weapons).length===1)G.lampOnly1000=true;showBanner(t('banner.midnight'),3);}
   if(G.zone===1&&G.depth>=3000){G.zone=2;showBanner(t('banner.abyssal'),3);}
   if(G.bannerT>0){G.bannerT-=dt;if(G.bannerT<=0)hideBanner();}
@@ -48,6 +50,11 @@ export function update(dt){
   updateWeapons(dt);
 
   updateEnemies(dt);
+  if(G.state!=='play')return;
+  updateEnemyBullets(dt);
+  if(G.state!=='play')return;
+  updateEvents(dt);
+  if(G.state!=='play')return;
 
   // bullets
   for(const b of G.bullets){
