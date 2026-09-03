@@ -59,3 +59,9 @@ cd android && ./gradlew assembleDebug
 Εικονίδια και splash παράγονται από τα `assets/*.png` (που παράγονται με το sharp από το `public/icons/icon.svg`) με `npx capacitor-assets generate --android`.
 
 Για το Google Play χρειάζεται υπογεγραμμένο release bundle: Android Studio → Build → Generate Signed Bundle, με δικό σου keystore. Φύλαξε το keystore, χωρίς αυτό δεν γίνονται ενημερώσεις.
+
+### Δοκιμαστικό κανάλι: ζωντανές ενημερώσεις
+
+Το `capacitor.config.json` έχει `server.url` προς το GitHub Pages: η εφαρμογή φορτώνει το παιχνίδι από τη σελίδα και ενημερώνεται μόνη της σε κάθε push, χωρίς νέο APK. Το offline δουλεύει μέσω του service worker της σελίδας μετά το πρώτο άνοιγμα.
+
+Για την έκδοση του Google Play, αφαίρεσε το `server` από το config ώστε το παιχνίδι να είναι ενσωματωμένο στο APK/AAB (`npx cap sync android` μετά).

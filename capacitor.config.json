@@ -2,6 +2,10 @@
   "appId": "com.bikakismanolis.abyssos",
   "appName": "Άβυσσος",
   "webDir": "dist",
+  "server": {
+    "url": "https://bikakismanolis-rgb.github.io/abyssos/",
+    "cleartext": false
+  },
   "android": {
     "backgroundColor": "#03101b",
     "allowMixedContent": false
