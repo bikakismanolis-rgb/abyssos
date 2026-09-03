@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#03101b">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Άβυσσος">
+<title>Άβυσσος</title>
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png">
+<link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="xp"></div>
+<div id="hud">
+  <div id="left"><div id="hpwrap"><div id="hp"></div></div><div id="time">0:00</div><div id="ng">NG</div></div>
+  <div id="depth"><span id="depthv">0</span><small>μέτρα</small></div>
+  <div id="right">
+    <button id="pausebtn" aria-label="Παύση"><svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="2" y="1" width="3.5" height="12" rx="1"/><rect x="8.5" y="1" width="3.5" height="12" rx="1"/></svg></button>
+    <div id="lvl">Επ. 1</div>
+  </div>
+</div>
+<div id="bossbar" class="hidden"><div id="bossname"></div><div id="bosswrap"><div id="bosshp"></div></div></div>
+<div id="banner"></div>
+
+<div id="start" class="screen">
+  <h1>Άβυσσος</h1>
+  <p class="sub">Ένα μικρό βαθυσκάφος, ένα φως, και ό,τι ζει εκεί κάτω.</p>
+  <p class="how">Σύρε το δάχτυλό σου οπουδήποτε στην οθόνη για να κινηθείς (ή WASD στο πληκτρολόγιο). Ο προβολέας στρέφεται μόνος του στον πιο κοντινό εχθρό και τα όπλα ρίχνουν μόνα τους. Μάζεψε το φως που αφήνουν τα πλάσματα για να ανέβεις επίπεδο και να διαλέξεις νέα όπλα. Σκότωσε και τα δύο αφεντικά για να περάσεις σε νέο παιχνίδι (NG+), με πιο δυνατούς εχθρούς και νέα ταβάνια αναβαθμίσεων.</p>
+  <button class="btn" id="startbtn">Κατάδυση</button>
+  <p class="best" id="startbest"></p>
+</div>
+
+<div id="levelup" class="screen hidden">
+  <p class="lvtitle" id="lvtitle">Επίπεδο 2</p>
+  <p class="sub">Διάλεξε μία αναβάθμιση</p>
+  <p class="slots" id="slots"></p>
+  <div class="cards" id="cards"></div>
+</div>
+
+<div id="pausescr" class="screen hidden">
+  <h2>Παύση</h2>
+  <button class="btn" id="resumebtn">Συνέχεια</button>
+  <button class="btn ghost" id="mutebtn">Ήχος: ναι</button>
+</div>
+
+<div id="over" class="screen hidden">
+  <h2>Το φως έσβησε</h2>
+  <div class="stats" id="stats"></div>
+  <button class="btn" id="againbtn">Ξανά</button>
+</div>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
