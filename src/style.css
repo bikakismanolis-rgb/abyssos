@@ -21,7 +21,7 @@ body{font-family:var(--sans);color:var(--ink);-webkit-user-select:none;user-sele
 #bosshp{height:100%;width:100%;background:var(--pink);box-shadow:0 0 8px var(--pink);transition:width .1s}
 #banner{position:fixed;left:0;right:0;top:36%;text-align:center;font-family:var(--serif);font-size:26px;letter-spacing:.08em;opacity:0;transition:opacity .6s;pointer-events:none;text-shadow:0 0 24px rgba(62,242,208,.6);padding:0 20px}
 #banner.show{opacity:1}
-.screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(2,10,20,.74);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);padding:24px 22px calc(env(safe-area-inset-bottom,0px) + 24px);text-align:center;overflow-y:auto}
+.screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;justify-content:safe center;background:rgba(2,10,20,.74);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);padding:24px 22px calc(env(safe-area-inset-bottom,0px) + 24px);text-align:center;overflow-y:auto}
 .hidden{display:none}
 h1{font-family:var(--serif);font-weight:400;font-style:italic;font-size:66px;margin:0 0 4px;letter-spacing:.05em;color:#eefaff;text-shadow:0 0 34px rgba(62,242,208,.55),0 0 80px rgba(62,242,208,.25)}
 h2{font-family:var(--serif);font-weight:400;font-size:34px;margin:0 0 14px;letter-spacing:.03em}
