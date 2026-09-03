@@ -1,7 +1,9 @@
 // Persistent save: one localStorage key, versioned schema, migration from older shapes.
 // Shape (version 1):
 //   { version:1, best:{depth,tier,time}, settings:{...DEFAULT_SETTINGS},
-//     meta:{ light, upgrades:{hull,dmg,speed,magnet,lamp,card4,reroll,slot}, stats:{dives,kills,maxDepth,time} } }
+//     meta:{ light, upgrades:{...DEFAULT_UPGRADES}, stats:{...DEFAULT_STATS},
+//            achievements:{ id: unixSeconds }, unlocks:{ startWeapons:{key:true}, vessels:{key:true} },
+//            startWeapon: null | weaponKey, vessel: vesselKey } }
 const KEY = 'abyssos-save';
 const LEGACY_BEST_KEY = 'abyssos-best';   // version 0: a bare best-depth number
 export const SAVE_VERSION = 1;
@@ -16,7 +18,7 @@ export const DEFAULT_SETTINGS = {
   lang: null          // null = follow the device language
 };
 export const DEFAULT_UPGRADES = { hull: 0, dmg: 0, speed: 0, magnet: 0, lamp: 0, card4: 0, reroll: 0, slot: 0 };
-export const DEFAULT_STATS = { dives: 0, kills: 0, maxDepth: 0, time: 0 };
+export const DEFAULT_STATS = { dives: 0, kills: 0, maxDepth: 0, time: 0, lightEarned: 0 };
 
 export let save = null;
 
@@ -30,11 +32,15 @@ function migrate(data) {
   // future: if (data.version === 1) { ...; data.version = 2; }
   data.best = Object.assign({ depth: 0, tier: 0, time: 0 }, data.best || {});
   data.settings = Object.assign({}, DEFAULT_SETTINGS, data.settings || {});
-  const meta = data.meta || {};
+  const meta = data.meta || {}, unlocks = meta.unlocks || {};
   data.meta = {
     light: meta.light || 0,
     upgrades: Object.assign({}, DEFAULT_UPGRADES, meta.upgrades || {}),
-    stats: Object.assign({}, DEFAULT_STATS, meta.stats || {})
+    stats: Object.assign({}, DEFAULT_STATS, meta.stats || {}),
+    achievements: meta.achievements || {},
+    unlocks: { startWeapons: unlocks.startWeapons || {}, vessels: unlocks.vessels || {} },
+    startWeapon: meta.startWeapon || null,
+    vessel: meta.vessel || 'bathy'
   };
   data.version = SAVE_VERSION;
   return data;

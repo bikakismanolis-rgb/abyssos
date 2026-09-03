@@ -1,7 +1,8 @@
 // ---------- render: glow sprites, background, rays, snow, vignette, lamp cone ----------
 import {ctx,W,H,getVignette} from './canvas.js';
 import {G,P,cam,snow,clock} from '../game/state.js';
-import {ZONES,WEAPONS,effLv} from '../game/config.js';
+import {ZONES} from '../game/config.js';
+import {lampStats} from '../game/weapons.js';
 import {clamp,lerp} from '../util.js';
 
 // ---------- glow sprites ----------
@@ -53,7 +54,7 @@ export function drawVignette(){
   ctx.drawImage(getVignette(),0,0,W,H);
 }
 export function drawLamp(){
-  const st=WEAPONS.lamp.lv(effLv(G.weapons.lamp,WEAPONS.lamp.max));
+  const st=lampStats();
   lampCone(P.aim,st,1);
   if(G.specials.lamp2)lampCone(P.aim+Math.PI,st,0.7);
 }

@@ -1,19 +1,21 @@
-// ---------- screens: start, level-up, pause, settings, shop, end of dive ----------
+// ---------- screens: start, level-up, pause, settings, shop, achievements, end of dive ----------
 import {$,fmtDepth,fmtTime} from '../util.js';
-import {G,newGame} from '../game/state.js';
-import {WEAPONS,PASSIVES,ngLabel} from '../game/config.js';
+import {G,P,newGame} from '../game/state.js';
+import {WEAPONS,PASSIVES,VESSELS,ngLabel} from '../game/config.js';
 import {levelOptions,chooseOption,pips,weaponSlots,weaponSlotsUsed,passiveSlots} from '../game/progression.js';
 import {SHOP,level,maxLevel,cost,light,buy,lightFor,addLight} from '../game/shop.js';
+import {ACHIEVEMENTS,has,count,check as checkAchievements} from '../game/achievements.js';
 import {joyEnd} from './input.js';
 import {SFX} from '../audio/sfx.js';
 import {showBanner,hideBanner,hideBossBar,resetHud,invalidateHud} from './hud.js';
-import {save,recordRun} from '../save.js';
+import {save,saveNow,recordRun} from '../save.js';
 import {settings,setSetting,buzz} from '../settings.js';
 import {t,deviceLang} from '../i18n/index.js';
 
 function show(id){$(id).classList.remove('hidden');}
 function hide(id){$(id).classList.add('hidden');}
 function visible(id){return !$(id).classList.contains('hidden');}
+function fmtLong(s){const h=Math.floor(s/3600);return h>0?h+':'+String(Math.floor(s%3600/60)).padStart(2,'0')+':'+String(Math.floor(s%60)).padStart(2,'0'):fmtTime(s);}
 
 // ---------- level up ----------
 function renderCards(){
@@ -53,6 +55,7 @@ export function gameOver(){
   const d=Math.floor(G.depth),m=t('over.m');
   const isRecord=recordRun(d,G.tier,G.t,G.kills);
   const earned=lightFor(d,G.kills,G.tier);addLight(earned.total);
+  G.newAch.push.apply(G.newAch,checkAchievements(G,P,true));
   const rows=[[t('over.depth'),fmtDepth(d)+' '+m],[t('over.time'),fmtTime(G.t)],[t('over.tier'),ngLabel(G.tier)],
     [t('over.creatures'),G.kills],[t('over.level'),G.level],[t('over.record'),fmtDepth(save.best.depth)+' '+m]];
   $('stats').innerHTML=rows.map(function(r){return '<span>'+r[0]+'</span><b>'+r[1]+'</b>';}).join('');
@@ -60,6 +63,8 @@ export function gameOver(){
   $('overlightdetail').textContent=t('over.lightDetail',{d:earned.depth,k:earned.kills,t:earned.tier});
   $('overweapons').innerHTML=Object.keys(G.weapons).map(function(k){return '<span>'+t('w.'+k+'.name')+' <b>'+G.weapons[k]+'</b></span>';}).join('');
   $('newrecord').classList.toggle('hidden',!isRecord);
+  $('overachwrap').classList.toggle('hidden',G.newAch.length===0);
+  $('overach').innerHTML=G.newAch.map(function(id){return '<span>★ '+t('ach.'+id+'.name')+'</span>';}).join('');
   hideBossBar();hideBanner();
   setTimeout(function(){show('over');},600);
   SFX.boom();buzz(80);
@@ -73,19 +78,58 @@ export function togglePause(){
 }
 
 // ---------- start ----------
+function chip(label,on,locked,title){
+  const b=document.createElement('button');b.type='button';b.className='chip'+(on?' on':'')+(locked?' locked':'');
+  b.textContent=label;if(title)b.title=title;return b;
+}
+function renderStart(){
+  const m=save.meta;
+  // vessel
+  const vw=$('vesselchips');vw.innerHTML='';
+  Object.keys(VESSELS).forEach(function(k){
+    const unlocked=k==='bathy'||!!m.unlocks.vessels[k];
+    const b=chip(t('v.'+k),m.vessel===k,!unlocked,t('v.'+k+'.desc'));
+    if(unlocked)b.addEventListener('click',function(){m.vessel=k;saveNow();renderStart();});
+    vw.appendChild(b);
+  });
+  $('vesseldesc').textContent=m.unlocks.vessels.dart||m.vessel==='dart'?t('v.'+m.vessel+'.desc'):t('v.bathy.desc')+' · '+t('v.dart')+': '+t('start.lockedDart');
+  // starting weapon
+  const unlockedW=Object.keys(WEAPONS).filter(function(k){return k!=='lamp'&&m.unlocks.startWeapons[k];});
+  const ww=$('weaponchips');ww.innerHTML='';
+  if(unlockedW.length){
+    const none=chip(t('start.none'),!m.startWeapon,false);none.addEventListener('click',function(){m.startWeapon=null;saveNow();renderStart();});ww.appendChild(none);
+    unlockedW.forEach(function(k){const b=chip(t('w.'+k+'.name'),m.startWeapon===k,false);b.addEventListener('click',function(){m.startWeapon=k;saveNow();renderStart();});ww.appendChild(b);});
+    $('weaponhint').classList.add('hidden');$('weaponlabel').classList.remove('hidden');
+  }else{$('weaponhint').classList.remove('hidden');$('weaponlabel').classList.add('hidden');}
+}
 export function showBest(){
   const b=save.best;
   $('startbest').textContent=b.depth>0?t('start.best',{d:fmtDepth(b.depth),ng:ngLabel(b.tier)}):'';
   $('startlight').textContent=t('start.light',{n:light()});
+  renderStart();
 }
 export function startGame(){
   SFX.init();SFX.resume();
   newGame('play');
-  ['start','over','pausescr','levelup','settings','shop'].forEach(hide);
+  ['start','over','pausescr','levelup','settings','shop','ach'].forEach(hide);
   hideBossBar();
   resetHud();
   setTimeout(function(){if(G&&G.state==='play')showBanner(t('banner.twilight'),2.5);},600);
 }
+
+// ---------- achievements & statistics ----------
+function renderAchievements(){
+  const s=save.meta.stats;
+  const rows=[[t('stats.dives'),s.dives],[t('stats.kills'),fmtDepth(s.kills)],[t('stats.maxDepth'),fmtDepth(s.maxDepth)+' '+t('over.m')],[t('stats.time'),fmtLong(s.time)],[t('stats.light'),fmtDepth(s.lightEarned||0)]];
+  $('lifestats').innerHTML=rows.map(function(r){return '<span>'+r[0]+'</span><b>'+r[1]+'</b>';}).join('');
+  $('achcount').textContent=count()+'/'+ACHIEVEMENTS.length;
+  $('achlist').innerHTML=ACHIEVEMENTS.map(function(a){
+    const got=has(a.id);
+    return '<div class="ach'+(got?' got':'')+'"><span class="star">'+(got?'★':'☆')+'</span><div><b>'+t('ach.'+a.id+'.name')+'</b><p>'+t('ach.'+a.id+'.desc')+'</p></div></div>';
+  }).join('');
+}
+$('startach').addEventListener('click',function(){renderAchievements();hide('start');show('ach');$('ach').scrollTop=0;});
+$('achback').addEventListener('click',function(){hide('ach');show('start');showBest();});
 
 // ---------- shop ----------
 let visitLine=0;
@@ -101,7 +145,7 @@ function renderShop(){
     if(c===null){b.textContent=t('shop.max');b.disabled=true;}
     else{b.textContent=c+' ◆';b.classList.toggle('poor',light()<c);}   // stays clickable so the Hermit can answer
     b.addEventListener('click',function(){
-      if(buy(s.key)){SFX.init();SFX.resume();SFX.levelup();buzz(30);say('shop.bought');renderShop();}
+      if(buy(s.key)){SFX.init();SFX.resume();SFX.levelup();buzz(30);say('shop.bought');renderShop();if(G)checkAchievements(G,P,true);}
       else say(cost(s.key)===null?'shop.soldout':'shop.poor');
     });
     row.appendChild(b);wrap.appendChild(row);
@@ -110,7 +154,7 @@ function renderShop(){
 export function openShop(){
   const allMax=SHOP.every(function(s){return cost(s.key)===null;});
   say(allMax?'shop.soldout':'shop.line.'+(visitLine++%8));
-  renderShop();hide('start');show('shop');
+  renderShop();hide('start');show('shop');$('shop').scrollTop=0;
 }
 $('shopback').addEventListener('click',function(){hide('shop');show('start');showBest();});
 $('startshop').addEventListener('click',openShop);

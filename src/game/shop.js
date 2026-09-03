@@ -29,14 +29,14 @@ export function lightFor(depth,kills,tier){
   const d=Math.floor(depth/50),k=Math.floor(kills/25),t=30*tier*(tier+1)/2;
   return{depth:d,kills:k,tier:t,total:d+k+t};
 }
-export function addLight(n){save.meta.light=light()+n;saveNow();}
+export function addLight(n){save.meta.light=light()+n;save.meta.stats.lightEarned=(save.meta.stats.lightEarned||0)+n;saveNow();}
 
 // Applied once per new game, right after the base player/game objects exist
 export function applyUpgrades(P,G){
   const u=save.meta.upgrades;
-  P.maxHp=Math.round(100*(1+0.05*u.hull));P.hp=P.maxHp;
+  P.maxHp=Math.round((P.baseHp||100)*(1+0.05*u.hull));P.hp=P.maxHp;
   P.dmgMul+=0.03*u.dmg;
-  P.speedMul+=0.03*u.speed;
+  P.speedMul+=0.03*u.speed;   // on top of the vessel's own speed factor
   P.magnet*=Math.pow(1.1,u.magnet);
   G.weapons.lamp=1+u.lamp;
   G.extraSlots=u.slot;

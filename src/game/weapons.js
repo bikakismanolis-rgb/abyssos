@@ -7,6 +7,11 @@ import {burst,ring} from './effects.js';
 import {SFX} from '../audio/sfx.js';
 import {rnd,TAU,angDiff} from '../util.js';
 
+// Searchlight stats for the current level, scaled by the vessel (the Dart has a narrow, long beam)
+export function lampStats(){
+  const st=WEAPONS.lamp.lv(effLv(G.weapons.lamp||1,WEAPONS.lamp.max));
+  st.range*=P.lampRange||1;st.arc*=P.lampArc||1;return st;
+}
 export function lampDamage(st,dt){
   const r2=st.range*st.range,second=!!G.specials.lamp2;
   for(const e of G.enemies){
@@ -67,7 +72,7 @@ export function tickCd(k,cd,fn,dt){
 export function updateWeapons(dt){
   for(const w in G.weapons){
     const st=WEAPONS[w].lv(effLv(G.weapons[w],WEAPONS[w].max));
-    if(w==='lamp')lampDamage(st,dt);
+    if(w==='lamp')lampDamage(lampStats(),dt);
     else if(w==='harpoon')tickCd(w,st.cd,function(){return fireHarpoon(st);},dt);
     else if(w==='field')tickCd(w,st.cd,function(){return firePulse(st);},dt);
     else if(w==='torpedo')tickCd(w,st.cd,function(){return fireTorpedo(st);},dt);

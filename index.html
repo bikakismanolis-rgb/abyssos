@@ -34,10 +34,27 @@
   <button class="btn" id="startbtn" data-i18n="start.dive">Κατάδυση</button>
   <div class="row">
     <button class="btn ghost" id="startshop" data-i18n="start.shop">Κατάστημα</button>
+    <button class="btn ghost" id="startach" data-i18n="start.ach">Επιτεύγματα</button>
     <button class="btn ghost" id="startsettings" data-i18n="start.settings">Ρυθμίσεις</button>
+  </div>
+  <div class="pick">
+    <p class="wlabel" data-i18n="start.vessel">Σκάφος</p>
+    <div class="chips" id="vesselchips"></div>
+    <p class="hint" id="vesseldesc"></p>
+    <p class="wlabel" id="weaponlabel" data-i18n="start.weapon">Αρχικό όπλο</p>
+    <div class="chips" id="weaponchips"></div>
+    <p class="hint" id="weaponhint" data-i18n="start.weaponHint">Ανέβασε ένα όπλο στο 6 για να ξεκινάς με αυτό.</p>
   </div>
   <p class="best" id="startlight"></p>
   <p class="best" id="startbest"></p>
+</div>
+
+<div id="ach" class="screen hidden">
+  <h2 data-i18n="stats.title">Στατιστικά</h2>
+  <div class="stats small" id="lifestats"></div>
+  <h2 class="mid"><span data-i18n="ach.title">Επιτεύγματα</span> <small id="achcount">0/0</small></h2>
+  <div class="achlist" id="achlist"></div>
+  <button class="btn" id="achback" data-i18n="settings.back">Πίσω</button>
 </div>
 
 <div id="levelup" class="screen hidden">
@@ -111,6 +128,10 @@
   <div class="lightrow"><span data-i18n="over.light">Φως</span><b id="overlight">+0</b><small id="overlightdetail"></small></div>
   <p class="wlabel" data-i18n="over.weapons">Όπλα</p>
   <div class="wlist" id="overweapons"></div>
+  <div id="overachwrap" class="hidden">
+    <p class="wlabel" data-i18n="over.ach">Νέα επιτεύγματα</p>
+    <div class="wlist gold" id="overach"></div>
+  </div>
   <button class="btn" id="againbtn" data-i18n="over.again">Ξανά</button>
 </div>
 

@@ -85,3 +85,22 @@ h2{font-family:var(--serif);font-weight:400;font-size:34px;margin:0 0 14px;lette
 .buy.poor{background:transparent;color:var(--ink);border:1px solid rgba(255,255,255,.22);box-shadow:none;opacity:.55}
 .buy:disabled{cursor:default}
 .buy:disabled:not(.poor){background:transparent;color:var(--teal);border:1px solid rgba(62,242,208,.35);box-shadow:none;opacity:.8}
+.row{flex-wrap:wrap;justify-content:center}
+.pick{width:100%;max-width:340px;margin:18px 0 0}
+.pick .wlabel{margin:0 0 6px}
+.chips{display:flex;flex-wrap:wrap;justify-content:center;gap:6px 8px;margin-bottom:6px}
+.chip{pointer-events:auto;cursor:pointer;font:500 13px var(--sans);color:var(--ink);background:rgba(6,28,48,.9);border:1px solid rgba(120,200,255,.22);border-radius:999px;padding:7px 14px;opacity:.8}
+.chip.on{background:rgba(62,242,208,.22);border-color:rgba(62,242,208,.6);color:#eefaff;opacity:1}
+.chip.locked{cursor:default;opacity:.35;border-style:dashed}
+.hint{margin:0 0 12px;font-size:12px;opacity:.5;line-height:1.4}
+.stats.small{font-size:14px;gap:6px 18px;margin:0 0 18px}
+.stats.small b{font-size:18px}
+h2.mid{font-size:26px;margin:4px 0 10px}
+h2.mid small{font-family:var(--sans);font-size:13px;opacity:.6;margin-left:8px;font-variant-numeric:tabular-nums}
+.achlist{display:flex;flex-direction:column;gap:6px;width:100%;max-width:360px;margin-bottom:18px}
+.ach{display:flex;align-items:flex-start;gap:10px;background:rgba(6,28,48,.7);border:1px solid rgba(120,200,255,.14);border-radius:12px;padding:8px 12px;text-align:left;opacity:.5}
+.ach.got{opacity:1;border-color:rgba(255,181,71,.35);background:rgba(6,28,48,.9)}
+.ach .star{color:var(--amber);font-size:16px;line-height:1.3;flex:none}
+.ach b{font-size:14px;font-weight:600}
+.ach p{margin:1px 0 0;font-size:12px;opacity:.7;line-height:1.35}
+.wlist.gold span{border-color:rgba(255,181,71,.4);color:#ffd9a0}
