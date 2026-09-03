@@ -51,7 +51,9 @@ export default defineConfig(({ mode }) => {
             },
             workbox: {
               globPatterns: ['**/*.{js,css,html,png,svg,webmanifest}'],
-              navigateFallback: 'index.html'
+              navigateFallback: 'index.html',
+              // downloads next to the site (the APK) must reach the server, not the app shell
+              navigateFallbackDenylist: [/\.apk$/i, /\.zip$/i]
             }
           })
         ]
