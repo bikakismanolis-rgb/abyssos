@@ -2,6 +2,7 @@
 import { save, saveNow, DEFAULT_SETTINGS } from './save.js';
 import { SFX } from './audio/sfx.js';
 import { setLang, deviceLang } from './i18n/index.js';
+import { vibrate } from './native.js';
 
 export function settings() { return save.settings; }
 
@@ -23,8 +24,8 @@ export function applyAllSettings() {
   for (const k in DEFAULT_SETTINGS) applySetting(k);
 }
 
-// Haptic feedback. Android Chrome honours navigator.vibrate; iOS ignores it.
+// Haptic feedback: the device's haptics in the app, navigator.vibrate in the browser (iOS Safari ignores it)
 export function buzz(ms) {
   if (!save.settings.vibrate) return;
-  try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) {}
+  vibrate(ms);
 }
