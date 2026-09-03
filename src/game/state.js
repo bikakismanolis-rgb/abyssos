@@ -9,6 +9,7 @@ import {ring} from './effects.js';
 import {SFX} from '../audio/sfx.js';
 import {specialsUnlocked} from './progression.js';
 import {t} from '../i18n/index.js';
+import {applyUpgrades} from './shop.js';
 
 export let G=null,P=null;
 export const cam={x:0,y:0};
@@ -26,7 +27,9 @@ export function newGame(state){
   G={state:state,t:0,depth:0,enemies:[],bullets:[],torps:[],motes:[],parts:[],fx:[],orbs:[],
      kills:0,level:1,xp:0,xpNext:xpFor(1),weapons:{lamp:1},passives:{},cds:{},
      spawnT:1.2,spawnEvery:1.15,phase:0,phaseT:150,boss:null,specials:{},emerUsed:false,zone:0,pendingLevels:0,
-     hpScale:1,dmgScale:1,spdScale:1,tier:0,whaleT:14,orbAng:0,shake:0,lastKillSfx:0,bannerT:0};
+     hpScale:1,dmgScale:1,spdScale:1,tier:0,whaleT:14,orbAng:0,shake:0,lastKillSfx:0,bannerT:0,
+     extraSlots:0,cardCount:3,rerolls:0};
+  applyUpgrades(P,G);
   cam.x=P.x-W/2;cam.y=P.y-H/2;
   applyTier();
   initSnow();
