@@ -9,3 +9,6 @@ Thumbs.db
 # never commit credentials
 *Token*.txt
 *token*.txt
+android/keystore.properties
+*.keystore
+!android/debug.keystore

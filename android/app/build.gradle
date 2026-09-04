@@ -1,10 +1,19 @@
 apply plugin: 'com.android.application'
 
+// Release signing: android/keystore.properties (git-ignored) holds the owner's keystore details:
+//   storeFile=../abyssos-release.keystore
+//   storePassword=...
+//   keyAlias=abyssos
+//   keyPassword=...
+def keystoreProps = new Properties()
+def keystoreFile = rootProject.file('keystore.properties')
+if (keystoreFile.exists()) keystoreFile.withInputStream { keystoreProps.load(it) }
+
 android {
-    namespace = "com.bikakismanolis.abyssos"
+    namespace = "com.skoros.abyssos"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.bikakismanolis.abyssos"
+        applicationId "com.skoros.abyssos"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
@@ -25,6 +34,14 @@ android {
             keyAlias 'abyssosdebug'
             keyPassword 'android'
         }
+        if (keystoreProps['storeFile']) {
+            release {
+                storeFile rootProject.file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
     }
     buildTypes {
         debug {
@@ -33,6 +50,7 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (keystoreProps['storeFile']) signingConfig signingConfigs.release
         }
     }
 }

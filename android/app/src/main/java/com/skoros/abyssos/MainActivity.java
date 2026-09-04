@@ -1,4 +1,4 @@
-package com.bikakismanolis.abyssos;
+package com.skoros.abyssos;
 
 import android.os.Bundle;
 import androidx.core.view.WindowCompat;
