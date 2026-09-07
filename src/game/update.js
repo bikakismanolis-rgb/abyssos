@@ -1,5 +1,6 @@
 // ---------- update ----------
-import {G,P,cam} from './state.js';
+import {G,P,cam,applyTier} from './state.js';
+import {advanceDescent} from './run-rules.js';
 import {W,H} from '../render/canvas.js';
 import {DEPTH_RATE} from './config.js';
 import {readMove} from '../ui/input.js';
@@ -16,8 +17,13 @@ import {rnd,lerp,angDiff} from '../util.js';
 import {t} from '../i18n/index.js';
 
 export function update(dt){
-  G.t+=dt;G.depth+=DEPTH_RATE*dt;
-  if(!G.boss){G.phaseT-=dt;if(G.phaseT<=0){if(G.phase===0){G.phase=1;spawnBoss(1);}else if(G.phase===2){G.phase=3;spawnBoss(2);}}}
+  G.t+=dt;
+  const slot=advanceDescent(G,dt,DEPTH_RATE);
+  applyTier();
+  if(slot)spawnBoss(slot);
+  const band=Math.floor(G.depth/300);
+  if(band>G.depthBand){G.depthBand=band;if(!G.boss)showBanner(t('banner.pressure'),2.5);}
+  if(!G.tutorialShown&&G.t>=5){G.tutorialShown=true;showBanner(t('banner.collect'),4);}
   if(G.fog>0)G.fog=Math.max(0,G.fog-dt*0.35);
   if(G.zone===0&&G.depth>=1000){G.zone=1;if(Object.keys(G.weapons).length===1)G.lampOnly1000=true;showBanner(t('banner.midnight'),3);}
   if(G.zone===1&&G.depth>=3000){G.zone=2;showBanner(t('banner.abyssal'),3);}
@@ -44,7 +50,7 @@ export function update(dt){
   if(P.bubbleT<=0){P.bubbleT=moving?0.07:0.5;bubble(P.x-Math.cos(P.dir)*P.r*1.6,P.y-Math.sin(P.dir)*P.r*1.6);}
   if(P.inv>0)P.inv-=dt;
   if(P.flash>0)P.flash=Math.max(0,P.flash-dt*2.5);
-  if(P.regen>0)P.hp=Math.min(P.maxHp,P.hp+P.regen*dt);
+  if(P.regen>0&&G.t-G.lastHitT>=3.5)P.hp=Math.min(P.maxHp,P.hp+P.regen*dt);
 
   // weapons
   updateWeapons(dt);

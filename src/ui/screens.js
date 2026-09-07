@@ -2,9 +2,10 @@
 import {$,fmtDepth,fmtTime} from '../util.js';
 import {G,P,newGame} from '../game/state.js';
 import {WEAPONS,PASSIVES,VESSELS,ngLabel} from '../game/config.js';
+import {optionChanges,shopChanges} from './upgrade-details.js';
 import {levelOptions,chooseOption,pips,weaponSlots,weaponSlotsUsed,passiveSlots} from '../game/progression.js';
 import {SHOP,level,maxLevel,cost,light,buy,lightFor,addLight} from '../game/shop.js';
-import {ACHIEVEMENTS,has,count,check as checkAchievements} from '../game/achievements.js';
+import {ACHIEVEMENTS,PLATINUM_IDS,has,count,check as checkAchievements} from '../game/achievements.js';
 import {joyEnd} from './input.js';
 import {SFX} from '../audio/sfx.js';
 import {showBanner,hideBanner,hideBossBar,resetHud,invalidateHud} from './hud.js';
@@ -30,6 +31,8 @@ function renderCards(){
       const def=o.kind==='w'?WEAPONS[o.key]:PASSIVES[o.key],pre=o.kind==='w'?'w.':'p.';
       b.innerHTML='<div class="top"><b>'+t(pre+o.key+'.name')+(o.lvl===0?'<em>'+t(o.kind==='w'?'levelup.newWeapon':'levelup.newPassive')+'</em>':'')+'</b><span class="pips">'+pips(o.lvl+1,def.max)+'</span></div><p>'+t(pre+o.key+'.desc')+'</p>';
     }
+    const details=document.createElement('p');details.className='changes';
+    details.textContent=optionChanges(o,P).join('\n');b.appendChild(details);
     b.addEventListener('click',function(){pick(o);});
     wrap.appendChild(b);
   });
@@ -57,7 +60,7 @@ export function gameOver(){
   const earned=lightFor(d,G.kills,G.tier);addLight(earned.total);
   G.newAch.push.apply(G.newAch,checkAchievements(G,P,true));
   const rows=[[t('over.depth'),fmtDepth(d)+' '+m],[t('over.time'),fmtTime(G.t)],[t('over.tier'),ngLabel(G.tier)],
-    [t('over.creatures'),G.kills],[t('over.level'),G.level],[t('over.record'),fmtDepth(save.best.depth)+' '+m]];
+    [t('over.creatures'),G.kills],[t('over.level'),G.level],[t('over.record'),ngLabel(save.rankedBest.tier)+' · '+fmtDepth(save.rankedBest.depth)+' '+m]];
   $('stats').innerHTML=rows.map(function(r){return '<span>'+r[0]+'</span><b>'+r[1]+'</b>';}).join('');
   $('overlight').textContent='+'+earned.total;
   $('overlightdetail').textContent=t('over.lightDetail',{d:earned.depth,k:earned.kills,t:earned.tier});
@@ -103,8 +106,9 @@ function renderStart(){
   }else{$('weaponhint').classList.remove('hidden');$('weaponlabel').classList.add('hidden');}
 }
 export function showBest(){
-  const b=save.best;
+  const b=save.rankedBest;
   $('startbest').textContent=b.depth>0?t('start.best',{d:fmtDepth(b.depth),ng:ngLabel(b.tier)}):'';
+  $('legacybest').textContent=save.best.depth>0?t('start.legacyBest',{d:fmtDepth(save.best.depth),ng:ngLabel(save.best.tier)}):'';
   $('startlight').textContent=t('start.light',{n:light()});
   renderStart();
 }
@@ -125,7 +129,10 @@ function renderAchievements(){
   $('achcount').textContent=count()+'/'+ACHIEVEMENTS.length;
   $('achlist').innerHTML=ACHIEVEMENTS.map(function(a){
     const got=has(a.id);
-    return '<div class="ach'+(got?' got':'')+'"><span class="star">'+(got?'★':'☆')+'</span><div><b>'+t('ach.'+a.id+'.name')+'</b><p>'+t('ach.'+a.id+'.desc')+'</p></div></div>';
+    const platinum=a.id==='platinum';
+    const progress=platinum?' '+PLATINUM_IDS.filter(has).length+'/'+PLATINUM_IDS.length:'';
+    const mastery=PLATINUM_IDS.includes(a.id)?' · '+t('ach.mastery'):'';
+    return '<div class="ach'+(got?' got':'')+(platinum?' platinum':'')+'"><span class="star">'+(platinum?'◆':got?'★':'☆')+'</span><div><b>'+t('ach.'+a.id+'.name')+progress+'</b><p>'+t('ach.'+a.id+'.desc')+mastery+'</p></div></div>';
   }).join('');
 }
 $('startach').addEventListener('click',function(){renderAchievements();hide('start');show('ach');$('ach').scrollTop=0;});
@@ -141,6 +148,7 @@ function renderShop(){
     const l=level(s.key),mx=maxLevel(s.key),c=cost(s.key);
     const row=document.createElement('div');row.className='item';
     row.innerHTML='<div class="info"><b>'+t('shop.'+s.key+'.name')+'</b><span class="pips">'+pips(l,mx)+'</span><p>'+t('shop.'+s.key+'.desc')+'</p></div>';
+    if(c!==null){const details=document.createElement('p');details.className='changes';details.textContent=shopChanges(s.key,l);row.querySelector('.info').appendChild(details);}
     const b=document.createElement('button');b.className='buy';
     if(c===null){b.textContent=t('shop.max');b.disabled=true;}
     else{b.textContent=c+' ◆';b.classList.toggle('poor',light()<c);}   // stays clickable so the Hermit can answer

@@ -1,18 +1,19 @@
 // ---------- spawning & enemy AI ----------
 import {G,P} from './state.js';
 import {W,H} from '../render/canvas.js';
-import {ET,TIER_BOSS,bossTypeFor} from './config.js';
+import {ET} from './config.js';
 import {rnd,rndi,TAU,lerp,angDiff} from '../util.js';
 import {showBanner,showBossBar} from '../ui/hud.js';
 import {SFX} from '../audio/sfx.js';
 import {burst,ring} from './effects.js';
 import {hurtPlayer,mineBlast} from './combat.js';
 import {t} from '../i18n/index.js';
+import {bossFor,difficultyAt} from './run-rules.js';
 
 export function spawnEnemy(type,x,y,hpMul){
   const t=ET[type];const hp=t.hp*(t.boss?(hpMul||1):G.hpScale);
   const e={type:type,x:x,y:y,vx:0,vy:0,hp:hp,maxHp:hp,spd:t.spd*rnd(0.9,1.1)*(t.boss?1:G.spdScale),dmg:t.dmg,r:t.r,xp:t.xp,col:t.col,
-    turn:t.turn,wob:t.wob,wobf:t.wobf||6,boss:!!t.boss,mine:!!t.mine,ghost:!!t.ghost,warn:false,ang:Math.atan2(P.y-y,P.x-x),seed:rnd(0,100),flash:0,stun:0,
+    turn:t.turn,wob:t.wob,wobf:t.wobf||6,boss:!!t.boss,mine:!!t.mine,ghost:!!t.ghost,warn:false,ang:Math.atan2(P.y-y,P.x-x),seed:rnd(0,100),flash:0,stun:0,stunReady:0,
     timer:rnd(0.5,2),dash:0,spawnT:5,dead:false,lit:false,lureX:x,lureY:y};
   if(type==='leviathan'){e.body=[];e.orbitA=rnd(0,TAU);}
   if(type==='queen')e.sting=0;
@@ -25,12 +26,13 @@ function weighted(tab){
 }
 export function spawnWave(){
   const t=G.tier,z=G.zone;
-  if(G.enemies.length>170+t*10)return;
+  if(G.enemies.length>=Math.min(240,170+t*10))return;
   const tab=[['fish',10],['jelly',6],['eel',Math.min(6,3+t*1.5)],['squid',2+t]];
   if(t>=1)tab.push(['angler',2+t*0.5]);
   if(t>=2){tab.push(['urchin',2+t*0.4]);tab.push(['ghost',2+t*0.5]);}
   // deeper zones bring their own creatures, whatever the tier
   if(z>=1){tab.push(['plankton',3]);tab.push(['beacon',1.2]);tab.push(['inksquid',2]);}
+  else if(G.depth>=300)tab.push(['inksquid',2]);
   if(z>=2)tab.push(['shrimp',2.2]);
   const type=weighted(tab);
   const n=type==='fish'?rndi(4,7):type==='jelly'?rndi(2,3):type==='urchin'?rndi(2,3):type==='ghost'?2:
@@ -38,14 +40,15 @@ export function spawnWave(){
   const ang=rnd(0,TAU),dist=Math.hypot(W,H)/2+70;
   for(let i=0;i<n;i++)spawnEnemy(type,P.x+Math.cos(ang)*dist+rnd(-50,50),P.y+Math.sin(ang)*dist+rnd(-50,50));
 }
-// slot 1 = first boss of the cycle, slot 2 = the one that ends it (NG+1)
+// Four depth gates per cycle; the Kraken always guards the final one.
 export function spawnBoss(slot){
-  const type=bossTypeFor(slot,G.depth,G.tier);
-  const mul=Math.pow(TIER_BOSS,G.tier);
+  const type=bossFor(slot,G.tier);
+  const mul=difficultyAt(G.depth,G.tier).bossHp;
   const ang=rnd(0,TAU),dist=Math.hypot(W,H)/2+120;
   const b=spawnEnemy(type,P.x+Math.cos(ang)*dist,P.y+Math.sin(ang)*dist,mul);
-  b.timer=3;b.spawnT=6;b.slot=slot;G.boss=b;
-  showBanner(t('banner.boss'),3);
+  b.timer=3;b.spawnT=6;b.slot=slot;b.hitsTaken=0;b.salvoT=4;G.boss=b;
+  G.ev.active=null;G.ev.next=rnd(20,35);
+  showBanner(t('banner.bossGate',{n:slot}),3);
   showBossBar(t('e.'+type));
   SFX.whale();
 }
@@ -102,8 +105,9 @@ export function updateEnemies(dt){
         let f=d<230?-1:d>320?1:0;let sx=-uy*spd*0.6,sy=ux*spd*0.6;
         e.vx=lerp(e.vx,ux*spd*f+sx,k);e.vy=lerp(e.vy,uy*spd*f+sy,k);
         e.timer-=dt;
-        if(e.timer<=0&&d<450){e.timer=3;const a=Math.atan2(dy,dx)+rnd(-0.08,0.08);
-          G.ebullets.push({x:e.x,y:e.y,vx:Math.cos(a)*220,vy:Math.sin(a)*220,life:2.5,dmg:12,r:6,kind:'ink'});
+        if(e.timer<=0.65&&d<450&&e.inkAim===undefined){e.inkAim=Math.atan2(dy,dx);ring(e.x,e.y,32,0.65,'255,160,235',2);}
+        if(e.timer<=0&&e.inkAim!==undefined){e.timer=Math.max(1.8,3-G.tier*0.1);const a=e.inkAim;delete e.inkAim;
+          fireInk(e,a);
           e.vx-=ux*120;e.vy-=uy*120;burst(e.x,e.y,4,e.col,60);SFX.shoot();}
       }
       else if(e.type==='shrimp'){
@@ -125,6 +129,16 @@ export function updateEnemies(dt){
 
 export function updateBoss(e,dt,ux,uy,d){
   e.timer-=dt;e.spawnT-=dt;
+  // Later cycles add readable aimed volleys; they never home after launch.
+  if(e.type==='boss2'||G.tier>=1){
+    e.salvoT-=dt;
+    if(e.salvoT<=0.7&&e.inkAim===undefined&&d<650){e.inkAim=Math.atan2(uy,ux);ring(e.x,e.y,e.r+20,0.7,'255,160,235',3);}
+    if(e.salvoT<=0&&e.inkAim!==undefined){
+      const count=1+2*Math.min(2,G.tier);
+      for(let i=0;i<count;i++)fireInk(e,e.inkAim+(i-(count-1)/2)*0.2);
+      delete e.inkAim;e.salvoT=Math.max(2.5,5-G.tier*0.25);
+    }
+  }
   if(e.type==='queen'){
     // drifts slowly; lashes with her tentacles when you are close; breeds jellies
     const k=1-Math.exp(-e.turn*dt);e.vx=lerp(e.vx,ux*e.spd,k);e.vy=lerp(e.vy,uy*e.spd,k);
@@ -167,6 +181,10 @@ export function updateBoss(e,dt,ux,uy,d){
 }
 
 // Enemy projectiles (ink): move, expire, hit the player
+function fireInk(e,a){
+  if(G.ebullets.length>=100)return;
+  G.ebullets.push({x:e.x,y:e.y,vx:Math.cos(a)*220,vy:Math.sin(a)*220,life:3.5,dmg:12,r:8,kind:'ink'});
+}
 export function updateEnemyBullets(dt){
   for(const b of G.ebullets){
     b.x+=b.vx*dt;b.y+=b.vy*dt;b.life-=dt;

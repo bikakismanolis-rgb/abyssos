@@ -9,7 +9,7 @@ export function drawEventsGlow(){
   const a=G.ev.active;
   if(a&&a.kind==='vent'){drawGlow(a.x,a.y,150,'255,150,70',0.35+0.1*Math.sin(clock*6));drawGlow(a.x,a.y-60,90,'255,200,120',0.15);}
   if(a&&a.kind==='chest')drawGlow(a.x,a.y,40,'255,220,140',0.6+0.2*Math.sin(clock*4));
-  for(const b of G.ebullets)drawGlow(b.x,b.y,16,'140,90,200',0.7);
+  for(const b of G.ebullets)drawGlow(b.x,b.y,24,'255,125,220',0.8);
 }
 // body pass (world space)
 export function drawEventsBody(){
@@ -30,12 +30,24 @@ export function drawEventsBody(){
     ctx.fillStyle='#ffe2a8';ctx.beginPath();ctx.arc(0,-3,2.5,0,TAU);ctx.fill();
     ctx.restore();
   }
-  for(const b of G.ebullets){ctx.fillStyle='rgba(40,20,60,0.95)';ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,TAU);ctx.fill();ctx.fillStyle='rgba(180,140,230,0.6)';ctx.beginPath();ctx.arc(b.x-2,b.y-2,b.r*0.35,0,TAU);ctx.fill();}
+  for(const e of G.enemies){if(e.inkAim===undefined||e.dead)continue;
+    ctx.save();ctx.translate(e.x,e.y);ctx.rotate(e.inkAim);
+    ctx.strokeStyle='#ffd5f4';ctx.lineWidth=2;ctx.setLineDash([5,6]);
+    ctx.beginPath();ctx.moveTo(e.r+8,0);ctx.lineTo(e.r+65,0);ctx.stroke();ctx.restore();
+  }
+  for(const b of G.ebullets){
+    const speed=Math.hypot(b.vx,b.vy)||1;
+    ctx.strokeStyle='rgba(255,155,225,0.65)';ctx.lineWidth=4;
+    ctx.beginPath();ctx.moveTo(b.x-b.vx/speed*24,b.y-b.vy/speed*24);ctx.lineTo(b.x,b.y);ctx.stroke();
+    ctx.fillStyle='#28143c';ctx.strokeStyle='#ffd5f4';ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,TAU);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#ffb8eb';ctx.beginPath();ctx.arc(b.x-2,b.y-2,2,0,TAU);ctx.fill();
+  }
 }
 // screen-space fog from plankton and ink
 export function drawFog(){
   if(G.fog<=0)return;
   const g=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*0.15,W/2,H/2,Math.max(W,H)*0.75);
-  g.addColorStop(0,'rgba(18,8,36,'+(G.fog*0.35).toFixed(3)+')');g.addColorStop(1,'rgba(18,8,36,'+(G.fog*0.85).toFixed(3)+')');
+  g.addColorStop(0,'rgba(18,8,36,0)');g.addColorStop(0.4,'rgba(18,8,36,'+(G.fog*0.25).toFixed(3)+')');g.addColorStop(1,'rgba(18,8,36,'+(G.fog*0.6).toFixed(3)+')');
   ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
 }
