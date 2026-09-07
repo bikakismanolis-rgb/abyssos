@@ -12,7 +12,7 @@ export function capOf(def){return def.max+G.tier;}
 export function weaponSlots(){return 4+G.tier+(G.extraSlots||0);}
 export function weaponSlotsUsed(){return Object.keys(G.weapons).filter(function(k){return k!=='lamp';}).length;}
 export function passiveSlots(){return 4+G.tier;}
-export function specialsUnlocked(){return Math.min(SPECIAL_ORDER.length,2*Math.floor(G.tier/5));}
+export function specialsUnlocked(){const cleared=G.tier*4+G.bossesCleared;return cleared>=8?6:cleared>=4?4:cleared>=2?2:0;}
 
 export function collectMote(mo){
   G.xp+=mo.v;SFX.pickup();

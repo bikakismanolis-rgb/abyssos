@@ -57,12 +57,17 @@ export function fireSonar(st){
   for(const e of G.enemies){if(e.dead||e.boss)continue;const dx=e.x-P.x,dy=e.y-P.y;const d2=dx*dx+dy*dy;
     if(d2<r2){const d=Math.sqrt(d2)||1;
       if(e.ghost){hurtEnemy(e,st.dmg*P.dmgMul);}
-      else if(e.mine){e.vx=dx/d*st.push;e.vy=dy/d*st.push;e.stun=0.4;}
-      else{e.vx=dx/d*st.push;e.vy=dy/d*st.push;e.stun=st.stun;hurtEnemy(e,st.dmg*P.dmgMul);}
+      else if(e.mine){sonarControl(e,0.4,dx/d*st.push,dy/d*st.push);}
+      else{sonarControl(e,st.stun,dx/d*st.push,dy/d*st.push);hurtEnemy(e,st.dmg*P.dmgMul);}
       any=true;}}
-  for(const e of G.enemies){if(e.dead||!e.boss)continue;const dx=e.x-P.x,dy=e.y-P.y;if(dx*dx+dy*dy<r2){hurtEnemy(e,st.dmg*P.dmgMul*3);e.stun=st.stun*0.5;}}
+  for(const e of G.enemies){if(e.dead||!e.boss)continue;const dx=e.x-P.x,dy=e.y-P.y;if(dx*dx+dy*dy<r2){hurtEnemy(e,st.dmg*P.dmgMul*3);sonarControl(e,st.stun*0.5,e.vx,e.vy);}}
   ring(P.x,P.y,st.radius,0.6,'62,242,208',2);ring(P.x,P.y,st.radius*0.7,0.6,'62,242,208',1);
   SFX.sonar();return true;
+}
+function sonarControl(e,duration,vx,vy){
+  // Every stun leaves a guaranteed recovery window, even with maximum cooling.
+  if(G.t<e.stunReady)return;
+  e.vx=vx;e.vy=vy;e.stun=duration;e.stunReady=G.t+duration+(e.boss?1.25:0.8);
 }
 export function tickCd(k,cd,fn,dt){
   G.cds[k]=(G.cds[k]||0)-dt;

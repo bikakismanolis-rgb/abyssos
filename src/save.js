@@ -1,12 +1,13 @@
 // Persistent save: one localStorage key, versioned schema, migration from older shapes.
-// Shape (version 1):
-//   { version:1, best:{depth,tier,time}, settings:{...DEFAULT_SETTINGS},
+// Shape (version 2):
+//   { version:2, best:{depth,tier,time}, rankedBest:{depth,tier,time}, settings:{...DEFAULT_SETTINGS},
 //     meta:{ light, upgrades:{...DEFAULT_UPGRADES}, stats:{...DEFAULT_STATS},
 //            achievements:{ id: unixSeconds }, unlocks:{ startWeapons:{key:true}, vessels:{key:true} },
 //            startWeapon: null | weaponKey, vessel: vesselKey } }
+import {betterRecord} from './game/run-rules.js';
 const KEY = 'abyssos-save';
 const LEGACY_BEST_KEY = 'abyssos-best';   // version 0: a bare best-depth number
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 export const DEFAULT_SETTINGS = {
   sfx: 70,            // 0..100
@@ -31,6 +32,8 @@ function migrate(data) {
   }
   // future: if (data.version === 1) { ...; data.version = 2; }
   data.best = Object.assign({ depth: 0, tier: 0, time: 0 }, data.best || {});
+  // Preserve the old unrestricted-depth record; new rules have their own record.
+  data.rankedBest = Object.assign({depth:0,tier:0,time:0},data.rankedBest||{});
   data.settings = Object.assign({}, DEFAULT_SETTINGS, data.settings || {});
   const meta = data.meta || {}, unlocks = meta.unlocks || {};
   data.meta = {
@@ -62,7 +65,8 @@ export function recordRun(depth, tier, time, kills) {
   const s = save.meta.stats;
   s.dives++; s.kills += kills; s.time += time; if (depth > s.maxDepth) s.maxDepth = depth;
   let record = false;
-  if (depth > save.best.depth) { save.best = { depth: depth, tier: tier, time: time }; record = true; }
+  const candidate={depth:depth,tier:tier,time:time};
+  if (betterRecord(candidate,save.rankedBest)) { save.rankedBest=candidate;record=true; }
   saveNow();
   return record;
 }

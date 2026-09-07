@@ -3,7 +3,7 @@
 // Only newGame() reassigns them.
 import {W,H} from '../render/canvas.js';
 import {rnd} from '../util.js';
-import {TIER_HP,TIER_DMG,TIER_SPD,TIER_DENSITY,xpFor,ngLabel,VESSELS,WEAPONS} from './config.js';
+import {xpFor,ngLabel,VESSELS,WEAPONS} from './config.js';
 import {save} from '../save.js';
 import {setNg,showBanner} from '../ui/hud.js';
 import {ring} from './effects.js';
@@ -11,6 +11,7 @@ import {SFX} from '../audio/sfx.js';
 import {specialsUnlocked} from './progression.js';
 import {t} from '../i18n/index.js';
 import {applyUpgrades} from './shop.js';
+import {difficultyAt} from './run-rules.js';
 
 export let G=null,P=null;
 export const cam={x:0,y:0};
@@ -31,7 +32,9 @@ export function newGame(state){
   P.speedMul=V.speed;
   G={state:state,t:0,depth:0,enemies:[],bullets:[],torps:[],motes:[],parts:[],fx:[],orbs:[],
      kills:0,level:1,xp:0,xpNext:xpFor(1),weapons:{lamp:1},passives:{},cds:{},
-     spawnT:1.2,spawnEvery:1.15,phase:0,phaseT:150,boss:null,specials:{},emerUsed:false,zone:0,pendingLevels:0,
+     spawnT:1.2,spawnEvery:1.15,bossesCleared:0,boss:null,specials:{},emerUsed:false,zone:0,pendingLevels:0,
+     bossKills:{},flawlessKraken:false,restrictedKraken:false,cleanCycle:false,cycleHits:0,lastHitT:-99,
+     depthBand:0,tutorialShown:false,
      hpScale:1,dmgScale:1,spdScale:1,tier:0,whaleT:14,orbAng:0,shake:0,lastKillSfx:0,bannerT:0,
      extraSlots:0,cardCount:3,rerolls:0,lampOnly1000:false,achT:0,achQueue:[],newAch:[],
      ebullets:[],fog:0,ev:{next:60,active:null}};
@@ -43,15 +46,14 @@ export function newGame(state){
   initSnow();
 }
 export function applyTier(){
-  const t=G.tier;
-  G.hpScale=Math.pow(TIER_HP,t);G.dmgScale=Math.pow(TIER_DMG,t);G.spdScale=Math.pow(TIER_SPD,t);
-  G.spawnEvery=Math.max(0.22,1.15/Math.pow(TIER_DENSITY,t));
-  setNg(ngLabel(t));
+  const d=difficultyAt(G.depth,G.tier);
+  G.hpScale=d.hp;G.dmgScale=d.damage;G.spdScale=d.speed;G.spawnEvery=d.interval;
+  setNg(ngLabel(G.tier));
 }
 export function nextTier(){
   const before=specialsUnlocked();
   G.tier++;applyTier();
-  G.phase=0;G.phaseT=120;G.emerUsed=false;
+  G.bossesCleared=0;G.cycleHits=0;G.emerUsed=false;
   P.hp=P.maxHp;
   showBanner(t('banner.newGame',{ng:ngLabel(G.tier)}),4);
   ring(P.x,P.y,340,1,'62,242,208',4);SFX.levelup();

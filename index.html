@@ -24,13 +24,14 @@
     <div id="lvl">Επ. 1</div>
   </div>
 </div>
+<div id="route"></div>
 <div id="bossbar" class="hidden"><div id="bossname"></div><div id="bosswrap"><div id="bosshp"></div></div></div>
 <div id="banner"></div>
 
 <div id="start" class="screen">
   <h1 data-i18n="app.name">Άβυσσος</h1>
   <p class="sub" data-i18n="start.sub">Ένα μικρό βαθυσκάφος, ένα φως, και ό,τι ζει εκεί κάτω.</p>
-  <p class="how" data-i18n="start.how">Σύρε το δάχτυλό σου οπουδήποτε στην οθόνη για να κινηθείς (ή WASD στο πληκτρολόγιο). Ο προβολέας στρέφεται μόνος του στον πιο κοντινό εχθρό και τα όπλα ρίχνουν μόνα τους. Μάζεψε το φως που αφήνουν τα πλάσματα για να ανέβεις επίπεδο και να διαλέξεις νέα όπλα. Σκότωσε και τα δύο αφεντικά για να περάσεις σε νέο παιχνίδι (NG+), με πιο δυνατούς εχθρούς και νέα ταβάνια αναβαθμίσεων.</p>
+  <p class="how" data-i18n="start.how">Σύρε για κίνηση ή χρησιμοποίησε WASD. Τα όπλα στοχεύουν αυτόματα. Νίκησε 4 αφεντικά ανά γύρο· ο Κράκεν ανοίγει το επόμενο NG. Η κάθοδος σταματά σε κάθε αφεντικό.</p>
   <button class="btn" id="startbtn" data-i18n="start.dive">Κατάδυση</button>
   <div class="row">
     <button class="btn ghost" id="startshop" data-i18n="start.shop">Κατάστημα</button>
@@ -47,6 +48,7 @@
   </div>
   <p class="best" id="startlight"></p>
   <p class="best" id="startbest"></p>
+  <p class="best" id="legacybest"></p>
 </div>
 
 <div id="ach" class="screen hidden">

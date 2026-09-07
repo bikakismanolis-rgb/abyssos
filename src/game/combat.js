@@ -7,6 +7,7 @@ import {gameOver} from '../ui/screens.js';
 import {rnd} from '../util.js';
 import {t} from '../i18n/index.js';
 import {settings,buzz} from '../settings.js';
+import {unlock} from './achievements.js';
 
 export function hurtEnemy(e,dmg,quiet){
   if(e.dead)return;e.hp-=dmg;
@@ -29,10 +30,20 @@ export function killEnemy(e){
   e.dead=true;G.kills++;
   burst(e.x,e.y,e.boss?70:8,e.col,e.boss?280:110);
   if(e.boss){
+    G.bossKills[e.type]=(G.bossKills[e.type]||0)+1;
+    if(e.type==='boss2'){
+      if(!G.weapons.harpoon)G.noHarpoonKraken=true;
+      if(e.hitsTaken===0)G.flawlessKraken=true;
+      if(Object.keys(G.weapons).length<=2)G.restrictedKraken=true;
+      if(G.cycleHits===0)G.cleanCycle=true;
+      // Award on the actual kill, even when a later hit ends this frame.
+      if(unlock('kraken')){G.newAch.push('kraken');G.achQueue.push('kraken');}
+    }
     for(let i=0;i<14;i++)G.motes.push(mote(e.x+rnd(-60,60),e.y+rnd(-60,60),Math.ceil(e.xp/14)));
     P.hp=Math.min(P.maxHp,P.hp+35);G.boss=null;hideBossBar();
     SFX.boom();G.shake=14;ring(e.x,e.y,260,0.8,'255,200,220',4);buzz(120);
-    if(e.slot===1){G.phase=2;G.phaseT=90;showBanner(t('banner.calm'),3);}
+    G.bossesCleared=e.slot;
+    if(e.slot<4){showBanner(t('banner.calm'),3);}
     else nextTier();
   }else{
     if(G.motes.length<320)G.motes.push(mote(e.x,e.y,e.xp));
@@ -42,6 +53,8 @@ export function killEnemy(e){
 }
 export function hurtPlayer(dmg){
   if(P.inv>0)return;
+  G.lastHitT=G.t;G.cycleHits++;
+  if(G.boss)G.boss.hitsTaken++;
   P.hp-=dmg*G.dmgScale*(1-P.armor);P.inv=0.85;P.flash=1;G.shake=7;SFX.hurt();buzz(40);
   burst(P.x,P.y,6,'255,120,120',90);
   if(P.hp<P.maxHp*0.2&&G.specials.emergency&&!G.emerUsed){

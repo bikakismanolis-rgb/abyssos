@@ -17,13 +17,12 @@ export const PASSIVES={
   power:{max:5,apply:function(P,f){P.dmgMul+=0.12*f;}},
   cool:{max:4,apply:function(P,f){P.cdMul*=Math.pow(0.9,f);}}
 };
-// Special one-time upgrades: two unlock every 5 new games (NG+5, NG+10, NG+15)
+// Specials unlock after 2, 4 and 8 total bosses in the current dive.
 export const SPECIALS={lamp2:{},emergency:{},overclock:{},shell:{},deathpulse:{},lightheal:{}};
 export const SPECIAL_ORDER=['lamp2','emergency','overclock','shell','deathpulse','lightheal'];
 // Each new game adds one level above the base cap; those extra levels give half the normal gain
 export function effLv(l,base){return l<=base?l:base+(l-base)*0.5;}
-// Difficulty only changes when a new game starts (both bosses killed)
-export const TIER_HP=1.4,TIER_DMG=1.2,TIER_SPD=1.04,TIER_DENSITY=1.15,TIER_BOSS=1.5;
+// Depth and cycle difficulty live in run-rules.js.
 export const ET={
   fish:{hp:9,spd:125,dmg:6,r:8,xp:1,col:'120,215,255',turn:4,wob:40},
   jelly:{hp:22,spd:38,dmg:11,r:15,xp:3,col:'255,110,200',turn:0.8,wob:0},
@@ -37,19 +36,13 @@ export const ET={
   beacon:{hp:40,spd:55,dmg:10,r:12,xp:5,col:'255,240,150',turn:1.5,wob:0},
   inksquid:{hp:70,spd:60,dmg:14,r:14,xp:7,col:'120,90,170',turn:2,wob:0},
   shrimp:{hp:50,spd:80,dmg:16,r:11,xp:8,col:'255,150,120',turn:3,wob:20},
-  // bosses: slot 1 (first of the cycle) and slot 2 (second, ends the cycle)
+  // Boss archetypes. run-rules.js assigns the four slots; boss2 is always the final Kraken.
   boss1:{hp:1500,spd:55,dmg:30,r:44,xp:60,col:'255,120,60',turn:1,wob:0,boss:true},
   boss2:{hp:3600,spd:50,dmg:38,r:60,xp:120,col:'255,70,120',turn:0.9,wob:0,boss:true},
   queen:{hp:1800,spd:25,dmg:26,r:48,xp:70,col:'255,140,230',turn:0.6,wob:0,boss:true},
   leviathan:{hp:3200,spd:95,dmg:34,r:30,xp:130,col:'120,255,190',turn:1.4,wob:0,boss:true},
   wreck:{hp:2600,spd:30,dmg:30,r:56,xp:90,col:'190,160,110',turn:0.5,wob:0,boss:true}
 };
-// Which boss fills each slot, by depth at spawn time (1,500 m and 3,500 m keep the first cycle unchanged)
-export function bossTypeFor(slot,depth,tier){
-  const z=depth<1500?0:depth<3500?1:2;
-  if(slot===1)return z===0?'boss1':z===1?'queen':['wreck','queen','boss1'][tier%3];
-  return z===0?'boss2':z===1?'leviathan':['boss2','leviathan'][tier%2];
-}
 export const ZONES=[
   {d:0,top:[9,54,92],bot:[3,24,46]},
   {d:1000,top:[5,28,60],bot:[2,9,24]},

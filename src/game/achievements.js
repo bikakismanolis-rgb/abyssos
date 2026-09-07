@@ -8,18 +8,21 @@ import {WEAPONS,PASSIVES} from './config.js';
 import {SHOP,cost} from './shop.js';
 
 const W=Object.keys(WEAPONS),PS=Object.keys(PASSIVES);
+// A fixed mastery set: future achievements do not move the Platinum goalposts.
+export const PLATINUM_IDS=['depth10000','ng5','queen','leviathan','wreck','flawlessKraken',
+  'restrictedKraken','cleanCycle','dartNG3','bathyNG3','ng8','depth20000'];
 export const ACHIEVEMENTS=[
   {id:'depth500',   check:function(G){return G.depth>=500;}},
   {id:'depth1000',  check:function(G){return G.depth>=1000;}},
   {id:'depth3000',  check:function(G){return G.depth>=3000;}},
   {id:'depth5000',  check:function(G){return G.depth>=5000;}},
   {id:'depth10000', check:function(G){return G.depth>=10000;}},
-  {id:'squid',      check:function(G){return G.phase>=2||G.tier>=1;}},
-  {id:'kraken',     check:function(G){return G.tier>=1;}},
+  {id:'squid',      check:function(G){return G.bossKills.boss1>0;}},
+  {id:'kraken',     check:function(G){return G.bossKills.boss2>0;}},
   {id:'ng2',        check:function(G){return G.tier>=2;}},
   {id:'ng3',        check:function(G){return G.tier>=3;}},
   {id:'ng5',        check:function(G){return G.tier>=5;}},
-  {id:'noHarpoon',  check:function(G){return G.tier>=1&&!G.weapons.harpoon;}},
+  {id:'noHarpoon',  check:function(G){return !!G.noHarpoonKraken;}},
   {id:'lampOnly',   check:function(G){return !!G.lampOnly1000;}},
   {id:'maxWeapon',  check:function(G){return W.some(function(k){return (G.weapons[k]||0)>=6;});}},
   {id:'allWeapons', check:function(G){return W.every(function(k){return G.weapons[k];});}},
@@ -36,11 +39,22 @@ export const ACHIEVEMENTS=[
   {id:'dives10',    life:true,check:function(G,P,m){return m.stats.dives>=10;}},
   {id:'dives50',    life:true,check:function(G,P,m){return m.stats.dives>=50;}},
   {id:'light1000',  life:true,check:function(G,P,m){return m.stats.lightEarned>=1000;}},
-  {id:'shopAll',    life:true,check:function(){return SHOP.every(function(s){return cost(s.key)===null;});}}
+  {id:'shopAll',    life:true,check:function(){return SHOP.every(function(s){return cost(s.key)===null;});}},
+  {id:'queen',check:G=>G.bossKills.queen>0},
+  {id:'leviathan',check:G=>G.bossKills.leviathan>0},
+  {id:'wreck',check:G=>G.bossKills.wreck>0},
+  {id:'flawlessKraken',check:G=>G.flawlessKraken},
+  {id:'restrictedKraken',check:G=>G.restrictedKraken},
+  {id:'cleanCycle',check:G=>G.cleanCycle},
+  {id:'dartNG3',check:(G,P)=>P.vessel==='dart'&&G.tier>=3},
+  {id:'bathyNG3',check:(G,P)=>P.vessel==='bathy'&&G.tier>=3},
+  {id:'ng8',check:G=>G.tier>=8},
+  {id:'depth20000',check:G=>G.depth>=20000},
+  {id:'platinum',check:()=>PLATINUM_IDS.every(has)}
 ];
 
 export function has(id){return !!save.meta.achievements[id];}
-export function count(){return Object.keys(save.meta.achievements).length;}
+export function count(){return ACHIEVEMENTS.filter(a=>has(a.id)).length;}
 // Unlocks one achievement. Returns true when it was new.
 export function unlock(id){
   if(has(id))return false;

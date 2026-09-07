@@ -38,7 +38,6 @@ export function render(){
   drawFx();
   drawParticles();
   ctx.globalCompositeOperation='source-over';
-  drawEventsBody();
 
   // bodies
   for(const mo of G.motes){if(!inView(mo.x,mo.y,20))continue;ctx.fillStyle='#e8fffa';ctx.beginPath();ctx.arc(mo.x,mo.y,2.2,0,TAU);ctx.fill();}
@@ -48,6 +47,7 @@ export function render(){
   for(const b of G.bullets){const l=Math.hypot(b.vx,b.vy)||1;ctx.beginPath();ctx.moveTo(b.x-b.vx/l*9,b.y-b.vy/l*9);ctx.lineTo(b.x+b.vx/l*7,b.y+b.vy/l*7);ctx.stroke();}
   for(const t of G.torps){ctx.save();ctx.translate(t.x,t.y);ctx.rotate(Math.atan2(t.vy,t.vx));ctx.fillStyle='#d9b675';ctx.beginPath();ctx.ellipse(0,0,9,3.5,0,0,TAU);ctx.fill();ctx.fillStyle='#ffd9a0';ctx.beginPath();ctx.arc(7,0,2.5,0,TAU);ctx.fill();ctx.restore();}
   drawPlayer();
+  drawEventsBody(); // hostile ink and its warnings stay above creature bodies
   drawNumbers();
   ctx.restore();
 
