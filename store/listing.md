@@ -1,6 +1,8 @@
 # Κείμενα για το Google Play
 
-Όλα τα όρια χαρακτήρων είναι της Google. Τα ελληνικά μπαίνουν ως προεπιλεγμένη γλώσσα (el-GR), τα αγγλικά ως μετάφραση (en-US).
+Όλα τα όρια χαρακτήρων είναι της Google. **Προεπιλεγμένη γλώσσα της καταχώρισης: English (United States), en-US.** Όλα τα πεδία στο Console συμπληρώνονται στα αγγλικά. Τα ελληνικά παρακάτω είναι προαιρετική μετάφραση για αργότερα (Store listing → Manage translations).
+
+Έτοιμο υλικό στον φάκελο `store/`: `screenshot-1.png` έως `screenshot-5.png` (1013×1800, 9:16), `feature-graphic.png` (1024×500, αγγλικά), `icon-512.png`. Το υπογεγραμμένο πακέτο: `release/abyssos-release.aab` (`npm run android:release`).
 
 ## Ελληνικά (el-GR)
 
@@ -57,4 +59,4 @@ Every dive leaves you Light. Spend it with the Hermit, an old crab living in a r
 - **Κοινό-στόχος**: 13+ (ώστε να μην ισχύουν οι κανόνες για οικογενειακές εφαρμογές)
 - **Εικονίδιο 512×512**: `public/icons/icon-512.png`
 - **Feature graphic 1024×500**: `store/feature-graphic.png`
-- **Screenshots**: τουλάχιστον 2, έως 8, από το κινητό (κατακόρυφα, 16:9 έως 9:16, ελάχιστο 320 px). Προτεινόμενα: αρχική οθόνη, μάχη με τον προβολέα, κάρτες level-up, αφεντικό με μπάρα ζωής, κατάστημα με τον Ερημίτη.
+- **Screenshots**: `store/screenshot-1.png` έως `-5.png`. Η Google δέχεται 16:9 έως 9:16, οπότε τα 810×1800 του κινητού πήραν σκούρο περιθώριο στα πλάγια για να γίνουν 1013×1800.
