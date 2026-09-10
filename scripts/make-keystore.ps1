@@ -29,7 +29,7 @@ if ($plain1.Length -lt 6) { Write-Host 'Πολύ μικρός κωδικός.' -
 if (-not (Test-Path $keystore)) { Write-Host 'Το keytool δεν έφτιαξε το κλειδί.' -ForegroundColor Red; exit 1 }
 
 @(
-  'storeFile=../abyssos-release.keystore',
+  'storeFile=abyssos-release.keystore',
   "storePassword=$plain1",
   'keyAlias=abyssos',
   "keyPassword=$plain1"
