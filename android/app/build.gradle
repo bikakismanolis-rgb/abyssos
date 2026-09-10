@@ -1,7 +1,8 @@
 apply plugin: 'com.android.application'
 
-// Release signing: android/keystore.properties (git-ignored) holds the owner's keystore details:
-//   storeFile=../abyssos-release.keystore
+// Release signing: android/keystore.properties (git-ignored) holds the owner's keystore details
+// (paths are relative to the android/ folder):
+//   storeFile=abyssos-release.keystore
 //   storePassword=...
 //   keyAlias=abyssos
 //   keyPassword=...
