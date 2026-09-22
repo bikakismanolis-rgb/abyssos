@@ -16,8 +16,8 @@ body{font-family:var(--sans);color:var(--ink);-webkit-user-select:none;user-sele
 #right{width:96px;display:flex;flex-direction:column;align-items:flex-end;gap:8px}
 #pausebtn{pointer-events:auto;width:38px;height:38px;border-radius:50%;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.07);color:var(--ink);display:grid;place-items:center;padding:0;cursor:pointer}
 #lvl{font-size:13px;opacity:.75}
-#route{position:fixed;top:calc(env(safe-area-inset-top,0px) + 82px);left:12px;right:12px;text-align:center;font-size:12px;color:#ffe1a8;pointer-events:none;text-shadow:0 1px 4px #03101b}
-#bossbar{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 108px);width:min(68vw,320px);text-align:center;pointer-events:none}
+#route{position:fixed;top:calc(env(safe-area-inset-top,0px) + 100px);left:12px;right:12px;text-align:center;font-size:12px;color:#ffe1a8;pointer-events:none;text-shadow:0 1px 4px #03101b}
+#bossbar{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 124px);width:min(68vw,320px);text-align:center;pointer-events:none}
 #bossname{font-family:var(--serif);font-size:15px;color:#ffb0c8;margin-bottom:4px;letter-spacing:.04em}
 #bosswrap{height:5px;background:rgba(255,255,255,.14);border-radius:3px;overflow:hidden}
 #bosshp{height:100%;width:100%;background:var(--pink);box-shadow:0 0 8px var(--pink);transition:width .1s}
@@ -43,6 +43,7 @@ h2{font-family:var(--serif);font-weight:400;font-size:34px;margin:0 0 14px;lette
 .card .pips{color:var(--teal);letter-spacing:3px;font-size:11px;white-space:nowrap}
 .card em{font-style:normal;color:var(--amber);font-size:12px;margin-left:8px}
 .card em.sp{color:var(--pink)}
+.card.evo{border-color:rgba(255,95,176,.55);box-shadow:0 0 18px rgba(255,95,176,.18)}
 .card p{margin:0;font-size:13px;opacity:.72;line-height:1.4}
 .card p.changes,.item p.changes{margin-top:7px;color:var(--teal);font-size:12px;opacity:1;white-space:pre-line}
 .ach.platinum{border:1px solid #c7e8ff;background:linear-gradient(120deg,rgba(170,215,255,.13),rgba(220,170,255,.1));border-radius:12px;padding:12px}
@@ -110,3 +111,20 @@ h2.mid small{font-family:var(--sans);font-size:13px;opacity:.6;margin-left:8px;f
 .ach p{margin:1px 0 0;font-size:12px;opacity:.7;line-height:1.35}
 .wlist.gold span{border-color:rgba(255,181,71,.4);color:#ffd9a0}
 #fatal{position:fixed;left:8px;right:8px;bottom:calc(env(safe-area-inset-bottom,0px) + 8px);z-index:99;padding:10px 12px;border-radius:10px;background:rgba(120,20,40,.92);color:#fff;font:12px/1.4 monospace;white-space:pre-wrap;word-break:break-word;pointer-events:none}
+
+#ngname{font-size:10.5px;line-height:1.2;opacity:.7;margin-top:1px;width:128px;color:var(--teal)}
+.sub.wide{max-width:360px;font-size:15px;line-height:1.6;margin-bottom:22px}
+h2 small{font-family:var(--sans);font-size:13px;opacity:.6;margin-left:8px;font-variant-numeric:tabular-nums}
+.loglist{display:flex;flex-direction:column;gap:8px;width:100%;max-width:380px;margin:8px 0 18px;text-align:left}
+.logch{margin:14px 0 2px;font-family:var(--serif);font-size:20px;color:var(--teal);letter-spacing:.03em}
+.logch small{display:block;font-family:var(--sans);font-size:11px;letter-spacing:.12em;opacity:.6;color:var(--ink);margin-top:2px}
+.logpl{background:rgba(6,28,48,.7);border:1px solid rgba(120,200,255,.14);border-radius:12px;padding:10px 13px;opacity:.5}
+.logpl.got{opacity:1;background:rgba(6,28,48,.9);border-color:rgba(62,242,208,.35)}
+.logpl .top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.logpl b{font-size:15px;font-weight:600}
+.logpl .dep{font-family:var(--serif);font-size:15px;color:var(--amber);white-space:nowrap;font-variant-numeric:tabular-nums}
+.logpl .where{margin:1px 0 0;font-size:11px;letter-spacing:.06em;opacity:.6;text-transform:uppercase}
+.logpl p{margin:6px 0 0;font-size:13px;line-height:1.5;opacity:.85}
+.logpl .guard{margin-top:6px;font-size:12px;color:#ffb0c8;opacity:.9}
+.logfauna{font-size:12px;line-height:1.6;opacity:.7;margin:2px 2px 0}
+.logfauna b{font-weight:500;color:var(--ink);opacity:.95}

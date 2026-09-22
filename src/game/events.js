@@ -15,7 +15,10 @@ export function updateEvents(dt){
   const ev=G.ev;
   if(!ev.active){
     ev.next-=dt;
-    if(ev.next<=0&&!G.boss)startEvent(KINDS[rndi(0,KINDS.length-1)]);
+    if(ev.next<=0&&!G.boss){
+      // the sea condition of the dive can favour currents or sunken crates
+      const m=G.mods;startEvent(m.currents&&Math.random()<0.6?'current':m.chest&&Math.random()<0.55?'chest':KINDS[rndi(0,KINDS.length-1)]);
+    }
     return;
   }
   const a=ev.active;a.t-=dt;a.age+=dt;
@@ -39,7 +42,7 @@ export function updateEvents(dt){
     if(dx*dx+dy*dy<(P.r+18)*(P.r+18)){
       burst(a.x,a.y,20,'255,220,140',160);ring(a.x,a.y,120,0.5,'255,220,140',3);SFX.levelup();
       if(Math.random()<0.5){G.pendingLevels++;endEvent();openLevelUp();return;}
-      const n=rndi(15,40);addLight(n);showBanner(t('event.light',{n:n}),2.5);
+      const n=Math.round(rndi(15,40)*(G.mods.chest?1.5:1));addLight(n);showBanner(t('event.light',{n:n}),2.5);
       endEvent();return;
     }
   }
@@ -53,4 +56,4 @@ function startEvent(kind){
   G.ev.active=a;
   showBanner(t('event.'+kind),3);
 }
-function endEvent(){G.ev.active=null;G.ev.next=rnd(45,75);}
+function endEvent(){const m=G.mods,quick=m.currents||m.chest;G.ev.active=null;G.ev.next=quick?rnd(25,45):rnd(45,75);}

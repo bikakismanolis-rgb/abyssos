@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 
 // `vite build`               -> dist/   PWA bundle (service worker, manifest, icons). Deployed to GitHub Pages.
 //                                BASE_PATH=/abyssos/ is set by the Pages workflow; default '/' for local preview.
-// `vite build --mode single` -> release/abyssos.html  one self-contained file (no PWA), for the Supabase download link.
+// `vite build --mode single` -> release/abyssos.html  one self-contained file (no PWA), to hand to someone or to test on a phone.
 export default defineConfig(({ mode }) => {
   const single = mode === 'single';
   return {

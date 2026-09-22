@@ -2,10 +2,10 @@
 import {G,P,cam,applyTier} from './state.js';
 import {advanceDescent} from './run-rules.js';
 import {W,H} from '../render/canvas.js';
-import {DEPTH_RATE} from './config.js';
 import {readMove} from '../ui/input.js';
 import {nearestEnemies,updateEnemies,updateEnemyBullets,spawnWave,spawnBoss} from './enemies.js';
 import {updateEvents} from './events.js';
+import {updateHazards} from './hazards.js';
 import {updateWeapons,lampStats} from './weapons.js';
 import {check as checkAchievements} from './achievements.js';
 import {hurtEnemy,explode} from './combat.js';
@@ -18,15 +18,15 @@ import {t} from '../i18n/index.js';
 
 export function update(dt){
   G.t+=dt;
-  const slot=advanceDescent(G,dt,DEPTH_RATE);
+  const slot=advanceDescent(G,dt);
   applyTier();
-  if(slot)spawnBoss(slot);
-  const band=Math.floor(G.depth/300);
-  if(band>G.depthBand){G.depthBand=band;if(!G.boss)showBanner(t('banner.pressure'),2.5);}
+  if(slot){
+    // reaching the second place of the first chapter with nothing but the searchlight
+    if(G.tier===0&&slot===2&&G.startTier===0&&Object.keys(G.weapons).length===1)G.lampOnly=true;
+    spawnBoss(slot);
+  }
   if(!G.tutorialShown&&G.t>=5){G.tutorialShown=true;showBanner(t('banner.collect'),4);}
   if(G.fog>0)G.fog=Math.max(0,G.fog-dt*0.35);
-  if(G.zone===0&&G.depth>=1000){G.zone=1;if(Object.keys(G.weapons).length===1)G.lampOnly1000=true;showBanner(t('banner.midnight'),3);}
-  if(G.zone===1&&G.depth>=3000){G.zone=2;showBanner(t('banner.abyssal'),3);}
   if(G.bannerT>0){G.bannerT-=dt;if(G.bannerT<=0)hideBanner();}
   // achievements: checked twice a second, announced one at a time when the banner is free
   G.achT-=dt;if(G.achT<=0){G.achT=0.5;const ids=checkAchievements(G,P,false);if(ids.length){G.achQueue.push.apply(G.achQueue,ids);G.newAch.push.apply(G.newAch,ids);}}
@@ -37,7 +37,8 @@ export function update(dt){
   // input
   let {ix,iy}=readMove();
   const il=Math.hypot(ix,iy);if(il>1){ix/=il;iy/=il;}
-  const sp=P.speed*P.speedMul,k=1-Math.exp(-8*dt);
+  if(P.slowT>0)P.slowT-=dt;
+  const sp=P.speed*P.speedMul*(P.slowT>0?0.55:1),k=1-Math.exp(-8*dt);
   P.vx=lerp(P.vx,ix*sp,k);P.vy=lerp(P.vy,iy*sp,k);
   P.x+=P.vx*dt;P.y+=P.vy*dt;
   if(il>0.15)P.dir+=angDiff(P.dir,Math.atan2(iy,ix))*Math.min(1,7*dt);
@@ -54,12 +55,15 @@ export function update(dt){
 
   // weapons
   updateWeapons(dt);
+  if(G.state!=='play')return;   // a weapon can end the last guardian, and with it the frame
 
   updateEnemies(dt);
   if(G.state!=='play')return;
   updateEnemyBullets(dt);
   if(G.state!=='play')return;
   updateEvents(dt);
+  if(G.state!=='play')return;
+  updateHazards(dt);
   if(G.state!=='play')return;
 
   // bullets
@@ -69,6 +73,7 @@ export function update(dt){
       if(dx*dx+dy*dy<rr*rr){b.hit.push(e);hurtEnemy(e,b.dmg);burst(b.x,b.y,3,'220,245,255',70);b.pierce--;if(b.pierce<0){b.life=0;break;}}}
   }
   G.bullets=G.bullets.filter(function(b){return b.life>0;});
+  if(G.state!=='play')return;
 
   // torpedoes
   for(const t of G.torps){
@@ -79,16 +84,21 @@ export function update(dt){
     if(t.target){const want=Math.atan2(t.target.y-t.y,t.target.x-t.x);a+=angDiff(a,want)*Math.min(1,4.5*dt);}
     t.vx=Math.cos(a)*spd;t.vy=Math.sin(a)*spd;t.x+=t.vx*dt;t.y+=t.vy*dt;
     if(Math.random()<0.5)bubble(t.x,t.y);
-    for(const e of G.enemies){if(e.dead)continue;const dx=e.x-t.x,dy=e.y-t.y;const rr=e.r+7;if(dx*dx+dy*dy<rr*rr){explode(t.x,t.y,t.radius,t.dmg);t.life=0;break;}}
+    for(const e of G.enemies){if(e.dead)continue;const dx=e.x-t.x,dy=e.y-t.y;const rr=e.r+7;if(dx*dx+dy*dy<rr*rr){explode(t.x,t.y,t.radius,t.dmg);
+      // Salvo: the blast throws out three smaller ones
+      if(G.evo.torpedo)for(let q=0;q<3;q++){const qa=q*2.094+t.t;explode(t.x+Math.cos(qa)*t.radius*0.8,t.y+Math.sin(qa)*t.radius*0.8,t.radius*0.6,t.dmg*0.5);}
+      t.life=0;break;}}
   }
   G.torps=G.torps.filter(function(t){return t.life>0;});
+  if(G.state!=='play')return;
 
   // motes
   const mag2=P.magnet*P.magnet;
   for(const mo of G.motes){
     mo.t+=dt;const dx=P.x-mo.x,dy=P.y-mo.y;const d2=dx*dx+dy*dy;
     const d=Math.sqrt(d2)||1;
-    if(d2<mag2){const s=(260+(P.magnet-d)*5)*dt;mo.x+=dx/d*s;mo.y+=dy/d*s;}
+    if(mo.pull){const s=Math.min(d,520*dt);mo.x+=dx/d*s;mo.y+=dy/d*s;}
+    else if(d2<mag2){const s=(260+(P.magnet-d)*5)*dt;mo.x+=dx/d*s;mo.y+=dy/d*s;}
     else{const s=(30+mo.t*12)*dt;mo.x+=dx/d*s;mo.y+=dy/d*s;}
     if(d2<(P.r+8)*(P.r+8)){mo.got=true;collectMote(mo);if(G.state!=='play')break;}
   }

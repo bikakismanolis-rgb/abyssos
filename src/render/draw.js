@@ -1,7 +1,7 @@
 // ---------- render: glow sprites, background, rays, snow, vignette, lamp cone ----------
 import {ctx,W,H,getVignette} from './canvas.js';
 import {G,P,cam,snow,clock} from '../game/state.js';
-import {ZONES} from '../game/config.js';
+import {chapterOf,chapterProgress} from '../game/places.js';
 import {lampStats} from '../game/weapons.js';
 import {clamp,lerp} from '../util.js';
 
@@ -18,11 +18,11 @@ export function glow(col){
 }
 export function drawGlow(x,y,r,col,a){ctx.globalAlpha=a;ctx.drawImage(glow(col),x-r,y-r,r*2,r*2);ctx.globalAlpha=1;}
 
+// The water takes the colours of the chapter and drifts towards the next one as the chapter runs out
 export function zoneColor(){
-  const d=G.depth;let i=0;while(i<ZONES.length-2&&d>ZONES[i+1].d)i++;
-  const a=ZONES[i],b=ZONES[i+1],t=clamp((d-a.d)/(b.d-a.d),0,1);
+  const a=chapterOf(G.tier),b=chapterOf(G.tier+1),p=chapterProgress(G.depth,G.tier),t=clamp(p*p,0,1);
   const mix=function(p,q){return p.map(function(v,k){return Math.round(lerp(v,q[k],t));});};
-  return{top:mix(a.top,b.top),bot:mix(a.bot,b.bot)};
+  return{top:mix(a.top,b.top),bot:mix(a.bot,b.bot),rays:lerp(a.rays,b.rays,t)};
 }
 export function drawBackground(){
   const z=zoneColor();const g=ctx.createLinearGradient(0,0,0,H);
@@ -30,7 +30,7 @@ export function drawBackground(){
   ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
 }
 export function drawRays(){
-  const k=1-G.depth/900;if(k<=0)return;
+  const k=zoneColor().rays;if(k<=0.01)return;
   ctx.save();ctx.globalCompositeOperation='lighter';
   const span=W*1.3;
   for(let i=0;i<6;i++){
@@ -57,6 +57,7 @@ export function drawLamp(){
   const st=lampStats();
   lampCone(P.aim,st,1);
   if(G.specials.lamp2)lampCone(P.aim+Math.PI,st,0.7);
+  if(G.evo.lamp){ctx.save();ctx.globalCompositeOperation='lighter';const r=st.range*0.6,g=ctx.createRadialGradient(P.x,P.y,8,P.x,P.y,r);g.addColorStop(0,'rgba(255,225,170,0.22)');g.addColorStop(1,'rgba(255,210,150,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(P.x,P.y,r,0,Math.PI*2);ctx.fill();ctx.restore();}
 }
 function lampCone(ang,st,k){
   ctx.save();ctx.translate(P.x,P.y);ctx.rotate(ang);ctx.globalCompositeOperation='lighter';

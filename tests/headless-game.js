@@ -14,7 +14,7 @@ export async function game(legacy,seed=1){
   const stubs={
     'render/canvas.js':'export const W=390,H=844;',
     'ui/hud.js':'export const setNg=()=>{},showBanner=()=>{},hideBanner=()=>{},showBossBar=()=>{},hideBossBar=()=>{};',
-    'ui/screens.js':"import {G} from '../game/state.js';export const openLevelUp=()=>{G.state='levelup';},gameOver=()=>{G.state='over';};",
+    'ui/screens.js':"import {G} from '../game/state.js';export const openLevelUp=()=>{G.state='levelup';},gameOver=()=>{G.state='over';},showEnding=()=>{G.state='ending';};",
     'ui/input.js':'export const readMove=()=>move;',
     'audio/sfx.js':'export const SFX=new Proxy({},{get:()=>()=>{}});',
     'settings.js':'export const settings=()=>({dmgNumbers:false}),buzz=()=>{};'
@@ -31,7 +31,8 @@ export async function game(legacy,seed=1){
     export * as enemies from './game/enemies.js';export * as update from './game/update.js';
     export * as save from './save.js';export * as achievements from './game/achievements.js';
     export * as progression from './game/progression.js';
-    export * as weapons from './game/weapons.js';
+    export * as weapons from './game/weapons.js';export * as hazards from './game/hazards.js';
+    export * as shop from './game/shop.js';export * as places from './game/places.js';export * as config from './game/config.js';
   `,{context,identifier:resolve(root,'driver.js')});
   await driver.link((specifier,ref)=>module(resolve(dirname(ref.identifier),specifier)));
   await driver.evaluate();

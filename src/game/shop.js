@@ -24,10 +24,13 @@ export function buy(key){
   save.meta.light-=c;save.meta.upgrades[key]=level(key)+1;saveNow();return true;
 }
 
-// Light earned by a dive: 1 per 50 m, 1 per 25 creatures, and 30·T·(T+1)/2 for the tier reached
-export function lightFor(depth,kills,tier){
-  const d=Math.floor(depth/50),k=Math.floor(kills/25),t=30*tier*(tier+1)/2;
-  return{depth:d,kills:k,tier:t,total:d+k+t};
+// Light earned by a dive: 1 per 50 "old metres" travelled in this dive (600 per place, however shallow),
+// 1 per 25 creatures, and 30 per chapter number for every chapter entered during this dive.
+// A dive that starts deep is paid only for what it did. The sea condition scales the total.
+export function lightFor(travelled,kills,tier,startTier,mult){
+  const tri=function(n){return 30*n*(n+1)/2;};
+  const d=Math.floor(travelled/50),k=Math.floor(kills/25),t=tri(tier)-tri(startTier||0);
+  return{depth:d,kills:k,tier:t,total:Math.round((d+k+t)*(mult||1))};
 }
 export function addLight(n){save.meta.light=light()+n;save.meta.stats.lightEarned=(save.meta.stats.lightEarned||0)+n;saveNow();}
 

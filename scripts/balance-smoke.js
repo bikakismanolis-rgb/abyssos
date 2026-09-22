@@ -7,8 +7,10 @@ for(const seed of [1,7])for(const mode of ['fresh idle','upgraded idle','upgrade
   let frames=0;
   while(G.state!=='over'&&G.t<900&&frames++<100000){
     if(G.state==='levelup'){
-      const priority=['lamp2','emergency','sonar','lamp','orbs','regen','field','torpedo','power','cool','hull','speed','magnet','harpoon'];
+      const priority=['trident','harpoon-x','lamp2','emergency','sonar','lamp','orbs','regen','field','torpedo','power','cool','hull','speed','magnet','harpoon'];
       const options=Array.from(g.progression.levelOptions());
+      for(const o of options)if(o.kind==='x'){g.progression.chooseOption(o);o.taken=true;break;}
+      if(options.some(o=>o.taken)){if(G.pendingLevels<=0)G.state='play';continue;}
       options.sort((a,b)=>(priority.indexOf(a.key)<0?99:priority.indexOf(a.key))-(priority.indexOf(b.key)<0?99:priority.indexOf(b.key)));
       g.progression.chooseOption(options[0]);if(G.pendingLevels<=0)G.state='play';continue;
     }
@@ -19,5 +21,5 @@ for(const seed of [1,7])for(const mode of ['fresh idle','upgraded idle','upgrade
     }
     g.update.update(1/30);
   }
-  console.log(JSON.stringify({seed,mode,seconds:Math.round(G.t),depth:Math.round(G.depth),ng:G.tier,bosses:G.bossKills,level:G.level,state:G.state}));
+  console.log(JSON.stringify({seed,mode,cond:G.cond,seconds:Math.round(G.t),depth:Math.round(G.depth),chapter:G.tier+1,place:G.bossesCleared,evo:Object.keys(G.evo),bosses:G.bossKills,level:G.level,state:G.state}));
 }
