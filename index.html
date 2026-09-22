@@ -17,7 +17,7 @@
 <canvas id="c"></canvas>
 <div id="fatal" class="hidden"></div>
 <div id="hud">
-  <div id="left"><div id="hpwrap"><div id="hp"></div></div><div id="time">0:00</div><div id="ng">NG</div></div>
+  <div id="left"><div id="hpwrap"><div id="hp"></div></div><div id="time">0:00</div><div id="ng">I</div><div id="ngname"></div></div>
   <div id="depth"><span id="depthv">0</span><small data-i18n="hud.meters">μέτρα</small><div id="xpwrap"><div id="xp"></div></div></div>
   <div id="right">
     <button id="pausebtn" aria-label="Παύση" data-i18n-aria="hud.pause"><svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="2" y="1" width="3.5" height="12" rx="1"/><rect x="8.5" y="1" width="3.5" height="12" rx="1"/></svg></button>
@@ -33,12 +33,20 @@
   <p class="sub" data-i18n="start.sub">Ένα μικρό βαθυσκάφος, ένα φως, και ό,τι ζει εκεί κάτω.</p>
   <p class="how" data-i18n="start.how">Σύρε για κίνηση ή χρησιμοποίησε WASD. Τα όπλα στοχεύουν αυτόματα. Νίκησε 4 αφεντικά ανά γύρο· ο Κράκεν ανοίγει το επόμενο NG. Η κάθοδος σταματά σε κάθε αφεντικό.</p>
   <button class="btn" id="startbtn" data-i18n="start.dive">Κατάδυση</button>
+  <button class="btn ghost hidden" id="resumedive"></button>
   <div class="row">
+    <button class="btn ghost" id="startlog" data-i18n="start.log">Ημερολόγιο</button>
     <button class="btn ghost" id="startshop" data-i18n="start.shop">Κατάστημα</button>
     <button class="btn ghost" id="startach" data-i18n="start.ach">Επιτεύγματα</button>
     <button class="btn ghost" id="startsettings" data-i18n="start.settings">Ρυθμίσεις</button>
   </div>
   <div class="pick">
+    <div id="chapterpick" class="hidden">
+      <p class="wlabel" data-i18n="start.chapter">Ξεκίνα από</p>
+      <div class="chips" id="chapterchips"></div>
+      <div class="chips hidden" id="loadoutchips"></div>
+      <p class="hint" id="chapterhint"></p>
+    </div>
     <p class="wlabel" data-i18n="start.vessel">Σκάφος</p>
     <div class="chips" id="vesselchips"></div>
     <p class="hint" id="vesseldesc"></p>
@@ -49,6 +57,22 @@
   <p class="best" id="startlight"></p>
   <p class="best" id="startbest"></p>
   <p class="best" id="legacybest"></p>
+  <button class="btn ghost small hidden" id="testunlock">🔧 Δοκιμαστική έκδοση: ξεκλείδωμα όλων των κεφαλαίων</button>
+</div>
+
+<div id="log" class="screen hidden">
+  <h2><span data-i18n="log.title">Ημερολόγιο καταδύσεων</span> <small id="logcount">0/32</small></h2>
+  <p class="sub" data-i18n="log.sub">Νίκησε τον φύλακα ενός μέρους για να ανοίξει η σελίδα του.</p>
+  <div class="loglist" id="loglist"></div>
+  <button class="btn" id="logback" data-i18n="settings.back">Πίσω</button>
+</div>
+
+<div id="ending" class="screen hidden">
+  <p class="eyebrow" data-i18n="ending.eyebrow">20.000 μέτρα</p>
+  <h2 data-i18n="ending.title">Ο θρόνος είναι άδειος</h2>
+  <p class="sub wide" data-i18n="ending.text"></p>
+  <button class="btn" id="endingon" data-i18n="ending.on">Πιο κάτω</button>
+  <button class="btn ghost" id="endingstop" data-i18n="ending.stop">Ανάδυση</button>
 </div>
 
 <div id="ach" class="screen hidden">
@@ -104,6 +128,7 @@
 
 <div id="pausescr" class="screen hidden">
   <h2 data-i18n="pause.title">Παύση</h2>
+  <p class="sub" id="pausecond"></p>
   <button class="btn" id="resumebtn" data-i18n="pause.resume">Συνέχεια</button>
   <button class="btn ghost" id="pausesettings" data-i18n="pause.settings">Ρυθμίσεις</button>
   <button class="btn ghost" id="pausequit" data-i18n="pause.quit">Τέλος κατάδυσης</button>
@@ -131,6 +156,10 @@
   <div class="lightrow"><span data-i18n="over.light">Φως</span><b id="overlight">+0</b><small id="overlightdetail"></small></div>
   <p class="wlabel" data-i18n="over.weapons">Όπλα</p>
   <div class="wlist" id="overweapons"></div>
+  <div id="overpageswrap" class="hidden">
+    <p class="wlabel" data-i18n="over.pages">Νέες σελίδες στο Ημερολόγιο</p>
+    <div class="wlist" id="overpages"></div>
+  </div>
   <div id="overachwrap" class="hidden">
     <p class="wlabel" data-i18n="over.ach">Νέα επιτεύγματα</p>
     <div class="wlist gold" id="overach"></div>

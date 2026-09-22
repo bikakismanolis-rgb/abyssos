@@ -34,6 +34,7 @@ export function optionChanges(option,player){
   if(option.kind==='w')return weaponChanges(option.key,option.lvl,player);
   if(option.kind==='p')return passiveChanges(option.key,option.lvl,player);
   if(option.kind==='heal')return [changeLine(t('card.hp'),player.hp,player.maxHp)].filter(Boolean);
+  if(option.kind==='x')return [];
   if(option.key==='overclock')return [changeLine(t('card.cdMul'),player.cdMul*100,player.cdMul*80,'%')];
   if(option.key==='shell')return [changeLine(t('card.armor'),player.armor*100,30,'%')];
   const specs={lamp2:['backBeam',0,70,'%'],emergency:['rescues',0,1,''],deathpulse:['chainDamage',0,50,'%'],lightheal:['pickupHeal',0,1,'']};

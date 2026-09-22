@@ -1,7 +1,10 @@
 // ---------- screens: start, level-up, pause, settings, shop, achievements, end of dive ----------
 import {$,fmtDepth,fmtTime} from '../util.js';
 import {G,P,newGame} from '../game/state.js';
-import {WEAPONS,PASSIVES,VESSELS,ngLabel} from '../game/config.js';
+import {WEAPONS,PASSIVES,VESSELS,EVOLUTIONS,CONDITIONS} from '../game/config.js';
+import {CHAPTERS,PLACES,LAST_TIER,ROMAN,chapterStart,travel} from '../game/places.js';
+import {travelled} from '../game/run-rules.js';
+import {tierLabel,chapterName,chapterShort} from './labels.js';
 import {optionChanges,shopChanges} from './upgrade-details.js';
 import {levelOptions,chooseOption,pips,weaponSlots,weaponSlotsUsed,passiveSlots} from '../game/progression.js';
 import {SHOP,level,maxLevel,cost,light,buy,lightFor,addLight} from '../game/shop.js';
@@ -26,6 +29,7 @@ function renderCards(){
   levelOptions().forEach(function(o){
     const b=document.createElement('button');b.className='card';
     if(o.kind==='heal'){b.innerHTML='<div class="top"><b>'+t('levelup.heal')+'</b></div><p>'+t('levelup.healDesc')+'</p>';}
+    else if(o.kind==='x'){const ev=EVOLUTIONS[o.key];b.classList.add('evo');b.innerHTML='<div class="top"><b>'+t('x.'+ev.key+'.name')+'<em class="sp">'+t('levelup.evolution')+'</em></b></div><p>'+t('x.'+ev.key+'.desc')+'</p>';}
     else if(o.kind==='s'){b.innerHTML='<div class="top"><b>'+t('s.'+o.key+'.name')+'<em class="sp">'+t('levelup.special')+'</em></b></div><p>'+t('s.'+o.key+'.desc')+'</p>';}
     else{
       const def=o.kind==='w'?WEAPONS[o.key]:PASSIVES[o.key],pre=o.kind==='w'?'w.':'p.';
@@ -41,6 +45,7 @@ function renderCards(){
   rr.textContent=t('levelup.reroll',{n:G.rerolls});
 }
 export function openLevelUp(){
+  if(G.state==='ending'||G.state==='over')return;   // the level waits; it opens with the next light collected
   G.state='levelup';joyEnd();SFX.levelup();
   renderCards();
   show('levelup');
@@ -57,26 +62,36 @@ export function gameOver(){
   G.state='over';joyEnd();
   const d=Math.floor(G.depth),m=t('over.m');
   const isRecord=recordRun(d,G.tier,G.t,G.kills);
-  const earned=lightFor(d,G.kills,G.tier);addLight(earned.total);
+  save.meta.resume=null;   // the dive is over; there is nothing left to continue
+  const earned=lightFor(travelled(G),G.kills,G.tier,G.startTier,G.mods.light);addLight(earned.total);
   G.newAch.push.apply(G.newAch,checkAchievements(G,P,true));
-  const rows=[[t('over.depth'),fmtDepth(d)+' '+m],[t('over.time'),fmtTime(G.t)],[t('over.tier'),ngLabel(G.tier)],
-    [t('over.creatures'),G.kills],[t('over.level'),G.level],[t('over.record'),ngLabel(save.rankedBest.tier)+' · '+fmtDepth(save.rankedBest.depth)+' '+m]];
+  const rows=[[t('over.depth'),fmtDepth(d)+' '+m],[t('over.time'),fmtTime(G.t)],[t('over.tier'),tierLabel(G.tier)],
+    [t('over.creatures'),G.kills],[t('over.level'),G.level],[t('over.record'),chapterShort(save.rankedBest.tier)+' · '+fmtDepth(save.rankedBest.depth)+' '+m]];
   $('stats').innerHTML=rows.map(function(r){return '<span>'+r[0]+'</span><b>'+r[1]+'</b>';}).join('');
   $('overlight').textContent='+'+earned.total;
-  $('overlightdetail').textContent=t('over.lightDetail',{d:earned.depth,k:earned.kills,t:earned.tier});
-  $('overweapons').innerHTML=Object.keys(G.weapons).map(function(k){return '<span>'+t('w.'+k+'.name')+' <b>'+G.weapons[k]+'</b></span>';}).join('');
+  $('overlightdetail').textContent=t('over.lightDetail',{d:earned.depth,k:earned.kills,t:earned.tier})+(G.mods.light!==1?' · '+t('cond.'+G.cond+'.name')+' ×'+G.mods.light:'');
+  $('overweapons').innerHTML=Object.keys(G.weapons).map(function(k){const x=G.evo[k]?t('x.'+EVOLUTIONS[k].key+'.name'):t('w.'+k+'.name');return '<span>'+x+' <b>'+G.weapons[k]+'</b></span>';}).join('');
   $('newrecord').classList.toggle('hidden',!isRecord);
+  $('overpageswrap').classList.toggle('hidden',G.newPages.length===0);
+  $('overpages').innerHTML=G.newPages.map(function(id){return '<span>'+t('pl.'+id+'.name')+'</span>';}).join('');
   $('overachwrap').classList.toggle('hidden',G.newAch.length===0);
   $('overach').innerHTML=G.newAch.map(function(id){return '<span>★ '+t('ach.'+id+'.name')+'</span>';}).join('');
   hideBossBar();hideBanner();
   setTimeout(function(){show('over');},600);
   SFX.boom();buzz(80);
 }
+// The throne is empty. The dive can end here as a victory or go on into the Bottomless.
+export function showEnding(){
+  G.state='ending';joyEnd();hideBossBar();hideBanner();
+  setTimeout(function(){show('ending');},900);
+}
+$('endingon').addEventListener('click',function(){if(G&&G.state==='ending'){hide('ending');G.state='play';SFX.resume();}});
+$('endingstop').addEventListener('click',function(){if(G&&G.state==='ending'){hide('ending');gameOver();}});
 
 // ---------- pause ----------
 export function togglePause(){
   if(!G)return;
-  if(G.state==='play'){G.state='pause';joyEnd();show('pausescr');}
+  if(G.state==='play'){G.state='pause';joyEnd();$('pausecond').textContent=t('cond.label')+': '+t('cond.'+G.cond+'.name')+' — '+t('cond.'+G.cond+'.desc');show('pausescr');}
   else if(G.state==='pause'){if(visible('settings'))closeSettings();G.state='play';hide('pausescr');SFX.resume();}
 }
 
@@ -105,21 +120,81 @@ function renderStart(){
     $('weaponhint').classList.add('hidden');$('weaponlabel').classList.remove('hidden');
   }else{$('weaponhint').classList.remove('hidden');$('weaponlabel').classList.add('hidden');}
 }
+let pickTier=0,pickLoadout='saved';
+function renderChapters(){
+  const m=save.meta,reached=Math.min(m.reached||0,LAST_TIER+1);
+  $('chapterpick').classList.toggle('hidden',reached<1);
+  if(reached<1){pickTier=0;return;}
+  if(pickTier>reached)pickTier=0;
+  const cw=$('chapterchips');cw.innerHTML='';
+  for(let i=0;i<=reached;i++){
+    const b=chip(i===0?t('start.surface'):chapterShort(i),pickTier===i,false,chapterName(i));
+    b.addEventListener('click',function(){pickTier=i;renderChapters();});cw.appendChild(b);
+  }
+  const lw=$('loadoutchips');lw.innerHTML='';lw.classList.toggle('hidden',pickTier===0);
+  if(pickTier>0){
+    [['saved','start.loadoutSaved'],['random','start.loadoutRandom']].forEach(function(o){
+      const b=chip(t(o[1]),pickLoadout===o[0],false);b.addEventListener('click',function(){pickLoadout=o[0];renderChapters();});lw.appendChild(b);});
+  }
+  const lo=m.loadouts[pickTier];
+  $('chapterhint').textContent=pickTier===0?t('start.surfaceHint'):
+    tierLabel(pickTier)+' · '+fmtDepth(chapterStart(pickTier))+' '+t('over.m')+(pickLoadout==='saved'&&lo?' · '+t('start.loadoutHint',{n:lo.level,w:Object.keys(lo.weapons).map(function(k){return t('w.'+k+'.name');}).join(', ')}):' · '+t('start.randomHint'));
+}
 export function showBest(){
   const b=save.rankedBest;
-  $('startbest').textContent=b.depth>0?t('start.best',{d:fmtDepth(b.depth),ng:ngLabel(b.tier)}):'';
-  $('legacybest').textContent=save.best.depth>0?t('start.legacyBest',{d:fmtDepth(save.best.depth),ng:ngLabel(save.best.tier)}):'';
+  $('startbest').textContent=b.depth>0?t('start.best',{d:fmtDepth(b.depth),ng:chapterShort(b.tier)}):'';
+  $('legacybest').textContent=save.best.depth>0?t('start.legacyBest',{d:fmtDepth(save.best.depth)}):'';
   $('startlight').textContent=t('start.light',{n:light()});
-  renderStart();
+  const rs=save.meta.resume;
+  $('resumedive').classList.toggle('hidden',!rs);
+  if(rs)$('resumedive').textContent=t('start.resume',{ch:chapterShort(rs.tier),d:fmtDepth(rs.depth)});
+  $('startbtn').textContent=t(rs?'start.newDive':'start.dive');
+  $('testunlock').classList.toggle('hidden',!TEST_BUILD||(save.meta.reached||0)>LAST_TIER);
+  renderStart();renderChapters();
 }
-export function startGame(){
+export function startGame(opts){
   SFX.init();SFX.resume();
-  newGame('play');
-  ['start','over','pausescr','levelup','settings','shop','ach'].forEach(hide);
+  if(opts&&opts.resume)newGame('play',{resume:save.meta.resume});   // the checkpoint stays until the next guardian replaces it
+  else{settleAbandoned();newGame('play',{tier:pickTier,loadout:pickLoadout});}
+  ['start','over','pausescr','levelup','settings','shop','ach','log','ending'].forEach(hide);
   hideBossBar();
   resetHud();
-  setTimeout(function(){if(G&&G.state==='play')showBanner(t('banner.twilight'),2.5);},600);
+  setTimeout(function(){if(G&&G.state==='play')showBanner(tierLabel(G.tier),2.5);},600);
+  setTimeout(function(){if(G&&G.state==='play'&&G.cond!=='calm'&&G.bannerT<=0)showBanner(t('cond.'+G.cond+'.name')+' — '+t('cond.'+G.cond+'.desc'),3.5);},3600);
 }
+// Starting a new dive while another is waiting ends that one: its Light is paid and its depth recorded
+function settleAbandoned(){
+  const rs=save.meta.resume;if(!rs)return;
+  save.meta.resume=null;
+  recordRun(Math.floor(rs.depth),rs.tier,rs.t,rs.kills);
+  const mult=(CONDITIONS[rs.cond]||{}).light||1;
+  addLight(lightFor(Math.max(0,travel(rs.depth,rs.tier)-(rs.startTravel||0)),rs.kills,rs.tier,rs.startTier,mult).total);
+}
+// A test build (the private preview page) can open every chapter at once; the real game never shows this
+const TEST_BUILD=!!(import.meta.env&&import.meta.env.VITE_TEST_BUILD);
+$('testunlock').addEventListener('click',function(){save.meta.reached=LAST_TIER+1;saveNow();showBest();});
+$('resumedive').addEventListener('click',function(){if(save.meta.resume)startGame({resume:true});});
+
+// ---------- logbook ----------
+function renderLog(){
+  const m=save.meta,got=Object.keys(m.logbook).length;
+  $('logcount').textContent=got+'/'+PLACES.length;
+  let html='';
+  CHAPTERS.forEach(function(ch,ci){
+    const from=chapterStart(ci),to=PLACES[ci*4+3].depth;
+    html+='<div class="logch">'+ROMAN[ci]+' · '+t('ch.'+ch.key+'.name')+'<small>'+fmtDepth(from)+'–'+fmtDepth(to)+' '+t('over.m')+' · '+t('ch.'+ch.key+'.desc')+'</small></div>';
+    for(let k=0;k<4;k++){
+      const pl=PLACES[ci*4+k],open=!!m.logbook[pl.id];
+      html+='<div class="logpl'+(open?' got':'')+'"><div class="top"><b>'+(open?t('pl.'+pl.id+'.name'):'; ; ;')+'</b><span class="dep">'+fmtDepth(pl.depth)+' '+t('over.m')+'</span></div>'+
+        (open?'<div class="where">'+t('pl.'+pl.id+'.where')+'</div><p>'+t('pl.'+pl.id+'.story')+'</p><div class="guard">'+t('log.guardian')+': '+t('e.'+pl.boss)+'</div>':'')+'</div>';
+    }
+    const names=ch.spawn.map(function(r){return m.seen[r[0]]?'<b>'+t('e.'+r[0])+'</b>':'; ; ;';});
+    html+='<div class="logfauna">'+t('log.fauna')+': '+names.join(' · ')+'</div>';
+  });
+  $('loglist').innerHTML=html;
+}
+$('startlog').addEventListener('click',function(){renderLog();hide('start');show('log');$('log').scrollTop=0;});
+$('logback').addEventListener('click',function(){hide('log');show('start');showBest();});
 
 // ---------- achievements & statistics ----------
 function renderAchievements(){
@@ -171,7 +246,7 @@ $('startshop').addEventListener('click',function(){openShop('start');});
 $('overshop').addEventListener('click',function(){openShop('over');});
 // back to the title screen after a dive: a fresh idle sea behind the menu
 function goHome(){
-  ['over','pausescr','levelup','settings','shop','ach'].forEach(hide);
+  ['over','pausescr','levelup','settings','shop','ach','log','ending'].forEach(hide);
   newGame('start');hideBossBar();hideBanner();resetHud();
   show('start');showBest();
 }
@@ -203,8 +278,8 @@ wireSeg('opt-lang','lang',function(){invalidateHud();});
 $('settingsback').addEventListener('click',closeSettings);
 
 // ---------- wiring ----------
-$('startbtn').addEventListener('click',startGame);
-$('againbtn').addEventListener('click',startGame);
+$('startbtn').addEventListener('click',function(){startGame();});
+$('againbtn').addEventListener('click',function(){startGame();});
 $('startsettings').addEventListener('click',function(){openSettings('start');});
 $('pausesettings').addEventListener('click',function(){openSettings('pausescr');});
 $('pausebtn').addEventListener('click',function(){if(G&&G.state==='play')togglePause();});

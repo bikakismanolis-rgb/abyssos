@@ -3,11 +3,13 @@
 //   { version:2, best:{depth,tier,time}, rankedBest:{depth,tier,time}, settings:{...DEFAULT_SETTINGS},
 //     meta:{ light, upgrades:{...DEFAULT_UPGRADES}, stats:{...DEFAULT_STATS},
 //            achievements:{ id: unixSeconds }, unlocks:{ startWeapons:{key:true}, vessels:{key:true} },
-//            startWeapon: null | weaponKey, vessel: vesselKey } }
+//            startWeapon: null | weaponKey, vessel: vesselKey,
+//            version 3 (the dive map): logbook:{ placeId: unixSeconds }, seen:{ creatureType: 1 },
+//            reached: highest chapter entered, loadouts:{ chapter: build }, resume: null | dive in progress } }
 import {betterRecord} from './game/run-rules.js';
 const KEY = 'abyssos-save';
 const LEGACY_BEST_KEY = 'abyssos-best';   // version 0: a bare best-depth number
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 export const DEFAULT_SETTINGS = {
   sfx: 70,            // 0..100
@@ -30,10 +32,14 @@ function migrate(data) {
     try { legacy = parseInt(localStorage.getItem(LEGACY_BEST_KEY), 10) || 0; } catch (e) {}
     data = { version: 1, best: { depth: legacy, tier: 0, time: 0 }, settings: {}, meta: {} };
   }
-  // future: if (data.version === 1) { ...; data.version = 2; }
   data.best = Object.assign({ depth: 0, tier: 0, time: 0 }, data.best || {});
-  // Preserve the old unrestricted-depth record; new rules have their own record.
   data.rankedBest = Object.assign({depth:0,tier:0,time:0},data.rankedBest||{});
+  // Version 3 changed what a metre and a chapter mean, so records made under the old rules cannot be
+  // compared with new ones. The better of the two old records is kept and shown as "old rules".
+  if (data.version < 3) {
+    if (betterRecord(data.rankedBest, data.best)) data.best = data.rankedBest;
+    data.rankedBest = { depth: 0, tier: 0, time: 0 };
+  }
   data.settings = Object.assign({}, DEFAULT_SETTINGS, data.settings || {});
   const meta = data.meta || {}, unlocks = meta.unlocks || {};
   data.meta = {
@@ -43,7 +49,12 @@ function migrate(data) {
     achievements: meta.achievements || {},
     unlocks: { startWeapons: unlocks.startWeapons || {}, vessels: unlocks.vessels || {} },
     startWeapon: meta.startWeapon || null,
-    vessel: meta.vessel || 'bathy'
+    vessel: meta.vessel || 'bathy',
+    logbook: meta.logbook || {},
+    seen: meta.seen || {},
+    reached: meta.reached || 0,
+    loadouts: meta.loadouts || {},
+    resume: meta.resume || null
   };
   data.version = SAVE_VERSION;
   return data;

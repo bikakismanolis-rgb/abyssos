@@ -232,7 +232,7 @@ export function drawEnemy(e){
     case 'urchin':drawUrchin(e);break;
     case 'ghost':drawGhost(e);break;
     case 'fish':drawFish(e);break;
-    case 'jelly':drawJelly(e);break;
+    case 'jelly':case 'hadaljelly':drawJelly(e);break;
     case 'eel':drawEel(e);break;
     case 'squid':case 'boss1':drawSquid(e);break;
     case 'angler':drawAngler(e);break;
@@ -240,7 +240,7 @@ export function drawEnemy(e){
     case 'plankton':drawPlankton(e);break;
     case 'beacon':drawBeacon(e);break;
     case 'inksquid':drawInkSquid(e);break;
-    case 'shrimp':drawShrimp(e);break;
+    case 'shrimp':case 'redshrimp':drawShrimp(e);break;
     case 'queen':drawQueen(e);break;
     case 'leviathan':drawLeviathan(e);break;
     case 'wreck':drawWreck(e);break;

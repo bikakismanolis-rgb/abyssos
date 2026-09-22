@@ -1,18 +1,21 @@
 // ---------- render: one frame, in the original pass order ----------
 import {ctx,W,H} from './canvas.js';
 import {G,P,cam,clock} from '../game/state.js';
-import {WEAPONS,effLv} from '../game/config.js';
+import {WEAPONS,ET,effLv} from '../game/config.js';
 import {rnd,clamp,TAU} from '../util.js';
 import {drawBackground,drawRays,drawSnow,drawVignette,drawLamp,drawGlow,inView} from './draw.js';
-import {drawEnemy,ghostAlpha} from './creatures.js';
+import {ghostAlpha} from './creatures.js';
+import {drawCreature} from './dispatch.js';
+import {drawBackdrop} from './places.js';
 import {drawPlayer} from './player.js';
 import {drawFx,drawParticles,drawNumbers,drawJoystick} from './fx.js';
-import {drawEventsGlow,drawEventsBody,drawFog} from './events.js';
+import {drawEventsGlow,drawEventsBody,drawFog,drawHazards,drawPlayerWeapons} from './events.js';
 
 export function render(){
   const sh=G.shake,ox=sh?rnd(-sh,sh):0,oy=sh?rnd(-sh,sh):0;
-  drawBackground();drawRays();drawSnow(false);
+  drawBackground();drawRays();drawBackdrop();drawSnow(false);
   ctx.save();ctx.translate(-cam.x+ox,-cam.y+oy);
+  drawHazards();
   if(G.weapons.lamp)drawLamp();
 
   // glow pass
@@ -20,10 +23,12 @@ export function render(){
   for(const mo of G.motes){if(!inView(mo.x,mo.y,20))continue;drawGlow(mo.x,mo.y,11+Math.sin(mo.t*5+mo.seed)*2,'120,255,225',0.8);}
   for(const e of G.enemies){
     if(!inView(e.x,e.y,120))continue;
-    if(e.type==='angler'){drawGlow(e.lureX,e.lureY,26,e.col,0.9);drawGlow(e.x,e.y,e.r*1.4,e.col,0.12);}
+    if(e.cloak>0)continue;
+    if(e.type==='angler'||e.type==='greatangler'){drawGlow(e.lureX,e.lureY,26,e.col,0.9);drawGlow(e.x,e.y,e.r*1.4,e.col,0.12);}
     else if(e.type==='beacon'){drawGlow(e.lureX,e.lureY,70+12*Math.sin(G.t*4+e.seed),e.col,0.9);drawGlow(e.x,e.y,e.r*2,e.col,0.3);}
     else if(e.type==='plankton')drawGlow(e.x,e.y,e.r*2.5,e.col,0.5+0.3*Math.sin(G.t*5+e.seed));
     else if(e.ghost)drawGlow(e.x,e.y,e.r*2.6,e.col,ghostAlpha(e)*0.6);
+    else if(ET[e.type].glow)drawGlow(e.x,e.y,e.r*3,e.col,0.6+0.25*Math.sin(G.t*5+e.seed));
     else if(e.mine)drawGlow(e.x,e.y,e.r*2.2,e.col,e.warn?0.35+0.35*Math.sin(G.t*16+e.seed):0.25);
     else drawGlow(e.x,e.y,e.r*(e.boss?2.4:2.1),e.col,e.boss?0.55:0.42);
     if(e.lit)drawGlow(e.x,e.y,e.r*1.8,'255,220,170',0.35);
@@ -41,7 +46,8 @@ export function render(){
 
   // bodies
   for(const mo of G.motes){if(!inView(mo.x,mo.y,20))continue;ctx.fillStyle='#e8fffa';ctx.beginPath();ctx.arc(mo.x,mo.y,2.2,0,TAU);ctx.fill();}
-  for(const e of G.enemies){if(inView(e.x,e.y,160))drawEnemy(e);}
+  for(const e of G.enemies){if(e.boss||e.body||inView(e.x,e.y,160))drawCreature(e);}
+  drawPlayerWeapons();
   for(const o of G.orbs){ctx.fillStyle='#fff6d6';ctx.beginPath();ctx.arc(o.x,o.y,5,0,TAU);ctx.fill();}
   ctx.strokeStyle='#eaf6ff';ctx.lineWidth=2.2;ctx.lineCap='round';
   for(const b of G.bullets){const l=Math.hypot(b.vx,b.vy)||1;ctx.beginPath();ctx.moveTo(b.x-b.vx/l*9,b.y-b.vy/l*9);ctx.lineTo(b.x+b.vx/l*7,b.y+b.vy/l*7);ctx.stroke();}
@@ -52,6 +58,12 @@ export function render(){
   ctx.restore();
 
   drawSnow(true);drawFog();drawVignette();
+  // the guardian has been left behind: an arrow on the edge of the screen points back to it
+  if(G.boss&&G.state==='play'&&!inView(G.boss.x,G.boss.y,-10)){
+    const a=Math.atan2(G.boss.y-P.y,G.boss.x-P.x),m=34,cx=W/2,cy=H/2,k=Math.min((cx-m)/Math.abs(Math.cos(a)||1e-6),(cy-m-70)/Math.abs(Math.sin(a)||1e-6));
+    ctx.save();ctx.translate(cx+Math.cos(a)*k,cy+Math.sin(a)*k);ctx.rotate(a);ctx.globalAlpha=0.65+0.3*Math.sin(clock*6);
+    ctx.fillStyle='#ff5fb0';ctx.beginPath();ctx.moveTo(14,0);ctx.lineTo(-8,-10);ctx.lineTo(-3,0);ctx.lineTo(-8,10);ctx.closePath();ctx.fill();ctx.restore();ctx.globalAlpha=1;
+  }
   if(P.flash>0){ctx.fillStyle='rgba(255,50,70,'+(P.flash*0.22).toFixed(3)+')';ctx.fillRect(0,0,W,H);}
   if(P.hp<P.maxHp*0.3&&G.state==='play'){const a=0.12+0.1*Math.sin(clock*6);ctx.fillStyle='rgba(255,60,80,'+a.toFixed(3)+')';ctx.fillRect(0,0,W,H);}
   drawJoystick();
