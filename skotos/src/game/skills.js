@@ -94,10 +94,13 @@ function basicWarden(aim) {
   const pl = p(), sk = SKILLS.warden[0];
   const step = pl.comboT > 0 ? (pl.comboStep + 1) % 3 : 0;
   pl.comboStep = step;
-  const anim = ['slash1', 'slash2', 'slash3'][step], impact = [0.38, 0.25, 0.55][step];
+  const anim = ['slash1', 'slash2', 'slash3'][step];
   const third = step === 2;
+  // realistic characters report where their swing lands; the action ends shortly after it
+  const hit = pl.avatar.anim.hitAt?.(anim), impact = hit ?? [0.38, 0.25, 0.55][step];
+  const cut = hit != null ? Math.min(1, hit + (third ? 0.3 : 0.26)) : third ? 0.78 : 0.62;
   act({
-    name: 'basic', anim, speed: attackSpeed(third ? 1.25 : 1.15), face: aim.dir, cut: third ? 0.78 : 0.62, trail: [impact - 0.15, impact + 0.12],
+    name: 'basic', anim, speed: attackSpeed(third ? 1.25 : 1.15), face: aim.dir, cut, trail: [impact - 0.15, impact + 0.12],
     events: [[impact, () => {
       const mult = skillMult(sk) * (third ? 1.5 : 1);
       const n = arcHit(third ? 3.0 : 2.6, third ? Math.PI * 2 : Math.PI * 0.8, (f) => damage(pl, f, heroHit(mult, { area: third }), { knock: third ? 7 : 2.5, kx: f.x - pl.x, kz: f.z - pl.z }));
@@ -114,7 +117,7 @@ function basicRanger(aim) {
   const pl = p(), sk = SKILLS.ranger[0];
   act({
     name: 'basic', anim: 'shoot', speed: attackSpeed(1.6), face: aim.dir, cut: 0.42,
-    events: [[0.14, () => {
+    events: [[pl.avatar.anim.hitAt ? 0.05 : 0.14, () => {
       const o = handPoint(V);
       fire('bolt', pl, o.x, o.z, pl.rot, { y: 1.25, dmg: heroHit(skillMult(sk)), opts: { knock: 1.2 } });
       pl.res = Math.min(G.stats.resMax, pl.res + sk.gain);
@@ -409,7 +412,7 @@ export function dodge(ev) {
   pl.rot = mv;
   Audio.sfx('roll');
   act({
-    name: 'roll', anim: 'roll', speed: 1.0, dur: 0.42,
+    name: 'roll', anim: 'roll', speed: (pl.avatar.anim.duration?.('roll') || 0.42) / 0.5, dur: 0.42,
     update(dt) {
       const nx = pl.x + Math.sin(mv) * sp * dt, nz = pl.z + Math.cos(mv) * sp * dt;
       pl.x = nx; pl.z = nz; pl.iframes = 0.08;

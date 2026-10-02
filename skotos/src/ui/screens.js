@@ -26,7 +26,7 @@ export function buildTitleScene() {
   setEmitters(lvl.emitters);
   setAmbient('town');
   setAtmosphere(Object.assign({}, ATMOS.town, { heroI: 0 }));
-  const spots = { warden: [32, 19.4, 0.15], ranger: [29.6, 20.2, 0.45], mage: [34.4, 20.2, -0.2] };
+  const spots = { warden: [29.6, 20.2, 0.45], ranger: [32, 19.4, 0.15], mage: [34.4, 20.2, -0.2] };
   for (const cls of ['warden', 'ranger', 'mage']) {
     const C = CLASSES[cls];
     const av = makeAvatar(cls, { style: C.style, weapon: C.weapon === 'staff' ? 'staff' : C.weapon });

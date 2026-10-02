@@ -86,7 +86,7 @@ const S = {
     await pg.waitForTimeout(3000); await shot();
     return pg.evaluate(() => { const G = window.__G; return { zone: G.zone.id, guardian: !!G.gate?.guardian, name: G.gate?.guardian?.name }; });
   } },
-  title: { q: 'sim=1&q=1', run: async (pg, shot) => {
+  title: { q: 'sim=1&q=' + (process.env.Q || '1'), run: async (pg, shot) => {
     await pg.waitForTimeout(2500); await shot();
     await pg.mouse.click(640, 360); await pg.waitForTimeout(1500); await shot();
     await pg.click('#m-new'); await pg.waitForTimeout(2500); await shot();
@@ -98,7 +98,9 @@ const S = {
 };
 const sc = S[name];
 await page.goto((process.env.BASE || 'http://localhost:5199/') + '?' + sc.q);
-await page.waitForFunction(() => window.__ready, null, { timeout: 120000 });
+page.setDefaultTimeout(120000);
+// auto-start runs after __ready: wait for the hero too
+await page.waitForFunction(() => window.__ready && (!location.search.includes('auto=') || window.__G?.player), null, { timeout: 180000 });
 let n = 0;
 const shot = async () => { await page.screenshot({ path: `${out}/${name}-${n++}.png` }); };
 let res;

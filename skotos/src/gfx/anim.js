@@ -4,6 +4,8 @@ import * as THREE from 'three';
 import { clamp, lerp, smooth, damp, TAU } from '../core/util.js';
 import { weaponGeo, shieldGeo, heldMesh } from './models.js';
 import { ANIMS } from './anims.data.js';
+import { PersonAnim, setHand } from './people.js';
+import { makeCharMat } from './rig.js';
 
 
 // ---------- humanoids: retargeted KayKit clips on an AnimationMixer ----------
@@ -245,12 +247,14 @@ const _v = new THREE.Vector3(), _w = new THREE.Vector3();
 export class Avatar {
   constructor(model, o = {}) {
     this.model = model; this.mesh = model.mesh; this.bones = model.bones; this.rest = model.rest; this.dims = model.dims;
-    this.kind = model.kind; this.style = o.style || 'none'; this.animSet = o.animSet; this.hunch = o.hunch || 0;
+    this.kind = model.kind; this.style = o.style || 'none'; this.animSet = o.animSet; this.hunch = o.hunch || 0; this.idleClip = o.idle;
     this.group = new THREE.Group();
     this.group.add(model.mesh);
     this.mat = model.mat;
     this.held = {};
-    const A = model.kind === 'warg' ? QuadAnim : model.kind === 'spider' ? SpiderAnim : HumanoidAnim;
+    // realistic people wear textured materials: what they hold gets a character material sharing their uniforms
+    if (model.kind === 'person') { this.heldMat = makeCharMat(); this.heldMat.userData.u = model.mat.userData.u; }
+    const A = model.kind === 'person' ? PersonAnim : model.kind === 'warg' ? QuadAnim : model.kind === 'spider' ? SpiderAnim : HumanoidAnim;
     this.anim = new A(this);
     this.flashV = 0; this.scale = o.scale || 1;
     this.group.scale.setScalar(this.scale);
@@ -259,22 +263,33 @@ export class Avatar {
     if (hand === 'S') hand = 'L';
     const bone = this.bones[hand === 'R' ? 'handR' : 'handL'];
     if (this.held[hand]) { bone.remove(this.held[hand].mesh); this.held[hand].mesh.geometry.dispose(); }
+    const person = this.kind === 'person';
+    if (person) setHand(this.bones, hand, !!type);
     if (!type) { this.held[hand] = null; return; }
     let info, mesh;
+    const mat = this.heldMat || this.mat;
     if (type === 'shield') {
-      mesh = heldMesh(shieldGeo(look), this.mat);
+      mesh = heldMesh(shieldGeo(look), mat);
       info = { mesh };
     } else {
       const w = weaponGeo(type, look);
-      mesh = heldMesh(w.parts, this.mat);
+      mesh = heldMesh(w.parts, mat);
       info = { mesh, tip: w.tip, base: w.base, gem: w.gem, type, axis: w.axis || 'y' };
     }
-    const slot = ANIMS[hand === 'R' ? 'slotR' : 'slotL'];
-    mesh.quaternion.set(slot.q[0], slot.q[1], slot.q[2], slot.q[3]);
+    if (person) {
+      const g = (type === 'crossbow' && this.model.grip[hand + 'pistol']) || this.model.grip[hand];
+      mesh.quaternion.copy(g.q); mesh.position.copy(g.p);
+      if (type === 'crossbow') mesh.scale.setScalar(0.8);
+      const T = typeof window !== 'undefined' && window.__grip;
+      if (T) { mesh['rotate' + T[0]](T[1]); if (T[2]) mesh['rotate' + T[2]](T[3]); }
+    } else {
+      const slot = ANIMS[hand === 'R' ? 'slotR' : 'slotL'];
+      mesh.quaternion.set(slot.q[0], slot.q[1], slot.q[2], slot.q[3]);
+      const s = this.dims?.s ?? 1;
+      mesh.position.set((hand === 'R' ? -1 : 1) * 0.05 * s, -0.035 * s, 0);
+    }
     // long staves read better held upright than pointed forward like a sword
     if (type && (type.startsWith('staff') || type === 'lanternStaff')) { const T = (typeof window !== 'undefined' && window.__tilt) || STAFF_TILT; mesh['rotate' + T[0]](T[1]); }
-    const s = this.dims?.s ?? 1;
-    mesh.position.set((hand === 'R' ? -1 : 1) * 0.05 * s, -0.035 * s, 0);
     bone.add(mesh);
     this.held[hand] = info;
     return info;
@@ -298,7 +313,8 @@ export class Avatar {
   update(dt, st) { this.anim.update(dt, st); }
   dispose() {
     this.group.parent?.remove(this.group);
-    this.mesh.geometry.dispose(); this.mat.dispose();
+    if (this.model.dispose) { this.model.dispose(); this.heldMat?.dispose(); }
+    else { this.mesh.geometry.dispose(); this.mat.dispose(); }
     for (const k in this.held) this.held[k]?.mesh.geometry.dispose();
   }
 }

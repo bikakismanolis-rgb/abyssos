@@ -5,6 +5,7 @@ import { R } from '../gfx/gfx.js';
 import { makeCharMat } from '../gfx/rig.js';
 import * as M from '../gfx/models.js';
 import { Avatar } from '../gfx/anim.js';
+import { hasPerson, personModel } from '../gfx/people.js';
 import { tex } from '../gfx/textures.js';
 import { MONSTERS, DIFFS, monsterHP, monsterDmg, AFFIXES, CLASSES } from './data.js';
 import { G, uid } from './state.js';
@@ -37,8 +38,10 @@ function instance(model) {
 export function preloadModels(list) { for (const m of list) if (!CACHE[m] && BUILD[m]) CACHE[m] = BUILD[m](); }
 
 const STYLE = { warden: 'sword', ranger: 'bow', mage: 'staff' };
+// realistic people (Quaternius, see gfx/people.js) replace the code-built models wherever one exists
 export function makeAvatar(model, o = {}) {
-  const av = new Avatar(instance(model), { style: o.style || STYLE[model] || 'none', animSet: o.animSet, hunch: o.hunch, scale: o.scale });
+  const m = hasPerson(model) ? personModel(model) : instance(model);
+  const av = new Avatar(m, { style: o.style || STYLE[model] || 'none', animSet: o.animSet, hunch: o.hunch, scale: o.scale, idle: o.idle });
   if (o.weapon) av.hold('R', o.weapon, o.look || {});
   if (o.offhand) av.hold('L', o.offhand, o.offLook || {});
   return av;
@@ -142,7 +145,9 @@ export function rollAffixes(n) { const pool = AFFIXES.slice(); rand.shuffle(pool
 // ---------- NPCs ----------
 export function spawnNpc(kind, x, z, rot) {
   const model = kind === 'villager' ? 'villager' + (Math.floor(x + z) % 3) : kind;
-  const o = kind === 'wayfarer' ? { style: 'staff', weapon: 'lanternStaff', animSet: 'npc' } : kind === 'smith' ? { style: 'none', weapon: 'hammer', animSet: 'npc' } : { style: 'none', animSet: 'npc' };
+  const vi = Math.floor(x + z) % 3;
+  const o = kind === 'wayfarer' ? { style: 'staff', weapon: 'lanternStaff', animSet: 'npc' } : kind === 'smith' ? { style: 'none', weapon: 'hammer', animSet: 'npc', idle: 'hammer' }
+    : kind === 'healer' ? { style: 'none', animSet: 'npc', idle: 'talk' } : { style: 'none', animSet: 'npc', idle: ['fold', 'talk', 'Idle_Loop'][vi] };
   const av = makeAvatar(model, o);
   const a = new Actor({ x, z, team: 'npc', kind, radius: 0.5, speed: 0, hp: 1e9, avatar: av, rot });
   a.npc = kind;
