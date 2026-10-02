@@ -1,0 +1,40 @@
+// Inline SVG icons (24x24). Stroke icons use currentColor.
+const S = (body, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" ${extra}>${body}</svg>`;
+export const ICON = {
+  sword: S('<path d="M5 19l9.5-9.5M14.5 9.5L19 4l1 1-5.5 4.5M7 14l3 3M4 20l2.5-2.5"/><path d="M13 6l5 5" stroke-width="1.2"/>'),
+  whirl: S('<path d="M12 12m-2 0a2 2 0 1 0 4 0a4 4 0 1 0-8 0a6 6 0 1 0 12 0a8 8 0 1 0-16 0"/>'),
+  leap: S('<path d="M4 20c4-1 6-5 8-12M12 8l-2.5 2.5M12 8l2.5 2"/><path d="M8 21h10M14 18l4 3-4-1" stroke-width="1.3"/><circle cx="13" cy="5" r="1.6"/>'),
+  horn: S('<path d="M4 9h3l9-5v16l-9-5H4z"/><path d="M19 8c1.2 1 1.8 2.4 1.8 4s-.6 3-1.8 4"/>'),
+  quake: S('<path d="M3 18l4-2 2 3 3-5 3 4 3-3 3 2"/><path d="M12 3v7M9.5 7.5L12 10l2.5-2.5"/>'),
+  bolt: S('<path d="M4 20L18 6"/><path d="M15 5h4v4"/><path d="M4 20l1.5-4M4 20l4-1.5"/><path d="M9 9l-3-1M11 7l-1-3" stroke-width="1.2"/>'),
+  fan: S('<path d="M4 20L12 4M4 20l12-10M4 20l14-4M4 20L7 4M4 20l16 0" stroke-width="1.4"/>'),
+  rain: S('<path d="M6 3l-2 6M11 3l-2 6M16 3l-2 6M21 3l-2 6M8 12l-2 6M13 12l-2 6M18 12l-2 6"/><path d="M3 21h18" stroke-width="1.2"/>'),
+  wolf: S('<path d="M4 6l3 3h6l3-4 1 4 3 2-2 3h-3l-2 4H9l-1-4-3-2z"/><circle cx="15.5" cy="10.5" r=".6" fill="currentColor"/>'),
+  arrow: S('<path d="M3 21L21 3"/><path d="M15 3h6v6"/><path d="M3 21l2-5M3 21l5-2"/><path d="M8 13l3 3M11 10l3 3" stroke-width="1.1"/>'),
+  orb: S('<circle cx="12" cy="12" r="5"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.5 1.5M16.9 16.9l1.5 1.5M5.6 18.4l1.5-1.5M16.9 7.1l1.5-1.5"/>'),
+  fire: S('<path d="M12 21c4 0 6.5-2.6 6.5-6.3 0-3.7-3-5.7-3.6-9.7-2.4 1.7-3.4 3.6-3.4 5.4C10 9.200 8.5 8 8 6c-2 2-2.5 4.4-2.5 6.6C5.5 17.6 8 21 12 21z"/><path d="M12 21c-1.8 0-3-1.3-3-3 0-2 1.6-2.6 2.2-4.6 1.6 1.2 3.8 2.6 3.8 4.6 0 1.7-1.2 3-3 3z"/>'),
+  frost: S('<path d="M12 2v20M4 7l16 10M4 17l16-10"/><path d="M9 3.5l3 2.5 3-2.5M9 20.5l3-2.5 3 2.5M3 10.5l3.6.9.5 3.3M21 13.5l-3.6-.9-.5-3.3M3 13.5l3.6-.9.5-3.3M21 10.5l-3.6.9-.5 3.3" stroke-width="1.2"/>'),
+  storm: S('<path d="M13 2L5 13h6l-2 9 9-12h-6l1-8z"/>'),
+  meteor: S('<circle cx="15" cy="15" r="4.5"/><path d="M3 3l8.5 8.5M6 2.5l7 7M2.5 6l7 7" stroke-width="1.3"/>'),
+  roll: S('<path d="M20 12a8 8 0 1 1-3-6.2"/><path d="M17.5 3v3.5H14"/><path d="M8 13l3 3 5-6" stroke-width="1.3"/>'),
+  blink: S('<circle cx="7" cy="16" r="2.5" stroke-dasharray="2 2"/><circle cx="17" cy="8" r="2.5"/><path d="M9 14l6-4" stroke-dasharray="2 2"/><path d="M17 3v1.5M21.5 8H20M17 13v-1.5M12.5 8H14" stroke-width="1.2"/>'),
+  potion: S('<path d="M9 3h6M10 3v5L5.5 16a4 4 0 0 0 3.5 6h6a4 4 0 0 0 3.5-6L14 8V3"/><path d="M7 15h10" stroke-width="1.2"/>'),
+  bag: S('<path d="M5 8h14l-1 12H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/><path d="M9 12h6" stroke-width="1.2"/>'),
+  book: S('<path d="M4 4h6a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H4zM20 4h-6a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h6z"/><path d="M16 8l1 2 2 .3-1.5 1.4.4 2.1-1.9-1-1.9 1 .4-2.1L13 10.3l2-.3z" stroke-width="1"/>'),
+  map: S('<path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/>'),
+  menu: S('<path d="M4 7h16M4 12h16M4 17h16"/>'),
+  close: S('<path d="M6 6l12 12M18 6L6 18"/>'),
+  coin: S('<circle cx="12" cy="12" r="8"/><path d="M12 7v10M9.5 9.5c0-1.2 1.1-2 2.5-2s2.5.8 2.5 2-1.1 1.7-2.5 2-2.5.9-2.5 2 1.1 2 2.5 2 2.5-.8 2.5-2"/>'),
+  hand: S('<path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V11M11 10.5V4a1.5 1.5 0 0 1 3 0v7M14 10.5V5.5a1.5 1.5 0 0 1 3 0V14c0 4-2.5 7-6.5 7-2.5 0-4.2-1.4-5.5-3.4L3.5 15a1.5 1.5 0 0 1 2.5-1.7L8 15.5"/>'),
+  talk: S('<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5" stroke-width="1.2"/>'),
+  chest: S('<path d="M3 10h18v10H3zM3 10c0-3 2-5 4-5h10c2 0 4 2 4 5"/><path d="M11 12h2v3h-2z"/>'),
+  gate: S('<path d="M5 21V9a7 7 0 0 1 14 0v12"/><path d="M9 21v-9a3 3 0 0 1 6 0v9" stroke-dasharray="2 1.5"/><path d="M3 21h18"/>'),
+  shield: S('<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>'),
+  star: S('<path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z"/>'),
+  skull: S('<path d="M5 11a7 7 0 1 1 14 0c0 2.5-1.2 4-3 5v3H8v-3c-1.8-1-3-2.5-3-5z"/><circle cx="9" cy="11" r="1.5" fill="currentColor"/><circle cx="15" cy="11" r="1.5" fill="currentColor"/><path d="M11 19v-2M13 19v-2"/>'),
+  flame: S('<path d="M12 21c3.5 0 6-2.4 6-5.8 0-4.4-4-6.2-4-11.2-2.5 1.6-4.6 4.4-4 8-1-.6-1.8-1.8-2-3-1.5 1.6-2 3.6-2 6.2C6 18.6 8.5 21 12 21z"/>'),
+  settings: S('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>'),
+  portal: S('<ellipse cx="12" cy="12" rx="6" ry="9"/><ellipse cx="12" cy="12" rx="3" ry="5.5" stroke-dasharray="2 2"/>')
+};
+// equipment slot glyphs
+export const SLOT_ICON = { weapon: 'sword', offhand: 'shield', helm: 'skull', chest: 'shield', gloves: 'hand', boots: 'roll', amulet: 'star', ring1: 'orb', ring2: 'orb' };
