@@ -4,6 +4,7 @@ import { G, later } from './state.js';
 import { initGfx, R, frame as gfxFrame, render, updateCamera, adaptResolution, setAtmosphere, shake } from '../gfx/gfx.js';
 import { initFX, updateFX, glowBurst, ring, P, clearFX } from '../gfx/fx.js';
 import { loadKits } from '../gfx/kits.js';
+import { loadPeople } from '../gfx/people.js';
 import { WIND } from '../world/build.js';
 import { initInput, pollInput, IN } from '../core/input.js';
 import { loadSave, writeSave } from './save.js';
@@ -46,8 +47,8 @@ export async function boot(q) {
   initOverlay(); buildHud(); initPanels();
   const fade = document.createElement('div'); fade.id = 'fade'; document.getElementById('app').appendChild(fade);
   const scr = document.createElement('div'); scr.id = 'screen'; scr.hidden = true; document.getElementById('app').appendChild(scr);
-  await loadKits(['dungeon', 'grave', 'town']);
-  preloadModels(['warden', 'ranger', 'mage', 'goblin', 'skeleton', 'warg', 'spider']);
+  await Promise.all([loadKits(['dungeon', 'grave', 'town']), loadPeople()]);
+  preloadModels(['goblin', 'skeleton', 'warg', 'spider']);
   buildTitleScene();
   loading.remove();
   window.__ready = true; window.__G = G; window.__R = R;

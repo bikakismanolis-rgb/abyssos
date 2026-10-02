@@ -4,9 +4,12 @@ import { initGfx, R, setAtmosphere, frame, render, updateCamera, addLight } from
 import { tex } from '../gfx/textures.js';
 import * as M from '../gfx/models.js';
 import { Avatar } from '../gfx/anim.js';
+import { loadPeople, personModel } from '../gfx/people.js';
 
-export function startViewer(q) {
+// people: ?viewer&only=p:warden,p:ranger (realistic characters), grip tests with &grip=X,1.57,Y,0
+export async function startViewer(q) {
   if (q.get('tilt')) { const [ax, a] = q.get('tilt').split(','); window.__tilt = [ax, +a]; }
+  if (q.get('grip')) { const g = q.get('grip').split(','); window.__grip = [g[0], +g[1], g[2], +g[3]]; }
   initGfx(2);
   setAtmosphere({ fog: 0x0a0d12, density: 0.012, sky: 0x6070a0, ground: 0x2a2018, hemi: 1.2, moon: 0xb0c4ff, moonI: 1.6, exposure: 1.2, heroI: 0 });
   const env = new THREE.PMREMGenerator(R.renderer);
@@ -32,8 +35,21 @@ export function startViewer(q) {
     wayfarer: () => { const a = new Avatar(M.buildWayfarer(), { style: 'staff' }); a.hold('R', 'lanternStaff', {}); return a; },
     smith: () => { const a = new Avatar(M.buildSmith(), { style: 'none' }); a.hold('R', 'hammer', {}); return a; },
     healer: () => new Avatar(M.buildHealer()),
-    villager: () => new Avatar(M.buildVillager(1))
+    villager: () => new Avatar(M.buildVillager(1)),
+    'p:warden': () => { const a = new Avatar(personModel('warden'), { style: 'sword' }); a.hold('R', 'sword', {}); a.hold('S', 'shield', {}); return a; },
+    'p:ranger': () => { const a = new Avatar(personModel('ranger'), { style: 'bow' }); a.hold('R', 'crossbow', {}); return a; },
+    'p:mage': () => { const a = new Avatar(personModel('mage'), { style: 'staff' }); a.hold('R', 'staff', {}); return a; },
+    'p:wayfarer': () => { const a = new Avatar(personModel('wayfarer'), { style: 'staff', animSet: 'npc' }); a.hold('R', 'lanternStaff', {}); return a; },
+    'p:smith': () => { const a = new Avatar(personModel('smith'), { style: 'none', animSet: 'npc' }); a.hold('R', 'hammer', {}); return a; },
+    'p:healer': () => new Avatar(personModel('healer'), { animSet: 'npc' }),
+    'p:villager0': () => new Avatar(personModel('villager0'), { animSet: 'npc' }),
+    'p:villager1': () => new Avatar(personModel('villager1'), { animSet: 'npc' }),
+    'p:villager2': () => new Avatar(personModel('villager2'), { animSet: 'npc' })
   };
+  if (list.some((n) => n.startsWith('p:'))) await loadPeople();
+  // &sheet=slash1,slash2,...: one copy of the first model per clip, each posed at the clip's strike (or &t)
+  const sheet = q.get('sheet') ? q.get('sheet').split(',') : null;
+  if (sheet) { const m = list[0]; list.length = 0; for (const c of sheet) list.push(m); }
   const avs = [];
   const cols = Math.ceil(Math.sqrt(list.length * 1.6));
   const gap = +(q.get('gap') || 2.4);
@@ -47,11 +63,20 @@ export function startViewer(q) {
   addLight({ x: 0, y: 3, z: 3, color: 0xffa860, intensity: 40, range: 20 });
   const clip = q.get('clip'), t = +(q.get('t') || 0), speed = +(q.get('speed') || 0);
   // advance animation to a fixed time
-  for (const a of avs) {
+  avs.forEach((a, i) => {
     let d = 1;
-    if (clip) d = a.play(a.kind === 'warg' || a.kind === 'spider' ? (q.get('qclip') || 'bite') : clip) || a.anim.adur || 0.5;
-    const steps = 30, dur = d * t + (clip ? 0 : 0.5);
+    const c = sheet ? sheet[i] : clip;
+    if (c) d = a.play(a.kind === 'warg' || a.kind === 'spider' ? (q.get('qclip') || 'bite') : c) || a.anim.adur || 0.5;
+    const at = sheet && !q.get('t') ? (a.anim.hitAt?.(c) ?? 0.5) : t;
+    if (sheet) a.label = c;
+    const steps = 30, dur = d * at + (c ? 0 : 0.5);
     for (let i = 0; i < steps; i++) a.update(dur / steps, { speed, runSpeed: 5, float: a.float });
+  });
+  // labels for clip sheets
+  if (sheet) {
+    const lay = document.createElement('div'); lay.style.cssText = 'position:fixed;inset:0;pointer-events:none;font:600 13px sans-serif;color:#fff;text-shadow:0 1px 2px #000';
+    document.body.appendChild(lay);
+    window.__labels = () => { lay.innerHTML = ''; for (const a of avs) { const v = a.group.position.clone(); v.y = 2.05; v.project(R.camera); const d = document.createElement('div'); d.textContent = a.label; d.style.cssText = `position:absolute;left:${(v.x * 0.5 + 0.5) * innerWidth}px;top:${(-v.y * 0.5 + 0.5) * innerHeight}px;transform:translate(-50%,-50%)`; lay.appendChild(d); } };
   }
   const camMode = q.get('cam') || 'game';
   const span = cols * gap;
@@ -63,8 +88,9 @@ export function startViewer(q) {
   let n = 0;
   function loop() {
     frame(0.016); updateCamera(0.016, 0, +(q.get('cz') || 0), true); render();
-    if (++n > 3) window.__ready = true;
-    requestAnimationFrame(loop);
+    if (++n > 3) { window.__labels?.(); window.__labels = null; window.__ready = true; }
+    // software rendering is slow: stop once the still frame is up
+    if (n < 8 || q.has('live')) requestAnimationFrame(loop);
   }
   loop();
 }
