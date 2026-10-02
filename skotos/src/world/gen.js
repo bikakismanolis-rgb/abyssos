@@ -110,6 +110,7 @@ export function genForest(seed, o = {}) {
       const edge = (D[i - 1] === 1 || D[i + 1] === 1 || D[i - w] === 1 || D[i + w] === 1);
       if (edge && rng.chance(0.3)) L.props.push({ t: 'bush', x: xx + rng.next(), z: zz + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.6, 1.1) });
       if (rng.chance(0.012)) L.props.push({ t: 'stone', x: xx + rng.next(), z: zz + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.25, 0.5) });
+      if (L.paint[i] < 0.2 && rng.chance(edge ? 0.02 : 0.005)) L.props.push({ t: 'branches', x: xx + rng.next(), z: zz + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.8, 1.25) });
       if (L.paint[i] < 0.35 && rng.chance(0.42)) L.props.push({ t: 'grass', x: xx + rng.next(), z: zz + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.7, 1.3) });
       continue;
     }
@@ -120,6 +121,7 @@ export function genForest(seed, o = {}) {
       L.props.push({ t: tt, x: xx + rng.range(0.2, 0.8), z: zz + rng.range(0.2, 0.8), r: rng.range(0, 6.28), s: rng.range(0.85, 1.35) * (d > 3 ? 1.2 : 1) });
     } else if (d <= 2 && rng.chance(0.4)) L.props.push({ t: 'bush', x: xx + rng.next(), z: zz + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.8, 1.4) });
     else if (d === 1 && rng.chance(0.05)) L.props.push({ t: 'rock', x: xx + 0.5, z: zz + 0.5, r: rng.range(0, 6.28), s: rng.range(0.8, 1.6) });
+    else if (d <= 2 && rng.chance(0.025)) L.props.push({ t: 'stump', x: xx + 0.5, z: zz + 0.5, r: rng.range(0, 6.28), s: rng.range(0.8, 1.15) });
   }
   // glowing mushrooms in rings and patches
   for (let n = 0; n < 26; n++) {
@@ -144,6 +146,7 @@ export function genForest(seed, o = {}) {
       for (let i = 0; i < 3; i++) { const a = (i / 3) * 6.28 + rng.next(); L.props.push({ t: 'tent', x: c.x + Math.sin(a) * (c.r - 2.2), z: c.z + Math.cos(a) * (c.r - 2.2), r: a + Math.PI, s: rng.range(0.9, 1.2) }); blockCircle(L, c.x + Math.sin(a) * (c.r - 2.2), c.z + Math.cos(a) * (c.r - 2.2), 1.1); }
       for (let i = 0; i < 4; i++) L.props.push({ t: 'bones', x: c.x + rng.range(-3, 3), z: c.z + rng.range(-3, 3), r: rng.range(0, 6.28), s: 1 });
       L.props.push({ t: 'crate', x: c.x + rng.range(-3, 3), z: c.z + rng.range(2, 3.5), r: rng.next(), s: 1, breakable: true });
+      { const a = rng.range(0, 6.28), bx = c.x + Math.sin(a) * (c.r - 1.2), bz = c.z + Math.cos(a) * (c.r - 1.2); L.props.push({ t: 'barrelS', x: bx, z: bz, r: rng.next() * 6 }, { t: 'crateS', x: bx + 0.9, z: bz + 0.3, r: rng.next() * 6 }); blockCircle(L, bx + 0.4, bz + 0.1, 0.9); }
       L.packs.push({ x: c.x, z: c.z, n: rng.int(5, 8), tag: 'goblins', elite: rng.chance(0.5) ? 'champion' : null });
     } else if (c.kind === 'ruin') {
       const n = rng.int(5, 8);
@@ -171,7 +174,7 @@ export function genForest(seed, o = {}) {
       for (let i = 0; i < 7; i++) L.props.push({ t: 'bones', x: c.x + rng.range(-3, 3), z: c.z + rng.range(-3, 3), r: rng.range(0, 6.28), s: 1.2 });
       L.packs.push({ x: c.x, z: c.z, n: rng.int(5, 7), tag: 'wolves', elite: rng.chance(0.6) ? 'champion' : null });
     } else if (c.kind === 'troll') {
-      for (let i = 0; i < 6; i++) L.props.push({ t: 'rock', x: c.x + Math.sin(i) * (c.r - 1), z: c.z + Math.cos(i) * (c.r - 1), r: i, s: rng.range(1.2, 2) });
+      for (let i = 0; i < 6; i++) { const s = rng.range(1.2, 2), x = c.x + Math.sin(i) * (c.r - 1), z = c.z + Math.cos(i) * (c.r - 1); L.props.push({ t: 'rock', x, z, r: i, s }); blockCircle(L, x, z, 0.45 * s); }
       for (let i = 0; i < 8; i++) L.props.push({ t: 'bones', x: c.x + rng.range(-3, 3), z: c.z + rng.range(-3, 3), r: rng.range(0, 6.28), s: 1.3 });
       L.packs.push({ x: c.x, z: c.z, n: 1, tag: 'troll', elite: 'rare' });
     }
@@ -235,14 +238,15 @@ export function genCrypt(seed, o = {}) {
   const Mf = (x, z) => x >= 0 && z >= 0 && x < MW && z < MH && M[z * MW + x] === 1;
   const roomAt = (mx, mz) => rooms.find((r) => mx >= r.x && mx < r.x + r.w && mz >= r.z && mz < r.z + r.h);
   const K = (m, x, z, r = 0, extra = {}) => L.props.push(Object.assign({ t: 'kit', kit: 'dungeon', m, x, z, r }, extra));
-  const KG = (m, x, z, r = 0, extra = {}) => L.props.push(Object.assign({ t: 'kit', kit: 'grave', m, x, z, r }, extra));
+  // skulls and ribcages at a believable size next to the scanned stone (the kit draws them large)
+  const KG = (m, x, z, r = 0, extra = {}) => L.props.push(Object.assign({ t: 'kit', kit: 'grave', m, x, z, r }, m === 'skull' || m === 'ribcage' ? { s: 0.6 } : {}, extra));
   const T = 0.375; // half wall thickness after scaling
   // floors
   for (let mz = 0; mz < MH; mz++) for (let mx = 0; mx < MW; mx++) {
     if (!Mf(mx, mz)) continue;
     const room = roomAt(mx, mz);
-    const m = room ? (room.kind === 'boss' ? rng.weighted([['floor_tile_large', 6], ['floor_tile_big_grate', 1]]) : rng.weighted([['floor_tile_large', 7], ['floor_tile_large_rocks', 2], ['floor_tile_big_grate', 0.4]])) : rng.weighted([['floor_dirt_large', 3], ['floor_dirt_large_rocky', 2], ['floor_tile_large_rocks', 1]]);
-    K(m, mx * S + 1.5, mz * S + 1.5, rng.int(0, 3) * Math.PI / 2, { floor: true });
+    // the floor itself is the photoreal stone ground plane (build.js), so no floor tiles are laid
+    void room;
   }
   // walls on every floor/solid edge, facing the floor
   const walls = [];
@@ -289,7 +293,7 @@ export function genCrypt(seed, o = {}) {
       for (let i = 0; i < 10; i++) {
         const a = (i / 10) * 6.283 + 0.31, px = cx + Math.sin(a) * 8.5, pz = cz + Math.cos(a) * 7;
         if (Math.abs(px - L.bossDoor.x) < 3 && pz > cz) continue;
-        K('pillar_decorated', px, pz, 0, { sx: 0.8 }); blockCircle(L, px, pz, 0.7);
+        K('pillar', px, pz, 0, { sx: 0.85 }); blockCircle(L, px, pz, 0.7);
       }
       L.props.push({ t: 'throne', x: cx, z: r.z + 2.4 }); blockCircle(L, cx, r.z + 2.4, 1.6);
       for (const sx of [-1, 1]) {
@@ -297,7 +301,7 @@ export function genCrypt(seed, o = {}) {
         L.lights.push({ x: cx + sx * 4.5, y: 1.6, z: r.z + 3.2, color: 0x4aa8ff, intensity: 18, range: 12, flicker: 0.3 });
         L.props.push({ t: 'brazier', x: cx + sx * 9, z: cz + 4, blue: true });
         L.lights.push({ x: cx + sx * 9, y: 1.6, z: cz + 4, color: 0x4aa8ff, intensity: 14, range: 11, flicker: 0.3 });
-        for (let k = 0; k < 3; k++) KG('candle_triple', cx + sx * (2.5 + k * 0.9), r.z + 1.4 + rng.next() * 0.4, rng.next() * 6);
+        for (let k = 0; k < 3; k++) L.props.push({ t: 'candlestick', x: cx + sx * (2.5 + k * 0.9), z: r.z + 1.4 + rng.next() * 0.4, r: rng.next() * 6, n: 3 });
         KG('skull_candle', cx + sx * 6.8, r.z + 1.5, rng.next() * 6);
       }
       for (let i = 0; i < 10; i++) KG(rng.pick(['bone_A', 'bone_B', 'bone_C', 'skull', 'ribcage']), cx + rng.range(-9, 9), cz + rng.range(-5, 6), rng.next() * 6);
@@ -327,7 +331,8 @@ export function genCrypt(seed, o = {}) {
     }
     for (let i = 0; i < rng.int(1, 3); i++) {
       const px = r.x + rng.range(1.2, r.w - 1.2), pz = r.z + rng.range(r.h * 0.45, r.h - 1.2);
-      KG(rng.pick(['candle_triple', 'skull_candle', 'candle_triple']), px, pz, rng.next() * 6);
+      if (rng.chance(0.33)) KG('skull_candle', px, pz, rng.next() * 6);
+      else L.props.push({ t: 'candlestick', x: px, z: pz, r: rng.next() * 6, n: rng.int(2, 3) });
       if (i === 0) L.lights.push({ x: px, y: 0.9, z: pz, color: 0xffb060, intensity: 7, range: 7, flicker: 0.25 });
     }
     if (rng.chance(0.55)) { const px = r.x + 1.3, pz = r.z + r.h - 1.3; L.props.push({ t: 'brazier', x: px, z: pz }); L.lights.push({ x: px, y: 1.6, z: pz, color: 0xff8a40, intensity: 14, range: 9, flicker: 0.35 }); blockCircle(L, px, pz, 0.4); }
@@ -408,7 +413,11 @@ export function genTown() {
     L.lights.push({ x, y: 2.2, z, color: 0xffb060, intensity: 9, range: 9, flicker: 0.2 });
   }
   for (const [x, z, r] of [[26.5, 40, 0.3], [38, 39.5, -0.2]]) { L.props.push({ t: 'stall', x, z, r }); blockCircle(L, x, z, 1.1); }
-  for (const [m, x, z, r] of [['wheelbarrow', 26, 48, 0.8], ['resource_lumber', 17, 37.5, 0.3], ['bucket_water', 33.8, 40, 0], ['sack', 42.5, 54, 0.4], ['crate_A_big', 41.6, 53.2, 0.2], ['barrel', 47.5, 52.5, 0], ['crate_B_small', 24, 49.5, 1], ['tent', 46, 40, -0.8], ['target', 12, 40, 1.2]]) L.props.push({ t: 'kit', kit: 'town', m, x, z, r });
+  for (const [m, x, z, r] of [['wheelbarrow', 26, 48, 0.8], ['resource_lumber', 17, 37.5, 0.3], ['sack', 42.5, 54, 0.4], ['tent', 46, 40, -0.8], ['target', 12, 40, 1.2]]) L.props.push({ t: 'kit', kit: 'town', m, x, z, r });
+  for (const [t, x, z, r] of [['bucket', 33.8, 40, 0], ['bucket', CX + 1.5, CZ + 1.1, 0.7], ['crateS', 41.6, 53.2, 0.2], ['crateS', 41.9, 53.9, 1.7], ['barrelS', 47.5, 52.5, 0], ['barrelS', 48.3, 53.1, 2], ['crateS', 24, 49.5, 1], ['barrelS', 20.6, 47.4, 0.5], ['barrelS', 21.4, 48.1, 2.2], ['bucket', 22.1, 47.2, 1]]) { L.props.push({ t, x, z, r }); blockCircle(L, x, z, t === 'bucket' ? 0.25 : 0.45); }
+  // a fire pit where the villagers warm themselves
+  L.props.push({ t: 'firepit', x: 40, z: 50 }); blockCircle(L, 40, 50, 0.9);
+  L.lights.push({ x: 40, y: 1.0, z: 50, color: 0xff7a30, intensity: 20, range: 11, flicker: 0.35, fx: 'fire' });
   for (let i = 0; i < 14; i++) { const a = rng.range(0, 6.28), d = rng.range(8, 18), x = CX + Math.sin(a) * d * 1.1, z = CZ + Math.cos(a) * d; if (L.cells[Math.floor(z) * w + Math.floor(x)] && Math.abs(x - CX) > 3) L.props.push({ t: rng.pick(['barrel', 'crate', 'barrel']), x, z, r: rng.next() * 6, s: rng.range(0.9, 1.1), breakable: true }); }
   // palisade along the edge, trees and rocks beyond it, the gate in the south
   const D = Dout;

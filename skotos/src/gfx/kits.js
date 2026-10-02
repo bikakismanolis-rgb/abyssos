@@ -48,7 +48,7 @@ export function loadKit(kit) {
         models[holder.name] = merged;
       }
       if (map) { map.colorSpace = THREE.SRGBColorSpace; map.flipY = false; map.anisotropy = 4; }
-      KITMAT[kit] = new THREE.MeshLambertMaterial({ map, color: kit === 'town' ? 0xb8b0a8 : kit === 'dungeon' ? 0x8c8a90 : 0xb0aca8 });
+      KITMAT[kit] = new THREE.MeshLambertMaterial({ map, color: kit === 'town' ? 0xb8b0a8 : kit === 'dungeon' ? 0x8c8a90 : 0x8a8274 }); // grave bits: aged bone, not chalk
       KIT[kit] = models;
       resolve(models);
     };

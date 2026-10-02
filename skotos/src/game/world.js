@@ -7,6 +7,7 @@ import { buildLevel, propMesh, runeDisc, WIND } from '../world/build.js';
 import { GridMap } from '../world/map.js';
 import { ATMOS } from '../world/atmos.js';
 import { kitMesh } from '../gfx/kits.js';
+import { envMesh, envChest, hasEnv } from '../gfx/env.js';
 import { setEmitters, setAmbient, clearFX, glowBurst, puff, sparks, ring, P, explosion } from '../gfx/fx.js';
 import { Actor, spawnMonster, spawnNpc, createPlayer, rollAffixes } from './actors.js';
 import { PACKS, DIFFS, MONSTERS } from './data.js';
@@ -44,7 +45,9 @@ function createZone(id, o = {}) {
   const z = { id, L, map, lvl, level: o.level ?? ZONES[id].level, actors: [], pickups: [], interact: [], packs: [], seed, tier: o.tier || 0, extra: [] };
   // breakables
   for (const p of lvl.breakables) {
-    const mesh = p.t === 'urn' ? propMesh('urn') : kitMesh('dungeon', p.t === 'barrel' ? 'barrel_small' : 'box_small', 0.42 * (p.s || 1));
+    const mesh = p.t === 'urn' ? propMesh('urn')
+      : hasEnv(p.t) ? envMesh(p.t, (p.t === 'crate' ? 1.15 : 0.95) * (p.s || 1))
+      : kitMesh('dungeon', p.t === 'barrel' ? 'barrel_small' : 'box_small', 0.42 * (p.s || 1));
     mesh.position.set(p.x, 0, p.z); mesh.rotation.y = rand.range(0, 6.28);
     const a = new Actor({ x: p.x, z: p.z, team: 'foe', kind: 'prop', radius: 0.45, hp: 1, def: { flesh: 'wood' } });
     a.prop = true; a.mesh = mesh; a.propType = p.t;
@@ -71,7 +74,7 @@ function createZone(id, o = {}) {
     z.emit = (z.emit || []).concat([{ x: s.x, y: 2.25, z: s.z, type: 'fire', s: 0.45, shrine: it }]);
   }
   for (const c of L.spots.chests || []) {
-    const m = kitMesh('dungeon', c.rare ? 'chest_gold' : 'chest', 0.55); m.position.set(c.x, 0, c.z); m.rotation.y = rand.range(-0.4, 0.4);
+    const m = hasEnv('chest') ? envChest(c.rare ? 1.15 : 1) : kitMesh('dungeon', c.rare ? 'chest_gold' : 'chest', 0.55); m.position.set(c.x, 0, c.z); m.rotation.y = rand.range(-0.4, 0.4);
     z.extra.push(m);
     const it = { kind: 'chest', rare: c.rare, x: c.x, z: c.z, r: 1.8, prompt: 'open', mesh: m };
     it.use = () => openChest(z, it);
@@ -231,10 +234,17 @@ function openChest(z, it) {
   const L = Math.max(z.level, G.hero.level), D = DIFFS[G.hero.diff];
   sparks(it.x, 0.8, it.z, 20, 0xffd070, 4);
   addLight({ x: it.x, y: 1.5, z: it.z, color: 0xffd070, intensity: 25, range: 8, life: 1.2, fade: 1.2 });
-  if (it.mesh) { it.mesh.rotation.x = -0.15; it.mesh.position.y = 0.02; }
+  if (it.mesh?.userData.lid) swingLid(it.mesh.userData.lid);
+  else if (it.mesh) { it.mesh.rotation.x = -0.15; it.mesh.position.y = 0.02; }
   const n = it.rare ? rand.int(2, 4) : rand.int(1, 2);
   for (let i = 0; i < n; i++) later(0.15 + i * 0.15, () => dropItem(it.x, it.z, makeItem(L, { elite: it.rare, mf: G.stats.mf, legMul: D.leg, rar: it.rare && i === 0 ? 2 : undefined })));
   for (let i = 0; i < (it.rare ? 4 : 2); i++) later(0.1 + i * 0.1, () => dropGold(it.x, it.z, Math.round((8 + L * 3) * rand.range(0.7, 1.3) * D.gold)));
+}
+// the scanned chest's lid swings back on its hinge
+function swingLid(lid) {
+  let t = 0;
+  const step = () => { t = Math.min(1, t + 0.06); lid.rotation.x = -1.9 * (1 - (1 - t) ** 3); if (t < 1) later(0.016, step); };
+  step();
 }
 function takeExit(z, e) {
   if (e.locked && !G.hero.flags[e.locked]) { emit('toast', t('locked')); Audio.sfx('denied'); if (e.locked === 'weaver') emit('say', 'd.weaver'); return; }

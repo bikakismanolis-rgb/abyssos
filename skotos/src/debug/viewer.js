@@ -100,9 +100,10 @@ export async function startWorld(q) {
   const { genForest, genCrypt, genTown } = await import('../world/gen.js');
   const { buildLevel } = await import('../world/build.js');
   const { loadKits } = await import('../gfx/kits.js');
+  const { loadEnv } = await import('../gfx/env.js');
   const { ATMOS } = await import('../world/atmos.js');
   initGfx(+(q.get('q') || 2));
-  await loadKits(['dungeon', 'grave', 'town']);
+  await Promise.all([loadKits(['dungeon', 'grave', 'town']), q.has('noenv') ? null : loadEnv(R.quality)]);
   const type = q.get('world'), seed = +(q.get('seed') || 3);
   const L = type === 'crypt' ? genCrypt(seed) : type === 'town' ? genTown() : genForest(seed);
   setAtmosphere(ATMOS[type]);
@@ -121,7 +122,7 @@ export async function startWorld(q) {
     R.heroLight.position.set(x, 2.6, z); R.heroLight.intensity = R.heroLight.userData.base;
     if (lvl.walls) lvl.walls.update(0.1, x, z);
     render();
-    if (++n > 5) window.__ready = true;
+    if (++n > 5) { window.__ready = true; window.__R = R; }
     requestAnimationFrame(loop);
   }
   loop();
