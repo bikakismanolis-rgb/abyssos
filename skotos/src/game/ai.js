@@ -131,7 +131,8 @@ function startAttack(a, name, o = {}) {
   const T = ATK[name] || ATK.slash1;
   a.state = 'attack'; a.atkT = 0; a.atkHit = false; a.atkName = name;
   a.atkHitT = (o.hit ?? T.hit) / (a.affixes.includes('fast') ? 1.25 : 1); a.atkDur = (o.dur ?? T.dur) / (a.affixes.includes('fast') ? 1.25 : 1);
-  a.avatar?.play(name, (o.speed ?? T.speed) * (a.affixes.includes('fast') ? 1.25 : 1));
+  // realistic creatures time-scale their clip so the strike lands when the hit is applied
+  a.avatar?.play(name, (o.speed ?? T.speed) * (a.affixes.includes('fast') ? 1.25 : 1), { hitIn: a.atkHitT });
   if (Math.random() < 0.35) Audio.sfx(ATK_SFX[a.def.sfx] || 'swing', { x: a.x, z: a.z, vol: 0.7 });
   a.cd = a.def.atkTime * rand.range(0.85, 1.15);
 }

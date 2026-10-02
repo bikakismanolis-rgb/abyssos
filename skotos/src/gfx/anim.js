@@ -5,6 +5,7 @@ import { clamp, lerp, smooth, damp, TAU } from '../core/util.js';
 import { weaponGeo, shieldGeo, heldMesh } from './models.js';
 import { ANIMS } from './anims.data.js';
 import { PersonAnim, setHand } from './people.js';
+import { CreatureAnim } from './creatures.js';
 import { makeCharMat } from './rig.js';
 
 
@@ -253,15 +254,17 @@ export class Avatar {
     this.mat = model.mat;
     this.held = {};
     // realistic people wear textured materials: what they hold gets a character material sharing their uniforms
-    if (model.kind === 'person') { this.heldMat = makeCharMat(); this.heldMat.userData.u = model.mat.userData.u; }
-    const A = model.kind === 'person' ? PersonAnim : model.kind === 'warg' ? QuadAnim : model.kind === 'spider' ? SpiderAnim : HumanoidAnim;
+    if (model.kind === 'person' || model.kind === 'creature') { this.heldMat = makeCharMat(); this.heldMat.userData.u = model.mat.userData.u; }
+    const A = model.kind === 'person' ? PersonAnim : model.kind === 'creature' ? CreatureAnim : model.kind === 'warg' ? QuadAnim : model.kind === 'spider' ? SpiderAnim : HumanoidAnim;
     this.anim = new A(this);
     this.flashV = 0; this.scale = o.scale || 1;
     this.group.scale.setScalar(this.scale);
   }
   hold(hand, type, look) {
     if (hand === 'S') hand = 'L';
-    const bone = this.bones[hand === 'R' ? 'handR' : 'handL'];
+    const grip = this.model.grips?.[hand];
+    const bone = grip || this.bones[hand === 'R' ? 'handR' : 'handL'];
+    if (!bone) return null;
     if (this.held[hand]) { bone.remove(this.held[hand].mesh); this.held[hand].mesh.geometry.dispose(); }
     const person = this.kind === 'person';
     if (person) setHand(this.bones, hand, !!type);
@@ -276,7 +279,10 @@ export class Avatar {
       mesh = heldMesh(w.parts, mat);
       info = { mesh, tip: w.tip, base: w.base, gem: w.gem, type, axis: w.axis || 'y' };
     }
-    if (person) {
+    if (grip) {
+      // creature grips: +Y along the blade, +Z along the knuckles (a crossbow's length)
+      mesh.quaternion.identity(); mesh.position.set(0, 0, 0);
+    } else if (person) {
       const g = (type === 'crossbow' && this.model.grip[hand + 'pistol']) || this.model.grip[hand];
       mesh.quaternion.copy(g.q); mesh.position.copy(g.p);
       if (type === 'crossbow') mesh.scale.setScalar(0.8);
