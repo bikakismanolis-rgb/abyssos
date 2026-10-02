@@ -11,7 +11,7 @@ import movesUrl from '../assets/moves.bin?url';
 
 export const PEOPLE = { scenes: {}, moves: null, ready: false };
 
-async function bytes(url) {
+export async function bytes(url) {
   // inlined builds carry assets as data URIs: decode them instead of fetching
   if (url.startsWith('data:')) {
     const bin = atob(url.slice(url.indexOf(',') + 1)), u8 = new Uint8Array(bin.length);
@@ -55,7 +55,7 @@ float ph31(vec3 p){ p = fract(p*0.3183099+0.1); p *= 17.0; return fract(p.x*p.y*
 float pnoise(vec3 x){ vec3 i=floor(x); vec3 f=fract(x); f=f*f*(3.0-2.0*f);
  return mix(mix(mix(ph31(i),ph31(i+vec3(1,0,0)),f.x), mix(ph31(i+vec3(0,1,0)),ph31(i+vec3(1,1,0)),f.x),f.y),
             mix(mix(ph31(i+vec3(0,0,1)),ph31(i+vec3(1,0,1)),f.x), mix(ph31(i+vec3(0,1,1)),ph31(i+vec3(1,1,1)),f.x),f.y),f.z); }`;
-function patchPerson(sh) {
+export function patchPerson(sh) {
   Object.assign(sh.uniforms, this.userData.u);
   sh.vertexShader = sh.vertexShader
     .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')

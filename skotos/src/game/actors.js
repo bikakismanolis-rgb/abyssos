@@ -6,6 +6,7 @@ import { makeCharMat } from '../gfx/rig.js';
 import * as M from '../gfx/models.js';
 import { Avatar } from '../gfx/anim.js';
 import { hasPerson, personModel } from '../gfx/people.js';
+import { hasCreature, creatureModel } from '../gfx/creatures.js';
 import { tex } from '../gfx/textures.js';
 import { MONSTERS, DIFFS, monsterHP, monsterDmg, AFFIXES, CLASSES } from './data.js';
 import { G, uid } from './state.js';
@@ -40,7 +41,7 @@ export function preloadModels(list) { for (const m of list) if (!CACHE[m] && BUI
 const STYLE = { warden: 'sword', ranger: 'bow', mage: 'staff' };
 // realistic people (Quaternius, see gfx/people.js) replace the code-built models wherever one exists
 export function makeAvatar(model, o = {}) {
-  const m = hasPerson(model) ? personModel(model) : instance(model);
+  const m = hasPerson(model) ? personModel(model) : hasCreature(model) ? creatureModel(model) : instance(model);
   const av = new Avatar(m, { style: o.style || STYLE[model] || 'none', animSet: o.animSet, hunch: o.hunch, scale: o.scale, idle: o.idle });
   if (o.weapon) av.hold('R', o.weapon, o.look || {});
   if (o.offhand) av.hold('L', o.offhand, o.offLook || {});
