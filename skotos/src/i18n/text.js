@@ -7,7 +7,7 @@ export const TEXT = {
   'menu.new': ['Νέος ήρωας', 'New hero'],
   'menu.settings': ['Ρυθμίσεις', 'Settings'],
   'menu.tap': ['Άγγιξε για να ξεκινήσεις', 'Tap to begin'],
-  'menu.credits': ['Μοντέλα και κινήσεις: KayKit (CC0). Όλα τα υπόλοιπα φτιάχτηκαν για το παιχνίδι.', 'Models and animations: KayKit (CC0). Everything else made for this game.'],
+  'menu.credits': ['Μοντέλα και κινήσεις: KayKit, Quaternius (CC0). Έδαφος, πέτρα και αντικείμενα: Poly Haven (CC0). Όλα τα υπόλοιπα φτιάχτηκαν για το παιχνίδι.', 'Models and animations: KayKit, Quaternius (CC0). Ground, stone and props: Poly Haven (CC0). Everything else made for this game.'],
   'menu.slot': ['{0} · Επίπεδο {1} · {2}', '{0} · Level {1} · {2}'],
   'menu.delete': ['Διαγραφή', 'Delete'],
   'menu.deleteSure': ['Σίγουρα; Πάτα ξανά.', 'Sure? Tap again.'],
