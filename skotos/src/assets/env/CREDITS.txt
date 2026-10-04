@@ -1,0 +1,36 @@
+Skotos environment assets - all CC0 (public domain), from Poly Haven (https://polyhaven.com).
+Packed by tools/pack-env.mjs: resized, WebP-encoded, ambient occlusion baked into the diffuse layers; props decimated and re-centred.
+
+Tiling layers (src/assets/env/*.webp):
+  leaves: forest_leaves_02 by Rob Tuytel - https://polyhaven.com/a/forest_leaves_02
+  mud: brown_mud_leaves_01 by Rob Tuytel - https://polyhaven.com/a/brown_mud_leaves_01
+  trail: rocky_trail by Amal Kumar - https://polyhaven.com/a/rocky_trail
+  cobble: cobblestone_floor_04 by Rob Tuytel - https://polyhaven.com/a/cobblestone_floor_04
+  flags: monastery_stone_floor by Amal Kumar - https://polyhaven.com/a/monastery_stone_floor
+  mcobble: mossy_cobblestone by Sơn Nguyễn - https://polyhaven.com/a/mossy_cobblestone
+  wall: mossy_stone_wall by Amal Kumar - https://polyhaven.com/a/mossy_stone_wall
+  blocks: medieval_blocks_03 by Rob Tuytel - https://polyhaven.com/a/medieval_blocks_03
+  bark: bark_brown_02 by Rob Tuytel - https://polyhaven.com/a/bark_brown_02
+
+Props (src/assets/env.glb):
+  boulder: boulder_01 by Rico Cilliers - https://polyhaven.com/a/boulder_01
+  rockA: rock_moss_set_01 by Kless Gyzen - https://polyhaven.com/a/rock_moss_set_01
+  rockB: rock_moss_set_01 by Kless Gyzen - https://polyhaven.com/a/rock_moss_set_01
+  rockC: rock_moss_set_01 by Kless Gyzen - https://polyhaven.com/a/rock_moss_set_01
+  stoneA: rock_moss_set_02 by Kless Gyzen - https://polyhaven.com/a/rock_moss_set_02
+  stoneB: rock_moss_set_02 by Kless Gyzen - https://polyhaven.com/a/rock_moss_set_02
+  stoneC: rock_moss_set_02 by Kless Gyzen - https://polyhaven.com/a/rock_moss_set_02
+  log: dead_tree_trunk by Rob Tuytel - https://polyhaven.com/a/dead_tree_trunk
+  stump: tree_stump_01 by Rob Tuytel - https://polyhaven.com/a/tree_stump_01
+  fernA: fern_02 by Rob Tuytel, Rico Cilliers - https://polyhaven.com/a/fern_02
+  fernB: fern_02 by Rob Tuytel, Rico Cilliers - https://polyhaven.com/a/fern_02
+  branches: dry_branches_medium_01 by Rico Cilliers - https://polyhaven.com/a/dry_branches_medium_01
+  barrel: wine_barrel_01 by James Ray Cock - https://polyhaven.com/a/wine_barrel_01
+  crate: wooden_crate_01 by James Ray Cock - https://polyhaven.com/a/wooden_crate_01
+  lantern: wooden_lantern_01 by James Ray Cock - https://polyhaven.com/a/wooden_lantern_01
+  bucket: wooden_bucket_01 by James Ray Cock - https://polyhaven.com/a/wooden_bucket_01
+  firepit: stone_fire_pit by Sebastian Platen - https://polyhaven.com/a/stone_fire_pit
+  chest: treasure_chest by Rico Cilliers - https://polyhaven.com/a/treasure_chest
+  chestLid: treasure_chest by Rico Cilliers - https://polyhaven.com/a/treasure_chest
+  candlestick: wooden_candlestick by Josh Dean - https://polyhaven.com/a/wooden_candlestick
+  statue: gothic_statue by Benny Weimer - https://polyhaven.com/a/gothic_statue

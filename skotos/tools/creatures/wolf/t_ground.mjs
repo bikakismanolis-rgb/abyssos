@@ -1,0 +1,13 @@
+import { NodeIO } from '@gltf-transform/core';
+import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
+import { makeRig, solve, makeSkinner } from './lib.mjs';
+import { makeClips } from './clips.mjs';
+const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
+const rig = makeRig(await io.read('wolf_base.glb'));
+const P = JSON.parse(process.argv[3] || '{}');
+const C = makeClips(rig, P)[process.argv[2] || 'die'];
+const sk = makeSkinner(rig, 1);
+const step = +(process.argv[4] || 3);
+C.frames.forEach((s, i) => { if (i % step && i !== C.frames.length - 1) return; const { frame } = solve(rig, s); const pts = sk.skinned(frame);
+  const by = {}; let mn = 1e9; pts.forEach((p, k) => { mn = Math.min(mn, p.y); if (p.y < 0.0) { const v = sk.VERTS[k]; let bi = 0; for (let q = 1; q < 4; q++) if (v.w[q] > v.w[bi]) bi = q; const n = sk.JL[v.j[bi]]; by[n] = Math.min(by[n] ?? 0, p.y); } });
+  console.log(String(i).padStart(3), 'minY', mn.toFixed(3), Object.entries(by).map(([k, v]) => k + ':' + v.toFixed(3)).join(' ')); });
