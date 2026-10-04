@@ -54,7 +54,9 @@ function prepare(gltf) {
     if (m.roughness < 0.45 && !m.metalnessMap) m.roughness = 0.6;
   });
   const box = new THREE.Box3().setFromObject(scene);
-  return { scene, clips, hit: ex.hit || {}, height: ex.height || box.max.y - box.min.y, walkSpeed: ex.walkSpeed || 1.4, runSpeed: ex.runSpeed || 4, credit: ex.credit };
+  // spiders and wolves are wider or longer than they are tall
+  const size = box.getSize(new THREE.Vector3()), extent = Math.max(size.x, size.z, ex.legSpan || 0, ex.length || 0);
+  return { scene, clips, hit: ex.hit || {}, height: ex.height || size.y, extent, walkSpeed: ex.walkSpeed || 1.4, runSpeed: ex.runSpeed || 4, credit: ex.credit };
 }
 
 export function creatureModel(model, o = {}) {
@@ -72,7 +74,7 @@ export function creatureModel(model, o = {}) {
     mat.customProgramCacheKey = () => 'person1';
     m.material = mat; mats.push(mat);
   });
-  cullSphere(inner, T.height * base);
+  cullSphere(inner, T.height * base, T.extent * base);
   const bones = {}, grips = {};
   root.traverse((n) => { if (n.isBone) bones[n.name] = n; if (n.name === 'grip_R') grips.R = n; if (n.name === 'grip_L') grips.L = n; });
   // names the rest of the game asks for

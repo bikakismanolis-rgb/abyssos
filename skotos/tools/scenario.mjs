@@ -104,7 +104,7 @@ const S = {
     await pg.click('#m-new'); await pg.waitForTimeout(2500); await shot();
     await pg.click('.pcard[data-c="mage"]'); await pg.waitForTimeout(2500); await shot();
     await pg.click('#p-go'); await pg.waitForTimeout(3500); await shot();
-    await pg.click('#i-skip'); await pg.waitForTimeout(4000); await shot();
+    await pg.evaluate(() => document.getElementById('i-skip')?.click()); await pg.waitForTimeout(4000); await shot();
     return pg.evaluate(() => ({ mode: window.__G.mode, zone: window.__G.zone?.id, cls: window.__G.hero?.cls }));
   } }
 };
