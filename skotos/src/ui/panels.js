@@ -1,4 +1,4 @@
-// Modal panels: inventory, skills, shops, stash, waypoints, gates, pause, settings, death, act end, map.
+// Modal panels: inventory, skills, shops, stash, waypoints, gates, pause, settings, credits, death, act end, map.
 import { G } from '../game/state.js';
 import { CLASSES, SKILLS, DIFFS, SLOTS, SKILL_MAX_RANK, BASES, DODGE } from '../game/data.js';
 import { computeStats, skillRank, skillUnlocked, refreshStats } from '../game/stats.js';
@@ -11,6 +11,7 @@ import { t, setLang, lang } from '../i18n/i18n.js';
 import { fmt, fmtK } from '../core/util.js';
 import { drawBigMap } from './hud.js';
 import Audio from '../audio/audio.js';
+import { CREDITS, MIT_ROCKETBOX } from './credits.js';
 
 const $ = (id) => document.getElementById(id);
 const P = { name: null, sel: null, tab: 0, ctx: null, delSure: null };
@@ -180,7 +181,15 @@ const R = {
       <div class="set-row"><span>${t('set.lang')}</span><div class="chips" style="justify-content:flex-start">${chip('lang:el', lang() === 'el', 'Ελληνικά')}${chip('lang:en', lang() === 'en', 'English')}</div></div>
       <div class="set-row"><span>${t('set.vibrate')}</span><div class="chips" style="justify-content:flex-start">${chip('vib:1', s.vibrate, t('set.on'))}${chip('vib:0', !s.vibrate, t('set.off'))}</div></div>
       <div class="set-row"><span>${t('set.numbers')}</span><div class="chips" style="justify-content:flex-start">${chip('num:1', s.numbers, t('set.on'))}${chip('num:0', !s.numbers, t('set.off'))}</div></div>
-      <p class="muted">${t('set.qnote')}</p><p class="muted">${t('menu.credits')}</p></div></div>`;
+      <p class="muted">${t('set.qnote')}</p><p class="muted">${t('menu.credits')}</p>
+      <button class="btn ghost" data-a="credits" style="width:100%">${t('cr.title')}</button></div></div>`;
+  },
+  credits() {
+    const esc = (x) => String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    const sec = CREDITS.map((c) => `<h4 class="cr-h">${t(c.h)}</h4>${c.items.map(([what, by, lic, url]) => `<div class="cr-i"><b>${esc(what)}</b><span>${esc(by)} · ${esc(lic)}</span><a href="${url}" target="_blank" rel="noopener">${esc(url.replace(/^https?:\/\//, ''))}</a></div>`).join('')}${c.note ? `<p class="muted">${t(c.note)}</p>` : ''}`).join('');
+    return `<div class="pn">${head(t('cr.title'), false)}<div class="pn-b cr">${sec}
+      <h4 class="cr-h">${t('cr.made')}</h4><p class="muted">${t('cr.madeD')}</p>
+      <h4 class="cr-h">Microsoft Rocketbox</h4><pre class="cr-lic">${esc(MIT_ROCKETBOX)}</pre></div></div>`;
   },
   dead() {
     return `<div class="pn narrow" style="text-align:center"><div class="pn-b" style="padding:24px"><div class="act-h" style="color:#ff8a70">${t('dead.title')}</div><p>${t('dead.sub')}</p><div class="menu" style="margin:16px auto 0">
@@ -242,6 +251,7 @@ function onClick(e) {
     case 'portal': close(); emit('townPortal'); return;
     case 'map': open('map'); return;
     case 'settings': open('settings'); return;
+    case 'credits': open('credits'); return;
     case 'quit': close(); emit('quit'); return;
     case 'q': G.settings.quality = +x; emit('settings'); break;
     case 'lang': setLang(x); G.settings.lang = x; emit('settings'); break;

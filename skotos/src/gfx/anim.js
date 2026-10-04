@@ -243,6 +243,8 @@ export class SpiderAnim {
 }
 
 const STAFF_TILT = ['Z', 1.35];
+// creature grips (+Y along a blade, +Z along the knuckles): staves lean head-up across the body
+const GRIP_STAFF_TILT = ['X', -Math.PI / 2];
 // ---------- avatar: what an actor looks like ----------
 const _v = new THREE.Vector3(), _w = new THREE.Vector3();
 export class Avatar {
@@ -282,6 +284,7 @@ export class Avatar {
     if (grip) {
       // creature grips: +Y along the blade, +Z along the knuckles (a crossbow's length)
       mesh.quaternion.identity(); mesh.position.set(0, 0, 0);
+      mesh.scale.setScalar((this.model.weaponScale || 1) * (type === 'crossbow' ? 0.85 : 1));
     } else if (person) {
       const g = (type === 'crossbow' && this.model.grip[hand + 'pistol']) || this.model.grip[hand];
       mesh.quaternion.copy(g.q); mesh.position.copy(g.p);
@@ -295,7 +298,7 @@ export class Avatar {
       mesh.position.set((hand === 'R' ? -1 : 1) * 0.05 * s, -0.035 * s, 0);
     }
     // long staves read better held upright than pointed forward like a sword
-    if (type && (type.startsWith('staff') || type === 'lanternStaff')) { const T = (typeof window !== 'undefined' && window.__tilt) || STAFF_TILT; mesh['rotate' + T[0]](T[1]); }
+    if (type && (type.startsWith('staff') || type === 'lanternStaff')) { const T = (typeof window !== 'undefined' && window.__tilt) || (grip ? GRIP_STAFF_TILT : STAFF_TILT); mesh['rotate' + T[0]](T[1]); }
     bone.add(mesh);
     this.held[hand] = info;
     return info;
