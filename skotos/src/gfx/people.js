@@ -71,7 +71,7 @@ float dn = 1.0;
 if (uDissolve > 0.0) { dn = pnoise(vWPos * 4.0) * 0.7 + pnoise(vWPos * 11.0) * 0.3; if (dn < uDissolve) discard; }`)
     .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
 float rimF = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 2.2);
-totalEmissiveRadiance += uRimColor * rimF * uRim;
+totalEmissiveRadiance += uRimColor * rimF * uRim * 0.5;
 totalEmissiveRadiance += vec3(1.0, 0.82, 0.65) * uFlash;
 if (uDissolve > 0.0) totalEmissiveRadiance += uBurn * 5.0 * (1.0 - smoothstep(0.0, 0.07, dn - uDissolve));`);
 }
@@ -120,6 +120,19 @@ function prepareTemplate(scene) {
   });
 }
 
+// Skinned meshes cull against a generous sphere around the standing character (in each mesh's own space),
+// so off-screen characters are not drawn; three.js would otherwise use the bind pose or skip culling.
+const _inv = new THREE.Matrix4();
+export function cullSphere(root, height) {
+  root.updateMatrixWorld(true);
+  const ws = new THREE.Sphere(new THREE.Vector3(0, height * 0.5, 0), height * 0.75 + 0.6);
+  root.traverse((m) => {
+    if (!m.isSkinnedMesh) return;
+    m.boundingSphere = ws.clone().applyMatrix4(_inv.copy(m.matrixWorld).invert());
+    m.frustumCulled = true;
+  });
+}
+
 // a fresh, independently animated copy of a character
 export function personModel(name, o = {}) {
   const tpl = PEOPLE.scenes[name];
@@ -135,6 +148,7 @@ export function personModel(name, o = {}) {
     mat.customProgramCacheKey = () => 'person1';
     m.material = mat; mats.push(mat);
   });
+  cullSphere(group, tpl.userData.tpl.height);
   const bones = {};
   group.traverse((b) => { if (b.isBone) bones[b.name] = b; });
   // the names the rest of the game uses

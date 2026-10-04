@@ -5,6 +5,7 @@ import { initGfx, R, frame as gfxFrame, render, updateCamera, adaptResolution, s
 import { initFX, updateFX, glowBurst, ring, P, clearFX } from '../gfx/fx.js';
 import { loadKits } from '../gfx/kits.js';
 import { loadPeople } from '../gfx/people.js';
+import { loadCreatures, hasCreature } from '../gfx/creatures.js';
 import { loadEnv } from '../gfx/env.js';
 import { WIND } from '../world/build.js';
 import { initInput, pollInput, IN } from '../core/input.js';
@@ -48,8 +49,9 @@ export async function boot(q) {
   initOverlay(); buildHud(); initPanels();
   const fade = document.createElement('div'); fade.id = 'fade'; document.getElementById('app').appendChild(fade);
   const scr = document.createElement('div'); scr.id = 'screen'; scr.hidden = true; document.getElementById('app').appendChild(scr);
-  await Promise.all([loadKits(['dungeon', 'grave', 'town']), loadPeople(), loadEnv(G.settings.quality)]);
-  preloadModels(['goblin', 'skeleton', 'warg', 'spider']);
+  await Promise.all([loadKits(['dungeon', 'grave', 'town']), loadPeople(), loadCreatures(), loadEnv(G.settings.quality)]);
+  // code-built fallbacks only for monsters without a realistic model
+  preloadModels(['goblin', 'skeleton', 'warg', 'spider'].filter((m) => !hasCreature(m)));
   buildTitleScene();
   loading.remove();
   window.__ready = true; window.__G = G; window.__R = R;

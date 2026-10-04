@@ -7,6 +7,7 @@ import { loadCreatures, hasCreature, creatureModel } from '../gfx/creatures.js';
 import { loadPeople, personModel } from '../gfx/people.js';
 
 export async function startCreatureView(q) {
+  if (q.get('tilt')) { const [ax, a] = q.get('tilt').split(','); window.__tilt = [ax, +a]; }
   initGfx(2);
   setAtmosphere({ fog: 0x0a0d12, density: 0.01, sky: 0x6070a0, ground: 0x2a2018, hemi: 1.2, moon: 0xb0c4ff, moonI: 1.6, exposure: 1.2, heroI: 0 });
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshLambertMaterial({ map: tex('grass') }));

@@ -6,7 +6,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { clamp, damp, smooth } from '../core/util.js';
-import { bytes, patchPerson, personUniforms } from './people.js';
+import { bytes, patchPerson, personUniforms, cullSphere } from './people.js';
+import { R } from './gfx.js';
 
 // every creature GLB present at build time; missing ones fall back to the code-built models
 const FILES = import.meta.glob('../assets/creatures/*.glb', { query: '?url', import: 'default', eager: true });
@@ -20,7 +21,7 @@ const CAST = {
   warg: ['wolf', 1.15], spiritWolf: ['wolf', 1],
   spider: ['spider', 1], spiderling: ['spider', 0.5], weaver: ['spider', 2.6],
   ash: ['ashspawn', 1], troll: ['troll', 1],
-  wraith: ['wight', 1], barrowLord: ['barrowlord', 1]
+  wraith: ['wight', 1], barrowLord: ['barrowlord', 1.15]
 };
 
 export const CREATURES = { tpl: {}, ready: false };
@@ -46,7 +47,8 @@ function prepare(gltf) {
   for (const c of gltf.animations) clips[c.name] = c;
   scene.traverse((o) => {
     if (!o.isMesh) return;
-    o.castShadow = true; o.receiveShadow = false; o.frustumCulled = false;
+    // packs are many: real shadows only on high quality, blob shadows always
+    o.castShadow = R.quality >= 2; o.receiveShadow = false;
     const m = o.material;
     m.envMapIntensity = 0.4;
     if (m.roughness < 0.45 && !m.metalnessMap) m.roughness = 0.6;
@@ -70,6 +72,7 @@ export function creatureModel(model, o = {}) {
     mat.customProgramCacheKey = () => 'person1';
     m.material = mat; mats.push(mat);
   });
+  cullSphere(inner, T.height * base);
   const bones = {}, grips = {};
   root.traverse((n) => { if (n.isBone) bones[n.name] = n; if (n.name === 'grip_R') grips.R = n; if (n.name === 'grip_L') grips.L = n; });
   // names the rest of the game asks for
@@ -77,6 +80,8 @@ export function creatureModel(model, o = {}) {
   const mat = { userData: { u }, dispose() { for (const m of mats) m.dispose(); } };
   return {
     mesh: inner, bones, mat, mats, kind: 'creature', tpl: T, grips, base,
+    // weapons are made for a human hand: a goblin's crossbow is smaller, a troll's club bigger
+    weaponScale: clamp(T.height / 1.8, 0.62, 1.35),
     rest: { hips: { y: 1 } }, dims: { s: (T.height * base) / 1.8 },
     dispose() { mat.dispose(); }
   };
@@ -112,7 +117,8 @@ export class CreatureAnim {
     this.act = null; this.actName = null; this.t = Math.random() * 10; this.hit = 0; this.locoW = 1;
     this.glow = av.model.mats.filter((m) => m.emissiveMap);
     // hit flinch about the creature's sideways axis, on the upper spine if there is one
-    this.flinchBone = this.b.spine_03 || this.b.spine_02 || this.b.chest || this.b.spine || null;
+    const fb = ['spine_03', 'chest', 'spine4', 'spine3', 'spine_02', 'spine2', 'spine', 'spine_01', 'body'].find((n) => this.b[n]);
+    this.flinchBone = fb ? this.b[fb] : null;
     if (this.flinchBone) {
       av.model.mesh.updateMatrixWorld(true);
       this.flinchAxis = new THREE.Vector3(1, 0, 0).applyQuaternion(this.flinchBone.getWorldQuaternion(new THREE.Quaternion()).invert()).normalize();
@@ -135,7 +141,8 @@ export class CreatureAnim {
     const strike = this.T.hit[clip.name];
     if (o.hitIn && strike) speed = clamp(strike / o.hitIn, 0.5, 2.5);
     a.timeScale = speed;
-    if (name === 'aim') { a.time = (strike || clip.duration * 0.4) * 0.6; a.timeScale = 0; }
+    // aiming holds the shot pose: the moment the bolt would leave
+    if (name === 'aim') { a.time = strike || clip.duration * 0.3; a.timeScale = 0; }
     a.setEffectiveWeight(1);
     a.fadeIn(o.fade ?? 0.1);
     a.play();
