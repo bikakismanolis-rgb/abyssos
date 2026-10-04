@@ -408,7 +408,7 @@ export function genTown() {
   L.lights.push({ x: 42, y: 1.5, z: 34.2, color: 0x90ffc0, intensity: 7, range: 7, flicker: 0.1 });
   L.props.push({ t: 'well', x: CX, z: CZ }); blockCircle(L, CX, CZ, 1.3);
   L.props.push({ t: 'stash', x: 36, z: 41.5, r: -0.4 });
-  for (const [x, z] of [[27.5, 44], [36.5, 44], [27, 31], [37, 31], [CX - 2.5, 24], [27, 51], [37, 57], [CX - 2.5, 63]]) {
+  for (const [x, z] of [[27.5, 44], [36.5, 44], [27, 31], [37, 31], [CX - 4.3, 24], [27, 51], [37, 57], [CX - 2.5, 63]]) {
     L.props.push({ t: 'lamp', x, z });
     L.lights.push({ x, y: 2.2, z, color: 0xffb060, intensity: 9, range: 9, flicker: 0.2 });
   }

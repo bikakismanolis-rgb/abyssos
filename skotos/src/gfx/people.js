@@ -123,9 +123,9 @@ function prepareTemplate(scene) {
 // Skinned meshes cull against a generous sphere around the standing character (in each mesh's own space),
 // so off-screen characters are not drawn; three.js would otherwise use the bind pose or skip culling.
 const _inv = new THREE.Matrix4();
-export function cullSphere(root, height) {
+export function cullSphere(root, height, extent = height) {
   root.updateMatrixWorld(true);
-  const ws = new THREE.Sphere(new THREE.Vector3(0, height * 0.5, 0), height * 0.75 + 0.6);
+  const ws = new THREE.Sphere(new THREE.Vector3(0, height * 0.5, 0), Math.max(height, extent) * 0.75 + 0.6);
   root.traverse((m) => {
     if (!m.isSkinnedMesh) return;
     m.boundingSphere = ws.clone().applyMatrix4(_inv.copy(m.matrixWorld).invert());
