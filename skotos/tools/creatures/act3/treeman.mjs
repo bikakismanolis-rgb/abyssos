@@ -40,6 +40,7 @@ const W0 = worlds(doc, locals(doc, null, 0));
 const wpos = (W, name) => new THREE.Vector3().setFromMatrixPosition(W.get(byName(doc, name)));
 // a clip whose feet stay where the base pose puts them: the hips are moved to cancel the feet's drift (both feet, averaged),
 // weighted by plant(t) (1 = fully planted). ground: also lifts the body wherever it would sink below y = 0.
+// slide(t, dur) -> Vector3: a character-space move of the whole body (feet too) added after the planting.
 function planted(name, o) {
   const n = Math.max(2, Math.round(o.dur * FPS) + 1);
   const tmp = makeClip(doc, '_tmp_' + name, { ...o, rootNode: 'hips' });
@@ -55,7 +56,7 @@ function planted(name, o) {
   }
   dropClip(tmp);
   const at = (arr, t) => { const f = Math.min(n - 1, t * FPS), i = Math.floor(f), j = Math.min(n - 1, i + 1); return arr[i].clone().lerp(arr[j], f - i); };
-  const rootFn = (extra) => (t, d) => { const r = o.root ? o.root(t, d) : {}; const p = at(fix, t).add(new THREE.Vector3(...(r.p || [0, 0, 0]))); if (extra) p.add(at(extra, t)); return { p: p.toArray(), r: r.r }; };
+  const rootFn = (extra) => (t, d) => { const r = o.root ? o.root(t, d) : {}; const p = at(fix, t).add(new THREE.Vector3(...(r.p || [0, 0, 0]))); if (extra) p.add(at(extra, t)); if (o.slide) p.add(o.slide(t, d)); return { p: p.toArray(), r: r.r }; };
   if (!o.ground) return makeClip(doc, name, { ...o, rootNode: 'hips', root: rootFn(null) });
   const tmp2 = makeClip(doc, '_tmp2_' + name, { ...o, rootNode: 'hips', root: rootFn(null) });
   const lift = [];
@@ -227,8 +228,14 @@ const rise = planted('rise', onIdle({ dur: RISE.dur, keys: (t) => {
 } }));
 
 // ---------- die: it sags at the knees, then topples forward like a felled trunk and settles ----------
+// Pivoting at its planted feet it would lie ~3 m out along +Z, far from the actor (its collider, the dissolve, any
+// corpse effect). So the whole body is slid back as it falls, growing with the drop of the trunk (1 - cos of the topple
+// angle): the feet hold while it starts to lean, then kick back as it crashes down, and the fallen body ends centred
+// on the actor's spot.
 const DIE = { dur: 2.7, sag: 0.7, fall: 1.35 };
-legIK(planted('die', onIdle({ dur: DIE.dur, ground: true, sink: 0.04, keys: (t) => {
+// a felled tree: slow to start, accelerating, a small bounce when it hits
+const topple = (t) => { const u = Math.max(0, Math.min(1, (t - DIE.sag + 0.1) / DIE.fall)); return 86 * Math.pow(u, 2.2) - 5 * bump(t, DIE.sag - 0.1 + DIE.fall, DIE.sag + DIE.fall + 0.35); };
+const dieO = (slide) => onIdle({ dur: DIE.dur, ground: true, sink: 0.04, keys: (t) => {
   const sag = ramp(t, 0.0, DIE.sag), f = ramp(t, DIE.sag - 0.1, DIE.sag + DIE.fall), limp = ramp(t, 0.5, 1.6);
   return merge(crouch(0.55 * sag * (1 - f)), {
     thighL: [[X, -14 * f]], thighR: [[X, -10 * f]],
@@ -238,11 +245,14 @@ legIK(planted('die', onIdle({ dur: DIE.dur, ground: true, sink: 0.04, keys: (t) 
     armL: [[X, -20 * sag - 25 * f], [Z, 10 * limp + 70 * f]], armR: [[X, -15 * sag - 40 * f], [Z, -10 * limp - 62 * f]],
     foreL: [[X, -25 * sag + 10 * f]], foreR: [[X, -20 * sag - 15 * f]]
   }, curl('L', 0.5 * limp), curl('R', 0.5 * limp));
-}, root: (t) => {
-  // a felled tree: slow to start, accelerating, a small bounce when it hits
-  const u = Math.max(0, Math.min(1, (t - DIE.sag + 0.1) / DIE.fall)), th = 86 * Math.pow(u, 2.2) - 5 * bump(t, DIE.sag - 0.1 + DIE.fall, DIE.sag + DIE.fall + 0.35);
-  return { r: [[X, th], [Z, -0.12 * th], [Y, 0.1 * th]] };
-} })), idle0, DIE.sag - 0.15);
+}, root: (t) => { const th = topple(t); return { r: [[X, th], [Z, -0.12 * th], [Y, 0.1 * th]] }; },
+slide: (t) => new THREE.Vector3(-slide.x, 0, -slide.z).multiplyScalar((1 - Math.cos((topple(t) * Math.PI) / 180)) / (1 - Math.cos((86 * Math.PI) / 180))) });
+// where it would lie with its feet kept put: the middle of its bounds at the end
+const dieTrial = planted('_dieTrial', dieO(new THREE.Vector3()));
+const lying = bounds(doc, dieTrial, DIE.dur, 2).getCenter(new THREE.Vector3());
+dropClip(dieTrial);
+legIK(planted('die', dieO(lying)), idle0, DIE.sag - 0.15);
+console.log('die: fallen body centred by moving it', lying.x.toFixed(2), lying.z.toFixed(2), '(x, z m)');
 // the feet stay exactly where they stood in every clip but the fall
 for (const c of [hit, lash, spikes, weep, rise]) legIK(c, idle0);
 

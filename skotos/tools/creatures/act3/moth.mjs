@@ -1,4 +1,4 @@
-// Amber Moths: "Animated Peacock Moth" by OsianOHM (sketchfab.com/OsianOHM), CC-BY 4.0 -> src/assets/creatures/moth.glb
+// Amber Moths: "Animated Peacock Moth" by OsianOHM (Osian CG), sketchfab.com/OsianOHM, CC-BY 4.0 -> src/assets/creatures/moth.glb
 // A giant peacock moth (Saturnia pyri) with one rigged flight loop. The source mirrors its left wings with a negatively
 // scaled second armature: here that armature is un-mirrored (bone frames conjugated by the X reflection, the inverse bind
 // matrices fixed to match) and its wing bones are re-parented under the thorax, so the moth is one skin with one root
@@ -371,7 +371,7 @@ const b = bounds(doc, null, 0, 1);
 if (LIFT) { const r = byName(doc, 'creature'), t = r.getTranslation(); r.setTranslation([t[0], t[1] + LIFT, t[2]]); }
 const extras = {
   hit: { attack: STRIKE, bite: STRIKE }, height: +(b.max.y - b.min.y).toFixed(2), walkSpeed: 3, runSpeed: 6.8,
-  credit: '"Animated Peacock Moth" by OsianOHM (sketchfab.com/OsianOHM), CC-BY 4.0 - decimated, re-tinted amber, extra animations made for Skotos', license: 'CC-BY-4.0'
+  credit: '"Animated Peacock Moth" by OsianOHM (Osian CG), sketchfab.com/OsianOHM, CC-BY 4.0 - decimated, re-tinted amber, extra animations made for Skotos', license: 'CC-BY-4.0'
 };
 if (DBG) { await io.write(DBG, doc); }
 const bytes = await finish(doc, OUT, extras, { base: 512, aux: 512 });

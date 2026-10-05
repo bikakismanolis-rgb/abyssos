@@ -3,6 +3,7 @@
 // (time windows, re-timed and chained with crossfades, root motion removed), the roars are layered on top procedurally.
 // The tan fur is re-coloured dark brown and the upper back is painted with a crust of cracked, softly glowing amber
 // (a mask computed from the rest-pose surface and baked into the mirrored UV layout), so the name reads from above.
+// The skin weights around the elbows and knees are reworked so a swinging leg no longer pulls a sheet of skin off the body.
 // usage: node bear.mjs [source.glb] [out.glb] [--raw]
 import { metalRough } from '@gltf-transform/functions';
 import { KHRMaterialsSpecular } from '@gltf-transform/extensions';
@@ -340,6 +341,157 @@ for (const node of meshes) for (const prim of node.getMesh().listPrimitives()) {
   }
 }
 // the materials stay double-sided like the source's: rendered single-sided, parts of the belly show the wrong side
+
+// ---------- skin weights: no skin sheets between the legs and the body ----------
+// The source weights the chest underside behind the elbows about 0.5 to the forearms (and the flank folds at the knees to
+// the shins), so a swinging leg drags a pale sheet of skin off the chest: an edge there grows 0.12 -> 0.6 m in the swipe.
+//  1. on the torso side of each elbow / knee the lower-leg weight moves onto the upper leg, then 45% of the upper leg's onto
+//     the body bones the vertex already follows; skin well away from a leg's bones gives all of that leg's weight to the body;
+//  2. wherever a clip still stretches an edge by more than 12 cm, the weights there relax towards their neighbours' (the
+//     relaxing region grows while edges stay stretched, so the blend from leg to body widens instead of piling up);
+//  3. a short fit (gradient descent on the clips' edge growth over 11 cm, kept close to step 2) takes what is left.
+// Edge growth is measured against the idle's first frame. Only the body mesh changes, and only above the paws and forearms /
+// shins (y > 0.4); co-located vertices (UV seams) share their weights and the neck seam with the head mesh stays as it was.
+{
+  const SKIN_CLIPS = ['idle', 'walk', 'run', 'charge', 'attack', 'attack2', 'rear', 'howl', 'hit', 'daze', 'die'].map((n) => doc.getRoot().listAnimations().find((a) => a.getName() === n));
+  const BODY_MESH = 'Object_8', LOW = 0.4, RELAX_AT = 0.12, FIT_AT = 0.11;
+  const BODY = /Pelvis|Spine|Chest/;
+  // the meshes, welded by position: a "vertex" below is a group of co-located vertices
+  const items = [];
+  for (const node of meshes) for (const prim of node.getMesh().listPrimitives()) {
+    const skin = node.getSkin(), js = skin.listJoints(), PA = prim.getAttribute('POSITION'), J = prim.getAttribute('JOINTS_0'), Wt = prim.getAttribute('WEIGHTS_0'), nv = PA.getCount();
+    const key = new Map(), g = new Int32Array(nv), first = [];
+    for (let v = 0; v < nv; v++) { const k = PA.getElement(v, []).map((x) => Math.round(x * 1e5)).join(); if (!key.has(k)) { key.set(k, first.length); first.push(v); } g[v] = key.get(k); }
+    const n = first.length, rv = restVerts(node, prim), raw = new Float32Array(n * 3), pos = new Float32Array(n * 3);
+    first.forEach((v, i) => { raw.set(PA.getElement(v, []), i * 3); pos.set(rv.subarray(v * 3, v * 3 + 3), i * 3); });
+    const w = first.map((v) => { const je = J.getElement(v, []), we = Wt.getElement(v, []), m = new Map(); for (let k = 0; k < 4; k++) if (we[k] > 0) m.set(je[k], (m.get(je[k]) || 0) + we[k]); return m; });
+    const nb = Array.from({ length: n }, () => new Set()), idx = prim.getIndices().getArray();
+    for (let t = 0; t < idx.length; t += 3) for (let k = 0; k < 3; k++) { const a = g[idx[t + k]], c = g[idx[t + (k + 1) % 3]]; if (a !== c) { nb[a].add(c); nb[c].add(a); } }
+    const edges = []; for (let a = 0; a < n; a++) for (const c of nb[a]) if (a < c) edges.push(a, c);
+    items.push({ node, prim, J, Wt, nv, g, n, js, names: js.map((j) => j.getName()), ibm: skin.getInverseBindMatrices().getArray(), raw, pos, w, nb, edges, free: new Uint8Array(n), changed: new Uint8Array(n) });
+  }
+  const body = items.find((it) => it.node.getName() === BODY_MESH);
+  const P3 = (it, i) => new THREE.Vector3().fromArray(it.pos, i * 3);
+  const seam = items.filter((it) => it !== body).flatMap((it) => Array.from({ length: it.n }, (_, i) => P3(it, i)));
+  for (let i = 0; i < body.n; i++) { const p = P3(body, i); body.free[i] = p.y > LOW && !seam.some((q) => q.distanceToSquared(p) < 1e-6) ? 1 : 0; }
+  const top4 = (m) => { const a = [...m].filter(([, x]) => x > 1e-4).sort((x, y) => y[1] - x[1]).slice(0, 4), s = a.reduce((x, [, y]) => x + y, 0); return new Map(a.map(([j, x]) => [j, x / s])); };
+
+  // the clips, sampled at 30 fps: skinning matrices (joint world x inverse bind) per frame; frame 0 is the reference (idle at 0)
+  const poses = [locals(doc, SKIN_CLIPS[0], 0)];
+  for (const c of SKIN_CLIPS) { const d = duration(c), n = Math.ceil(d * 30); for (let f = 0; f <= n; f++) poses.push(locals(doc, c, (d * f) / n)); }
+  const F = poses.length, M = poses.map((L) => { const W = worlds(doc, L); return body.js.map((j, k) => new THREE.Matrix4().multiplyMatrices(W.get(j), new THREE.Matrix4().fromArray(body.ibm, k * 16))); });
+  const posed = (f) => { const out = new Float32Array(body.n * 3), r = new THREE.Vector3(), v = new THREE.Vector3(), a = new THREE.Vector3();
+    for (let i = 0; i < body.n; i++) { r.fromArray(body.raw, i * 3); a.set(0, 0, 0); for (const [j, x] of body.w[i]) a.addScaledVector(v.copy(r).applyMatrix4(M[f][j]), x); a.toArray(out, i * 3); } return out; };
+  const len = (P, a, c) => Math.hypot(P[a * 3] - P[c * 3], P[a * 3 + 1] - P[c * 3 + 1], P[a * 3 + 2] - P[c * 3 + 2]);
+  // each edge's largest growth over all frames
+  const growth = () => { const R = posed(0), g = new Float32Array(body.edges.length / 2).fill(-9);
+    for (let f = 1; f < F; f++) { const P = posed(f); for (let e = 0; e < g.length; e++) { const a = body.edges[e * 2], c = body.edges[e * 2 + 1], x = len(P, a, c) - len(R, a, c); if (x > g[e]) g[e] = x; } } return g; };
+  const report = (g) => `worst +${Math.max(...g).toFixed(3)} m, ${g.filter((x) => x > 0.1).length} edges over 10 cm`;
+  const g0 = growth();
+
+  // 1. the torso side of the elbows and knees
+  const wpos = (n) => new THREE.Vector3().setFromMatrixPosition(W0.get(byName(doc, n)));
+  // [side (+x left), torso direction from the elbow / knee along z, upper leg, lower leg bones, body bone of last resort,
+  //  distance from the leg's bones over which the leg lets go of the skin]
+  const LEGS = [[1, -1, B.fl1L, [B.fl2L, 'RigLFLegAnkle_017', 'RigLFLegDigit11_018'], B.chest, [0.22, 0.36]], [-1, -1, B.fl1R, [B.fl2R, 'RigRFLegAnkle_032', B.pawR], B.chest, [0.22, 0.36]],
+    [1, 1, B.bl1L, ['RigLBLeg2_04', 'RigLBLegAnkle_05', 'RigLBLegDigit11_06'], B.pelvis, [0.24, 0.38]], [-1, 1, B.bl1R, ['RigRBLeg2_08', 'RigRBLegAnkle_09', 'RigRBLegDigit11_010'], B.pelvis, [0.24, 0.38]]]
+    .map(([side, dir, upper, lower, own, far]) => ({ side, dir, upper, lower, own, far, J: wpos(lower[0]), chain: [upper, ...lower].map(wpos) }));
+  const segDist = (p, a, c) => { const ac = c.clone().sub(a), t = Math.max(0, Math.min(1, p.clone().sub(a).dot(ac) / ac.lengthSq())); return p.distanceTo(a.clone().addScaledVector(ac, t)); };
+  for (let i = 0; i < body.n; i++) {
+    if (!body.free[i]) continue;
+    const p = P3(body, i), w = body.w[i], ix = (n) => body.names.indexOf(n);
+    for (const L of LEGS) {
+      const up = ix(L.upper), lows = L.lower.map(ix).filter((j) => w.has(j));
+      if (!w.has(up) && !lows.length) continue;
+      // medial of the elbow / knee, or behind the elbow / in front of the knee without being on its outer side; not below it
+      const m = L.side * (L.J.x - p.x), d = L.dir * (p.z - L.J.z), h = p.y - L.J.y;
+      const t = Math.max(sstep(0.03, 0.07, m), sstep(0.08, 0.11, d) * sstep(-0.03, 0.01, m)) * sstep(-0.1, -0.03, h) * (1 - sstep(0.3, 0.4, h));
+      let dl = 9; for (let k = 0; k + 1 < L.chain.length; k++) dl = Math.min(dl, segDist(p, L.chain[k], L.chain[k + 1]));
+      const away = sstep(L.far[0], L.far[1], dl);
+      if (t <= 0.001 && away <= 0.001) continue;
+      let low = 0; for (const j of lows) { low += w.get(j) * t; w.set(j, w.get(j) * (1 - t)); }
+      w.set(up, (w.get(up) || 0) + low);
+      const k = Math.max(0.45 * t, away); let give = 0;
+      for (const j of [up, ...lows]) { const x = w.get(j) || 0; give += x * k; w.set(j, x * (1 - k)); }
+      const bw = [...w].filter(([j]) => BODY.test(body.names[j])), bs = bw.reduce((s, [, x]) => s + x, 0);
+      if (bs > 0.05) for (const [j, x] of bw) w.set(j, x + (give * x) / bs); else w.set(ix(L.own), (w.get(ix(L.own)) || 0) + give);
+      body.changed[i] = 1;
+    }
+    if (body.changed[i]) body.w[i] = top4(w);
+  }
+  const g1 = growth();
+
+  // 2. relax where it still stretches
+  const region = new Uint8Array(body.n);
+  for (let it = 0; it < 40; it++) {
+    const g = growth(), hot = new Uint8Array(body.n);
+    for (let e = 0; e < g.length; e++) if (g[e] > RELAX_AT) { hot[body.edges[e * 2]] = 1; hot[body.edges[e * 2 + 1]] = 1; }
+    if (!hot.some((h, i) => h && body.free[i])) break;
+    for (let r = 0, rings = Math.min(8, 1 + Math.floor(it / 3)); r < rings; r++) { const add = []; for (let i = 0; i < body.n; i++) if (hot[i]) for (const q of body.nb[i]) add.push(q); for (const q of add) hot[q] = 1; }
+    for (let i = 0; i < body.n; i++) if (hot[i] && body.free[i]) region[i] = 1;
+    for (let s = 0; s < 3; s++) body.w = body.w.map((m, i) => {
+      if (!region[i]) return m;
+      const out = new Map(); for (const [j, x] of m) out.set(j, x * 0.5);
+      for (const q of body.nb[i]) for (const [j, x] of body.w[q]) out.set(j, (out.get(j) || 0) + (0.5 * x) / body.nb[i].size);
+      body.changed[i] = 1; return top4(out);
+    });
+  }
+  const g2 = growth();
+
+  // 3. the fit: weights over the bones a vertex or its neighbours use, steps of about LR (Adam), at most 4 bones each
+  {
+    const LR = 0.004, LAM = 0.05, free = [...body.free.keys()].filter((i) => body.free[i]), slot = new Int32Array(body.n).fill(-1);
+    free.forEach((i, s) => { slot[i] = s; });
+    const cand = free.map((i) => { const c = new Set(body.w[i].keys()); for (const q of body.nb[i]) for (const j of body.w[q].keys()) c.add(j); return [...c]; });
+    const Q = free.map((i, s) => { const r = new THREE.Vector3().fromArray(body.raw, i * 3), v = new THREE.Vector3(), q = new Float32Array(cand[s].length * F * 3);
+      cand[s].forEach((j, c) => { for (let f = 0; f < F; f++) v.copy(r).applyMatrix4(M[f][j]).toArray(q, (c * F + f) * 3); }); return q; });
+    const W = free.map((i, s) => Float64Array.from(cand[s], (j) => body.w[i].get(j) || 0)), Ws = W.map((x) => x.slice());
+    const m1 = W.map((x) => new Float64Array(x.length)), m2 = W.map((x) => new Float64Array(x.length)), G = W.map((x) => new Float64Array(x.length));
+    const P = new Float32Array(body.n * F * 3); for (let f = 0; f < F; f++) { const p = posed(f); for (let i = 0; i < body.n; i++) P.set(p.subarray(i * 3, i * 3 + 3), (i * F + f) * 3); }
+    const edges = []; for (let e = 0; e < body.edges.length; e += 2) if (slot[body.edges[e]] >= 0 || slot[body.edges[e + 1]] >= 0) edges.push(body.edges[e], body.edges[e + 1]);
+    for (let it = 0; it < 300; it++) {
+      free.forEach((i, s) => { const q = Q[s], w = W[s]; for (let f = 0; f < F; f++) { let x = 0, y = 0, z = 0; for (let c = 0; c < w.length; c++) { const o = (c * F + f) * 3; x += w[c] * q[o]; y += w[c] * q[o + 1]; z += w[c] * q[o + 2]; } P[(i * F + f) * 3] = x; P[(i * F + f) * 3 + 1] = y; P[(i * F + f) * 3 + 2] = z; } });
+      for (const x of G) x.fill(0);
+      let loss = 0;
+      for (let e = 0; e < edges.length; e += 2) {
+        const a = edges[e], c = edges[e + 1], oa = a * F * 3, oc = c * F * 3, d0 = [P[oa] - P[oc], P[oa + 1] - P[oc + 1], P[oa + 2] - P[oc + 2]], l0 = Math.hypot(...d0) || 1e-9;
+        for (let f = 1; f < F; f++) {
+          const dx = P[oa + f * 3] - P[oc + f * 3], dy = P[oa + f * 3 + 1] - P[oc + f * 3 + 1], dz = P[oa + f * 3 + 2] - P[oc + f * 3 + 2], l = Math.hypot(dx, dy, dz) || 1e-9, h = l - l0 - FIT_AT;
+          if (h <= 0) continue;
+          loss += h * h;
+          // d(growth)/d(weight k of vertex v) = +-(u_f . q_vk(f) - u_0 . q_vk(0)), u the edge's unit vector, q_vk where bone k carries v
+          for (const [v, sg] of [[a, 1], [c, -1]]) {
+            const s = slot[v]; if (s < 0) continue;
+            const q = Q[s], gv = G[s];
+            for (let k = 0; k < gv.length; k++) { const of = (k * F + f) * 3, o0 = k * F * 3; gv[k] += 2 * h * sg * ((dx * q[of] + dy * q[of + 1] + dz * q[of + 2]) / l - (d0[0] * q[o0] + d0[1] * q[o0 + 1] + d0[2] * q[o0 + 2]) / l0); }
+          }
+        }
+      }
+      if (!loss) break;
+      const b1 = 0.9, b2 = 0.999, c1 = 1 - b1 ** (it + 1), c2 = 1 - b2 ** (it + 1);
+      W.forEach((w, s) => {
+        const gv = G[s]; for (let k = 0; k < w.length; k++) gv[k] += 2 * LAM * (w[k] - Ws[s][k]);
+        const mean = gv.reduce((x, y) => x + y, 0) / w.length;   // weights sum to one: only the part along the simplex counts
+        for (let k = 0; k < w.length; k++) { const gk = gv[k] - mean; m1[s][k] = b1 * m1[s][k] + (1 - b1) * gk; m2[s][k] = b2 * m2[s][k] + (1 - b2) * gk * gk; w[k] = Math.max(0, w[k] - (LR * m1[s][k]) / c1 / (Math.sqrt(m2[s][k] / c2) + 1e-8)); }
+        if (w.length > 4) [...w.keys()].sort((x, y) => w[y] - w[x]).slice(4).forEach((k) => { w[k] = 0; });
+        const sum = w.reduce((x, y) => x + y, 0) || 1; for (let k = 0; k < w.length; k++) w[k] /= sum;
+      });
+    }
+    free.forEach((i, s) => { body.w[i] = top4(new Map(cand[s].map((j, k) => [j, W[s][k]]))); body.changed[i] = 1; });
+  }
+  const g3 = growth();
+  console.log('skin: edge growth over the clips: source', report(g0), '| legs reweighted', report(g1), '| relaxed', report(g2), '| fitted', report(g3));
+
+  // write back: every member of a changed group takes the group's weights; the rest keep theirs exactly
+  const jo = new Uint16Array(body.nv * 4), wo = new Float32Array(body.nv * 4), buf = doc.getRoot().listBuffers()[0];
+  for (let v = 0; v < body.nv; v++) {
+    const i = body.g[v];
+    if (!body.changed[i]) { jo.set(body.J.getElement(v, []), v * 4); wo.set(body.Wt.getElement(v, []), v * 4); continue; }
+    [...body.w[i]].forEach(([j, x], k) => { jo[v * 4 + k] = j; wo[v * 4 + k] = x; });
+  }
+  body.prim.setAttribute('JOINTS_0', doc.createAccessor().setType('VEC4').setArray(jo).setBuffer(buf));
+  body.prim.setAttribute('WEIGHTS_0', doc.createAccessor().setType('VEC4').setArray(wo).setBuffer(buf));
+}
 
 // ---------- finish ----------
 const nUsed = slimRig(doc);
