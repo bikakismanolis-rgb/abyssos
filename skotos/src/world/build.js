@@ -345,7 +345,11 @@ const CAT = {
   strands: () => ({ material: strandMat(), shadow: false, geo: strandGeo() }),
   cocoonShell: () => ({ material: MAT.cocoon ||= amberMat({ alpha: 0.5, glow: 0.8 }), shadow: false, geo: cocoonGeo() }),
   cocoonCore: () => ({ mat: 'lam', shadow: false, parts: figureParts(0x2a1608, 1.55, 0.35) }),
-  rootPillar: () => ({ mat: 'barkW', shadow: true, parts: [0, 1, 2].map((i) => ({ geo: jitter(G.cyl(0.42 - i * 0.08, 0.62 - i * 0.1, 9, 7), 0.07, 60 + i), color: 0x6a5a48, o: { x: Math.sin(i * 2.1) * 0.32, z: Math.cos(i * 2.1) * 0.32, y: 4.2, rz: Math.sin(i * 1.7) * 0.07, rx: Math.cos(i * 1.3) * 0.07, ry: i } })) }),
+  // three roots twisted round each other, rising out of the wall into the dark
+  rootPillar: () => ({ mat: 'rootW', shadow: true, parts: [0, 1, 2].map((i) => {
+    const pts = []; for (let k = 0; k <= 8; k++) { const t = k / 8, a = i * 2.09 + t * 4.2, r = 0.42 + 0.2 * Math.sin(t * 7 + i); pts.push([Math.sin(a) * r, -0.6 + t * 10, Math.cos(a) * r]); }
+    return { geo: rootGeo(pts, 0.5 - i * 0.08, 0.22, 26, 7, 3), color: 0x6a5a48, o: {} };
+  }) }),
   saplingG: () => ({ mat: 'wind', shadow: false, parts: saplingParts(0x5a4a34, [0x8a8a34, 0xa89a3c, 0x7a7a2c]) })
 };
 
@@ -534,7 +538,7 @@ function addProp(B, I, p, L, rng, out) {
   // the Weeping Woods' willows (wood pack): those that stand in a clearing always, the forest's thinned like the oaks
   if (p.t === 'willow' && ENV.props.willow && !NO_TREES) {
     const d = p.d ?? 2;
-    if (d > 1 && hash2(x * 1.7, z * 0.9) > (d <= 3 ? 0.65 : 0.4)) return;
+    if (d > 1 && hash2(x * 1.7, z * 0.9) > (d <= 3 ? 0.5 : 0.25)) return;
     const k = s * (0.85 + hash2(x + 3, z) * 0.25);
     I.add('tree:willow', x, z, r, k, -0.1, k * (0.92 + hash2(x, z + 5) * 0.2));
     return;
@@ -965,13 +969,14 @@ function addProp(B, I, p, L, rng, out) {
       if (ENV.props.giantRoot) I.add(MAT.rootW ? 'roots:giantRoot' : 'env:giantRoot', x, z, r + Math.PI, 0.32 * s, -0.08);
       break;
     case 'groot': if (ENV.props.giantRoot) I.add(MAT.rootW ? 'roots:giantRoot' : 'env:giantRoot', x, z, r, s, p.y || 0); else I.add('rock', x, z, r, s); break;
+    case 'rcluster': if (ENV.props.rootCluster) { I.add(MAT.rootW ? 'roots:rootCluster' : 'env:rootCluster', x, z, r, s, p.y || 0); break; } // falls through to a stump
     case 'ostump': if (ENV.props.stumpOld) I.add(MAT.rootW ? 'roots:stumpOld' : 'env:stumpOld', x, z, r, s, p.y || 0); else I.add('rock', x, z, r, s * 0.8); break;
     case 'wallRoot': {
       // a root pouring down out of the wall onto the floor (local +z is toward the floor)
       const rr = RNG(Math.round(x * 31 + z * 17)), parts = [];
-      for (let i = 0; i < rr.int(1, 3); i++) {
-        const ox = rr.range(-0.8, 0.8), top = rr.range(2.2, 3.6);
-        parts.push({ geo: rootGeo(bend(rr, [ox, top, -1.9], [ox + rr.range(-0.9, 0.9), 0.05, rr.range(0.3, 1.1)], 4, 0.45), rr.range(0.16, 0.3), 0.04, 12, 6, rr.int(0, 2)), color: 0x6a5a48, o: {} });
+      for (let i = 0; i < rr.int(2, 4); i++) {
+        const ox = rr.range(-1, 1), top = rr.range(2.2, 3.8);
+        parts.push({ geo: rootGeo(bend(rr, [ox, top, -2.0], [ox + rr.range(-1, 1), 0.05, rr.range(0.2, 1.2)], 4, 0.45), rr.range(0.2, 0.42), 0.05, 12, 7, rr.int(0, 2)), color: 0x6a5a48, o: {} });
       }
       B.add(MAT.rootW ? 'rootW' : 'lam', parts, x, z, r, s);
       break;
@@ -1000,8 +1005,8 @@ function addProp(B, I, p, L, rng, out) {
     }
     case 'heartDais': {
       // the root dais under the amber heart: a boss of woven root, ribs running out across the floor
-      const ribs = [];
-      for (let i = 0; i < 9; i++) { const a = (i / 9) * Math.PI * 2 + 0.2, l = 3.4 + (i % 3) * 0.9; ribs.push({ geo: G.segTo(Math.sin(a) * l, -0.55, Math.cos(a) * l, 0.34, 0.12, 6), color: 0x5a4a38, o: { x: Math.sin(a) * 2.2, y: 0.62, z: Math.cos(a) * 2.2 } }); }
+      const ribs = [], rr = RNG(29);
+      for (let i = 0; i < 11; i++) { const a = (i / 11) * Math.PI * 2 + rr.range(-0.15, 0.15), l = rr.range(3.2, 5.2), b = a + rr.range(-0.4, 0.4); ribs.push({ geo: rootGeo(bend(rr, [Math.sin(a) * 2.1, 0.75, Math.cos(a) * 2.1], [Math.sin(b) * (2.1 + l), -0.1, Math.cos(b) * (2.1 + l)], 4, 0.35), rr.range(0.3, 0.45), 0.06, 14, 7, 1), color: 0x5a4a38, o: {} }); }
       B.add(MAT.rootW ? 'rootW' : 'lam', [{ geo: jitter(G.cyl(2.7, 3.2, 0.9, 16), 0.12, 73), color: 0x6a5844, o: { y: 0.45 } }, { geo: jitter(G.cyl(2.2, 2.6, 0.3, 14), 0.08, 74), color: 0x5a4a38, o: { y: 0.95 } }, ...ribs], x, z);
       break;
     }
@@ -1096,7 +1101,7 @@ function buildGround(L, group) {
       let lw = 0;
       if (hole || dk) for (let dz = -2; dz <= 1; dz++) for (let dx = -2; dx <= 1; dx++) { const c = cellAt(vx + dx, vz + dz); if (c >= 0 && (L.low[c] || L.deck[c])) lw++; }
       // (the Heartwood's channels and wells are narrow: there the vertex's own four cells count as well)
-      const bank = Math.max(smooth(clamp((lw / 16 - 0.45) / 0.45, 0, 1)), heart ? smooth(clamp(((hole + dk) / 4 - 0.25) / 0.6, 0, 1)) : 0);
+      const bank = heart ? smooth(clamp((lw / 16 - 0.16) / 0.42, 0, 1)) : smooth(clamp((lw / 16 - 0.45) / 0.45, 0, 1));
       if (bank > 0) { pos.setY(i, -(heart ? 1.2 : 1.7) * bank); k *= 1 - 0.45 * bank; }
       else if (!fl && !hole && !dk) pos.setY(i, heart ? heartWallH(dd) + (mac - 0.5) * 0.6 * clamp(dd - 1, 0, 1) : Math.min(dd, 5) * 0.07);
       if (!heart && LG) { const d = Math.hypot(vx - LG.x, vz - LG.z); wb = Math.max(wb, (1 - clamp((d - LG.r + 4) / 5, 0, 1)) * (0.55 + (nz - 0.5) * 0.8)); }
@@ -1218,9 +1223,9 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
   gc = mix(gc, cD, wD); gh = mix(gh, gH(cD), wD);` : '') + (X.sap ? `
   // amber sap: the floor shows through the resin, darkened and gold; glossy, faintly lit from within
   float wS = smoothstep(0.4, 0.62, vSap + (gh - 0.45) * 0.45);
-  vec3 amb = mix(vec3(0.16, 0.06, 0.006), vec3(0.66, 0.32, 0.045), clamp(gh * 1.4 - 0.15, 0.0, 1.0));
-  gc = mix(gc, amb, wS * 0.92);
-  totalEmissiveRadiance += vec3(1.0, 0.5, 0.08) * 0.1 * wS;` : '') + (X.wall ? `
+  vec3 amb = mix(vec3(0.2, 0.065, 0.007), vec3(0.52, 0.21, 0.025), smoothstep(0.25, 0.8, gh));
+  gc = mix(gc, amb, wS * 0.95);
+  totalEmissiveRadiance += vec3(1.0, 0.45, 0.06) * 0.08 * wS;` : '') + (X.wall ? `
   // root walls: the steep faces take the bark, projected sideways
   vec3 gNw = normalize(vGN);
   float steep = 1.0 - smoothstep(0.45, 0.82, gNw.y);
@@ -1539,7 +1544,8 @@ function rootArch(out, x, z) {
   dark.position.set(0, 2.9, -1.0);
   g.add(hill, dark);
   for (const sx of [-1, 1]) {
-    placeEnv(g, 'fallenTrunk', wood, V3(sx * 3.35, 2.85, -0.45), EU(-Math.PI / 2, sx * 0.4, -sx * 0.09), V3(1.55, 1.55, 1.45));
+    // stood on end with its bark to the glade (the scan's flat underside faces away)
+    placeEnv(g, 'fallenTrunk', wood, V3(sx * 3.35, 2.85, -0.75), EU(Math.PI / 2, sx * 0.4, -sx * 0.09), V3(1.55, 2.2, 1.45));
     placeEnv(g, 'giantRoot', wood, V3(sx * 3.7, -0.12, 0.3), EU(0, sx * 1.25, 0), V3(1.25, 1.25, 1.25));
   }
   placeEnv(g, 'fallenTrunk', wood, V3(0, 5.55, -0.45), EU(0.05, Math.PI / 2, 0.04), V3(1.35, 1.25, 2.15));
@@ -1597,6 +1603,9 @@ function standingStone(st, out) {
     body.visible = false; rubble.visible = true; rubble.children.forEach((c) => { c.visible = true; });
     puff(st.x, 1, st.z, 22, 0x8a8478, 2.2, 2, 1.6);
   };
+  // the stone follows what the fight does to L.stones[i] (cracks, broken: game/ai.js), so nothing else has to call it
+  const watch = body.children[0]?.children[0];
+  if (watch) watch.onBeforeRender = () => { if (st.broken) g.userData.shatter(); else if (st.cracks && !g.userData.cracked) g.userData.crack(); };
   out.group.add(g);
   st.mesh = g;
   return g;
@@ -1626,15 +1635,17 @@ function buildAmber(L, group) {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.setAttribute('aDep', new THREE.Float32BufferAttribute(dep, 1));
-  const u = { uTime: WIND.uTime, uBright: { value: 1 }, uLY: { value: y } };
-  const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  // what the polished amber mirrors: the gold sky and the crowns over the mere, the dark root vault in the Heartwood
+  const weep = L.type === 'weep';
+  const u = { uTime: WIND.uTime, uBright: { value: 1 }, uLY: { value: y }, uShal: { value: weep ? 1 : 0.3 }, uSky: { value: new THREE.Color(weep ? 0xffcc75 : 0x2a1608) }, uTint: { value: new THREE.Color(weep ? 0xffffff : 0xf0a070) } };
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true });
   mat.toneMapped = false;
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aDep;\nvarying vec2 vLP;\nvarying float vDep;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLP = (modelMatrix * vec4(transformed, 1.0)).xz; vDep = aDep;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
-uniform float uTime; uniform float uBright; uniform float uLY; varying vec2 vLP; varying float vDep;
+uniform float uTime; uniform float uBright; uniform float uLY; uniform float uShal; uniform vec3 uSky; uniform vec3 uTint; varying vec2 vLP; varying float vDep;
 float lh(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float ln(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(lh(i), lh(i + vec2(1, 0)), f.x), mix(lh(i + vec2(0, 1)), lh(i + vec2(1, 1)), f.x), f.y); }`)
       .replace('#include <map_fragment>', `
@@ -1647,19 +1658,25 @@ float ln(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   // of gold light drifting in it, the dark motes of whatever it caught
   float dp = vDep + (sw - 0.5) * 1.2, sh = 1.0 - smoothstep(0.3, 2.6, dp);
   float heat = ln(wq * 1.5) * 0.55 + ln(wq * 3.7 - 2.0) * 0.3 + ln(q * 9.0) * 0.15;
-  vec3 col = mix(vec3(0.2, 0.055, 0.006), vec3(0.82, 0.4, 0.06), smoothstep(0.28, 0.74, heat));
-  col = mix(col, vec3(1.0, 0.74, 0.28), smoothstep(0.68, 0.92, heat) * 0.55);
-  col = mix(col, vec3(0.95, 0.6, 0.18), sh * 0.4);
-  col *= 1.0 - smoothstep(0.86, 0.9, fl) * 0.5;
-  // a polished surface: the gold sky and the dark crowns overhead mirrored in it, shifting as the eye moves
-  vec3 V = normalize(cameraPosition - vec3(vLP.x, uLY, vLP.y)), Rf = reflect(-V, vec3(0.0, 1.0, 0.0));
+  float glow = smoothstep(0.57, 0.74, heat);
+  vec3 col = mix(vec3(0.05, 0.011, 0.001), vec3(0.34, 0.1, 0.012), smoothstep(0.3, 0.58, heat));
+  col = mix(col, vec3(0.9, 0.36, 0.045), glow * 0.9);
+  col = mix(col, vec3(0.82, 0.4, 0.07), sh * 0.55 * uShal);
+  col *= 1.0 - smoothstep(0.9, 0.93, fl) * 0.25;
+  // a polished surface: the gold sky and the dark crowns overhead mirrored in it, shifting as the eye moves, and the
+  // sun's glint broken up by the faintest ripple
+  vec3 Nr = normalize(vec3((ln(q * 22.0) - 0.5) * 0.12, 1.0, (ln(q * 22.0 + 3.0) - 0.5) * 0.12));
+  vec3 V = normalize(cameraPosition - vec3(vLP.x, uLY, vLP.y)), Rf = reflect(-V, Nr);
+  col += vec3(1.0, 0.85, 0.55) * pow(max(dot(Rf, normalize(vec3(-0.35, 0.9, 0.26))), 0.0), 48.0) * 0.9 * uShal;
   vec2 rp = vLP + Rf.xz / max(Rf.y, 0.25) * 7.0;
   float crown = smoothstep(0.38, 0.62, ln(rp * 0.13) * 0.7 + ln(rp * 0.37 + 2.0) * 0.3);
-  vec3 sky = mix(vec3(1.0, 0.8, 0.46), vec3(0.06, 0.035, 0.015), crown);
+  vec3 sky = mix(uSky, vec3(0.06, 0.035, 0.015), crown);
   col = mix(col, sky, 0.08 + 0.4 * pow(1.0 - V.y, 3.0));
   float gl = smoothstep(0.8, 0.97, ln(q * 3.0 + vec2(t * 0.03, t * 0.02)));
   col += vec3(1.0, 0.85, 0.55) * gl * 0.12;
-  diffuseColor.rgb = col * uBright;`);
+  diffuseColor.rgb = col * uTint * uBright;
+  // it thins to nothing where it meets the bank, so the shore line stays soft
+  diffuseColor.a = smoothstep(0.4, 1.1, vDep);`);
   };
   mat.customProgramCacheKey = () => 'amberSheet';
   const mesh = new THREE.Mesh(geo, mat);
@@ -1744,10 +1761,10 @@ function thornsProp(o) {
   const rng = RNG(cells.length * 31 + 7), parts = [];
   for (const [cx, cz] of cells) {
     const x = cx + 0.5 - ax, z = cz + 0.5 - az;
-    parts.push({ geo: jitter(G.ico(0.62, 1), 0.14, 110), color: 0x1c0e08, o: { x, z, y: 0.2, sy: 0.75 }, jit: 0.3 });
+    for (let i = 0; i < 3; i++) { const a = rng.range(0, 6.28), ox = x + rng.range(-0.3, 0.3), oz = z + rng.range(-0.3, 0.3); parts.push({ geo: rootGeo(bend(rng, [ox - Math.sin(a) * 0.8, 0.05, oz - Math.cos(a) * 0.8], [ox + Math.sin(a) * 0.8, 0.1, oz + Math.cos(a) * 0.8], 3, 0.6), 0.1, 0.05, 8, 5), color: 0x24100a, o: { y: 0.25 } }); }
     // arching canes, thorns set along them
-    for (let i = 0; i < 5; i++) {
-      const a = rng.range(0, 6.28), l = rng.range(1.3, 2.6), ox = x + rng.range(-0.35, 0.35), oz = z + rng.range(-0.35, 0.35);
+    for (let i = 0; i < 6; i++) {
+      const a = rng.range(0, 6.28), l = rng.range(1.1, 2.6), ox = x + rng.range(-0.35, 0.35), oz = z + rng.range(-0.35, 0.35);
       const pts = bend(rng, [ox, 0, oz], [ox + Math.sin(a) * 1.2, l, oz + Math.cos(a) * 1.2], 3, 0.4);
       parts.push({ geo: rootGeo(pts, 0.085, 0.02, 8, 4), color: 0x3a1a12, o: {} });
       const cv = new THREE.CatmullRomCurve3(pts), P = new THREE.Vector3(), T = new THREE.Vector3();
@@ -1877,6 +1894,7 @@ export function buildLevel(L, quality) {
   if (L.amberDeep) out.amber = buildAmber(L, group);
   for (const p of L.props) addProp(B, I, p, L, rng, out);
   if (L.type === 'weep' || L.type === 'heart') act3Level(L, I, B, out);
+  if (L.type === 'town') townBeyond(L, I, group);
   // per-level shader globals, set whenever this level's ground is drawn (only the zone the hero is in): the Edge of Tears,
   // where the last of the wind still reaches the Weeping Woods, and the Heartwood's heart that the lights beat with
   const edge = L.type === 'weep' ? [L.h - 40, L.h - 26] : [0, 0], heartAt = L.type === 'heart' ? L.spots.heart : null;
@@ -1888,6 +1906,34 @@ export function buildLevel(L, quality) {
   if (cut.length) out.walls = new WallCut(cut);
   if (out.houses || out.spin) out.village = new Village(out.houses, out.spin);
   return out;
+}
+
+// The country round Whitecliff: the map ends a few metres past the beacon, and the Act III beacon scene lowers the camera
+// toward the western horizon. Dark ground runs on past the edge into the fog, and pine woods stand on it to the north
+// and west, so the far fires rise over a treeline rather than out of the void. (Off the map: nothing walks there.)
+function townBeyond(L, I, group) {
+  const { w, h } = L, F = 150, rng = RNG(919);
+  const geo = new THREE.BufferGeometry(), pos = [];
+  const quad = (x0, z0, x1, z1) => pos.push(x0, 0, z0, x0, 0, z1, x1, 0, z1, x0, 0, z0, x1, 0, z1, x1, 0, z0);
+  quad(-F, -F, w + F, 0); quad(-F, h, w + F, h + F); quad(-F, 0, 0, h); quad(w, 0, w + F, h);
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.translate(0, -0.03, 0); geo.computeVertexNormals();
+  const apron = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: 0x16120c }));
+  apron.receiveShadow = true;
+  group.add(apron);
+  // the woods: thick along the edge, thinning out with distance, with the odd clearing
+  const clear = L.farFires || [];
+  const wood = (x, z, d) => {
+    if (clear.some((c) => Math.hypot(x - c.x, z - c.z) < 9)) return;
+    if (fbm(x * 0.05 + 3.1, z * 0.05 + 7.7, 2) < 0.36) return;
+    if (rng.next() > 0.62 - d * 0.008) return;
+    // low enough (under 8 m) that none hides a far fire from the beacon hill
+    const s = rng.range(1.0, 1.4);
+    I.add('pine', x + rng.range(-1.5, 1.5), z + rng.range(-1.5, 1.5), rng.range(0, 6.28), s, -0.05, s * rng.range(0.9, 1.15));
+  };
+  // (from a few metres out: the village's own ring of trees stands along the edge)
+  for (let z = -50; z < -6; z += 3.4) for (let x = -50; x < w + 20; x += 3.4) wood(x, z, -z);
+  for (let z = -6; z < h; z += 3.4) for (let x = -50; x < -6; x += 3.4) wood(x, z, -x);
 }
 
 // held, breakable and interactive props are separate meshes owned by gameplay

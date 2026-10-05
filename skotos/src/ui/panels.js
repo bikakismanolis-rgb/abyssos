@@ -133,7 +133,7 @@ const R = {
       const baseFor = (ty) => ty === 'weapon' ? CLASSES[h.cls].weapon : ty === 'offhand' ? CLASSES[h.cls].off : ty;
       body = `<p class="muted">${t('shop.gamble.d')}</p><div class="doll" style="grid-template-columns:repeat(4,1fr)">${types.map((ty) => `<button class="cell" data-a="gamble:${baseFor(ty)}">${ICON[ICON_OF[baseFor(ty)]]}<span class="lbl">${t('base.' + baseFor(ty))}</span></button>`).join('')}</div><p class="r-2" style="font-family:var(--display);text-align:center">${t('shop.cost', fmt(cost))}</p>${P.last ? tip(P.last, '') : ''}`;
     }
-    return `<div class="pn">${head(t('npc.healer') + ' · ' + t('shop.vendor'))}<div class="pn-b">${tabs}<div style="margin-top:10px">${body}</div></div></div>`;
+    return `<div class="pn">${head(t('npc.' + (P.ctx?.npc || 'healer')) + ' · ' + t('shop.vendor'))}<div class="pn-b">${tabs}<div style="margin-top:10px">${body}</div></div></div>`;
   },
   smith() {
     const h = G.hero;
@@ -154,7 +154,7 @@ const R = {
   },
   waypoints() {
     const h = G.hero, inTown = G.zone?.id === 'town';
-    const list = ['town', 'forest', 'crypt', 'pass', 'halls'].filter((z) => h.wps.includes(z)).map((z) => `<button class="wp ${G.zone?.id === z ? 'here' : ''}" data-a="wp:${z}">${ICON.portal}<b>${t('zone.' + z)}</b><span class="muted">${t('zone.' + z + '.s')}</span></button>`).join('');
+    const list = ['town', 'forest', 'crypt', 'pass', 'halls', 'weep', 'heart'].filter((z) => h.wps.includes(z)).map((z) => `<button class="wp ${G.zone?.id === z ? 'here' : ''}" data-a="wp:${z}">${ICON.portal}<b>${t('zone.' + z)}</b><span class="muted">${t('zone.' + z + '.s')}</span></button>`).join('');
     const gates = h.quest >= 5 ? `<button class="wp" data-a="gates">${ICON.gate}<b>${t('gate.title')}</b><span class="muted">${t('gate.best', h.gateBest)}</span></button>` : '';
     const diffs = DIFFS.map((d, i) => { const lock = !diffUnlocked(i); return `<button class="chip ${h.diff === i ? 'on' : ''} ${lock ? 'lock' : ''}" data-a="diff:${i}" style="${h.diff === i ? 'color:' + d.color : ''}">${t('diff.' + d.id)}</button>`; }).join('');
     return `<div class="pn narrow">${head(t('wp.title'), false)}<div class="pn-b"><div style="display:grid;gap:6px">${list}${gates}</div><div class="logo-rule"></div><b style="font-family:var(--display);color:var(--gold)">${t('pick.diff')}</b><div class="chips" style="justify-content:flex-start;margin-top:6px">${diffs}</div><p class="muted">${inTown ? t('diff.' + DIFFS[h.diff].id + '.d') : t('wp.diffNote')}</p></div></div>`;
@@ -202,7 +202,8 @@ const R = {
     const h = G.hero;
     const mins = Math.round((Date.now() - h.created) / 60000);
     const next = DIFFS[h.diff + 1];
-    const a2 = G.flags.actDone === 2, k = a2 ? 'act2' : 'act';
+    // act 1 shows what it unlocked; later acts their own title, line and what comes next
+    const n = G.flags.actDone || 1, a2 = n > 1, k = n > 1 ? 'act' + n : 'act';
     return `<div class="pn narrow" style="text-align:center"><div class="pn-b" style="padding:22px"><div class="act-h">${t(k + '.done')}</div><p style="font-style:italic;color:var(--ink2)">${t(k + '.sub')}</p><div class="logo-rule"></div>
       <div class="stats" style="text-align:left"><div><span>${t('hud.level', '')}</span><b>${h.level}</b></div><div><span>${t('stat.kills')}</span><b>${fmt(h.stats.kills)}</b></div><div><span>${t('stat.time')}</span><b>${mins}′</b></div><div><span>${t('rar.legendary')}</span><b class="r-3">${h.stats.legs}</b></div></div>
       ${a2 ? '' : `<div class="logo-rule"></div><b style="font-family:var(--display);color:var(--gold)">${t('act.unlocks')}</b><p>${t('act.gates')}</p>${next ? `<p style="color:${next.color}">${t('pick.diff')}: ${t('diff.' + next.id)}</p>` : ''}`}

@@ -64,9 +64,8 @@ export function damage(src, target, amount, o = {}) {
     const def = target.def;
     const dx = o.kx ?? (src ? target.x - src.x : 0), dz = o.kz ?? (src ? target.z - src.z : 0), l = Math.hypot(dx, dz) || 1;
     if (!o.noFx) {
-      hitFx(target.x, (def.big || target.boss ? 1.6 : 1.0) * (target.scale || 1), target.z, target.prop ? 'wood' : def.flesh, dx / l, dz / l, crit);
+      hitFx(target.x, (def.big || target.boss ? 1.6 : 1.0) * (target.scale || 1), target.z, target.prop ? 'wood' : def.flesh === 'wood' ? 'bark' : def.flesh, dx / l, dz / l, crit);
       if (!o.quiet) Audio.sfx(target.prop ? 'break' : (HIT_SFX[def.flesh] || 'hitFlesh'), { x: target.x, z: target.z, vol: crit ? 1 : 0.8 });
-      if (def.flesh === 'wood' && !target.prop) barkChips(target, dx / l, dz / l, crit);
       if (crit && !o.quiet) Audio.sfx('crit', { x: target.x, z: target.z, vol: 0.6 });
     }
     if (o.knock && !target.boss && !target.prop && !def.anchored) {
@@ -185,12 +184,6 @@ export function moveMul(a) {
   if (a.hero && a.buffs?.evergreen > 0) m *= 1.3;
   if (a.hero && a.buffs?.memory > 0) m *= 1 + BUFFS.memory.move;
   return m;
-}
-// bark and amber splinters off anything made of wood
-function barkChips(a, dx, dz, crit) {
-  const h = (a.def.big || a.boss ? 1.6 : 1.0) * (a.scale || 1);
-  for (let i = 0; i < (crit ? 10 : 6); i++) P({ add: false, x: a.x, y: h, z: a.z, vx: dx * rand.range(1, 4) + rand.range(-1.5, 1.5), vy: rand.range(1.5, 4), vz: dz * rand.range(1, 4) + rand.range(-1.5, 1.5), life: rand.range(0.5, 0.9), size: rand.range(0.07, 0.14), size1: 0.06, color: Math.random() < 0.3 ? 0x8a6a40 : 0x3a2a1a, alpha: 1, grav: 16 });
-  if (crit || Math.random() < 0.4) sparks(a.x, h, a.z, 3, 0xffc050, 3, { dx, dz, color1: 0xa05010 });
 }
 
 // ---------- death ----------

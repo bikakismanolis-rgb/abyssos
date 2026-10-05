@@ -17,7 +17,13 @@ export const CREDITS = [
     ['Worm Monster (the deepworms)', 'CR!STALLL', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/worm-monster-5563066315694125b741901681d387c5'],
     ['Grock - Endboss (the Stonewarden)', 'Baue Franco', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/grock-endboss-fc582e5f47da447d934d616ad271a3fe'],
     ['lava monster (Durgan, the Molten King)', 'Satwik.Bandi', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/lava-monster-2e2a1eac6f834857af5347a0662b075d'],
-    ['The dwarves of Deepstone: Quaternius characters re-proportioned for Skotos', 'Quaternius', 'CC0', 'https://quaternius.com']
+    ['The dwarves of Deepstone: Quaternius characters re-proportioned for Skotos', 'Quaternius', 'CC0', 'https://quaternius.com'],
+    ['Realistic Animated Elk 3D Model (Silverhorn, the White Hart, and the deer held in amber)', 'WildMesh_3D', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/realistic-animated-elk-3d-model-787834f9caa2474d9f1814b807c072d7'],
+    ['Realistic Animated Bear 3D Model (the Amberback bears)', 'WildMesh_3D', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/realistic-animated-bear-3d-model-bffc3c87d2d148ff8533e1cc8a11c9f1'],
+    ['Animated Peacock Moth (the amber moths)', 'OsianOHM (Osian CG)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/animated-peacock-moth-1c3db0798f1c46be9764e99631cbb0a7'],
+    ['Mandrake (the rootlings)', 'timsblends', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/mandrake-31f9f793011b43e38ce9421298f90b80'],
+    ['Treeman (the Rootwardens)', 'DJMaesen (sketchfab.com/bumstrum)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/treeman-e3a094316a8c4820a94d271afffe497c'],
+    ['The Evergreen (Elati, Old Linden, the Rootsworn, the Hollowed, the Mourners, Amaranthe): Quaternius characters re-proportioned for Skotos, with bark from bark_brown_02 by Rob Tuytel (Poly Haven)', 'Quaternius; Rob Tuytel', 'CC0', 'https://quaternius.com']
   ], note: 'cr.modified' },
   { h: 'cr.world', items: [
     ['Dungeon Remastered, Medieval Hexagon Pack, Halloween Bits', 'Kay Lousberg (KayKit)', 'CC0', 'https://kaylousberg.com'],
@@ -33,6 +39,14 @@ export const CREDITS = [
     ['Forge And Bellow; Anvil, Water Bucket And Water Trough', 'RBG_illustrations', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/forge-and-bellow-e4b8f1ae6d6744da863812a5081b941e'],
     ['Medieval Grindstone', 'Thangzy', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/medieval-grindstone-eb2ae5a1c1014ee989339ef8325ed804'],
     ['Well', 'FlukierJupiter', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/well-d8442bc92f224f0ebfa8446a1bca836d'],
+    ['The Weeping Woods and the Heartwood: leaves_forest_ground, bark_willow (Dario Barresi, Dimitrios Savva); forest_leaves_02, mossy_rock (Rob Tuytel); mud_forest (eye-candy.xyz); dry_decay_leaves (Amal Kumar); rock_07, rock_09 (Jenelle van Heerden); dead_tree_trunk_02, the Fallen King (Jenelle van Heerden, Rico Cilliers)', 'Poly Haven', 'CC0', 'https://polyhaven.com'],
+    ['Willow (the weeping trees)', 'evolveduk', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/willow-422de2372f3d46dfb314a0cd5da512fe'],
+    ['Tree Stump with big Roots [Free] (the Root Gate)', 'RodoxDE', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/tree-stump-with-big-roots-free-bd60213e01574f94a715d01936f4ee82'],
+    ['Old Oak Stump Obora', '3dhdscan', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/old-oak-stump-obora-5f5bb2305d534283be08f534ece9c9db'],
+    ['Crazy Tree Roots Scan', 'evan4129 (EFX)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/crazy-tree-roots-scan-be10284b4c6e426a914bf10ba6641a08'],
+    ['Realistic HD Rosemary willow (63/99)', 'PlantCatalog', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/realistic-hd-rosemary-willow-6399-6d25c2941dae4065b9476f0705b4f0d3'],
+    ['Bracken Fern Low Poly', 'Marcin.Kwiatkowski', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/bracken-fern-low-poly-b64381d3ea9547b88581f98178800627'],
+    ['Realistic Mushroom - 01', 'SanForge', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/realistic-mushroom-01-aededce1ec0f48f8b0f50cc1762a3f86'],
     ['The Giants\' Stair and Deepstone: snow_02, rocks_ground_02/05 (Rob Tuytel); dark_rock, dark_rock_02, stone_wall_04, rock_wall_10 (Amal Kumar); rock_tile_floor_02, volcanic_herringbone_01 (Charlotte Baglioni); slab_tiles (Dario Barresi, Dimitrios Savva); cliffs, rock faces, mountainside and boulders (Dario Barresi, Rico Cilliers, Jenelle van Heerden, Greg Zaal); large_iron_gate (Josh Dean); large_castle_door (Tina); lantern_chandelier_01 (Kirill Sannikov); overhead_crane (Timothy3D); wooden_ladder (Miroslav Turura)', 'Poly Haven', 'CC0', 'https://polyhaven.com']
   ] },
   { h: 'cr.type', items: [

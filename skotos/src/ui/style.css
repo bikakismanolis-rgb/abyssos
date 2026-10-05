@@ -47,6 +47,16 @@ button { font: inherit; color: inherit; }
 #buffs .bf { width: 22px; height: 22px; border-radius: 4px; border: 1px solid var(--line); background: #111318; display: grid; place-items: center; color: var(--gold2); position: relative; font: 700 9px var(--display); }
 #buffs .bf svg { width: 15px; height: 15px; }
 #buffs .bf b { position: absolute; bottom: -2px; right: -2px; font-size: 9px; color: var(--ink); text-shadow: 0 1px 2px #000; }
+#buffs .bf.mem { border-color: rgba(255, 190, 90, .7); color: #ffc860; box-shadow: 0 0 8px rgba(255, 170, 60, .45); }
+/* Act III: amber sap on the hero (the build-up, then the lock that a dodge breaks) */
+#amber { display: flex; align-items: center; gap: 5px; height: 18px; font: 700 10px var(--display); color: #ffcf7a; letter-spacing: .5px; text-shadow: 0 1px 2px #000; }
+#amber .ic { width: 18px; height: 18px; display: grid; place-items: center; color: #ffb840; filter: drop-shadow(0 0 4px rgba(255, 160, 40, .6)); }
+#amber .ic svg { width: 16px; height: 16px; }
+#amber .ab { width: 64px; height: 6px; border-radius: 3px; background: #0b0c0f; border: 1px solid rgba(255, 180, 70, .45); overflow: hidden; }
+#amber .ab i { display: block; height: 100%; background: linear-gradient(90deg, #a85a10, #ffc050); transform-origin: left; }
+#amber.rooted { color: #fff0c0; animation: amberPulse .5s ease-in-out infinite alternate; }
+#amber.rooted .ab i { background: linear-gradient(90deg, #ffd070, #fff4d0); }
+@keyframes amberPulse { to { filter: drop-shadow(0 0 6px rgba(255, 190, 70, .9)); } }
 
 #hud-tr { position: absolute; right: calc(10px + var(--sr)); top: calc(8px + var(--st)); display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 #minimap { width: clamp(92px, 15vw, 132px); height: clamp(92px, 15vw, 132px); border-radius: 50%; border: 2px solid var(--gold); box-shadow: 0 0 0 2px #0a0b0e, 0 2px 12px rgba(0, 0, 0, .7); background: rgba(5, 6, 9, .78); display: block; }
@@ -66,10 +76,14 @@ button { font: inherit; color: inherit; }
 #gatebar .nm { font: 700 13px var(--display); color: #d8b8ff; text-shadow: 0 1px 3px #000; }
 #gatebar .bar i.fill { background: linear-gradient(90deg, #5a2ab8, #c080ff); }
 
-#toasts { position: absolute; top: 22%; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; width: 80vw; }
+#toasts { position: fixed; z-index: 8; top: 22%; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; width: 80vw; }
 .toast { font: 600 15px var(--body); color: var(--ink); background: linear-gradient(90deg, transparent, rgba(8, 9, 12, .82) 20%, rgba(8, 9, 12, .82) 80%, transparent); padding: 6px 48px; text-align: center; animation: toast 3.4s ease forwards; text-shadow: 0 1px 2px #000; }
 .toast.quest { color: var(--gold2); font-family: var(--display); letter-spacing: .5px; }
 .toast.big { font: 800 22px var(--display); color: var(--gold2); letter-spacing: 2px; }
+/* the Lady's voice in the still trees; the Ash King's whisper; the wind of the First Autumn */
+.toast.voice { color: #ffd890; font: italic 500 16px var(--body); letter-spacing: .2px; text-shadow: 0 0 10px rgba(255, 180, 60, .55); }
+.toast.ash { color: #ff8a60; font: italic 500 15px var(--body); text-shadow: 0 0 10px rgba(255, 60, 20, .6); }
+.toast.wind { color: #e8e0c8; font: italic 500 16px var(--body); }
 @keyframes toast { 0% { opacity: 0; transform: translateY(8px); } 10% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; } }
 #zonename { position: absolute; top: 30%; left: 0; right: 0; text-align: center; pointer-events: none; opacity: 0; }
 #zonename.on { animation: zone 4.2s ease forwards; }
@@ -188,6 +202,15 @@ button { font: inherit; color: inherit; }
 #dialog .face { position: absolute; left: 14px; top: 14px; width: 56px; height: 56px; border-radius: 50%; border: 2px solid var(--gold); display: grid; place-items: center; font: 800 26px var(--display); color: var(--gold2); background: radial-gradient(circle at 50% 35%, #3a3024, #0c0d10); }
 #dialog .more { position: absolute; right: 14px; bottom: 8px; color: var(--gold); font: 700 14px var(--display); animation: blink 1s infinite; }
 @keyframes blink { 50% { opacity: .2; } }
+/* an Amber Tear's narrator, and the Lady */
+#dialog[data-who="memory"] .txt { font-style: italic; color: #f0dcb0; }
+#dialog[data-who="memory"] .face { border-color: #e0a040; color: #ffd080; background: radial-gradient(circle at 50% 35%, #6a4010, #1a0e04); }
+#dialog[data-who="amaranthe"] .face { border-color: #ffc060; box-shadow: 0 0 14px rgba(255, 170, 60, .5); }
+/* a memory held in amber: the world goes sepia and gold at the edges while it plays */
+#stage > canvas { transition: filter 1s ease; }
+body.memory #stage > canvas:first-child { filter: sepia(.55) saturate(1.3) brightness(1.04); }
+#stage::after { content: ""; position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 1s ease; background: radial-gradient(ellipse at center, transparent 40%, rgba(120, 70, 10, .35) 80%, rgba(40, 20, 0, .7) 100%); }
+body.memory #stage::after { opacity: 1; }
 
 /* screens */
 #screen { position: fixed; inset: 0; z-index: 8; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: calc(16px + var(--st)) calc(16px + var(--sr)) calc(16px + var(--sb)) calc(16px + var(--sl)); pointer-events: auto; }

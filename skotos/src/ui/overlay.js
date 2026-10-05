@@ -8,6 +8,8 @@ import { fmtK } from '../core/util.js';
 const OV = { c: null, g: null, nums: [], dpr: 1 };
 const sp = { x: 0, y: 0, vis: false };
 const FONT = '"Alegreya SC", "Alegreya", Georgia, serif';
+// where a health bar floats over the low and the long (default: 2.2 m, big brutes 3.6 m)
+const BAR_H = { spider: 1.5, warg: 1.5, spiderling: 0.8, rootling: 1.0, amberMoth: 2.0, amberBear: 2.5, heartroot: 2.3, rootwarden: 3.9 };
 
 export function initOverlay() {
   OV.c = document.createElement('canvas'); OV.c.id = 'ov';
@@ -49,10 +51,12 @@ export function drawOverlay(dt) {
   // health bars and names
   for (const a of G.actors) {
     if (a.dead || a.team !== 'foe' || !a.avatar || a.boss) continue;
+    // nothing gives away what cannot be seen: an archer gone into the trees, a rootling underground, a Hollowed passing for dead wood
+    if (!a.avatar.group.visible || a.disguised) continue;
     const show = a.hpShow > 0 || a.elite;
     if (!show) continue;
     a.hpShow -= dt;
-    const h = (a.def.big ? 3.6 : a.kind === 'spider' || a.kind === 'warg' ? 1.5 : a.kind === 'spiderling' ? 0.8 : 2.2) * (a.scale || 1);
+    const h = (BAR_H[a.kind] ?? (a.def.big ? 3.6 : 2.2)) * (a.scale || 1);
     toScreen(a.x, h, a.z, sp); if (!sp.vis) continue;
     const w = a.elite ? 64 : 40;
     bar(g, sp.x, sp.y, w, a.elite ? 5 : 4, a.hp / a.hpMax, a.elite === 'rare' ? '#e8b030' : a.elite === 'champion' ? '#5a80ff' : '#c02a20');
