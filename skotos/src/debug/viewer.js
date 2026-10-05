@@ -83,6 +83,9 @@ export async function startViewer(q) {
   R.cam.dist = +(q.get('dist') || span * 0.9 + 4);
   if (camMode === 'front') R.cam.pitch = 0.25;
   if (q.get('pitch')) R.cam.pitch = +q.get('pitch');
+  if (q.get('zoom')) R.cam.zoomT = R.cam.zoom = +q.get('zoom');
+  const { setEmitters, initFX, updateFX } = await import('../gfx/fx.js');
+  initFX(R.quality); setEmitters(lvl.emitters);
   R.cam.lookY = 0.9;
   updateCamera(0, 0, +(q.get('cz') || 0), true);
   let n = 0;
@@ -98,27 +101,36 @@ export async function startViewer(q) {
 // ?world=crypt|forest|town&seed=3&x=..&z=..&dist=..
 export async function startWorld(q) {
   const { genForest, genCrypt, genTown } = await import('../world/gen.js');
+  const { genPass, genHalls } = await import('../world/gen2.js');
   const { buildLevel } = await import('../world/build.js');
   const { loadKits } = await import('../gfx/kits.js');
-  const { loadEnv } = await import('../gfx/env.js');
+  const { loadEnv, loadPack } = await import('../gfx/env.js');
   const { ATMOS } = await import('../world/atmos.js');
   initGfx(+(q.get('q') || 2));
   await Promise.all([loadKits(['dungeon', 'grave', 'town']), q.has('noenv') ? null : loadEnv(R.quality)]);
   const type = q.get('world'), seed = +(q.get('seed') || 3);
-  const L = type === 'crypt' ? genCrypt(seed) : type === 'town' ? genTown() : genForest(seed);
+  if (type === 'pass' || type === 'halls') await loadPack('deep');
+  if (R.quality >= 1) await loadPack('trees');
+  if (type === 'pass') (await import('../world/build.js')).WIND.uSnow.value = 1;
+  const L = type === 'crypt' ? genCrypt(seed) : type === 'town' ? genTown() : type === 'pass' ? genPass(seed) : type === 'halls' ? genHalls(seed) : genForest(seed);
   setAtmosphere(ATMOS[type]);
+  if (q.has('nofog')) { R.scene.fog.density = 0; R.camera.far = 600; R.camera.updateProjectionMatrix(); R.hemi.intensity *= 1.6; }
   const lvl = buildLevel(L, R.quality);
   R.scene.add(lvl.group);
   for (const l of L.lights) addLight(l);
-  const x = +(q.get('x') || L.start.x), z = +(q.get('z') || L.start.z);
+  const at = q.get('at') === 'boss' ? L.boss : q.get('at') === 'gate' ? L.gate : q.get('at') === 'bridge' ? L.bridge : L.start;
+  const x = +(q.get('x') || at.x), z = +(q.get('z') || at.z + (q.get('at') === 'gate' ? 8 : 0));
   const hero = new Avatar(M.buildWarden(), { style: 'sword' }); hero.hold('R', 'sword', {}); hero.hold('L', 'shield', {});
   hero.group.position.set(x, 0, z); hero.group.rotation.y = Math.PI; R.scene.add(hero.group);
   if (q.get('dist')) R.cam.dist = +q.get('dist');
   if (q.get('pitch')) R.cam.pitch = +q.get('pitch');
+  if (q.get('zoom')) R.cam.zoomT = R.cam.zoom = +q.get('zoom');
+  const { setEmitters, initFX, updateFX } = await import('../gfx/fx.js');
+  initFX(R.quality); setEmitters(lvl.emitters);
   R.heroLight.position.set(x, 2.6, z);
   let n = 0;
   function loop() {
-    frame(0.016); hero.update(0.016, { speed: 0 }); updateCamera(0.016, x, z, true);
+    frame(0.016); hero.update(0.016, { speed: 0 }); updateCamera(0.016, x, z, true); updateFX(0.016, x, z);
     R.heroLight.position.set(x, 2.6, z); R.heroLight.intensity = R.heroLight.userData.base;
     if (lvl.walls) lvl.walls.update(0.1, x, z);
     render();

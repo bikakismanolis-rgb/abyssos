@@ -1047,6 +1047,61 @@ const SFX = {
     s.connect(f); f.connect(e); e.connect(v.out);
   },
 
+  // ── Act II creatures ──
+  batScreech(v, t, p) {
+    for (let k = 0; k < 3; k++) { const x = t + k * rand(0.05, 0.08), f = rand(3200, 4200) * p; tn(v, x, { f, fe: f * 0.7, pk: 0.1, d: 0.05 }); }
+    nb(v, t, { k: 'w', ft: 'highpass', f: 4000 * p, q: 1, a: 0.005, pk: 0.12, d: 0.12 });
+  },
+  batDie(v, t, p) {
+    tn(v, t, { f: 3600 * p, fe: 1200 * p, pk: 0.12, d: 0.18 });
+    nb(v, t + 0.05, { k: 'p', f: 900 * p, q: 1, a: 0.01, pk: 0.3, d: 0.15, am: [30, 0.5] });
+  },
+  wormRumble(v, t, p) {
+    nb(v, t, { k: 'b', ft: 'lowpass', f: 180 * p, q: 0.8, a: 0.2, pk: 0.9, d: 0.9, drive: 3 });
+    tn(v, t, { f: 46 * p, fe: 38 * p, a: 0.15, pk: 0.5, d: 0.9 });
+    for (let k = 0; k < 6; k++) nb(v, t + rand(0, 0.7), { k: 'p', f: rand(300, 700), q: 3, a: 0.002, pk: 0.3, d: 0.05 });
+    v.wet(0.3);
+  },
+  wormDie(v, t, p) { roar(v, t, 70 * p, 0.9, 0.4, 3); SFX.hitChitin(v, t, p * 0.7); v.wet(0.3); },
+  dwarfAttack(v, t, p) {
+    vox(v, t, { f: 135 * p, d: 0.3, c: [[0, 0.95], [0.1, 1.1], [0.3, 0.9]], vow: 'a', growl: [24, 0.25], drive: 2.5, breath: 0.3, pk: 0.55, fg: 4, fs: 0.82, a: 0.02, hold: 0.5 });
+  },
+  dwarfDie(v, t, p) {
+    vox(v, t, { f: 120 * p, d: 0.7, c: [[0, 1.05], [0.15, 1], [0.7, 0.6]], vow: 'o', growl: [20, 0.3], drive: 3, breath: 0.3, pk: 0.65, fg: 4, fs: 0.82, a: 0.03, hold: 0.45 });
+  },
+  houndGrowl(v, t, p) {
+    vox(v, t, { f: 150 * p, d: 0.5, c: [[0, 0.9], [0.5, 1]], vow: 'o', growl: [34, 0.6], drive: 5, breath: 0.6, pk: 0.4, fg: 3, fs: 1.1, a: 0.05, hold: 0.6 });
+    nb(v, t, { k: 'p', ft: 'lowpass', f: 700, q: 1, a: 0.05, pk: 0.3, d: 0.5, am: [30, 0.5] });
+  },
+  golemStep(v, t, p) {
+    tn(v, t, { f: 60 * p, fe: 32, sw: 0.4, pk: 0.9, d: 0.5 });
+    nb(v, t, { k: 'b', ft: 'lowpass', f: 400 * p, fe: 120, pk: 0.7, d: 0.4, drive: 2 });
+    for (let k = 0; k < 5; k++) nb(v, t + rand(0.02, 0.3), { k: 'w', f: rand(1500, 3000), q: 4, a: 0.001, pk: 0.25, d: 0.03 });
+    v.wet(0.35);
+  },
+  golemDie(v, t, p) {
+    SFX.golemStep(v, t, p * 0.8); SFX.golemStep(v, t + 0.35, p * 0.7);
+    nb(v, t, { k: 'b', ft: 'lowpass', f: 300, q: 0.8, a: 0.1, pk: 0.8, d: 2, drive: 3 });
+    v.wet(0.6);
+  },
+  stoneCrack(v, t, p) {
+    const d = 0.5, s = v.N('w', t, t + d), bp = v.F('bandpass', 1800 * p, 3), e = v.G(0);
+    spikes(e.gain, t, d, 14, 0.9, 0.01, 1.5);
+    s.connect(bp); bp.connect(e); e.connect(v.out);
+    tn(v, t, { f: 90 * p, fe: 50, pk: 0.5, d: 0.25 });
+  },
+  lavaBurst(v, t, p) {
+    nb(v, t, { k: 'p', ft: 'lowpass', f: 300 * p, fp: 1800 * p, fe: 400 * p, q: 1, a: 0.05, pk: 0.8, d: 0.6, drive: 3 });
+    for (let k = 0; k < 8; k++) nb(v, t + rand(0.05, 0.6), { k: 'w', f: rand(1500, 3500), q: 4, a: 0.001, pk: 0.2, d: 0.02 });
+    tn(v, t, { f: 70 * p, fe: 40, pk: 0.5, d: 0.4 });
+    v.wet(0.4);
+  },
+  anvil(v, t, p) {
+    metal(v, t, 330 * p * rand(0.98, 1.02), [1, 2.76, 5.4, 8.93, 13.3], 1.2, 0.35);
+    tn(v, t, { f: 140 * p, fe: 90 * p, pk: 0.3, d: 0.08 });
+    v.wet(0.5);
+  },
+
   // ── story / world ──
   beaconIgnite(v, t) {
     nb(v, t, { k: 'p', ft: 'lowpass', f: 300, fp: 3200, fe: 700, q: 1, a: 0.45, pk: 0.75, d: 2 });
@@ -1457,6 +1512,55 @@ const THEMES = {
       const { th, i } = S;
       if (i % 2 === 0) INS.ost(nv(th), S.t, bassNote(S.ch, 40) + (i === 12 ? 7 : 0), S.sd * 1.7, 0.08, { br: 6 });
       if (chance(0.06)) INS.pluck(nv(th), S.t, pick(scaleTones(S.d.scale, 69, 84)), { vel: 0.05, dec: 2, bright: 3, saw: 0.1, wet: 0.9 });
+    },
+  },
+
+  // the Giants' Stair: wind, open strings, a lone horn far up the mountain (D dorian)
+  pass: {
+    bpm: 62, beats: 3, sub: 2, bpc: 2, gain: 1.25, drums: 'march', dt: 2, scale: [2, 4, 5, 7, 9, 11, 0],
+    progs: [['Dm', 'C', 'Dm', 'Am'], ['Dm', 'F', 'C', 'Dm'], ['Bb', 'F', 'C', 'Dm'], ['Dm', 'Am', 'Bb', 'C'], ['Dm', 'Csus2', 'Bb', 'Am']],
+    bar(S) {
+      const { th, t, bd, ch } = S, st = th.st;
+      if (S.bar % 8 === 0) INS.drone(nv(th), t, 26, bd * 8 + 2, { vel: 0.15 });
+      if (S.nc) {
+        st.pv = voicing(ch, 50, 67, st.pv, 3);
+        INS.strings(nv(th), t, st.pv, S.cd + 0.6, { vel: 0.14, att: 2.4, rel: 3.2, cut: 720, wet: 0.5 });
+      }
+      if (chance(0.35)) INS.whisper(nv(th), t + rand(0, bd * 0.5), rand(3, 5), { vel: 0.12, wet: 0.7 });
+      if (chance(0.15)) INS.bell(nv(th), t + rand(0, bd), pick([74, 81, 86]), { vel: 0.04, dec: 6, wet: 0.95 });
+      if (S.nc && th.ci === 0 && chance(0.45)) {
+        const r = bassNote(ch, 50), h = t + bd * 0.5;
+        INS.brass(nv(th), h, [r], bd * 0.9, { vel: 0.1, att: 0.5, rel: 1, bright: 800, wet: 0.7 });
+        INS.brass(nv(th), h + bd, [r + 7], bd * 1.4, { vel: 0.09, att: 0.4, rel: 1.4, bright: 800, wet: 0.7 });
+      }
+    },
+    step(S) {
+      if (!chance(0.1)) return;
+      const th = S.th, m = pick(scaleTones(S.d.scale, 69, 86));
+      INS.pluck(nv(th), S.t, m, { vel: rand(0.05, 0.08), dec: 3.5, bright: 2.5, saw: 0.05, wet: 0.95 });
+    },
+  },
+
+  // the Halls of Deepstone: a low choir under the mountain and a far-off anvil keeping time (E phrygian)
+  halls: {
+    bpm: 58, beats: 4, sub: 2, bpc: 2, drums: 'heavy', scale: [4, 5, 7, 9, 11, 0, 2],
+    progs: [['Em', 'F', 'Em', 'Dm'], ['Em', 'C', 'F', 'Em'], ['Am', 'F', 'Em', 'Em'], ['Em', 'Dm', 'C', 'F']],
+    bar(S) {
+      const { th, t, bd, ch } = S, st = th.st;
+      if (S.bar % 8 === 0) INS.drone(nv(th), t, 28, bd * 8 + 3, { vel: 0.2 });
+      if (S.nc) {
+        st.pv = voicing(ch, 43, 58, st.pv, 3);
+        INS.choir(nv(th), t, st.pv, S.cd, { vel: 0.22, att: 2.2, rel: 3, vowel: 'o', wet: 0.55 });
+        const b = bassNote(ch, 33);
+        INS.strings(nv(th), t, [b, b + 7], S.cd, { vel: 0.15, att: 2, rel: 3, cut: 380 });
+      }
+      if (S.bar % 2 === 0) for (const k of [0, 3]) metal(nv(th), t + k * S.sd, 330 * rand(0.98, 1.02), [1, 2.76, 5.4, 8.93], 0.9, k ? 0.035 : 0.05);
+      if (chance(0.2)) INS.bell(nv(th), t + rand(0, bd), pick([40, 45, 52]), { vel: 0.1, dec: 7, wet: 0.7 });
+    },
+    step(S) {
+      if (!chance(0.04)) return;
+      const th = S.th, m = pick(scaleTones(S.d.scale, 64, 79));
+      INS.pluck(nv(th), S.t, m, { vel: 0.05, dec: 2.5, bright: 2, saw: 0.05, wet: 1 });
     },
   },
 

@@ -30,8 +30,12 @@ const KIND = {
   hex: { speed: 9, r: 0.45, life: 2, color: 0x70ff50, light: 0x40ff40 },
   web: { speed: 12, r: 0.7, life: 1.6, color: 0xe0e8f0 },
   spectral: { speed: 13, r: 1.0, life: 1.6, color: 0x7ad0ff, light: 0x60b0ff },
-  gate: { speed: 10, r: 0.6, life: 2.2, color: 0xc060ff, light: 0x9040ff }
+  gate: { speed: 10, r: 0.6, life: 2.2, color: 0xc060ff, light: 0x9040ff },
+  ember: { speed: 15, r: 0.5, life: 1.3, color: 0xff8a30, light: 0xff6a10 },
+  acid: { speed: 12, r: 0.55, life: 1.2, color: 0x9adf40, light: 0x60c020 },
+  firewave: { speed: 14, r: 1.2, life: 1.4, color: 0xff6a20, light: 0xff5010 }
 };
+const PASS_WALLS = new Set(['spectral', 'firewave']);
 
 export function fire(kind, src, x, z, dir, o = {}) {
   const K = KIND[kind];
@@ -71,12 +75,21 @@ export function updateProjs(dt) {
       }
     }
     const nx = p.x + p.vx * dt, nz = p.z + p.vz * dt;
-    if (map && map.solid(Math.floor(nx), Math.floor(nz)) && p.kind !== 'spectral') { endProj(p, i, true); continue; }
+    if (map && map.blocks(Math.floor(nx), Math.floor(nz)) && !PASS_WALLS.has(p.kind)) { endProj(p, i, true); continue; }
     p.x = nx; p.z = nz;
     if (p.mesh) { p.mesh.position.set(p.x, p.y, p.z); p.mesh.rotation.y = Math.atan2(p.vx, p.vz); }
     if (p.light) { p.light.x = p.x; p.light.y = p.y; p.light.z = p.z; }
     // looks
-    if (p.kind === 'fireball' || p.kind === 'mini') {
+    if (p.kind === 'ember') {
+      for (let k = 0; k < 2; k++) P({ x: p.x + rand.range(-0.1, 0.1), y: p.y + rand.range(-0.1, 0.1), z: p.z + rand.range(-0.1, 0.1), vx: -p.vx * 0.05, vy: rand.range(0.2, 0.8), vz: -p.vz * 0.05, life: rand.range(0.2, 0.4), size: 0.45, size1: 0.08, color: 0xffc060, color1: 0xff3000 });
+    } else if (p.kind === 'acid') {
+      P({ add: false, x: p.x, y: p.y, z: p.z, life: 0.3, size: 0.55, size1: 0.2, color: 0x8ad030, alpha: 0.9 });
+      if (Math.random() < 0.5) P({ add: false, x: p.x, y: p.y, z: p.z, vy: -2, life: 0.5, size: 0.12, size1: 0.08, color: 0x6aa020, alpha: 0.9, grav: 9 });
+    } else if (p.kind === 'firewave') {
+      const px = Math.cos(Math.atan2(p.vx, p.vz)), pz = -Math.sin(Math.atan2(p.vx, p.vz));
+      for (let k = -2; k <= 2; k++) P({ x: p.x + px * k * 0.5, y: 0.3 + Math.random() * 0.9, z: p.z + pz * k * 0.5, vy: rand.range(1, 2.5), life: 0.45, size: 0.55, size1: 0.1, color: 0xffc050, color1: 0xff3000 });
+      if (Math.random() < 0.25) area('fire', p.x, p.z, 0.9, 2.5, { team: 'foe', src: p.src, dmg: p.dmg * 0.15, tick: 0.5 });
+    } else if (p.kind === 'fireball' || p.kind === 'mini') {
       for (let k = 0; k < 3; k++) P({ x: p.x + rand.range(-0.15, 0.15), y: p.y + rand.range(-0.15, 0.15), z: p.z + rand.range(-0.15, 0.15), vx: -p.vx * 0.05, vy: rand.range(0.2, 1), vz: -p.vz * 0.05, life: rand.range(0.25, 0.45), size: p.kind === 'mini' ? 0.4 : 0.7, size1: 0.1, color: 0xffd070, color1: 0xff3a00 });
       if (Math.random() < 0.3) P({ add: false, x: p.x, y: p.y, z: p.z, vy: 0.5, life: 0.8, size: 0.4, size1: 1.0, color: 0x2a2220, alpha: 0.4 });
     } else if (p.kind === 'arcane' || p.kind === 'gate') {
@@ -109,7 +122,7 @@ export function updateProjs(dt) {
         if (dx * dx + dz * dz < rr * rr) {
           p.hit.add(tg);
           if (p.onHit) p.onHit(tg, p); else damage(p.src, tg, p.dmg, Object.assign({ kx: p.vx, kz: p.vz }, p.opts));
-          if (p.kind !== 'spectral') { done = true; break; }
+          if (!PASS_WALLS.has(p.kind)) { done = true; break; }
         }
       }
     }

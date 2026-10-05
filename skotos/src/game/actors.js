@@ -40,7 +40,10 @@ export function preloadModels(list) { for (const m of list) if (!CACHE[m] && BUI
 
 const STYLE = { warden: 'sword', ranger: 'bow', mage: 'staff' };
 // realistic people (Quaternius, see gfx/people.js) replace the code-built models wherever one exists
+// stand-ins while a model is missing from the build (Act II's people and creatures)
+const STAND_IN = { magmaHound: 'warg', caveBat: 'spiderling', deepworm: 'spider', stoneborn: 'villager1', stonebornArb: 'villager0', runepriest: 'wayfarer', brokka: 'smith', stonewarden: 'troll', moltenKing: 'ash' };
 export function makeAvatar(model, o = {}) {
+  if (!hasPerson(model) && !hasCreature(model) && STAND_IN[model]) model = STAND_IN[model];
   const m = hasPerson(model) ? personModel(model) : hasCreature(model) ? creatureModel(model) : instance(model);
   const av = new Avatar(m, { style: o.style || STYLE[model] || 'none', animSet: o.animSet, hunch: o.hunch, scale: o.scale, idle: o.idle });
   if (o.weapon) av.hold('R', o.weapon, o.look || {});
@@ -115,24 +118,30 @@ export function spawnMonster(id, x, z, o = {}) {
   const D = DIFFS[G.hero.diff];
   const lvl = o.level ?? monsterLevel(G.zone?.level ?? 1);
   let hp = monsterHP(lvl) * def.hp * D.hp, dmg = monsterDmg(lvl) * def.dmg * D.dmg;
-  let scale = 1;
+  let scale = def.look?.scale || 1;
   const look = {};
   if (o.elite === 'champion') { hp *= 3; dmg *= 1.25; scale = 1.1; }
   if (o.elite === 'rare') { hp *= 4.2; dmg *= 1.4; scale = 1.22; }
   if (o.minion) { hp *= 1.3; dmg *= 1.1; }
   if (o.gateMul) { hp *= o.gateMul; dmg *= Math.sqrt(o.gateMul); }
-  if (def.boss) scale = 1;
+  if (def.boss) scale = def.look?.scale || 1;
   const style = def.style || 'none';
   const weapon = def.weapon && (id === 'skeleton' ? 'sword' : def.weapon);
-  const wlook = id === 'skeleton' ? { blade: 0x6a6052, len: 0.8 } : id === 'barrowLord' ? { blade: 0x9ad0ff, glow: 0.7 } : id === 'goblinArcher' ? { wood: 0x3a2a1a } : {};
+  const wlook = id === 'skeleton' ? { blade: 0x6a6052, len: 0.8 } : id === 'barrowLord' ? { blade: 0x9ad0ff, glow: 0.7 } : id === 'goblinArcher' ? { wood: 0x3a2a1a }
+    : id === 'moltenKing' ? { head: 0x2a2220, glow: 0.9, rune: 0xff6a10 } : id === 'deadDwarf' ? { blade: 0x5a5248 } : id === 'runepriest' ? { gem: 0xff8a30, wood: 0x3a3028 } : {};
   const av = makeAvatar(def.model, { style, animSet: def.ai === 'melee' && (id === 'skeleton') ? 'undead' : undefined, hunch: def.hunch, weapon, look: wlook, scale });
   if (id === 'skeleton' && Math.random() < 0.5) av.hold('L', 'shield', { face: 0x4a3a2a, rim: 0x5a5248, emblem: 0x3a3028, r: 0.26 });
+  if (id === 'stoneborn') av.hold('L', 'shield', { face: 0x3a2a24, rim: 0x8a6a3a, emblem: 0xb07a30, r: 0.3 });
   const a = new Actor({ x, z, team: 'foe', kind: id, def, radius: def.radius * scale, speed: def.speed * (o.elite ? 1.05 : 1), hp, dmg, level: lvl, avatar: av, elite: o.elite, affixes: o.affixes, boss: def.boss });
   a.scale = scale;
   if (o.elite === 'champion') { av.setTint(0x5070ff, 0.35); av.setRim(0x6090ff, 0.9); }
   if (o.elite === 'rare') { av.setTint(0xffb040, 0.25); av.setRim(0xffc040, 0.9); a.name = rand.pick(RARE_A()) + ' ' + rand.pick(RARE_B()); }
   if (o.minion) { av.setRim(0xffc040, 0.5); }
   if (def.pet) { av.setTint(0x70c8ff, 0.8); av.setRim(0x80d8ff, 1.6); }
+  if (def.look?.tint && !o.elite) av.setTint(def.look.tint, def.look.tintAmt ?? 0.3);
+  if (def.look?.rim && !o.elite) av.setRim(def.look.rim, def.look.rimI ?? 0.6);
+  if (def.armor) a.armored = true;
+  if (def.ai === 'stonewarden') a.statue = true;
   if (a.affixes.includes('fast')) { a.speed *= 1.35; }
   if (a.affixes.includes('armored')) { a.armored = true; }
   a.packId = o.packId;
@@ -141,6 +150,14 @@ export function spawnMonster(id, x, z, o = {}) {
   if (o.rising) { a.rising = 1.6; av.play('rise', 1); }
   return a;
 }
+export function restoreRim(a) {
+  const av = a.avatar; if (!av) return;
+  if (a.def.pet) av.setRim(0x80d8ff, 1.6);
+  else if (a.elite === 'champion') av.setRim(0x6090ff, 0.9);
+  else if (a.elite === 'rare') av.setRim(0xffc040, 0.9);
+  else if (a.minion) av.setRim(0xffc040, 0.5);
+  else av.setRim(a.def.look?.rim ?? 0x6080b0, a.def.look?.rimI ?? 0.3);
+}
 export function rollAffixes(n) { const pool = AFFIXES.slice(); rand.shuffle(pool); return pool.slice(0, n); }
 
 // ---------- NPCs ----------
@@ -148,6 +165,7 @@ export function spawnNpc(kind, x, z, rot) {
   const model = kind === 'villager' ? 'villager' + (Math.floor(x + z) % 3) : kind;
   const vi = Math.floor(x + z) % 3;
   const o = kind === 'wayfarer' ? { style: 'staff', weapon: 'lanternStaff', animSet: 'npc' } : kind === 'smith' ? { style: 'none', weapon: 'hammer', animSet: 'npc', idle: 'hammer' }
+    : kind === 'brokka' ? { style: 'none', weapon: 'hammer', animSet: 'npc', idle: 'fold' }
     : kind === 'healer' ? { style: 'none', animSet: 'npc', idle: 'talk' } : { style: 'none', animSet: 'npc', idle: ['fold', 'talk', 'Idle_Loop'][vi] };
   const av = makeAvatar(model, o);
   const a = new Actor({ x, z, team: 'npc', kind, radius: 0.5, speed: 0, hp: 1e9, avatar: av, rot });
@@ -203,6 +221,6 @@ export function near(x, z, r, out = []) {
   }
   return out;
 }
-export const foes = (x, z, r, out) => near(x, z, r, out).filter((a) => !a.dead && (a.team === 'foe'));
+export const foes = (x, z, r, out) => near(x, z, r, out).filter((a) => !a.dead && a.team === 'foe' && !a.under);
 export const allies = (x, z, r) => near(x, z, r).filter((a) => !a.dead && a.team === 'hero');
 export { clamp, t };

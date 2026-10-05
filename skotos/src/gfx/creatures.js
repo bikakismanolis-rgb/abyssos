@@ -21,7 +21,8 @@ const CAST = {
   warg: ['wolf', 1.15], spiritWolf: ['wolf', 1],
   spider: ['spider', 1], spiderling: ['spider', 0.5], weaver: ['spider', 2.6],
   ash: ['ashspawn', 1], troll: ['troll', 1],
-  wraith: ['wight', 1], barrowLord: ['barrowlord', 1.15]
+  wraith: ['wight', 1], barrowLord: ['barrowlord', 1.15], golemView: ['golem', 1],
+  magmaHound: ['magmahound', 1], caveBat: ['bat', 1], deepworm: ['worm', 1], stonewarden: ['golem', 1], moltenKing: ['moltenking', 1]
 };
 
 export const CREATURES = { tpl: {}, ready: false };

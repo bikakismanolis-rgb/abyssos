@@ -8,7 +8,7 @@ import { RNG, fbm, clamp } from '../core/util.js';
 import { KIT, KITMAT, KIT_SCALE } from '../gfx/kits.js';
 import { ENV } from '../gfx/env.js';
 
-export const WIND = { uTime: { value: 0 }, uHero: { value: new THREE.Vector3(0, 0, -999) } };
+export const WIND = { uTime: { value: 0 }, uHero: { value: new THREE.Vector3(0, 0, -999) }, uSnow: { value: 0 } };
 
 // Screen-door fade for anything standing between the camera and the hero (camera sits to the south, +z).
 const OCC_V = `
@@ -97,16 +97,26 @@ function mats() {
 }
 function envMats() {
   for (const k in KITMAT) if (!KITMAT[k].userData.occ) { occlude(KITMAT[k]); KITMAT[k].userData.occ = true; }
-  if (MAT.envDone || !ENV.ready) return MAT;
-  MAT.envDone = true;
-  {
+  if (!ENV.ready) return MAT;
+  if (!MAT.envDone) {
+    MAT.envDone = true;
     // photoreal stone, projected in world space so it never stretches (crypt walls shrink as the hero passes)
     MAT.wallW = worldMat('wall', { scale: 2.2, kit: KITMAT.dungeon, tint: 0xf4f0e8, rough: 0.82 });
     MAT.postW = worldMat('blocks', { scale: 2.0, kit: KITMAT.dungeon, tri: true, tint: 0xd8d4cc, rough: 0.8 });
     MAT.blocks = worldMat('blocks', { scale: 2.0, vc: 0.144, tri: true, rough: 0.82 });
     MAT.rough = worldMat('wall', { scale: 2.6, vc: 0.144, tri: true, rough: 0.85 });
-    for (const k in ENV.props) for (const part of ENV.props[k]) if (!part.mat.userData.occ && !part.mat.transparent) { occlude(part.mat); part.mat.userData.occ = true; }
   }
+  if (!MAT.deepDone && ENV.packs.deep) {
+    MAT.deepDone = true;
+    MAT.cliffW = worldMat('cliff', { scale: 3.2, tri: true, rough: 0.9, snow: true, tint: 0xc8c8cc });
+    MAT.rockW = worldMat('cliff', { scale: 2.0, tri: true, rough: 0.9, tint: 0xa8a49c });
+    MAT.dwallW = worldMat('dwall', { scale: 2.4, kit: KITMAT.dungeon, tint: 0xe6dccc, rough: 0.82 });
+    MAT.dpostW = worldMat('dwall', { scale: 2.0, kit: KITMAT.dungeon, tri: true, tint: 0xd8cebe, rough: 0.8 });
+    MAT.caveW = worldMat('cavewall', { scale: 2.6, kit: KITMAT.dungeon, tri: true, tint: 0xb8b0a6, rough: 0.9 });
+    MAT.dblocks = worldMat('dwall', { scale: 2.0, vc: 0.144, tri: true, rough: 0.82 });
+    MAT.snowRock = worldMat('cliff', { scale: 2.6, vc: 0.144, tri: true, rough: 0.9, snow: true });
+  }
+  for (const k in ENV.props) for (const part of ENV.props[k]) if (!part.mat.userData.occ && !part.mat.transparent) { occlude(part.mat); part.mat.userData.occ = true; }
   return MAT;
 }
 
@@ -120,7 +130,8 @@ function worldMat(layer, o = {}) {
   const m = new (Std())({ vertexColors: !!o.vc, map: o.kit?.map || null, color: o.tint ?? 0xffffff });
   if (m.isMeshStandardMaterial) { m.roughness = o.rough ?? 0.85; m.metalness = 0; m.envMapIntensity = 0.25; }
   const nrm = !!L.n;
-  const uni = { tW: { value: L.d }, tWn: { value: L.n }, uWS: { value: 1 / (o.scale || 2) }, uVC: { value: 1 / (o.vc || 1) } };
+  const SN = o.snow && ENV.layers.snow;
+  const uni = { tW: { value: L.d }, tWn: { value: L.n }, uWS: { value: 1 / (o.scale || 2) }, uVC: { value: 1 / (o.vc || 1) }, tSnow: { value: SN ? SN.d : null } };
   const proj = (k) => `
   {
     vec2 q = ${k};
@@ -156,20 +167,25 @@ function worldMat(layer, o = {}) {
   wpp = instanceMatrix * wpp; wnn = mat3(instanceMatrix) * wnn;
 #endif
   wpp = modelMatrix * wpp; vWP = wpp.xyz; vWN = normalize(mat3(modelMatrix) * wnn);`);
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler2D tW;\nuniform sampler2D tWn;\nuniform float uWS;\nuniform float uVC;\nvarying vec3 vWP;\nvarying vec3 vWN;')
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler2D tW;\nuniform sampler2D tWn;\nuniform sampler2D tSnow;\nuniform float uWS;\nuniform float uVC;\nvarying vec3 vWP;\nvarying vec3 vWN;')
       .replace('#include <map_fragment>', (o.kit ? `#ifdef USE_MAP
   vec3 kitC = texture2D(map, vMapUv).rgb;
   diffuseColor.rgb *= clamp(dot(kitC, vec3(0.3, 0.55, 0.15)) * 1.6, 0.25, 1.15);
-#endif` : '') + frag + '\n  diffuseColor.rgb *= wc;')
+#endif` : '') + frag + (SN ? `
+  // snow settles on whatever faces the sky, thicker higher up the slope
+  vec3 snc = texture2D(tSnow, vWP.xz * 0.33).rgb;
+  float snw = smoothstep(0.45, 0.8, wN.y + (snc.r - 0.5) * 0.5 + clamp(vWP.y, 0.0, 6.0) * 0.03);
+  wc = mix(wc, snc * 1.15, snw);` : '') + '\n  diffuseColor.rgb *= wc;')
       .replace('#include <color_fragment>', '#include <color_fragment>\n#ifdef USE_COLOR\n  diffuseColor.rgb *= uVC;\n#endif')
       .replace('#include <normal_fragment_maps>', '#ifdef W_NRM\n  normal = normalize((viewMatrix * vec4(wPN, 0.0)).xyz);\n#endif');
   };
-  m.customProgramCacheKey = () => 'world|' + layer + (o.tri ? '|tri' : '') + (o.kit ? '|kit' : '') + (o.vc ? '|vc' : '');
+  m.customProgramCacheKey = () => 'world|' + layer + (o.tri ? '|tri' : '') + (o.kit ? '|kit' : '') + (o.vc ? '|vc' : '') + (SN ? '|snow' : '');
   return occlude(m, patch);
 }
 
 
 // ---------- geometry helpers ----------
+const lerpC = (a, b, t) => a + (b - a) * t;
 const _c = new THREE.Color(), _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3();
 // parts: [{geo, color, o:{x,y,z,rx,ry,rz,sx,sy,sz}, shade?:fn(y)->k, top?:k}] -> one geometry with vertex colors (and uv if keepUV)
 function bake(parts, keepUV = false) {
@@ -194,6 +210,7 @@ function bake(parts, keepUV = false) {
     for (let i = 0; i < n; i++) {
       let k = 1;
       if (p.top != null && nor.getY(i) > 0.7) k *= p.top;
+      if (p.snow && nor.getY(i) > 0.25) { const f = Math.min(1, (nor.getY(i) - 0.25) * p.snow); col[i * 3] = lerpC(_c.r, 0.86, f) * k; col[i * 3 + 1] = lerpC(_c.g, 0.89, f) * k; col[i * 3 + 2] = lerpC(_c.b, 0.94, f) * k; continue; }
       if (p.ao) k *= 0.55 + 0.45 * clamp(pos.getY(i) / p.ao, 0, 1);
       if (p.jit) k *= 1 - p.jit / 2 + Math.random() * p.jit;
       col[i * 3] = _c.r * k; col[i * 3 + 1] = _c.g * k; col[i * 3 + 2] = _c.b * k;
@@ -217,9 +234,9 @@ function jitter(g, amt, seed = 1) {
   g.computeVertexNormals();
   return g;
 }
-function grassGeo() {
+function grassGeo(b = 0x16240f, tp = 0x5a7a30) {
   const pos = [], col = [], rng = RNG(5);
-  const base = new THREE.Color(0x16240f), tip = new THREE.Color(0x5a7a30);
+  const base = new THREE.Color(b), tip = new THREE.Color(tp);
   for (let i = 0; i < 6; i++) {
     const a = rng.range(0, 6.28), r = rng.range(0, 0.18), x = Math.sin(a) * r, z = Math.cos(a) * r;
     const lean = rng.range(-0.25, 0.25), lz = rng.range(-0.25, 0.25), h = rng.range(0.3, 0.6), wdt = 0.05;
@@ -274,6 +291,14 @@ const CAT = {
     { geo: jitter(G.ico(0.38, 0), 0.08, 10), color: 0x18261a, o: { y: 0.28, x: -0.35, z: -0.2, sy: 0.8 }, jit: 0.3, soft: 0.7 }
   ] }),
   grass: () => ({ mat: 'wind', shadow: false, geo: grassGeo() }),
+  tuft: () => ({ mat: 'wind', shadow: false, geo: grassGeo(0x3a3428, 0x9a8a62) }),
+  pineS: () => ({ mat: 'wind', shadow: true, parts: [
+    { geo: G.cyl(0.11, 0.2, 1.8, 6), color: 0x3a2a1e, o: { y: 0.9 } },
+    { geo: jitter(G.cone(1.45, 1.9, 7), 0.12, 1), color: 0x16261c, o: { y: 1.9 }, jit: 0.25, soft: 0.6, snow: 2.2 },
+    { geo: jitter(G.cone(1.15, 1.7, 7), 0.1, 2), color: 0x1a2c20, o: { y: 2.8, ry: 0.4 }, jit: 0.25, soft: 0.6, snow: 2.2 },
+    { geo: jitter(G.cone(0.85, 1.5, 7), 0.08, 3), color: 0x1e3224, o: { y: 3.6 }, jit: 0.25, soft: 0.6, snow: 2.2 },
+    { geo: G.cone(0.5, 1.2, 6), color: 0x223a28, o: { y: 4.3, ry: 0.3 }, soft: 0.6, snow: 2.2 }
+  ] }),
   rock: () => ({ mat: 'lam', shadow: true, parts: [{ geo: jitter(G.dodeca(0.7), 0.18, 11), color: 0x55544e, o: { y: 0.3, sy: 0.75 }, top: 1.25, jit: 0.2 }, { geo: jitter(G.dodeca(0.4), 0.1, 12), color: 0x4a4a46, o: { y: 0.15, x: 0.6, z: 0.3, sy: 0.7 }, jit: 0.2 }] }),
   stone: () => ({ mat: 'lam', shadow: false, parts: [{ geo: jitter(G.dodeca(0.4), 0.1, 13), color: 0x5a5852, o: { y: 0.1, sy: 0.6 }, jit: 0.2 }] }),
   shroom: () => ({ mat: 'lam', shadow: false, parts: [{ geo: G.cyl(0.03, 0.045, 0.22, 5), color: 0xc8c4b0, o: { y: 0.11 } }] }),
@@ -295,6 +320,44 @@ const CAT = {
   torchBracket: () => ({ mat: 'lam', shadow: false, parts: [{ geo: G.box(0.1, 0.25, 0.1), color: 0x2a2a2a, o: { y: 1.6 } }, { geo: G.cyl(0.04, 0.03, 0.5, 5), color: 0x4a3020, o: { y: 1.8, z: 0.15, rx: 0.5 } }] })
 };
 
+// ---------- scanned trees (trees.glb): their own materials plus wind, the cutaway fade and snow on the pass ----------
+const TREE_MAT = new Map();
+function treeMat(src) {
+  if (TREE_MAT.has(src)) return TREE_MAT.get(src);
+  const m = src.clone();
+  const leaf = m.alphaTest > 0;
+  // the scans were shot in daylight: trunks read too pale in a night forest
+  m.color.multiplyScalar(leaf ? 0.82 : 0.55);
+  occlude(m, (sh) => {
+    sh.uniforms.uTime = WIND.uTime; sh.uniforms.uSnow = WIND.uSnow;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime;\nvarying float vTH;\nvarying vec3 vTWN;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+#ifdef USE_INSTANCING
+  vec3 tip = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
+#else
+  vec3 tip = vec3(0.0);
+#endif
+  float th = max(position.y, 0.0);
+  vTH = th;
+  float tsw = (sin(uTime * 1.1 + tip.x * 0.37 + tip.z * 0.29) * 0.018 + sin(uTime * 2.6 + tip.x * 1.3) * 0.006) * th * th * 0.18;
+  transformed.x += tsw; transformed.z += tsw * 0.6;
+  ${leaf ? 'transformed.xz += vec2(sin(uTime * 4.0 + position.y * 3.0 + tip.x), cos(uTime * 3.3 + position.x * 2.0 + tip.z)) * 0.025 * min(th, 3.0);' : ''}`)
+      .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nvTWN = objectNormal;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uSnow;\nvarying float vTH;\nvarying vec3 vTWN;')
+      .replace('#include <color_fragment>', `#include <color_fragment>
+  if (uSnow > 0.0) {
+    float up = ${leaf ? 'abs(normalize(vTWN).y)' : 'normalize(vTWN).y'};
+    float sn = uSnow * clamp(smoothstep(0.25, 0.75, up) * 0.85 + smoothstep(2.0, 7.0, vTH) * 0.25, 0.0, 0.9);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.89, 0.95), sn);
+  }`);
+  });
+  m.customProgramCacheKey = () => 'tree|' + (leaf ? 'leaf' : 'bark') + '|' + m.type;
+  TREE_MAT.set(src, m);
+  return m;
+}
+const NO_TREES = typeof location !== 'undefined' && location.search.includes('notrees');
+const TREE_POOL = { pine: ['treePine', 'treePine', 'treeSpruce'], pineS: ['treePine', 'treeSpruce', 'treeFir'], oak: ['treeOak', 'treeBeech', 'treeOak'], dead: ['treeDead'] };
+
 // ---------- instanced chunks ----------
 class Instancer {
   constructor(group) { this.group = group; this.sets = {}; }
@@ -305,8 +368,16 @@ class Instancer {
     const M = mats(), out = {};
     for (const type in this.sets) {
       let def;
-      if (type.startsWith('kit:')) {
-        const [kit, m] = type.slice(4).split('#')[0].split('/');
+      if (type.startsWith('tree:')) {
+        const parts = ENV.props[type.slice(5)];
+        if (!parts) { console.warn('missing tree', type); continue; }
+        def = { parts: parts.map((p) => ({ geo: p.geo, material: treeMat(p.mat) })), shadow: quality >= 2 };
+      } else if (type.startsWith('rock:') || type.startsWith('rockb:')) {
+        const name = type.slice(type.indexOf(':') + 1), parts = ENV.props[name];
+        if (!parts) { console.warn('missing rock', name); continue; }
+        def = { parts: parts.map((p) => ({ geo: p.geo, material: (type.startsWith('rock:') ? M.cliffW : M.rockW) || M.lam })), shadow: true };
+      } else if (type.startsWith('kit:')) {
+        const [kit, m] = type.slice(4).split('#')[0].split('~')[0].split('/');
         const g = KIT[kit]?.[m];
         if (!g) { console.warn('missing kit model', kit, m); continue; }
         def = { parts: [{ geo: g, material: kitMaterial(M, kit, m, type) }], shadow: !type.includes('#floor') };
@@ -346,6 +417,11 @@ class Instancer {
 // KayKit dungeon walls and posts take the photoreal stone; everything else keeps the kit's own look
 const STONE_KIT = new Set(['wall', 'wall_arched', 'wall_cracked', 'wall_pillar', 'wall_shelves', 'wall_broken', 'wall_corner', 'wall_endcap', 'stairs', 'stairs_wide']);
 function kitMaterial(M, kit, m, type) {
+  if (kit === 'dungeon' && type.includes('~cave') && M.caveW) return STONE_KIT.has(m) || m === 'pillar' || m === 'column' ? M.caveW : KITMAT[kit];
+  if (kit === 'dungeon' && type.includes('~dwall') && M.dwallW) {
+    if (m === 'pillar' || m === 'column') return M.dpostW;
+    if (STONE_KIT.has(m)) return M.dwallW;
+  }
   if (kit === 'dungeon' && M.wallW) {
     if (m === 'pillar' || m === 'column') return M.postW;
     if (STONE_KIT.has(m)) return M.wallW;
@@ -405,7 +481,17 @@ function addProp(B, I, p, L, rng, out) {
     I.add('env:' + name, x, z, r, s * k, 0);
     return;
   }
+  // scanned trees on medium and high quality: fewer of them (each is bigger and bushier), the rest stay procedural
+  if (TREE_POOL[p.t] && R.quality >= 1 && ENV.props.treePine && !NO_TREES) {
+    const h = hash2(x * 1.7, z * 0.9), d = p.d ?? 2, keep = d <= 1 ? 0.75 : d <= 3 ? 0.6 : 0.4;
+    if (h > keep) return;
+    const pool = TREE_POOL[p.t], name = pool[Math.floor(hash2(z, x) * pool.length)];
+    const k = s * (p.t === 'dead' ? 0.85 : 0.72) * (0.9 + hash2(x + 3, z) * 0.3);
+    I.add('tree:' + name, x, z, r, k, (p.y || 0) - 0.05, k * (0.92 + hash2(x, z + 5) * 0.2));
+    return;
+  }
   switch (p.t) {
+    case 'pineS': I.add('pine', x, z, r, s, p.y || 0, s * (0.9 + rng.next() * 0.35)); break;
     case 'pine': case 'oak': case 'dead': case 'bush': case 'grass': case 'rock': case 'stone': case 'log': case 'eggs': case 'bones': case 'stake':
       I.add(p.t, x, z, r, s, 0, p.t === 'pine' || p.t === 'oak' ? s * (0.9 + rng.next() * 0.35) : s); break;
     case 'shroom': I.add('shroom', x, z, r, s); I.add('shroomCap', x, z, r, s); break;
@@ -449,11 +535,12 @@ function addProp(B, I, p, L, rng, out) {
       if (p.t === 'pillar') parts.push({ geo: G.box(0.9, 0.3, 0.9), color: DSTONE, o: { y: 0.35 + hh + 0.15 } });
       else if (!ENV.ready) parts.push({ geo: jitter(G.dodeca(0.4), 0.1, 3), color: STONE, o: { y: 0.3, x: 0.9, z: 0.4 } });
       else I.add('env:stoneA', x + Math.cos(r) * 0.9 + Math.sin(r) * 0.4, z - Math.sin(r) * 0.9 + Math.cos(r) * 0.4, r, 0.55);
-      B.add('blocks', parts, x, z, r, s);
+      B.add(p.dwarf && MAT.snowRock ? 'snowRock' : 'blocks', parts, x, z, r, s);
       break;
     }
     case 'statue':
       if (ENV.ready) {
+        if (s !== 1) { B.add(MAT.snowRock ? 'snowRock' : 'blocks', [{ geo: G.box(1.9, 0.5, 1.9), color: DSTONE, o: { y: 0.25 }, ao: 0.5 }], x, z, r, s); I.add('env:statue', x, z, r, 1.05 * s, 0.5 * s); break; }
         B.add('blocks', [{ geo: G.box(1.9, 0.5, 1.9), color: DSTONE, o: { y: 0.25 }, ao: 0.5 }, { geo: G.box(1.7, 0.12, 1.7), color: STONE, o: { y: 0.56 } }], x, z, r);
         I.add('env:statue', x, z, r, 1.05, 0.6);
         break;
@@ -650,10 +737,108 @@ function addProp(B, I, p, L, rng, out) {
     case 'crate': case 'barrel': case 'urn': out.breakables.push(p); break;
     case 'kit': {
       const ks = KIT_SCALE[p.kit] * (p.s || 1);
-      const key = 'kit:' + p.kit + '/' + p.m + (p.wall ? '#wall' : p.floor ? '#floor' : '');
+      const key = 'kit:' + p.kit + '/' + p.m + (p.wall ? '#wall' : p.floor ? '#floor' : '') + (p.skin ? '~' + p.skin : '');
       I.add(key, x, z, r, ks * (p.sx ?? 1), p.y ? p.y : 0, ks * (p.sy ?? 1));
       break;
     }
+    // ---------- Act II ----------
+    case 'boulder': case 'face': case 'cliff': case 'mount': case 'rubble': {
+      const pool = { boulder: ['boulderD', 'rockD', 'rockE', 'rockF'], rubble: ['rockD', 'rockE', 'rockF'], face: ['faceA', 'faceB'], cliff: ['cliffA', 'cliffB', 'mount', 'faceA'], mount: ['mount', 'cliffA'] }[p.t];
+      const want = { boulder: 1.5, rubble: 0.7, face: 4.6, cliff: 8.5, mount: 15 }[p.t];
+      const name = pool[Math.floor(hash2(x, z) * pool.length)], sz = ENV.sizes[name];
+      if (!sz) { I.add(p.t === 'rubble' ? 'stone' : 'rock', x, z, r, s * (p.t === 'boulder' || p.t === 'rubble' ? 1 : 3), p.y || 0); break; }
+      const k = want / Math.max(sz[0], sz[2]) * s;
+      I.add((p.t === 'rubble' ? 'rockb:' : 'rock:') + name, x, z, r, k, p.y || 0);
+      break;
+    }
+    case 'tuft': I.add(p.t, x, z, r, s, p.y || 0, s); break;
+    case 'bridge': {
+      // a dwarf-built bridge along z: a deck over the gap, parapets, a dark arch beneath
+      const len = p.len || 12, bw = p.w || 3.4, parts = [];
+      parts.push({ geo: G.box(bw + 0.6, 1.0, len), color: STONE, o: { y: -0.5 }, ao: 1 });
+      for (const sx of [-1, 1]) for (let i = 0; i < Math.floor(len / 1.6); i++) if (i % 3 !== 2) parts.push({ geo: G.box(0.35, 0.65, 1.45), color: DSTONE, o: { x: sx * (bw / 2 + 0.1), y: 0.32, z: -len / 2 + 0.8 + i * 1.6 }, jit: 0.1 });
+      for (const sz of [-1, 1]) parts.push({ geo: G.box(bw + 1.4, 1.6, 1.1), color: DSTONE, o: { y: -0.3, z: sz * (len / 2 - 0.2) } });
+      parts.push({ geo: G.box(bw + 0.4, 4, len - 2.4), color: 0x2a2826, o: { y: -3 } });
+      B.add(MAT.dblocks ? 'dblocks' : MAT.blocks ? 'blocks' : 'lam', parts, x, z, 0);
+      break;
+    }
+    case 'deepgate': {
+      // the Great Gate of Deepstone, hewn out of the mountain: stepped jambs, a lintel and pediment carved with runes
+      const M2 = MAT.snowRock ? 'snowRock' : 'lam', parts = [];
+      for (const sx of [-1, 1]) {
+        parts.push({ geo: G.box(3.4, 10.5, 3.6), color: STONE, o: { x: sx * 4.7, y: 5.25 }, ao: 4 });
+        parts.push({ geo: G.box(1.2, 9.6, 3.9), color: DSTONE, o: { x: sx * 3.25, y: 4.8 } });
+        parts.push({ geo: G.box(4.4, 1.2, 4.6), color: DSTONE, o: { x: sx * 4.7, y: 0.6 } });
+        parts.push({ geo: G.box(4.0, 0.8, 4.2), color: STONE, o: { x: sx * 4.7, y: 10.9 } });
+      }
+      parts.push({ geo: G.box(14, 2.4, 4.2), color: DSTONE, o: { y: 12.3 } }, { geo: prism(15, 3.4, 4.4), color: STONE, o: { y: 13.5 } });
+      parts.push({ geo: G.box(6.2, 0.5, 2.6), color: DSTONE, o: { y: 0.25, z: 1.4 } }, { geo: G.box(7.4, 0.3, 3.4), color: STONE, o: { y: 0.15, z: 2.4 } });
+      parts.push({ geo: jitter(G.box(34, 18, 7, 6, 4, 2), 0.6, 51), color: 0x3a3a3c, o: { y: 7.5, z: -4.6 } });
+      B.add(M2, parts, x, z, 0);
+      const runes = [{ geo: G.box(11, 0.12, 0.05), color: 0xffb050, o: { y: 11.4, z: 2.13 } }, { geo: G.box(11, 0.12, 0.05), color: 0xffb050, o: { y: 13.1, z: 2.13 } }];
+      for (let i = -4; i <= 4; i++) runes.push({ geo: G.box(0.12, 0.95, 0.05), color: 0xffa040, o: { x: i * 1.2, y: 12.25, z: 2.13, rz: ((i * 7) % 5) * 0.12 - 0.24 } });
+      for (const sx of [-1, 1]) for (let i = 0; i < 5; i++) runes.push({ geo: G.box(0.5, 0.1, 0.05), color: 0xff9030, o: { x: sx * 4.7, y: 2.2 + i * 1.8, z: 1.83, rz: sx * 0.5 } });
+      B.add('glow', runes, x, z, 0);
+      I.add('rock:mount', x - 16, z - 5, 0.4, 1.5, -1.5);
+      I.add('rock:mount', x + 16, z - 5, 2.6, 1.6, -1.5);
+      I.add('rock:cliffA', x - 9, z - 7, 0, 1.1, 4);
+      I.add('rock:cliffA', x + 9, z - 7, 3.1, 1.1, 4);
+      break;
+    }
+    case 'kingStatue': {
+      // a king of the Stoneborn on a stepped plinth, twice the height of a man
+      const k = p.s || 1;
+      B.add(MAT.dblocks ? 'dblocks' : 'blocks', [{ geo: G.box(3.2, 0.9, 3.2), color: DSTONE, o: { y: 0.45 }, ao: 0.8 }, { geo: G.box(2.6, 0.5, 2.6), color: STONE, o: { y: 1.15 } }], x, z, r, k * 1.1);
+      if (ENV.ready && ENV.props.statue) I.add('env:statue', x, z, r, 1.9 * k, 1.4 * k);
+      else B.add('lam', [{ geo: G.cyl(0.6, 1.0, 3.2, 8), color: STONE, o: { y: 3 } }, { geo: G.ball(0.5, 8, 6), color: STONE, o: { y: 4.9 } }], x, z, r, k);
+      break;
+    }
+    case 'cairn': {
+      const st = ['stoneA', 'stoneB', 'stoneC'];
+      if (ENV.ready) for (let i = 0; i < 4; i++) I.add('env:' + st[i % 3], x + Math.sin(i * 2.3) * 0.15, z + Math.cos(i * 2.3) * 0.15, r + i, s * (1.4 - i * 0.25) * 0.55, i * 0.34 * s);
+      else B.add('lam', [0, 1, 2].map((i) => ({ geo: jitter(G.dodeca(0.45 - i * 0.1), 0.06, 20 + i), color: 0x6a6862, o: { y: 0.3 + i * 0.5 } })), x, z, r, s);
+      break;
+    }
+    case 'ice': {
+      const m = new THREE.Mesh(new THREE.CircleGeometry(s, 36), new (Std())({ color: 0x4a6278, transparent: true, opacity: 0.72, depthWrite: true }));
+      if (m.material.isMeshStandardMaterial) { m.material.roughness = 0.22; m.material.metalness = 0.15; m.material.envMapIntensity = 0.9; }
+      m.material.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n  float rr = length(vUvI - 0.5) * 2.0; diffuseColor.a *= smoothstep(1.0, 0.82, rr); diffuseColor.rgb *= 0.8 + 0.35 * smoothstep(0.5, 1.0, rr);').replace('#include <common>', '#include <common>\nvarying vec2 vUvI;'); sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec2 vUvI;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvUvI = uv;'); };
+      m.rotation.x = -Math.PI / 2; m.position.set(x, 0.035, z); m.receiveShadow = true;
+      B.group.add(m);
+      break;
+    }
+    case 'bedroll': B.add('lam', [{ geo: G.box(0.9, 0.12, 2.0), color: 0x5a3a2a, o: { y: 0.06 } }, { geo: G.cyl(0.18, 0.18, 0.9, 7), color: 0x6a5040, o: { y: 0.18, z: -0.85, rz: Math.PI / 2 } }], x, z, r); break;
+    case 'chandelier': {
+      if (ENV.ready && ENV.props.chandelier) I.add('env:chandelier', x, z, r, 2.2, p.y || 5);
+      B.add('lam', [{ geo: G.cyl(0.025, 0.025, 6, 4), color: IRON, o: { y: (p.y || 5) + 4.2 } }], x, z);
+      break;
+    }
+    case 'anvilGreat': {
+      B.add(MAT.dblocks ? 'dblocks' : 'blocks', [{ geo: G.box(3.4, 0.8, 2.4), color: DSTONE, o: { y: 0.4 } }, { geo: G.box(2.4, 0.4, 1.8), color: STONE, o: { y: 1.0 } }], x, z);
+      B.add('lam', [{ geo: G.box(1.2, 0.9, 0.9), color: IRON, o: { y: 1.65 } }, { geo: G.box(2.6, 0.6, 1.0), color: 0x34322e, o: { y: 2.35 } }, { geo: G.cone(0.48, 1.1, 4), color: 0x34322e, o: { y: 2.35, x: 1.75, rz: -1.57 } }], x, z);
+      B.add('glow', [{ geo: G.box(2.2, 0.05, 0.8), color: 0xff6a20, o: { y: 2.67 } }], x, z);
+      out.emitters.push({ x, y: 2.8, z, type: 'embers', s: 1 });
+      break;
+    }
+    case 'rails': {
+      const len = p.len || 8, parts = [];
+      for (const sx of [-0.45, 0.45]) parts.push({ geo: G.box(0.07, 0.08, len), color: 0x3a3634, o: { x: sx, y: 0.1 } });
+      for (let i = 0; i < Math.floor(len / 0.9); i++) parts.push({ geo: G.box(1.3, 0.08, 0.22), color: DWOOD, o: { y: 0.04, z: -len / 2 + 0.45 + i * 0.9 }, jit: 0.2 });
+      B.add('lam', parts, x, z, r);
+      break;
+    }
+    case 'cart': B.add('lam', [
+      { geo: G.box(1.0, 0.65, 1.5), color: 0x4a3626, o: { y: 0.62 }, jit: 0.1 }, { geo: G.box(1.06, 0.08, 1.56), color: IRON, o: { y: 0.92 } }, { geo: G.box(1.06, 0.08, 1.56), color: IRON, o: { y: 0.4 } },
+      ...[[-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]].map(([wx, wz]) => ({ geo: G.cyl(0.18, 0.18, 0.08, 9), color: 0x2a2826, o: { x: wx, y: 0.22, z: wz, rz: Math.PI / 2 } })),
+      { geo: jitter(G.dodeca(0.32), 0.08, 31), color: 0x4a4a50, o: { y: 0.95, x: 0.15 } }, { geo: jitter(G.dodeca(0.26), 0.08, 32), color: 0x55545a, o: { y: 0.98, x: -0.2, z: 0.3 } }
+    ], x, z, r); break;
+    case 'ore': {
+      B.add('lam', [{ geo: jitter(G.dodeca(0.45), 0.1, 40), color: 0x3a3836, o: { y: 0.15, sy: 0.6 } }], x, z, r, s);
+      B.add('glow', [0, 1, 2, 3].map((i) => ({ geo: G.cone(0.09 + (i % 2) * 0.04, 0.5 + i * 0.12, 4), color: [0x40d0ff, 0x60e8ff, 0x30b0f0, 0x80f0ff][i], o: { x: Math.sin(i * 1.7) * 0.18, z: Math.cos(i * 1.7) * 0.18, y: 0.4 + i * 0.05, rx: Math.sin(i * 2.1) * 0.5, rz: Math.cos(i * 2.9) * 0.5 } })), x, z, r, s);
+      break;
+    }
+    case 'timber': B.add('lam', [{ geo: G.box(0.24, 3, 0.24), color: DWOOD, o: { x: -1.1, y: 1.5 } }, { geo: G.box(0.24, 3, 0.24), color: DWOOD, o: { x: 1.1, y: 1.5 } }, { geo: G.box(2.7, 0.26, 0.3), color: WOOD, o: { y: 3.05 } }], x, z, r); break;
+    case 'ladder': if (ENV.ready && ENV.props.ladder) I.add('env:ladder', x, z, r, 1.6, 0); break;
     case 'fx': out.emitters.push({ x, y: p.y, z, type: p.fx, s: 1 }); break;
   }
 }
@@ -665,7 +850,9 @@ const GROUND = {
 // dual: read the layer twice (two scales/angles) to hide its repeat - only for organic scans; paving would ghost
   forest: { A: 'leaves', B: 'mud', P: 'trail', s: [3.4, 2.1, 2.6], r: [0.95, 0.82, 0.9], ns: 1.0, tint: 0x9a9a8e, dual: [1, 1] },
   town: { A: 'leaves', B: 'mud', P: 'cobble', s: [3.4, 2.1, 1.9], r: [0.95, 0.82, 0.68], ns: 1.0, tint: 0xaaa8a0, dual: [1, 0] },
-  crypt: { A: 'flags', B: 'mud', P: 'mcobble', s: [2.4, 2.1, 2.4], r: [0.72, 0.85, 0.8], ns: 1.1, tint: 0xe6e2da, dual: [0, 0] }
+  crypt: { A: 'flags', B: 'mud', P: 'mcobble', s: [2.4, 2.1, 2.4], r: [0.72, 0.85, 0.8], ns: 1.1, tint: 0xe6e2da, dual: [0, 0] },
+  pass: { A: 'snow', B: 'scree', P: 'dslab', s: [3.2, 3.6, 3.2], r: [0.55, 0.9, 0.8], ns: 1.0, tint: 0xe2e6ee, dual: [1, 0] },
+  halls: { A: 'dslab', B: 'cave', P: 'herring', s: [3.6, 2.6, 2.2], r: [0.68, 0.9, 0.72], ns: 1.1, tint: 0xd6cec4, dual: [0, 0] }
 };
 function buildGround(L, group) {
   const { w, h, cells, paint } = L;
@@ -674,23 +861,42 @@ function buildGround(L, group) {
   geo.translate(w / 2, 0, h / 2);
   const pos = geo.attributes.position, n = pos.count;
   const col = new Float32Array(n * 3), blend = new Float32Array(n), lay = new Float32Array(n * 4);
-  const D = L.dist, crypt = L.type === 'crypt';
+  const D = L.dist, crypt = L.type === 'crypt', halls = L.type === 'halls', pass = L.type === 'pass';
   const cellAt = (x, z) => (x < 0 || z < 0 || x >= w || z >= h ? -1 : z * w + x);
   const roomAt = crypt ? new Uint8Array(w * h) : null;
   if (crypt) for (const r of L.rooms) for (let z = r.z; z < r.z + r.h; z++) for (let x = r.x; x < r.x + r.w; x++) roomAt[z * w + x] = 1;
+  const cap = pass ? 12 : 9;
   for (let i = 0; i < n; i++) {
     const vx = Math.round(pos.getX(i)), vz = Math.round(pos.getZ(i));
-    let pv = 0, fl = 0, dd = 0, cnt = 0, rm = 0;
+    let pv = 0, fl = 0, dd = 0, cnt = 0, rm = 0, hole = 0, cave = 0, ave = 0;
     for (const [dx, dz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) {
-      const c = cellAt(vx + dx, vz + dz); if (c < 0) { dd += 9; cnt++; continue; }
-      pv += paint[c]; fl += cells[c]; dd += Math.min(D[c] === 255 ? 9 : D[c], 9); cnt++;
+      const c = cellAt(vx + dx, vz + dz); if (c < 0) { dd += cap; cnt++; continue; }
+      pv += paint[c]; fl += cells[c]; dd += Math.min(D[c] === 255 ? cap : D[c], cap); cnt++;
       if (crypt) rm += roomAt[c];
+      if (L.low && L.low[c]) hole++;
+      if (halls && cells[c]) { cave += L.fk[c] === 2 ? 1 : 0; ave += L.fk[c] === 1 ? 1 : 0; }
     }
     pv /= 4; fl /= 4; dd /= cnt; rm /= 4;
     const nz = fbm(vx * 0.15, vz * 0.15, L.seed || 1);
     const big = fbm(vx * 0.045 + 31, vz * 0.045 - 17, (L.seed || 1) + 5), mac = fbm(vx * 0.09 - 7, vz * 0.09 + 11, (L.seed || 1) + 9);
     let k, wb, wp;
-    if (crypt) {
+    if (halls) {
+      // dressed slabs in the halls, herringbone paving on the king's road, raw rock in the mines; lava sits in cut channels
+      let walls = 0;
+      for (let dz = -2; dz <= 1; dz++) for (let dx = -2; dx <= 1; dx++) { const c = cellAt(vx + dx, vz + dz); if (c < 0 || (!cells[c] && !(L.low && L.low[c]))) walls++; }
+      k = fl > 0 || hole ? 1 - Math.min(walls, 8) * 0.06 : 0;
+      if (hole) { k *= 0.35; pos.setY(i, -0.75); }
+      const fn = Math.max(1, fl * 4);
+      wb = clamp(cave / fn + (nz - 0.55) * 1.2 + walls * 0.04, 0, 1);
+      wp = clamp(ave / fn * 1.2, 0, 1);
+    } else if (pass) {
+      // snow on the road's shoulders, scree up the slopes, the gravel road; the chasm drops away into the dark
+      k = fl > 0 ? 0.95 + nz * 0.2 : Math.max(0.35, 0.85 - dd * 0.035);
+      wp = clamp(pv * 1.25, 0, 1);
+      wb = clamp((fl > 0 ? -0.25 : 0.3 + dd * 0.05) + (nz - 0.5) * 1.6 + (big - 0.5) * 1.4, 0, 0.85);
+      if (!fl && !hole) pos.setY(i, Math.min(dd, 10) * 0.55);
+      if (hole) { const deep = hole / 4; pos.setY(i, -16 * deep); k *= 1 - 0.9 * deep; wb = 1; }
+    } else if (crypt) {
       // rooms are flagged, passages cobbled; dirt drifts in the corners; walls throw a contact shadow
       let walls = 0;
       for (let dz = -2; dz <= 1; dz++) for (let dx = -2; dx <= 1; dx++) { const c = cellAt(vx + dx, vz + dz); if (c < 0 || !cells[c]) walls++; }
@@ -705,7 +911,7 @@ function buildGround(L, group) {
       if (L.type === 'town') wb = clamp(wb + pv * 0.5 + (fl > 0 ? 0.1 : 0), 0, 1);
     }
     col[i * 3] = k; col[i * 3 + 1] = k; col[i * 3 + 2] = k;
-    blend[i] = crypt ? clamp((nz - 0.55) * 1.4, 0, 0.5) : clamp(pv * 1.2, 0, 1);
+    blend[i] = crypt || halls ? clamp((nz - 0.55) * 1.4, 0, 0.5) : clamp(pv * 1.2, 0, 1);
     lay[i * 4] = wb; lay[i * 4 + 1] = wp; lay[i * 4 + 2] = big; lay[i * 4 + 3] = mac;
     if (L.type === 'forest' && !fl) pos.setY(i, Math.min(dd, 5) * 0.06);
   }
@@ -812,6 +1018,48 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }`)
   return m;
 }
 
+// ---------- lava: a sheet in the cut channels, its crust cracked and glowing, drifting slowly ----------
+function buildLava(L, group) {
+  const { w, h } = L, pos = [];
+  // each lava cell's quad reaches half a cell past it: the sloped channel edges then cut the outline, not the grid
+  for (let z = 0; z < h; z++) for (let x = 0; x < w; x++) {
+    if (!L.lava[z * w + x]) continue;
+    const y = -0.32, x0 = x - 0.5, z0 = z - 0.5, x1 = x + 1.5, z1 = z + 1.5;
+    pos.push(x0, y, z0, x0, y, z1, x1, y, z1, x0, y, z0, x1, y, z1, x1, y, z0);
+  }
+  if (!pos.length) return null;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  const crust = ENV.layers.lava?.d;
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  mat.toneMapped = false; // keep the glow saturated: ACES would wash it out to straw
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uTime = WIND.uTime; sh.uniforms.tCrust = { value: crust || null };
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec2 vLP;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLP = (modelMatrix * vec4(transformed, 1.0)).xz;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+uniform float uTime; uniform sampler2D tCrust; varying vec2 vLP;
+float lh(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float ln(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(lh(i), lh(i + vec2(1, 0)), f.x), mix(lh(i + vec2(0, 1)), lh(i + vec2(1, 1)), f.x), f.y); }`)
+      .replace('#include <map_fragment>', `
+  vec2 q = vLP * 0.22;
+  float t = uTime;
+  float heat = ln(q * 3.0 + vec2(t * 0.11, -t * 0.07)) * 0.6 + ln(q * 7.0 - vec2(t * 0.05, t * 0.13)) * 0.4;
+  ${crust ? `vec3 c1 = texture2D(tCrust, q * 0.9 + vec2(t * 0.012, t * 0.006)).rgb, c2 = texture2D(tCrust, q * 0.6 - vec2(t * 0.008, -t * 0.01) + 0.37).rgb;
+  float crack = max(clamp((c1.r - c1.b) * 2.6 - 0.15, 0.0, 1.0), clamp((c2.r - c2.b) * 2.6 - 0.15, 0.0, 1.0) * 0.7);
+  float crustK = smoothstep(0.3, 0.62, 1.0 - heat) * (1.0 - crack);` : 'float crack = heat; float crustK = 1.0 - smoothstep(0.35, 0.7, heat);'}
+  vec3 hot = mix(vec3(0.95, 0.2, 0.02), vec3(1.0, 0.62, 0.16), smoothstep(0.6, 1.0, heat + crack * 0.35));
+  ${crust ? 'vec3 crustC = c1 * vec3(0.32, 0.26, 0.24);' : 'vec3 crustC = vec3(0.06, 0.04, 0.03);'}
+  vec3 col = mix(hot * (0.95 + 0.15 * sin(t * 1.7 + vLP.x * 0.4)), crustC + hot * 0.05, crustK * 0.95);
+  diffuseColor.rgb = col;`);
+  };
+  mat.customProgramCacheKey = () => 'lava' + (crust ? 'c' : '');
+  const mesh = new THREE.Mesh(geo, mat);
+  geo.computeBoundingSphere();
+  group.add(mesh);
+  return mesh;
+}
+
 // ---------- crypt walls with a cutaway in front of the hero ----------
 function buildWalls(L, I) {
   const { w, h, cells } = L;
@@ -858,11 +1106,12 @@ export function buildLevel(L, quality) {
   const out = { group, emitters: [], breakables: [], walls: null, ground: null };
   mats();
   out.ground = buildGround(L, group);
+  if (L.lava) out.lava = buildLava(L, group);
   for (const p of L.props) addProp(B, I, p, L, rng, out);
   const inst = I.build(quality);
   B.build(quality);
   const cut = [];
-  for (const k in inst) if (k.endsWith('#wall')) cut.push(...inst[k]);
+  for (const k in inst) if (k.includes('#wall')) cut.push(...inst[k]);
   if (cut.length) out.walls = new WallCut(cut);
   return out;
 }

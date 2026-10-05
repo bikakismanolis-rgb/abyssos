@@ -1,10 +1,10 @@
 // Level layouts as plain data. Visuals are built from these in build.js, gameplay content in zones.js.
 import { RNG, clamp, fbm, angleDiff } from '../core/util.js';
 
-function base(w, h) {
+export function base(w, h) {
   return { w, h, cells: new Uint8Array(w * h), paint: new Float32Array(w * h), props: [], lights: [], packs: [], spots: {}, exits: [], rooms: [] };
 }
-function carveCircle(L, cx, cz, r, paint = 0) {
+export function carveCircle(L, cx, cz, r, paint = 0) {
   const { w, h, cells } = L;
   for (let z = Math.floor(cz - r); z <= Math.ceil(cz + r); z++) for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) {
     if (x < 2 || z < 2 || x >= w - 2 || z >= h - 2) continue;
@@ -15,11 +15,11 @@ function carveCircle(L, cx, cz, r, paint = 0) {
     if (paint) L.paint[i] = Math.max(L.paint[i], paint * clamp((r - d) / Math.max(0.8, r * 0.6), 0, 1));
   }
 }
-function carveLine(L, x0, z0, x1, z1, r, paint = 0) {
+export function carveLine(L, x0, z0, x1, z1, r, paint = 0) {
   const n = Math.ceil(Math.hypot(x1 - x0, z1 - z0));
   for (let i = 0; i <= n; i++) { const t = i / Math.max(1, n); carveCircle(L, x0 + (x1 - x0) * t, z0 + (z1 - z0) * t, r, paint); }
 }
-function smoothCells(L, passes = 2) {
+export function smoothCells(L, passes = 2) {
   const { w, h } = L;
   for (let p = 0; p < passes; p++) {
     const c = L.cells.slice();
@@ -46,8 +46,8 @@ export function distField(L, cap = 10) {
   }
   return d;
 }
-const floorAt = (L, x, z) => x >= 0 && z >= 0 && x < L.w && z < L.h && L.cells[Math.floor(z) * L.w + Math.floor(x)] === 1;
-function blockCircle(L, cx, cz, r) {
+export const floorAt = (L, x, z) => x >= 0 && z >= 0 && x < L.w && z < L.h && L.cells[Math.floor(z) * L.w + Math.floor(x)] === 1;
+export function blockCircle(L, cx, cz, r) {
   for (let z = Math.floor(cz - r); z <= Math.floor(cz + r); z++) for (let x = Math.floor(cx - r); x <= Math.floor(cx + r); x++)
     if (Math.hypot(x + 0.5 - cx, z + 0.5 - cz) <= r && x >= 0 && z >= 0 && x < L.w && z < L.h) L.cells[z * L.w + x] = 0;
 }
@@ -118,7 +118,7 @@ export function genForest(seed, o = {}) {
     const p = d === 1 ? 0.62 : d <= 3 ? 0.36 : d <= 6 ? 0.16 : 0.05;
     if (rng.chance(p)) {
       const tt = rng.weighted([['pine', 5], ['oak', 3], ['dead', d === 1 ? 1 : 0.4]]);
-      L.props.push({ t: tt, x: xx + rng.range(0.2, 0.8), z: zz + rng.range(0.2, 0.8), r: rng.range(0, 6.28), s: rng.range(0.85, 1.35) * (d > 3 ? 1.2 : 1) });
+      L.props.push({ t: tt, x: xx + rng.range(0.2, 0.8), z: zz + rng.range(0.2, 0.8), r: rng.range(0, 6.28), s: rng.range(0.85, 1.35) * (d > 3 ? 1.2 : 1), d });
     } else if (d <= 2 && rng.chance(0.4)) L.props.push({ t: 'bush', x: xx + rng.next(), z: zz + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.8, 1.4) });
     else if (d === 1 && rng.chance(0.05)) L.props.push({ t: 'rock', x: xx + 0.5, z: zz + 0.5, r: rng.range(0, 6.28), s: rng.range(0.8, 1.6) });
     else if (d <= 2 && rng.chance(0.025)) L.props.push({ t: 'stump', x: xx + 0.5, z: zz + 0.5, r: rng.range(0, 6.28), s: rng.range(0.8, 1.15) });
@@ -380,11 +380,17 @@ export function genTown() {
   carveLine(L, CX, CZ, 20, 36, 1.4, 0.9);
   carveLine(L, CX, CZ, 44, 36, 1.4, 0.9);
   carveCircle(L, CX, 18, 3.5, 0.7);
+  // the old mountain road leaves past the beacon hill, north-east toward the Giants' Stair
+  carveLine(L, CX + 3, 18, 44, 15, 1.5, 0.9);
+  carveLine(L, 44, 15, 55, 8.5, 1.5, 0.9);
   const Dout = distField(L, 12); // the village edge, before anything is built inside
   L.start = { x: CX, z: CZ + 6 };
   L.spots.waypoint = { x: CX + 3.8, z: 51 };
   L.lights.push({ x: CX + 3.8, y: 1.2, z: 51, color: 0x60a8ff, intensity: 10, range: 8, flicker: 0.1 });
   L.exits.push({ x: CX, z: h - 5, to: 'forest', label: 'exit.forest' });
+  L.exits.push({ x: 55, z: 8.5, to: 'pass', label: 'exit.pass', locked: 'act1' });
+  L.props.push({ t: 'lamp', x: 52.5, z: 11.6 });
+  L.lights.push({ x: 52.5, y: 2.2, z: 11.6, color: 0xffb060, intensity: 9, range: 9, flicker: 0.2 });
   // the beacon on its hill
   L.beacon = { x: CX, z: 12 };
   L.props.push({ t: 'beacon', x: CX, z: 12 });
@@ -426,7 +432,7 @@ export function genTown() {
     const i = z * w + x, d = D[i];
     if (d === 0 && !L.cells[i]) continue;
     if (d === 1 && z > 22 && !(Math.abs(x - CX) < 3 && z > h - 9)) L.props.push({ t: 'stake', x: x + 0.5, z: z + 0.5, r: rng.next() * 6, s: rng.range(0.9, 1.15) });
-    else if (d >= 2 && d <= 11 && rng.chance(d < 4 ? 0.3 : 0.45)) L.props.push({ t: z < 24 ? rng.pick(['rock', 'pine', 'pine']) : rng.pick(['pine', 'pine', 'oak']), x: x + rng.next(), z: z + rng.next(), r: rng.next() * 6, s: rng.range(1, 1.5) });
+    else if (d >= 2 && d <= 11 && rng.chance(d < 4 ? 0.3 : 0.45)) L.props.push({ t: z < 24 ? rng.pick(['rock', 'pine', 'pine']) : rng.pick(['pine', 'pine', 'oak']), x: x + rng.next(), z: z + rng.next(), r: rng.next() * 6, s: rng.range(1, 1.5), d });
     else if (d === 0 && L.paint[i] < 0.3 && rng.chance(0.35)) L.props.push({ t: 'grass', x: x + rng.next(), z: z + rng.next(), r: rng.next() * 6, s: rng.range(0.6, 1) });
   }
   L.props.push({ t: 'kit', kit: 'town', m: 'building_windmill_red', x: 6, z: 56, r: 0.6, s: 1.1 });

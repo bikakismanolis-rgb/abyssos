@@ -62,6 +62,17 @@ export const MONSTERS = {
   // bosses
   weaver: { model: 'weaver', hp: 38, dmg: 1.8, speed: 5.2, radius: 2.2, ai: 'weaver', reach: 3.6, atk: 'bite', atkTime: 1.6, flesh: 'chitin', xp: 60, boss: true, sfx: 'spider' },
   barrowLord: { model: 'barrowLord', hp: 55, dmg: 2.1, speed: 4.2, radius: 1.2, ai: 'lord', reach: 3.6, atk: 'smash', atkTime: 1.5, flesh: 'spirit', xp: 90, boss: true, weapon: 'greatsword', style: 'heavy', sfx: 'wraith', float: true },
+  // Act II: the Giants' Stair and the Halls of Deepstone
+  magmaHound: { model: 'magmaHound', hp: 0.95, dmg: 1.0, speed: 6.4, radius: 0.6, ai: 'pounce', reach: 1.6, atk: 'bite', atkTime: 1.1, flesh: 'magma', xp: 1.6, sfx: 'hound', burns: true, deathFire: true },
+  caveBat: { model: 'caveBat', hp: 0.28, dmg: 0.5, speed: 7.2, radius: 0.35, ai: 'bat', reach: 1.1, atk: 'bite', atkTime: 0.9, flesh: 'flesh', xp: 0.45, sfx: 'bat' },
+  deepworm: { model: 'deepworm', hp: 1.5, dmg: 1.35, speed: 4.4, radius: 0.85, ai: 'burrow', reach: 2.4, atk: 'bite', atkTime: 1.4, flesh: 'chitin', xp: 2.6, sfx: 'worm', proj: 'acid' },
+  stoneborn: { model: 'stoneborn', hp: 1.25, dmg: 1.1, speed: 4.0, radius: 0.5, ai: 'melee', reach: 1.7, atk: 'chop', atkTime: 1.25, flesh: 'flesh', xp: 1.6, weapon: 'axe', style: 'sword', sfx: 'dwarf', armor: true },
+  stonebornArbalest: { model: 'stonebornArb', hp: 0.9, dmg: 0.95, speed: 3.8, radius: 0.5, ai: 'ranged', reach: 12, atk: 'shoot', atkTime: 1.8, flesh: 'flesh', xp: 1.5, weapon: 'crossbow', style: 'bow', sfx: 'dwarf', proj: 'bolt' },
+  runepriest: { model: 'runepriest', hp: 1.0, dmg: 1.0, speed: 3.6, radius: 0.5, ai: 'runepriest', reach: 10, atk: 'cast', atkTime: 2.2, flesh: 'flesh', xp: 2.2, weapon: 'staff', style: 'staff', sfx: 'dwarf', proj: 'ember' },
+  caveTroll: { model: 'troll', hp: 7.5, dmg: 2.9, speed: 3.6, radius: 1.25, ai: 'brute', reach: 3.0, atk: 'smash', atkTime: 2.1, flesh: 'flesh', xp: 11, weapon: 'club', style: 'heavy', hunch: 0.25, sfx: 'troll', big: true, look: { scale: 1.18, tint: 0x8a9aa8, tintAmt: 0.35 } },
+  deadDwarf: { model: 'skeleton', hp: 0.9, dmg: 1.0, speed: 3.7, radius: 0.48, ai: 'melee', reach: 1.6, atk: 'slash1', atkTime: 1.15, flesh: 'bone', xp: 1.2, weapon: 'axe', style: 'undead', sfx: 'skeleton', rises: true, look: { scale: 0.86, tint: 0xd8b880, tintAmt: 0.2 } },
+  stonewarden: { model: 'stonewarden', hp: 46, dmg: 2.0, speed: 3.6, radius: 1.6, ai: 'stonewarden', reach: 3.8, atk: 'smash', atkTime: 1.6, flesh: 'stone', xp: 80, boss: true, sfx: 'golem' },
+  moltenKing: { model: 'moltenKing', hp: 72, dmg: 2.4, speed: 4.1, radius: 1.4, ai: 'molten', reach: 3.9, atk: 'smash', atkTime: 1.5, flesh: 'magma', xp: 130, boss: true, weapon: 'hammer', style: 'heavy', sfx: 'golem' },
   // the ranger's companion
   spiritWolf: { model: 'spiritWolf', hp: 2, dmg: 1, speed: 7.5, radius: 0.55, ai: 'pet', reach: 1.7, atk: 'bite', atkTime: 0.8, flesh: 'spirit', xp: 0, pet: true }
 };
@@ -74,7 +85,17 @@ export const PACKS = {
   undead: [['skeleton', 5], ['skeletonArcher', 2], ['wraith', 0.8]],
   wraiths: [['wraith', 2], ['skeleton', 2]],
   ash: [['ash', 3], ['goblin', 2], ['goblinArcher', 1]],
-  gate: [['skeleton', 3], ['goblin', 3], ['warg', 2], ['wraith', 1.5], ['ash', 1.5], ['spider', 1.5], ['skeletonArcher', 1], ['goblinShaman', 0.6]]
+  gate: [['skeleton', 3], ['goblin', 3], ['warg', 2], ['wraith', 1.5], ['ash', 1.5], ['spider', 1.5], ['skeletonArcher', 1], ['goblinShaman', 0.6]],
+  // Act II
+  passGoblins: [['goblin', 5], ['goblinArcher', 2.5], ['goblinShaman', 1], ['warg', 1.2]],
+  bats: [['caveBat', 1]],
+  hounds: [['magmaHound', 3], ['ash', 1]],
+  ashbound: [['stoneborn', 5], ['stonebornArbalest', 2.2], ['runepriest', 1]],
+  trollCave: [['caveTroll', 1]],
+  worms: [['deepworm', 2], ['caveBat', 2]],
+  deep: [['stoneborn', 3], ['magmaHound', 2], ['ash', 2], ['caveBat', 2], ['stonebornArbalest', 1]],
+  mine: [['spider', 3], ['caveBat', 3], ['deepworm', 0.6], ['spiderling', 2]],
+  deadDwarves: [['deadDwarf', 5], ['skeletonArcher', 1.5], ['wraith', 1]]
 };
 // elite affixes
 export const AFFIXES = ['fast', 'vampiric', 'molten', 'frozen', 'shielding', 'teleporter', 'thunder', 'horde', 'armored'];
