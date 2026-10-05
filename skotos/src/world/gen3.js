@@ -395,13 +395,17 @@ export function genWeep(seed, o = {}) {
     L.props.push({ t: 'fx', fx: 'drip', x: px, y: 3.6, z: pz });
   }
   // ---- dressing: the gold wood (green still at its southern edge), roots, ferns, dry grass, toadstools ----
+  // undergrowth: autumn bracken and the odd rosemary willow in the gold wood, summer ferns where it is still green
+  const under = (green) => rng.next() < green ? 'bush' : rng.weighted([['bracken', 3], ['shrub', 1]]);
   for (let z = 0; z < h; z++) for (let x = 0; x < w; x++) {
     const i = z * w + x, d = D[i];
     if (L.low[i] || L.deck[i] || res[i]) continue;
+    const green = clamp((z - (h - 34)) / 12, 0, 1);
     if (d === 0) {
       if (!L.cells[i]) continue;
       const edge = D[i - 1] === 1 || D[i + 1] === 1 || D[i - w] === 1 || D[i + w] === 1;
-      if (edge && rng.chance(0.2)) L.props.push({ t: 'bush', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.6, 1.0) });
+      const wet = L.sap[i] || L.low[i - 1] || L.low[i + 1] || L.low[i - w] || L.low[i + w];
+      if (edge && !wet && rng.chance(0.2)) L.props.push({ t: under(green), x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.6, 1.0) });
       if (L.paint[i] < 0.3 && !L.sap[i] && rng.chance(0.26)) L.props.push({ t: 'tuft', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.7, 1.2) });
       if (rng.chance(0.01)) L.props.push({ t: 'stone', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.25, 0.5) });
       if (L.paint[i] < 0.2 && rng.chance(edge ? 0.018 : 0.004)) L.props.push({ t: 'branches', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.8, 1.2) });
@@ -409,13 +413,12 @@ export function genWeep(seed, o = {}) {
       continue;
     }
     if (d === 255) continue;
-    const green = clamp((z - (h - 34)) / 12, 0, 1);
     const p = d === 1 ? 0.56 : d <= 3 ? 0.34 : d <= 6 ? 0.16 : 0.05;
     if (rng.chance(p)) {
       const t = rng.next() < green ? rng.weighted([['oak', 4], ['pine', 2]]) : rng.weighted([['goak', 6], ['willow', d <= 3 ? 0.45 : 0.1], ['dead', d === 1 ? 0.7 : 0.25]]);
       L.props.push({ t, x: x + rng.range(0.2, 0.8), z: z + rng.range(0.2, 0.8), r: rng.range(0, 6.28), s: rng.range(0.85, 1.3) * (d > 3 ? 1.15 : 1), d });
     } else if (d <= 2 && rng.chance(0.045)) L.props.push({ t: rng.weighted([['groot', 3], ['ostump', 2], ['rcluster', 2]]), x: x + 0.5, z: z + 0.5, r: toFloor(L, D, x, z) + rng.range(-0.4, 0.4), s: rng.range(0.7, 1.05), y: -0.05 });
-    else if (d <= 2 && rng.chance(0.3)) L.props.push({ t: 'bush', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.8, 1.3) });
+    else if (d <= 2 && rng.chance(0.3)) L.props.push({ t: under(green), x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.8, 1.3) });
     else if (d === 1 && rng.chance(0.04)) L.props.push({ t: 'rock', x: x + 0.5, z: z + 0.5, r: rng.range(0, 6.28), s: rng.range(0.8, 1.5) });
   }
   // fallen logs and toadstool rings by the trail
