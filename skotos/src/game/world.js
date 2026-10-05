@@ -3,11 +3,13 @@ import * as THREE from 'three';
 import { G, later } from './state.js';
 import { R, setAtmosphere, addLight, clearLights, updateCamera, removeLight } from '../gfx/gfx.js';
 import { genForest, genCrypt, genTown } from '../world/gen.js';
+import { genPass, genHalls } from '../world/gen2.js';
 import { buildLevel, propMesh, runeDisc, WIND } from '../world/build.js';
 import { GridMap } from '../world/map.js';
 import { ATMOS } from '../world/atmos.js';
 import { kitMesh } from '../gfx/kits.js';
-import { envMesh, envChest, hasEnv } from '../gfx/env.js';
+import { tex } from '../gfx/textures.js';
+import { envMesh, envChest, hasEnv, loadPack } from '../gfx/env.js';
 import { setEmitters, setAmbient, clearFX, glowBurst, puff, sparks, ring, P, explosion } from '../gfx/fx.js';
 import { Actor, spawnMonster, spawnNpc, createPlayer, rollAffixes } from './actors.js';
 import { PACKS, DIFFS, MONSTERS } from './data.js';
@@ -23,8 +25,24 @@ export const ZONES = {
   town: { level: 1, music: 'town', ambient: 'town', atmos: 'town' },
   forest: { level: 1, music: 'forest', ambient: 'forest', atmos: 'forest' },
   crypt: { level: 4, music: 'crypt', ambient: 'crypt', atmos: 'crypt' },
+  pass: { level: 10, music: 'pass', ambient: 'snow', atmos: 'pass', act: 2, pack: 'deep' },
+  halls: { level: 13, music: 'halls', ambient: 'halls', atmos: 'halls', act: 2, pack: 'deep' },
   gate: { level: 1, music: 'gate', ambient: 'gate', atmos: 'gate' }
 };
+// beacons that have answered Whitecliff's: Arna's hill after Act I, Deepstone after Act II (offsets from our beacon)
+export const FAR_BEACONS = [{ dx: -40, dz: -60, y: 14 }, { dx: 46, dz: -58, y: 17 }];
+// a far-off beacon: a glow seen through the fog (sprites ignore it), breathing like a fire
+export function farFire(p) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex('dot'), color: 0xffa040, blending: THREE.AdditiveBlending, fog: false, depthWrite: false, transparent: true }));
+  s.position.set(p.x, p.y, p.z); s.scale.setScalar(7);
+  s.onBeforeRender = () => { const k = 1 + Math.sin(performance.now() * 0.007) * 0.08 + Math.sin(performance.now() * 0.019) * 0.05; s.scale.setScalar(7 * k); };
+  return s;
+}
+// the zone's extra assets (Act II's stone, snow and lava), fetched the first time it is visited
+export function zoneReady(id) {
+  const p = ZONES[id]?.pack;
+  return p ? loadPack(p) : Promise.resolve();
+}
 
 function seedFor(id) {
   G.hero.seeds ||= {};
@@ -39,8 +57,10 @@ function createZone(id, o = {}) {
   if (id === 'town') L = genTown();
   else if (id === 'forest') L = genForest(seed);
   else if (id === 'crypt') L = genCrypt(seed);
+  else if (id === 'pass') L = genPass(seed);
+  else if (id === 'halls') L = genHalls(seed);
   else if (id === 'gate') L = (o.tier % 2 ? genCrypt(seed, { rooms: 12, mh: 30 }) : genForest(seed, { h: 120 }));
-  const map = new GridMap(L.w, L.h, L.cells);
+  const map = new GridMap(L.w, L.h, L.cells, L.low);
   const lvl = buildLevel(L, R.quality);
   const z = { id, L, map, lvl, level: o.level ?? ZONES[id].level, actors: [], pickups: [], interact: [], packs: [], seed, tier: o.tier || 0, extra: [] };
   // breakables
@@ -87,6 +107,12 @@ function createZone(id, o = {}) {
   // bosses
   if (id === 'forest') z.bossSpot = { kind: 'weaver', x: L.boss.x, z: L.boss.z - 2 };
   if (id === 'crypt') z.bossSpot = { kind: 'barrowLord', x: L.boss.x, z: L.boss.z };
+  if (id === 'pass') { z.bossSpot = { kind: 'stonewarden', x: L.boss.x, z: L.boss.z }; z.gateDoors = deepGateDoors(L.gate, !!G.hero.flags.stonewarden); z.extra.push(z.gateDoors); }
+  if (id === 'halls') {
+    z.bossSpot = { kind: 'moltenKing', x: L.boss.x, z: L.boss.z };
+    const s = L.spots.npcs.brokka, a = spawnNpc('brokka', s.x, s.z, s.r); a.home = s.r; z.actors.push(a);
+    z.interact.push({ kind: 'npc', npc: 'brokka', actor: a, x: s.x, z: s.z, r: 2.4, prompt: 'talk', use: () => emit('talk', 'brokka', a) });
+  }
   // town people and the stash
   if (id === 'town') {
     const N = L.spots.npcs;
@@ -96,6 +122,14 @@ function createZone(id, o = {}) {
     }
     N.villagers.forEach((s, i) => { const a = spawnNpc('villager', s.x, s.z, s.r); a.home = s.r; a.bark = i; z.actors.push(a); z.interact.push({ kind: 'npc', npc: 'villager', bark: i, actor: a, x: s.x, z: s.z, r: 2, prompt: 'talk', use: () => emit('talk', 'villager', a) }); });
     z.interact.push({ kind: 'stash', x: 36, z: 41.5, r: 2, prompt: 'stash.title', use: () => emit('openPanel', 'stash') });
+    const h = G.hero, lit = [h.act1 >= 0 || h.quest >= 5, (h.act2 ?? -1) >= 0 || h.quest >= 10];
+    FAR_BEACONS.forEach((F, i) => {
+      if (!lit[i]) return;
+      const b = L.beacon, far = { x: b.x + F.dx, y: F.y, z: b.z + F.dz };
+      L.lights.push({ x: far.x, y: far.y, z: far.z, color: 0xff8a30, intensity: 200, range: 60, flicker: 0.3 });
+      z.emit = (z.emit || []).concat([{ x: far.x, y: far.y - 2, z: far.z, type: 'beacon', s: 1.2 }]);
+      z.extra.push(farFire(far));
+    });
   }
   // actors were added to the scene on creation; keep them parked until we enter
   for (const a of z.actors) if (a.avatar) R.scene.remove(a.avatar.group);
@@ -129,6 +163,7 @@ export function enterZone(id, o = {}) {
   const Z = ZONES[id];
   setAmbient(Z.ambient);
   setAtmosphere(ATMOS[Z.atmos]);
+  WIND.uSnow.value = id === 'pass' ? 1 : 0;
   Audio.music(Z.music);
   // where the hero appears
   let at = o.at;
@@ -167,7 +202,7 @@ export function updatePacks() {
   }
   if (z.bossSpot && !z.bossSpawned && Math.hypot(z.bossSpot.x - pl.x, z.bossSpot.z - pl.z) < 30) {
     z.bossSpawned = true;
-    const b = spawnMonster(z.bossSpot.kind, z.bossSpot.x, z.bossSpot.z, { level: Math.max(z.level + (z.bossSpot.kind === 'weaver' ? 2 : 3), G.hero.level + 1) });
+    const b = spawnMonster(z.bossSpot.kind, z.bossSpot.x, z.bossSpot.z, { level: Math.max(z.level + (z.bossSpot.kind === 'weaver' || z.bossSpot.kind === 'stonewarden' ? 2 : 3), G.hero.level + 1) });
     b.rot = Math.PI * 0.0 + angleTo(b.x, b.z, pl.x, pl.z);
     z.actors.push(b); z.boss = b;
   }
@@ -184,17 +219,19 @@ function spawnPack(z, p, D) {
   const opts = { packId: p.id, gateMul };
   const nAff = G.hero.diff >= 3 ? 3 : G.hero.diff >= 2 ? 2 : 1;
   if (elite === 'champion') {
-    const kind = pick() === 'spiderling' ? 'spider' : pick();
+    let kind = pick() === 'spiderling' ? 'spider' : pick();
+    if (MONSTERS[kind].big) kind = z.id === 'pass' || z.id === 'halls' ? 'stoneborn' : 'ash';
     const aff = rollAffixes(nAff + 1);
     const cnt = aff.includes('horde') ? 5 : 3;
-    for (let i = 0; i < cnt; i++) { const s = place(); z.actors.push(spawnMonster(kind === 'troll' ? 'ash' : kind, s.x, s.z, Object.assign({ elite: 'champion', affixes: aff }, opts))); }
+    for (let i = 0; i < cnt; i++) { const s = place(); z.actors.push(spawnMonster(kind, s.x, s.z, Object.assign({ elite: 'champion', affixes: aff }, opts))); }
     n = Math.max(0, n - cnt - 1);
   } else if (elite === 'rare') {
     let kind = p.tag === 'troll' ? 'troll' : pick(); if (kind === 'spiderling') kind = 'spider';
     const aff = rollAffixes(nAff + 2);
     const s = place(); z.actors.push(spawnMonster(kind, s.x, s.z, Object.assign({ elite: 'rare', affixes: aff }, opts)));
-    const minions = p.tag === 'troll' ? 0 : (aff.includes('horde') ? 6 : 3);
-    for (let i = 0; i < minions; i++) { const q = place(); const mk = kind === 'troll' ? 'goblin' : kind; z.actors.push(spawnMonster(mk === 'troll' ? 'goblin' : mk, q.x, q.z, Object.assign({ minion: true }, opts))); }
+    // big brutes come alone
+    const minions = MONSTERS[kind].big ? 0 : (aff.includes('horde') ? 6 : 3);
+    for (let i = 0; i < minions; i++) { const q = place(); z.actors.push(spawnMonster(kind, q.x, q.z, Object.assign({ minion: true }, opts))); }
     n = Math.max(0, n - minions - 1);
   }
   for (let i = 0; i < n; i++) {
@@ -247,7 +284,7 @@ function swingLid(lid) {
   step();
 }
 function takeExit(z, e) {
-  if (e.locked && !G.hero.flags[e.locked]) { emit('toast', t('locked')); Audio.sfx('denied'); if (e.locked === 'weaver') emit('say', 'd.weaver'); return; }
+  if (e.locked && !G.hero.flags[e.locked]) { emit('toast', t('locked')); Audio.sfx('denied'); if (e.locked === 'weaver') emit('say', 'd.weaver'); if (e.locked === 'stonewarden') emit('say', 'd.gateShut'); if (e.locked === 'act1') emit('say', 'd.mountainShut'); return; }
   emit('travel', e.to, { at: z.id });
 }
 on('propBroken', (a) => {
@@ -260,6 +297,32 @@ on('propBroken', (a) => {
   if (Math.random() < 0.06) dropGlobe(x, z);
   if (a.mesh) R.scene.remove(a.mesh);
 });
+
+// ---------- the Great Gate of Deepstone: two slabs of rune-cut stone that swing inward once the Stonewarden falls ----------
+const gateMat = { m: null };
+function deepGateDoors(g, open) {
+  gateMat.m ||= new THREE.MeshLambertMaterial({ color: 0x4a4844 });
+  const grp = new THREE.Group();
+  grp.position.set(g.x, 0, g.z + 1.2);
+  const runeMat = new THREE.MeshBasicMaterial({ color: 0xffa040 });
+  grp.userData.leaves = [];
+  for (const sx of [-1, 1]) {
+    const hinge = new THREE.Group(); hinge.position.set(sx * 2.8, 0, 0);
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(2.8, 8.4, 0.7), gateMat.m); slab.position.set(-sx * 1.4, 4.2, 0); slab.castShadow = true;
+    const rune = new THREE.Mesh(new THREE.BoxGeometry(0.14, 3.6, 0.05), runeMat); rune.position.set(-sx * 1.4, 4.4, 0.37);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.08, 6, 16), runeMat); ring.position.set(-sx * 1.4, 4.4, 0.38);
+    hinge.add(slab, rune, ring); grp.add(hinge); grp.userData.leaves.push({ hinge, sx });
+    if (open) hinge.rotation.y = sx * 1.45;
+  }
+  return grp;
+}
+export function openDeepGate(z) {
+  const d = z?.gateDoors; if (!d) return;
+  let t = 0;
+  const step = () => { t = Math.min(1, t + 0.012); for (const l of d.userData.leaves) l.hinge.rotation.y = l.sx * 1.45 * (1 - (1 - t) ** 2); if (t < 1) later(0.016, step); };
+  later(0.5, () => { Audio.sfx('door'); shakeGate(); step(); });
+}
+function shakeGate() { const g = G.zone.L.gate; puff(g.x, 1, g.z + 1.5, 14, 0x8a8a86, 2.5, 3, 2); }
 
 // ---------- town portal ----------
 let portalObj = null;

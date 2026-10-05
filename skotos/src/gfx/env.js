@@ -29,7 +29,7 @@ const LAYER_URLS = {
   flags: [flagsD, flagsN], mcobble: [mcobbleD, mcobbleN], wall: [wallD, wallN], blocks: [blocksD, blocksN], bark: [barkD, barkN]
 };
 // ENV.layers[id] = { d: diffuse texture (sRGB), n: OpenGL normal map }; ENV.props[name] = [{ geo, mat }] (one part per material)
-export const ENV = { layers: {}, props: {}, pivots: {}, ready: false, quality: 1 };
+export const ENV = { layers: {}, props: {}, pivots: {}, sizes: {}, packs: {}, ready: false, quality: 1 };
 
 async function bytes(url) {
   // inlined builds carry assets as data URIs: decode them instead of fetching
@@ -95,17 +95,46 @@ function readProps(gltf, quality) {
     const parts = [];
     for (const [mat, geos] of byMat) {
       const geo = geos.length > 1 ? mergeGeometries(geos, false) : geos[0];
+      if (mat.name === 'rock') geo.computeVertexNormals(); // decimated scans: smooth shading over the big faces
       geo.computeBoundingBox(); geo.computeBoundingSphere();
       let m = mat;
       if (/glass/i.test(mat.name)) m = GLOW;
+      else if (!mat.map && !mat.normalMap && mat.name === 'rock') m = mat;   // geometry-only props: the game supplies the stone
       else if (quality < 2) m = lambert(mat, quality);
       else m.envMapIntensity = 0.5;
       parts.push({ geo, mat: m });
     }
     ENV.props[holder.name] = parts;
     if (holder.userData.pivot) ENV.pivots[holder.name] = new THREE.Vector3().fromArray(holder.userData.pivot);
+    if (holder.userData.size) ENV.sizes[holder.name] = holder.userData.size;
   }
 }
+
+// extra packs, fetched the first time a zone needs them (Act II: tools/pack-deep.mjs)
+const PACK_GLB = import.meta.glob('../assets/*.glb', { query: '?url', import: 'default', eager: true });
+const PACK_TEX = import.meta.glob('../assets/*/*.webp', { query: '?url', import: 'default', eager: true });
+const packs = {};
+export function loadPack(name) {
+  if (packs[name]) return packs[name];
+  const q = ENV.quality;
+  packs[name] = (async () => {
+    const glbUrl = PACK_GLB['../assets/' + name + '.glb'];
+    const layers = {};
+    for (const k in PACK_TEX) {
+      const m = k.match(new RegExp('^\\.\\./assets/' + name + '/(\\w+)_(d|n)\\.webp$'));
+      if (m) (layers[m[1]] ||= {})[m[2]] = PACK_TEX[k];
+    }
+    const tex = Object.entries(layers).map(async ([id, u]) => {
+      const [td, tn] = await Promise.all([texture(u.d, true, q), q >= 1 && u.n ? texture(u.n, false, q) : null]);
+      ENV.layers[id] = { d: td, n: tn };
+    });
+    const glb = glbUrl ? bytes(glbUrl).then((b) => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(b, '')).then((g) => readProps(g, q)) : null;
+    await Promise.all([...tex, glb]);
+    ENV.packs[name] = true;
+  })();
+  return packs[name];
+}
+export const packReady = (name) => !!ENV.packs[name];
 
 let loading = null;
 export function loadEnv(quality = 1) {

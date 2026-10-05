@@ -12,9 +12,10 @@ import { rand, clamp } from '../core/util.js';
 import { t } from '../i18n/i18n.js';
 import { foes, spawnMonster } from './actors.js';
 import { dropGold, dropItem, dropGlobe } from './pickups.js';
+import { area } from './projectiles.js';
 
-const HIT_SFX = { flesh: 'hitFlesh', bone: 'hitBone', spirit: 'hitSpirit', chitin: 'hitChitin', ash: 'hitFlesh' };
-const DIE_SFX = { goblin: 'goblinDie', wolf: 'wolfDie', spider: 'spiderDie', orc: 'orcDie', troll: 'trollRoar', skeleton: 'skeletonDie', wraith: 'wraithDie' };
+const HIT_SFX = { flesh: 'hitFlesh', bone: 'hitBone', spirit: 'hitSpirit', chitin: 'hitChitin', ash: 'hitFlesh', stone: 'hitBone', magma: 'hitFlesh' };
+const DIE_SFX = { goblin: 'goblinDie', wolf: 'wolfDie', spider: 'spiderDie', orc: 'orcDie', troll: 'trollRoar', skeleton: 'skeletonDie', wraith: 'wraithDie', hound: 'wolfDie', bat: 'batDie', worm: 'wormDie', dwarf: 'dwarfDie', golem: 'golemDie' };
 
 export function heroCrit() { return Math.random() * 100 < G.stats.critC; }
 
@@ -41,6 +42,7 @@ export function damage(src, target, amount, o = {}) {
   }
   if (target.invuln > 0) { if (!o.dot) number(target.x, 2.2, target.z, t('hud.immune'), 'text', '#9ab8ff'); return 0; }
   if (target.armored) amount *= 0.72;
+  if (target.ward > 0) amount *= 0.5;
   if (target.prop) amount = target.hp;
   amount = Math.max(1, Math.round(amount));
   target.hp -= amount;
@@ -155,7 +157,8 @@ export function kill(a, src, o = {}) {
     else av.play(a.kind.startsWith('skeleton') ? 'dieBones' : Math.random() < 0.5 ? 'die' : 'dieFwd', 1);
   }
   Audio.sfx(DIE_SFX[def.sfx] || 'hitFlesh', { x: a.x, z: a.z });
-  if (def.flesh === 'flesh' || def.flesh === 'ash') decal(a.x, a.z, 'blood', 1.2 + a.radius);
+  if (def.flesh === 'flesh' || def.flesh === 'ash' || def.flesh === 'magma') decal(a.x, a.z, 'blood', 1.2 + a.radius);
+  else if (def.flesh === 'stone') puff(a.x, 0.8, a.z, 10, 0x8a8680, 1.4, 1.6, 1.6);
   else if (def.flesh === 'chitin') decal(a.x, a.z, 'goo', 1.2 + a.radius);
   else if (def.flesh === 'spirit') { decal(a.x, a.z, 'ecto', 1.4); glowBurst(a.x, 1.2, a.z, 0x7ae0ff, 24, 3, 0.3, 0.9); }
   if (o.overkill || (src?.hero && Math.random() < 0.15)) { puff(a.x, 0.8, a.z, 4, 0x2a1a14, 0.6, 0.6, 0.6); }
@@ -194,6 +197,7 @@ export function kill(a, src, o = {}) {
   }
   if (s.legs.has('barrowCrown') && !a.boss && Math.random() < 0.12) emit('raiseAlly', a);
   // affixes
+  if (def.deathFire) later(0.25, () => { explosion(a.x, a.z, 1.6, 0xff7a20, { smoke: 0x2a2220, shake: 0.05 }); area('fire', a.x, a.z, 1.3, 3.5, { team: 'foe', src: a, dmg: a.dmg * 0.3, tick: 0.5 }); });
   if (a.affixes.includes('molten')) later(0.6, () => { explosion(a.x, a.z, 3, 0xff6a20); const p = G.player; if (Math.hypot(p.x - a.x, p.z - a.z) < 3.2) damage(a, p, a.dmg * 2.2, { burn: a.dmg }); });
   emit('kill', a);
 }

@@ -1,8 +1,10 @@
 // Walkability grid: 1 cell = 1 world unit. Circle collision, line of sight and a flow field toward the hero.
+// Low cells (lava, chasms) block feet but not eyes or arrows: los() and projectiles pass over them, clear() does not.
 
 export class GridMap {
-  constructor(w, h, cells) {
+  constructor(w, h, cells, low) {
     this.w = w; this.h = h; this.cells = cells; // 0 solid, 1 floor
+    this.low = low || null;                     // 1 where a solid cell is only a hole in the floor
     this.flow = new Uint16Array(w * h);
     this.flowT = { x: -1, z: -1, t: 0 };
     this.queue = new Int32Array(w * h);
@@ -13,6 +15,12 @@ export class GridMap {
     return this.cells[iz * this.w + ix] === 0;
   }
   walkable(x, z) { return !this.solid(Math.floor(x), Math.floor(z)); }
+  // solid and tall: a wall, not a hole
+  blocks(ix, iz) {
+    if (ix < 0 || iz < 0 || ix >= this.w || iz >= this.h) return true;
+    const i = iz * this.w + ix;
+    return this.cells[i] === 0 && !(this.low && this.low[i]);
+  }
   setSolid(ix, iz, v = true) { if (ix >= 0 && iz >= 0 && ix < this.w && iz < this.h) this.cells[iz * this.w + ix] = v ? 0 : 1; }
 
   // push a circle out of solid cells; returns true if it touched a wall
@@ -38,8 +46,18 @@ export class GridMap {
     return hit;
   }
 
-  // grid walk between two points
+  // grid walk between two points: can one see (and shoot) from a to b
   los(x0, z0, x1, z1) {
+    const dx = x1 - x0, dz = z1 - z0, n = Math.ceil(Math.max(Math.abs(dx), Math.abs(dz)) * 2);
+    for (let i = 1; i < n; i++) {
+      const t = i / n;
+      if (this.blocks(Math.floor(x0 + dx * t), Math.floor(z0 + dz * t))) return false;
+    }
+    return true;
+  }
+  // ... and walk there in a straight line
+  clear(x0, z0, x1, z1) {
+    if (!this.low) return this.los(x0, z0, x1, z1);
     const dx = x1 - x0, dz = z1 - z0, n = Math.ceil(Math.max(Math.abs(dx), Math.abs(dz)) * 2);
     for (let i = 1; i < n; i++) {
       const t = i / n;

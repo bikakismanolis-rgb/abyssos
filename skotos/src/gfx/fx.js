@@ -133,6 +133,8 @@ export function hitFx(x, y, z, kind, dx, dz, crit) {
   else if (kind === 'spirit') { glowBurst(x, y, z, 0x7ae0ff, Math.round(12 * k), 3.5, 0.25, 0.5); }
   else if (kind === 'chitin') { blood(x, y, z, Math.round(8 * k), dx, dz, 0x3a5a10); sparks(x, y, z, 3, 0xb0ff60, 3, { dx, dz }); }
   else if (kind === 'ash') { sparks(x, y, z, Math.round(10 * k), 0xffa040, 5, { dx, dz }); blood(x, y, z, 4, dx, dz, 0x2a2420); }
+  else if (kind === 'stone') { sparks(x, y, z, Math.round(8 * k), 0xfff0d0, 6, { dx, dz, color1: 0x8a8070 }); puff(x, y, z, 3, 0x8a8680, 0.6, 0.7, 0.7); blood(x, y, z, 5, dx, dz, 0x5a5650); }
+  else if (kind === 'magma') { sparks(x, y, z, Math.round(12 * k), 0xffc050, 6, { dx, dz, color1: 0xff3000 }); blood(x, y, z, 4, dx, dz, 0x1a1210); P({ x, y, z, life: 0.25, size: 1.2 * k, size1: 0.2, color: 0xffa040, color1: 0xff3000 }); }
   else sparks(x, y, z, Math.round(8 * k), 0xffd080, 5, { dx, dz });
   if (crit) flash(x, y, z, 0xfff0d0, 2.2, 0.12);
 }
@@ -298,13 +300,22 @@ function emit(e, dt, cx, cz) {
     }
     case 'smoke': while (e.acc > 0.25) { e.acc -= 0.25; P({ add: false, x: e.x + rr(-0.1, 0.1), y: e.y, z: e.z, vx: rr(0.1, 0.4), vy: rr(0.6, 1.0), vz: rr(-0.2, 0.2), life: rr(3, 5), size: 0.6, size1: 2.6, color: 0x3a3a40, alpha: 0.3, alpha1: 0, drag: 0.2 }); } break;
     case 'embers': while (e.acc > 0.12) { e.acc -= 0.12; P({ x: e.x + rr(-0.4, 0.4), y: e.y, z: e.z + rr(-0.3, 0.3), vx: rr(-0.4, 0.4), vy: rr(1, 2.5), vz: rr(-0.4, 0.4), life: rr(0.6, 1.4), size: 0.06, size1: 0.02, color: 0xffb040, color1: 0xff3000, drag: 0.6 }); } break;
+    case 'abyss': while (e.acc > 0.35) { e.acc -= 0.35; P({ add: false, x: e.x + rr(-3, 3), y: e.y, z: e.z + rr(-1.5, 1.5), vx: rr(-0.2, 0.2), vy: rr(0.5, 1.1), vz: rr(-0.2, 0.2), life: rr(3, 5), size: 2.5, size1: 6, color: 0x9aa8c0, alpha: 0.2, alpha1: 0, drag: 0.15 }); } break;
+    case 'lava': {
+      while (e.acc > 0.4) {
+        e.acc -= 0.4;
+        P({ x: e.x + rr(-1.4, 1.4), y: -0.2, z: e.z + rr(-1.4, 1.4), vx: rr(-0.3, 0.3), vy: rr(0.8, 2.2), vz: rr(-0.3, 0.3), life: rr(0.8, 1.8), size: 0.07, size1: 0.02, color: 0xffc050, color1: 0xff3000, drag: 0.4 });
+        if (Math.random() < 0.18) { const bx = e.x + rr(-1.2, 1.2), bz = e.z + rr(-1.2, 1.2); P({ x: bx, y: -0.25, z: bz, life: 0.5, size: 0.6, size1: 1.1, color: 0xffa040, color1: 0xff3a00, alpha: 0.8, alpha1: 0 }); P({ add: false, x: bx, y: 0.2, z: bz, vy: 0.8, life: 2.2, size: 0.6, size1: 2.2, color: 0x2a2220, alpha: 0.25, alpha1: 0 }); }
+      }
+      break;
+    }
     case 'mist': while (e.acc > 0.3) { e.acc -= 0.3; P({ add: false, x: e.x + rr(-1.2, 1.2), y: 0.3, z: e.z + rr(0, 1), vx: rr(-0.2, 0.2), vy: 0.05, vz: rr(0.2, 0.6), life: rr(3, 5), size: 1.5, size1: 3.5, color: 0x8aa0b8, alpha: 0.22, alpha1: 0, drag: 0.2 }); } break;
   }
 }
 function ambient(dt, cx, cz) {
   const k = FX.ambient; if (!k) return;
   FX.ambAcc = (FX.ambAcc || 0) + dt;
-  const rate = k === 'forest' ? 0.06 : k === 'town' ? 0.05 : 0.09;
+  const rate = k === 'forest' ? 0.06 : k === 'town' ? 0.05 : k === 'snow' ? 0.012 : k === 'halls' ? 0.07 : 0.09;
   while (FX.ambAcc > rate) {
     FX.ambAcc -= rate;
     const x = cx + rr(-16, 16), z = cz + rr(-14, 12);
@@ -317,6 +328,15 @@ function ambient(dt, cx, cz) {
     } else if (k === 'crypt') {
       if (Math.random() < 0.6) P({ x, y: rr(0.2, 2.5), z, vx: rr(-0.1, 0.1), vy: rr(-0.05, 0.08), vz: rr(-0.1, 0.1), life: rr(3, 5), size: 0.05, size1: 0.05, color: 0xd0c8b0, alpha: 0.5, alpha1: 0 });
       else P({ add: false, x, y: 0.2, z, vx: rr(-0.2, 0.2), vy: 0, vz: rr(-0.2, 0.2), life: rr(4, 7), size: 2.5, size1: 4, color: 0x506070, alpha: 0.12, alpha1: 0 });
+    } else if (k === 'snow') {
+      // flakes drift down and sideways with the wind off the peaks; now and then a gust of spindrift along the ground
+      FX.gust = (FX.gust || 0) + rate;
+      const g = 0.6 + Math.sin(FX.time * 0.35) * 0.4;
+      if (Math.random() < 0.94) P({ add: false, x: x - 4, y: rr(4, 9), z, vx: rr(0.6, 1.4) * (1 + g), vy: rr(-1.3, -0.8), vz: rr(-0.2, 0.3), life: rr(5, 8), size: rr(0.05, 0.11), size1: 0.06, color: 0xf2f6ff, alpha: 0.9, alpha1: 0 });
+      else P({ add: false, x: x - 6, y: 0.3, z, vx: rr(2.5, 4) * g, vy: 0.1, vz: rr(-0.3, 0.3), life: rr(2, 3), size: 1.6, size1: 3.5, color: 0xdfe6f2, alpha: 0.16 * g, alpha1: 0 });
+    } else if (k === 'halls') {
+      if (Math.random() < 0.55) P({ x, y: rr(0.2, 4), z, vx: rr(-0.15, 0.15), vy: rr(0.15, 0.5), vz: rr(-0.15, 0.15), life: rr(2.5, 5), size: 0.05, size1: 0.02, color: 0xffb060, color1: 0xff4010, alpha: 0.9, alpha1: 0 });
+      else P({ add: false, x, y: rr(0.3, 3), z, vx: rr(-0.15, 0.15), vy: rr(-0.05, 0.08), vz: rr(-0.15, 0.15), life: rr(4, 7), size: 0.06, size1: 0.06, color: 0x8a8278, alpha: 0.6, alpha1: 0 });
     } else if (k === 'gate') {
       P({ x, y: rr(0.2, 3), z, vx: rr(-0.2, 0.2), vy: rr(0.2, 0.6), vz: rr(-0.2, 0.2), life: rr(2, 4), size: 0.1, size1: 0.02, color: 0xc080ff, color1: 0x4010a0, alpha: 0.9, alpha1: 0 });
     }

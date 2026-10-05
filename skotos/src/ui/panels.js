@@ -151,7 +151,7 @@ const R = {
   },
   waypoints() {
     const h = G.hero, inTown = G.zone?.id === 'town';
-    const list = ['town', 'forest', 'crypt'].filter((z) => h.wps.includes(z)).map((z) => `<button class="wp ${G.zone?.id === z ? 'here' : ''}" data-a="wp:${z}">${ICON.portal}<b>${t('zone.' + z)}</b><span class="muted">${t('zone.' + z + '.s')}</span></button>`).join('');
+    const list = ['town', 'forest', 'crypt', 'pass', 'halls'].filter((z) => h.wps.includes(z)).map((z) => `<button class="wp ${G.zone?.id === z ? 'here' : ''}" data-a="wp:${z}">${ICON.portal}<b>${t('zone.' + z)}</b><span class="muted">${t('zone.' + z + '.s')}</span></button>`).join('');
     const gates = h.quest >= 5 ? `<button class="wp" data-a="gates">${ICON.gate}<b>${t('gate.title')}</b><span class="muted">${t('gate.best', h.gateBest)}</span></button>` : '';
     const diffs = DIFFS.map((d, i) => { const lock = !diffUnlocked(i); return `<button class="chip ${h.diff === i ? 'on' : ''} ${lock ? 'lock' : ''}" data-a="diff:${i}" style="${h.diff === i ? 'color:' + d.color : ''}">${t('diff.' + d.id)}</button>`; }).join('');
     return `<div class="pn narrow">${head(t('wp.title'), false)}<div class="pn-b"><div style="display:grid;gap:6px">${list}${gates}</div><div class="logo-rule"></div><b style="font-family:var(--display);color:var(--gold)">${t('pick.diff')}</b><div class="chips" style="justify-content:flex-start;margin-top:6px">${diffs}</div><p class="muted">${inTown ? t('diff.' + DIFFS[h.diff].id + '.d') : t('wp.diffNote')}</p></div></div>`;
@@ -199,10 +199,11 @@ const R = {
     const h = G.hero;
     const mins = Math.round((Date.now() - h.created) / 60000);
     const next = DIFFS[h.diff + 1];
-    return `<div class="pn narrow" style="text-align:center"><div class="pn-b" style="padding:22px"><div class="act-h">${t('act.done')}</div><p style="font-style:italic;color:var(--ink2)">${t('act.sub')}</p><div class="logo-rule"></div>
+    const a2 = G.flags.actDone === 2, k = a2 ? 'act2' : 'act';
+    return `<div class="pn narrow" style="text-align:center"><div class="pn-b" style="padding:22px"><div class="act-h">${t(k + '.done')}</div><p style="font-style:italic;color:var(--ink2)">${t(k + '.sub')}</p><div class="logo-rule"></div>
       <div class="stats" style="text-align:left"><div><span>${t('hud.level', '')}</span><b>${h.level}</b></div><div><span>${t('stat.kills')}</span><b>${fmt(h.stats.kills)}</b></div><div><span>${t('stat.time')}</span><b>${mins}′</b></div><div><span>${t('rar.legendary')}</span><b class="r-3">${h.stats.legs}</b></div></div>
-      <div class="logo-rule"></div><b style="font-family:var(--display);color:var(--gold)">${t('act.unlocks')}</b><p>${t('act.gates')}</p>${next ? `<p style="color:${next.color}">${t('pick.diff')}: ${t('diff.' + next.id)}</p>` : ''}
-      <p class="muted">${t('act.next')}</p><button class="btn" data-a="close">${t('act.cont')}</button></div></div>`;
+      ${a2 ? '' : `<div class="logo-rule"></div><b style="font-family:var(--display);color:var(--gold)">${t('act.unlocks')}</b><p>${t('act.gates')}</p>${next ? `<p style="color:${next.color}">${t('pick.diff')}: ${t('diff.' + next.id)}</p>` : ''}`}
+      <p class="muted">${t(k + '.next')}</p><button class="btn" data-a="close">${t('act.cont')}</button></div></div>`;
   },
   map() { return `<div class="pn" style="height:100%">${head(t('zone.' + G.zone.id), false)}<div class="pn-b" style="display:flex;align-items:center;justify-content:center"><canvas id="bigmap" width="800" height="800" style="max-width:100%;max-height:100%;aspect-ratio:1"></canvas></div></div>`; }
 };

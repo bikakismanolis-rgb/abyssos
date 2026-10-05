@@ -6,13 +6,14 @@ import { initFX, updateFX, glowBurst, ring, P, clearFX } from '../gfx/fx.js';
 import { loadKits } from '../gfx/kits.js';
 import { loadPeople } from '../gfx/people.js';
 import { loadCreatures, hasCreature } from '../gfx/creatures.js';
-import { loadEnv } from '../gfx/env.js';
+import { loadEnv, loadPack } from '../gfx/env.js';
 import { WIND } from '../world/build.js';
 import { initInput, pollInput, IN } from '../core/input.js';
 import { loadSave, writeSave } from './save.js';
 import { refreshStats } from './stats.js';
-import { enterZone, updatePacks, nearestInteract, updatePortalFx, ZONES } from './world.js';
+import { enterZone, updatePacks, nearestInteract, updatePortalFx, ZONES, zoneReady } from './world.js';
 import { updatePlayer } from './player.js';
+import { damage } from './combat.js';
 import { updateActors } from './ai.js';
 import { updateProjs, updateAreas } from './projectiles.js';
 import { updatePickups } from './pickups.js';
@@ -49,13 +50,13 @@ export async function boot(q) {
   initOverlay(); buildHud(); initPanels();
   const fade = document.createElement('div'); fade.id = 'fade'; document.getElementById('app').appendChild(fade);
   const scr = document.createElement('div'); scr.id = 'screen'; scr.hidden = true; document.getElementById('app').appendChild(scr);
-  await Promise.all([loadKits(['dungeon', 'grave', 'town']), loadPeople(), loadCreatures(), loadEnv(G.settings.quality)]);
+  await Promise.all([loadKits(['dungeon', 'grave', 'town']), loadPeople(), loadCreatures(), loadEnv(G.settings.quality).then(() => G.settings.quality >= 1 && loadPack('trees'))]);
   // code-built fallbacks only for monsters without a realistic model
   preloadModels(['goblin', 'skeleton', 'warg', 'spider'].filter((m) => !hasCreature(m)));
   buildTitleScene();
   loading.remove();
   window.__ready = true; window.__G = G; window.__R = R;
-  window.__D = { emit, enterZone, refreshStats, openPanel, closePanel, IN, spawnMonster, t };
+  window.__D = { emit, enterZone, refreshStats, openPanel, closePanel, IN, spawnMonster, t, kill: (a) => damage(G.player, a, 1e9, { crit: false }) };
   if (q.has('auto')) { // test hook: jump straight into a zone
     const h = (await import('./state.js')).newHero(q.get('cls') || 'warden', +(q.get('diff') || 1));
     if (q.has('lvl')) { h.level = +q.get('lvl'); h.points = h.level - 1; }
@@ -79,6 +80,10 @@ async function startHero(hero, isNew, zone = 'town') {
   hideScreen(); removeTitleScene(); clearFX();
   refreshStats();
   setupHeroHud();
+  // saves from before Act II: finishing Act I opens the mountain road
+  if (hero.act1 >= 0) hero.flags.act1 = true;
+  hero.act2 ??= -1;
+  await zoneReady(zone);
   G.mode = 'play';
   showHud(true);
   enterZone(zone, zone === 'town' ? { at: isNew ? { x: 31, z: 26 } : 'waypoint' } : {});
@@ -93,12 +98,13 @@ function travel(zone, o = {}) {
   travelling = true;
   const f = document.getElementById('fade'); f.classList.add('on');
   Audio.sfx('waypoint');
-  setTimeout(() => {
+  // the fade covers any first-visit loading (Act II's stone and lava)
+  Promise.all([zoneReady(zone).catch((e) => fatal(e.stack || e)), new Promise((r) => setTimeout(r, 450))]).then(() => {
     try { enterZone(zone, o); } catch (e) { fatal(e.stack || e); }
     clearOverlay();
     setTimeout(() => { f.classList.remove('on'); travelling = false; }, 120);
     writeSave();
-  }, 450);
+  });
 }
 on('travel', travel);
 on('townPortal', () => {
@@ -187,6 +193,7 @@ window.addEventListener('pagehide', () => writeSave());
 // ---------- the loop ----------
 let last = performance.now(), saveT = 0;
 const SIM = +(new URLSearchParams(location.search).get('sim') || 0); // test mode: N fixed steps per frame
+const NORENDER = new URLSearchParams(location.search).has('norender');  // test mode: game logic only, no drawing
 function loop(now) {
   let dt = (now - last) / 1000; last = now;
   if (!SIM) adaptResolution(Math.min(100, dt * 1000));
@@ -237,7 +244,7 @@ function tick(dt, noDraw) {
   let n = 0; for (const a of G.actors) if (a.aggro && !a.dead && a.team === 'foe' && !a.prop && Math.abs(a.x - pl.x) + Math.abs(a.z - pl.z) < 22) n++;
   Audio.intensity(clamp(n / 7, 0, 1));
   Audio.listener(pl.x, pl.z);
-  if (noDraw) return;
+  if (noDraw || (NORENDER && !window.__shoot)) return;
   render();
   drawOverlay(dt);
   updateHud(dt);
