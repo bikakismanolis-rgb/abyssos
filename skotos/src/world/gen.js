@@ -465,7 +465,7 @@ export function genTown() {
   const clearR = { stake: 1.5, pine: 1.4, oak: 1.4, rock: 1.4, grass: 0.8 };
   L.props = L.props.filter((p) => !clearR[p.t] || !lane.some(([x, z]) => Math.hypot(p.x - x, p.z - z) < clearR[p.t]));
   L.dist = distField(L, 12);
-  L.exits.push({ x: 4.6, z: 27.3, to: 'weep', label: 'exit.weep', locked: 'act2' });
+  L.exits.push({ x: 6.2, z: 27.3, to: 'weep', label: 'exit.weep', locked: 'act2' });
   L.props.push({ t: 'lamp', x: 7.2, z: 25.4 });
   L.lights.push({ x: 7.2, y: 2.2, z: 25.4, color: 0xffb060, intensity: 9, range: 9, flicker: 0.2 });
   L.spots.npcs = { wayfarer: { x: CX - 2.6, z: 20.5, r: 0.4 }, smith: { x: 24.6, z: 33.4, r: -1.2 }, healer: { x: 41.2, z: 35.6, r: 0.8 }, villagers: [{ x: 27, z: 43, r: 0.8 }, { x: 38, z: 45, r: -0.6 }, { x: 34, z: 27, r: 2.8 }] };

@@ -168,6 +168,7 @@ function updateLights(dt) {
     else if (s.flicker === 'seed') k = (1 - LIGHTS.autumn) * (1 + 0.16 * (noise2(R.time * 1.3 + s.phase, s.phase) - 0.5));
     else if (s.flicker) k = 1 + s.flicker * (noise2(R.time * 9 + s.phase, s.phase) - 0.5) * 2;
     if (s.fade) k *= s.life > 0 ? Math.min(1, s.life / s.fade) : 1;
+    if (s.gain) k *= s.gain.k; // a shared dimmer (an Amber Tear once its memory is spent)
     l.position.set(s.x, s.y, s.z);
     l.color.copy(s._c);
     l.intensity = s.intensity * k;

@@ -13,6 +13,8 @@ import Audio from '../audio/audio.js';
 
 const $ = (id) => document.getElementById(id);
 const el = (html) => { const d = document.createElement('div'); d.innerHTML = html.trim(); return d.firstChild; };
+// a drop of amber: the sap status and the Memory of the Evergreen
+const TEAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c3.2 4.6 6 8 6 11.2A6 6 0 0 1 6 14.2C6 11 8.8 7.6 12 3z"/><path d="M9.5 14.5a2.6 2.6 0 0 0 2.4 2.6" opacity=".7"/></svg>';
 let built = false;
 const S = { hpW: 1, lagW: 1, minimapT: 0, toastN: 0, dialog: null };
 
@@ -23,13 +25,13 @@ export function buildHud() {
   const hud = el(`<div id="hud" hidden>
     <div id="hurt"></div>
     <div id="hud-tl"><div id="portrait"><span id="pic"></span><div id="lvl">1</div></div>
-      <div id="bars"><div class="bar hp"><i class="lag"></i><i class="fill"></i><i class="shield"></i><span></span></div><div class="bar res"><i class="fill"></i></div><div id="xpbar"><i></i></div><div id="buffs"></div></div></div>
+      <div id="bars"><div class="bar hp"><i class="lag"></i><i class="fill"></i><i class="shield"></i><span></span></div><div class="bar res"><i class="fill"></i></div><div id="xpbar"><i></i></div><div id="buffs"></div>
+        <div id="amber" hidden><span class="ic">${TEAR}</span><div class="ab"><i></i></div><b></b></div></div></div>
     <div id="hud-tr"><canvas id="minimap" width="264" height="264"></canvas>
       <div id="hud-btns"><button class="hbtn" id="h-bag" aria-label="bag">${ICON.bag}</button><button class="hbtn" id="h-skills" aria-label="skills">${ICON.book}</button><button class="hbtn" id="h-menu" aria-label="menu">${ICON.menu}</button></div>
       <div id="quest"></div></div>
     <div id="bossbar" hidden><div class="nm"></div><div class="ti"></div><div class="bar"><i class="fill"></i></div></div>
     <div id="gatebar" hidden><div class="nm"></div><div class="bar"><i class="fill"></i></div></div>
-    <div id="toasts"></div>
     <div id="zonename"><div class="a"></div><div class="rule"></div><div class="b"></div></div>
     <div id="levelup"><div class="a"></div><div class="b"></div></div>
     <div id="massacre"></div>
@@ -43,6 +45,8 @@ export function buildHud() {
   app.appendChild(hud);
   app.appendChild(el(`<div id="dialog" hidden><div class="face"></div><div class="who"></div><div class="txt"></div><div class="more">▸</div></div>`));
   app.appendChild(el(`<div id="letterbox"></div>`));
+  // toasts live outside the HUD so that what is said in a cinematic (the beacon answering, the Lady's last words) is seen
+  app.appendChild(el(`<div id="toasts"></div>`));
   // buttons
   bindButton($('b-attack'), { down: () => { IN.btnAttack = true; IN.events.push({ t: 'skill', i: 0, aim: null }); }, up: () => { IN.btnAttack = false; } });
   for (let i = 1; i <= 4; i++) bindButton($('b-s' + i), { aim: true, index: i, up: (aim, cancel) => { if (!cancel) IN.events.push({ t: 'skill', i, aim }); } });
@@ -114,9 +118,19 @@ export function updateHud(dt) {
   } else u.hidden = true;
   // buffs
   const bf = [];
-  for (const k in pl.buffs) if (pl.buffs[k] > 0 && k !== 'evergreen') bf.push(`<div class="bf">${ICON[{ cry: 'horn', shrineFury: 'flame', shrineSpeed: 'roll', shrineFortune: 'coin', shrineShield: 'shield' }[k] || 'star']}<b>${Math.ceil(pl.buffs[k])}</b></div>`);
+  for (const k in pl.buffs) if (pl.buffs[k] > 0 && k !== 'evergreen') bf.push(`<div class="bf${k === 'memory' ? ' mem' : ''}">${k === 'memory' ? TEAR : ICON[{ cry: 'horn', shrineFury: 'flame', shrineSpeed: 'roll', shrineFortune: 'coin', shrineShield: 'shield' }[k] || 'star']}<b>${Math.ceil(pl.buffs[k])}</b></div>`);
   const bh = bf.join('');
   if (bh !== S.bh) { $('buffs').innerHTML = bh; S.bh = bh; }
+  // amber sap: the build-up toward an amber-lock, then the lock itself (a dodge breaks it)
+  const st = pl.status || {}, rooted = st.root > 0, stick = Math.min(1, (st.stick || 0) / 1.5);
+  const am = $('amber'), show = rooted || stick > 0.02;
+  if (am.hidden === show) am.hidden = !show;
+  if (show) {
+    am.classList.toggle('rooted', rooted);
+    am.querySelector('i').style.transform = `scaleX(${rooted ? st.root / 1.2 : stick})`;
+    const lb = rooted ? t('hud.rooted') : t('hud.sap');
+    if (S.amb !== lb) { am.querySelector('b').textContent = lb; S.amb = lb; }
+  }
   // boss
   const b = G.bossActor;
   const bb = $('bossbar');
@@ -179,7 +193,7 @@ function drawMinimap(big) {
     if (it.used) continue;
     const ex = z.map.explored[Math.floor(it.z) * z.map.w + Math.floor(it.x)];
     if (!ex && z.id !== 'town') continue;
-    const c = { waypoint: '#6aa8ff', exit: '#f0e0c0', chest: '#f2d24a', shrine: '#ffe0a0', npc: '#f0c860', stash: '#c0a060', portal: '#6aa8ff' }[it.kind] || '#fff';
+    const c = { waypoint: '#6aa8ff', exit: '#f0e0c0', chest: '#f2d24a', shrine: '#ffe0a0', npc: '#f0c860', stash: '#c0a060', portal: '#6aa8ff', tear: '#ffa030' }[it.kind] || '#fff';
     dot(it.x, it.z, it.kind === 'npc' ? 3.5 : 4, c);
   }
   for (const a of G.actors) {
@@ -200,12 +214,28 @@ function drawMinimap(big) {
 }
 export const drawBigMap = (cv) => drawMinimap(cv);
 function questGoal() {
-  const z = G.zone, q = G.hero.quest;
-  if (z.id === 'town') { if (q === 0 || q === 4 || q >= 5) return z.L.spots.npcs.wayfarer; if (q >= 1 && q < 4) return z.L.exits[0]; }
-  if (z.id === 'forest') { if (q <= 2 && !G.hero.flags.weaver) return z.L.boss; if (q >= 2 && q < 4) return z.L.barrowDoor; if (q >= 4) return z.L.exits.find((e) => e.to === 'town'); }
-  if (z.id === 'crypt') { if (q < 4) return z.L.boss; }
+  const z = G.zone, q = G.hero.quest, F = G.hero.flags, L = z.L;
+  if (z.id === 'town') { if (q >= 11 && q <= 14) return L.exits.find((e) => e.to === 'weep'); if (q === 0 || q === 4 || q >= 5) return L.spots.npcs.wayfarer; if (q >= 1 && q < 4) return L.exits[0]; }
+  if (z.id === 'forest') { if (q <= 2 && !G.hero.flags.weaver) return L.boss; if (q >= 2 && q < 4) return L.barrowDoor; if (q >= 4) return L.exits.find((e) => e.to === 'town'); }
+  if (z.id === 'crypt') { if (q < 4) return L.boss; }
+  // Act III: the Lanternglade, the nearest unseen verse of the Long Sorrow, the Glade of Stones, the gate, the walls, the Lady
+  if (z.id === 'weep') {
+    if (q <= 11) return L.spots.npcs.elati;
+    if (q === 12) { let best = null, bd = 1e9; for (const s of L.spots.tears) if (s.story && !F['tear_' + s.id]) { const d = Math.hypot(s.x - G.player.x, s.z - G.player.z); if (d < bd) { bd = d; best = s; } } return best; }
+    if (q === 13) return L.spots.glade;
+    if (q === 14) return L.exits.find((e) => e.to === 'heart');
+    if (q === 15) return L.exits.find((e) => e.to === 'town');
+  }
+  if (z.id === 'heart') {
+    if (q === 14) { const i = [0, 1, 2].find((k) => !F['thorn' + k]); return i != null ? L.thorns[i].node : L.boss; }
+    if (q === 15) return L.exits.find((e) => e.to === 'weep');
+  }
   return null;
 }
+
+// walls that open at runtime (the Root Gate, the thorn walls, a standing stone the Hart breaks) repaint the map
+on('mapChanged', () => { mapDirty++; });
+on('stoneBroken', () => { mapDirty++; });
 
 // ---------- messages ----------
 on('toast', (msg, kind) => {
@@ -234,9 +264,12 @@ on('bossIntro', (a) => {
   const bb = $('bossbar');
   bb.querySelector('.nm').textContent = a.name || t('mon.' + a.kind);
   bb.querySelector('.ti').textContent = a.name ? t('gate.guardianName') : t('mon.' + a.kind + '.t');
-  Audio.music('boss'); Audio.sting('bossIntro');
+  // the Lady has a waltz of her own; it gains brass as she loses her roots
+  if (a.kind === 'amaranthe') { Audio.mood({ phase: 0 }); Audio.music('amaranthe'); } else Audio.music('boss');
+  Audio.sting('bossIntro');
   emit('toast', (a.name || t('mon.' + a.kind)).toUpperCase(), 'big');
 });
+on('bossPhase', (a, ph) => { if (a?.kind === 'amaranthe') Audio.mood({ phase: ph }); });
 on('bossDown', () => { Audio.music(G.zone.id === 'gate' ? 'gate' : G.zone.id); Audio.sting('victory'); });
 let masT = 0;
 export function comboTick(dt) {
@@ -249,13 +282,18 @@ on('dialog', (d) => {
   S.dialog = Object.assign({ i: 0, shown: 0 }, d);
   const box = $('dialog');
   box.hidden = false;
-  box.querySelector('.who').textContent = t('npc.' + d.who);
-  box.querySelector('.face').textContent = t('npc.' + d.who)[0];
   showLine();
   Audio.sfx('click');
 });
-on('say', (key) => emit('toast', '«' + t(key) + '»', 'quest'));
-function showLine() { const d = S.dialog; d.text = t(d.lines[d.i]); d.shown = 0; }
+// the Lady's voice in the still trees, and the Ash King's whispers, read differently from a spoken line
+on('say', (key) => emit('toast', '«' + t(key) + '»', key.startsWith('d.ash') || key === 'd.amaranthe.p2' ? 'quest ash' : key.startsWith('d.lady') || key.startsWith('d.amaranthe') ? 'quest voice' : key.startsWith('d.autumn') ? 'quest wind' : 'quest'));
+// a line is a key, or [key, who] when a scene has more than one speaker (an Amber Tear's memory)
+function showLine() {
+  const d = S.dialog, ln = d.lines[d.i], key = Array.isArray(ln) ? ln[0] : ln, who = Array.isArray(ln) ? ln[1] : d.who;
+  d.text = t(key); d.shown = 0;
+  const box = $('dialog');
+  if (who !== d.cur) { d.cur = who; box.querySelector('.who').textContent = t('npc.' + who); box.querySelector('.face').textContent = t('npc.' + who)[0]; box.dataset.who = who; }
+}
 export function dialogTick(dt) {
   const d = S.dialog; if (!d) return;
   if (d.shown < d.text.length) { d.shown = Math.min(d.text.length, d.shown + dt * 55); $('dialog').querySelector('.txt').textContent = d.text.slice(0, Math.floor(d.shown)); }

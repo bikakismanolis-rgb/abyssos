@@ -24,10 +24,27 @@ ACT II MONSTERS (src/assets/creatures/, src/assets/folk.glb; adapted for Skotos:
 - Durgan, the Molten King: "lava monster" by Satwik.Bandi. CC-BY 4.0, modified (rebound onto the people's skeleton so it shares their animations). https://sketchfab.com/3d-models/lava-monster-2e2a1eac6f834857af5347a0662b075d
 - The dwarves of Deepstone (the Ashbound and Brokka): Quaternius characters (CC0), re-proportioned and re-coloured for Skotos.
 
+ACT III MONSTERS AND PEOPLE (src/assets/creatures/, src/assets/grove.glb; adapted for Skotos: re-coloured in amber, re-rigged, decimated, new animations)
+- Silverhorn, the White Hart (and the deer held in amber at the Edge of Tears): "Realistic Animated Elk 3D Model" by WildMesh_3D (WildMesh 3D). CC-BY 4.0, modified (coat lifted to birch-white, antlers re-bound and turned to amber, amber tears painted; attack, rear, bellow, paw and hit animations made for Skotos). https://sketchfab.com/3d-models/realistic-animated-elk-3d-model-787834f9caa2474d9f1814b807c072d7
+- Amberback bears: "Realistic Animated Bear 3D Model" by WildMesh_3D (WildMesh 3D). CC-BY 4.0, modified (amber crust, clips cut and re-timed, roars added). https://sketchfab.com/3d-models/realistic-animated-bear-3d-model-bffc3c87d2d148ff8533e1cc8a11c9f1
+- Amber moths: "Animated Peacock Moth" by OsianOHM (Osian CG, sketchfab.com/OsianOHM). CC-BY 4.0, modified (decimated, re-tinted amber, re-rigged, extra animations). https://sketchfab.com/3d-models/animated-peacock-moth-1c3db0798f1c46be9764e99631cbb0a7
+- Rootlings: "Mandrake" by timsblends. CC-BY 4.0, modified (re-rigged, re-textured, new rise, shriek, bite, hit and death animations). https://sketchfab.com/3d-models/mandrake-31f9f793011b43e38ce9421298f90b80
+- Rootwardens: "Treeman" by DJMaesen (sketchfab.com/bumstrum). CC-BY 4.0, modified (bark re-graded with glowing amber cracks, amber eyes and tears, autumn crown, all animations made for Skotos). https://sketchfab.com/3d-models/treeman-e3a094316a8c4820a94d271afffe497c
+- The Evergreen (Elati, Old Linden, the Rootsworn, the Hollowed, the Mourners and Amaranthe): Quaternius characters (CC0), re-proportioned and re-coloured for Skotos, with bark grain from "Bark Brown 02" by Rob Tuytel (Poly Haven, CC0, https://polyhaven.com/a/bark_brown_02). Amaranthe's antler crown, the Mourners' veils, the spears and the Heartroots are made in code.
+
 WORLD
 - Dungeon Remastered, Medieval Hexagon Pack, Halloween Bits by Kay Lousberg / KayKit. CC0 1.0.
 - Ground, stone, bark and props from Poly Haven (polyhaven.com). CC0. Per-asset authors in src/assets/env/CREDITS.txt.
 - Act II ground, cliffs, rocks, gates and dwarven props from Poly Haven (polyhaven.com). CC0. Per-asset authors in src/assets/deep/CREDITS.txt.
+- Act III ground, bark and stones (the Weeping Woods and the Heartwood) from Poly Haven (polyhaven.com), CC0: leaves_forest_ground and bark_willow by Dario Barresi, Dimitrios Savva; forest_leaves_02 and mossy_rock by Rob Tuytel; mud_forest by eye-candy.xyz; dry_decay_leaves by Amal Kumar; rock_07 and rock_09 by Jenelle van Heerden; dead_tree_trunk_02 (the Fallen King) by Jenelle van Heerden, Rico Cilliers. Per-asset details in src/assets/wood/CREDITS.txt.
+- Act III props from sketchfab.com, CC-BY 4.0, modified (decimated, re-centred, rescaled, ground patches removed, leaves recoloured to autumn; src/assets/wood.glb):
+  "Willow" by evolveduk (the weeping trees), https://sketchfab.com/3d-models/willow-422de2372f3d46dfb314a0cd5da512fe
+  "Tree Stump with big Roots [Free]" by RodoxDE (the Root Gate), https://sketchfab.com/3d-models/tree-stump-with-big-roots-free-bd60213e01574f94a715d01936f4ee82
+  "Old Oak Stump Obora" by 3dhdscan, https://sketchfab.com/3d-models/old-oak-stump-obora-5f5bb2305d534283be08f534ece9c9db
+  "Crazy Tree Roots Scan" by evan4129 (EFX), https://sketchfab.com/3d-models/crazy-tree-roots-scan-be10284b4c6e426a914bf10ba6641a08
+  "Realistic HD Rosemary willow (63/99)" by PlantCatalog, https://sketchfab.com/3d-models/realistic-hd-rosemary-willow-6399-6d25c2941dae4065b9476f0705b4f0d3
+  "Bracken Fern Low Poly" by Marcin.Kwiatkowski, https://sketchfab.com/3d-models/bracken-fern-low-poly-b64381d3ea9547b88581f98178800627
+  "Realistic Mushroom - 01" by SanForge, https://sketchfab.com/3d-models/realistic-mushroom-01-aededce1ec0f48f8b0f50cc1762a3f86
 - Village of Lefkovrachos (src/assets/village.glb; rescaled, decimated, textures re-encoded, window glow added), all CC-BY 4.0 from sketchfab.com, per-model links in src/assets/VILLAGE_CREDITS.txt:
   "Medieval House 1", "Medieval House 2", "Medieval House 3", "Medieval House 4" by Animau3D;
   "Medieval house | Generic Textures | Game ready" by by__Rx; "Medieval house" by Young_Wizard; "Medieval Warehouse" by timowes;

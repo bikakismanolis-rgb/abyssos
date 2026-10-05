@@ -13,7 +13,7 @@ import { has } from '../i18n/i18n.js';
 import { sapAt, addSapPool, addSapRing, sapPools, startDrips } from './sap.js';
 import { grantBuff } from './stats.js';
 
-const ATK_SFX = { goblin: 'goblinAttack', wolf: 'wolfAttack', spider: 'spiderHiss', orc: 'orcAttack', troll: 'trollRoar', skeleton: 'skeletonRattle', wraith: 'wraithWail', hound: 'houndGrowl', bat: 'batScreech', worm: 'wormRumble', dwarf: 'dwarfAttack', golem: 'golemStep' };
+const ATK_SFX = { goblin: 'goblinAttack', wolf: 'wolfAttack', spider: 'spiderHiss', orc: 'orcAttack', troll: 'trollRoar', skeleton: 'skeletonRattle', wraith: 'wraithWail', hound: 'houndGrowl', bat: 'batScreech', worm: 'wormRumble', dwarf: 'dwarfAttack', golem: 'golemStep', moth: 'batScreech', bear: 'bearRoar', hart: 'hartBellow' };
 // attack timing per animation: speed, hit time (s), total (s)
 const ATK = {
   stab: { speed: 1.25, hit: 0.34, dur: 0.85 }, slash1: { speed: 1.05, hit: 0.38, dur: 0.85 }, chop: { speed: 1.05, hit: 0.7, dur: 1.25 },

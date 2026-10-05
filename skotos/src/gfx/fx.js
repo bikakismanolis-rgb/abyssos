@@ -416,14 +416,14 @@ function ambient(dt, cx, cz) {
     } else if (k === 'weepAutumn') {
       // the First Autumn: leaves fall at last, gold and brown, on a wind out of the west
       const g = 0.6 + Math.sin(FX.time * 0.4) * 0.4, y = rr(3, 8), vy = rr(-1.1, -0.65);
-      if (Math.random() < 0.75) P({ leaf: true, x: x - 3, y, z, vx: rr(0.3, 0.9) * (0.6 + g), vy, vz: rr(-0.25, 0.25), life: (y / -vy) * 0.97, size: rr(0.16, 0.26), size1: 0.18, color: Math.random() < 0.55 ? 0xe0a030 : Math.random() < 0.5 ? 0xb85a1c : 0x8a5a2a, alpha: 1, alpha1: 0.85 });
+      if (Math.random() < 0.75) P({ leaf: true, x: x - 3, y, z, vx: rr(0.3, 0.9) * (0.6 + g), vy, vz: rr(-0.25, 0.25), life: (y / -vy) * 0.97, size: rr(0.26, 0.4), size1: 0.3, color: Math.random() < 0.55 ? 0xe0a030 : Math.random() < 0.5 ? 0xb85a1c : 0x8a5a2a, alpha: 1, alpha1: 0.85 });
       else P({ add: false, x, y: rr(0.9, 1.6), z, vx: rr(0.1, 0.4), vy: 0, vz: rr(-0.1, 0.1), life: rr(4, 7), size: 2.2, size1: 3.2, color: 0xa88a60, alpha: 0.07, alpha1: 0 });
     } else if (k === 'heart' || k === 'heartAutumn') {
       // inside the First Oak: spores rise from the root floor, sap drips from above; after the First Autumn leaves drift down
       const autumn = k === 'heartAutumn', q = Math.random();
       if (q < 0.55) P({ x, y: rr(0, 1.2), z, vx: rr(-0.06, 0.06), vy: rr(0.12, 0.35), vz: rr(-0.06, 0.06), life: rr(4, 7), size: rr(0.04, 0.07), size1: 0.03, color: autumn ? 0xe8d0a0 : 0xe8e090, color1: 0xa07830, alpha: 0.85, alpha1: 0 });
       else if (q < 0.7 && !autumn) { const y = rr(4.5, 7); P({ x, y, z, vy: -0.4, life: Math.sqrt((2 * y) / 9.8), size: 0.08, size1: 0.06, color: 0xffc050, color1: 0xff9020, alpha: 0.9, alpha1: 0.85, grav: 9.8 }); }
-      else if (q < 0.82 && autumn) { const y = rr(4, 7), vy = rr(-0.9, -0.55); P({ leaf: true, x, y, z, vx: rr(-0.2, 0.2), vy, vz: rr(-0.2, 0.2), life: (y / -vy) * 0.97, size: rr(0.15, 0.24), size1: 0.17, color: Math.random() < 0.6 ? 0xd09030 : 0x8a5a2a, alpha: 1, alpha1: 0.8 }); }
+      else if (q < 0.82 && autumn) { const y = rr(4, 7), vy = rr(-0.9, -0.55); P({ leaf: true, x, y, z, vx: rr(-0.2, 0.2), vy, vz: rr(-0.2, 0.2), life: (y / -vy) * 0.97, size: rr(0.24, 0.36), size1: 0.28, color: Math.random() < 0.6 ? 0xd09030 : 0x8a5a2a, alpha: 1, alpha1: 0.8 }); }
       else P({ add: false, x, y: rr(0.8, 1.4), z, vx: rr(-0.08, 0.08), vy: 0, vz: rr(-0.08, 0.08), life: rr(5, 8), size: 2, size1: 3, color: 0x4a3018, alpha: 0.12, alpha1: 0 });
     } else if (k === 'gate') {
       P({ x, y: rr(0.2, 3), z, vx: rr(-0.2, 0.2), vy: rr(0.2, 0.6), vz: rr(-0.2, 0.2), life: rr(2, 4), size: 0.1, size1: 0.02, color: 0xc080ff, color1: 0x4010a0, alpha: 0.9, alpha1: 0 });

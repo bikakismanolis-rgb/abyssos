@@ -76,7 +76,7 @@ export function updateShadows() {
   for (const a of all) {
     if (!a.avatar || a.removed || !a.avatar.group.visible) continue;
     if (n < 160) { _p.set(a.x, 0.04, a.z); _s.setScalar(a.radius * 2.6 * (a.dead ? Math.max(0, 1 - a.deadT * 0.5) : 1)); _q.identity(); blobs.setMatrixAt(n++, _m.compose(_p, _q, _s)); }
-    if ((a.elite || a.boss || a.pet) && !a.dead && k < 40) {
+    if ((a.elite || a.boss || a.pet) && !a.dead && !a.disguised && k < 40) {
       _p.set(a.x, 0.06, a.z); _s.setScalar(a.radius * 1.5); rings.setMatrixAt(k, _m.compose(_p, _q, _s));
       rings.setColorAt(k, _c.set(a.boss ? 0xff4020 : a.elite === 'rare' ? 0xffc030 : a.pet ? 0x60c0ff : 0x5080ff));
       k++;
@@ -87,6 +87,8 @@ export function updateShadows() {
 }
 
 // ---------- actor ----------
+// every status an actor can carry, all clear (the hero gets a new one on respawn too)
+export const freshStatus = () => ({ stun: 0, freeze: 0, slow: 0, slowK: 0, fear: 0, burn: 0, burnDps: 0, poison: 0, poisonDps: 0, chill: 0, root: 0, rootImm: 0, stick: 0 });
 export class Actor {
   constructor(o) {
     this.id = uid();
@@ -95,7 +97,7 @@ export class Actor {
     this.radius = o.radius ?? 0.45; this.speed = o.speed ?? 4;
     this.hp = this.hpMax = o.hp ?? 10; this.dmg = o.dmg ?? 1; this.level = o.level ?? 1;
     this.dead = false; this.deadT = 0; this.removed = false;
-    this.status = { stun: 0, freeze: 0, slow: 0, slowK: 0, fear: 0, burn: 0, burnDps: 0, poison: 0, poisonDps: 0, chill: 0, root: 0, rootImm: 0, stick: 0 };
+    this.status = freshStatus();
     this.kx = 0; this.kz = 0; this.flash = 0; this.hpShow = 0;
     this.avatar = o.avatar || null;
     this.cd = 0; this.state = 'idle'; this.aggro = false; this.t = 0;

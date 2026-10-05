@@ -405,16 +405,16 @@ export function genWeep(seed, o = {}) {
       if (L.paint[i] < 0.3 && !L.sap[i] && rng.chance(0.26)) L.props.push({ t: 'tuft', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.7, 1.2) });
       if (rng.chance(0.01)) L.props.push({ t: 'stone', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.25, 0.5) });
       if (L.paint[i] < 0.2 && rng.chance(edge ? 0.018 : 0.004)) L.props.push({ t: 'branches', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.8, 1.2) });
-      if (L.paint[i] < 0.25 && rng.chance(edge ? 0.012 : 0.003)) L.props.push({ t: 'mush', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.9, 1.6) });
+      if (L.paint[i] < 0.25 && rng.chance(edge ? 0.005 : 0.0012)) L.props.push({ t: 'mush', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.9, 1.6) });
       continue;
     }
     if (d === 255) continue;
     const green = clamp((z - (h - 34)) / 12, 0, 1);
     const p = d === 1 ? 0.56 : d <= 3 ? 0.34 : d <= 6 ? 0.16 : 0.05;
     if (rng.chance(p)) {
-      const t = rng.next() < green ? rng.weighted([['oak', 4], ['pine', 2]]) : rng.weighted([['goak', 6], ['willow', d <= 3 ? 1.3 : 0.4], ['dead', d === 1 ? 0.7 : 0.25]]);
+      const t = rng.next() < green ? rng.weighted([['oak', 4], ['pine', 2]]) : rng.weighted([['goak', 6], ['willow', d <= 3 ? 0.45 : 0.1], ['dead', d === 1 ? 0.7 : 0.25]]);
       L.props.push({ t, x: x + rng.range(0.2, 0.8), z: z + rng.range(0.2, 0.8), r: rng.range(0, 6.28), s: rng.range(0.85, 1.3) * (d > 3 ? 1.15 : 1), d });
-    } else if (d <= 2 && rng.chance(0.07)) L.props.push({ t: rng.chance(0.6) ? 'groot' : 'ostump', x: x + 0.5, z: z + 0.5, r: toFloor(L, D, x, z) + rng.range(-0.4, 0.4), s: rng.range(0.7, 1.05), y: -0.05 });
+    } else if (d <= 2 && rng.chance(0.045)) L.props.push({ t: rng.weighted([['groot', 3], ['ostump', 2], ['rcluster', 2]]), x: x + 0.5, z: z + 0.5, r: toFloor(L, D, x, z) + rng.range(-0.4, 0.4), s: rng.range(0.7, 1.05), y: -0.05 });
     else if (d <= 2 && rng.chance(0.3)) L.props.push({ t: 'bush', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.8, 1.3) });
     else if (d === 1 && rng.chance(0.04)) L.props.push({ t: 'rock', x: x + 0.5, z: z + 0.5, r: rng.range(0, 6.28), s: rng.range(0.8, 1.5) });
   }
@@ -424,11 +424,11 @@ export function genWeep(seed, o = {}) {
     const a = rng.range(0, 6.28), dd = rng.range(3.5, 6), lx = t.x + Math.sin(a) * dd, lz = t.z + Math.cos(a) * dd, i = Math.floor(lz) * w + Math.floor(lx);
     if (L.cells[i] && D[i] === 0 && !res[i] && !L.sap[i] && L.paint[i] < 0.2) L.props.push({ t: 'log', x: lx, z: lz, r: rng.range(0, 3.14), s: rng.range(0.8, 1.2) });
   }
-  for (let n = 0; n < 12; n++) {
+  for (let n = 0; n < 8; n++) {
     const t = rng.pick(trail); if (t.mere) continue;
     const a = rng.range(0, 6.28), dd = rng.range(3.5, 7), mx = t.x + Math.sin(a) * dd, mz = t.z + Math.cos(a) * dd, i = Math.floor(mz) * w + Math.floor(mx);
     if (!L.cells[i] || res[i]) continue;
-    for (let m = 0; m < rng.int(4, 7); m++) { const b = (m / 6) * 6.28, rr = rng.range(0.8, 1.3); L.props.push({ t: 'mush', x: mx + Math.sin(b) * rr, z: mz + Math.cos(b) * rr, r: rng.range(0, 6.28), s: rng.range(0.7, 1.2) }); }
+    for (let m = 0; m < rng.int(3, 5); m++) { const b = (m / 6) * 6.28, rr = rng.range(0.8, 1.3); L.props.push({ t: 'mush', x: mx + Math.sin(b) * rr, z: mz + Math.cos(b) * rr, r: rng.range(0, 6.28), s: rng.range(0.7, 1.2) }); }
   }
   L.clearings = clearings;
   L.exits.push({ x: L.start.x, z: h - 4.5, to: 'town', label: 'exit.town' });
@@ -519,6 +519,8 @@ function tryHeart(seed, o, last) {
     L.bridges.push({ x: p.x + fz * off, z: p.z - fx * off, r: ang, len: 2 * half + 4.2, w: 2.6 });
     L.lights.push({ x: p.x, y: 0.5, z: p.z, color: 0xffa030, intensity: 12, range: 10, flicker: 'beat' });
   }
+  // the root walls' distance field, taken before thorns and props close any cells: only the cave's own walls rise
+  const D = distField(L, 12);
   // ---- the thorn walls ----
   for (let k = 0; k < 3; k++) {
     const i = wIdx[k], p = spine[i], ang = spineAng(i);
@@ -652,7 +654,6 @@ function tryHeart(seed, o, last) {
   for (let i = 8; i < n - 4; i += 9) { const p = spine[i]; L.lights.push({ x: p.x, y: 1.4, z: p.z, color: 0xff9a40, intensity: 7, range: 8, flicker: 'beat' }); }
   for (let z = 0; z < h; z += 3) for (let x = 0; x < w; x += 3) if (L.amberDeep[z * w + x]) L.props.push({ t: 'fx', fx: 'amberglow', x: x + 0.5, y: 0, z: z + 0.5, s: 0.6 });
   // ---- dressing: root masses grow out of the walls, toadstools in the damp ----
-  const D = distField(L, 12);
   L.dist = D;
   for (let z = 0; z < h; z++) for (let x = 0; x < w; x++) {
     const i = z * w + x, d = D[i];
@@ -666,9 +667,10 @@ function tryHeart(seed, o, last) {
       continue;
     }
     if (d === 255) continue;
-    if (d === 1 && rng.chance(0.16)) L.props.push({ t: 'wallRoot', x: x + 0.5, z: z + 0.5, r: toFloor(L, D, x, z), s: rng.range(0.9, 1.25) });
+    if (d === 1 && rng.chance(0.3)) L.props.push({ t: 'wallRoot', x: x + 0.5, z: z + 0.5, r: toFloor(L, D, x, z), s: rng.range(0.9, 1.25) });
     else if (d === 1 && rng.chance(0.06)) L.props.push({ t: 'groot', x: x + 0.5, z: z + 0.5, r: toFloor(L, D, x, z) + rng.range(-0.5, 0.5), s: rng.range(1.1, 1.6), y: heartWallH(0.5) - 0.9 });
     else if (d === 2 && rng.chance(0.035)) L.props.push({ t: 'rootPillar', x: x + 0.5, z: z + 0.5, r: rng.range(0, 6.28), s: rng.range(0.8, 1.3), y: heartWallH(1.5) - 0.4 });
+    else if (d <= 3 && rng.chance(0.015)) L.props.push({ t: 'rcluster', x: x + 0.5, z: z + 0.5, r: toFloor(L, D, x, z), s: rng.range(1.1, 1.5), y: heartWallH(d - 0.5) - 0.6 });
     else if (d <= 3 && rng.chance(0.03)) L.props.push({ t: 'ostump', x: x + 0.5, z: z + 0.5, r: rng.range(0, 6.28), s: rng.range(1.0, 1.5), y: heartWallH(d - 0.5) - 0.5 });
   }
   // a few shroom patches along the rootway

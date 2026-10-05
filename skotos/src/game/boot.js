@@ -17,7 +17,7 @@ import { damage } from './combat.js';
 import { updateActors } from './ai.js';
 import { updateProjs, updateAreas } from './projectiles.js';
 import { updatePickups } from './pickups.js';
-import { updateShadows, refreshHeroLook, spawnMonster, preloadModels } from './actors.js';
+import { updateShadows, refreshHeroLook, spawnMonster, preloadModels, freshStatus } from './actors.js';
 import { initOverlay, drawOverlay, clearOverlay } from '../ui/overlay.js';
 import { buildHud, setupHeroHud, updateHud, showHud, dialogTick, advanceDialog, dialogOpen, comboTick } from '../ui/hud.js';
 import { initPanels, open as openPanel, close as closePanel, panelOpen } from '../ui/panels.js';
@@ -80,9 +80,12 @@ async function startHero(hero, isNew, zone = 'town') {
   hideScreen(); removeTitleScene(); clearFX();
   refreshStats();
   setupHeroHud();
-  // saves from before Act II: finishing Act I opens the mountain road
+  // saves from before Act II: finishing Act I opens the mountain road; from before Act III: finishing Act II opens the
+  // west road to the Weeping Woods
   if (hero.act1 >= 0) hero.flags.act1 = true;
   hero.act2 ??= -1;
+  if (hero.act2 >= 0) hero.flags.act2 = true;
+  hero.act3 ??= -1;
   await zoneReady(zone);
   G.mode = 'play';
   showHud(true);
@@ -116,7 +119,7 @@ on('townPortal', () => {
 });
 on('respawn', (town) => {
   const pl = G.player;
-  pl.dead = false; pl.hp = pl.hpMax; pl.res = G.hero.cls === 'warden' ? 0 : G.stats.resMax; pl.status = { stun: 0, freeze: 0, slow: 0, slowK: 0, fear: 0, burn: 0, burnDps: 0, poison: 0, poisonDps: 0, chill: 0 };
+  pl.dead = false; pl.hp = pl.hpMax; pl.res = G.hero.cls === 'warden' ? 0 : G.stats.resMax; pl.status = freshStatus();
   refreshHeroLook();
   if (town || G.zone.id === 'gate') { G.gate = null; travel('town', { at: 'waypoint' }); }
   else travel(G.zone.id, { at: G.zone.L.spots.waypoint ? 'waypoint' : 'start' });
@@ -248,6 +251,9 @@ function tick(dt, noDraw) {
   let n = 0; for (const a of G.actors) if (a.aggro && !a.dead && a.team === 'foe' && !a.prop && Math.abs(a.x - pl.x) + Math.abs(a.z - pl.z) < 22) n++;
   Audio.intensity(clamp(n / 7, 0, 1));
   Audio.listener(pl.x, pl.z);
+  // the Heartwood's heartbeat quickens toward the Heart Chamber
+  const H = G.zone.id === 'heart' && G.zone.L.spots.heart;
+  if (H) Audio.mood({ near: clamp(1 - (Math.hypot(H.x - pl.x, H.z - pl.z) - 16) / 90, 0, 1) });
   if (noDraw || (NORENDER && !window.__shoot)) return;
   render();
   drawOverlay(dt);
@@ -256,14 +262,19 @@ function tick(dt, noDraw) {
 }
 function cineTick(dt) {
   const c = G.cine; c.t += dt;
-  for (let i = 0; i < c.steps.length; i++) if (!c.done.has(i) && c.t >= c.steps[i][0]) { c.done.add(i); c.steps[i][1](); }
+  // a scene that waits on something (an Amber Tear's memory, told in a dialog) holds its close-up until it is over
+  if (c.until && !c.until() && c.t > c.dur - 1.2) c.t = c.dur - 1.2;
+  for (let i = 0; i < (c.steps || []).length; i++) if (!c.done.has(i) && c.t >= c.steps[i][0]) { c.done.add(i); c.steps[i][1](); }
   const k = clamp(c.t / 1.6, 0, 1), back = clamp((c.dur - c.t) / 1.2, 0, 1);
   const pl = G.player, w = Math.min(k, back);
   R.cam.zoomT = 1 + (c.zoom - 1) * w;
   R.cam.lookY = 0.9 + 5 * w;
+  // a scene may lower the camera toward the horizon (c.pitch, eased; set or changed at any step)
+  const P0 = (c.p0 ??= R.cam.pitch);
+  if (c.pitch != null) R.cam.pitch += (P0 + (c.pitch - P0) * w - R.cam.pitch) * Math.min(1, dt * 2.2);
   updateCamera(dt, pl.x + (c.x - pl.x) * w, pl.z + (c.z - pl.z) * w);
   if (c.t >= c.dur) {
-    G.mode = 'play'; G.cine = null; R.cam.lookY = 0.9; R.cam.zoomT = 1.05;
+    G.mode = 'play'; G.cine = null; R.cam.lookY = 0.9; R.cam.zoomT = 1.05; R.cam.pitch = c.p0;
     showHud(true); document.getElementById('letterbox').classList.remove('on');
     c.end?.();
   }
