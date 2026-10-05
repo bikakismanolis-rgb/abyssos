@@ -9,8 +9,9 @@ import { clamp, damp, smooth } from '../core/util.js';
 import { bytes, patchPerson, personUniforms, cullSphere } from './people.js';
 import { R } from './gfx.js';
 
-// every creature GLB present at build time; missing ones fall back to the code-built models
-const FILES = import.meta.glob('../assets/creatures/*.glb', { query: '?url', import: 'default', eager: true });
+// every creature GLB present at build time; missing ones fall back to the code-built models.
+// Lazy: each URL is its own small module, so an inlined (artifact) build keeps every chunk small.
+const FILES = import.meta.glob('../assets/creatures/*.glb', { query: '?url', import: 'default' });
 const URLS = {};
 for (const k in FILES) URLS[k.split('/').pop().replace('.glb', '')] = FILES[k];
 
@@ -24,7 +25,7 @@ const CAST = {
   wraith: ['wight', 1], barrowLord: ['barrowlord', 1.15],
   magmaHound: ['magmahound', 1], caveBat: ['bat', 1], deepworm: ['worm', 1], stonewarden: ['golem', 1],
   // Act III (tools/creatures/act3)
-  silverhorn: ['elk', 1], amberBear: ['bear', 1], amberMoth: ['moth', 1], rootling: ['mandrake', 1], rootwarden: ['treeman', 1]
+  silverhorn: ['elk', 1], amberBear: ['bear', 1.12], amberMoth: ['moth', 1], rootling: ['mandrake', 1], rootwarden: ['treeman', 1]
 };
 
 export const CREATURES = { tpl: {}, ready: false };
@@ -35,7 +36,7 @@ export function loadCreatures() {
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
   loading = Promise.all(names.map(async (n) => {
     try {
-      const gltf = await loader.parseAsync(await bytes(URLS[n]), '');
+      const gltf = await loader.parseAsync(await bytes(await URLS[n]()), '');
       CREATURES.tpl[n] = prepare(gltf);
     } catch (e) { console.warn('creature ' + n + ' failed to load', e); }
   })).then(() => { CREATURES.ready = true; });

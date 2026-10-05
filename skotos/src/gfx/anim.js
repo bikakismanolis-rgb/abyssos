@@ -257,7 +257,7 @@ export class Avatar {
     this.held = {};
     // realistic people wear textured materials: what they hold gets a character material sharing their uniforms
     if (model.kind === 'person' || model.kind === 'creature') { this.heldMat = makeCharMat(); this.heldMat.userData.u = model.mat.userData.u; }
-    const A = model.kind === 'person' ? PersonAnim : model.kind === 'creature' ? CreatureAnim : model.kind === 'warg' ? QuadAnim : model.kind === 'spider' ? SpiderAnim : HumanoidAnim;
+    const A = model.Anim || (model.kind === 'person' ? PersonAnim : model.kind === 'creature' ? CreatureAnim : model.kind === 'warg' ? QuadAnim : model.kind === 'spider' ? SpiderAnim : HumanoidAnim);
     this.anim = new A(this);
     this.flashV = 0; this.scale = o.scale || 1;
     this.group.scale.setScalar(this.scale);

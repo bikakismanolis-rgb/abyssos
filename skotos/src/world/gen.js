@@ -455,6 +455,19 @@ export function genTown() {
   }
   L.props.push({ t: 'bld', m: 'hMill', kit: 'building_windmill_red', x: MX, z: MZ, r: 0.25, s: 1.1, hw: 2.4, hd: 2.4 });
   L.props.push({ t: 'gate', x: CX, z: h - 6.5 });
+  // the west lane (Act III): from the north road between the Hall and the Manor, out through the palisade toward the
+  // Weeping Woods. Cut last, so everything else in the village stays where it was; only the stakes and trees on it go.
+  const before = L.cells.slice(), paintBefore = L.paint.slice();
+  carveLine(L, CX - 0.5, 27.6, 10, 27.4, 1.3, 0.9);
+  carveLine(L, 10, 27.4, 3, 27.2, 1.5, 0.9);
+  const lane = [];
+  for (let i = 0; i < w * h; i++) if ((L.cells[i] && !before[i]) || L.paint[i] > paintBefore[i] + 0.3) lane.push([i % w + 0.5, Math.floor(i / w) + 0.5]);
+  const clearR = { stake: 1.5, pine: 1.4, oak: 1.4, rock: 1.4, grass: 0.8 };
+  L.props = L.props.filter((p) => !clearR[p.t] || !lane.some(([x, z]) => Math.hypot(p.x - x, p.z - z) < clearR[p.t]));
+  L.dist = distField(L, 12);
+  L.exits.push({ x: 4.6, z: 27.3, to: 'weep', label: 'exit.weep', locked: 'act2' });
+  L.props.push({ t: 'lamp', x: 7.2, z: 25.4 });
+  L.lights.push({ x: 7.2, y: 2.2, z: 25.4, color: 0xffb060, intensity: 9, range: 9, flicker: 0.2 });
   L.spots.npcs = { wayfarer: { x: CX - 2.6, z: 20.5, r: 0.4 }, smith: { x: 24.6, z: 33.4, r: -1.2 }, healer: { x: 41.2, z: 35.6, r: 0.8 }, villagers: [{ x: 27, z: 43, r: 0.8 }, { x: 38, z: 45, r: -0.6 }, { x: 34, z: 27, r: 2.8 }] };
   return L;
 }

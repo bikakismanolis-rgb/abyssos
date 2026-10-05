@@ -4,7 +4,8 @@ import { G } from './state.js';
 import { CLASSES, SKILLS } from './data.js';
 import { IN, takeEvents } from '../core/input.js';
 import { basicAttack, useSkill, dodge, drinkPotion, updateAction, trailOn, nearestFoe } from './skills.js';
-import { tickStatus, moveMul } from './combat.js';
+import { tickStatus, moveMul, rootHero } from './combat.js';
+import { sapAt } from './sap.js';
 import { foes } from './actors.js';
 import { Trail, P } from '../gfx/fx.js';
 import { R } from '../gfx/gfx.js';
@@ -55,6 +56,14 @@ export function updatePlayer(dt) {
   }
   if (pl.act) { if (pl.act.name === 'basic' || pl.act.name === 'whirl') lastHit = Math.min(lastHit, 0.5); updateAction(dt); }
 
+  // amber sap: it slows the hero (moveMul), and staying in it for 1.5 s sets her fast (rootHero); out of it the build-up drains
+  const st = pl.status, airborne = (pl.y || 0) > 0.2 || (pl.act && (pl.act.name === 'roll' || pl.act.name === 'blink'));
+  pl.onSap = !airborne && sapAt(pl.x, pl.z);
+  if (pl.onSap && !(st.root > 0)) { st.stick += dt; if (st.stick >= 1.5) { st.stick = 0; rootHero(1.2); } }
+  else if (!pl.onSap) st.stick = Math.max(0, st.stick - dt * 3);
+  if ((st.root > 0) !== !!pl.amberTint) { pl.amberTint = st.root > 0; av.setTint(0xffb040, pl.amberTint ? 0.55 : 0); }
+  if (st.root > 0 && Math.random() < 0.4) P({ x: pl.x + (Math.random() - 0.5) * 0.7, y: Math.random() * 0.8, z: pl.z + (Math.random() - 0.5) * 0.7, vy: 0.2, life: 0.5, size: 0.12, size1: 0.02, color: 0xffd080 });
+
   // movement
   const m = moveMul(pl);
   let mx = IN.mx, mz = IN.mz;
@@ -90,6 +99,7 @@ export function updatePlayer(dt) {
   if (speed > 1 && !pl.act) { stepAcc += dt * speed; if (stepAcc > 2.4) { stepAcc = 0; Audio.sfx('footstep', { vol: 0.35 }); } }
   // buffs glow
   if (pl.buffs.cry > 0 && Math.random() < 0.3) P({ x: pl.x + (Math.random() - 0.5) * 0.8, y: Math.random() * 1.8, z: pl.z + (Math.random() - 0.5) * 0.8, vy: 1.2, life: 0.6, size: 0.1, size1: 0.02, color: 0xff6030 });
+  if (pl.buffs.memory > 0 && Math.random() < 0.25) P({ x: pl.x + (Math.random() - 0.5) * 0.9, y: Math.random() * 2, z: pl.z + (Math.random() - 0.5) * 0.9, vy: 0.7, life: 0.9, size: 0.09, size1: 0.02, color: 0xffe0a0, color1: 0xffa030 });
   if (pl.shield > 0 && Math.random() < 0.4) P({ x: pl.x + Math.sin(R.time * 5) * 0.7, y: 1 + Math.sin(R.time * 3) * 0.6, z: pl.z + Math.cos(R.time * 5) * 0.7, life: 0.4, size: 0.15, size1: 0.02, color: 0xffd080 });
   // hero light follows
   R.heroLight.position.set(pl.x, 2.6 + (pl.y || 0), pl.z + 0.4);

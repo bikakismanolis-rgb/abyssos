@@ -73,6 +73,18 @@ export const MONSTERS = {
   deadDwarf: { model: 'skeleton', hp: 0.9, dmg: 1.0, speed: 3.7, radius: 0.48, ai: 'melee', reach: 1.6, atk: 'slash1', atkTime: 1.15, flesh: 'bone', xp: 1.2, weapon: 'axe', style: 'undead', sfx: 'skeleton', rises: true, look: { scale: 0.86, tint: 0xd8b880, tintAmt: 0.2 } },
   stonewarden: { model: 'stonewarden', hp: 46, dmg: 2.0, speed: 3.6, radius: 1.6, ai: 'stonewarden', reach: 3.8, atk: 'smash', atkTime: 1.6, flesh: 'stone', xp: 80, boss: true, sfx: 'golem' },
   moltenKing: { model: 'moltenKing', hp: 72, dmg: 2.4, speed: 4.1, radius: 0.9, look: { scale: 1.55, rim: 0xff6a20, rimI: 0.4 }, ai: 'molten', reach: 3.9, atk: 'smash', atkTime: 1.5, flesh: 'magma', xp: 130, boss: true, weapon: 'hammer', style: 'heavy', sfx: 'golem' },
+  // Act III: the Weeping Woods and the Heartwood. 'wood' flesh shrugs off sap; flesh is slowed by it; floaters never touch it
+  hollowed: { model: 'hollowed', hp: 1.4, dmg: 1.15, speed: 3.6, radius: 0.5, ai: 'hollow', reach: 1.7, atk: 'claw', atkTime: 1.25, flesh: 'wood', xp: 1.8, style: 'undead', hunch: 0.15, deathSap: 1.5, wake: { d: 6, clip: 'riseStand', sfx: 'hollowCrack', t: 2.2 } },
+  rootling: { model: 'rootling', hp: 0.3, dmg: 0.5, speed: 6.2, radius: 0.35, ai: 'rootling', reach: 1.2, atk: 'bite', atkTime: 0.9, flesh: 'wood', xp: 0.6, burst: true },
+  amberMoth: { model: 'amberMoth', hp: 0.3, dmg: 0.5, speed: 6.8, radius: 0.4, ai: 'bat', reach: 1.1, atk: 'bite', atkTime: 0.9, flesh: 'chitin', xp: 0.5, sfx: 'moth', float: true, biteSlow: { k: 0.15, t: 1 }, deathDust: true, look: { rim: 0xffb040, rimI: 0.35 } },
+  amberBear: { model: 'amberBear', hp: 3.2, dmg: 1.8, speed: 5.6, radius: 1.0, ai: 'charger', reach: 2.2, atk: 'smash', atkTime: 1.6, flesh: 'flesh', xp: 5, sfx: 'bear', big: true },
+  rootsworn: { model: 'rootsworn', hp: 1.2, dmg: 1.15, speed: 4.4, radius: 0.5, ai: 'melee', reach: 2.3, atk: 'heavyStab', atkTime: 1.3, flesh: 'flesh', xp: 1.6, weapon: 'spear', wlook: { len: 2.0 }, style: 'heavy', spinEvery: 3 },
+  rootswornArcher: { model: 'rootswornArcher', hp: 0.85, dmg: 1.0, speed: 4.4, radius: 0.48, ai: 'skirmisher', reach: 13, atk: 'shoot', atkTime: 1.6, flesh: 'flesh', xp: 1.5, weapon: 'bow', wlook: { blade: 0x3a2a1a }, style: 'bow', proj: 'arrow' },
+  rootwarden: { model: 'rootwarden', hp: 4.5, dmg: 1.6, speed: 0, radius: 1.1, ai: 'rooted', reach: 4, atk: 'smash', atkTime: 3, flesh: 'wood', xp: 6, big: true, anchored: true },
+  mourner: { model: 'mourner', hp: 0.9, dmg: 0.8, speed: 4.2, radius: 0.45, ai: 'tether', reach: 11, atk: 'cast', atkTime: 3.2, flesh: 'spirit', xp: 2, sfx: 'wraith', float: true, look: { rim: 0xe8d8a8, rimI: 0.5 } },
+  heartroot: { model: 'heartroot', hp: 6, dmg: 1, speed: 0, radius: 0.9, ai: 'node', reach: 0, atk: 'cast', atkTime: 9, flesh: 'wood', xp: 3, big: true, anchored: true },
+  silverhorn: { model: 'silverhorn', hp: 52, dmg: 2.1, speed: 6.0, radius: 1.4, ai: 'silverhorn', reach: 4.6, atk: 'smash', atkTime: 1.6, flesh: 'flesh', xp: 110, boss: true, sfx: 'hart', look: { scale: 1.15, tint: 0xf0ece0, tintAmt: 0.15, rim: 0xffc060, rimI: 0.3 } },
+  amaranthe: { model: 'amaranthe', hp: 80, dmg: 2.5, speed: 4.4, radius: 0.9, ai: 'amaranthe', reach: 4.6, atk: 'heavyStab', atkTime: 1.5, flesh: 'wood', xp: 160, boss: true, weapon: 'spear', wlook: { len: 1.3 }, style: 'heavy', dieClip: 'kneel', look: { scale: 1.45, rim: 0xffb040, rimI: 0.5 } },
   // the ranger's companion
   spiritWolf: { model: 'spiritWolf', hp: 2, dmg: 1, speed: 7.5, radius: 0.55, ai: 'pet', reach: 1.7, atk: 'bite', atkTime: 0.8, flesh: 'spirit', xp: 0, pet: true }
 };
@@ -95,8 +107,31 @@ export const PACKS = {
   worms: [['deepworm', 2], ['caveBat', 2]],
   deep: [['stoneborn', 3], ['magmaHound', 2], ['ash', 2], ['caveBat', 2], ['stonebornArbalest', 1]],
   mine: [['spider', 3], ['caveBat', 3], ['deepworm', 0.6], ['spiderling', 2]],
-  deadDwarves: [['deadDwarf', 5], ['skeletonArcher', 1.5], ['wraith', 1]]
+  deadDwarves: [['deadDwarf', 5], ['skeletonArcher', 1.5], ['wraith', 1]],
+  // Act III
+  weepHollow: [['hollowed', 4], ['rootling', 3]],
+  weepDen: [['amberBear', 1], ['rootling', 2]],
+  weepMoths: [['amberMoth', 6]],
+  weepSentinels: [['rootsworn', 3], ['rootswornArcher', 2]],
+  weepMourners: [['mourner', 1], ['rootsworn', 2], ['hollowed', 2]],
+  weepWeepers: [['rootwarden', 1], ['hollowed', 2]],
+  weepMixed: [['hollowed', 3], ['rootswornArcher', 1.5], ['amberMoth', 2], ['rootling', 2]],
+  heartSleepers: [['hollowed', 4], ['rootling', 2]],
+  heartWarden: [['rootwarden', 1], ['hollowed', 2], ['rootling', 3]],
+  heartChoir: [['mourner', 2], ['rootsworn', 3], ['rootswornArcher', 1]],
+  heartDeep: [['hollowed', 3], ['rootsworn', 2], ['rootswornArcher', 1.5], ['amberBear', 0.4], ['mourner', 0.5]]
 };
+// packs built around one creature: it comes first, exactly once (or the count given), and the rest are drawn without it
+export const PACK_LEAD = { weepDen: ['amberBear'], weepWeepers: ['rootwarden'], weepMourners: ['mourner'], heartWarden: ['rootwarden'], heartChoir: ['mourner', 'mourner'] };
+// packs whose Hollowed wait in disguise (dead trees, amber cocoons) until the hero is close
+export const PACK_DORMANT = { weepHollow: true, heartSleepers: true };
+// the kinds to spawn for a pack of n: the leads, then weighted picks of the rest (pick = rand.weighted)
+export function packKinds(tag, n, pick) {
+  const lead = PACK_LEAD[tag] || [], w = (PACKS[tag] || PACKS.goblins).filter(([k]) => !lead.includes(k));
+  const out = lead.slice(0, n);
+  while (out.length < n) out.push(pick(w.length ? w : PACKS[tag]));
+  return out;
+}
 // beacon blessings: when a shard is laid on the beacon and another fire answers, the flame gives one of three, for good
 export const BOONS = {
   1: [
@@ -108,8 +143,15 @@ export const BOONS = {
     { id: 'forge', icon: 'fire', stats: { eliteDmg: 20, area: 10 } },
     { id: 'anvil', icon: 'shield', stats: { armorPct: 20, thorns: 40 } },
     { id: 'rune', icon: 'star', stats: { cdr: 8, resRegen: 20 } }
+  ],
+  3: [
+    { id: 'amber', icon: 'potion', stats: { lifeOnHit: 15, regen: 10 } },
+    { id: 'hart', icon: 'leap', stats: { crit: 5, move: 6 } },
+    { id: 'root', icon: 'shield', stats: { block: 10, lifePct: 8 } }
   ]
 };
+// timed hero buffs granted by the world (shrines live in world.js): seconds and what they do
+export const BUFFS = { memory: { dur: 60, dmg: 0.12, move: 0.08 } };
 export const BOON = Object.fromEntries(Object.values(BOONS).flat().map((b) => [b.id, b]));
 // elite affixes
 export const AFFIXES = ['fast', 'vampiric', 'molten', 'frozen', 'shielding', 'teleporter', 'thunder', 'horde', 'armored'];
