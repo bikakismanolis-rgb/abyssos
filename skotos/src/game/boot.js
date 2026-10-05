@@ -5,7 +5,7 @@ import { initGfx, R, frame as gfxFrame, render, updateCamera, adaptResolution, s
 import { initFX, updateFX, glowBurst, ring, P, clearFX } from '../gfx/fx.js';
 import { loadKits } from '../gfx/kits.js';
 import { loadPeople } from '../gfx/people.js';
-import { loadCreatures, hasCreature } from '../gfx/creatures.js';
+import { loadCreatures, hasCreature, creatureCount } from '../gfx/creatures.js';
 import { loadEnv, loadPack } from '../gfx/env.js';
 import { WIND } from '../world/build.js';
 import { initInput, pollInput, takeEvents, IN } from '../core/input.js';
@@ -38,7 +38,9 @@ window.addEventListener('error', (e) => fatal((e.message || e.error) + (e.filena
 window.addEventListener('unhandledrejection', (e) => fatal('promise: ' + (e.reason && e.reason.message || e.reason)));
 
 export async function boot(q) {
-  const loading = document.createElement('div'); loading.id = 'loading'; loading.textContent = 'ΣΚΟΤΟΣ'; document.body.appendChild(loading);
+  // the loading screen is in index.html; each finished part moves its bar
+  const B = window.__boot, step = (p, text) => B?.set(p, text);
+  step(0.12, 'Φόρτωση του κόσμου');
   loadSave();
   setLang(G.settings.lang || (navigator.language?.startsWith('el') ? 'el' : (G.save.heroes.length ? 'el' : 'el')));
   const mobile = matchMedia('(pointer: coarse)').matches || /Android|iPhone|iPad/i.test(navigator.userAgent);
@@ -50,11 +52,17 @@ export async function boot(q) {
   initOverlay(); buildHud(); initPanels();
   const fade = document.createElement('div'); fade.id = 'fade'; document.getElementById('app').appendChild(fade);
   const scr = document.createElement('div'); scr.id = 'screen'; scr.hidden = true; document.getElementById('app').appendChild(scr);
-  await Promise.all([loadKits(['dungeon', 'grave', 'town']), loadPeople(), loadCreatures(), loadEnv(G.settings.quality).then(() => Promise.all([loadPack('village'), G.settings.quality >= 1 && loadPack('trees')]))]);
+  const parts = 5 + creatureCount('act1');
+  let done = 0;
+  const part = (pr) => Promise.resolve(pr).then((v) => { done++; step(0.12 + 0.83 * done / parts); return v; });
+  await Promise.all([
+    part(loadKits(['dungeon', 'grave', 'town'])), part(loadPeople()), loadCreatures('act1', () => part()),
+    part(loadEnv(G.settings.quality)).then(() => Promise.all([part(loadPack('village')), part(G.settings.quality >= 1 && loadPack('trees'))]))
+  ]);
   // code-built fallbacks only for monsters without a realistic model
   preloadModels(['goblin', 'skeleton', 'warg', 'spider'].filter((m) => !hasCreature(m)));
   buildTitleScene();
-  loading.remove();
+  B?.done();
   window.__ready = true; window.__G = G; window.__R = R;
   window.__D = { emit, enterZone, refreshStats, openPanel, closePanel, IN, spawnMonster, t, kill: (a) => damage(G.player, a, 1e9, { crit: false }) };
   if (q.has('auto')) { // test hook: jump straight into a zone

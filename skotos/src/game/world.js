@@ -51,7 +51,7 @@ export function farFire(p, color = 0xffa040) {
 export function zoneReady(id) {
   const p = ZONES[id]?.pack;
   if (!p) return Promise.resolve();
-  return p === 'wood' ? Promise.all([loadPack('wood'), loadFolk('grove'), loadCreatures()]) : Promise.all([loadPack(p), loadFolk()]);
+  return p === 'wood' ? Promise.all([loadPack('wood'), loadFolk('grove'), loadCreatures('act3')]) : Promise.all([loadPack(p), loadFolk(), loadCreatures('act2')]);
 }
 
 function seedFor(id) {

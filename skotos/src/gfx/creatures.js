@@ -29,19 +29,26 @@ const CAST = {
 };
 
 export const CREATURES = { tpl: {}, ready: false };
-let loading = null;
-export function loadCreatures() {
-  if (loading) return loading;
-  const names = [...new Set(Object.values(CAST).map((c) => c[0]))].filter((n) => URLS[n]);
-  const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
-  loading = Promise.all(names.map(async (n) => {
+// each act's creatures load with its zones (Act I's at start-up); no argument loads every creature (the debug views)
+const ACT_FILES = {
+  act1: ['goblin', 'skeleton', 'wolf', 'spider', 'ashspawn', 'troll', 'wight', 'barrowlord'],
+  act2: ['magmahound', 'bat', 'worm', 'golem'],
+  act3: ['elk', 'bear', 'moth', 'mandrake', 'treeman']
+};
+const loads = {};
+function loadFile(n) {
+  return (loads[n] ||= (async () => {
     try {
-      const gltf = await loader.parseAsync(await bytes(await URLS[n]()), '');
+      const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(await bytes(await URLS[n]()), '');
       CREATURES.tpl[n] = prepare(gltf);
     } catch (e) { console.warn('creature ' + n + ' failed to load', e); }
-  })).then(() => { CREATURES.ready = true; });
-  return loading;
+  })());
 }
+export function loadCreatures(set, onFile) {
+  const names = (set ? ACT_FILES[set] : [...new Set(Object.values(CAST).map((c) => c[0]))]).filter((n) => URLS[n]);
+  return Promise.all(names.map((n) => loadFile(n).then(() => onFile?.()))).then(() => { CREATURES.ready = true; });
+}
+export const creatureCount = (set) => ACT_FILES[set].filter((n) => URLS[n]).length;
 export const hasCreature = (model) => !!(CAST[model] && CREATURES.tpl[CAST[model][0]]);
 
 function prepare(gltf) {
