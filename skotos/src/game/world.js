@@ -394,7 +394,7 @@ function act3Zone(z) {
     const g = L.spots.rootGate;
     if (g) { A.gate = put(z, act3Prop('rootGate'), g.x, g.z); A.gate.userData.setOpen(!!F.hart); if (F.hart) z.map.open(g.cells); }
     // Silverhorn guards the Glade of Stones; once it has fallen it is the white tree there, and the gate stays open
-    if (F.hart) { const w = F.hartAt || { x: L.spots.glade.x, z: L.spots.glade.z + 1 }; A.whiteTree = put(z, act3Prop('whiteTree'), w.x, w.z); }
+    if (F.hart) { const w = F.hartAt || { x: L.spots.glade.x, z: L.spots.glade.z + 1 }; A.whiteTree = put(z, act3Prop('whiteTree'), w.x, w.z); echoAt(z, 'silverhorn', w.x, w.z); }
     else z.bossSpot = { kind: 'silverhorn', x: L.boss.x, z: L.boss.z };
     // Elati and Old Linden in the Lanternglade; after the First Autumn Linden is a tree and the Lady's sapling grows at her feet
     npc('elati', L.spots.npcs.elati); npc('linden', L.spots.npcs.linden);
@@ -417,11 +417,18 @@ function act3Zone(z) {
       // sleepers in amber in the four alcoves, for the Lady to wake (pushed back against the wall, clear of the Heartroots)
       A.cocoons = (L.spots.alcoves || []).map((s) => { const a = Math.atan2(s.x - H.x, s.z - H.z); return put(z, act3Prop('cocoon'), s.x + Math.sin(a) * 1.3, s.z + Math.cos(a) * 1.3, a + Math.PI); });
       z.bossSpot = { kind: 'amaranthe', x: L.boss.x, z: L.boss.z };
-    } else A.sapling = put(z, act3Prop('sapling'), L.boss.x, L.boss.z);
+    } else { A.sapling = put(z, act3Prop('sapling'), L.boss.x, L.boss.z); echoAt(z, 'amaranthe', L.boss.x, L.boss.z); }
     npc('elati', L.spots.npcs.elati);
     const ch = (L.chambers || []).slice().sort((a, b) => b.z - a.z);
     z.voices = voice(ch, 'd.lady.h').concat([{ x: H.x, z: H.z, r: 26, key: 'd.lady.h6' }]);
   }
+}
+// a fallen boss's tree keeps the memory of the fight: touched, it lets an amber echo of the boss rise to be fought again
+// (story.js 'echo'); like the small Tears, once a day
+function echoAt(z, boss, x, zz) {
+  const it = { kind: 'echo', boss, x, z: zz, r: 2.8, prompt: boss === 'silverhorn' ? 'echo.hart' : 'echo.lady' };
+  it.use = () => emit('echo', it, z);
+  z.interact.push(it);
 }
 // who is where depends on the story so far; zones are kept between visits, so this runs on every entry (and at the
 // First Autumn). In the wood Elati is at the Lanternglade until she goes down to the Heartwood, and back after the Autumn.

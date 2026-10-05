@@ -9,6 +9,7 @@ import { dropShard } from './pickups.js';
 import { writeSave } from './save.js';
 import Audio from '../audio/audio.js';
 import { grantBuff } from './stats.js';
+import { spawnMonster } from './actors.js';
 import { act3Prop } from '../world/build.js';
 import { openDeepGate, FAR_BEACONS, farFire, openRootGate, witherWall, firstAutumn, growProp } from './world.js';
 
@@ -112,6 +113,15 @@ on('zoneEnter', (id, z) => {
 on('voice', (key) => say(key));
 
 on('kill', (a) => {
+  // an echo fades back into the amber it came from: the fight is real, the story is not touched
+  if (a.echo) {
+    G.bossActor = null;
+    emit('bossDown', a);
+    later(1.2, () => { if (G.zone?.actors.includes(a)) { glowBurst(a.x, 1.2, a.z, 0xffc060, 40, 3, 0.3, 1); ring(a.x, a.z, 3, 0xffc060, 0.7); } });
+    later(2.2, () => emit('toast', t('echo.done'), 'quest'));
+    writeSave();
+    return;
+  }
   if (a.kind === 'weaver' && G.zone.id === 'forest') {
     G.bossActor = null;
     emit('bossDown', a);
@@ -261,6 +271,25 @@ function checkTears() {
     later(1.4, () => { say('d.linden.bellow'); setQuest(13); });
   });
 }
+
+// a boss's tree remembers the fight (world.js echoAt): an amber echo of the boss rises across from the hero
+on('echo', (it, z) => {
+  if (it.used || G.mode !== 'play' || G.zone !== z || (z.boss && !z.boss.dead)) return;
+  it.used = true;
+  const k = it.boss, pl = G.player, away = Math.atan2(it.x - pl.x, it.z - pl.z), d = k === 'silverhorn' ? 8 : 5;
+  const s = z.map.nearestFloor(it.x + Math.sin(away) * d, it.z + Math.cos(away) * d, 4);
+  Audio.sting('memory');
+  glowBurst(it.x, 1.7, it.z, 0xffc060, 40, 3, 0.3, 1); ring(it.x, it.z, 3, 0xffc060, 0.8);
+  emit('toast', t('echo.rise'), 'quest');
+  later(1.4, () => {
+    if (G.zone !== z) { it.used = false; return; }
+    glowBurst(s.x, 1.5, s.z, 0xffc060, 50, 4, 0.35, 1); ring(s.x, s.z, 5, 0xffd080, 1); shake(0.3);
+    const b = spawnMonster(k, s.x, s.z, { level: Math.max(z.level + (k === 'silverhorn' ? 2 : 3), G.hero.level + 1) });
+    b.echo = true; b.rot = Math.atan2(G.player.x - b.x, G.player.z - b.z);
+    b.baseTint = 0xffc870; b.baseTintAmt = 0.4; b.avatar?.setTint(b.baseTint, b.baseTintAmt); b.avatar?.setRim?.(0xffd070, 1.4);
+    z.actors.push(b); z.boss = b;
+  });
+});
 
 // ---------- the beacon flares when a shard is fed to it, and another fire answers ----------
 const BEACON = {

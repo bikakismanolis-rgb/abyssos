@@ -284,6 +284,25 @@ const S = {
     await pg.waitForTimeout(2500); await shot();
     return pg.evaluate(async (o) => { const G = window.__G, z = G.zone, B = await import('/src/world/build.js'), F = await import('/src/gfx/fx.js'); return { ...o, boss: z.boss?.dead, autumn: G.hero.flags.autumn, quest: G.hero.quest, wind: +B.WIND.uWind.value.toFixed(2), dry: +B.WIND.uAutumn.value.toFixed(2), beat: +F.FX.beat.toFixed(2), sapling: !!z.act3.sapling, elati: z.actors.some((a) => a.npc === 'elati'), mode: G.mode, panel: G.panel, shardLeft: G.pickups.some((p) => p.kind === 'shard') }; }, { p0, p1, p2, words });
   } },
+  // after the story: the white tree and the Lady's sapling each raise an amber echo of their boss, fought again without story
+  echo: { q: 'auto=weep&sim=6&q=1&norender&lvl=20&cls=' + (process.env.CLS || 'warden'), run: async (pg, shot) => {
+    const out = {};
+    for (const zid of ['weep', 'heart']) {
+      await pg.evaluate((zid) => { const G = window.__G; window.__immortal = true; G.hero.quest = 16; Object.assign(G.hero.flags, { hart: true, autumn: true, thorn0: true, thorn1: true, thorn2: true }); window.__D.enterZone(zid, { fresh: true }); G.player.hp = G.player.hpMax = 99999; for (const p of G.zone.packs) p.spawned = true; }, zid);
+      await pg.waitForTimeout(1500);
+      const before = await pg.evaluate(() => { const G = window.__G, z = G.zone, it = z.interact.find((i) => i.kind === 'echo'); if (!it) return { echo: false }; const f = z.map.nearestFloor(it.x, it.z + 2); G.player.x = f.x; G.player.z = f.z; it.use(); it.use(); return { echo: it.boss, prompt: window.__D.t(it.prompt), extra: z.extra.length, foes: z.actors.filter((a) => a.boss).length }; });
+      await pg.waitForTimeout(3500); await shot();
+      const spawned = await pg.evaluate(() => { const G = window.__G, b = G.zone.boss; return b && { kind: b.kind, echo: b.echo, awake: b.awake, bar: G.bossActor === b, bosses: G.zone.actors.filter((a) => a.boss).length, d: +Math.hypot(b.x - G.player.x, b.z - G.player.z).toFixed(1) }; });
+      for (let k = 0; k < 14; k++) {
+        const st = await pg.evaluate(() => { const G = window.__G, b = G.zone.boss; if (!b || b.dead) return 'dead'; for (const n of b.nodes || []) if (!n.dead) { window.__D.kill(n); return 'node'; } b.hidden = false; b.ward = 0; if (!b.rooted && !b.goingHome) { b.invuln = 0; window.__D.kill(b); } return b.dead ? 'dead' : 'hit'; });
+        if (st === 'dead') break;
+        await pg.waitForTimeout(1200);
+      }
+      await pg.waitForTimeout(4000); await shot();
+      out[zid] = await pg.evaluate((o) => { const G = window.__G, z = G.zone, it = z.interact.find((i) => i.kind === 'echo'); return { ...o, dead: z.boss?.dead, bar: !!G.bossActor, quest: G.hero.quest, hart: G.hero.flags.hart, autumn: G.hero.flags.autumn, used: it?.used, extra: z.extra.length, shard: G.pickups.some((p) => p.kind === 'shard'), dialog: !document.querySelector('#dialog')?.hidden, mode: G.mode, loot: G.pickups.filter((p) => p.item).length }; }, { before, spawned });
+    }
+    return out;
+  } },
   // the third shard on the beacon: the green-gold fire no hand lit, Isarn's lantern, his partial confession, the act panel, the blessing
   ending3: { q: 'auto=town&sim=1&q=1&norender&lvl=20', run: async (pg, shot) => {
     await pg.evaluate(() => { const G = window.__G; G.hero.quest = 15; G.hero.act1 = 1; G.hero.act2 = 1; G.hero.boons = ['ember', 'forge']; Object.assign(G.hero.flags, { act1: true, act2: true, hart: true, autumn: true }); });
