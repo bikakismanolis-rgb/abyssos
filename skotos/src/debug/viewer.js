@@ -49,10 +49,19 @@ export async function startViewer(q) {
     'p:stonebornArb': () => { const a = new Avatar(personModel('stonebornArb'), { style: 'bow' }); a.hold('R', 'crossbow', {}); return a; },
     'p:runepriest': () => { const a = new Avatar(personModel('runepriest'), { style: 'staff' }); a.hold('R', 'staff', { gem: 0xff8a30, wood: 0x3a3028 }); return a; },
     'p:moltenKing': () => { const a = new Avatar(personModel('moltenKing'), { style: 'heavy' }); a.hold('R', 'hammer', { head: 0x2a2220, glow: 0.9, rune: 0xff6a10 }); return a; },
-    'p:brokka': () => { const a = new Avatar(personModel('brokka'), { style: 'none', animSet: 'npc' }); a.hold('R', 'hammer', {}); return a; }
+    'p:brokka': () => { const a = new Avatar(personModel('brokka'), { style: 'none', animSet: 'npc' }); a.hold('R', 'hammer', {}); return a; },
+    // Act III's Evergreen (grove.glb); weapons are stand-ins until the game's spear exists
+    'p:elati': () => { const a = new Avatar(personModel('elati'), { style: 'bow', animSet: 'npc' }); a.hold('R', 'bow', {}); return a; },
+    'p:linden': () => new Avatar(personModel('linden'), { animSet: 'npc' }),
+    'p:rootsworn': () => { const a = new Avatar(personModel('rootsworn'), { style: 'heavy' }); a.hold('R', 'spear', {}); return a; },
+    'p:rootswornArcher': () => { const a = new Avatar(personModel('rootswornArcher'), { style: 'bow' }); a.hold('R', 'bow', {}); return a; },
+    'p:hollowed': () => new Avatar(personModel('hollowed'), { style: 'undead', hunch: 0.15 }),
+    'p:mourner': () => new Avatar(personModel('mourner'), { style: 'staff' }),
+    'p:amaranthe': () => { const a = new Avatar(personModel('amaranthe'), { style: 'heavy' }); a.hold('R', 'spear', {}); return a; }
   };
   if (list.some((n) => n.startsWith('p:'))) await loadPeople();
   if (list.some((n) => /^p:(stoneborn|runepriest|brokka|moltenKing)/.test(n))) await loadFolk();
+  if (list.some((n) => /^p:(elati|linden|rootsworn|hollowed|mourner|amaranthe)/.test(n))) await loadFolk('grove');
   // &sheet=slash1,slash2,...: one copy of the first model per clip, each posed at the clip's strike (or &t)
   const sheet = q.get('sheet') ? q.get('sheet').split(',') : null;
   if (sheet) { const m = list[0]; list.length = 0; for (const c of sheet) list.push(m); }

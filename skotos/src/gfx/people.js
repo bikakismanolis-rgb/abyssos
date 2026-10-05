@@ -8,8 +8,10 @@ import { clamp, damp, smooth } from '../core/util.js';
 import { ANIMS } from './anims.data.js';
 import peopleUrl from '../assets/people.glb?url';
 import movesUrl from '../assets/moves.bin?url';
-// Act II's dwarves (tools/creatures/act2/folk.mjs), loaded with the zones that need them
-const FOLK = Object.values(import.meta.glob('../assets/folk.glb', { query: '?url', import: 'default', eager: true }))[0];
+// extra sets of people, each loaded with the zones that need it (tools/creatures/act2/folk.mjs builds both):
+// 'folk' = Act II's dwarves (folk.glb), 'grove' = Act III's Evergreen (grove.glb)
+const SET_URLS = Object.fromEntries(Object.entries(import.meta.glob(['../assets/folk.glb', '../assets/grove.glb'], { query: '?url', import: 'default', eager: true }))
+  .map(([path, url]) => [path.match(/(\w+)\.glb$/)[1], url]));
 
 export const PEOPLE = { scenes: {}, moves: null, ready: false };
 
@@ -52,11 +54,12 @@ async function addScenes(glb) {
     PEOPLE.scenes[s.name] = s;
   }
 }
-let folk = null;
-export function loadFolk() {
-  if (!FOLK) return Promise.resolve();
-  folk ||= loadPeople().then(async () => addScenes(await bytes(FOLK))).catch((e) => console.warn('folk failed to load', e));
-  return folk;
+const sets = {};
+export function loadFolk(set = 'folk') {
+  const url = SET_URLS[set];
+  if (!url) return Promise.resolve();
+  sets[set] ||= loadPeople().then(async () => addScenes(await bytes(url))).catch((e) => console.warn(set + ' failed to load', e));
+  return sets[set];
 }
 export const hasPerson = (name) => !!PEOPLE.scenes[name];
 
