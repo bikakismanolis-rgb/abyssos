@@ -26,3 +26,9 @@ The contract every creature follows, which `src/gfx/creatures.js` relies on:
 | act2 | folk.glb (people, not creatures) | Quaternius characters (CC0) re-proportioned into dwarves; "lava monster" by Satwik.Bandi (CC-BY 4.0) rebound onto the people's skeleton as the Molten King (`folk.mjs`) |
 
 The Act II scripts need no Blender: `lib.mjs` normalises a model (Y up, facing +Z, feet on y=0), copies and time-windows its clips, and writes procedural clips as rotations about body axes layered on a base clip.
+| act3 | elk.glb | "Realistic Animated Elk 3D Model" by WildMesh_3D (CC-BY 4.0): Silverhorn, the White Hart. Coat graded to birch-white, antlers rebound into the skinned mesh and turned to glowing amber, amber tears; gore, rear-and-stamp, rear, bellow, paw and hit made here; `leap` posed at `leapApex` for the frozen deer |
+| act3 | bear.glb | "Realistic Animated Bear 3D Model" by WildMesh_3D (CC-BY 4.0): the Amberback Bear. Amber resin over the back; `charge` and `daze` extras; torso skin reweighted so no sheets open between legs and body |
+| act3 | moth.glb | "Animated Peacock Moth" by OsianOHM (CC-BY 4.0): decimated from 61k to about 3k triangles, re-tinted amber; bat conventions |
+| act3 | mandrake.glb | "Mandrake" by timsblends (CC-BY 4.0): the rootlings. Re-graded towards the realistic look; `rise` from 0.7 m underground, the shriek, a fast scuttle |
+| act3 | treeman.glb | "Treeman" by bumstrum / DJMaesen (CC-BY 4.0): the Rootwarden turret. Amber light in the bark cracks; `dormant`, `rise`, lash, spikes, weep |
+| act2 | grove.glb (people) | `node folk.mjs --set=grove`: the Evergreen (Elati, Linden, the Rootsworn and archers, the Hollowed, the Mourners, Amaranthe) from the Quaternius characters (CC0) with the ELF proportion table; bark from Poly Haven bark_brown_02 (CC0), read from the download folder (`/tmp/claude-0/ph/tex/bark_brown_02`) |
