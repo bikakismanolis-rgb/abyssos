@@ -120,6 +120,26 @@ function beaconScene(act = 1) {
     end: () => emit('dialog', { who: 'wayfarer', lines: after, end: () => actComplete(act) })
   });
 }
+// a beacon blessing for each act, chosen once (heroes from before the blessings get theirs on their next return)
+export function offerBoons() {
+  const h = G.hero; if (!h) return false;
+  h.boons ||= [];
+  // never over a cinematic or another panel: try again in a moment
+  if (G.mode !== 'play' || G.panel) { later(2, offerBoons); return false; }
+  for (const act of [1, 2]) {
+    const done = act === 1 ? h.act1 >= 0 : (h.act2 ?? -1) >= 0;
+    if (done && !h.boons[act - 1]) { emit('openPanel', 'boon', { act }); return true; }
+  }
+  return false;
+}
+on('actClosed', () => later(0.6, offerBoons));
+on('boonTaken', (id) => {
+  const p = G.player; if (!p) return;
+  Audio.sfx('beaconIgnite', { vol: 0.6 });
+  glowBurst(p.x, 1.2, p.z, 0xffb050, 30, 4, 0.4, 0.9);
+  ring(p.x, p.z, 3.2, 0xffa040, 0.7);
+  emit('toast', t('boon.taken', t('boon.' + id)), 'quest');
+});
 function actComplete(act) {
   const h = G.hero;
   if (act === 1) { h.act1 = Math.max(h.act1, h.diff); h.quest = 5; h.flags.act1 = true; }

@@ -170,6 +170,23 @@ const S = {
     await pg.waitForTimeout(1500); await shot();
     return pg.evaluate(() => { const G = window.__G; return { quest: G.hero.quest, act2: G.hero.act2, panel: G.panel, mode: G.mode, extras: G.zone.extra.length }; });
   } },
+  // the beacon's blessing after Act I, then an Act I veteran from before the blessings gets the Act II one on load
+  boons: { q: 'auto=town&sim=3&q=1&norender&lvl=9', run: async (pg, shot) => {
+    const before = await pg.evaluate(() => ({ dmg: window.__G.stats.dmgMult, life: window.__G.stats.lifeMax }));
+    await pg.evaluate(() => { const G = window.__G; G.hero.act1 = 0; window.__D.emit('openPanel', 'boon', { act: 1 }); });
+    await pg.waitForTimeout(800); await shot();
+    await pg.keyboard.press('Escape'); await pg.waitForTimeout(1500);
+    const still = await pg.evaluate(() => window.__G.panel);
+    await pg.click('[data-a="boon:ember"]'); await pg.waitForTimeout(1200); await shot();
+    const after = await pg.evaluate(() => ({ dmg: window.__G.stats.dmgMult, life: window.__G.stats.lifeMax, boons: window.__G.hero.boons, panel: window.__G.panel }));
+    await pg.evaluate(() => { const G = window.__G; G.hero.act2 = 0; window.__D.emit('actClosed'); });
+    await pg.waitForTimeout(1500); await shot();
+    const second = await pg.evaluate(() => ({ panel: window.__G.panel, timers: window.__G.timers.length, mode: window.__G.mode, act2: window.__G.hero.act2, boons: window.__G.hero.boons }));
+    if (second.panel !== 'boon') return { before, still, after, second };
+    await pg.click('[data-a="boon:anvil"]'); await pg.waitForTimeout(600);
+    await pg.evaluate(() => window.__D.openPanel('inventory')); await pg.waitForTimeout(600); await shot();
+    return pg.evaluate((o) => ({ ...o, final: window.__G.hero.boons, armor: window.__G.stats.armor }), { before, still, after, second });
+  } },
   title: { q: 'sim=1&q=' + (process.env.Q || '1'), run: async (pg, shot) => {
     await pg.waitForTimeout(2500); await shot();
     await pg.mouse.click(640, 360); await pg.waitForTimeout(1500); await shot();
