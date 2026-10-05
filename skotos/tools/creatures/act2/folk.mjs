@@ -10,6 +10,7 @@ import { MeshoptEncoder, MeshoptDecoder } from 'meshoptimizer';
 import sharp from 'sharp';
 import * as THREE from 'three';
 import { statSync } from 'node:fs';
+import { load, normalise, dropLoose, locals, worlds } from './lib.mjs';
 
 const [PEOPLE = new URL('../../../src/assets/people.glb', import.meta.url).pathname, OUT = new URL('../../../src/assets/folk.glb', import.meta.url).pathname] = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 await MeshoptDecoder.ready; await MeshoptEncoder.ready;
@@ -119,16 +120,17 @@ function morph(doc, M) {
     for (const prim of mesh.listPrimitives()) {
       const Pa = prim.getAttribute('POSITION'), Na = prim.getAttribute('NORMAL'), J = prim.getAttribute('JOINTS_0'), Wt = prim.getAttribute('WEIGHTS_0');
       const pos = new Float32Array(Pa.getCount() * 3), nor = Na ? new Float32Array(Na.getCount() * 3) : null;
-      const e = [], je = [], we = [], v = new THREE.Vector3(), n = new THREE.Vector3();
+      const e = [], ne = [], je = [], we = [], v = new THREE.Vector3(), n = new THREE.Vector3(), acc = new THREE.Vector3(), nacc = new THREE.Vector3();
+      // normals move with the inverse transpose of each blended transform
+      const XB = js.map((jt, k) => X.get(jt).clone().multiply(B[k])), NB = XB.map((m) => new THREE.Matrix3().setFromMatrix4(m).invert().transpose());
       for (let i = 0; i < Pa.getCount(); i++) {
         Pa.getElement(i, e); J.getElement(i, je); Wt.getElement(i, we);
-        const acc = new THREE.Vector3(), nacc = new THREE.Vector3();
-        if (Na) Na.getElement(i, e.length ? [] : []);
+        if (Na) Na.getElement(i, ne);
+        acc.set(0, 0, 0); nacc.set(0, 0, 0);
         for (let k = 0; k < 4; k++) {
           if (!we[k]) continue;
-          const jt = js[je[k]], bw = v.fromArray(Pa.getElement(i, [])).applyMatrix4(B[je[k]]).applyMatrix4(X.get(jt));
-          acc.addScaledVector(bw, we[k]);
-          if (Na) { const nn = n.fromArray(Na.getElement(i, [])).transformDirection(B[je[k]]); const lin = new THREE.Matrix3().setFromMatrix4(X.get(jt)).invert().transpose(); nacc.addScaledVector(nn.applyMatrix3(lin), we[k]); }
+          acc.addScaledVector(v.fromArray(e).applyMatrix4(XB[je[k]]), we[k]);
+          if (Na) nacc.addScaledVector(n.fromArray(ne).applyMatrix3(NB[je[k]]), we[k]);
         }
         acc.toArray(pos, i * 3);
         if (nor) nacc.normalize().toArray(nor, i * 3);
@@ -150,20 +152,141 @@ function morph(doc, M) {
   }
 }
 
+// ---------- another rig's body on this skeleton ----------
+// Mixamo bone -> UE bone. The model's arms are first swung into the UE T-pose (shortest arc per bone, so a hanging
+// A-pose arm comes up level), its skin is set in that pose, and the UE bones are placed on its joints keeping their
+// own rest rotations, so the shared clips drive it like any other person.
+const MIXAMO = { Hips: 'pelvis', Spine: 'spine_01', Spine1: 'spine_02', Spine2: 'spine_03', Neck: 'neck_01', Head: 'Head' };
+for (const [m, u] of [['Left', 'l'], ['Right', 'r']]) {
+  Object.assign(MIXAMO, { [m + 'Shoulder']: 'clavicle_' + u, [m + 'Arm']: 'upperarm_' + u, [m + 'ForeArm']: 'lowerarm_' + u, [m + 'Hand']: 'hand_' + u,
+    [m + 'UpLeg']: 'thigh_' + u, [m + 'Leg']: 'calf_' + u, [m + 'Foot']: 'foot_' + u, [m + 'ToeBase']: 'ball_' + u, [m + 'Toe_End']: 'ball_leaf_' + u });
+  for (const [f, uf] of [['Thumb', 'thumb'], ['Index', 'index'], ['Middle', 'middle'], ['Ring', 'ring'], ['Pinky', 'pinky']])
+    for (let i = 1; i <= 4; i++) MIXAMO[m + 'Hand' + f + i] = uf + (i < 4 ? '_0' + i + '_' : '_04_leaf_') + u;
+}
+const ALIGN = [['LeftArm', 'LeftForeArm'], ['LeftForeArm', 'LeftHand'], ['LeftHand', 'LeftHandMiddle1'], ['RightArm', 'RightForeArm'], ['RightForeArm', 'RightHand'], ['RightHand', 'RightHandMiddle1']];
+async function rebind(doc, R) {
+  const root = doc.getRoot(), sc = root.getDefaultScene();
+  const { W, P } = worldOf(sc);
+  const ue = new Map(); sc.traverse((n) => { if (!n.getMesh()) ue.set(n.getName(), n); });
+  const ueJoints = root.listSkins()[0].listJoints();
+  // the body to carry
+  const md = await load(R.body);
+  dropLoose(md);
+  normalise(md, { height: R.height });
+  const mroot = md.getRoot(), mskin = mroot.listSkins()[0], mj = mskin.listJoints();
+  const base = (n) => n.getName().replace(/^mixamorig:/, '').replace(/_\d+$/, '');
+  const byBase = new Map(mj.map((j) => [base(j), j]));
+  const Wm = worlds(md, locals(md, null, 0));
+  const pos = (m) => new THREE.Vector3().setFromMatrixPosition(m);
+  // swing the arms level
+  const under = (j) => { const out = []; const v = (n) => { out.push(n); for (const c of n.listChildren()) v(c); }; v(j); return out; };
+  for (const [a, b] of ALIGN) {
+    const ja = byBase.get(a), jb = byBase.get(b); if (!ja || !jb) continue;
+    const pa = pos(Wm.get(ja)), dm = pos(Wm.get(jb)).sub(pa).normalize();
+    const ua = ue.get(MIXAMO[a]), ub = ue.get(MIXAMO[b]);
+    const du = pos(W.get(ub)).sub(pos(W.get(ua))).normalize();
+    const q = new THREE.Quaternion().setFromUnitVectors(dm, du);
+    const M = new THREE.Matrix4().makeTranslation(pa.x, pa.y, pa.z).multiply(new THREE.Matrix4().makeRotationFromQuaternion(q)).multiply(new THREE.Matrix4().makeTranslation(-pa.x, -pa.y, -pa.z));
+    for (const n of under(ja)) Wm.set(n, M.clone().multiply(Wm.get(n)));
+  }
+  // where each UE bone goes: on its Mixamo joint, else carried along from its parent at the body's scale
+  const toUE = new Map(); for (const j of mj) if (MIXAMO[base(j)] && ue.has(MIXAMO[base(j)])) toUE.set(MIXAMO[base(j)], j);
+  const k = R.height / 1.85, Wn = new Map();
+  const place = (n) => {
+    const w = W.get(n), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(); w.decompose(p, q, s);
+    const par = P.get(n), m = toUE.get(n.getName());
+    if (m) p.copy(pos(Wm.get(m)));
+    else if (par && Wn.has(par)) p.copy(pos(Wn.get(par)).add(pos(w).sub(pos(W.get(par))).multiplyScalar(k)));
+    Wn.set(n, new THREE.Matrix4().compose(p, q, s));
+    for (const c of n.listChildren()) if (!c.getMesh()) place(c);
+  };
+  for (const n of sc.listChildren()) place(n);
+  // weights: each Mixamo joint goes to its UE bone, or its nearest mapped ancestor
+  const parentOf = new Map(); for (const j of mj) for (const c of j.listChildren()) parentOf.set(c, j);
+  const target = mj.map((j) => { let n = j; while (n && !(MIXAMO[base(n)] && ue.has(MIXAMO[base(n)]))) n = parentOf.get(n); return n ? ueJoints.indexOf(ue.get(MIXAMO[base(n)])) : ueJoints.indexOf(ue.get('pelvis')); });
+  const B = mj.map((j, i) => Wm.get(j).clone().multiply(new THREE.Matrix4().fromArray(mskin.getInverseBindMatrices().getArray(), i * 16)));
+  const NB = B.map((m) => new THREE.Matrix3().setFromMatrix4(m).invert().transpose());
+  // the people's own meshes go, the body comes in
+  const arm = [...ue.values()].find((n) => n.listChildren().some((c) => c.getMesh())) || sc.listChildren()[0];
+  for (const n of root.listNodes()) if (n.getMesh()) { n.getMesh().dispose(); n.dispose(); }
+  const buf = root.listBuffers()[0];
+  const texOf = (t) => t && doc.createTexture(t.getName()).setImage(t.getImage()).setMimeType(t.getMimeType());
+  const mats = new Map();
+  const matOf = (m) => {
+    if (mats.has(m)) return mats.get(m);
+    const n = doc.createMaterial(R.name + '_body').setBaseColorFactor(m.getBaseColorFactor()).setEmissiveFactor(m.getEmissiveFactor())
+      .setMetallicFactor(m.getMetallicFactor()).setRoughnessFactor(m.getRoughnessFactor()).setExtras({ part: 'cloth' });
+    if (m.getBaseColorTexture()) n.setBaseColorTexture(texOf(m.getBaseColorTexture()));
+    if (m.getEmissiveTexture()) n.setEmissiveTexture(texOf(m.getEmissiveTexture()));
+    if (m.getNormalTexture()) n.setNormalTexture(texOf(m.getNormalTexture()));
+    if (m.getMetallicRoughnessTexture()) n.setMetallicRoughnessTexture(texOf(m.getMetallicRoughnessTexture()));
+    mats.set(m, n); return n;
+  };
+  const skin = doc.createSkin(R.name);
+  for (const j of ueJoints) skin.addJoint(j);
+  const ibm = new Float32Array(ueJoints.length * 16);
+  ueJoints.forEach((j, i) => Wn.get(j).clone().invert().toArray(ibm, i * 16));
+  skin.setInverseBindMatrices(doc.createAccessor().setType('MAT4').setArray(ibm).setBuffer(buf));
+  const mesh = doc.createMesh(R.name);
+  for (const node of mroot.listNodes()) {
+    const m = node.getMesh(); if (!m || node.getSkin() !== mskin) continue;
+    for (const pr of m.listPrimitives()) {
+      const Pa = pr.getAttribute('POSITION'), Na = pr.getAttribute('NORMAL'), Ua = pr.getAttribute('TEXCOORD_0'), J = pr.getAttribute('JOINTS_0'), Wt = pr.getAttribute('WEIGHTS_0');
+      const n = Pa.getCount(), P2 = new Float32Array(n * 3), N2 = new Float32Array(n * 3), J2 = new Uint16Array(n * 4), W2 = new Float32Array(n * 4);
+      const e = [], ne = [], je = [], we = [], v = new THREE.Vector3(), nv = new THREE.Vector3(), acc = new THREE.Vector3(), nacc = new THREE.Vector3();
+      for (let i = 0; i < n; i++) {
+        Pa.getElement(i, e); J.getElement(i, je); Wt.getElement(i, we); if (Na) Na.getElement(i, ne);
+        acc.set(0, 0, 0); nacc.set(0, 0, 0);
+        const sum = new Map();
+        for (let c = 0; c < 4; c++) {
+          if (!we[c]) continue;
+          acc.addScaledVector(v.fromArray(e).applyMatrix4(B[je[c]]), we[c]);
+          if (Na) nacc.addScaledVector(nv.fromArray(ne).applyMatrix3(NB[je[c]]), we[c]);
+          const t = target[je[c]]; sum.set(t, (sum.get(t) || 0) + we[c]);
+        }
+        acc.toArray(P2, i * 3); nacc.normalize().toArray(N2, i * 3);
+        const top = [...sum].sort((a, b) => b[1] - a[1]).slice(0, 4), tot = top.reduce((a, b) => a + b[1], 0) || 1;
+        top.forEach(([t, w], c) => { J2[i * 4 + c] = t; W2[i * 4 + c] = w / tot; });
+      }
+      const p = doc.createPrimitive().setMaterial(matOf(pr.getMaterial()))
+        .setAttribute('POSITION', doc.createAccessor().setType('VEC3').setArray(P2).setBuffer(buf))
+        .setAttribute('JOINTS_0', doc.createAccessor().setType('VEC4').setArray(J2).setBuffer(buf))
+        .setAttribute('WEIGHTS_0', doc.createAccessor().setType('VEC4').setArray(W2).setBuffer(buf));
+      if (Na) p.setAttribute('NORMAL', doc.createAccessor().setType('VEC3').setArray(N2).setBuffer(buf));
+      if (Ua) p.setAttribute('TEXCOORD_0', doc.createAccessor().setType('VEC2').setArray(Ua.getArray().slice()).setNormalized(Ua.getNormalized()).setBuffer(buf));
+      const idx = pr.getIndices(); if (idx) p.setIndices(doc.createAccessor().setType('SCALAR').setArray(idx.getArray().slice()).setBuffer(buf));
+      mesh.addPrimitive(p);
+    }
+  }
+  arm.addChild(doc.createNode(R.name).setMesh(mesh).setSkin(skin).setExtras({ name: R.name }));
+  // UE bone locals from their new world transforms
+  for (const n of Wn.keys()) {
+    const par = P.get(n), pw = par ? Wn.get(par) : new THREE.Matrix4();
+    const l = pw.clone().invert().multiply(Wn.get(n)), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
+    l.decompose(p, q, s);
+    n.setTranslation(p.toArray()).setRotation(q.toArray()).setScale(s.toArray());
+  }
+}
+
 // ---------- recipes ----------
+// face and body skin gone the grey of cold ash
+const ASH = { MI_Superhero_Male: { ash: 0.9 }, MI_Regular_Male: { ash: 0.9 } };
 const RECIPES = {
   // the Ashbound: ash-grey skin, armour gone the colour of old embers
-  stoneborn: { src: 'warden', dwarf: true, mats: { MI_Ranger_warden: { hsv: [180, 260, 14, 0.55, 0.62] }, MI_Superhero_Male: { ash: 0.85 } }, color: { MI_Hair_1_warden: '#2e2a28' } },
-  stonebornArb: { src: 'wayfarer', dwarf: true, mats: { MI_Ranger_wayfarer: { ash: 0.55 }, MI_Superhero_Male: { ash: 0.85 } }, color: { MI_Hair_1_wayfarer: '#3a3430' } },
-  runepriest: { src: 'mage', dwarf: true, mats: { MI_Ranger_mage: { hsv: [200, 300, 8, 1.1, 0.75] }, MI_Superhero_Male: { ash: 0.85 } }, color: { MI_Hair_1_mage: '#8a8682' } },
+  stoneborn: { src: 'warden', dwarf: true, mats: { MI_Ranger_warden: { hsv: [180, 260, 14, 0.55, 0.62] }, ...ASH }, color: { MI_Hair_1_warden: '#2e2a28' } },
+  stonebornArb: { src: 'wayfarer', dwarf: true, mats: { MI_Ranger_wayfarer: { ash: 0.55 }, ...ASH }, color: { MI_Hair_1_wayfarer: '#3a3430' } },
+  runepriest: { src: 'mage', dwarf: true, mats: { MI_Ranger_mage: { hsv: [200, 300, 8, 1.1, 0.75] }, ...ASH }, color: { MI_Hair_1_mage: '#8a8682' } },
   // Brokka, smith of the third gallery
-  brokka: { src: 'smith', dwarf: true, mats: { MI_Peasant_smith: { hsv: [0, 60, 28, 0.9, 0.8] } }, color: { MI_Hair_2_smith: '#9a3a12', MI_Hair_1_smith: '#9a3a12' } }
+  brokka: { src: 'smith', dwarf: true, mats: { MI_Peasant_smith: { hsv: [0, 60, 28, 0.9, 0.8] } }, color: { MI_Hair_2_smith: '#9a3a12', MI_Hair_1_smith: '#9a3a12' } },
+  // Durgan, the Molten King: "lava monster" by Satwik.Bandi (sketchfab.com/Satwik.Bandi), CC-BY 4.0
+  moltenKing: { src: 'warden', body: '/tmp/claude-0/sf/models/lava_monster/model.glb', height: 2.1, extras: { weaponScale: 1.7 } }
 };
 
 let out = null;
 for (const [name, R] of Object.entries(RECIPES)) {
   const doc = await isolate(R.src);
   if (R.dwarf) morph(doc, DWARF);
+  if (R.body) await rebind(doc, { ...R, name });
   const root = doc.getRoot();
   for (const mat of root.listMaterials()) {
     const mn = mat.getName(), op = R.mats?.[mn], tex = mat.getBaseColorTexture();
@@ -176,18 +299,17 @@ for (const [name, R] of Object.entries(RECIPES)) {
     if (R.color?.[mn]) mat.setBaseColorFactor([...hexRGB(R.color[mn]), 1]);
     mat.setName(`${mn}_${name}`);
   }
-  root.getDefaultScene().setName(name);
+  root.getDefaultScene().setName(name).setExtras({ folk: true, ...R.extras });
   if (!out) { out = doc; continue; }
   mergeDocuments(out, doc);
 }
 const root = out.getRoot();
-for (const s of root.listScenes()) s.setExtras({ folk: true });
 root.setDefaultScene(root.listScenes()[0]);
 for (const b of root.listBuffers().slice(1)) b.dispose();
 for (const a of root.listAccessors()) a.setBuffer(root.listBuffers()[0]);
 await out.transform(
   dedup(), weld(),
-  textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [1024, 1024], quality: 80 }),
+  textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [512, 512], quality: 80 }),
   quantize({ quantizePosition: 14, quantizeNormal: 10, quantizeTexcoord: 12, quantizeWeight: 8 }),
   prune({ keepAttributes: false, keepLeaves: false }),
   meshopt({ encoder: MeshoptEncoder, level: 'medium' }),

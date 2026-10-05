@@ -8,6 +8,8 @@ import { clamp, damp, smooth } from '../core/util.js';
 import { ANIMS } from './anims.data.js';
 import peopleUrl from '../assets/people.glb?url';
 import movesUrl from '../assets/moves.bin?url';
+// Act II's dwarves (tools/creatures/act2/folk.mjs), loaded with the zones that need them
+const FOLK = Object.values(import.meta.glob('../assets/folk.glb', { query: '?url', import: 'default', eager: true }))[0];
 
 export const PEOPLE = { scenes: {}, moves: null, ready: false };
 
@@ -36,16 +38,25 @@ export function loadPeople() {
   loading = (async () => {
     const [glb, mv] = await Promise.all([bytes(peopleUrl), bytes(movesUrl)]);
     PEOPLE.moves = parseMoves(mv);
-    const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(glb, '');
-    for (const s of gltf.scenes) {
-      // GLTFLoader makes node names unique across the file (pelvis, pelvis_1, ...): restore the originals
-      s.traverse((o) => { if (o.userData?.name) o.name = o.userData.name; });
-      prepareTemplate(s);
-      PEOPLE.scenes[s.name] = s;
-    }
+    await addScenes(glb);
     PEOPLE.ready = true;
   })();
   return loading;
+}
+async function addScenes(glb) {
+  const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(glb, '');
+  for (const s of gltf.scenes) {
+    // GLTFLoader makes node names unique across the file (pelvis, pelvis_1, ...): restore the originals
+    s.traverse((o) => { if (o.userData?.name) o.name = o.userData.name; });
+    prepareTemplate(s);
+    PEOPLE.scenes[s.name] = s;
+  }
+}
+let folk = null;
+export function loadFolk() {
+  if (!FOLK) return Promise.resolve();
+  folk ||= loadPeople().then(async () => addScenes(await bytes(FOLK))).catch((e) => console.warn('folk failed to load', e));
+  return folk;
 }
 export const hasPerson = (name) => !!PEOPLE.scenes[name];
 
@@ -109,7 +120,7 @@ function prepareTemplate(scene) {
     grip[side + 'pistol'] = { q: hq.clone().multiply(wq), p: new THREE.Vector3(sg * 0.07, -0.03, 0).applyQuaternion(hq) };
   }
   const box = new THREE.Box3().setFromObject(scene);
-  scene.userData.tpl = { grip, height: box.max.y - box.min.y, hip: bones.pelvis.getWorldPosition(_v).y };
+  scene.userData.tpl = { grip, height: box.max.y - box.min.y, hip: bones.pelvis.getWorldPosition(_v).y, weaponScale: scene.userData.weaponScale || 1 };
   scene.traverse((o) => {
     if (!o.isMesh) return;
     const part = o.material.userData?.part || 'cloth';
@@ -156,7 +167,7 @@ export function personModel(name, o = {}) {
   const t = tpl.userData.tpl;
   const mat = { userData: { u }, dispose() { for (const m of mats) m.dispose(); } };
   return {
-    mesh: group, bones, mat, kind: 'person', grip: t.grip, hip: t.hip, height: t.height,
+    mesh: group, bones, mat, mats, kind: 'person', grip: t.grip, hip: t.hip, height: t.height, weaponScale: t.weaponScale,
     rest: { hips: { y: t.hip } }, dims: { s: t.height / 1.8 },
     dispose() { mat.dispose(); }
   };
@@ -226,6 +237,8 @@ export class PersonAnim {
   constructor(av) {
     this.av = av; this.b = av.bones;
     this.hipH = av.model.hip;
+    // stride length goes with leg length: dwarves step quicker, giants slower
+    this.size = this.hipH / (PEOPLE.moves?.hip || this.hipH);
     this.mixer = new THREE.AnimationMixer(av.group);
     this.set = Object.assign({}, SETS[av.animSet || av.style] || SETS.none);
     this.acts = Object.assign({}, PERSON_ACTIONS, STYLE_ACTIONS[av.style]);
@@ -238,6 +251,8 @@ export class PersonAnim {
       this.loco[k] = a;
     }
     this.act = null; this.actName = null; this.t = 0; this.hit = 0; this.locoW = 1;
+    // molten veins breathe
+    this.glow = (av.model.mats || []).filter((m) => m.emissiveMap);
     // flinch axis: the character's sideways axis in the chest bone's frame
     const chest = this.b.spine_03;
     av.group.updateMatrixWorld(true);
@@ -267,7 +282,7 @@ export class PersonAnim {
   get progress() { return this.act ? Math.min(1, this.act.time / this.act.getClip().duration) : 1; }
   update(dt, st) {
     this.t += dt;
-    const speed = st.speed || 0;
+    const speed = (st.speed || 0) / (this.size * (this.av.scale || 1));
     if (this.act && !this.loop && !this.hold && !this.act.isRunning()) { this.act.fadeOut(0.18); this.act = null; this.actName = null; }
     const actOn = !!this.act;
     this.locoW = damp(this.locoW, actOn ? 0 : 1, actOn ? 30 : 9, dt);
@@ -282,6 +297,7 @@ export class PersonAnim {
     L.walk.timeScale = clamp(speed / 1.45, 0.5, 2);
     L.run.timeScale = clamp(speed / 3.9, 0.7, 1.8);
     this.mixer.update(dt);
+    for (const m of this.glow) m.emissiveIntensity = 1.1 + Math.sin(this.t * 2.3) * 0.3 + Math.sin(this.t * 6.1) * 0.12;
     if (this.hit > 0) {
       this.hit = Math.max(0, this.hit - dt * 5);
       this.flinchQ.setFromAxisAngle(this.flinchAxis, -0.35 * smooth(this.hit));

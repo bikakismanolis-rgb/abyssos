@@ -63,7 +63,7 @@ export const MONSTERS = {
   weaver: { model: 'weaver', hp: 38, dmg: 1.8, speed: 5.2, radius: 2.2, ai: 'weaver', reach: 3.6, atk: 'bite', atkTime: 1.6, flesh: 'chitin', xp: 60, boss: true, sfx: 'spider' },
   barrowLord: { model: 'barrowLord', hp: 55, dmg: 2.1, speed: 4.2, radius: 1.2, ai: 'lord', reach: 3.6, atk: 'smash', atkTime: 1.5, flesh: 'spirit', xp: 90, boss: true, weapon: 'greatsword', style: 'heavy', sfx: 'wraith', float: true },
   // Act II: the Giants' Stair and the Halls of Deepstone
-  magmaHound: { model: 'magmaHound', hp: 0.95, dmg: 1.0, speed: 6.4, radius: 0.6, ai: 'pounce', reach: 1.6, atk: 'bite', atkTime: 1.1, flesh: 'magma', xp: 1.6, sfx: 'hound', burns: true, deathFire: true },
+  magmaHound: { model: 'magmaHound', hp: 0.95, dmg: 1.0, speed: 6.4, radius: 0.6, ai: 'pounce', reach: 1.6, atk: 'bite', atkTime: 1.1, flesh: 'magma', xp: 1.6, sfx: 'hound', burns: true, deathFire: true, look: { rim: 0xff5a18, rimI: 0.3 } },
   caveBat: { model: 'caveBat', hp: 0.28, dmg: 0.5, speed: 7.2, radius: 0.35, ai: 'bat', reach: 1.1, atk: 'bite', atkTime: 0.9, flesh: 'flesh', xp: 0.45, sfx: 'bat' },
   deepworm: { model: 'deepworm', hp: 1.5, dmg: 1.35, speed: 4.4, radius: 0.85, ai: 'burrow', reach: 2.4, atk: 'bite', atkTime: 1.4, flesh: 'chitin', xp: 2.6, sfx: 'worm', proj: 'acid' },
   stoneborn: { model: 'stoneborn', hp: 1.25, dmg: 1.1, speed: 4.0, radius: 0.5, ai: 'melee', reach: 1.7, atk: 'chop', atkTime: 1.25, flesh: 'flesh', xp: 1.6, weapon: 'axe', style: 'sword', sfx: 'dwarf', armor: true },
@@ -72,7 +72,7 @@ export const MONSTERS = {
   caveTroll: { model: 'troll', hp: 7.5, dmg: 2.9, speed: 3.6, radius: 1.25, ai: 'brute', reach: 3.0, atk: 'smash', atkTime: 2.1, flesh: 'flesh', xp: 11, weapon: 'club', style: 'heavy', hunch: 0.25, sfx: 'troll', big: true, look: { scale: 1.18, tint: 0x8a9aa8, tintAmt: 0.35 } },
   deadDwarf: { model: 'skeleton', hp: 0.9, dmg: 1.0, speed: 3.7, radius: 0.48, ai: 'melee', reach: 1.6, atk: 'slash1', atkTime: 1.15, flesh: 'bone', xp: 1.2, weapon: 'axe', style: 'undead', sfx: 'skeleton', rises: true, look: { scale: 0.86, tint: 0xd8b880, tintAmt: 0.2 } },
   stonewarden: { model: 'stonewarden', hp: 46, dmg: 2.0, speed: 3.6, radius: 1.6, ai: 'stonewarden', reach: 3.8, atk: 'smash', atkTime: 1.6, flesh: 'stone', xp: 80, boss: true, sfx: 'golem' },
-  moltenKing: { model: 'moltenKing', hp: 72, dmg: 2.4, speed: 4.1, radius: 1.4, ai: 'molten', reach: 3.9, atk: 'smash', atkTime: 1.5, flesh: 'magma', xp: 130, boss: true, weapon: 'hammer', style: 'heavy', sfx: 'golem' },
+  moltenKing: { model: 'moltenKing', hp: 72, dmg: 2.4, speed: 4.1, radius: 0.9, look: { scale: 1.55, rim: 0xff6a20, rimI: 0.4 }, ai: 'molten', reach: 3.9, atk: 'smash', atkTime: 1.5, flesh: 'magma', xp: 130, boss: true, weapon: 'hammer', style: 'heavy', sfx: 'golem' },
   // the ranger's companion
   spiritWolf: { model: 'spiritWolf', hp: 2, dmg: 1, speed: 7.5, radius: 0.55, ai: 'pet', reach: 1.7, atk: 'bite', atkTime: 0.8, flesh: 'spirit', xp: 0, pet: true }
 };

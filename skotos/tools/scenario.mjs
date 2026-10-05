@@ -83,11 +83,11 @@ const S = {
   ending: { q: 'auto=town&sim=3&q=1&lvl=10', run: async (pg, shot) => {
     await pg.evaluate(() => { const G = window.__G; G.hero.quest = 4; });
     await pg.evaluate(() => window.__D.emit('talk', 'wayfarer', {}));
-    for (let i = 0; i < 3; i++) { await pg.waitForTimeout(600); await pg.click('#dialog').catch(() => {}); await pg.click('#dialog').catch(() => {}); }
+    for (let i = 0; i < 3; i++) { await pg.waitForTimeout(600); await pg.click('#dialog', { timeout: 800 }).catch(() => {}); await pg.click('#dialog', { timeout: 800 }).catch(() => {}); }
     await pg.waitForTimeout(2500); await shot();
     await pg.waitForTimeout(4000); await shot();
     await pg.waitForTimeout(6000);
-    for (let i = 0; i < 5; i++) { await pg.click('#dialog').catch(() => {}); await pg.waitForTimeout(300); await pg.click('#dialog').catch(() => {}); await pg.waitForTimeout(300); }
+    for (let i = 0; i < 5; i++) { await pg.click('#dialog', { timeout: 800 }).catch(() => {}); await pg.waitForTimeout(300); await pg.click('#dialog', { timeout: 800 }).catch(() => {}); await pg.waitForTimeout(300); }
     await pg.waitForTimeout(1500); await shot();
     return pg.evaluate(() => { const G = window.__G; return { quest: G.hero.quest, act1: G.hero.act1, panel: G.panel, mode: G.mode }; });
   } },
@@ -122,7 +122,7 @@ const S = {
     await pg.evaluate(() => { const G = window.__G; window.__immortal = true; G.hero.quest = 7; G.hero.flags.stonewarden = true; G.player.hp = G.player.hpMax = 99999; });
     await pg.waitForTimeout(1500); await shot();
     await pg.evaluate(() => window.__D.emit('talk', 'brokka', {}));
-    for (let i = 0; i < 10; i++) { await pg.waitForTimeout(400); await pg.click('#dialog').catch(() => {}); }
+    for (let i = 0; i < 10; i++) { await pg.waitForTimeout(400); await pg.click('#dialog', { timeout: 800 }).catch(() => {}); }
     await pg.waitForTimeout(800); await shot();
     const n = await pg.evaluate(() => window.__G.zone.packs.length);
     for (let i = 0; i < n; i += Math.max(1, Math.floor(n / 6))) {
@@ -147,14 +147,26 @@ const S = {
     await pg.waitForTimeout(2000); await shot();
     return pg.evaluate((mid) => { const G = window.__G, s = G.pickups.find((p) => p.kind === 'shard'); return { mid, boss: G.zone.boss?.dead, quest: G.hero.quest, king: G.hero.flags.king, shard: s && [s.x, s.z, s.y, s.t], pl: [G.player.x, G.player.z, G.player.dead], mode: G.mode, panel: G.panel }; }, mid);
   } },
-  ending2: { q: 'auto=town&sim=3&q=1&lvl=16', run: async (pg, shot) => {
+  // Act II's cast lined up in the halls (no fighting): &zone=pass to see them in the snow
+  cast2: { q: 'auto=' + (process.env.ZONE || 'halls') + '&sim=1&q=' + (process.env.Q || '1') + '&lvl=14&cls=warden', run: async (pg, shot) => {
+    await pg.evaluate(() => {
+      const G = window.__G; window.__immortal = true;
+      for (const a of G.actors) if (a.team === 'foe' && !a.boss) a.dead = true;
+      for (const p of G.zone.packs) p.spawned = true;
+      const ids = ['magmaHound', 'stoneborn', 'stonebornArbalest', 'runepriest', 'caveBat', 'deepworm'];
+      ids.forEach((id, i) => { const f = G.zone.map.nearestFloor(G.player.x - 5 + i * 2, G.player.z - 3); const m = window.__D.spawnMonster(id, f.x, f.z, {}); m.speed = 0; G.actors.push(m); });
+    });
+    await pg.waitForTimeout(1500); await shot();
+    return pg.evaluate(() => window.__G.actors.filter((a) => a.team === 'foe' && !a.dead).map((a) => a.kind + ':' + a.avatar.kind));
+  } },
+  ending2: { q: 'auto=town&sim=3&q=1&norender&lvl=16', run: async (pg, shot) => {
     await pg.evaluate(() => { const G = window.__G; G.hero.quest = 9; G.hero.act1 = 1; });
     await pg.evaluate(() => window.__D.emit('talk', 'wayfarer', {}));
-    for (let i = 0; i < 3; i++) { await pg.waitForTimeout(600); await pg.click('#dialog').catch(() => {}); await pg.click('#dialog').catch(() => {}); }
+    for (let i = 0; i < 3; i++) { await pg.waitForTimeout(600); await pg.click('#dialog', { timeout: 800 }).catch(() => {}); await pg.click('#dialog', { timeout: 800 }).catch(() => {}); }
     await pg.waitForTimeout(2500); await shot();
     await pg.waitForTimeout(4000); await shot();
     await pg.waitForTimeout(6000);
-    for (let i = 0; i < 5; i++) { await pg.click('#dialog').catch(() => {}); await pg.waitForTimeout(300); await pg.click('#dialog').catch(() => {}); await pg.waitForTimeout(300); }
+    for (let i = 0; i < 5; i++) { await pg.click('#dialog', { timeout: 800 }).catch(() => {}); await pg.waitForTimeout(300); await pg.click('#dialog', { timeout: 800 }).catch(() => {}); await pg.waitForTimeout(300); }
     await pg.waitForTimeout(1500); await shot();
     return pg.evaluate(() => { const G = window.__G; return { quest: G.hero.quest, act2: G.hero.act2, panel: G.panel, mode: G.mode, extras: G.zone.extra.length }; });
   } },
