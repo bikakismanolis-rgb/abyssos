@@ -408,6 +408,39 @@ function barkLimb(doc, sideTag, tex) {
   }
 }
 
+// outfit pieces taken off (by node name), and another character's hair put on in their place: all the women of
+// people.glb share one skeleton and one head (Superhero_Female), so a hair mesh moves across with its own inverse bind
+// matrices on this rig's joints of the same names, and takes the eyebrows' hair material (the same T_Hair_2 map)
+async function restyle(doc, { drop = [], hair }) {
+  const root = doc.getRoot(), buf = root.listBuffers()[0];
+  for (const n of root.listNodes()) if (drop.includes(n.getName())) { n.getMesh()?.dispose(); n.dispose(); }
+  if (!hair) return;
+  const [srcScene, nodeName, matName] = hair;
+  const src = await isolate(srcScene), from = src.getRoot().listNodes().find((n) => n.getName() === nodeName);
+  const joints = new Map(); for (const sk of root.listSkins()) for (const j of sk.listJoints()) joints.set(j.getName(), j);
+  const mat = root.listMaterials().find((m) => m.getName() === matName);
+  const copy = (a) => doc.createAccessor().setType(a.getType()).setArray(a.getArray().slice()).setNormalized(a.getNormalized()).setBuffer(buf);
+  const sk0 = from.getSkin(), skin = doc.createSkin(nodeName).setInverseBindMatrices(copy(sk0.getInverseBindMatrices()));
+  for (const j of sk0.listJoints()) skin.addJoint(joints.get(j.getName()));
+  const mesh = doc.createMesh(nodeName);
+  for (const p0 of from.getMesh().listPrimitives()) {
+    const p = doc.createPrimitive().setMaterial(mat).setIndices(copy(p0.getIndices()));
+    for (const sem of p0.listSemantics()) p.setAttribute(sem, copy(p0.getAttribute(sem)));
+    mesh.addPrimitive(p);
+  }
+  const node = doc.createNode(nodeName).setMesh(mesh).setSkin(skin).setTranslation(from.getTranslation()).setRotation(from.getRotation()).setScale(from.getScale());
+  const sib = root.listNodes().find((n) => n.getMesh()?.listPrimitives().some((q) => q.getMaterial() === mat));
+  (sib?.getParentNode() || root.getDefaultScene()).addChild(node);
+}
+// some pieces of an outfit given a material of their own (a copy of `from`), so a recipe can colour them apart
+function split(doc, parts) {
+  const root = doc.getRoot();
+  for (const [name, { from, nodes }] of Object.entries(parts)) {
+    const m0 = root.listMaterials().find((m) => m.getName() === from), m = m0.clone().setName(name);
+    for (const n of root.listNodes()) if (nodes.includes(n.getName())) for (const p of n.getMesh()?.listPrimitives() || []) if (p.getMaterial() === m0) p.setMaterial(m);
+  }
+}
+
 // lowest and highest point of the rest pose (after morph() the skins hold world-space rest positions)
 function span(doc) {
   let lo = Infinity, hi = -Infinity; const e = [];
@@ -431,10 +464,17 @@ const AMBER_EYES = { eyes: { tint: 1, glow: 1, white: 0.45, fill: 0.6 } };
 const GOLD = [{ s: [0, 0.14], v: [0.3, 1], to: 40, add: 0.42, bri: 0.95 }];
 const ROOT_RANGER = [...GOLD, { h: [60, 180], to: 100, sat: 0.6, bri: 1.0 }, { h: [-20, 60], to: 26, sat: 0.62, bri: 0.6 }];
 const ROOT_WARDEN = [...GOLD, { h: [170, 270], to: 100, sat: 0.85, bri: 1.55 }, { h: [-20, 60], to: 26, sat: 0.62, bri: 0.6 }];
+// Elati: the ranger's greens go silver (light panels) and slate (sleeves, leggings), its browns a grey leather, all a
+// little cool so they stay silver under the Evergreen's amber light; the sash takes the green
+const ELATI_GREY = [{ h: [60, 180], v: [0.4, 1], to: 205, sat: 0.16, bri: 1.3 }, { h: [60, 180], v: [0, 0.4], to: 210, sat: 0.16, bri: 1.15 }, { h: [-20, 60], to: 215, sat: 0.12, bri: 0.7 }];
+const ELATI_SASH = [{ h: [-20, 180], to: 112, spread: 0.15, sat: 0.75, bri: 0.85 }];
 const ROOTSWORN_SKIN = each([...SKIN_M, ...SKIN_F], { ash: 0.35, tint: BARK_TINT });
 const GROVE = {
-  // Elati, the scout who would not kneel: grey-green and moss leathers, silver hair, amber-flecked eyes, a bark forearm
-  elati: { src: 'ranger', elf: true, barkArm: 'l', mats: { MI_Ranger: { grade: [{ h: [60, 180], to: 125, sat: 0.32, bri: 1.1 }, { h: [-20, 60], to: 88, sat: 0.7, bri: 0.7 }] }, ...each(SKIN_F, { ash: 0.12, tint: [0.62, 0.62, 0.6] }), MI_Eyes: { eyes: { tint: 0.5 } } }, color: { MI_Hair_2_ranger: '#d8dcd0' } },
+  // Elati, the scout who would not kneel: bare-headed (the ranger's hood off, the healer's hair on, gone silver), grey-silver
+  // cloth and leathers with a moss-green sash for the only green, amber-flecked eyes, a bark forearm
+  elati: { src: 'ranger', elf: true, barkArm: 'l', drop: ['Female_Ranger_Head_Hood'], hair: ['healer', 'Hair_Long', 'MI_Hair_2_ranger'],
+    split: { MI_Ranger_sash: { from: 'MI_Ranger', nodes: ['Female_Ranger_Body_Belt_1', 'Female_Ranger_Body_Belt_2'] } },
+    mats: { MI_Ranger: { grade: ELATI_GREY }, MI_Ranger_sash: { grade: ELATI_SASH }, ...each(SKIN_F, { ash: 0.12, tint: [0.62, 0.62, 0.6] }), MI_Eyes: { eyes: { tint: 0.5 } } }, color: { MI_Hair_2_ranger: '#d8dcd0' } },
   // Old Linden, half rooted into her tree: bark skin, a moss and bark-brown dress, lichen hair
   linden: { src: 'healer', elf: true, mats: { MI_Peasant_healer: { grade: [{ h: [100, 200], v: [0, 0.52], to: 95, sat: 0.55, bri: 0.78 }, { h: [100, 200], v: [0.52, 1], to: 28, sat: 1.3, bri: 0.55 }], bark: 0.35 }, MI_Superhero_Female: { ash: 0.85, tint: BARK_TINT, bark: 1 } }, color: { MI_Hair_2_healer: '#a2ae94' } },
   // the Rootsworn, guards of the Lady's song: bark and moss with gold trim, light bark skin, amber burning in the eyes
@@ -456,10 +496,12 @@ if (!SETS[SET]) throw new Error(`unknown set ${SET} (folk, grove)`);
 let out = null;
 for (const [name, R] of Object.entries(SETS[SET])) {
   const doc = await isolate(R.src);
+  if (R.drop || R.hair) await restyle(doc, R);
   if (R.dwarf) morph(doc, DWARF);
   if (R.elf) { morph(doc, R.elf === true ? ELF : stretch(ELF, R.elf)); lighten(doc); console.log(name, 'stands', span(doc).map((v) => v.toFixed(3)).join(' to '), 'm'); }
   if (R.body) await rebind(doc, { ...R, name });
   if (R.barkArm) barkLimb(doc, R.barkArm, doc.createTexture(`${name}_bark`).setImage(new Uint8Array(await sharp(BARK).resize(256, 256).modulate({ saturation: 0.75, brightness: 1.15 }).png().toBuffer())).setMimeType('image/png'));
+  if (R.split) split(doc, R.split);
   const root = doc.getRoot();
   for (const mat of root.listMaterials()) {
     const mn = mat.getName(), op = R.mats?.[mn], tex = mat.getBaseColorTexture();

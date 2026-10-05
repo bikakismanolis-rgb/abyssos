@@ -81,9 +81,9 @@ for (const b of DEFS) {
 for (const a of Object.values(SRCA)) dropClip(a);
 for (const [nn, src] of RIG) BONE[nn].setName(nn);
 // writes rows (Map bone -> {p, q}) as a clip: rotations of every deform bone, translation of the hips only
-function bake(name, rows, dur) {
+function bake(name, rows, dur, fps = FPS) {
   const n = rows.length, buf = R.listBuffers()[0];
-  const times = new Float32Array(n); for (let i = 0; i < n; i++) times[i] = Math.min(dur, i / FPS);
+  const times = new Float32Array(n); for (let i = 0; i < n; i++) times[i] = Math.min(dur, i / fps);
   const input = doc.createAccessor(name + '_bt').setType('SCALAR').setArray(times).setBuffer(buf);
   const anim = doc.createAnimation(name);
   for (const b of DEFS) for (const path of b === HIPS ? ['rotation', 'translation'] : ['rotation']) {
@@ -114,12 +114,12 @@ function mix(La, Lb, k) {
   return out;
 }
 // a clip from poseAt(t) (a Map of local transforms), sampled at FPS
-const bakeFn = (name, dur, poseAt) => { const n = Math.round(dur * FPS) + 1, rows = []; for (let i = 0; i < n; i++) rows.push(poseAt(Math.min(dur, i / FPS))); return bake(name, rows, dur); };
+const bakeFn = (name, dur, poseAt, fps = FPS) => { const n = Math.round(dur * fps) + 1, rows = []; for (let i = 0; i < n; i++) rows.push(poseAt(Math.min(dur, i / fps))); return bake(name, rows, dur, fps); };
 const side = (b) => [B[b + '_L'], B[b + '_R']];
 const ARMS = new Set(['shoulder', 'upperarm', 'upperarm_twist', 'forearm', 'forearm_twist', 'hand'].flatMap(side));
 const UPPER = new Set([...ARMS, B.spine_02, B.chest, B.neck, B.neck_02, B.head]);
 // the lowest skinned point of a pose (character space, metres)
-const lowY = (L) => { let m = 9; for (const p of skinnedPoints(doc, worlds(doc, L), 3)) m = Math.min(m, p.y); return m; };
+const lowY = (L, step = 3) => { let m = 9; for (const p of skinnedPoints(doc, worlds(doc, L), step)) m = Math.min(m, p.y); return m; };
 // character space -> the hips' parent frame: moves the hips by a character-space offset (metres); PAR_X turns the whole body
 const PINV3 = new THREE.Matrix3().setFromMatrix4(W0.get(parentOf(HIPS)).clone().invert());
 const PAR_X = X.clone().applyMatrix3(PINV3).normalize();
@@ -128,14 +128,30 @@ const shift = (L, dy, dz = 0) => { const h = L.get(HIPS); L.set(HIPS, { p: h.p.c
 const iT = duration(A.Idle), rT = duration(A.Running), wT = duration(A.Wake), sT = duration(A.Scream);
 // ---------- locomotion ----------
 copyClip(doc, A.Idle, 'idle', { loop: true });
-// walk: its scuttle slowed, the flung-out arms and the head calmed toward the idle stance; run: the scuttle quickened
-const WALK = 0.7, RUN = 1.7;
-bakeFn('walk', rT / WALK, (t) => {
-  const L = pose(A.Running, (t * WALK) % rT), I = pose(A.Idle, (t * WALK * iT / rT) % iT), out = new Map(L);
+// walk: its scuttle slowed, the flung-out arms and the head calmed toward the idle stance; run: the scuttle quickened to a
+// fast skitter (2.4x). Both are grounded: the source gait hops (both feet up to ~3.5 cm clear for about 40 % of a
+// stride), so the hips are moved down (or up) until the lowest skinned point sits on y = 0, frame by frame. That offset
+// is smoothed round the loop so the hand-over from foot to foot does not jolt the body.
+const WALK = 0.7, RUN = 2.4;
+function groundLoop(name, dur, fps, poseAt, sig) {
+  const n = Math.round(dur * fps), P = [], g = [];
+  for (let i = 0; i < n; i++) { const L = poseAt(i / n); P.push(L); g.push(-lowY(L, 1)); }
+  // smoothed (a gaussian of `sig` frames) but never let more than 5 mm into the ground: where the hand-over from foot
+  // to foot is too quick to follow, a foot hovers for a frame or two instead of the body jolting down and up
+  const k = Math.ceil(sig * 3), wt = []; for (let j = -k; j <= k; j++) wt.push(Math.exp(-(j * j) / (2 * sig * sig)));
+  const o = g.map((gi, i) => { let a = 0, w = 0; for (let j = -k; j <= k; j++) { a += wt[j + k] * g[(i + j + n * 9) % n]; w += wt[j + k]; } return Math.max(a / w, gi - 0.005); });
+  const rows = P.map((L, i) => shift(L, o[i])); rows.push(rows[0]);
+  return bake(name, rows, n / fps, fps);
+}
+// (the loops are a whole number of frames, so the last key is the first; the run takes 60 keys a second, as at this
+// pace 30 leave the grounding's hand-overs too coarse)
+const walkDur = Math.round((rT / WALK) * 30) / 30, runDur = Math.round((rT / RUN) * 60) / 60;
+groundLoop('walk', walkDur, 30, (u) => {
+  const L = pose(A.Running, u * rT), I = pose(A.Idle, u * iT), out = new Map(L);
   for (const b of UPPER) { const a = L.get(b), c = I.get(b); out.set(b, { p: a.p, q: a.q.clone().slerp(c.q, 0.35), s: a.s }); }
   return out;
-});
-copyClip(doc, A.Running, 'run', { loop: true, speed: RUN });
+}, 1);
+groundLoop('run', runDur, 60, (u) => pose(A.Running, u * rT), 1.5);
 // ground speed of the scuttle: how fast a foot sweeps back while it is down (the clip holds two strides)
 const sweepSpeed = (() => {
   const n = 60, out = [];
@@ -146,7 +162,7 @@ const sweepSpeed = (() => {
   }
   return out.reduce((s, v) => s + v, 0) / out.length;
 })();
-const walkSpeed = +(sweepSpeed * WALK).toFixed(2), runSpeed = +(sweepSpeed * RUN).toFixed(2);
+const walkSpeed = +((sweepSpeed * rT) / walkDur).toFixed(2), runSpeed = +((sweepSpeed * rT) / runDur).toFixed(2);
 
 // ---------- rise: bursts up out of the ground curled like a root bulb, hops clear, then unfolds and stands (its waking-up) ----------
 const RISE = 1.5, UP = 0.34, LAND = 0.56;

@@ -195,10 +195,10 @@ const restW = worlds(doc, locals(doc, null, 0)), headBone = byName(doc, B.head),
 const G = restW.get(headBone).clone().multiply(new THREE.Matrix4().fromArray(skin.getInverseBindMatrices().getArray(), skin.listJoints().indexOf(headBone) * 16));
 // fn(character-space point) evaluated over every texel a primitive covers in UV space (the largest value wins where islands
 // share texels, as the two mirrored antlers do), then bled a few texels into the gutters
-function bake(prim, w, h, fn) {
+function bake(prim, w, h, fn, M = G) {
   const P = prim.getAttribute('POSITION'), UV = prim.getAttribute('TEXCOORD_0'), I = prim.getIndices().getArray();
   const val = new Float32Array(w * h), has = new Uint8Array(w * h), pos = [], uv = [], e = [];
-  for (let i = 0; i < P.getCount(); i++) { pos.push(new THREE.Vector3().fromArray(P.getElement(i, e)).applyMatrix4(G)); const t = UV.getElement(i, e); uv.push([t[0] * w, t[1] * h]); }
+  for (let i = 0; i < P.getCount(); i++) { pos.push(new THREE.Vector3().fromArray(P.getElement(i, e)).applyMatrix4(M)); const t = UV.getElement(i, e); uv.push([t[0] * w, t[1] * h]); }
   const q = new THREE.Vector3();
   for (let f = 0; f < I.length; f += 3) {
     const a = I[f], b = I[f + 1], c = I[f + 2], [ax, ay] = uv[a], [bx, by] = uv[b], [cx, cy] = uv[c];
@@ -220,16 +220,28 @@ function bake(prim, w, h, fn) {
   return val;
 }
 
-// the coat: luminance through a curve - nose, hooves and eyes stay dark, the brown coat goes birch-white, the dark mane and
-// legs a light silver; the mouth's pinks are kept
+// the coat: luminance through a curve - nose, hooves and eyes stay dark, the brown coat goes birch-white, the legs a light
+// silver; the mouth's pinks are kept. The neck's mane (mane = 0..1, see maneZone) is the source's darkest, streakiest
+// brown: through the coat curve its strands came out as a grey-brown smudge, so there it takes a flatter curve and no
+// trace of the brown - silver-white a shade below the coat, the strands left as a faint cool-grey grain.
 const CURVE = [[0, [0.1]], [0.03, [0.3]], [0.08, [0.72]], [0.18, [0.85]], [0.4, [0.92]], [1, [0.98]]];
-const coat = (r, g, b) => {
+const MANE = [[0, [0.7]], [0.04, [0.74]], [0.1, [0.79]], [0.2, [0.84]], [0.4, [0.89]], [1, [0.96]]];
+const coat = (r, g, b, mane = 0) => {
   const l = 0.3 * r + 0.59 * g + 0.11 * b;
   const pink = clamp01(((b - g) * 4 + (r - g) * 1.5 - 0.25) * 2) * (r > 0.35 ? 1 : 0);
-  const L = ramp3(CURVE, l)[0], warm = smooth((L - 0.45) / 0.45);
-  const tint = [lerp(0.93, 1.0, warm), lerp(0.95, 0.985, warm), lerp(0.98, 0.93, warm)];
-  return [r, g, b].map((o, i) => Math.min(1, lerp(L * tint[i] + 0.04 * (o - l), o * 0.9 + l * 0.1, pink)));
+  const L = lerp(ramp3(CURVE, l)[0], ramp3(MANE, l)[0], mane), warm = smooth((L - 0.45) / 0.45) * (1 - mane);
+  const tint = [lerp(0.93, 1.0, warm), lerp(0.95, 0.985, warm), lerp(0.98, 0.93, warm)].map((v, i) => lerp(v, [0.955, 0.96, 0.975][i], mane));
+  return [r, g, b].map((o, i) => Math.min(1, lerp(L * tint[i] + 0.04 * (1 - mane) * (o - l), o * 0.9 + l * 0.1, pink)));
 };
+// the mane's zone, in character space: around the neck's axis (low in the chest front up to the base of the skull),
+// 0.32 m out with a soft edge, faded out over the brisket and before the face, eyes and ears
+const NECK_A = new THREE.Vector3(0, 1.0, 0.1).multiplyScalar(HEIGHT / 2.6), NECK_B = new THREE.Vector3(0, 1.55, 0.78).multiplyScalar(HEIGHT / 2.6);
+const maneZone = (q) => {
+  const ab = NECK_B.clone().sub(NECK_A), d = q.clone().sub(NECK_A), s = d.dot(ab) / ab.lengthSq(), r = d.addScaledVector(ab, -s).length() / (HEIGHT / 2.6);
+  return smooth((s + 0.15) / 0.2) * (1 - smooth((s - 0.95) / 0.15)) * (1 - smooth((r - 0.3) / 0.1));
+};
+// a skinned mesh's bind space -> character space (rest pose = bind pose, so any joint gives the same matrix)
+const bindToChar = (node) => { const sk = node.getSkin(); return restW.get(headBone).clone().multiply(new THREE.Matrix4().fromArray(sk.getInverseBindMatrices().getArray(), sk.listJoints().indexOf(headBone) * 16)); };
 // amber tears: a streak from the front corner of each eye down the face (the eyes sit at x = +-0.1 m in this rig), with a bead at its end
 const eyeBox = new THREE.Box3();
 { const p = byName(doc, 'Object_9').getMesh().listPrimitives()[0], P = p.getAttribute('POSITION'), e = []; for (let i = 0; i < P.getCount(); i++) eyeBox.expandByPoint(new THREE.Vector3().fromArray(P.getElement(i, e)).applyMatrix4(G)); }
@@ -242,18 +254,23 @@ const tear = (q) => {
   const bead = clamp01(1.6 - new THREE.Vector2(q.y, q.z).distanceTo(tearA.clone().addScaledVector(tearDir, tearLen * 1.04)) / (0.009 * S));
   return Math.max(streak, bead);
 };
-for (const n of ['Body', 'Head']) {
+const maneStat = [0, 0], coatStat = [0, 0];
+for (const [n, node] of [['Body', byName(doc, 'Object_10')], ['Head', host]]) {
   const m = mats[n], { data, info } = await rgb(m.getBaseColorTexture()), w = info.width, h = info.height;
-  const tears = n === 'Head' ? bake(host.getMesh().listPrimitives().find((p) => p.getMaterial() === m), w, h, tear) : null;
+  const prim = node.getMesh().listPrimitives().find((p) => p.getMaterial() === m);
+  const tears = n === 'Head' ? bake(prim, w, h, tear) : null, mane = bake(prim, w, h, maneZone, bindToChar(node));
   const em = tears ? Buffer.alloc(w * h * 3) : null;
   for (let i = 0, k = 0; i < data.length; i += 3, k++) {
-    let c = coat(data[i] / 255, data[i + 1] / 255, data[i + 2] / 255);
+    let c = coat(data[i] / 255, data[i + 1] / 255, data[i + 2] / 255, mane[k]);
+    if (mane[k] > 0.9 || (mane[k] === 0 && data[i] > 60)) { const st = mane[k] > 0.9 ? maneStat : coatStat; st[0] += 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2]; st[1]++; }
     if (tears && tears[k] > 0) { const t = smooth(tears[k]); c = c.map((v, j) => lerp(v, [0.78, 0.36, 0.05][j], t * 0.92)); em[i] = 255 * t; em[i + 1] = 120 * t; em[i + 2] = 20 * t; }
     data[i] = c[0] * 255; data[i + 1] = c[1] * 255; data[i + 2] = c[2] * 255;
   }
   m.getBaseColorTexture().setImage(await png(data, w, h)).setMimeType('image/png');
   if (em) m.setEmissiveTexture(doc.createTexture('tears_glow').setImage(await png(em, w, h)).setMimeType('image/png')).setEmissiveFactor([0.7, 0.7, 0.7]);
 }
+
+console.log('mane: mean brightness', (maneStat[0] / maneStat[1]).toFixed(3), 'against the coat', (coatStat[0] / coatStat[1]).toFixed(3));
 
 // the antlers: amber, deep resin at the skull warming to honey-gold towards the tips, which glow most
 {
