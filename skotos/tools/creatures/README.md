@@ -19,3 +19,10 @@ The contract every creature follows, which `src/gfx/creatures.js` relies on:
 | troll | troll.glb | "Troll Mauler" by piacenti (CC-BY 3.0), retargeted + hand-keyed |
 | ashspawn | ashspawn.glb | "Executioner" by thecubber (CC-BY 3.0), ember-crack emissive |
 | wight | wight.glb, barrowlord.glb | MakeHuman/MPFB2 CC0 assets, generated with gen.py |
+| act2 | magmahound.glb | "Infernal Magma Hound" by Yury Misiyuk (CC-BY 4.0), run, bite, lunge, pounce, howl, hit and die layered on its idle and walk |
+| act2 | bat.glb | "Bat" by matisosanimation (CC-BY 4.0), one flapping loop; bite, hit and death made from it |
+| act2 | worm.glb | "Worm Monster" by CR!STALLL (CC-BY 4.0), its own clips renamed to the contract, a burrow clip added |
+| act2 | golem.glb | "Grock - Endboss" by Baue Franco (CC-BY 4.0), granite recolour with ember runes, walk/run/hit/die added |
+| act2 | folk.glb (people, not creatures) | Quaternius characters (CC0) re-proportioned into dwarves; "lava monster" by Satwik.Bandi (CC-BY 4.0) rebound onto the people's skeleton as the Molten King (`folk.mjs`) |
+
+The Act II scripts need no Blender: `lib.mjs` normalises a model (Y up, facing +Z, feet on y=0), copies and time-windows its clips, and writes procedural clips as rotations about body axes layered on a base clip.
