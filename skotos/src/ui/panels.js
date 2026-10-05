@@ -1,6 +1,6 @@
 // Modal panels: inventory, skills, shops, stash, waypoints, gates, pause, settings, credits, death, act end, map.
 import { G } from '../game/state.js';
-import { CLASSES, SKILLS, DIFFS, SLOTS, SKILL_MAX_RANK, BASES, DODGE } from '../game/data.js';
+import { CLASSES, SKILLS, DIFFS, SLOTS, SKILL_MAX_RANK, BASES, DODGE, BOONS } from '../game/data.js';
 import { computeStats, skillRank, skillUnlocked, refreshStats } from '../game/stats.js';
 import { itemName, statLines, sellValue, equipSlots, usable, withItem, bestSlotFor, itemClass } from '../game/items.js';
 import { equip, unequip, sell, sellJunk, toStash, fromStash, gamble, gambleCost, reforge, reforgeCost } from '../game/inventory.js';
@@ -19,7 +19,7 @@ const ICON_OF = { sword: 'sword', axe: 'sword', mace: 'sword', crossbow: 'bolt',
 
 export function initPanels() {
   const p = document.createElement('div'); p.id = 'panel'; p.hidden = true; document.getElementById('app').appendChild(p);
-  p.addEventListener('pointerdown', (e) => { if (e.target === p && P.name !== 'dead' && P.name !== 'act') close(); });
+  p.addEventListener('pointerdown', (e) => { if (e.target === p && P.name !== 'dead' && P.name !== 'act' && P.name !== 'boon') close(); });
   p.addEventListener('click', onClick);
   p.addEventListener('input', onInput);
 }
@@ -32,6 +32,8 @@ export function open(name, ctx) {
 }
 export function close() {
   if (!P.name) return;
+  // a blessing has to be chosen
+  if (P.name === 'boon' && !G.hero?.boons?.[(P.ctx?.act || 1) - 1]) return;
   if (P.name === 'act') emit('actClosed');
   P.name = null; G.panel = null; $('panel').hidden = true;
   for (const it of G.hero?.inv || []) if (it) it.isNew = false;
@@ -94,7 +96,8 @@ const R = {
       <div><span>${t('stat.life')}</span><b>${fmt(s.lifeMax)}</b></div><div><span>${t('stat.armor')}</span><b>${fmt(s.armor)}</b></div>
       <div><span>${t('main.' + C.main)}</span><b>${fmt(s.main)}</b></div><div><span>${t('stat.reduction')}</span><b>${red}%</b></div>
       <div><span>${t('stat.crit')}</span><b>${s.critC.toFixed(1)}% · ${fmt(s.critD)}%</b></div><div><span>${t('stat.speed')}</span><b>${s.aps.toFixed(2)}</b></div>
-      <div><span>${t('stat.kills')}</span><b>${fmt(h.stats.kills)}</b></div><div><span>${t('diff.' + DIFFS[h.diff].id)}</span><b style="color:${DIFFS[h.diff].color}">●</b></div></div>`;
+      <div><span>${t('stat.kills')}</span><b>${fmt(h.stats.kills)}</b></div><div><span>${t('diff.' + DIFFS[h.diff].id)}</span><b style="color:${DIFFS[h.diff].color}">●</b></div>
+      ${(h.boons || []).filter(Boolean).map((id) => `<div style="grid-column:1/-1"><span>${ICON.flame} ${t('boon.' + id)}</span><b style="font-size:12px;color:var(--gold2)">${t('boon.' + id + '.d')}</b></div>`).join('')}</div>`;
     let tp = '';
     if (P.sel) {
       const [w, k] = P.sel.split(':');
@@ -205,6 +208,11 @@ const R = {
       ${a2 ? '' : `<div class="logo-rule"></div><b style="font-family:var(--display);color:var(--gold)">${t('act.unlocks')}</b><p>${t('act.gates')}</p>${next ? `<p style="color:${next.color}">${t('pick.diff')}: ${t('diff.' + next.id)}</p>` : ''}`}
       <p class="muted">${t(k + '.next')}</p><button class="btn" data-a="close">${t('act.cont')}</button></div></div>`;
   },
+  boon() {
+    const act = P.ctx?.act || 1;
+    const cards = BOONS[act].map((b) => `<button class="pcard boon" data-a="boon:${b.id}"><div class="bi">${ICON[b.icon]}</div><h3>${t('boon.' + b.id)}</h3><p>${t('boon.' + b.id + '.d')}</p><p class="bq">${t('boon.' + b.id + '.q')}</p></button>`).join('');
+    return `<div class="pn" style="text-align:center"><div class="pn-b" style="padding:20px"><div class="act-h">${t('boon.h' + act)}</div><p style="font-style:italic;color:var(--ink2)">${t('boon.sub')}</p><div class="logo-rule"></div><div class="boons">${cards}</div></div></div>`;
+  },
   map() { return `<div class="pn" style="height:100%">${head(t('zone.' + G.zone.id), false)}<div class="pn-b" style="display:flex;align-items:center;justify-content:center"><canvas id="bigmap" width="800" height="800" style="max-width:100%;max-height:100%;aspect-ratio:1"></canvas></div></div>`; }
 };
 export function diffUnlocked(i) {
@@ -258,6 +266,7 @@ function onClick(e) {
     case 'lang': setLang(x); G.settings.lang = x; emit('settings'); break;
     case 'vib': G.settings.vibrate = x === '1'; break;
     case 'num': G.settings.numbers = x === '1'; break;
+    case 'boon': { const act = P.ctx?.act || 1; h.boons ||= []; h.boons[act - 1] = x; refreshStats(); writeSave(); close(); emit('boonTaken', x); return; }
     case 'respawn': close(); emit('respawn', false); return;
     case 'respawnTown': close(); emit('respawn', true); return;
   }

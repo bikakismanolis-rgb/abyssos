@@ -8,7 +8,7 @@ import { loadPeople } from '../gfx/people.js';
 import { loadCreatures, hasCreature } from '../gfx/creatures.js';
 import { loadEnv, loadPack } from '../gfx/env.js';
 import { WIND } from '../world/build.js';
-import { initInput, pollInput, IN } from '../core/input.js';
+import { initInput, pollInput, takeEvents, IN } from '../core/input.js';
 import { loadSave, writeSave } from './save.js';
 import { refreshStats } from './stats.js';
 import { enterZone, updatePacks, nearestInteract, updatePortalFx, ZONES, zoneReady } from './world.js';
@@ -26,7 +26,7 @@ import { on, emit } from '../ui/bus.js';
 import { setLang, t } from '../i18n/i18n.js';
 import { DIFFS } from './data.js';
 import Audio from '../audio/audio.js';
-import './story.js';
+import { offerBoons } from './story.js';
 import { clamp, rand } from '../core/util.js';
 
 function fatal(msg) {
@@ -90,6 +90,7 @@ async function startHero(hero, isNew, zone = 'town') {
   G.player.res = hero.cls === 'warden' ? 0 : 100;
   writeSave();
   if (isNew) later(1.2, () => emit('toast', t('q.new') + ': ' + t('q.0'), 'quest'));
+  else later(1.5, offerBoons);
 }
 on('startHero', (h, isNew) => { startHero(h, isNew).catch((e) => fatal(e.stack || e)); });
 let travelling = false;
@@ -218,6 +219,8 @@ function tick(dt, noDraw) {
   pollInput();
   const pl = G.player;
   const paused = panelOpen() || dialogOpen();
+  // keys still work over a panel or a dialog (Escape closes it); taps and skills aimed at the world are dropped
+  if (paused) for (const ev of takeEvents()) if (ev.t === 'key') emit('key', ev.k);
   let gdt = dt;
   if (G.hitstop > 0) { G.hitstop -= dt; gdt = dt * 0.08; }
   if (G.slowT > 0) { G.slowT -= dt; gdt *= G.slow; }

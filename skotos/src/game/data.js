@@ -97,6 +97,20 @@ export const PACKS = {
   mine: [['spider', 3], ['caveBat', 3], ['deepworm', 0.6], ['spiderling', 2]],
   deadDwarves: [['deadDwarf', 5], ['skeletonArcher', 1.5], ['wraith', 1]]
 };
+// beacon blessings: when a shard is laid on the beacon and another fire answers, the flame gives one of three, for good
+export const BOONS = {
+  1: [
+    { id: 'ember', icon: 'flame', stats: { dmgPct: 12, critDmg: 10 } },
+    { id: 'hearth', icon: 'shield', stats: { lifePct: 15, armorPct: 10 } },
+    { id: 'north', icon: 'roll', stats: { move: 8, atkSpd: 6 } }
+  ],
+  2: [
+    { id: 'forge', icon: 'fire', stats: { eliteDmg: 20, area: 10 } },
+    { id: 'anvil', icon: 'shield', stats: { armorPct: 20, thorns: 40 } },
+    { id: 'rune', icon: 'star', stats: { cdr: 8, resRegen: 20 } }
+  ]
+};
+export const BOON = Object.fromEntries(Object.values(BOONS).flat().map((b) => [b.id, b]));
 // elite affixes
 export const AFFIXES = ['fast', 'vampiric', 'molten', 'frozen', 'shielding', 'teleporter', 'thunder', 'horde', 'armored'];
 
