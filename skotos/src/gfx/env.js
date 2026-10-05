@@ -4,30 +4,6 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import envUrl from '../assets/env.glb?url';
-import leavesD from '../assets/env/leaves_d.webp?url';
-import leavesN from '../assets/env/leaves_n.webp?url';
-import mudD from '../assets/env/mud_d.webp?url';
-import mudN from '../assets/env/mud_n.webp?url';
-import trailD from '../assets/env/trail_d.webp?url';
-import trailN from '../assets/env/trail_n.webp?url';
-import cobbleD from '../assets/env/cobble_d.webp?url';
-import cobbleN from '../assets/env/cobble_n.webp?url';
-import flagsD from '../assets/env/flags_d.webp?url';
-import flagsN from '../assets/env/flags_n.webp?url';
-import mcobbleD from '../assets/env/mcobble_d.webp?url';
-import mcobbleN from '../assets/env/mcobble_n.webp?url';
-import wallD from '../assets/env/wall_d.webp?url';
-import wallN from '../assets/env/wall_n.webp?url';
-import blocksD from '../assets/env/blocks_d.webp?url';
-import blocksN from '../assets/env/blocks_n.webp?url';
-import barkD from '../assets/env/bark_d.webp?url';
-import barkN from '../assets/env/bark_n.webp?url';
-
-const LAYER_URLS = {
-  leaves: [leavesD, leavesN], mud: [mudD, mudN], trail: [trailD, trailN], cobble: [cobbleD, cobbleN],
-  flags: [flagsD, flagsN], mcobble: [mcobbleD, mcobbleN], wall: [wallD, wallN], blocks: [blocksD, blocksN], bark: [barkD, barkN]
-};
 // ENV.layers[id] = { d: diffuse texture (sRGB), n: OpenGL normal map }; ENV.props[name] = [{ geo, mat }] (one part per material)
 export const ENV = { layers: {}, props: {}, pivots: {}, sizes: {}, extras: {}, packs: {}, ready: false, quality: 1 };
 
@@ -121,17 +97,21 @@ function readProps(gltf, quality) {
 const PACK_GLB = import.meta.glob('../assets/*.glb', { query: '?url', import: 'default' });
 const PACK_TEX = import.meta.glob('../assets/*/*.webp', { query: '?url', import: 'default' });
 const packs = {};
+// a pack's tiling layers: { id: { d: () => url, n: () => url } } from src/assets/<name>/<id>_d|n.webp
+function packLayers(name) {
+  const layers = {};
+  for (const k in PACK_TEX) {
+    const m = k.match(new RegExp('^\\.\\./assets/' + name + '/(\\w+)_(d|n)\\.webp$'));
+    if (m) (layers[m[1]] ||= {})[m[2]] = PACK_TEX[k];
+  }
+  return layers;
+}
 export function loadPack(name) {
   if (packs[name]) return packs[name];
   const q = ENV.quality;
   packs[name] = (async () => {
     const glbKey = '../assets/' + name + '.glb';
-    const layers = {};
-    for (const k in PACK_TEX) {
-      const m = k.match(new RegExp('^\\.\\./assets/' + name + '/(\\w+)_(d|n)\\.webp$'));
-      if (m) (layers[m[1]] ||= {})[m[2]] = PACK_TEX[k];
-    }
-    const tex = Object.entries(layers).map(async ([id, u]) => {
+    const tex = Object.entries(packLayers(name)).map(async ([id, u]) => {
       const [ud, un] = await Promise.all([u.d(), q >= 1 && u.n ? u.n() : null]);
       const [td, tn] = await Promise.all([texture(ud, true, q), un ? texture(un, false, q) : null]);
       ENV.layers[id] = { d: td, n: tn };
@@ -149,11 +129,13 @@ export function loadEnv(quality = 1) {
   if (loading) return loading;
   ENV.quality = quality;
   loading = (async () => {
-    const tex = Object.entries(LAYER_URLS).map(async ([id, [d, n]]) => {
-      const [td, tn] = await Promise.all([texture(d, true, quality), quality >= 1 ? texture(n, false, quality) : null]);
+    // the base set is packed like the others (src/assets/env.glb + src/assets/env/*.webp) and fetched lazily
+    const tex = Object.entries(packLayers('env')).map(async ([id, u]) => {
+      const [ud, un] = await Promise.all([u.d(), quality >= 1 && u.n ? u.n() : null]);
+      const [td, tn] = await Promise.all([texture(ud, true, quality), un ? texture(un, false, quality) : null]);
       ENV.layers[id] = { d: td, n: tn };
     });
-    const glb = bytes(envUrl).then((b) => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(b, '')).then((g) => readProps(g, quality));
+    const glb = PACK_GLB['../assets/env.glb']().then(bytes).then((b) => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(b, '')).then((g) => readProps(g, quality));
     await Promise.all([...tex, glb]);
     ENV.ready = true;
   })();

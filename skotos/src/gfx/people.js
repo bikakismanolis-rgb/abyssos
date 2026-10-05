@@ -6,8 +6,9 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { clamp, damp, smooth } from '../core/util.js';
 import { ANIMS } from './anims.data.js';
-import peopleUrl from '../assets/people.glb?url';
-import movesUrl from '../assets/moves.bin?url';
+// lazy, so inlined builds keep these megabytes out of the scripts the game needs before its loading screen
+const peopleUrl = () => import('../assets/people.glb?url').then((m) => m.default);
+const movesUrl = () => import('../assets/moves.bin?url').then((m) => m.default);
 // extra sets of people, each loaded with the zones that need it (tools/creatures/act2/folk.mjs builds both):
 // 'folk' = Act II's dwarves (folk.glb), 'grove' = Act III's Evergreen (grove.glb)
 // (lazy: each set's URL is fetched only when a zone asks for it, which keeps inlined builds in small chunks)
@@ -39,7 +40,7 @@ let loading = null;
 export function loadPeople() {
   if (loading) return loading;
   loading = (async () => {
-    const [glb, mv] = await Promise.all([bytes(peopleUrl), bytes(movesUrl)]);
+    const [glb, mv] = await Promise.all([peopleUrl().then(bytes), movesUrl().then(bytes)]);
     PEOPLE.moves = parseMoves(mv);
     await addScenes(glb);
     PEOPLE.ready = true;

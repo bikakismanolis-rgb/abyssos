@@ -15,6 +15,27 @@
 <body>
 <div id="stage"></div>
 <div id="app"></div>
+<!-- shown from the first frame, before any script has arrived; the game fills the bar and removes it -->
+<div id="boot" style="position:fixed;inset:0;z-index:40;display:grid;place-items:center;background:#05070a;color:#d8b46a;font:700 20px Alegreya SC,Georgia,serif;letter-spacing:5px;text-align:center">
+<div><div>ΣΚΟΤΟΣ</div>
+<div style="margin:18px auto 0;width:200px;max-width:60vw;height:3px;background:#221c12;border-radius:2px;overflow:hidden"><i id="boot-bar" style="display:block;height:100%;width:2%;background:#d8b46a;transition:width .4s"></i></div>
+<div id="boot-msg" style="margin-top:12px;font:400 13px/1.5 Alegreya,Georgia,serif;letter-spacing:1px;color:#8a7a5a;max-width:80vw">Φόρτωση…</div></div>
+</div>
+<script>
+(function () {
+  var t0 = Date.now(), bar = document.getElementById('boot-bar'), msg = document.getElementById('boot-msg'), label = 'Φόρτωση', bad = false;
+  function show() { if (!bad) msg.textContent = label + ' · ' + Math.round((Date.now() - t0) / 1000) + ' δ.'; }
+  var tick = setInterval(show, 1000);
+  window.__boot = {
+    p: 0.02,
+    set: function (p, text) { this.p = Math.max(this.p, p); bar.style.width = Math.round(this.p * 100) + '%'; if (text) label = text; show(); },
+    fail: function (m) { bad = true; clearInterval(tick); msg.style.color = '#ff9a8a'; msg.textContent = 'Σφάλμα φόρτωσης: ' + m; },
+    done: function () { clearInterval(tick); var b = document.getElementById('boot'); if (b) b.remove(); }
+  };
+  window.addEventListener('error', function (e) { if (document.getElementById('boot')) window.__boot.fail((e.message || 'script') + (e.filename ? ' (' + e.filename.split('/').pop() + ')' : '')); }, true);
+  window.addEventListener('unhandledrejection', function (e) { if (document.getElementById('boot')) window.__boot.fail(String(e.reason && e.reason.message || e.reason)); });
+})();
+</script>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>
