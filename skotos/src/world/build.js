@@ -126,7 +126,7 @@ function envMats() {
   }
   if (!MAT.woodDone && ENV.packs.wood) {
     MAT.woodDone = true;
-    MAT.mossW = worldMat('stonemoss', { scale: 2.6, tri: true, rough: 0.88, tint: 0xd0ccc0 });
+    MAT.mossW = worldMat('stonemoss', { scale: 3.9, tri: true, rough: 0.88, tint: 0xd0ccc0 });
     MAT.rootW = worldMat('rootwall', { scale: 2.2, tri: true, rough: 0.9, tint: 0xc0b098 });
   }
   if (!MAT.barkW && ENV.layers.bark) MAT.barkW = worldMat('bark', { scale: 1.8, tri: true, rough: 0.9, tint: 0xb0a088 });
@@ -483,7 +483,7 @@ function kitMaterial(M, kit, m, type) {
   return KITMAT[kit];
 }
 // small things on the floor do not need to cast moon shadows
-const ENV_SHADOW = { fernA: false, fernB: false, branches: false, stoneA: false, candlestick: false, mushrooms: false };
+const ENV_SHADOW = { fernA: false, fernB: false, fern: false, branches: false, stoneA: false, candlestick: false, mushrooms: false };
 
 // ---------- static merged batches (chunked for culling) ----------
 class Batch {
@@ -527,6 +527,14 @@ const ENV_SWAP = {
 const hash2 = (x, z) => { const v = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453; return v - Math.floor(v); };
 function addProp(B, I, p, L, rng, out) {
   const { x, z } = p, r = p.r || 0, s = p.s || 1;
+  // the Weeping Woods' undergrowth (wood pack): autumn bracken and rosemary willow shrubs (the shrubs give way to bracken
+  // on low quality); without the pack they are the summer ferns
+  if (p.t === 'bracken' || p.t === 'shrub') {
+    const name = p.t === 'shrub' && R.quality >= 1 && ENV.props.shrub ? 'shrub' : ENV.props.fern ? 'fern' : null;
+    if (name) I.add('env:' + name, x, z, r, s * (name === 'fern' ? 1.35 : 0.85), 0);
+    else addProp(B, I, { ...p, t: 'bush' }, L, rng, out);
+    return;
+  }
   const sw = ENV.ready && ENV_SWAP[p.t];
   if (sw) {
     const name = sw[0][Math.floor(hash2(x, z) * sw[0].length)];
@@ -1219,7 +1227,7 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
   gc = mix(vec3(dot(gc, vec3(0.3, 0.59, 0.11))), gc, uSat);` : '') + (X.dry ? `
   // the First Autumn: dry leaves drift over everything but the trodden paths
   vec3 cD = texture2D(tD, vGP * uS.x * 0.93 + vec2(0.37, 0.11)).rgb * uDryTint;
-  float wD = uAut * smoothstep(0.32, 0.6, vLay.z * 0.8 + gH(cD) * 0.7 - wP * 0.4 + 0.08);
+  float wD = uAut * smoothstep(0.32, 0.6, vLay.z * 0.8 + gH(cD) * 0.7 - wP * 0.4 - 0.01);
   gc = mix(gc, cD, wD); gh = mix(gh, gH(cD), wD);` : '') + (X.sap ? `
   // amber sap: the floor shows through the resin, darkened and gold; glossy, faintly lit from within
   float wS = smoothstep(0.4, 0.62, vSap + (gh - 0.45) * 0.45);

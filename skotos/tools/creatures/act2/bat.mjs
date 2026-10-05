@@ -16,8 +16,10 @@ const chest = find(/^Chest/), elbowL = find(/^Elbow_L/), elbowR = find(/^Elbow_R
 copyClip(doc, flap, 'idle', { loop: true });
 copyClip(doc, flap, 'walk', { loop: true });
 copyClip(doc, flap, 'run', { loop: true, speed: 1.4 });
-copyClip(doc, flap, 'attack', { speed: 1.6, keys: (t, d) => ({ [chest]: [[X, 25 * bump(t, 0, d)]], [head]: [[X, 20 * bump(t, 0.1 * d, 0.7 * d)]] }) });
-copyClip(doc, flap, 'bite', { speed: 1.6, keys: (t, d) => ({ [chest]: [[X, 25 * bump(t, 0, d)]], [head]: [[X, 20 * bump(t, 0.1 * d, 0.7 * d)]] }) });
+// the bite lunges early in the beat (peak at a fifth of the clip, 0.28 s) so the hit lands as the head snaps forward
+const lunge = (t, d) => ({ [chest]: [[X, 25 * bump(t, 0, 0.4 * d)]], [head]: [[X, 20 * bump(t, 0.04 * d, 0.36 * d)]] });
+copyClip(doc, flap, 'attack', { speed: 1.6, keys: lunge });
+copyClip(doc, flap, 'bite', { speed: 1.6, keys: lunge });
 copyClip(doc, flap, 'hit', { to: 0.4, speed: 0.6, keys: (t, d) => ({ [chest]: [[X, -20 * bump(t, 0, d)]] }) });
 // die: the wings fold in and the bat falls back onto its back, rolled a little to one side. The game drops a dying bat
 // to the ground in its first ~0.25 s, so the body is lifted to rest on y = 0 and slid over the actor's spot as it falls.
@@ -42,7 +44,7 @@ makeClip(doc, 'die', { ...dieO, root: (t, d) => {
 dropClip(flap);
 const b = bounds(doc, null, 0);
 const bytes = await finish(doc, OUT, {
-  hit: { attack: 0.22, bite: 0.22 }, height: +(b.max.y - b.min.y).toFixed(2), walkSpeed: 2, runSpeed: 6,
+  hit: { attack: 0.28, bite: 0.28 }, height: +(b.max.y - b.min.y).toFixed(2), walkSpeed: 2, runSpeed: 6,
   credit: '"Bat" by matisosanimation (sketchfab.com/matisosanimation), CC-BY 4.0 - rescaled, extra clips made for Skotos', license: 'CC-BY-4.0'
 }, { base: 512, aux: 256 });
 console.log('bat', (bytes / 1024).toFixed(0) + ' KB', { chest, elbowL, clavL, head });
