@@ -22,7 +22,9 @@ const CAST = {
   spider: ['spider', 1], spiderling: ['spider', 0.5], weaver: ['spider', 2.6],
   ash: ['ashspawn', 1], troll: ['troll', 1],
   wraith: ['wight', 1], barrowLord: ['barrowlord', 1.15],
-  magmaHound: ['magmahound', 1], caveBat: ['bat', 1], deepworm: ['worm', 1], stonewarden: ['golem', 1]
+  magmaHound: ['magmahound', 1], caveBat: ['bat', 1], deepworm: ['worm', 1], stonewarden: ['golem', 1],
+  // Act III (tools/creatures/act3)
+  silverhorn: ['elk', 1], amberBear: ['bear', 1], amberMoth: ['moth', 1], rootling: ['mandrake', 1], rootwarden: ['treeman', 1]
 };
 
 export const CREATURES = { tpl: {}, ready: false };
