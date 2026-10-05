@@ -116,25 +116,27 @@ function readProps(gltf, quality) {
   }
 }
 
-// extra packs, fetched the first time a zone needs them (Act II: tools/pack-deep.mjs)
-const PACK_GLB = import.meta.glob('../assets/*.glb', { query: '?url', import: 'default', eager: true });
-const PACK_TEX = import.meta.glob('../assets/*/*.webp', { query: '?url', import: 'default', eager: true });
+// extra packs, fetched the first time a zone needs them (Act II: tools/pack-deep.mjs, Act III: tools/pack-wood.mjs).
+// Lazy globs: each file is its own chunk, so an inlined build never puts every pack into one script.
+const PACK_GLB = import.meta.glob('../assets/*.glb', { query: '?url', import: 'default' });
+const PACK_TEX = import.meta.glob('../assets/*/*.webp', { query: '?url', import: 'default' });
 const packs = {};
 export function loadPack(name) {
   if (packs[name]) return packs[name];
   const q = ENV.quality;
   packs[name] = (async () => {
-    const glbUrl = PACK_GLB['../assets/' + name + '.glb'];
+    const glbKey = '../assets/' + name + '.glb';
     const layers = {};
     for (const k in PACK_TEX) {
       const m = k.match(new RegExp('^\\.\\./assets/' + name + '/(\\w+)_(d|n)\\.webp$'));
       if (m) (layers[m[1]] ||= {})[m[2]] = PACK_TEX[k];
     }
     const tex = Object.entries(layers).map(async ([id, u]) => {
-      const [td, tn] = await Promise.all([texture(u.d, true, q), q >= 1 && u.n ? texture(u.n, false, q) : null]);
+      const [ud, un] = await Promise.all([u.d(), q >= 1 && u.n ? u.n() : null]);
+      const [td, tn] = await Promise.all([texture(ud, true, q), un ? texture(un, false, q) : null]);
       ENV.layers[id] = { d: td, n: tn };
     });
-    const glb = glbUrl ? bytes(glbUrl).then((b) => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(b, '')).then((g) => readProps(g, q)) : null;
+    const glb = PACK_GLB[glbKey] ? PACK_GLB[glbKey]().then(bytes).then((b) => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(b, '')).then((g) => readProps(g, q)) : null;
     await Promise.all([...tex, glb]);
     ENV.packs[name] = true;
   })();

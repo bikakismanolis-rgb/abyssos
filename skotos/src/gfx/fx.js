@@ -1,6 +1,6 @@
 // Particles, weapon trails, ground telegraphs, decals, rings and lightning.
 import * as THREE from 'three';
-import { R, addLight, shake } from './gfx.js';
+import { R, addLight, shake, LIGHTS } from './gfx.js';
 import { tex } from './textures.js';
 import { rand, clamp, lerp, TAU } from '../core/util.js';
 
@@ -22,8 +22,43 @@ void main() {
   if (gl_FragColor.a < 0.004) discard;
 }`;
 
+// falling leaves: the sprite turns and flips as it falls (its angle follows its own position, so no extra attributes)
+const VS_LEAF = `
+attribute float aSize; attribute vec4 aColor;
+varying vec4 vColor; varying vec2 vRot; varying float vFlip; uniform float uScale;
+void main() {
+  vColor = aColor;
+  float a = position.y * 1.7 + position.x * 0.9 + position.z * 1.3;
+  vRot = vec2(cos(a), sin(a)); vFlip = 0.25 + 0.75 * abs(sin(position.y * 2.3 + position.z));
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  gl_PointSize = aSize * uScale / -mv.z;
+  gl_Position = projectionMatrix * mv;
+}`;
+const FS_LEAF = `
+uniform sampler2D uTex; varying vec4 vColor; varying vec2 vRot; varying float vFlip;
+void main() {
+  vec2 q = gl_PointCoord - 0.5;
+  q = vec2(q.x * vRot.x - q.y * vRot.y, q.x * vRot.y + q.y * vRot.x);
+  q.x /= vFlip;
+  if (abs(q.x) > 0.5 || abs(q.y) > 0.5) discard;
+  vec4 t = texture2D(uTex, q + 0.5);
+  gl_FragColor = vec4(vColor.rgb * (0.75 + 0.25 * vFlip) * t.rgb, vColor.a * t.a);
+  if (gl_FragColor.a < 0.05) discard;
+}`;
+let leafTex = null;
+function leafTexture() {
+  if (leafTex) return leafTex;
+  const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+  g.translate(32, 32); g.rotate(0.5);
+  g.fillStyle = '#fff'; g.beginPath(); g.moveTo(0, -27); g.bezierCurveTo(17, -14, 16, 12, 0, 27); g.bezierCurveTo(-16, 12, -17, -14, 0, -27); g.fill();
+  g.strokeStyle = 'rgba(120,90,60,0.9)'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, -24); g.lineTo(0, 30); g.stroke();
+  g.lineWidth = 1; for (let i = -2; i <= 2; i++) { g.beginPath(); g.moveTo(0, i * 8); g.lineTo(10, i * 8 - 7); g.moveTo(0, i * 8); g.lineTo(-10, i * 8 - 7); g.stroke(); }
+  leafTex = new THREE.CanvasTexture(c);
+  return leafTex;
+}
+
 class Pool {
-  constructor(cap, additive) {
+  constructor(cap, additive, leaf) {
     this.cap = cap; this.n = 0;
     const f = (k) => new Float32Array(cap * k);
     this.p = f(3); this.v = f(3); this.life = f(1); this.max = f(1); this.s0 = f(1); this.s1 = f(1);
@@ -34,8 +69,8 @@ class Pool {
     this.aColor = new THREE.BufferAttribute(new Float32Array(cap * 4), 4).setUsage(THREE.DynamicDrawUsage);
     this.geo.setAttribute('position', this.aPos); this.geo.setAttribute('aSize', this.aSize); this.geo.setAttribute('aColor', this.aColor);
     this.mat = new THREE.ShaderMaterial({
-      uniforms: { uTex: { value: tex('dot') }, uScale: { value: 300 } },
-      vertexShader: VS, fragmentShader: FS, transparent: true, depthWrite: false,
+      uniforms: { uTex: { value: leaf ? leafTexture() : tex('dot') }, uScale: { value: 300 } },
+      vertexShader: leaf ? VS_LEAF : VS, fragmentShader: leaf ? FS_LEAF : FS, transparent: true, depthWrite: false,
       blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending
     });
     this.points = new THREE.Points(this.geo, this.mat);
@@ -87,20 +122,23 @@ class Pool {
   clear() { this.n = 0; this.geo.setDrawRange(0, 0); }
 }
 
-export const FX = { add: null, alpha: null, group: null, trails: [], teles: [], rings: [], decals: [], bolts: [], emitters: [], ambient: null, time: 0, q: 1 };
+export const FX = { add: null, alpha: null, leaf: null, group: null, trails: [], teles: [], rings: [], decals: [], bolts: [], emitters: [], ambient: null, time: 0, q: 1, autumn: 0 };
+// FX.beat (0-1): the Heartwood's heartbeat in the lights; 0 leaves them a steady ember glow (shared with gfx.js LIGHTS)
+Object.defineProperty(FX, 'beat', { get: () => LIGHTS.beat, set: (v) => { LIGHTS.beat = v; }, enumerable: true });
 
 export function initFX(quality) {
   FX.q = quality;
   FX.group = new THREE.Group();
   FX.add = new Pool([1200, 2400, 3500][quality], true);
   FX.alpha = new Pool([500, 1000, 1600][quality], false);
-  FX.group.add(FX.add.points, FX.alpha.points);
+  FX.leaf = new Pool([160, 320, 500][quality], false, true);
+  FX.group.add(FX.add.points, FX.alpha.points, FX.leaf.points);
   R.scene.add(FX.group);
-  const setScale = () => { const s = R.h * R.renderer.getPixelRatio() * 0.5 / Math.tan((R.camera.fov * Math.PI) / 360); FX.add.mat.uniforms.uScale.value = s; FX.alpha.mat.uniforms.uScale.value = s; };
+  const setScale = () => { const s = R.h * R.renderer.getPixelRatio() * 0.5 / Math.tan((R.camera.fov * Math.PI) / 360); FX.add.mat.uniforms.uScale.value = s; FX.alpha.mat.uniforms.uScale.value = s; FX.leaf.mat.uniforms.uScale.value = s; };
   setScale(); window.addEventListener('resize', () => setTimeout(setScale, 50));
   FX.setScale = setScale;
 }
-export const P = (o) => (o.add === false ? FX.alpha : FX.add).spawn(o);
+export const P = (o) => (o.leaf ? FX.leaf : o.add === false ? FX.alpha : FX.add).spawn(o);
 const rr = (a, b) => a + Math.random() * (b - a);
 
 // ---------- one-shot effects ----------
@@ -134,6 +172,10 @@ export function hitFx(x, y, z, kind, dx, dz, crit) {
   else if (kind === 'chitin') { blood(x, y, z, Math.round(8 * k), dx, dz, 0x3a5a10); sparks(x, y, z, 3, 0xb0ff60, 3, { dx, dz }); }
   else if (kind === 'ash') { sparks(x, y, z, Math.round(10 * k), 0xffa040, 5, { dx, dz }); blood(x, y, z, 4, dx, dz, 0x2a2420); }
   else if (kind === 'stone') { sparks(x, y, z, Math.round(8 * k), 0xfff0d0, 6, { dx, dz, color1: 0x8a8070 }); puff(x, y, z, 3, 0x8a8680, 0.6, 0.7, 0.7); blood(x, y, z, 5, dx, dz, 0x5a5650); }
+  else if (kind === 'bark') { // the Evergreen and their roots: splinters and a spray of amber sap
+    for (let i = 0; i < Math.round(7 * k); i++) { const a = Math.random() * TAU, sp = rr(1.5, 4.5); P({ add: false, x, y, z, vx: Math.cos(a) * sp * 0.6 + dx * sp, vy: rr(1.5, 4), vz: Math.sin(a) * sp * 0.6 + dz * sp, life: rr(0.4, 0.8), size: rr(0.07, 0.13), size1: 0.06, color: 0x6a4a2c, color1: 0x3a2818, alpha: 1, alpha1: 0.7, grav: 16, drag: 1 }); }
+    sparks(x, y, z, Math.round(5 * k), 0xffc860, 4, { dx, dz, color1: 0xb05a10 });
+  }
   else if (kind === 'magma') { sparks(x, y, z, Math.round(12 * k), 0xffc050, 6, { dx, dz, color1: 0xff3000 }); blood(x, y, z, 4, dx, dz, 0x1a1210); P({ x, y, z, life: 0.25, size: 1.2 * k, size1: 0.2, color: 0xffa040, color1: 0xff3000 }); }
   else sparks(x, y, z, Math.round(8 * k), 0xffd080, 5, { dx, dz });
   if (crit) flash(x, y, z, 0xfff0d0, 2.2, 0.12);
@@ -146,6 +188,13 @@ export function explosion(x, z, r = 3, color = 0xff7a20, opts = {}) {
   addLight({ x, y: 1.5, z, color, intensity: 40, range: r * 4, life: 0.4, fade: 0.4 });
   decal(x, z, 'scorch', r * 0.9);
   shake(opts.shake ?? 0.35);
+}
+
+// amber bursting from a broken root or a dying tree-thing; leaves a sap stain
+export function sapBurst(x, z, s = 1) {
+  glowBurst(x, 0.9 * s, z, 0xffb040, Math.round(18 * s), 3 * s, 0.22, 0.7);
+  for (let i = 0; i < 10 * s; i++) { const a = Math.random() * TAU, sp = rr(1, 3.5) * s; P({ add: false, x, y: 0.8 * s, z, vx: Math.cos(a) * sp, vy: rr(2, 5), vz: Math.sin(a) * sp, life: rr(0.5, 0.9), size: rr(0.08, 0.16), size1: 0.08, color: 0xffa830, color1: 0xa05a10, alpha: 0.95, alpha1: 0.8, grav: 16, drag: 0.8 }); }
+  decal(x, z, 'amber', 1.4 * s);
 }
 
 // ---------- ground rings (shockwaves) ----------
@@ -173,7 +222,7 @@ function decalTexture() {
 const decalGeo = new THREE.PlaneGeometry(1, 1); decalGeo.rotateX(-Math.PI / 2);
 export function decal(x, z, kind, s = 1, life = 14) {
   if (FX.decals.length > 40) { const d = FX.decals.shift(); FX.group.remove(d.m); d.m.material.dispose(); }
-  const color = kind === 'blood' ? 0x4a0505 : kind === 'scorch' ? 0x0a0806 : kind === 'goo' ? 0x2a4a08 : kind === 'ecto' ? 0x2a6a8a : 0x202020;
+  const color = kind === 'blood' ? 0x4a0505 : kind === 'scorch' ? 0x0a0806 : kind === 'goo' ? 0x2a4a08 : kind === 'ecto' ? 0x2a6a8a : kind === 'amber' || kind === 'sap' ? 0xb07018 : 0x202020;
   const m = new THREE.Mesh(decalGeo, new THREE.MeshBasicMaterial({ map: decalTexture(), color, transparent: true, opacity: kind === 'ecto' ? 0.5 : 0.75, depthWrite: false, blending: kind === 'ecto' ? THREE.AdditiveBlending : THREE.NormalBlending }));
   m.position.set(x, 0.03 + FX.decals.length * 0.0005, z); m.rotation.y = Math.random() * TAU; m.scale.setScalar(s);
   m.renderOrder = 2;
@@ -309,13 +358,34 @@ function emit(e, dt, cx, cz) {
       }
       break;
     }
+    // Act III: mist lying in the Glade of Stones, motes round the seed-lanterns and Tears, the mere's slow glow, weeping trees
+    case 'lowmist': while (e.acc > 0.3) { e.acc -= 0.3; P({ add: false, x: e.x + rr(-4, 4) * s, y: rr(0.7, 1.3), z: e.z + rr(-4, 4) * s, vx: rr(-0.15, 0.15), vy: 0.02, vz: rr(-0.15, 0.15), life: rr(5, 8), size: 2.2, size1: 3.4, color: 0xd8ccb0, alpha: 0.12, alpha1: 0, drag: 0.1 }); } break;
+    case 'motes': {
+      const r = e.autumn ? 1 - FX.autumn : 1; if (r <= 0) break;
+      while (e.acc > 0.35 / r) { e.acc -= 0.35 / r; P({ x: e.x + rr(-0.6, 0.6) * s, y: e.y + rr(-0.5, 0.5), z: e.z + rr(-0.6, 0.6) * s, vx: rr(-0.1, 0.1), vy: rr(0.02, 0.15), vz: rr(-0.1, 0.1), life: rr(2, 4), size: 0.07, size1: 0.03, color: e.color || 0xe0f080, color1: 0x80a020, alpha: 0.9, alpha1: 0 }); }
+      break;
+    }
+    case 'amberglow': {
+      const r = 1 - FX.autumn * 0.6;
+      while (e.acc > 0.5 / r) {
+        e.acc -= 0.5 / r;
+        P({ x: e.x + rr(-2, 2) * s, y: -0.1, z: e.z + rr(-2, 2) * s, vx: rr(-0.08, 0.08), vy: rr(0.2, 0.5), vz: rr(-0.08, 0.08), life: rr(2.5, 4.5), size: 0.06, size1: 0.02, color: 0xffd070, color1: 0xc06010, alpha: 0.85, alpha1: 0 });
+        if (Math.random() < 0.08) P({ x: e.x + rr(-2, 2) * s, y: -0.15, z: e.z + rr(-2, 2) * s, life: 1.2, size: 0.5, size1: 1.0, color: 0xffb040, color1: 0x804010, alpha: 0.35, alpha1: 0 });
+      }
+      break;
+    }
+    case 'drip': {
+      if (FX.autumn >= 1) break;
+      if (e.acc > (e.next ||= rr(2.5, 6))) { e.acc = 0; e.next = rr(2.5, 6); const x = e.x + rr(-1.2, 1.2), z = e.z + rr(-1.2, 1.2), y = e.y || 3.5; P({ x, y, z, vy: -0.5, life: Math.sqrt((2 * y) / 9.8), size: 0.09, size1: 0.07, color: 0xffc050, color1: 0xff9a20, alpha: 0.95, alpha1: 0.9, grav: 9.8 }); }
+      break;
+    }
     case 'mist': while (e.acc > 0.3) { e.acc -= 0.3; P({ add: false, x: e.x + rr(-1.2, 1.2), y: 0.3, z: e.z + rr(0, 1), vx: rr(-0.2, 0.2), vy: 0.05, vz: rr(0.2, 0.6), life: rr(3, 5), size: 1.5, size1: 3.5, color: 0x8aa0b8, alpha: 0.22, alpha1: 0, drag: 0.2 }); } break;
   }
 }
 function ambient(dt, cx, cz) {
   const k = FX.ambient; if (!k) return;
   FX.ambAcc = (FX.ambAcc || 0) + dt;
-  const rate = k === 'forest' ? 0.06 : k === 'town' ? 0.05 : k === 'snow' ? 0.012 : k === 'halls' ? 0.07 : 0.09;
+  const rate = k === 'forest' ? 0.06 : k === 'town' ? 0.05 : k === 'snow' ? 0.012 : k === 'halls' ? 0.07 : k === 'weep' ? 0.07 : k === 'weepAutumn' ? 0.045 : k === 'heart' || k === 'heartAutumn' ? 0.08 : 0.09;
   while (FX.ambAcc > rate) {
     FX.ambAcc -= rate;
     const x = cx + rr(-16, 16), z = cz + rr(-14, 12);
@@ -337,6 +407,24 @@ function ambient(dt, cx, cz) {
     } else if (k === 'halls') {
       if (Math.random() < 0.55) P({ x, y: rr(0.2, 4), z, vx: rr(-0.15, 0.15), vy: rr(0.15, 0.5), vz: rr(-0.15, 0.15), life: rr(2.5, 5), size: 0.05, size1: 0.02, color: 0xffb060, color1: 0xff4010, alpha: 0.9, alpha1: 0 });
       else P({ add: false, x, y: rr(0.3, 3), z, vx: rr(-0.15, 0.15), vy: rr(-0.05, 0.08), vz: rr(-0.15, 0.15), life: rr(4, 7), size: 0.06, size1: 0.06, color: 0x8a8278, alpha: 0.6, alpha1: 0 });
+    } else if (k === 'weep') {
+      // the Still Wood: pollen and dust hang in the gold light and barely move; a warm haze lies in the hollows
+      const q = Math.random();
+      if (q < 0.7) P({ x, y: rr(0.3, 3.8), z, vx: rr(-0.04, 0.04), vy: rr(-0.015, 0.03), vz: rr(-0.04, 0.04), life: rr(4, 7), size: rr(0.04, 0.09), size1: 0.05, color: 0xffe6a8, color1: 0xffb850, alpha: 0.8, alpha1: 0 });
+      else if (q < 0.9) P({ add: false, x, y: rr(0.9, 1.6), z, vx: rr(-0.05, 0.05), vy: 0, vz: rr(-0.05, 0.05), life: rr(5, 8), size: 2.2, size1: 3.2, color: 0xd0a860, alpha: 0.08, alpha1: 0 });
+      else P({ add: false, x, y: rr(1, 4), z, vx: 0, vy: rr(-0.01, 0.01), vz: 0, life: rr(5, 8), size: 0.05, size1: 0.05, color: 0xe8d8b0, alpha: 0.7, alpha1: 0 });
+    } else if (k === 'weepAutumn') {
+      // the First Autumn: leaves fall at last, gold and brown, on a wind out of the west
+      const g = 0.6 + Math.sin(FX.time * 0.4) * 0.4, y = rr(3, 8), vy = rr(-1.1, -0.65);
+      if (Math.random() < 0.75) P({ leaf: true, x: x - 3, y, z, vx: rr(0.3, 0.9) * (0.6 + g), vy, vz: rr(-0.25, 0.25), life: (y / -vy) * 0.97, size: rr(0.16, 0.26), size1: 0.18, color: Math.random() < 0.55 ? 0xe0a030 : Math.random() < 0.5 ? 0xb85a1c : 0x8a5a2a, alpha: 1, alpha1: 0.85 });
+      else P({ add: false, x, y: rr(0.9, 1.6), z, vx: rr(0.1, 0.4), vy: 0, vz: rr(-0.1, 0.1), life: rr(4, 7), size: 2.2, size1: 3.2, color: 0xa88a60, alpha: 0.07, alpha1: 0 });
+    } else if (k === 'heart' || k === 'heartAutumn') {
+      // inside the First Oak: spores rise from the root floor, sap drips from above; after the First Autumn leaves drift down
+      const autumn = k === 'heartAutumn', q = Math.random();
+      if (q < 0.55) P({ x, y: rr(0, 1.2), z, vx: rr(-0.06, 0.06), vy: rr(0.12, 0.35), vz: rr(-0.06, 0.06), life: rr(4, 7), size: rr(0.04, 0.07), size1: 0.03, color: autumn ? 0xe8d0a0 : 0xe8e090, color1: 0xa07830, alpha: 0.85, alpha1: 0 });
+      else if (q < 0.7 && !autumn) { const y = rr(4.5, 7); P({ x, y, z, vy: -0.4, life: Math.sqrt((2 * y) / 9.8), size: 0.08, size1: 0.06, color: 0xffc050, color1: 0xff9020, alpha: 0.9, alpha1: 0.85, grav: 9.8 }); }
+      else if (q < 0.82 && autumn) { const y = rr(4, 7), vy = rr(-0.9, -0.55); P({ leaf: true, x, y, z, vx: rr(-0.2, 0.2), vy, vz: rr(-0.2, 0.2), life: (y / -vy) * 0.97, size: rr(0.15, 0.24), size1: 0.17, color: Math.random() < 0.6 ? 0xd09030 : 0x8a5a2a, alpha: 1, alpha1: 0.8 }); }
+      else P({ add: false, x, y: rr(0.8, 1.4), z, vx: rr(-0.08, 0.08), vy: 0, vz: rr(-0.08, 0.08), life: rr(5, 8), size: 2, size1: 3, color: 0x4a3018, alpha: 0.12, alpha1: 0 });
     } else if (k === 'gate') {
       P({ x, y: rr(0.2, 3), z, vx: rr(-0.2, 0.2), vy: rr(0.2, 0.6), vz: rr(-0.2, 0.2), life: rr(2, 4), size: 0.1, size1: 0.02, color: 0xc080ff, color1: 0x4010a0, alpha: 0.9, alpha1: 0 });
     }
@@ -347,7 +435,7 @@ export function updateFX(dt, cx, cz) {
   FX.time += dt;
   for (const e of FX.emitters) emit(e, dt, cx, cz);
   ambient(dt, cx, cz);
-  FX.add.update(dt); FX.alpha.update(dt);
+  FX.add.update(dt); FX.alpha.update(dt); FX.leaf.update(dt);
   for (let i = FX.rings.length - 1; i >= 0; i--) {
     const r = FX.rings[i]; r.t += dt; const k = r.t / r.life;
     if (k >= 1) { FX.group.remove(r.m); r.m.material.dispose(); FX.rings.splice(i, 1); continue; }
@@ -368,7 +456,7 @@ export function updateFX(dt, cx, cz) {
   }
 }
 export function clearFX() {
-  FX.add.clear(); FX.alpha.clear();
+  FX.add.clear(); FX.alpha.clear(); FX.leaf.clear();
   for (const r of FX.rings) { FX.group.remove(r.m); r.m.material.dispose(); } FX.rings = [];
   for (const d of FX.decals) { FX.group.remove(d.m); d.m.material.dispose(); } FX.decals = [];
   for (const t of FX.teles) { FX.group.remove(t.m); t.m.material.dispose(); } FX.teles = [];

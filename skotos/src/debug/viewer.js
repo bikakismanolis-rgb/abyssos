@@ -111,46 +111,92 @@ export async function startViewer(q) {
   loop();
 }
 
-// ?world=crypt|forest|town&seed=3&x=..&z=..&dist=..
+// ?world=crypt|forest|town|pass|halls|weep|heart&seed=3&x=..&z=..&dist=..&at=..
+// Act III: &at=glade|mere|boss|gate|lantern|deer|island|heart|thorns|chamber&n=..; &autumn=1 the First Autumn; &wind=1;
+// &live keeps rendering (otherwise it stops once FX have warmed up, which keeps software-rendered screenshots quick)
 export async function startWorld(q) {
   const { genForest, genCrypt, genTown } = await import('../world/gen.js');
   const { genPass, genHalls } = await import('../world/gen2.js');
-  const { buildLevel } = await import('../world/build.js');
+  const { genWeep, genHeart } = await import('../world/gen3.js');
+  const { buildLevel, WIND, act3Prop, setAutumn } = await import('../world/build.js');
   const { loadKits } = await import('../gfx/kits.js');
   const { loadEnv, loadPack } = await import('../gfx/env.js');
+  const { loadCreatures } = await import('../gfx/creatures.js');
   const { ATMOS } = await import('../world/atmos.js');
   initGfx(+(q.get('q') || 2));
   await Promise.all([loadKits(['dungeon', 'grave', 'town']), q.has('noenv') ? null : loadEnv(R.quality)]);
-  const type = q.get('world'), seed = +(q.get('seed') || 3);
+  const type = q.get('world'), seed = +(q.get('seed') || 3), act3 = type === 'weep' || type === 'heart';
   if (type === 'pass' || type === 'halls') await loadPack('deep');
+  if (act3) await Promise.all([loadPack('wood'), loadCreatures(), loadFolk('grove')]);
   if (R.quality >= 1) await loadPack('trees');
   if (!q.has('nohouses')) await loadPack('village');
-  if (type === 'pass') (await import('../world/build.js')).WIND.uSnow.value = 1;
-  const L = type === 'crypt' ? genCrypt(seed) : type === 'town' ? genTown() : type === 'pass' ? genPass(seed) : type === 'halls' ? genHalls(seed) : genForest(seed);
-  setAtmosphere(ATMOS[type]);
+  if (type === 'pass') WIND.uSnow.value = 1;
+  const L = type === 'crypt' ? genCrypt(seed) : type === 'town' ? genTown() : type === 'pass' ? genPass(seed) : type === 'halls' ? genHalls(seed)
+    : type === 'weep' ? genWeep(seed) : type === 'heart' ? genHeart(seed) : genForest(seed);
+  const autumn = q.get('autumn') === '1';
+  setAtmosphere(ATMOS[act3 && autumn ? type + 'Autumn' : type]);
+  if (act3) { WIND.uWind.value = autumn || q.has('wind') ? 1 : 0; setAutumn(autumn ? 1 : 0); }
   if (q.has('nofog')) { R.scene.fog.density = 0; R.camera.far = 600; R.camera.updateProjectionMatrix(); R.hemi.intensity *= 1.6; }
   const lvl = buildLevel(L, R.quality);
   R.scene.add(lvl.group);
   for (const l of L.lights) addLight(l);
-  const at = q.get('at') === 'boss' ? L.boss : q.get('at') === 'gate' ? L.gate : q.get('at') === 'bridge' ? L.bridge : L.start;
-  const x = +(q.get('x') || at.x), z = +(q.get('z') || at.z + (q.get('at') === 'gate' ? 8 : 0));
+  // the Act III props the story places
+  if (act3) {
+    const put = (o, x, z, ry = 0) => { o.position.set(x, 0, z); o.rotation.y = ry; R.scene.add(o); return o; };
+    for (const t of L.spots.tears || []) put(act3Prop('tear', t), t.x, t.z, t.r || 0);
+    if (L.spots.deer) put(act3Prop('deer', { r: L.spots.deer.r }), L.spots.deer.x, L.spots.deer.z);
+    if (L.spots.rootGate) { const gte = put(act3Prop('rootGate'), L.spots.rootGate.x, L.spots.rootGate.z); gte.userData.setOpen(q.has('open')); }
+    if (L.spots.heart) put(act3Prop('heart', { beat: autumn ? 0 : 1 }), L.spots.heart.x, L.spots.heart.z);
+    for (const t of L.thorns || []) if (!q.has('open')) R.scene.add(act3Prop('thorns', t));
+    if (autumn && L.spots.lindenTree) put(act3Prop('sapling'), L.spots.lindenTree.x + 1.2, L.spots.lindenTree.z + 1.4);
+    if (q.has('hart') && L.spots.glade) put(act3Prop('whiteTree'), L.spots.glade.x, L.spots.glade.z + 1);
+    for (const k in L.spots.npcs || {}) {
+      const n = L.spots.npcs[k];
+      try { const a = new Avatar(personModel(k), { animSet: 'npc' }); a.group.position.set(n.x, 0, n.z); a.group.rotation.y = n.r || 0; a.update(0.5, { speed: 0 }); R.scene.add(a.group); } catch (e) { console.warn('npc', k, e.message); }
+    }
+  }
+  const at0 = q.get('at'), n0 = +(q.get('n') || 0);
+  const sp = L.spots, off = (p, dz = 0, dx = 0) => p && { x: p.x + dx, z: p.z + dz };
+  const at = at0 === 'boss' ? L.boss : at0 === 'gate' ? (L.gate || off(sp.rootGate, 4)) : at0 === 'bridge' ? L.bridge
+    : at0 === 'glade' ? off(sp.glade, 6) : at0 === 'mere' ? off(sp.mere, 2) : at0 === 'lantern' ? off(sp.lanternglade, 3) : at0 === 'deer' ? off(sp.deer, 4)
+      : at0 === 'island' ? off(sp.island, 1) : at0 === 'heart' ? off(sp.heart, 9) : at0 === 'thorns' ? off(L.thorns?.[n0], 0) : at0 === 'chamber' ? L.chambers?.[n0]
+        : at0 === 'tear' ? off(sp.tears?.[n0], 2.5) : at0 === 'waypoint' ? off(sp.waypoint, 2) : L.start;
+  const x = +(q.get('x') || at.x), z = +(q.get('z') || at.z + (at0 === 'gate' && L.gate ? 8 : 0));
   const hero = new Avatar(M.buildWarden(), { style: 'sword' }); hero.hold('R', 'sword', {}); hero.hold('L', 'shield', {});
   hero.group.position.set(x, 0, z); hero.group.rotation.y = Math.PI; R.scene.add(hero.group);
   if (q.get('dist')) R.cam.dist = +q.get('dist');
   if (q.get('pitch')) R.cam.pitch = +q.get('pitch');
   if (q.get('zoom')) R.cam.zoomT = R.cam.zoom = +q.get('zoom');
-  const { setEmitters, initFX, updateFX } = await import('../gfx/fx.js');
+  const { setEmitters, setAmbient, initFX, updateFX } = await import('../gfx/fx.js');
   initFX(R.quality); setEmitters(lvl.emitters);
+  setAmbient(act3 ? (autumn ? type + 'Autumn' : type) : { pass: 'snow' }[type] || type);
   R.heroLight.position.set(x, 2.6, z);
-  let n = 0;
-  function loop() {
-    frame(0.016); hero.update(0.016, { speed: 0 }); updateCamera(0.016, x, z, true); updateFX(0.016, x, z);
-    R.heroLight.position.set(x, 2.6, z); R.heroLight.intensity = R.heroLight.userData.base;
-    if (lvl.walls) lvl.walls.update(0.1, x, z);
-    lvl.village?.update(0.1, x, z);
+  // let the particles and the ambient fill in before the first picture
+  updateCamera(0, x, z, true);
+  for (let i = 0; i < 80; i++) updateFX(0.05, x, z);
+  WIND.uHero.value.set(x, 1, z);
+  let n = 0, hx = x, hz = z;
+  const draw = () => {
+    frame(0.016); hero.update(0.016, { speed: 0 }); updateCamera(0.016, hx, hz, true); updateFX(0.016, hx, hz);
+    WIND.uTime.value += 0.016;
+    R.heroLight.position.set(hx, 2.6, hz); R.heroLight.intensity = R.heroLight.userData.base;
+    if (lvl.walls) lvl.walls.update(0.1, hx, hz);
+    lvl.village?.update(0.1, hx, hz);
     render();
-    if (++n > 5) { window.__ready = true; window.__R = R; }
-    requestAnimationFrame(loop);
+  };
+  // screenshot tools move the hero (and the camera) between pictures: __view(x, z, {dist, pitch, ry}) draws one frame there
+  window.__view = (vx, vz, o = {}) => {
+    hx = vx; hz = vz; hero.group.position.set(hx, 0, hz); if (o.ry != null) hero.group.rotation.y = o.ry;
+    if (o.dist) R.cam.dist = o.dist; if (o.pitch) R.cam.pitch = o.pitch;
+    WIND.uHero.value.set(hx, 1, hz);
+    for (let i = 0; i < 60; i++) updateFX(0.05, hx, hz);
+    draw(); draw();
+    return { x: hx, z: hz };
+  };
+  function loop() {
+    draw();
+    if (++n > 1) { window.__ready = true; window.__R = R; window.__L = L; window.__lvl = lvl; }
+    if (n < 3 || q.has('live')) requestAnimationFrame(loop);
   }
   loop();
 }

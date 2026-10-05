@@ -1,5 +1,5 @@
 // Hero stats from level, items and buffs.
-import { CLASSES, SKILLS, SKILL_MAX_RANK, BOON } from './data.js';
+import { CLASSES, SKILLS, SKILL_MAX_RANK, BOON, BUFFS } from './data.js';
 import { G } from './state.js';
 
 export function computeStats(hero, equip = hero.equip) {
@@ -54,3 +54,10 @@ export function skillMult(sk) {
 }
 export function skillUnlocked(sk) { return sk.basic || G.hero.level >= sk.lvl; }
 export { SKILL_MAX_RANK, SKILLS };
+// a timed buff on the hero (the Memory of the Evergreen from an Amber Tear: +12% damage, +8% move for 60 s);
+// it never shortens one already running. The HUD lists pl.buffs; combat.js reads them.
+export function grantBuff(kind, sec = BUFFS[kind]?.dur ?? 30) {
+  const p = G.player; if (!p) return 0;
+  p.buffs[kind] = Math.max(p.buffs[kind] || 0, sec);
+  return p.buffs[kind];
+}

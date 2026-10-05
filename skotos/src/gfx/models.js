@@ -154,6 +154,18 @@ export function weaponGeo(type, look = {}) {
       p.push({ geo: G.box(0.22, 0.12, 0.12), color: darkSteel, o: { y: 0.45, metal: 1 } });
       return { parts: p, tip: 0.5, base: 0.3 };
     }
+    case 'spear': {
+      // the Evergreen's living-wood spear: held a third of the way up, a leaf-shaped amber blade bound with leaves
+      const L = look.len ?? 2.2, b0 = -0.3 * L, s1 = 0.72 * L, bl = Math.min(0.5, 0.2 * L), wd = look.wood ?? 0x3a2a18;
+      p.push({ geo: G.cyl(0.02, 0.026, s1 - b0, 6), color: wd, o: { y: (s1 + b0) / 2 } });
+      for (let i = 0; i < 4; i++) p.push({ geo: G.cyl(0.027, 0.027, 0.045, 6), color: 0x5a4628, o: { y: b0 + 0.18 * L + i * 0.16 * L, ry: i } });
+      p.push({ geo: G.ball(0.034, 6, 4), color: wd, o: { y: b0, sy: 1.5 } });
+      p.push({ geo: G.cone(0.038, 0.1, 6), color: 0x7a5a28, o: { y: s1 - 0.03, rx: Math.PI } });
+      p.push({ geo: G.blade(bl, look.width ?? 0.12, 0.028), color: look.blade ?? 0xc87a18, o: { y: s1, glow: look.glow ?? 0.18, metal: 0.2 } });
+      p.push({ geo: G.blade(bl * 0.75, 0.02, 0.034), color: 0xffb040, o: { y: s1 + 0.02, glow: 0.5 } });
+      for (const sg of [-1, 1]) p.push({ geo: G.box(0.05, 0.13, 0.006), color: 0x5a7a2a, o: { y: s1 - 0.1, x: sg * 0.04, rz: sg * 0.55 } });
+      return { parts: p, tip: s1 + bl, base: s1 - 0.15 };
+    }
   }
   return { parts: [{ geo: G.box(0.05, 0.6, 0.05), color: steel }], tip: 0.6, base: 0.1 };
 }
@@ -169,6 +181,83 @@ export function shieldGeo(look = {}) {
   p.push({ geo: G.box(r * 1.2, 0.06, 0.012), color: look.emblem ?? gold, o: { z: 0.095, y: 0.06, metal: 1 } });
   p.push({ geo: G.box(0.05, 0.16, 0.06), color: leather, o: { z: 0.0 } });
   return p;
+}
+
+// ---------- Act III worn and ground pieces (see game/actors.js) ----------
+const amber = 0xc87818;
+// the Lady's crown: a band and two antlers of amber, in head space (+y up, +z the face), band at y = 0
+export function crownParts() {
+  const p = [];
+  const band = G.torus(0.098, 0.012, 4, 18); band.rotateX(Math.PI / 2);
+  p.push({ geo: band, color: 0x7a4a14, o: { glow: 0.08, metal: 0.3 } });
+  for (let i = 0; i < 5; i++) { const a = (i - 2) * 0.42; p.push({ geo: G.segTo(Math.sin(a) * 0.02, 0.07 + (i === 2 ? 0.03 : 0), 0.01, 0.009, 0.002, 4), color: amber, o: { x: Math.sin(a) * 0.098, z: Math.cos(a) * 0.098, glow: 0.22 } }); }
+  for (const sg of [-1, 1]) {
+    // beam: temple, up and out and back, three tines forward and up
+    const pts = [[0.085, 0.0, -0.01], [0.15, 0.13, -0.05], [0.2, 0.27, -0.1], [0.2, 0.41, -0.17]];
+    for (let k = 0; k < 3; k++) { const a = pts[k], b = pts[k + 1]; p.push({ geo: G.segTo(sg * (b[0] - a[0]), b[1] - a[1], b[2] - a[2], 0.016 - k * 0.004, 0.012 - k * 0.004, 5), color: amber, o: { x: sg * a[0], y: a[1], z: a[2], glow: 0.2 } }); }
+    const tines = [[1, [0.04, 0.11, 0.09]], [2, [0.09, 0.13, 0.04]], [2, [-0.06, 0.15, -0.02]], [3, [0.05, 0.09, 0.03]]];
+    for (const [k, d] of tines) { const a = pts[k]; p.push({ geo: G.segTo(sg * d[0], d[1], d[2], 0.008, 0.002, 4), color: 0xe89a28, o: { x: sg * a[0], y: a[1], z: a[2], glow: 0.32 } }); }
+  }
+  return p;
+}
+// a Mourner's veil: a hood and shroud from the crown of the head (y = 0) down past the shoulders
+export function veilParts() {
+  const prof = [[0.0, 0.05], [0.09, 0.03], [0.128, -0.06], [0.142, -0.16], [0.165, -0.3], [0.22, -0.46], [0.29, -0.64]];
+  const g = G.lathe(prof, 18); g.translate(0, 0, 0.012);
+  const hem = G.torus(0.29, 0.008, 3, 24); hem.rotateX(Math.PI / 2); hem.translate(0, -0.64, 0.012);
+  return [{ geo: g, color: 0x0c0b0e }, { geo: hem, color: 0x6a6860, o: { glow: 0.05 } }];
+}
+// a rootling's hiding place: a heap of turned soil with a tuft of gold leaves
+let mound = null;
+export function moundMesh() {
+  if (!mound) {
+    const p = [{ geo: G.dome(0.5, 0.5, 10), color: 0x2e2216, o: { sy: 0.35 } }, { geo: G.dome(0.3, 0.5, 8), color: 0x3a2a1a, o: { sy: 0.55, x: 0.1, z: -0.05 } }];
+    for (let i = 0; i < 7; i++) { const a = i * 0.9, r = 0.08 + (i % 3) * 0.06; p.push({ geo: G.box(0.07, 0.24, 0.008), color: [0xa08a30, 0x7a8a2a, 0xc09a38][i % 3], o: { x: Math.sin(a) * r, y: 0.18, z: Math.cos(a) * r, ry: a, rx: 0.35 * (i % 2 ? 1 : -1), rz: 0.3 } }); }
+    for (let i = 0; i < 3; i++) p.push({ geo: G.segTo(0.2 - i * 0.15, 0.08, 0.12 * (i - 1), 0.02, 0.008, 4), color: 0x4a3420, o: { y: 0.05 } });
+    mound = { geo: staticGeo(p), mat: makeCharMat({ rim: 0x806020, rimI: 0.15 }) };
+  }
+  const m = new THREE.Mesh(mound.geo, mound.mat);
+  m.castShadow = false;
+  return m;
+}
+// a Heartroot: a cage of roots around a beating amber bulb; it never moves (see NodeAnim below)
+export function buildHeartroot() {
+  const rb = new RigBuilder();
+  rb.bone('root', null).bone('heart', 'root', 0, 1.0, 0).bone('crown', 'root', 0, 1.62, 0);
+  const bark = 0x2a1c10, bark2 = 0x3a2816;
+  // spreading roots, thick at the knot
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * 6.28 + 0.3, r = 0.3; rb.add('root', G.segTo(Math.cos(a) * 0.85, -0.3, Math.sin(a) * 0.85, 0.15, 0.04, 6), i % 2 ? bark : bark2, { x: Math.cos(a) * r, y: 0.26, z: Math.sin(a) * r }); }
+  rb.add('root', G.cyl(0.42, 0.55, 0.4, 8), bark, { y: 0.18 });
+  // a cage of twisted roots around the bulb, closing over it
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * 6.28, c = Math.cos(a), s = Math.sin(a), c2 = Math.cos(a + 0.5), s2 = Math.sin(a + 0.5);
+    rb.add('root', G.segTo(c2 * 0.5 - c * 0.42, 0.62, s2 * 0.5 - s * 0.42, 0.11, 0.08, 6), i % 2 ? bark : bark2, { x: c * 0.42, y: 0.3, z: s * 0.42 });
+    rb.add('root', G.segTo(c2 * -0.38, 0.72, s2 * -0.38, 0.08, 0.03, 5), bark2, { x: c2 * 0.5, y: 0.92, z: s2 * 0.5 });
+    for (let k = 0; k < 2; k++) rb.add('root', G.cone(0.03, 0.14, 4), 0x1e140a, { x: c2 * 0.52, y: 0.75 + k * 0.3, z: s2 * 0.52, rz: -c2 * 1.3, rx: s2 * 1.3 });
+  }
+  rb.add('heart', G.ico(0.3, 1), 0xd07812, { sy: 1.18, glow: 0.32 });
+  rb.add('heart', G.ico(0.13, 0), 0xffc050, { y: 0.02, z: 0.22, glow: 0.9 });
+  for (let i = 0; i < 4; i++) { const a = i * 1.57; rb.add('heart', G.segTo(Math.cos(a) * 0.36, 0.05, Math.sin(a) * 0.36, 0.022, 0.01, 4), 0xe89a28, { glow: 0.5 }); }
+  for (let i = 0; i < 3; i++) { const a = i * 2.09; rb.add('crown', G.segTo(Math.cos(a) * 0.22, 0.42, Math.sin(a) * 0.22, 0.04, 0.008, 4), bark2, {}); }
+  const r = rb.build({ rim: 0xffa040, rimI: 0.3 });
+  r.kind = 'node'; r.dims = { s: 1 }; r.Anim = NodeAnim;
+  return r;
+}
+// a heartbeat in place of a walk: a double thump that swells the bulb, shrinking away when it dies
+class NodeAnim {
+  constructor(av) { this.av = av; this.b = av.bones; this.t = Math.random() * 3; this.hit = 0; this.act = null; this.dead = 0; this.rate = 0.9; }
+  play(name) { if (name === 'die' || name === 'dieFwd') this.dead = 0.001; return 0.6; }
+  stop() {}
+  get busy() { return false; }
+  get progress() { return 1; }
+  update(dt) {
+    this.t += dt;
+    const ph = (this.t * this.rate) % 1, beat = Math.exp(-((ph - 0.1) ** 2) / 0.003) + 0.6 * Math.exp(-((ph - 0.3) ** 2) / 0.003);
+    const k = this.dead ? Math.max(0.05, 1 - (this.dead += dt) * 1.4) : 1;
+    this.b.heart.scale.setScalar((1 + beat * 0.14 - this.hit * 0.12) * k);
+    this.b.crown.rotation.set(Math.sin(this.t * 1.3) * 0.12, 0, Math.cos(this.t * 1.1) * 0.12);
+    if (this.hit > 0) this.hit = Math.max(0, this.hit - dt * 5);
+  }
 }
 
 export function heldMesh(parts, mat) {

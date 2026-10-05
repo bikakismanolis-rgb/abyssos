@@ -10,8 +10,9 @@ import peopleUrl from '../assets/people.glb?url';
 import movesUrl from '../assets/moves.bin?url';
 // extra sets of people, each loaded with the zones that need it (tools/creatures/act2/folk.mjs builds both):
 // 'folk' = Act II's dwarves (folk.glb), 'grove' = Act III's Evergreen (grove.glb)
-const SET_URLS = Object.fromEntries(Object.entries(import.meta.glob(['../assets/folk.glb', '../assets/grove.glb'], { query: '?url', import: 'default', eager: true }))
-  .map(([path, url]) => [path.match(/(\w+)\.glb$/)[1], url]));
+// (lazy: each set's URL is fetched only when a zone asks for it, which keeps inlined builds in small chunks)
+const SET_URLS = Object.fromEntries(Object.entries(import.meta.glob(['../assets/folk.glb', '../assets/grove.glb'], { query: '?url', import: 'default' }))
+  .map(([path, load]) => [path.match(/(\w+)\.glb$/)[1], load]));
 
 export const PEOPLE = { scenes: {}, moves: null, ready: false };
 
@@ -56,9 +57,9 @@ async function addScenes(glb) {
 }
 const sets = {};
 export function loadFolk(set = 'folk') {
-  const url = SET_URLS[set];
-  if (!url) return Promise.resolve();
-  sets[set] ||= loadPeople().then(async () => addScenes(await bytes(url))).catch((e) => console.warn(set + ' failed to load', e));
+  const load = SET_URLS[set];
+  if (!load) return Promise.resolve();
+  sets[set] ||= loadPeople().then(async () => addScenes(await bytes(await load()))).catch((e) => console.warn(set + ' failed to load', e));
   return sets[set];
 }
 export const hasPerson = (name) => !!PEOPLE.scenes[name];

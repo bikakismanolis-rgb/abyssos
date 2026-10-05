@@ -22,6 +22,19 @@ export class GridMap {
     return this.cells[i] === 0 && !(this.low && this.low[i]);
   }
   setSolid(ix, iz, v = true) { if (ix >= 0 && iz >= 0 && ix < this.w && iz < this.h) this.cells[iz * this.w + ix] = v ? 0 : 1; }
+  // reopen cells at runtime (broken standing stones, withered thorns, the Root Gate): [[ix, iz], ...] become floor and
+  // the flow field is rebuilt on its next update. Nothing ever turns solid around the hero this way.
+  open(cells) {
+    let n = 0;
+    for (const [ix, iz] of cells || []) {
+      if (ix < 0 || iz < 0 || ix >= this.w || iz >= this.h) continue;
+      const i = iz * this.w + ix;
+      if (this.cells[i] === 0) { this.cells[i] = 1; n++; }
+      if (this.low) this.low[i] = 0;
+    }
+    if (n) this.flowT.x = -1;
+    return n;
+  }
 
   // push a circle out of solid cells; returns true if it touched a wall
   collide(p, r) {

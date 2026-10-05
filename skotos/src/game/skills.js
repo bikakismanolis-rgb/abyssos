@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { G, later } from './state.js';
 import { SKILLS, DODGE, POTION, CLASSES } from './data.js';
 import { skillMult, skillRank, skillUnlocked } from './stats.js';
-import { damage, heroHit, healHero } from './combat.js';
+import { damage, heroHit, healHero, freeHero } from './combat.js';
 import { foes, spawnMonster, Actor } from './actors.js';
 import { fire, area } from './projectiles.js';
 import { sparks, glowBurst, explosion, ring, bolt, puff, P, flash, decal, teleCircle } from '../gfx/fx.js';
@@ -21,7 +21,7 @@ const fx = (x, z) => ({ x, z });
 export function nearestFoe(range, dir = null, from = p()) {
   let best = null, bs = 1e9;
   for (const f of foes(from.x, from.z, range)) {
-    if (f.prop && !f.hp) continue;
+    if ((f.prop && !f.hp) || f.hidden) continue;
     const d = Math.hypot(f.x - from.x, f.z - from.z) - f.radius;
     let s = d + (f.prop ? 4 : 0);
     if (dir != null) s += Math.abs(angleDiff(dir, angleTo(from.x, from.z, f.x, f.z))) * 1.6;
@@ -395,6 +395,8 @@ export function dodge(ev) {
   if (pl.dodgeCd > 0) { Audio.sfx('denied', { vol: 0.4 }); return; }
   if (pl.act && pl.act.name === 'leap') return;
   pl.act = null;
+  // a dodge always breaks free of amber, and clears the build-up
+  freeHero();
   pl.dodgeCd = D.cd * (G.stats.legs.has('swiftboots') ? 0.5 : 1);
   const mv = Math.hypot(G.input.mx, G.input.mz) > 0.2 ? Math.atan2(G.input.mx, G.input.mz) : (ev?.aim?.dir ? Math.atan2(ev.aim.dir.x, ev.aim.dir.z) : pl.rot);
   const map = G.zone.map;

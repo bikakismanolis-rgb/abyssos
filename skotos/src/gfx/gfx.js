@@ -135,12 +135,26 @@ export function addLight(o) {
 export function removeLight(src) { if (src) R.sources.delete(src); }
 export function clearLights() { R.sources.clear(); }
 
+// Light modes (Act III). flicker: 'beat' follows the Heartwood's heartbeat, a double thump at 0.9 Hz that quickens toward
+// 1.2 Hz near the Heart Chamber (LIGHTS.heart); LIGHTS.beat (0-1, FX.beat) fades the beat out to a steady ember glow.
+// flicker: 'seed' is a seed-lantern: it breathes gently and goes out as LIGHTS.autumn reaches 1.
+export const LIGHTS = { beat: 1, hz: 0.9, phase: 0, heart: null, autumn: 0 };
+// the heartbeat's pulse now (0 between beats, about 1 on the first thump, 0.7 on the second)
+export function beatPulse() {
+  const f = LIGHTS.phase - Math.floor(LIGHTS.phase), a = (f - 0.06) / 0.055, b = (f - 0.31) / 0.07;
+  return Math.exp(-a * a) + 0.7 * Math.exp(-b * b);
+}
 const tmpList = [];
 function updateLights(dt) {
   const cx = R.cam.x, cz = R.cam.z;
+  const H = LIGHTS.heart;
+  LIGHTS.hz = H ? 1.2 - 0.3 * clamp((Math.hypot(H.x - cx, H.z - cz) - 18) / 50, 0, 1) : 0.9;
+  LIGHTS.phase += dt * LIGHTS.hz;
+  const beatK = 0.5 + LIGHTS.beat * (0.05 + 0.8 * beatPulse());
   tmpList.length = 0;
   for (const s of R.sources) {
     if (s.life > 0) { s.life -= dt; if (s.life <= 0) { R.sources.delete(s); continue; } }
+    if (s.flicker === 'seed' && LIGHTS.autumn >= 1) continue; // a lantern gone out keeps no light
     const dx = s.x - cx, dz = s.z - cz;
     s._d = dx * dx + dz * dz - s.intensity * 2;
     if (s._d < 900) tmpList.push(s);
@@ -150,7 +164,9 @@ function updateLights(dt) {
     const l = R.pool[i], s = tmpList[i];
     if (!s) { l.intensity = 0; continue; }
     let k = 1;
-    if (s.flicker) k = 1 + s.flicker * (noise2(R.time * 9 + s.phase, s.phase) - 0.5) * 2;
+    if (s.flicker === 'beat') k = beatK;
+    else if (s.flicker === 'seed') k = (1 - LIGHTS.autumn) * (1 + 0.16 * (noise2(R.time * 1.3 + s.phase, s.phase) - 0.5));
+    else if (s.flicker) k = 1 + s.flicker * (noise2(R.time * 9 + s.phase, s.phase) - 0.5) * 2;
     if (s.fade) k *= s.life > 0 ? Math.min(1, s.life / s.fade) : 1;
     l.position.set(s.x, s.y, s.z);
     l.color.copy(s._c);

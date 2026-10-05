@@ -1,21 +1,23 @@
 // Damage, status effects, deaths, experience and drops.
 import { G, later, vibrate } from './state.js';
-import { DIFFS, monsterXP, xpToNext, MAX_LEVEL, SKILLS, CLASSES } from './data.js';
+import { DIFFS, monsterXP, xpToNext, MAX_LEVEL, SKILLS, CLASSES, BUFFS } from './data.js';
 import { makeItem } from './items.js';
 import { refreshStats } from './stats.js';
 import { number } from '../ui/overlay.js';
 import { emit } from '../ui/bus.js';
-import { hitFx, sparks, glowBurst, explosion, decal, puff, flash, ring } from '../gfx/fx.js';
-import { shake, addLight } from '../gfx/gfx.js';
+import { hitFx, sparks, glowBurst, explosion, decal, puff, flash, ring, bolt, P } from '../gfx/fx.js';
+import { shake, addLight, removeLight } from '../gfx/gfx.js';
 import Audio from '../audio/audio.js';
 import { rand, clamp } from '../core/util.js';
 import { t } from '../i18n/i18n.js';
 import { foes, spawnMonster } from './actors.js';
 import { dropGold, dropItem, dropGlobe } from './pickups.js';
 import { area } from './projectiles.js';
+import { addSapPool } from './sap.js';
 
-const HIT_SFX = { flesh: 'hitFlesh', bone: 'hitBone', spirit: 'hitSpirit', chitin: 'hitChitin', ash: 'hitFlesh', stone: 'hitBone', magma: 'hitFlesh' };
-const DIE_SFX = { goblin: 'goblinDie', wolf: 'wolfDie', spider: 'spiderDie', orc: 'orcDie', troll: 'trollRoar', skeleton: 'skeletonDie', wraith: 'wraithDie', hound: 'wolfDie', bat: 'batDie', worm: 'wormDie', dwarf: 'dwarfDie', golem: 'golemDie' };
+const HIT_SFX = { flesh: 'hitFlesh', bone: 'hitBone', spirit: 'hitSpirit', chitin: 'hitChitin', ash: 'hitFlesh', stone: 'hitBone', magma: 'hitFlesh', wood: 'woodHit' };
+const DIE_SFX = { goblin: 'goblinDie', wolf: 'wolfDie', spider: 'spiderDie', orc: 'orcDie', troll: 'trollRoar', skeleton: 'skeletonDie', wraith: 'wraithDie', hound: 'wolfDie', bat: 'batDie', worm: 'wormDie', dwarf: 'dwarfDie', golem: 'golemDie', moth: 'mothDie', bear: 'bearRoar', hart: 'hartBellow' };
+const FLESH_DIE = { wood: 'woodDie' };
 
 export function heroCrit() { return Math.random() * 100 < G.stats.critC; }
 
@@ -26,6 +28,7 @@ export function heroHit(mult, o = {}) {
   if (o.area) d *= 1 + s.area / 100;
   if (p.buffs.cry > 0) d *= 1.3;
   if (p.buffs.shrineFury > 0) d *= 1.5;
+  if (p.buffs.memory > 0) d *= 1 + BUFFS.memory.dmg;
   return d;
 }
 
@@ -33,6 +36,8 @@ export function damage(src, target, amount, o = {}) {
   if (!target || target.dead || target.removed) return 0;
   if (target.team === 'hero' && target.hero) return hurtHero(src, amount, o);
   if (target.team === 'npc') return 0;
+  // stepped into the trees, or gone into mist: nothing to hit
+  if (target.hidden) return 0;
   const fromHero = src && (src.hero || src.team === 'hero');
   let crit = false;
   if (fromHero) {
@@ -40,12 +45,17 @@ export function damage(src, target, amount, o = {}) {
     if (o.crit ?? (!o.dot && heroCrit())) { crit = true; amount *= 1 + s.critD / 100; }
     if (target.elite || target.boss) { amount *= 1 + s.eliteDmg / 100; if (s.legs.has('kingslayer')) amount *= 1.3; }
   }
-  if (target.invuln > 0) { if (!o.dot) number(target.x, 2.2, target.z, t('hud.immune'), 'text', '#9ab8ff'); return 0; }
+  // invulnerable, or held by a Mourner's lament-bond
+  if (target.invuln > 0 || target.bondT > 0) { if (!o.dot) number(target.x, 2.2, target.z, t('hud.immune'), 'text', target.bondT > 0 ? '#ffe8a0' : '#9ab8ff'); return 0; }
   if (target.armored) amount *= 0.72;
   if (target.ward > 0) amount *= 0.5;
+  // dazed, rooted in bark, torn free: some states take more or less
+  if (target.dmgTaken != null) amount *= target.dmgTaken;
   if (target.prop) amount = target.hp;
   amount = Math.max(1, Math.round(amount));
   target.hp -= amount;
+  // a boss phase that a single burst may not skip
+  if (target.hpFloor) target.hp = Math.max(target.hp, target.hpFloor);
   target.hpShow = 3;
   target.aggro = true;
   if (!o.dot) {
@@ -56,9 +66,10 @@ export function damage(src, target, amount, o = {}) {
     if (!o.noFx) {
       hitFx(target.x, (def.big || target.boss ? 1.6 : 1.0) * (target.scale || 1), target.z, target.prop ? 'wood' : def.flesh, dx / l, dz / l, crit);
       if (!o.quiet) Audio.sfx(target.prop ? 'break' : (HIT_SFX[def.flesh] || 'hitFlesh'), { x: target.x, z: target.z, vol: crit ? 1 : 0.8 });
+      if (def.flesh === 'wood' && !target.prop) barkChips(target, dx / l, dz / l, crit);
       if (crit && !o.quiet) Audio.sfx('crit', { x: target.x, z: target.z, vol: 0.6 });
     }
-    if (o.knock && !target.boss && !target.prop) {
+    if (o.knock && !target.boss && !target.prop && !def.anchored) {
       const k = o.knock / (def.big ? 3 : 1);
       target.kx += (dx / l) * k; target.kz += (dz / l) * k;
     }
@@ -115,14 +126,43 @@ function hurtHero(src, amount, o) {
     if (o.freeze) p.status.freeze = Math.max(p.status.freeze, o.freeze * 0.5);
     if (o.poison) { p.status.poison = 3; p.status.poisonDps = Math.max(p.status.poisonDps, o.poison / 3); }
     if (o.burn) { p.status.burn = 3; p.status.burnDps = Math.max(p.status.burnDps, o.burn / 3); }
+    // Act III: amber roots (capped), blows that throw the hero back, shrieks that break a channel
+    if (o.root) rootHero(o.root);
+    if (o.push && src) { const dx = o.kx ?? p.x - src.x, dz = o.kz ?? p.z - src.z, l = Math.hypot(dx, dz) || 1; p.kx += (dx / l) * o.push; p.kz += (dz / l) * o.push; }
+    if (o.interrupt && p.act && (p.act.name === 'whirl' || p.act.name === 'portal')) { p.act = null; p.avatar.anim.stop?.(0.15); }
   }
   if (p.hp <= 0) { p.hp = 0; emit('heroDeath'); }
   return amount;
 }
 
+// Rooted: the hero's one Act III status. Only amber roots (sap amber-lock, the Song of Sorrow); at most 1.2 s,
+// it cannot be refreshed while it holds, and when it ends the hero is immune for 1.8 s. A dodge always breaks it.
+export function rootHero(t) {
+  const p = G.player; if (!p || p.dead) return false;
+  const s = p.status;
+  if (s.rootImm > 0 || s.root > 0) return false;
+  s.root = Math.min(1.2, t);
+  s.stick = 0;
+  for (let i = 0; i < 18; i++) { const a = Math.random() * 6.28, r = rand.range(0.2, 0.55); P({ add: false, x: p.x + Math.sin(a) * r, y: rand.range(0, 0.9), z: p.z + Math.cos(a) * r, vy: 0.2, life: 1.1, size: 0.22, size1: 0.18, color: 0xe0a030, alpha: 0.9, alpha1: 0 }); }
+  glowBurst(p.x, 0.5, p.z, 0xffc050, 12, 1.5, 0.25, 0.5);
+  Audio.sfx('sapRoot', { vol: 0.9 });
+  emit('rooted', s.root);
+  return true;
+}
+export function freeHero(crack = true) {
+  const p = G.player; if (!p) return;
+  const s = p.status, was = s.root > 0;
+  s.stick = 0;
+  if (!was) return;
+  s.root = 0; s.rootImm = 1.8;
+  if (crack) { sparks(p.x, 0.5, p.z, 12, 0xffd080, 4, { color1: 0xa05010 }); Audio.sfx('sapCrack', { vol: 0.8 }); }
+}
+
 // ---------- status effects, once per frame per actor ----------
 export function tickStatus(a, dt) {
   const s = a.status;
+  if (s.root > 0) { s.root -= dt; if (s.root <= 0) { s.root = 0; s.rootImm = 1.8; if (a.hero) { sparks(a.x, 0.5, a.z, 12, 0xffd080, 4, { color1: 0xa05010 }); Audio.sfx('sapCrack', { vol: 0.8 }); } } }
+  if (s.rootImm > 0) s.rootImm -= dt;
   if (s.stun > 0) s.stun -= dt;
   if (s.freeze > 0) s.freeze -= dt;
   if (s.fear > 0) s.fear -= dt;
@@ -136,12 +176,21 @@ export function tickStatus(a, dt) {
 }
 export function moveMul(a) {
   const s = a.status;
-  if (s.freeze > 0 || s.stun > 0) return 0;
+  if (s.freeze > 0 || s.stun > 0 || s.root > 0) return 0;
   let m = 1;
   if (s.slow > 0) m *= 1 - s.slowK;
+  // amber sap: the hero wades at 55%, flesh at 65% (wood and floaters never get onSap, see ai.js)
+  if (a.onSap) m *= a.hero ? 0.55 : 0.65;
   if (a.hero && a.buffs?.shrineSpeed > 0) m *= 1.4;
   if (a.hero && a.buffs?.evergreen > 0) m *= 1.3;
+  if (a.hero && a.buffs?.memory > 0) m *= 1 + BUFFS.memory.move;
   return m;
+}
+// bark and amber splinters off anything made of wood
+function barkChips(a, dx, dz, crit) {
+  const h = (a.def.big || a.boss ? 1.6 : 1.0) * (a.scale || 1);
+  for (let i = 0; i < (crit ? 10 : 6); i++) P({ add: false, x: a.x, y: h, z: a.z, vx: dx * rand.range(1, 4) + rand.range(-1.5, 1.5), vy: rand.range(1.5, 4), vz: dz * rand.range(1, 4) + rand.range(-1.5, 1.5), life: rand.range(0.5, 0.9), size: rand.range(0.07, 0.14), size1: 0.06, color: Math.random() < 0.3 ? 0x8a6a40 : 0x3a2a1a, alpha: 1, grav: 16 });
+  if (crit || Math.random() < 0.4) sparks(a.x, h, a.z, 3, 0xffc050, 3, { dx, dz, color1: 0xa05010 });
 }
 
 // ---------- death ----------
@@ -151,13 +200,19 @@ export function kill(a, src, o = {}) {
   const def = a.def;
   if (a.prop) { emit('propBroken', a); return; }
   if (a.pet) { a.avatar?.play(a.kind === 'spiritWolf' ? 'die' : 'die'); return; }
+  // whatever trick it was in the middle of ends with it
+  a.hidden = false; a.dash = null; a.dazed = 0; a.dmgTaken = null;
   const av = a.avatar;
   if (av) {
-    if (av.kind === 'warg' || av.kind === 'spider') av.play('die');
+    av.anim.stop?.(0.1);
+    if (def.dieClip) av.play(def.dieClip, 1);
+    else if (av.kind === 'warg' || av.kind === 'spider') av.play('die');
     else av.play(a.kind.startsWith('skeleton') ? 'dieBones' : Math.random() < 0.5 ? 'die' : 'dieFwd', 1);
   }
-  Audio.sfx(DIE_SFX[def.sfx] || 'hitFlesh', { x: a.x, z: a.z });
+  Audio.sfx(DIE_SFX[def.sfx] || FLESH_DIE[def.flesh] || 'hitFlesh', { x: a.x, z: a.z });
+  actDeath(a, def);
   if (def.flesh === 'flesh' || def.flesh === 'ash' || def.flesh === 'magma') decal(a.x, a.z, 'blood', 1.2 + a.radius);
+  else if (def.flesh === 'wood') { puff(a.x, 0.6, a.z, 6, 0x4a3a28, 1, 1.2, 1.2); glowBurst(a.x, 1, a.z, 0xffb040, 10, 2, 0.2, 0.6); }
   else if (def.flesh === 'stone') puff(a.x, 0.8, a.z, 10, 0x8a8680, 1.4, 1.6, 1.6);
   else if (def.flesh === 'chitin') decal(a.x, a.z, 'goo', 1.2 + a.radius);
   else if (def.flesh === 'spirit') { decal(a.x, a.z, 'ecto', 1.4); glowBurst(a.x, 1.2, a.z, 0x7ae0ff, 24, 3, 0.3, 0.9); }
@@ -200,6 +255,29 @@ export function kill(a, src, o = {}) {
   if (def.deathFire) later(0.25, () => { explosion(a.x, a.z, 1.6, 0xff7a20, { smoke: 0x2a2220, shake: 0.05 }); area('fire', a.x, a.z, 1.3, 3.5, { team: 'foe', src: a, dmg: a.dmg * 0.3, tick: 0.5 }); });
   if (a.affixes.includes('molten')) later(0.6, () => { explosion(a.x, a.z, 3, 0xff6a20); const p = G.player; if (Math.hypot(p.x - a.x, p.z - a.z) < 3.2) damage(a, p, a.dmg * 2.2, { burn: a.dmg }); });
   emit('kill', a);
+}
+
+// Act III deaths: sap, amber dust, broken bonds, torn tendrils, the Lady's shard going dark
+function actDeath(a, def) {
+  if (def.deathSap) later(0.3, () => addSapPool(a.x, a.z, def.deathSap, 5));
+  if (def.deathDust) {
+    area('amberDust', a.x, a.z, 1.8, 3, { team: 'all' });
+    glowBurst(a.x, Math.max(0.6, a.y || 0), a.z, 0xffd070, 26, 3, 0.18, 0.9);
+  }
+  if (a.bond) { const b = a.bond; a.bond = null; ring(b.x, b.z, 2.4, 0xffe8a0, 0.6); glowBurst(b.x, 1.4, b.z, 0xffe8a0, 20, 3, 0.25, 0.6); Audio.sfx('mournerKeen', { x: b.x, z: b.z, vol: 0.5 }); }
+  // a Heartroot feeds the Lady: when it dies its tendril snaps and the wound is hers
+  const B = a.bossNode;
+  if (B && !B.dead) {
+    const v = Math.round(B.hpMax * 0.09);
+    B.hp = Math.max(1, B.hp - v); B.hpShow = 3; B.flash = 1;
+    number(B.x, 3.4 * (B.scale || 1), B.z, v, 'crit');
+    bolt(a.x, 1.2, a.z, B.x, 2.2, B.z, 0xffb040, 2);
+    glowBurst(B.x, 2, B.z, 0xffb040, 30, 4, 0.3, 0.7);
+    if (B.avatar?.anim) B.avatar.anim.hit = 0.6;
+    Audio.sfx('thornWither', { x: B.x, z: B.z });
+  }
+  if (a.shardGlow) a.shardGlow.visible = false;
+  if (a.shardLight) { removeLight(a.shardLight); a.shardLight = null; }
 }
 
 export function gainXP(v) {
