@@ -10,7 +10,7 @@ export const TEXT = {
   'cr.title': ['Δημιουργοί', 'Credits'], 'cr.people': ['Άνθρωποι και κινήσεις', 'People and animations'], 'cr.monsters': ['Τέρατα', 'Monsters'], 'cr.world': ['Κόσμος', 'World'], 'cr.type': ['Γραμματοσειρά', 'Typeface'],
   'cr.modified': ['Τα τέρατα προσαρμόστηκαν για το Σκότος: νέες υφές, σκελετοί και κινήσεις (από Quaternius και KayKit).', 'The monsters were adapted for Skotos: new textures, rigs and animations (from Quaternius and KayKit).'],
   'cr.made': ['Φτιαγμένα για το παιχνίδι', 'Made for this game'], 'cr.madeD': ['Κώδικας, ιστορία, κόσμος, ισορροπία, μουσική και ήχοι.', 'Code, story, world, balance, music and sound.'],
-  'menu.credits': ['Μοντέλα, κινήσεις, υφές: Quaternius, KayKit, Poly Haven, OpenGameArt, MakeHuman, Microsoft Rocketbox. Δες «Δημιουργοί» στις Ρυθμίσεις.', 'Models, animations, textures: Quaternius, KayKit, Poly Haven, OpenGameArt, MakeHuman, Microsoft Rocketbox. See Credits in Settings.'],
+  'menu.credits': ['Μοντέλα, κινήσεις, υφές: Quaternius, KayKit, Poly Haven, Sketchfab, OpenGameArt, MakeHuman, Microsoft Rocketbox. Δες «Δημιουργοί» στις Ρυθμίσεις.', 'Models, animations, textures: Quaternius, KayKit, Poly Haven, Sketchfab, OpenGameArt, MakeHuman, Microsoft Rocketbox. See Credits in Settings.'],
   'menu.slot': ['{0} · Επίπεδο {1} · {2}', '{0} · Level {1} · {2}'],
   'menu.delete': ['Διαγραφή', 'Delete'],
   'menu.deleteSure': ['Σίγουρα; Πάτα ξανά.', 'Sure? Tap again.'],

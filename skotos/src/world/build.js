@@ -644,6 +644,14 @@ function addProp(B, I, p, L, rng, out) {
       break;
     }
     case 'forge': {
+      // Halda's forge (tools/pack-village.mjs): the hearth glows, the chimney smokes
+      if (ENV.props.sForge) {
+        I.add('env:sForge', x, z, r, 1, 0);
+        const cs = Math.cos(r), sn = Math.sin(r), hx = 0.1, hz = 0.5;
+        out.emitters.push({ x: x + hx * cs + hz * sn, y: 1.4, z: z - hx * sn + hz * cs, type: 'embers', s: 1 });
+        out.emitters.push({ x: x - 0.4 * sn, y: 4.6, z: z - 0.4 * cs, type: 'smoke', s: 1 });
+        break;
+      }
       B.add('lam', [
         { geo: G.box(2.4, 1.2, 1.8), color: DSTONE, o: { y: 0.6 }, jit: 0.1 },
         { geo: G.box(1.8, 0.2, 1.4), color: STONE, o: { y: 1.3 } },
@@ -657,9 +665,19 @@ function addProp(B, I, p, L, rng, out) {
       out.emitters.push({ x, y: 4.2, z: z - 0.4, type: 'smoke', s: 1 });
       break;
     }
-    case 'anvil': B.add('lam', [{ geo: G.box(0.35, 0.5, 0.35), color: DWOOD, o: { y: 0.25 } }, { geo: G.box(0.75, 0.22, 0.32), color: IRON, o: { y: 0.6 } }, { geo: G.cone(0.14, 0.35, 4), color: IRON, o: { y: 0.62, x: 0.5, rz: -1.57 } }], x, z, 0.4); break;
+    case 'anvil': if (ENV.props.sAnvil) { I.add('env:sAnvil', x, z, r || 0.4, 1, 0); break; } B.add('lam', [{ geo: G.box(0.35, 0.5, 0.35), color: DWOOD, o: { y: 0.25 } }, { geo: G.box(0.75, 0.22, 0.32), color: IRON, o: { y: 0.6 } }, { geo: G.cone(0.14, 0.35, 4), color: IRON, o: { y: 0.62, x: 0.5, rz: -1.57 } }], x, z, 0.4); break;
     case 'healtent': {
-      B.add('lam', [
+      // Elianthe's corner: her tent, an awning over the table of draughts
+      if (ENV.props.sTent && ENV.props.sAwning) {
+        const cs = Math.cos(r), sn = Math.sin(r), at = (lx, lz) => [x + lx * cs + lz * sn, z - lx * sn + lz * cs];
+        I.add('env:sTent', ...at(-1.2, -0.6), r + 0.3, 1, 0);
+        I.add('env:sAwning', ...at(0.4, 1.9), r, 1, 0);
+        B.add('lam', [
+          { geo: G.box(1.8, 0.1, 0.8), color: WOOD, o: { y: 0.85, z: 2.2 } },
+          { geo: G.box(0.1, 0.85, 0.1), color: DWOOD, o: { y: 0.42, z: 2.2, x: 0.8 } },
+          { geo: G.box(0.1, 0.85, 0.1), color: DWOOD, o: { y: 0.42, z: 2.2, x: -0.8 } }
+        ], x, z, r);
+      } else B.add('lam', [
         { geo: G.cone(2.6, 2.8, 6), color: 0xc8ccc0, o: { y: 1.4 }, jit: 0.1 },
         { geo: G.cyl(0.05, 0.05, 3.2, 4), color: DWOOD, o: { y: 1.6 } },
         { geo: G.box(1.8, 0.1, 0.8), color: WOOD, o: { y: 0.85, z: 2.2 } },
@@ -671,7 +689,8 @@ function addProp(B, I, p, L, rng, out) {
       B.add('glow', bottles, x, z, r);
       break;
     }
-    case 'well': if (MAT.blocks) B.add('blocks', [{ geo: G.cyl(1.1, 1.2, 0.9, 16), color: STONE, o: { y: 0.45 }, ao: 0.9 }, { geo: G.cyl(1.16, 1.16, 0.12, 16), color: DSTONE, o: { y: 0.92 } }], x, z);
+    case 'well': if (ENV.props.sWell) { I.add('env:sWell', x, z, r || 0.3, 1, 0); B.add('lam', [{ geo: G.cyl(0.62, 0.62, 0.04, 14), color: 0x050608, o: { y: 0.9 } }], x, z); break; }
+      if (MAT.blocks) B.add('blocks', [{ geo: G.cyl(1.1, 1.2, 0.9, 16), color: STONE, o: { y: 0.45 }, ao: 0.9 }, { geo: G.cyl(1.16, 1.16, 0.12, 16), color: DSTONE, o: { y: 0.92 } }], x, z);
       B.add('lam', [
       ...(MAT.blocks ? [] : [{ geo: G.cyl(1.1, 1.2, 0.9, 10), color: STONE, o: { y: 0.45 }, jit: 0.1 }]),
       { geo: G.cyl(0.9, 0.9, 0.05, 10), color: 0x050608, o: { y: MAT.blocks ? 0.99 : 0.88 } },
@@ -680,7 +699,13 @@ function addProp(B, I, p, L, rng, out) {
       { geo: G.cyl(0.07, 0.07, 2.1, 5), color: WOOD, o: { y: 1.9, rz: 1.57 } },
       { geo: prism(2.6, 0.8, 1.6), color: 0x3a3028, o: { y: 2.2 } }
     ], x, z); break;
-    case 'stash': B.add('lam', [
+    case 'stash': if (ENV.props.chest && ENV.props.chestLid) {
+      // the stash is the iron-bound chest of the dungeons, a size up
+      const k = 1.3, pv = ENV.pivots.chestLid || new THREE.Vector3(), cs = Math.cos(r), sn = Math.sin(r);
+      I.add('env:chest', x, z, r, k, 0);
+      I.add('env:chestLid', x + (pv.x * cs + pv.z * sn) * k, z + (-pv.x * sn + pv.z * cs) * k, r, k, pv.y * k);
+      break;
+    } B.add('lam', [
       { geo: G.box(1.2, 0.6, 0.75), color: 0x5a3a20, o: { y: 0.3 } },
       { geo: G.cyl(0.38, 0.38, 1.2, 8, 1), color: 0x6a4428, o: { y: 0.6, rz: 1.57, sz: 1.0 } },
       { geo: G.box(1.25, 0.08, 0.8), color: 0xa08040, o: { y: 0.45 } },
@@ -708,7 +733,7 @@ function addProp(B, I, p, L, rng, out) {
       B.add('glow', flames, x, z);
       break;
     }
-    case 'stall': B.add('lam', [
+    case 'stall': if (ENV.props.sStall) { I.add('env:sStall', x, z, r, 1, 0); break; } B.add('lam', [
       { geo: G.box(2.4, 0.9, 1.0), color: WOOD, o: { y: 0.45 } },
       { geo: G.box(0.1, 2.4, 0.1), color: DWOOD, o: { y: 1.2, x: 1.15, z: 0.45 } }, { geo: G.box(0.1, 2.4, 0.1), color: DWOOD, o: { y: 1.2, x: -1.15, z: 0.45 } },
       { geo: G.box(0.1, 2.0, 0.1), color: DWOOD, o: { y: 1.0, x: 1.15, z: -0.45 } }, { geo: G.box(0.1, 2.0, 0.1), color: DWOOD, o: { y: 1.0, x: -1.15, z: -0.45 } },
@@ -735,6 +760,26 @@ function addProp(B, I, p, L, rng, out) {
       break;
     }
     case 'crate': case 'barrel': case 'urn': out.breakables.push(p); break;
+    case 'envp': if (ENV.props[p.m]) I.add('env:' + p.m, x, z, r, s, p.y || 0); break;
+    case 'bld': {
+      // a village house (tools/pack-village.mjs), its own meshes so it can fade when the hero walks behind it
+      if (!ENV.props[p.m]) { I.add('kit:town/' + p.kit, x, z, r, KIT_SCALE.town * (p.s || 1)); break; }
+      const g = new THREE.Group(), u = { value: 1 };
+      for (const part of ENV.props[p.m]) g.add(fadeMesh(part, u));
+      g.position.set(x, 0, z); g.rotation.y = r;
+      out.group.add(g);
+      const size = ENV.sizes[p.m] || [p.hw * 2, 8, p.hd * 2], ch = ENV.extras[p.m]?.chimney;
+      if (ch) { const cs = Math.cos(r), sn = Math.sin(r); out.emitters.push({ x: x + ch[0] * cs + ch[2] * sn, y: ch[1], z: z - ch[0] * sn + ch[2] * cs, type: 'smoke', s: 1 }); }
+      (out.houses ||= []).push({ x, z, r, hw: p.hw, hd: p.hd, h: size[1], u });
+      if (p.m === 'hMill' && ENV.props.hSails) {
+        const sails = new THREE.Group();
+        for (const part of ENV.props.hSails) sails.add(fadeMesh(part, u));
+        if (ENV.pivots.hSails) sails.position.copy(ENV.pivots.hSails);
+        g.add(sails);
+        (out.spin ||= []).push({ o: sails, v: 0.45 });
+      }
+      break;
+    }
     case 'kit': {
       const ks = KIT_SCALE[p.kit] * (p.s || 1);
       const key = 'kit:' + p.kit + '/' + p.m + (p.wall ? '#wall' : p.floor ? '#floor' : '') + (p.skin ? '~' + p.skin : '');
@@ -1098,6 +1143,45 @@ export class WallCut {
   }
 }
 
+// ---------- houses that step aside ----------
+// A house between the camera (south and above) and the hero dissolves into a dither, so the hero stays in sight.
+const FADE_GLSL = `uniform float uFade;
+float bayer4(vec2 p) { ivec2 i = ivec2(mod(p, 4.0)); int k = i.x + i.y * 4;
+  float m[16] = float[16](0., 8., 2., 10., 12., 4., 14., 6., 3., 11., 1., 9., 15., 7., 13., 5.); return (m[k] + 0.5) / 16.0; }`;
+function fadeMesh(part, u) {
+  const mat = part.mat.clone();
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uFade = u;
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + FADE_GLSL)
+      .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\n  if (uFade < 0.999 && bayer4(gl_FragCoord.xy) > uFade) discard;');
+  };
+  mat.customProgramCacheKey = () => 'fade|' + mat.type;
+  const m = new THREE.Mesh(part.geo, mat);
+  m.castShadow = !mat.transparent; m.receiveShadow = true;
+  return m;
+}
+export class Village {
+  constructor(houses, spin) { this.houses = houses || []; this.spin = spin || []; }
+  update(dt, px, pz) {
+    for (const s of this.spin) s.o.rotation.x += s.v * dt;
+    for (const H of this.houses) {
+      const c = Math.cos(H.r), sn = Math.sin(H.r);
+      // walk from the hero towards the camera until the line of sight clears the roof
+      let hidden = false;
+      for (let k = 1; k < 16 && !hidden; k++) {
+        const zz = pz + k * 0.7, yy = 1.2 + k * 0.7 * 1.25;
+        if (yy > H.h) break;
+        for (const ox of [-0.35, 0.35]) {
+          const dx = px + ox - H.x, dz = zz - H.z, uu = dx * c - dz * sn, vv = dx * sn + dz * c;
+          if (Math.abs(uu) < H.hw && Math.abs(vv) < H.hd) { hidden = true; break; }
+        }
+      }
+      const target = hidden ? 0.28 : 1;
+      if (Math.abs(H.u.value - target) > 0.005) H.u.value += (target - H.u.value) * Math.min(1, dt * 7);
+    }
+  }
+}
+
 // ---------- entry ----------
 export function buildLevel(L, quality) {
   const group = new THREE.Group();
@@ -1113,6 +1197,7 @@ export function buildLevel(L, quality) {
   const cut = [];
   for (const k in inst) if (k.includes('#wall')) cut.push(...inst[k]);
   if (cut.length) out.walls = new WallCut(cut);
+  if (out.houses || out.spin) out.village = new Village(out.houses, out.spin);
   return out;
 }
 

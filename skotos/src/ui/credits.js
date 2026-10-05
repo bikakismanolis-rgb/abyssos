@@ -24,6 +24,15 @@ export const CREDITS = [
     ['Ground, stone and bark: forest_leaves_02, brown_mud_leaves_01, cobblestone_floor_04, medieval_blocks_03, bark_brown_02 (Rob Tuytel); rocky_trail, monastery_stone_floor, mossy_stone_wall (Amal Kumar); mossy_cobblestone (Sơn Nguyễn)', 'Poly Haven', 'CC0', 'https://polyhaven.com'],
     ['Props: boulder_01, dry_branches_medium_01, treasure_chest (Rico Cilliers); rock_moss_set_01/02 (Kless Gyzen); dead_tree_trunk, tree_stump_01, fern_02 (Rob Tuytel, Rico Cilliers); barrels, crate, lantern, bucket (James Ray Cock); stone_fire_pit (Sebastian Platen); wooden_candlestick (Josh Dean); gothic_statue (Benny Weimer)', 'Poly Haven', 'CC0', 'https://polyhaven.com'],
     ['Trees: Pine Tree, Fir tree, Spruce, Oak tree, Beech tree, Old tree', 'evolveduk', 'CC-BY 4.0', 'https://sketchfab.com/evolveduk'],
+    ['Lefkovrachos: Medieval House 1-4', 'Animau3D', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/medieval-house-1-0bbda345359349ea95280f597c8a4bd4'],
+    ['Medieval house | Generic Textures | Game ready', 'by__Rx', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/medieval-house-generic-textures-game-ready-3eb9e3b600264e2f99100fc43619497e'],
+    ['Medieval house (the market hall)', 'Young_Wizard', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/medieval-house-4ec56df1c24d422ea85d1cfbf21bbe8c'],
+    ['Medieval Warehouse (the hall by the beacon road)', 'timowes', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/medieval-warehouse-570438bab7f94bbba71fb86b8a89bde6'],
+    ['Windmill', 'KaramellGlass', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/windmill-92f751dab03e4a2792348a21b3673ec1'],
+    ['Medieval Tents (stalls, the healer\'s tent and awning)', 'AnyRPG', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/medieval-tents-eaa80cf29ceb4c0099698a5f5c7aea8d'],
+    ['Forge And Bellow; Anvil, Water Bucket And Water Trough', 'RBG_illustrations', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/forge-and-bellow-e4b8f1ae6d6744da863812a5081b941e'],
+    ['Medieval Grindstone', 'Thangzy', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/medieval-grindstone-eb2ae5a1c1014ee989339ef8325ed804'],
+    ['Well', 'FlukierJupiter', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/well-d8442bc92f224f0ebfa8446a1bca836d'],
     ['The Giants\' Stair and Deepstone: snow_02, rocks_ground_02/05 (Rob Tuytel); dark_rock, dark_rock_02, stone_wall_04, rock_wall_10 (Amal Kumar); rock_tile_floor_02, volcanic_herringbone_01 (Charlotte Baglioni); slab_tiles (Dario Barresi, Dimitrios Savva); cliffs, rock faces, mountainside and boulders (Dario Barresi, Rico Cilliers, Jenelle van Heerden, Greg Zaal); large_iron_gate (Josh Dean); large_castle_door (Tina); lantern_chandelier_01 (Kirill Sannikov); overhead_crane (Timothy3D); wooden_ladder (Miroslav Turura)', 'Poly Haven', 'CC0', 'https://polyhaven.com']
   ] },
   { h: 'cr.type', items: [

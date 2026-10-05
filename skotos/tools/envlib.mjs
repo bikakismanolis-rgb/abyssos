@@ -2,7 +2,8 @@
 // decimated props with WebP textures, and the final meshopt/quantize write.
 import { NodeIO, Document } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
-import { dedup, prune, weld, quantize, mergeDocuments, textureCompress, meshopt, unpartition, clearNodeTransform, compactPrimitive } from '@gltf-transform/functions';
+import { dedup, prune, weld, quantize, mergeDocuments, textureCompress, meshopt, unpartition, clearNodeTransform, compactPrimitive, metalRough, transformMesh } from '@gltf-transform/functions';
+import * as THREE from 'three';
 import { MeshoptSimplifier, MeshoptEncoder, MeshoptDecoder } from 'meshoptimizer';
 import sharp from 'sharp';
 import { statSync } from 'node:fs';
@@ -51,10 +52,17 @@ export function simplifyPrim(p, ratio, err = 0.03, keepUV = true) {
 }
 
 // P: { key, src, file?, nodes?, tris, err?, d, n, orm, solid, alpha, geo (geometry only: textures and UVs dropped),
-//      pivot?, keepXZ?, ground? (feet on y = 0), height? (uniform scale to this height), centre? }
+//      pivot?, keepXZ?, ground? (feet on y = 0), height? (uniform scale to this height), centre?,
+//      drop? / only? (regexps on mesh node names at any depth), xform? ({ s, off }: v' = (v + off) * s, instead of fitting),
+//      anchor? (stored as the pivot: where a separately moving part sits on its parent prop) }
 export async function loadProp(P, srcDir) {
   const doc = await io.read(P.file || path.join(srcDir, P.src, `${P.src}_1k.gltf`));
   const root = doc.getRoot(), scene = root.getDefaultScene() || root.listScenes()[0];
+  // specular-glossiness scans and kits become metal-roughness (the colour lands in baseColor)
+  await doc.transform(metalRough());
+  // what the conversion leaves behind (specular colour and IOR) costs textures and buys nothing here
+  for (const e of root.listExtensionsUsed()) if (/KHR_materials_(specular|ior)$/.test(e.extensionName)) e.dispose();
+  for (const n of root.listNodes()) if (n.getMesh() && ((P.drop && P.drop.test(n.getName())) || (P.only && !P.only.test(n.getName())))) n.setMesh(null);
   for (const node of scene.listChildren()) {
     if (P.nodes && !P.nodes.includes(node.getName())) { node.dispose(); continue; }
     const t = node.getTranslation();
@@ -62,8 +70,7 @@ export async function loadProp(P, srcDir) {
     if (P.pivot) node.setTranslation([t[0] - P.pivot[0], t[1] - P.pivot[1], t[2] - P.pivot[2]]);
   }
   // bake every transform into the vertices so bounds can be measured and fixed in model space
-  const bake = (n) => { clearNodeTransform(n); for (const c of n.listChildren()) bake(c); };
-  for (const node of scene.listChildren()) bake(node);
+  flatten(doc, scene);
   await doc.transform(prune(), dedup(), weld());
   if (P.geo) for (const m of root.listMeshes()) for (const p of m.listPrimitives()) {
     for (const s of p.listSemantics()) if (s !== 'POSITION' && s !== 'NORMAL') p.setAttribute(s, null);
@@ -76,7 +83,8 @@ export async function loadProp(P, srcDir) {
   const ratio = Math.min(1, Math.max(0.02, (P.tris - cards) / Math.max(1, solid)));
   const modes = new Set();
   if (ratio < 1) for (const p of prims) modes.add(simplifyPrim(p, ratio, P.err, !P.geo));
-  if (P.ground || P.height || P.centre) fitBounds(doc, P);
+  if (P.xform) P.bounds = transformAll(doc, P.xform);
+  else if (P.ground || P.height || P.centre) fitBounds(doc, P);
   if (P.geo) {
     const mat = doc.createMaterial(P.geo === true ? 'rock' : P.geo).setDoubleSided(false);
     for (const m of root.listMeshes()) for (const p of m.listPrimitives()) p.setMaterial(mat);
@@ -87,15 +95,51 @@ export async function loadProp(P, srcDir) {
     if (mr && !mat.getOcclusionTexture() && /arm/i.test(mr.getURI() || '')) mat.setOcclusionTexture(mr);
     if (P.alpha) mat.setAlphaMode('MASK').setAlphaCutoff(0.45);
   }
+  if (P.prep) await P.prep(doc);
   await doc.transform(
     prune(),
     textureCompress({ encoder: sharp, targetFormat: 'webp', slots: /^baseColor/, resize: [P.d || 512, P.d || 512], quality: 80 }),
     textureCompress({ encoder: sharp, targetFormat: 'webp', slots: /^normal/, resize: [P.n || 256, P.n || 256], quality: 84 }),
-    textureCompress({ encoder: sharp, targetFormat: 'webp', slots: /^(metallicRoughness|occlusion)/, resize: [P.orm || 256, P.orm || 256], quality: 82 })
+    textureCompress({ encoder: sharp, targetFormat: 'webp', slots: /^(metallicRoughness|occlusion)/, resize: [P.orm || 256, P.orm || 256], quality: 82 }),
+    textureCompress({ encoder: sharp, targetFormat: 'webp', slots: /^emissive/, resize: [P.d || 512, P.d || 512], quality: 80 })
   );
   return { doc, before, after: triCount(doc), modes: [...modes].join('+') || 'as-is' };
 }
 
+// every mesh node straight under one node, its world transform baked into the vertices (a mesh used twice is copied)
+function flatten(doc, scene) {
+  const found = [];
+  const visit = (n, pm) => {
+    const w = new THREE.Matrix4().fromArray(n.getMatrix()); if (pm) w.premultiply(pm);
+    if (n.getMesh()) found.push([n, w]);
+    for (const c of n.listChildren()) visit(c, w);
+  };
+  const tops = scene.listChildren();
+  for (const n of tops) visit(n, null);
+  const used = new Set(), holder = doc.createNode('flat');
+  for (const [n, w] of found) {
+    let mesh = n.getMesh();
+    if (used.has(mesh)) { const copy = doc.createMesh(mesh.getName()); for (const p of mesh.listPrimitives()) copy.addPrimitive(p.clone()); mesh = copy; }
+    used.add(mesh);
+    transformMesh(mesh, w.toArray());
+    holder.addChild(doc.createNode(n.getName()).setMesh(mesh));
+  }
+  const old = []; for (const t of tops) t.traverse((n) => old.push(n));
+  for (const n of old) { n.setMesh(null); n.dispose(); }
+  scene.addChild(holder);
+}
+// v' = (v + off) * s on every vertex; the bounds are measured after
+function transformAll(doc, { s = 1, off = [0, 0, 0] }) {
+  const lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9], v = [], seen = new Set();
+  for (const m of doc.getRoot().listMeshes()) for (const p of m.listPrimitives()) {
+    const a = p.getAttribute('POSITION'); if (seen.has(a)) continue; seen.add(a);
+    for (let i = 0; i < a.getCount(); i++) {
+      a.getElement(i, v); const w = [(v[0] + off[0]) * s, (v[1] + off[1]) * s, (v[2] + off[2]) * s]; a.setElement(i, w);
+      for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], w[k]); hi[k] = Math.max(hi[k], w[k]); }
+    }
+  }
+  return { size: [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]] };
+}
 // translate (and optionally scale) all vertices: feet on y = 0, centred on x/z, height P.height
 function fitBounds(doc, P) {
   const lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9], v = [];
@@ -119,7 +163,8 @@ export async function writePack(props, outGlb, extras) {
     const srcScene = doc.getRoot().getDefaultScene() || doc.getRoot().listScenes()[0];
     const holder = out.createNode(P.key);
     const ex = {};
-    if (P.pivot) ex.pivot = P.pivot;
+    if (P.anchor || P.pivot) ex.pivot = P.anchor || P.pivot;
+    if (P.extra) Object.assign(ex, P.extra);
     if (P.bounds) ex.size = P.bounds.size.map((x) => +x.toFixed(3));
     if (Object.keys(ex).length) holder.setExtras(ex);
     for (const n of srcScene.listChildren()) holder.addChild(map.get(n));

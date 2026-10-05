@@ -28,6 +28,11 @@ WORLD
 - Dungeon Remastered, Medieval Hexagon Pack, Halloween Bits by Kay Lousberg / KayKit. CC0 1.0.
 - Ground, stone, bark and props from Poly Haven (polyhaven.com). CC0. Per-asset authors in src/assets/env/CREDITS.txt.
 - Act II ground, cliffs, rocks, gates and dwarven props from Poly Haven (polyhaven.com). CC0. Per-asset authors in src/assets/deep/CREDITS.txt.
+- Village of Lefkovrachos (src/assets/village.glb; rescaled, decimated, textures re-encoded, window glow added), all CC-BY 4.0 from sketchfab.com, per-model links in src/assets/VILLAGE_CREDITS.txt:
+  "Medieval House 1", "Medieval House 2", "Medieval House 3", "Medieval House 4" by Animau3D;
+  "Medieval house | Generic Textures | Game ready" by by__Rx; "Medieval house" by Young_Wizard; "Medieval Warehouse" by timowes;
+  "Windmill" by KaramellGlass; "Medieval Tents" by AnyRPG; "Forge And Bellow" and "Anvil, Water Bucket And Water Trough" by RBG_illustrations;
+  "Medieval Grindstone" by Thangzy; "Well" by FlukierJupiter.
 - Trees: "Pine Tree", "Fir tree", "Spruce", "Oak tree", "Beech tree" and "Old tree" by evolveduk (sketchfab.com/evolveduk). CC-BY 4.0, modified (decimated, rescaled, textures re-encoded). Links in src/assets/TREES_CREDITS.txt.
 
 TYPEFACE
