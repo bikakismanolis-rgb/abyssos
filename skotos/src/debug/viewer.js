@@ -4,7 +4,7 @@ import { initGfx, R, setAtmosphere, frame, render, updateCamera, addLight } from
 import { tex } from '../gfx/textures.js';
 import * as M from '../gfx/models.js';
 import { Avatar } from '../gfx/anim.js';
-import { loadPeople, personModel } from '../gfx/people.js';
+import { loadPeople, loadFolk, personModel } from '../gfx/people.js';
 
 // people: ?viewer&only=p:warden,p:ranger (realistic characters), grip tests with &grip=X,1.57,Y,0
 export async function startViewer(q) {
@@ -44,9 +44,15 @@ export async function startViewer(q) {
     'p:healer': () => new Avatar(personModel('healer'), { animSet: 'npc' }),
     'p:villager0': () => new Avatar(personModel('villager0'), { animSet: 'npc' }),
     'p:villager1': () => new Avatar(personModel('villager1'), { animSet: 'npc' }),
-    'p:villager2': () => new Avatar(personModel('villager2'), { animSet: 'npc' })
+    'p:villager2': () => new Avatar(personModel('villager2'), { animSet: 'npc' }),
+    'p:stoneborn': () => { const a = new Avatar(personModel('stoneborn'), { style: 'sword' }); a.hold('R', 'axe', {}); a.hold('L', 'shield', { face: 0x3a2a24, rim: 0x8a6a3a, emblem: 0xb07a30, r: 0.3 }); return a; },
+    'p:stonebornArb': () => { const a = new Avatar(personModel('stonebornArb'), { style: 'bow' }); a.hold('R', 'crossbow', {}); return a; },
+    'p:runepriest': () => { const a = new Avatar(personModel('runepriest'), { style: 'staff' }); a.hold('R', 'staff', { gem: 0xff8a30, wood: 0x3a3028 }); return a; },
+    'p:moltenKing': () => { const a = new Avatar(personModel('moltenKing'), { style: 'heavy' }); a.hold('R', 'hammer', { head: 0x2a2220, glow: 0.9, rune: 0xff6a10 }); return a; },
+    'p:brokka': () => { const a = new Avatar(personModel('brokka'), { style: 'none', animSet: 'npc' }); a.hold('R', 'hammer', {}); return a; }
   };
   if (list.some((n) => n.startsWith('p:'))) await loadPeople();
+  if (list.some((n) => /^p:(stoneborn|runepriest|brokka|moltenKing)/.test(n))) await loadFolk();
   // &sheet=slash1,slash2,...: one copy of the first model per clip, each posed at the clip's strike (or &t)
   const sheet = q.get('sheet') ? q.get('sheet').split(',') : null;
   if (sheet) { const m = list[0]; list.length = 0; for (const c of sheet) list.push(m); }
@@ -84,8 +90,6 @@ export async function startViewer(q) {
   if (camMode === 'front') R.cam.pitch = 0.25;
   if (q.get('pitch')) R.cam.pitch = +q.get('pitch');
   if (q.get('zoom')) R.cam.zoomT = R.cam.zoom = +q.get('zoom');
-  const { setEmitters, initFX, updateFX } = await import('../gfx/fx.js');
-  initFX(R.quality); setEmitters(lvl.emitters);
   R.cam.lookY = 0.9;
   updateCamera(0, 0, +(q.get('cz') || 0), true);
   let n = 0;

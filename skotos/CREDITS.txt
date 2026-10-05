@@ -16,9 +16,19 @@ MONSTERS (src/assets/creatures/; adapted for Skotos: retextured, rigged, animate
 - Barrow-wight and Lord of the Barrow: built from CC0 MakeHuman assets via MPFB2 (makehumancommunity.org): base mesh and game_engine rig; skin "old caucasian male" (MakeHuman) with mottling from "Female zombie skin" by sohh; "Monks Robe" and "Monk's Hood" by Donitz; "Hand claws" and "Hero-heroine gloves 3" by culturalibre; "Viking tunic" and "Viking pants" by Rehman Polanski; "MC SciFi Armor Helios" by MatCreator. All CC0.
 - Monster animations retargeted and edited from the Quaternius Universal Animation Library and KayKit packs (CC0); wolf and spider animations made for Skotos.
 
+ACT II MONSTERS (src/assets/creatures/, src/assets/folk.glb; adapted for Skotos: rescaled, re-coloured, decimated, new animations)
+- Magma hounds: "Infernal Magma Hound - Free Lava Creature Asset" by Yury Misiyuk (sketchfab.com/Tim0). CC-BY 4.0, modified. https://sketchfab.com/3d-models/infernal-magma-hound-free-lava-creature-asset-bd8290074df34eb99f174edb176fcc46
+- Cave bats: "Bat" by matisosanimation. CC-BY 4.0, modified. https://sketchfab.com/3d-models/bat-28af38de4d2c401d809148c7f63a73f9
+- Deepworms: "Worm Monster" by CR!STALLL (sketchfab.com/CR1STALLL). CC-BY 4.0, modified. https://sketchfab.com/3d-models/worm-monster-5563066315694125b741901681d387c5
+- The Stonewarden: "Grock - Endboss" by Baue Franco (sketchfab.com/BaueFranco). CC-BY 4.0, modified (re-coloured as granite with ember runes; walk, run, hit and death animations added). https://sketchfab.com/3d-models/grock-endboss-fc582e5f47da447d934d616ad271a3fe
+- Durgan, the Molten King: "lava monster" by Satwik.Bandi. CC-BY 4.0, modified (rebound onto the people's skeleton so it shares their animations). https://sketchfab.com/3d-models/lava-monster-2e2a1eac6f834857af5347a0662b075d
+- The dwarves of Deepstone (the Ashbound and Brokka): Quaternius characters (CC0), re-proportioned and re-coloured for Skotos.
+
 WORLD
 - Dungeon Remastered, Medieval Hexagon Pack, Halloween Bits by Kay Lousberg / KayKit. CC0 1.0.
 - Ground, stone, bark and props from Poly Haven (polyhaven.com). CC0. Per-asset authors in src/assets/env/CREDITS.txt.
+- Act II ground, cliffs, rocks, gates and dwarven props from Poly Haven (polyhaven.com). CC0. Per-asset authors in src/assets/deep/CREDITS.txt.
+- Trees: "Pine Tree", "Fir tree", "Spruce", "Oak tree", "Beech tree" and "Old tree" by evolveduk (sketchfab.com/evolveduk). CC-BY 4.0, modified (decimated, rescaled, textures re-encoded). Links in src/assets/TREES_CREDITS.txt.
 
 TYPEFACE
 - Alegreya and Alegreya SC by Juan Pablo del Peral, Huerta Tipográfica. SIL Open Font License 1.1 (loaded from Google Fonts).

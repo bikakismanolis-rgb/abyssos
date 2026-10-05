@@ -10,6 +10,7 @@ import { ATMOS } from '../world/atmos.js';
 import { kitMesh } from '../gfx/kits.js';
 import { tex } from '../gfx/textures.js';
 import { envMesh, envChest, hasEnv, loadPack } from '../gfx/env.js';
+import { loadFolk } from '../gfx/people.js';
 import { setEmitters, setAmbient, clearFX, glowBurst, puff, sparks, ring, P, explosion } from '../gfx/fx.js';
 import { Actor, spawnMonster, spawnNpc, createPlayer, rollAffixes } from './actors.js';
 import { PACKS, DIFFS, MONSTERS } from './data.js';
@@ -41,7 +42,7 @@ export function farFire(p) {
 // the zone's extra assets (Act II's stone, snow and lava), fetched the first time it is visited
 export function zoneReady(id) {
   const p = ZONES[id]?.pack;
-  return p ? loadPack(p) : Promise.resolve();
+  return p ? Promise.all([loadPack(p), loadFolk()]) : Promise.resolve();
 }
 
 function seedFor(id) {
