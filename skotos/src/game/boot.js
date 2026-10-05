@@ -50,7 +50,7 @@ export async function boot(q) {
   initOverlay(); buildHud(); initPanels();
   const fade = document.createElement('div'); fade.id = 'fade'; document.getElementById('app').appendChild(fade);
   const scr = document.createElement('div'); scr.id = 'screen'; scr.hidden = true; document.getElementById('app').appendChild(scr);
-  await Promise.all([loadKits(['dungeon', 'grave', 'town']), loadPeople(), loadCreatures(), loadEnv(G.settings.quality).then(() => G.settings.quality >= 1 && loadPack('trees'))]);
+  await Promise.all([loadKits(['dungeon', 'grave', 'town']), loadPeople(), loadCreatures(), loadEnv(G.settings.quality).then(() => Promise.all([loadPack('village'), G.settings.quality >= 1 && loadPack('trees')]))]);
   // code-built fallbacks only for monsters without a realistic model
   preloadModels(['goblin', 'skeleton', 'warg', 'spider'].filter((m) => !hasCreature(m)));
   buildTitleScene();
@@ -237,6 +237,7 @@ function tick(dt, noDraw) {
   updateShadows();
   updatePortalFx(dt);
   if (G.zone.lvl.walls) G.zone.lvl.walls.update(dt, pl.x, pl.z);
+  G.zone.lvl.village?.update(dt, pl.x, pl.z);
   if (G.mode === 'play') updateCamera(dt, pl.x, pl.z);
   WIND.uHero.value.set(pl.x, 0, pl.z);
   updateFX(gdt, pl.x, pl.z);

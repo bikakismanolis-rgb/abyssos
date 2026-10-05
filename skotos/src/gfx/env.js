@@ -29,7 +29,7 @@ const LAYER_URLS = {
   flags: [flagsD, flagsN], mcobble: [mcobbleD, mcobbleN], wall: [wallD, wallN], blocks: [blocksD, blocksN], bark: [barkD, barkN]
 };
 // ENV.layers[id] = { d: diffuse texture (sRGB), n: OpenGL normal map }; ENV.props[name] = [{ geo, mat }] (one part per material)
-export const ENV = { layers: {}, props: {}, pivots: {}, sizes: {}, packs: {}, ready: false, quality: 1 };
+export const ENV = { layers: {}, props: {}, pivots: {}, sizes: {}, extras: {}, packs: {}, ready: false, quality: 1 };
 
 async function bytes(url) {
   // inlined builds carry assets as data URIs: decode them instead of fetching
@@ -71,7 +71,8 @@ function lambert(mat, quality) {
   if (LAMB.has(mat)) return LAMB.get(mat);
   const m = new THREE.MeshLambertMaterial({
     name: mat.name, map: mat.map, color: mat.color, side: mat.side, alphaTest: mat.alphaTest, transparent: mat.transparent,
-    normalMap: quality >= 1 ? mat.normalMap : null, aoMap: mat.aoMap, aoMapIntensity: 0.8
+    normalMap: quality >= 1 ? mat.normalMap : null, aoMap: mat.aoMap, aoMapIntensity: 0.8,
+    emissiveMap: mat.emissiveMap, emissive: mat.emissive
   });
   if (m.normalMap) m.normalScale.copy(mat.normalScale);
   LAMB.set(mat, m);
@@ -79,6 +80,9 @@ function lambert(mat, quality) {
 }
 function readProps(gltf, quality) {
   const root = gltf.scene;
+  // node extras straight from the file: the loader's userData copy loses some keys (pivot)
+  const extras = {};
+  for (const n of gltf.parser?.json?.nodes || []) if (n.extras && n.name) extras[n.name] = n.extras;
   root.updateMatrixWorld(true);
   for (const holder of root.children) {
     const inv = new THREE.Matrix4().copy(holder.matrixWorld).invert();
@@ -105,8 +109,10 @@ function readProps(gltf, quality) {
       parts.push({ geo, mat: m });
     }
     ENV.props[holder.name] = parts;
-    if (holder.userData.pivot) ENV.pivots[holder.name] = new THREE.Vector3().fromArray(holder.userData.pivot);
-    if (holder.userData.size) ENV.sizes[holder.name] = holder.userData.size;
+    const ex = extras[holder.name] || holder.userData;
+    if (ex.pivot) ENV.pivots[holder.name] = new THREE.Vector3().fromArray(ex.pivot);
+    if (ex.size) ENV.sizes[holder.name] = ex.size;
+    ENV.extras[holder.name] = ex;
   }
 }
 

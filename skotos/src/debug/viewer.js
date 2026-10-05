@@ -115,6 +115,7 @@ export async function startWorld(q) {
   const type = q.get('world'), seed = +(q.get('seed') || 3);
   if (type === 'pass' || type === 'halls') await loadPack('deep');
   if (R.quality >= 1) await loadPack('trees');
+  if (!q.has('nohouses')) await loadPack('village');
   if (type === 'pass') (await import('../world/build.js')).WIND.uSnow.value = 1;
   const L = type === 'crypt' ? genCrypt(seed) : type === 'town' ? genTown() : type === 'pass' ? genPass(seed) : type === 'halls' ? genHalls(seed) : genForest(seed);
   setAtmosphere(ATMOS[type]);
@@ -137,6 +138,7 @@ export async function startWorld(q) {
     frame(0.016); hero.update(0.016, { speed: 0 }); updateCamera(0.016, x, z, true); updateFX(0.016, x, z);
     R.heroLight.position.set(x, 2.6, z); R.heroLight.intensity = R.heroLight.userData.base;
     if (lvl.walls) lvl.walls.update(0.1, x, z);
+    lvl.village?.update(0.1, x, z);
     render();
     if (++n > 5) { window.__ready = true; window.__R = R; }
     requestAnimationFrame(loop);
