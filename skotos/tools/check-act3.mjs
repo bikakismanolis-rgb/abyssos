@@ -61,10 +61,11 @@ function heart(seed) {
     }
   }
   for (const p of L.props) if (GROUNDED.has(p.t) && wet(L, cellOf(L, p.x, p.z))) odd('heart.overAmber.' + p.t, seed);
-  // each alcove's mouth stays dry: no sap within 4.5 m of its centre
+  // each alcove's mouth stays dry: no sap of the Heart Chamber's ring within 4.5 m of its centre
+  const H = L.spots.heart;
   for (const a of L.spots.alcoves) {
     let n = 0;
-    for (let z = Math.floor(a.z - 5); z <= a.z + 5; z++) for (let x = Math.floor(a.x - 5); x <= a.x + 5; x++) if (Math.hypot(x + 0.5 - a.x, z + 0.5 - a.z) < 4.5 && L.sap[z * w + x]) n++;
+    for (let z = Math.floor(a.z - 5); z <= a.z + 5; z++) for (let x = Math.floor(a.x - 5); x <= a.x + 5; x++) if (Math.hypot(x + 0.5 - a.x, z + 0.5 - a.z) < 4.5 && Math.hypot(x + 0.5 - H.x, z + 0.5 - H.z) < 17 && L.sap[z * w + x]) n++;
     if (n) odd('heart.alcoveSap', seed);
   }
 }

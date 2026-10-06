@@ -117,6 +117,10 @@ export function setAtmosphere(a) {
   s.fog.density = a.density;
   R.hemi.color.set(a.sky); R.hemi.groundColor.set(a.ground); R.hemi.intensity = a.hemi;
   R.moon.color.set(a.moon); R.moon.intensity = a.moonI;
+  // no moon (the crypt, the halls, the Heartwood before the Autumn): its shadow map is not redrawn each frame (one last
+  // update on the switch; castShadow stays, so no shader recompiles)
+  const sh = a.moonI > 0;
+  if (R.moon.shadow.autoUpdate !== sh) { R.moon.shadow.autoUpdate = sh; R.moon.shadow.needsUpdate = true; }
   R.renderer.toneMappingExposure = a.exposure ?? 1.15;
   R.heroLight.color.set(a.heroColor ?? 0xffa860);
   R.heroLight.userData.base = a.heroI ?? 30;

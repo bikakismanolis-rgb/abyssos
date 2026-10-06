@@ -86,6 +86,15 @@ function circleCells(L, cx, cz, r) {
   return out;
 }
 const mark = (m, L, cx, cz, r) => { for (const [x, z] of circleCells(L, cx, cz, r)) m[z * L.w + x] = 1; };
+// no amber and no deck within two cells: there the ground sinks into the amber's bed (build.js), and a prop would float
+function dryAt(L, x, z) {
+  const cx = Math.floor(x), cz = Math.floor(z);
+  for (let dz = -2; dz <= 2; dz++) for (let dx = Math.abs(dz) - 2; dx <= 2 - Math.abs(dz); dx++) {
+    const xx = cx + dx, zz = cz + dz, i = zz * L.w + xx;
+    if (xx >= 0 && zz >= 0 && xx < L.w && zz < L.h && (L.low[i] || L.deck[i])) return false;
+  }
+  return true;
+}
 // which way the floor lies from a solid cell (root masses and faces turn toward it)
 function toFloor(L, D, xx, zz) {
   let bx = 0, bz = 0;
@@ -96,8 +105,13 @@ function toFloor(L, D, xx, zz) {
 // ======================= WEEP: the Weeping Woods =======================
 // South to north: the Edge of Tears (the frozen deer), Tear 1 in the sentinels' clearing, the Amber Mere with the Fallen
 // King and the island of Tear 2, the Lanternglade (waypoint, Elati, Old Linden), Tear 3 in the hollow of dead trees,
-// and the Glade of Stones with the Root Gate on its north edge.
+// and the Glade of Stones with the Root Gate on its north edge. The generator retries until the three story Tears, the
+// grove of weepers, the mourners' ring, the bear's den and at least two minor Tears all found room.
 export function genWeep(seed, o = {}) {
+  for (let k = 0; k < 20; k++) { const L = tryWeep(seed + k * 7919, o, k === 19); if (L) { L.seed = seed; return L; } }
+  return null;
+}
+function tryWeep(seed, o, last) {
   const rng = RNG(seed);
   const w = o.w || 112, h = o.h || 176, N = w * h;
   const L = base(w, h);
@@ -260,8 +274,10 @@ export function genWeep(seed, o = {}) {
   L.spots.waypoint = { x: pth.x + ws * 4.4, z: LG.z + 2.4 };
   const wpt = L.spots.waypoint;
   L.lights.push({ x: wpt.x, y: 1.2, z: wpt.z, color: 0x60a8ff, intensity: 10, range: 8, flicker: 0.1 });
+  // Elati on the other, kept 4 m inside the ring of rooted Evergreen (they stand at 9.4 m), never in a trunk
+  const ex = pth.x - ws * 3.6 - LG.x, ez = 0.8, ek = Math.min(1, (LG.r - 4) / Math.hypot(ex, ez));
   L.spots.npcs = {
-    elati: { x: pth.x - ws * 3.6, z: LG.z + 0.8, r: ws * 0.6 },
+    elati: { x: LG.x + ex * ek, z: LG.z + ez * ek, r: ws * 0.6 },
     linden: { x: linden.x - Math.sin(linden.a) * 1.7, z: linden.z - Math.cos(linden.a) * 1.7, r: linden.a + Math.PI }
   };
   mark(res, L, LG.x, LG.z, 6);
@@ -294,10 +310,13 @@ export function genWeep(seed, o = {}) {
     const t = trail[i]; if (t.mere || Math.hypot(t.x - LG.x, t.z - LG.z) < LG.r + 6 || inMere(t.x, t.z, 6) || L.spots.tears.some((q) => Math.hypot(q.x - t.x, q.z - t.z) < 16) || Math.hypot(t.x - GS.x, t.z - GS.z) < GS.r + 4) continue;
     const a = sideOf(i); let x = t.x, z = t.z;
     for (let s2 = 0; s2 < 9 && L.cells[Math.floor(z + Math.cos(a)) * w + Math.floor(x + Math.sin(a))]; s2++) { x += Math.sin(a); z += Math.cos(a); }
-    if (Math.hypot(x - t.x, z - t.z) < 2.5) continue;
+    // (and never out in the middle of a clearing, where its chest and its pack stand)
+    if (Math.hypot(x - t.x, z - t.z) < 2.5 || clearings.some((c) => Math.hypot(c.x - x, c.z - z) < c.r - 2)) continue;
     x -= Math.sin(a) * 0.9; z -= Math.cos(a) * 0.9;
     tear(x, z, a, 'm' + (++k), false);
   }
+  if (!last && (!T1 || !T3 || kn < 3 || L.spots.tears.length < 5)) return null;
+  const put = (p) => { if (dryAt(L, p.x, p.z)) L.props.push(p); };
   // ---- clearings ----
   const deadRing = (c, n, gapA) => {
     for (let k = 0; k < n; k++) {
@@ -338,21 +357,22 @@ export function genWeep(seed, o = {}) {
         L.props.push({ t: 'menhir', x, z, r: rng.range(0, 6.28), s: rng.range(0.75, 0.9) }); blockCircle(L, x, z, 0.9); mark(res, L, x, z, 1.6);
       }
       for (let k = 0; k < 8; k++) L.props.push({ t: 'bones', x: c.x + rng.range(-3.5, 3.5), z: c.z + rng.range(-3.5, 3.5), r: rng.range(0, 6.28), s: 1.3 });
-      L.spots.chests.push({ x: c.x + Math.sin(toTrail + Math.PI) * 2.5, z: c.z + Math.cos(toTrail + Math.PI) * 2.5, rare: rng.chance(0.5) });
+      // the chest lies by the den's heart, clear of the stones (they stand 3.5 m and more out)
+      L.spots.chests.push({ x: c.x + Math.sin(toTrail + Math.PI), z: c.z + Math.cos(toTrail + Math.PI), rare: rng.chance(0.5) });
       L.packs.push({ x: c.x, z: c.z, n: rng.int(3, 4), tag: 'weepDen', elite: rng.chance(0.4) ? 'rare' : null });
     } else if (c.kind === 'moths') {
       // giant toadstools and gold dust: the moths' feeding ground
-      for (let k = 0; k < 7; k++) { const a = rng.range(0, 6.28), d = rng.range(c.r * 0.45, c.r - 1), x = c.x + Math.sin(a) * d, z = c.z + Math.cos(a) * d; L.props.push({ t: 'mush', x, z, r: rng.range(0, 6.28), s: rng.range(2.4, 4.2) }); blockCircle(L, x, z, 0.35); }
+      for (let k = 0; k < 7; k++) { const a = rng.range(0, 6.28), d = rng.range(c.r * 0.45, c.r - 1), x = c.x + Math.sin(a) * d, z = c.z + Math.cos(a) * d, p = { t: 'mush', x, z, r: rng.range(0, 6.28), s: rng.range(2.4, 4.2) }; if (dryAt(L, x, z)) { L.props.push(p); blockCircle(L, x, z, 0.35); } }
       L.props.push({ t: 'fx', fx: 'motes', x: c.x, y: 1.4, z: c.z, s: 4, color: 0xffd890 });
       L.packs.push({ x: c.x, z: c.z, n: rng.int(5, 7), tag: 'weepMoths', elite: elite(0.35) });
     } else if (c.kind === 'rootlings') {
-      for (let k = 0; k < rng.int(5, 7); k++) L.props.push({ t: 'mound', x: c.x + rng.range(-c.r + 1.5, c.r - 1.5), z: c.z + rng.range(-c.r + 1.5, c.r - 1.5), r: rng.range(0, 6.28), s: rng.range(0.8, 1.2) });
+      for (let k = 0; k < rng.int(5, 7); k++) put({ t: 'mound', x: c.x + rng.range(-c.r + 1.5, c.r - 1.5), z: c.z + rng.range(-c.r + 1.5, c.r - 1.5), r: rng.range(0, 6.28), s: rng.range(0.8, 1.2) });
       L.packs.push({ x: c.x, z: c.z, n: rng.int(5, 8), tag: 'weepMixed', elite: elite(0.3) });
     } else if (c.kind === 'weepers') {
       // a grove of weeping trees: sap under them, and the drips that keep it fresh
       for (let k = 0; k < 6; k++) {
         const a = toTrail + 0.6 + (k / 6) * (Math.PI * 2 - 1.2), rr = c.r - 1.4, x = c.x + Math.sin(a) * rr, z = c.z + Math.cos(a) * rr;
-        L.props.push({ t: 'willow', x, z, r: rng.range(0, 6.28), s: rng.range(0.8, 0.95), d: 1 }); blockCircle(L, x, z, 0.6); mark(res, L, x, z, 1.5);
+        L.props.push({ t: 'willow', x, z, r: rng.range(0, 6.28), s: rng.range(0.8, 0.95), d: 1, weeper: true }); blockCircle(L, x, z, 0.6); mark(res, L, x, z, 1.5);
         const px = x - Math.sin(a) * 2.2, pz = z - Math.cos(a) * 2.2;
         L.weepers.push({ x: px, z: pz, tx: x, tz: z });
         L.props.push({ t: 'fx', fx: 'drip', x: px, y: 3.6, z: pz });
@@ -388,7 +408,7 @@ export function genWeep(seed, o = {}) {
     const x = M.x + Math.sin(a) * sx * (M.rx + 1.5), z = M.z + Math.cos(a) * (M.rz + 1.3);
     const i = Math.floor(z) * w + Math.floor(x);
     if (!L.cells[i] || L.deck[i] || res[i] || DM[i] > 2) continue;
-    L.props.push({ t: 'willow', x, z, r: rng.range(0, 6.28), s: rng.range(0.75, 0.9), d: 1 }); blockCircle(L, x, z, 0.6); mark(res, L, x, z, 1.4);
+    L.props.push({ t: 'willow', x, z, r: rng.range(0, 6.28), s: rng.range(0.75, 0.9), d: 1, weeper: true }); blockCircle(L, x, z, 0.6); mark(res, L, x, z, 1.4);
     // the drips fall on the shore, on the side away from the amber
     const ox = Math.sin(a) * sx, oz = Math.cos(a) * (M.rx / M.rz), ol = Math.hypot(ox, oz), px = x + (ox / ol) * 1.8, pz = z + (oz / ol) * 1.8;
     L.weepers.push({ x: px, z: pz, tx: x, tz: z });
@@ -405,11 +425,11 @@ export function genWeep(seed, o = {}) {
       if (!L.cells[i]) continue;
       const edge = D[i - 1] === 1 || D[i + 1] === 1 || D[i - w] === 1 || D[i + w] === 1;
       const wet = L.sap[i] || L.low[i - 1] || L.low[i + 1] || L.low[i - w] || L.low[i + w];
-      if (edge && !wet && rng.chance(0.2)) L.props.push({ t: under(green), x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.6, 1.0) });
-      if (L.paint[i] < 0.3 && !L.sap[i] && rng.chance(0.26)) L.props.push({ t: 'tuft', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.7, 1.2) });
-      if (rng.chance(0.01)) L.props.push({ t: 'stone', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.25, 0.5) });
-      if (L.paint[i] < 0.2 && rng.chance(edge ? 0.018 : 0.004)) L.props.push({ t: 'branches', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.8, 1.2) });
-      if (L.paint[i] < 0.25 && rng.chance(edge ? 0.005 : 0.0012)) L.props.push({ t: 'mush', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.9, 1.6) });
+      if (edge && !wet && rng.chance(0.2)) put({ t: under(green), x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.6, 1.0) });
+      if (L.paint[i] < 0.3 && !L.sap[i] && rng.chance(0.26)) put({ t: 'tuft', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.7, 1.2) });
+      if (rng.chance(0.01)) put({ t: 'stone', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.25, 0.5) });
+      if (L.paint[i] < 0.2 && rng.chance(edge ? 0.018 : 0.004)) put({ t: 'branches', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.8, 1.2) });
+      if (L.paint[i] < 0.25 && rng.chance(edge ? 0.005 : 0.0012)) put({ t: 'mush', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.9, 1.6) });
       continue;
     }
     if (d === 255) continue;
@@ -418,20 +438,20 @@ export function genWeep(seed, o = {}) {
       const t = rng.next() < green ? rng.weighted([['oak', 4], ['pine', 2]]) : rng.weighted([['goak', 6], ['willow', d <= 3 ? 0.45 : 0.1], ['dead', d === 1 ? 0.7 : 0.25]]);
       L.props.push({ t, x: x + rng.range(0.2, 0.8), z: z + rng.range(0.2, 0.8), r: rng.range(0, 6.28), s: rng.range(0.85, 1.3) * (d > 3 ? 1.15 : 1), d });
     } else if (d <= 2 && rng.chance(0.045)) L.props.push({ t: rng.weighted([['groot', 3], ['ostump', 2], ['rcluster', 2]]), x: x + 0.5, z: z + 0.5, r: toFloor(L, D, x, z) + rng.range(-0.4, 0.4), s: rng.range(0.7, 1.05), y: -0.05 });
-    else if (d <= 2 && rng.chance(0.3)) L.props.push({ t: under(green), x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.8, 1.3) });
+    else if (d <= 2 && rng.chance(0.3)) put({ t: under(green), x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.8, 1.3) });
     else if (d === 1 && rng.chance(0.04)) L.props.push({ t: 'rock', x: x + 0.5, z: z + 0.5, r: rng.range(0, 6.28), s: rng.range(0.8, 1.5) });
   }
-  // fallen logs and toadstool rings by the trail
+  // fallen logs and toadstool rings by the trail (none on the Fallen King's deck or the mere's banks)
   for (let n = 0; n < 14; n++) {
     const t = rng.pick(trail); if (t.mere) continue;
     const a = rng.range(0, 6.28), dd = rng.range(3.5, 6), lx = t.x + Math.sin(a) * dd, lz = t.z + Math.cos(a) * dd, i = Math.floor(lz) * w + Math.floor(lx);
-    if (L.cells[i] && D[i] === 0 && !res[i] && !L.sap[i] && L.paint[i] < 0.2) L.props.push({ t: 'log', x: lx, z: lz, r: rng.range(0, 3.14), s: rng.range(0.8, 1.2) });
+    if (L.cells[i] && D[i] === 0 && !res[i] && !L.sap[i] && L.paint[i] < 0.2) put({ t: 'log', x: lx, z: lz, r: rng.range(0, 3.14), s: rng.range(0.8, 1.2) });
   }
   for (let n = 0; n < 8; n++) {
     const t = rng.pick(trail); if (t.mere) continue;
     const a = rng.range(0, 6.28), dd = rng.range(3.5, 7), mx = t.x + Math.sin(a) * dd, mz = t.z + Math.cos(a) * dd, i = Math.floor(mz) * w + Math.floor(mx);
     if (!L.cells[i] || res[i]) continue;
-    for (let m = 0; m < rng.int(3, 5); m++) { const b = (m / 6) * 6.28, rr = rng.range(0.8, 1.3); L.props.push({ t: 'mush', x: mx + Math.sin(b) * rr, z: mz + Math.cos(b) * rr, r: rng.range(0, 6.28), s: rng.range(0.7, 1.2) }); }
+    for (let m = 0; m < rng.int(3, 5); m++) { const b = (m / 6) * 6.28, rr = rng.range(0.8, 1.3); put({ t: 'mush', x: mx + Math.sin(b) * rr, z: mz + Math.cos(b) * rr, r: rng.range(0, 6.28), s: rng.range(0.7, 1.2) }); }
   }
   L.clearings = clearings;
   L.exits.push({ x: L.start.x, z: h - 4.5, to: 'town', label: 'exit.town' });
@@ -544,7 +564,8 @@ function tryHeart(seed, o, last) {
   for (const a of alcoves) { mark(res, L, a.x, a.z, 2.6); L.lights.push({ x: a.x, y: 1.2, z: a.z, color: 0xff9a30, intensity: 8, range: 7, flicker: 'beat' }); }
   for (let z = Math.floor(H.z - H.r - 1); z <= H.z + H.r + 1; z++) for (let x = Math.floor(H.x - H.r - 1); x <= H.x + H.r + 1; x++) {
     const d = Math.hypot(x + 0.5 - H.x, z + 0.5 - H.z), i = z * w + x;
-    if (L.cells[i] && d >= 13 && d <= 16.4 + (fbm(x * 0.3, z * 0.3, seed + 7) - 0.5) * 0.8) L.sap[i] = 1;
+    // (each alcove keeps a dry mouth: the walk from node to node need not wade the ring)
+    if (L.cells[i] && d >= 13 && d <= 16.4 + (fbm(x * 0.3, z * 0.3, seed + 7) - 0.5) * 0.8 && !alcoves.some((a) => Math.hypot(x + 0.5 - a.x, z + 0.5 - a.z) < 5.5)) L.sap[i] = 1;
   }
   L.lights.push({ x: H.x, y: 4, z: H.z, color: 0xffa040, intensity: 34, range: 24, flicker: 'beat' });
   for (let k = 0; k < 6; k++) { const a = (k / 6) * Math.PI * 2 + 0.5; L.lights.push({ x: H.x + Math.sin(a) * 14.5, y: 0.6, z: H.z + Math.cos(a) * 14.5, color: 0xffa030, intensity: 8, range: 9, flicker: 'beat' }); }
@@ -583,23 +604,28 @@ function tryHeart(seed, o, last) {
   L.props.push({ t: 'rootStair', x: S.x, z: h - 5 });
   L.exits.push({ x: S.x, z: h - 6, to: 'weep', label: 'exit.weep' });
   // ---- chambers ----
+  const put = (p) => { if (dryAt(L, p.x, p.z)) L.props.push(p); };
   for (const c of chambers) {
     const away = Math.atan2(c.x - c.from.x, c.z - c.from.z), fx = Math.sin(away), fz = Math.cos(away);
-    if (c.node) mark(res, L, c.x + fx * (c.r - 2.2), c.z + fz * (c.r - 2.2), 2);
+    const nx = c.x + fx * (c.r - 2.2), nz = c.z + fz * (c.r - 2.2);
+    if (c.node) mark(res, L, nx, nz, 2);
     if (c.kind === 'sleepers') {
       // Evergreen asleep in amber along the walls; some of them are not asleep
       const k0 = rng.int(7, 10);
       for (let k = 0; k < k0; k++) {
-        const a = away + Math.PI + 0.75 + (k / (k0 - 1)) * (Math.PI * 2 - 1.5), x = c.x + Math.sin(a) * (c.r - 1.1), z = c.z + Math.cos(a) * (c.r - 1.1);
-        L.props.push({ t: 'cocoon', x, z, r: a + Math.PI, s: rng.range(0.9, 1.1) }); blockCircle(L, x, z, 0.55); mark(res, L, x, z, 1.2);
+        const a = away + Math.PI + 0.75 + (k / (k0 - 1)) * (Math.PI * 2 - 1.5), x = c.x + Math.sin(a) * (c.r - 1.1), z = c.z + Math.cos(a) * (c.r - 1.1), s = rng.range(0.9, 1.1);
+        // none behind the Heartroot, none over the amber (its spot stays bare: the dressing that follows is unchanged)
+        mark(res, L, x, z, 1.2);
+        if ((c.node && Math.hypot(x - nx, z - nz) < 2.2) || !dryAt(L, x, z)) continue;
+        L.props.push({ t: 'cocoon', x, z, r: a + Math.PI, s }); blockCircle(L, x, z, 0.55);
         L.spots.cocoons.push({ x, z, r: a + Math.PI });
         if (k % 3 === 0) L.lights.push({ x: x - Math.sin(a) * 0.8, y: 1.2, z: z - Math.cos(a) * 0.8, color: 0xffa040, intensity: 6, range: 6, flicker: 'beat' });
       }
       L.packs.push({ x: c.x, z: c.z, n: rng.int(5, 7), tag: 'heartSleepers', elite: rng.chance(0.3) ? 'champion' : null, dormant: true });
     } else if (c.kind === 'grove') {
       // cold blue toadstools and rootling mounds
-      for (let k = 0; k < 18; k++) { const a = rng.range(0, 6.28), d = rng.range(1, c.r - 1); L.props.push({ t: 'shroom', x: c.x + Math.sin(a) * d, z: c.z + Math.cos(a) * d, r: rng.next() * 6, s: rng.range(0.9, 2.0) }); }
-      for (let k = 0; k < rng.int(3, 5); k++) L.props.push({ t: 'mound', x: c.x + rng.range(-c.r + 2, c.r - 2), z: c.z + rng.range(-c.r + 2, c.r - 2), r: rng.range(0, 6.28), s: rng.range(0.8, 1.1) });
+      for (let k = 0; k < 18; k++) { const a = rng.range(0, 6.28), d = rng.range(1, c.r - 1); put({ t: 'shroom', x: c.x + Math.sin(a) * d, z: c.z + Math.cos(a) * d, r: rng.next() * 6, s: rng.range(0.9, 2.0) }); }
+      for (let k = 0; k < rng.int(3, 5); k++) put({ t: 'mound', x: c.x + rng.range(-c.r + 2, c.r - 2), z: c.z + rng.range(-c.r + 2, c.r - 2), r: rng.range(0, 6.28), s: rng.range(0.8, 1.1) });
       L.lights.push({ x: c.x, y: 1, z: c.z, color: 0x50c8ff, intensity: 12, range: 10, flicker: 0.1 });
       if (rng.chance(0.5)) L.spots.chests.push({ x: c.x, z: c.z, rare: rng.chance(0.4) });
       L.packs.push({ x: c.x, z: c.z, n: rng.int(5, 7), tag: 'heartDeep', elite: rng.chance(0.3) ? 'champion' : null });
@@ -625,8 +651,10 @@ function tryHeart(seed, o, last) {
       const k0 = rng.int(5, 7);
       for (let k = 0; k < k0; k++) {
         const a = away + (k / k0) * Math.PI * 2 + 0.4; if (Math.abs(angleDiff(a, away + Math.PI)) < 0.5) continue;
-        const x = c.x + Math.sin(a) * (c.r - 2), z = c.z + Math.cos(a) * (c.r - 2);
-        L.props.push({ t: 'songStone', x, z, r: a + Math.PI, s: rng.range(0.55, 0.75) }); blockCircle(L, x, z, 0.6); mark(res, L, x, z, 1.3);
+        const x = c.x + Math.sin(a) * (c.r - 2), z = c.z + Math.cos(a) * (c.r - 2), s = rng.range(0.55, 0.75);
+        mark(res, L, x, z, 1.3);
+        if (!dryAt(L, x, z)) continue;
+        L.props.push({ t: 'songStone', x, z, r: a + Math.PI, s }); blockCircle(L, x, z, 0.6);
       }
       L.lights.push({ x: c.x, y: 1.4, z: c.z, color: 0xffc070, intensity: 10, range: 10, flicker: 0.08 });
       if (rng.chance(0.5)) L.spots.shrines.push({ x: c.x, z: c.z });
@@ -636,8 +664,10 @@ function tryHeart(seed, o, last) {
       for (let k = 0; k < 14; k++) {
         const a = rng.range(0, 6.28), d = rng.range(1.6, c.r - 1.2), x = c.x + Math.sin(a) * d, z = c.z + Math.cos(a) * d, i = Math.floor(z) * w + Math.floor(x);
         if (!L.cells[i] || res[i]) continue;
-        L.props.push({ t: 'sapling', x, z, r: rng.range(0, 6.28), s: rng.range(0.7, 1.1) }, { t: 'nameStone', x: x + 0.5, z: z + 0.35, r: rng.range(-0.4, 0.4) });
-        blockCircle(L, x, z, 0.3); mark(res, L, x, z, 0.9);
+        const p = [{ t: 'sapling', x, z, r: rng.range(0, 6.28), s: rng.range(0.7, 1.1) }, { t: 'nameStone', x: x + 0.5, z: z + 0.35, r: rng.range(-0.4, 0.4) }];
+        mark(res, L, x, z, 0.9);
+        if (!dryAt(L, x, z) || !dryAt(L, x + 0.5, z + 0.35)) continue;
+        L.props.push(...p); blockCircle(L, x, z, 0.3);
       }
       const tx = c.x + fx * (c.r - 2.4), tz = c.z + fz * (c.r - 2.4), gain = { k: 1 };
       L.spots.tears.push({ x: tx, z: tz, id: 'nursery', story: false, gain, r: away });
@@ -647,6 +677,15 @@ function tryHeart(seed, o, last) {
       L.props.push({ t: 'fx', fx: 'motes', x: c.x, y: 1.2, z: c.z, s: 3, color: 0xe8f0b0 });
     }
   }
+  // ---- does it still hold, the chambers dressed? a cocoon or a stone can close a way in that a channel left narrow:
+  // each node must still be in reach while its wall stands, and every chamber and the nursery's Tear once all are down ----
+  if (!last) for (let k = 0; k <= 3; k++) {
+    setWalls(k);
+    const R = reach(L, S.x, S.z), near = (x, z, r) => circleCells(L, x, z, r).some(([x2, z2]) => R[z2 * w + x2]);
+    if (k < 3 ? !near(L.thorns[k].node.x, L.thorns[k].node.z, 1.5)
+      : chambers.some((c) => !near(c.x, c.z, 3)) || L.spots.tears.some((t) => !near(t.x, t.z, 1.8))) return null;
+  }
+  setWalls(0);
   // stragglers along the rootway, never in the entrance or the Heart Chamber
   for (let i = 12; i < n - 10; i += rng.int(10, 14)) {
     const p = spine[i];
@@ -664,9 +703,9 @@ function tryHeart(seed, o, last) {
     if (d === 0) {
       if (!L.cells[i]) continue;
       const edge = D[i - 1] === 1 || D[i + 1] === 1 || D[i - w] === 1 || D[i + w] === 1;
-      if (edge && rng.chance(0.05)) L.props.push({ t: 'mush', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.8, 1.5) });
-      if (edge && rng.chance(0.025)) L.props.push({ t: 'shroom', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.8, 1.6) });
-      if (L.paint[i] < 0.2 && rng.chance(0.004)) L.props.push({ t: 'branches', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.8, 1.2) });
+      if (edge && rng.chance(0.05)) put({ t: 'mush', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.8, 1.5) });
+      if (edge && rng.chance(0.025)) put({ t: 'shroom', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.8, 1.6) });
+      if (L.paint[i] < 0.2 && rng.chance(0.004)) put({ t: 'branches', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.8, 1.2) });
       continue;
     }
     if (d === 255) continue;
@@ -680,8 +719,8 @@ function tryHeart(seed, o, last) {
   for (let k = 0; k < 10; k++) {
     const p = rng.pick(spine), a = rng.range(0, 6.28), dd = rng.range(2, 3.5), mx = p.x + Math.sin(a) * dd, mz = p.z + Math.cos(a) * dd, i = Math.floor(mz) * w + Math.floor(mx);
     if (!L.cells[i] || res[i] || L.deck[i]) continue;
-    for (let m = 0; m < rng.int(3, 6); m++) L.props.push({ t: 'shroom', x: mx + rng.range(-0.8, 0.8), z: mz + rng.range(-0.8, 0.8), r: rng.range(0, 6.28), s: rng.range(0.7, 1.4) });
-    if (k % 2 === 0) L.lights.push({ x: mx, y: 0.6, z: mz, color: 0x40c0ff, intensity: 5, range: 6, flicker: 0.1 });
+    for (let m = 0; m < rng.int(3, 6); m++) put({ t: 'shroom', x: mx + rng.range(-0.8, 0.8), z: mz + rng.range(-0.8, 0.8), r: rng.range(0, 6.28), s: rng.range(0.7, 1.4) });
+    if (k % 2 === 0 && dryAt(L, mx, mz)) L.lights.push({ x: mx, y: 0.6, z: mz, color: 0x40c0ff, intensity: 5, range: 6, flicker: 0.1 });
   }
   return L;
 }
