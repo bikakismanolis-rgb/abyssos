@@ -41,7 +41,7 @@ function loadFile(n) {
     try {
       const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(await bytes(await URLS[n]()), '');
       CREATURES.tpl[n] = prepare(gltf);
-    } catch (e) { console.warn('creature ' + n + ' failed to load', e); }
+    } catch (e) { console.warn('creature ' + n + ' failed to load', e); delete loads[n]; } // the next zone tries again
   })());
 }
 export function loadCreatures(set, onFile) {

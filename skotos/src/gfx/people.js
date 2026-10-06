@@ -60,7 +60,7 @@ const sets = {};
 export function loadFolk(set = 'folk') {
   const load = SET_URLS[set];
   if (!load) return Promise.resolve();
-  sets[set] ||= loadPeople().then(async () => addScenes(await bytes(await load()))).catch((e) => console.warn(set + ' failed to load', e));
+  sets[set] ||= loadPeople().then(async () => addScenes(await bytes(await load()))).catch((e) => { console.warn(set + ' failed to load', e); delete sets[set]; });
   return sets[set];
 }
 export const hasPerson = (name) => !!PEOPLE.scenes[name];

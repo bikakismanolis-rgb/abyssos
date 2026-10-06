@@ -163,6 +163,7 @@ export const TEXT = {
   'zone.heart': ['Το Καρδιόξυλο', 'The Heartwood'], 'zone.heart.s': ['Μέσα στην Πρώτη Δρυ', 'Inside the First Oak'],
   'exit.pass': ['Στο βουνό', 'To the mountain'], 'exit.halls': ['Η Βαθύπετρα', 'Deepstone'],
   'exit.weep': ['Στα Δάση που Κλαίνε', 'To the Weeping Woods'], 'exit.heart': ['Η Πύλη των Ριζών', 'The Root Gate'],
+  'load.zone': ['Φόρτωση της περιοχής', 'Loading the area'], 'load.fail': ['Η περιοχή δεν φόρτωσε. Δοκίμασε ξανά', 'The area did not load. Try again'],
   'echo.hart': ['Θυμήσου τον Αργυρόκερω', 'Remember Silverhorn'], 'echo.lady': ['Θυμήσου την Αμαράνθη', 'Remember Amaranthe'],
   'echo.rise': ['Το κεχριμπάρι θυμάται τη μάχη...', 'The amber remembers the fight...'], 'echo.done': ['Η ηχώ σβήνει. Το δέντρο θα θυμηθεί ξανά αύριο.', 'The echo fades. The tree will remember again tomorrow.'],
   'tear.touch': ['Άγγιξε το Δάκρυ', 'Touch the Tear'], 'tear.buff': ['Μνήμη των Αειθαλών: +12% ζημιά, +8% ταχύτητα για 60 δευτ.', 'Memory of the Evergreen: +12% damage, +8% speed for 60s'],
@@ -299,7 +300,7 @@ export const TEXT = {
   'd.linden.hart': ['Ο Αργυρόκερως ξύπνησε. Πήγαινε στο Ξέφωτο των Λίθων· οι πέτρες εκεί είναι πιο παλιές από τον θυμό του.', 'Silverhorn is awake. Go to the Glade of Stones; the stones there are older than its anger.'],
   'd.linden.bellow': ['Ο Αργυρόκερως ξυπνά. Μυρίζει τη φωτιά πάνω σου.', 'Silverhorn wakes. It smells the fire on you.'],
   'd.linden.heart': ['Κατέβα, παιδί. Κι αν την ακούσεις να σε λέει με τ\' όνομά σου, θυμήσου πως έτσι έπεισε κι εμένα.', 'Go down, child. And if you hear her call you by your name, remember that is how she convinced me too.'],
-  'd.linden.heart.r': ['Κατέβα, κόρη μου. Θα σε γνωρίσει. Μη την αφήσεις να σε κρατήσει.', 'Go down, daughter. She will know you. Do not let her keep you.'],
+  'd.linden.heart.r': ['Κατέβα, κόρη μου. Θα σε γνωρίσει. Μην την αφήσεις να σε κρατήσει.', 'Go down, daughter. She will know you. Do not let her keep you.'],
   // the Lady's voice in the still trees: warning, then pleading, then tenderness
   'd.lady.w1': ['Γύρνα πίσω, παιδί της φωτιάς.', 'Turn back, child of the fire.'],
   'd.lady.w1.r': ['Γύρισες, παιδί μου; Και φέρνεις φωτιά;', 'You came back, my child? And you bring fire?'],
