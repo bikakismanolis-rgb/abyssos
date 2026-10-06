@@ -543,8 +543,9 @@ function addProp(B, I, p, L, rng, out) {
     I.add('env:' + name, x, z, r, s * k, 0);
     return;
   }
-  // the Weeping Woods' willows (wood pack): those that stand in a clearing always, the forest's thinned like the oaks
-  if (p.t === 'willow' && ENV.props.willow && !NO_TREES) {
+  // the Weeping Woods' willows (wood pack): those that stand in a clearing always, the forest's thinned like the oaks;
+  // on low quality only the weepers (the grove's and the mere's, which drip sap) stay scans, the forest's are code-built
+  if (p.t === 'willow' && ENV.props.willow && !NO_TREES && (R.quality >= 1 || p.weeper)) {
     const d = p.d ?? 2;
     if (d > 1 && hash2(x * 1.7, z * 0.9) > (d <= 3 ? 0.5 : 0.25)) return;
     const k = s * (0.85 + hash2(x + 3, z) * 0.25);
@@ -1048,7 +1049,9 @@ const GROUND = {
   // Act III (tools/pack-wood.mjs): gold leaf litter, moss, dark peat paths; amber sap painted from L.sap, dry leaves with
   // the First Autumn; in the Heartwood the root walls take the bark scan, projected on the steep faces
   weep: { A: 'goldleaf', B: 'moss', P: 'peat', s: [3.0, 2.4, 2.6], r: [0.92, 0.95, 0.9], ns: 1.0, tint: 0xa49884, dual: [1, 1], sap: true, dry: true, sat: 0.72, hueA: [1.0, 1.12, 0.7] },
-  heart: { A: 'peat', B: 'rootwall', P: 'goldleaf', W: 'rootwall', s: [2.6, 2.2, 2.8], r: [0.85, 0.8, 0.92], ns: 1.1, tint: 0xa89888, dual: [1, 0], sap: true, dry: true, ws: 2.4, sat: 0.8 }
+  // (the Heartwood's peat and bark are very dark scans: a light tint keeps its floor readable; dryK holds the Autumn's
+  // leaves, which are light already, near their own brightness)
+  heart: { A: 'peat', B: 'rootwall', P: 'goldleaf', W: 'rootwall', s: [2.6, 2.2, 2.8], r: [0.85, 0.8, 0.92], ns: 1.1, tint: 0xd8ccc0, dual: [1, 0], sap: true, dry: true, dryK: 0.6, ws: 2.4, sat: 0.8 }
 };
 function buildGround(L, group) {
   const { w, h, cells, paint } = L;
@@ -1101,7 +1104,7 @@ function buildGround(L, group) {
       let walls = 0;
       if (heart) for (let dz = -2; dz <= 1; dz++) for (let dx = -2; dx <= 1; dx++) { const c = cellAt(vx + dx, vz + dz); if (c < 0 || (!cells[c] && !L.low[c])) walls++; }
       const fl2 = fl - dk;
-      k = fl2 > 0 ? (0.93 + nz * 0.18) * (heart ? 1 - Math.min(walls, 8) * 0.04 : 1) : heart ? 0.68 + nz * 0.22 : Math.max(0.3, 0.72 - dd * 0.06);
+      k = fl2 > 0 ? (0.93 + nz * 0.18) * (heart ? 1 - Math.min(walls, 8) * 0.02 : 1) : heart ? 0.8 + nz * 0.22 : Math.max(0.3, 0.72 - dd * 0.06);
       wp = clamp(pv * 1.25, 0, 1);
       if (heart) wb = clamp((fl2 > 0 ? walls * 0.07 - 0.15 : 1) + (nz - 0.5) * 1.6 + (big - 0.5) * 1.2, 0, 1);
       else wb = clamp((fl2 > 0 ? -0.1 : 0.3 + dd * 0.12) + (nz - 0.48) * 2.0 + (big - 0.5) * 1.8 + clamp((vz - (h - 36)) / 14, 0, 1) * 0.35, 0, 1);
@@ -1186,7 +1189,7 @@ function groundMat(cfg, type) {
   const X = { sap: !!cfg.sap, dry: !!cfg.dry, wall: !!cfg.W, sat: cfg.sat != null };
   if (X.sat) uni.uSat = { value: cfg.sat };
   if (cfg.hueA) uni.uHueA = { value: new THREE.Vector3(...cfg.hueA) };
-  if (X.dry) { const Dr = ENV.layers.dryleaf; Object.assign(uni, { tD: { value: (Dr || A).d }, uDryTint: { value: new THREE.Color(Dr ? 0xffffff : 0xc89a70) }, uAut: WIND.uAutumn }); }
+  if (X.dry) { const Dr = ENV.layers.dryleaf; Object.assign(uni, { tD: { value: (Dr || A).d }, uDryTint: { value: new THREE.Color(Dr ? 0xffffff : 0xc89a70).multiplyScalar(cfg.dryK ?? 1) }, uAut: WIND.uAutumn }); }
   if (X.wall) { const W = lay(cfg.W); Object.assign(uni, { tW: { value: W.d }, tWn: { value: W.n }, uWS: { value: 1 / (cfg.ws || 2.4) } }); }
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, uni);
@@ -1225,10 +1228,12 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
   float wP = smoothstep(-0.15, 0.15, vLay.y * 2.0 - 1.3 + (hP - gh) * 1.2);
   gc = mix(gc, cP, wP); gh = mix(gh, hP, wP);` + (X.sat ? `
   gc = mix(vec3(dot(gc, vec3(0.3, 0.59, 0.11))), gc, uSat);` : '') + (X.dry ? `
-  // the First Autumn: dry leaves drift over everything but the trodden paths
-  vec3 cD = texture2D(tD, vGP * uS.x * 0.93 + vec2(0.37, 0.11)).rgb * uDryTint;
-  float wD = uAut * smoothstep(0.32, 0.6, vLay.z * 0.8 + gH(cD) * 0.7 - wP * 0.4 - 0.01);
-  gc = mix(gc, cD, wD); gh = mix(gh, gH(cD), wD);` : '') + (X.sap ? `
+  // the First Autumn: dry leaves drift over everything but the trodden paths (none before it: a uniform branch)
+  if (uAut > 0.001) {
+    vec3 cD = texture2D(tD, vGP * uS.x * 0.93 + vec2(0.37, 0.11)).rgb * uDryTint;
+    float wD = uAut * smoothstep(0.32, 0.6, vLay.z * 0.8 + gH(cD) * 0.7 - wP * 0.4 - 0.01);
+    gc = mix(gc, cD, wD); gh = mix(gh, gH(cD), wD);
+  }` : '') + (X.sap ? `
   // amber sap: the floor shows through the resin, darkened and gold; glossy, faintly lit from within
   float wS = smoothstep(0.4, 0.62, vSap + (gh - 0.45) * 0.45);
   vec3 amb = mix(vec3(0.2, 0.065, 0.007), vec3(0.52, 0.21, 0.025), smoothstep(0.25, 0.8, gh));
@@ -1239,8 +1244,11 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
   float steep = 1.0 - smoothstep(0.45, 0.82, gNw.y);
   vec2 wbw = abs(gNw.xz) + 0.001; wbw /= wbw.x + wbw.y;
   vec2 uWx = vec2(vGP.y, -vGY) * uWS, uWz = vec2(vGP.x, -vGY) * uWS;
-  vec3 cW = texture2D(tW, uWx).rgb * wbw.x + texture2D(tW, uWz).rgb * wbw.y;
-  gc = mix(gc, cW, steep); gh = mix(gh, gH(cW), steep);` : '') + `
+  // (the flat floor skips the bark: steep changes smoothly, so where the branch splits a pixel quad its weight is ~0)
+  if (steep > 0.001) {
+    vec3 cW = texture2D(tW, uWx).rgb * wbw.x + texture2D(tW, uWz).rgb * wbw.y;
+    gc = mix(gc, cW, steep); gh = mix(gh, gH(cW), steep);
+  }` : '') + `
   diffuseColor.rgb *= gc * (0.82 + 0.36 * vLay.w);`)
       .replace('#include <roughnessmap_fragment>', `float roughnessFactor = clamp(mix(mix(uR.x, uR.y, wB), uR.z, wP) * (1.12 - 0.25 * gh), 0.3, 1.0);` + (X.sap ? '\n  roughnessFactor = mix(roughnessFactor, 0.14, wS);' : ''))
       .replace('#include <normal_fragment_maps>', `#ifdef G_NRM
@@ -1255,7 +1263,7 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
   vec3 nB = texture2D(tBn, uB).xyz * 2.0 - 1.0;
   vec3 tn = mix(mix(nA, nB, wB), nP, wP); tn.xy *= uNS;` + (X.sap ? '\n  tn.xy *= 1.0 - wS * 0.85;' : '') + (X.wall ? `
 #ifdef G_WNRM
-  vec3 nW = texture2D(tWn, wbw.x > wbw.y ? uWx : uWz).xyz * 2.0 - 1.0; tn = mix(tn, nW, steep);
+  if (steep > 0.001) { vec3 nW = texture2D(tWn, wbw.x > wbw.y ? uWx : uWz).xyz * 2.0 - 1.0; tn = mix(tn, nW, steep); }
 #endif
   vec3 gN = normalize(vGN), gT = normalize(abs(gN.x) < 0.9 ? vec3(1.0, 0.0, 0.0) - gN * gN.x : vec3(0.0, 0.0, 1.0) - gN * gN.z), gB = cross(gN, gT);` : `
   vec3 gN = normalize(vGN), gT = normalize(vec3(1.0, 0.0, 0.0) - gN * gN.x), gB = cross(gN, gT);`) + `
@@ -1861,7 +1869,8 @@ function deerProp(o) {
     const T = m.tpl, clip = T.clips.leap || T.clips.run || T.clips.idle;
     if (clip) { const mixer = new THREE.AnimationMixer(m.mesh); mixer.clipAction(clip).play(); mixer.setTime(T.scene.userData?.leapApex ?? clip.duration * 0.45); }
     const u = m.mat.userData.u; u.uTint.value.set(0xffc880); u.uTintAmt.value = 0.18;
-    m.mesh.traverse((n) => { if (n.isMesh) { n.frustumCulled = false; n.castShadow = R.quality >= 2; } });
+    // (culled by the sphere creatureModel gave it: it is on screen only at the Edge of Tears)
+    m.mesh.traverse((n) => { if (n.isMesh) n.castShadow = R.quality >= 2; });
     body.add(m.mesh);
   } else {
     // a stand-in hart: bone-white, legs folded and flung back mid-leap
