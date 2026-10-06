@@ -395,6 +395,8 @@ export function spawnNpc(kind, x, z, rot) {
 // the dead of the Wayfarers, seen for a moment: pale, see-through, a cold rim
 export function ghostly(av, opacity = 0.45) {
   for (const m of av.model.mats || [av.mat]) { m.transparent = true; m.opacity = opacity; m.depthWrite = false; }
+  // drawn after the light on the ground (pools, rings): writing no depth, they would be washed out by what lies behind
+  av.group.traverse((o) => { if (o.isMesh) o.renderOrder = 4; });
   av.setTint(0xd8e4ff, 0.55); av.setRim(0xe0ecff, 1.8);
 }
 

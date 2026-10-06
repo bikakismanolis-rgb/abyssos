@@ -98,12 +98,13 @@ function terrain(L, cells, D, rise) {
   }
   return H;
 }
-// the ground's height under (x, z), the way build.js lays it
+// the ground's height under (x, z), the way build.js lays it: each cell is two triangles split from (x0, z0 + 1) to
+// (x0 + 1, z0), as the ground plane's grid is
 export function groundY(L, x, z) {
   const H = L.hgt; if (!H) return 0;
   const W = L.w + 1, x0 = clamp(Math.floor(x), 0, L.w - 1), z0 = clamp(Math.floor(z), 0, L.h - 1), fx = clamp(x - x0, 0, 1), fz = clamp(z - z0, 0, 1);
   const a = H[z0 * W + x0], b = H[z0 * W + x0 + 1], c = H[(z0 + 1) * W + x0], d = H[(z0 + 1) * W + x0 + 1];
-  return (a * (1 - fx) + b * fx) * (1 - fz) + (c * (1 - fx) + d * fx) * fz;
+  return fx + fz <= 1 ? a + (b - a) * fx + (c - a) * fz : d + (c - d) * (1 - fx) + (b - d) * (1 - fz);
 }
 // a straight walk from a to b stays on floor cells (patrol legs)
 function clearLine(L, ax, az, bx, bz) {
@@ -781,8 +782,10 @@ function tryForge(seed, o, last) {
     for (let k = 0; k < 16; k++) {
       const a = rng.range(0, 6.28), x = HM.x + Math.sin(a) * rng.range(HM.hw - 2.2, HM.hw - 1.2), z = HM.z + Math.cos(a) * rng.range(HM.hd - 2.2, HM.hd - 1.2);
       if (!isFloor(L, x, z) || res[cellAt(L, x, z)]) continue;
-      const m = rng.pick(clut);
-      L.props.push({ t: 'forgeClutter', m, x, z, r: Math.atan2(HM.x - x, HM.z - z), s: rng.range(0.9, 1.1) });
+      const m = rng.pick(clut), sc = rng.range(0.9, 1.1);
+      // (one piece to a place: two anvils dropped into each other read as a glitch)
+      if (L.props.some((q) => q.t === 'forgeClutter' && Math.hypot(q.x - x, q.z - z) < 1.6)) continue;
+      L.props.push({ t: 'forgeClutter', m, x, z, r: Math.atan2(HM.x - x, HM.z - z), s: sc });
       if (m !== 'tongs' && m !== 'crossPein') blockCircle(L, x, z, 0.5);
     }
     sp.chests.push({ x: HM.x + s * (HM.hw - 2), z: HM.z - HM.hd + 2.4, rare: rng.chance(0.6) });
