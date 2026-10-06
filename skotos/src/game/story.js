@@ -179,6 +179,7 @@ on('kill', (a) => {
     G.bossActor = null;
     emit('bossDown', a);
     const ash = a.kind === 'ivar' || a.kind === 'karthax', c = ash ? 0xd8d0c0 : 0xffc060;
+    if (ash) dismiss(G.zone, a);
     later(1.2, () => { if (G.zone?.actors.includes(a)) { glowBurst(a.x, 1.2, a.z, c, 40, 3, 0.3, 1); ring(a.x, a.z, 3, c, 0.7); } });
     later(2.2, () => emit('toast', t(ash ? 'echo.done4' : 'echo.done'), 'quest'));
     writeSave();
@@ -268,6 +269,7 @@ on('kill', (a) => {
     G.bossActor = null;
     emit('bossDown', a);
     const z = G.zone;
+    dismiss(z, a);
     if (!G.hero.flags.ivar) { G.hero.flags.ivarDown = true; later(1.6, () => { if (G.zone === z) ivarFalls(z, { x: a.x, z: a.z, rot: a.rot }); }); }
     writeSave();
   }
@@ -275,11 +277,18 @@ on('kill', (a) => {
     G.bossActor = null;
     emit('bossDown', a);
     const z = G.zone;
+    dismiss(z, a);
     if (!G.hero.flags.crownUnmade) { G.hero.flags.karthax = true; later(1.6, () => { if (G.zone === z) karthaxFalls(z, a); }); }
     writeSave();
   }
   if (G.gate && G.zone.id === 'gate') emit('gateKill', a);
 });
+// Act IV's bosses take what they called up with them: Ivar's Lampless kneel and fade, Karthax's raised host falls back into
+// the ash (no fight goes on through their last words)
+function dismiss(z, b) {
+  for (const m of b.summons || []) if (!m.dead && z?.actors.includes(m)) release(z, m, true);
+  for (const m of b.host || []) if (!m.dead && z?.actors.includes(m)) { puff(m.x, 1, m.z, 14, 0x6a6660, 1.4, 1.4, 1.4); release(z, m, false); }
+}
 // her lucid moment, then the Autumn (at the kill, or on the next entry if the game closed or the hero left first)
 function ladyFalls(z, a) {
   if (z.ladyFalling) return;
@@ -365,7 +374,9 @@ on('echo', (it, z) => {
   // Act III's echoes rise out of amber; Act IV's out of ash (Ivar at the Last Lamp, Karthax at the cold Anvil)
   const k = it.boss, pl = G.player, away = Math.atan2(it.x - pl.x, it.z - pl.z), d = k === 'silverhorn' ? 8 : k === 'karthax' ? 6 : 5;
   const ash = k === 'ivar' || k === 'karthax', c = ash ? 0xd8d0c0 : 0xffc060;
-  const s = z.map.nearestFloor(it.x + Math.sin(away) * d, it.z + Math.cos(away) * d, 4);
+  const across = (a) => z.map.nearestFloor(it.x + Math.sin(away + a) * d, it.z + Math.cos(away + a) * d, 4);
+  // straight across, or a little to the side where something solid stands between (the Last Lamp, the Anvil): it must see her
+  const s = [0, 0.7, -0.7, 1.3, -1.3].map(across).find((p) => z.map.los(p.x, p.z, pl.x, pl.z)) || across(0);
   Audio.sting('memory');
   glowBurst(it.x, 1.7, it.z, c, 40, 3, 0.3, 1); ring(it.x, it.z, 3, c, 0.8);
   emit('toast', t(ash ? 'echo.rise4' : 'echo.rise'), 'quest');
