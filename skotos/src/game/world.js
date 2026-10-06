@@ -649,7 +649,7 @@ function act4Zone(z) {
     npc4(z, 'elati', 'elati', N.elati);
     // Isarn, dragged ahead by the lantern, kneels at the Anvil
     if (S.isarn) npc4(z, 'isarn', 'wayfarer', { x: S.isarn.x, z: S.isarn.z, r: Math.PI }, { kneel: true });
-    if (F.plug && !F.karthax) z.bossSpot = { kind: 'karthax', ...z.map.nearestFloor(L.boss.x, L.boss.z - 4.6, 4) };
+    if (F.plug && !F.karthax) karthaxWaits(z);
     else if (F.crownUnmade && S.anvil) echoAt(z, 'karthax', S.anvil.x, S.anvil.z + 2.4);
   }
 }
@@ -849,10 +849,13 @@ export function heatTo(z, k) {
   if (k >= 0) setFlueHeat(k);
   Audio.mood({ heat: k });
 }
+// Karthax under the slag at the Anvil (he rises when the hero comes up the stair: updatePacks, then story.js)
+function karthaxWaits(z) { const b = z.L.boss; z.bossSpot = { kind: 'karthax', ...z.map.nearestFloor(b.x, b.z - 4.6, 4) }; }
 // the third breath: the slag on the Great Stair runs down and the way up to the Anvil opens
 export function meltPlug(z) {
   const P0 = z?.L.plug; if (!P0) return;
   z.map.open(P0.cells); emit('mapChanged');
+  if (!G.hero.flags.karthax && !z.bossSpot) karthaxWaits(z);
   const m = z.act4?.plug;
   later(0.4, () => {
     m?.userData.melt?.();

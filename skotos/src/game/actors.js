@@ -270,7 +270,9 @@ function shackle(a, av, o) {
   if (!post && !o.free) for (const s of S) if (Math.hypot(s.x - a.x, s.z - a.z) < 6 && !G.actors.some((b) => b.post === s && !b.dead)) { post = s; break; }
   if (!post) return;
   a.post = post; a.chainLen = a.def.chain || 9;
-  a.home = { x: post.x + Math.sin(a.rot) * 1.4, z: post.z + Math.cos(a.rot) * 1.4 };
+  // it works the station from the bay's open side (the station faces it; or the side it was found on)
+  const r = post.r ?? Math.atan2(a.x - post.x, a.z - post.z);
+  a.home = { x: post.x + Math.sin(r) * 1.4, z: post.z + Math.cos(r) * 1.4 };
   const n = 26, links = new THREE.InstancedMesh(linkG ||= M.linkGeo(), linkM ||= makeCharMat({ rim: 0x5a5048, rimI: 0.2 }), n);
   links.frustumCulled = false; links.castShadow = false;
   a.mesh = links; a.chainN = n; R.scene.add(links);

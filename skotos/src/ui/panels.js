@@ -265,7 +265,8 @@ function onClick(e) {
     case 'st': fromStash(+x); break;
     case 'tostash': toStash(+x); break;
     case 'rank': { h.skills[x] = Math.max(1, (h.skills[x] || 1)) + 1; h.points--; refreshStats(); Audio.sfx('equip'); break; }
-    case 'wp': { close(); const [zid, n] = x.split('@'); if (zid !== G.zone.id || n) emit('travel', zid, { at: n ? 'waypoint' + n : 'waypoint' }); return; }
+    // (in a zone with two waypoints, either one can be the way across it)
+    case 'wp': { close(); const [zid, n] = x.split('@'); if (zid !== G.zone.id || n || G.zone.L.spots.camp2) emit('travel', zid, { at: n ? 'waypoint' + n : 'waypoint' }); return; }
     case 'gates': open('gates'); return;
     case 'tier': P.tier = +x; break;
     case 'gateGo': close(); emit('startGate', P.tier); return;

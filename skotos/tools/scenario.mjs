@@ -445,7 +445,8 @@ const S = {
   // last words, the Last Lamp lit, the Lampless kneeling, the gate open, quest 20
   ivar: { q: 'auto=ashfield&sim=6&q=1&norender&lvl=24&cls=' + (process.env.CLS || 'warden'), run: async (pg, shot) => {
     await A4.listen(pg);
-    await pg.evaluate(() => { const G = window.__G, h = G.hero; window.__immortal = true; h.quest = 19; for (const id of ['l1', 'l2', 'l3', 'l4', 'l5']) { h.flags['lamp_' + id] = true; h.flags['mem_' + id] = true; } Object.assign(h.flags, { act3: true, fireTaken: true }); window.__D.enterZone('ashfield', { fresh: true }); const z = G.zone, b = z.L.boss; for (const p of z.packs) p.spawned = true; const f = z.map.nearestFloor(b.x, b.z + 3); G.player.x = f.x; G.player.z = f.z; G.player.hp = G.player.hpMax = 99999; });
+    await pg.evaluate(() => { const G = window.__G, h = G.hero; window.__immortal = true; h.quest = 19; for (const id of ['l1', 'l2', 'l3', 'l4', 'l5']) { h.flags['lamp_' + id] = true; h.flags['mem_' + id] = true; } Object.assign(h.flags, { act3: true, fireTaken: true }); window.__D.enterZone('ashfield', { fresh: true }); const z = G.zone, b = z.L.boss; for (const p of z.packs) p.spawned = true; const f = z.map.nearestFloor(b.x + 2.5, b.z + 3); G.player.x = f.x; G.player.z = f.z; G.player.hp = G.player.hpMax = 99999; });
+    // (a little off the axis: the Last Lamp in the middle of the plaza would hide him from straight south)
     await pg.waitForTimeout(3500); await shot();
     const swing = async (n) => { for (let k = 0; k < n; k++) { await pg.evaluate(() => { const G = window.__G; G.player.res = 100; window.__D.IN.events.push({ t: 'skill', i: [0, 1, 0, 2, 0, 4][Math.floor(Math.random() * 6)], aim: null }); }); await pg.waitForTimeout(350); } };
     await swing(16);
@@ -500,17 +501,27 @@ const S = {
         // the fire-pit eaten: the hold waits until it burns again
         await pg.evaluate(() => window.__G.zone.run.it.snuff());
         await pg.waitForTimeout(800);
-        r.out = await pg.evaluate(() => ({ paused: window.__G.zone.run.paused, out: window.__G.zone.run.out, ring: !document.getElementById('ring')?.hidden }));
         await shot();
+        r.out = await pg.evaluate(() => ({ paused: window.__G.zone.run.paused, out: window.__G.zone.run.out, ring: !document.getElementById('ring')?.hidden, label: document.querySelector('#ring b')?.textContent }));
         await pg.evaluate(() => { const G = window.__G, it = G.zone.run.it; G.player.act = null; it.use(); });
         await pg.waitForTimeout(1800);
         await pg.evaluate(() => { const it = window.__G.zone.run?.it; if (it && !it.lit) it.relight(); });
         r.relit = await pg.evaluate(() => window.__G.zone.run?.it.lit);
       }
-      await pg.waitForTimeout(2500);
+      // the hold: she fights by the bellows, cuts down the Smoke-eaters that go for the fire-pit, lights it again if one
+      // ate it, and (after the first seconds) the clock is moved on to the last breath
+      const hold = (bump) => pg.evaluate((bump) => {
+        const G = window.__G, z = G.zone, R0 = z.run, pl = G.player; if (!R0) return true;
+        for (const a of z.actors) if (a.kind === 'smokeEater' && !a.dead && (a.lamp === R0.it || Math.hypot(a.x - R0.it.x, a.z - R0.it.z) < 5)) { window.__D.kill(a); window.__eaten = (window.__eaten || 0) + 1; }
+        if (!R0.it.lit) { if (!pl.act) { const f = z.map.nearestFloor(R0.it.x, R0.it.z); pl.x = f.x; pl.z = f.z; R0.it.use(); } }
+        else { pl.res = 100; window.__D.IN.events.push({ t: 'skill', i: [0, 1, 0, 2][Math.floor(Math.random() * 4)], aim: null }); }
+        if (bump) R0.t = Math.max(R0.t, 18.5);
+        return false;
+      }, bump);
+      for (let k = 0; k < 6; k++) { await hold(false); await pg.waitForTimeout(450); }
       r.waves = await pg.evaluate(() => window.__G.zone.run?.wi);
-      await pg.evaluate(() => { const R0 = window.__G.zone.run; if (R0) R0.t = Math.max(R0.t, 18.5); });
-      await pg.waitForFunction(() => !window.__G.zone.run, null, { timeout: 30000 }).catch(() => {});
+      for (let k = 0; k < 80 && !(await hold(true)); k++) await pg.waitForTimeout(500);
+      r.eatersCut = await pg.evaluate(() => window.__eaten || 0);
       await pg.waitForTimeout(4000);
       r.after = await pg.evaluate(async (id) => { const G = window.__G, Fg = await import('/src/game/forge.js'), Bd = await import('/src/world/build.js'); return { done: !!G.hero.flags['bellows' + id], heat: G.hero.flags.heat, heatK: +Bd.HEAT.k.toFixed(2), period: Fg.flues()?.[0] && Fg.fluePeriod(Fg.flues()[0]), quest: G.hero.quest }; }, id);
       runs.push(r);
@@ -522,7 +533,7 @@ const S = {
   // cages broken by his own Hammerfall, Isarn's light in the last fire, the beacon-keeper's answer, his death, the Unmaking
   karthax: { q: 'auto=forge&sim=6&q=1&norender&lvl=27&cls=' + (process.env.CLS || 'ranger'), run: async (pg, shot) => {
     await A4.listen(pg);
-    await pg.evaluate(() => { const G = window.__G, h = G.hero; window.__immortal = true; h.quest = 21; Object.assign(h.flags, { act3: true, fireTaken: true, ivar: true, bellows0: true, bellows1: true, bellows2: true, heat: 3, plug: true, gifts: { throne: 'taken', forge: 'refused' } }); window.__D.refreshStats(); window.__D.enterZone('forge', { fresh: true }); const z = G.zone, b = z.L.boss; for (const p of z.packs) p.spawned = true; const f = z.map.nearestFloor(b.x, b.z + 15); G.player.x = f.x; G.player.z = f.z; G.player.hp = G.player.hpMax = 99999; });
+    await pg.evaluate(() => { const G = window.__G, h = G.hero; window.__immortal = window.__tough = true; h.quest = 21; Object.assign(h.flags, { act3: true, fireTaken: true, ivar: true, bellows0: true, bellows1: true, bellows2: true, heat: 3, plug: true, gifts: { throne: 'taken', forge: 'refused' } }); window.__D.refreshStats(); window.__D.enterZone('forge', { fresh: true }); const z = G.zone, b = z.L.boss; for (const p of z.packs) p.spawned = true; const f = z.map.nearestFloor(b.x, b.z + 15); G.player.x = f.x; G.player.z = f.z; G.player.hp = G.player.hpMax = 99999; });
     const armor0 = await pg.evaluate(() => window.__G.stats.armor);
     await pg.waitForTimeout(2000);
     // closer: Karthax pours himself out of the slag
@@ -615,7 +626,8 @@ const S = {
     await A4.listen(pg);
     const out = {};
     for (const zid of ['ashfield', 'forge']) {
-      await pg.evaluate((zid) => { const G = window.__G, h = G.hero; window.__immortal = true; h.quest = 23; h.act4 = 1; Object.assign(h.flags, { act3: true, act4: true, fireTaken: true, ivar: true, bellows0: true, bellows1: true, bellows2: true, heat: 3, plug: true, karthax: true, crownUnmade: true, newFire: true, giftsTaken: true }); window.__D.enterZone(zid, { fresh: true }); G.player.hp = G.player.hpMax = 99999; for (const p of G.zone.packs) p.spawned = true; }, zid);
+      // (all four blessings chosen: an act done without one opens the blessing panel, which pauses the game)
+      await pg.evaluate((zid) => { const G = window.__G, h = G.hero; window.__immortal = true; h.quest = 23; h.act1 = h.act2 = h.act3 = h.act4 = 1; h.boons = ['ember', 'forge', 'amber', 'lantern']; window.__D.closePanel(); Object.assign(h.flags, { act3: true, act4: true, fireTaken: true, ivar: true, bellows0: true, bellows1: true, bellows2: true, heat: 3, plug: true, karthax: true, crownUnmade: true, newFire: true, giftsTaken: true }); window.__D.enterZone(zid, { fresh: true }); G.player.hp = G.player.hpMax = 99999; for (const p of G.zone.packs) p.spawned = true; }, zid);
       await pg.waitForTimeout(1500);
       const before = await pg.evaluate(() => { const G = window.__G, z = G.zone, it = z.interact.find((i) => i.kind === 'echo'); if (!it) return { echo: false }; const f = z.map.nearestFloor(it.x, it.z + 2); G.player.x = f.x; G.player.z = f.z; it.use(); it.use(); return { echo: it.boss, prompt: window.__D.t(it.prompt), foes: z.actors.filter((a) => a.boss).length, braziers: z.act4.braziers?.filter((b) => b.lit).length }; });
       await pg.waitForTimeout(3500); await shot();
@@ -641,8 +653,9 @@ const S = {
   } }
 };
 const sc = S[name];
-// the test hero never dies (levelling up resets the life pool, so keep topping it up)
-await page.addInitScript(() => { setInterval(() => { const G = window.__G; if (G?.player && G.player.hpMax >= 99999) G.player.hp = G.player.hpMax; if (G?.player && window.__immortal) { G.player.hp = G.player.hpMax; G.player.dead = false; } }, 50); });
+// the test hero never dies (levelling up resets the life pool, so keep topping it up; window.__tough also puts back the
+// huge pool whenever the stats are recounted, as when Karthax takes the gifts back)
+await page.addInitScript(() => { setInterval(() => { const G = window.__G; if (G?.player && window.__tough && G.player.hpMax < 99999) G.player.hpMax = 99999; if (G?.player && G.player.hpMax >= 99999) G.player.hp = G.player.hpMax; if (G?.player && window.__immortal) { G.player.hp = G.player.hpMax; G.player.dead = false; } }, 50); });
 await page.goto((process.env.BASE || 'http://localhost:5199/') + '?' + sc.q);
 page.setDefaultTimeout(120000);
 // auto-start runs after __ready: wait for the hero too

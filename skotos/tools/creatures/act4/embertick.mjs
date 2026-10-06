@@ -410,7 +410,7 @@ bake('spawn', SPAWN, (t) => {
 });
 
 // attack: its jab (rear back, lunge with the raised claws) quickened, with a pincer snap on the lunge
-const ATK = 0.62, STRIKE = 0.3;
+const ATK = 0.62, STRIKE = 0.34;
 const jabAt = (t) => (t < 0.22 ? 0.5 * (t / 0.22) : t < 0.32 ? 0.5 + 0.25 * ((t - 0.22) / 0.1) : 0.75 + 0.25 * ((t - 0.32) / (ATK - 0.32)));
 bake('attack', ATK, (t) => {
   const L = pose(JAB, jabAt(t));

@@ -435,6 +435,7 @@ function act4Death(a, def) {
     glowBurst(a.x, 1, a.z, 0xffa040, 30, 4, 0.3, 0.7); explosion(a.x, a.z, 1.4, 0xff8a30, { smoke: 0x2a2220, shake: 0.1 });
     relightNear(a.x, a.z, 8);
   }
+  if (a.gorgeLight) { removeLight(a.gorgeLight); a.gorgeLight = null; }
   if (a.cling) { a.cling = false; const c = G.player?.cling, i = c ? c.indexOf(a) : -1; if (i >= 0) { c.splice(i, 1); emit('cling', c.length); } }
   addRemains(a);
 }

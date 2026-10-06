@@ -1968,6 +1968,13 @@ function size4(parts) {
   SIZE4.set(parts, s);
   return s;
 }
+// where the cinder brazier's fire sits, placed h tall: { y, r } from its extras (the coal bed in the bowl), or null
+function brazierFire(h) {
+  const parts = cinder('brazier'), sz = size4(parts), ex = ENV.extras['cinder/brazier'];
+  if (!parts || !ex?.fire) return null;
+  const k = h / Math.max(0.01, sz.y);
+  return { y: (ex.fire[1] - sz.y0) * k, r: (ex.fireR || 0.3) * k };
+}
 // a cinder scan placed at a wanted size: 'h' its height, 'l' its longest side; laid along local z when it is long in x
 function cin4(I, name, x, z, r, want, by = 'h', y = 0, look = '', tilt = 0, base = false) {
   const parts = cinder(name) || (base && ENV.props[name]), sz = size4(parts);
@@ -2035,18 +2042,19 @@ function grateTexture() {
 function grateMat(gi) {
   const k = 'grate' + gi;
   if (MAT[k]) return MAT[k];
-  const L4 = ENV.layers['cinder/grate'], map = L4?.d || grateTexture();
+  const L4 = ENV.layers['cinder/grate'], map = L4?.d || grateTexture(), mask = L4 ? ENV.layers['cinder/grateGlow']?.d : null;
   const m = new THREE.MeshLambertMaterial({ map, color: 0x8a847e });
-  const u = { uHeat: HEAT.uGrate, uFlue: gi >= 0 ? HEAT.flue[gi] : HEAT.flue[3] };
+  const u = { uHeat: HEAT.uGrate, uFlue: gi >= 0 ? HEAT.flue[gi] : HEAT.flue[3], uSlots: { value: mask } };
+  // the slots are the openings: fire shows through them (the pack's glow mask, or the dark of the code texture)
+  const slot = mask ? 'texture2D(uSlots, vMapUv).r' : '1.0 - smoothstep(0.006, 0.045, dot(texture2D(map, vMapUv).rgb, vec3(0.3, 0.55, 0.15)))';
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uHeat; uniform float uFlue;')
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uHeat; uniform float uFlue; uniform sampler2D uSlots;')
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-  // the dark slots are the openings: fire shows through them
-  float slot = 1.0 - smoothstep(0.006, 0.045, dot(texture2D(map, vMapUv).rgb, vec3(0.3, 0.55, 0.15)));
+  float slot = ${slot};
   totalEmissiveRadiance += vec3(0.8, 0.17, 0.02) * slot * (uHeat * 0.16 + uFlue * 1.6);`);
   };
-  m.customProgramCacheKey = () => 'grate' + (L4 ? 'p' : 'c');
+  m.customProgramCacheKey = () => 'grate' + (mask ? 'g' : L4 ? 'p' : 'c');
   return (MAT[k] = m);
 }
 
@@ -2301,7 +2309,7 @@ function addProp4(B, I, p, L, rng, out) {
     case 'ashTree': {
       const d = p.d ?? 2;
       if (d > 2 && hash2(x * 1.3, z * 0.7) > 0.6) return true; // thinner away from the open
-      if (cinder('deadTree') && cin4(I, hash2(x, z) < 0.5 || !cinder('deadTreeB') ? 'deadTree' : 'deadTreeB', x, z, r, s * 5.2, 'h', y, 'char')) return true;
+      if (cinder('deadTree') && cin4(I, hash2(x, z) < 0.5 || !cinder('deadTreeB') ? 'deadTree' : 'deadTreeB', x, z, r, s * 5.2, 'h', y)) return true;
       if (ENV.props.treeDead && R.quality >= 1 && !NO_TREES) { const k = s * 0.8; I.add('tree:treeDead@char', x, z, r, k, y - 0.05, k * 0.95); return true; }
       I.add('deadAsh', x, z, r, s, y);
       return true;
@@ -2322,7 +2330,7 @@ function addProp4(B, I, p, L, rng, out) {
     case 'darkBeacon': darkBeacon(B, p); return true;
     case 'campBrazier': {
       if (!cin4(I, 'brazier', x, z, r, 1.25, 'h')) addProp(B, I, { t: 'brazier', x, z }, L, rng, out);
-      else { B.add('glow', [{ geo: G.cyl(0.3, 0.3, 0.04, 8), color: 0xff6a20, o: { y: 1.05 } }], x, z); out.emitters.push({ x, y: 1.12, z, type: 'fire', s: 0.8 }); }
+      else { const f = brazierFire(1.25) || { y: 1.05, r: 0.34 }; B.add('glow', [{ geo: G.cyl(f.r * 0.88, f.r * 0.88, 0.04, 8), color: 0xff6a20, o: { y: f.y } }], x, z); out.emitters.push({ x, y: f.y + 0.07, z, type: 'fire', s: 0.8 }); }
       return true;
     }
     case 'ruinedTower': ruinedTower(I, B, p); return true;
@@ -2454,13 +2462,14 @@ const PROP4 = {
   // a brazier (Ivar's arena, the camps): the Sky_Hunter scan or the iron bowl on three legs; coals and flame when lit
   brazier() {
     const g = new THREE.Group(), parts = cinder('brazier'), sz = size4(parts);
-    let top = 1.15, glows = [];
+    let top = 1.15, bedR = 0.34, glows = [];
     if (parts) {
-      const k = 1.25 / Math.max(0.01, sz.y);
+      const k = 1.25 / Math.max(0.01, sz.y), f = brazierFire(1.25);
       for (const p of parts) { const gl = p.mat.transparent || /glow/i.test(p.mat.name); const mm = gl ? glowMat(0xff6a20) : cinMat(p.mat); const m = new THREE.Mesh(p.geo, mm); m.scale.setScalar(k); m.position.y = -sz.y0 * k; m.castShadow = !gl; g.add(m); if (gl) glows.push(mm); }
-      top = 1.18;
+      // the coals and flame in the scan's own bowl
+      if (f) { top = f.y; bedR = f.r * 0.88; } else top = 1.18;
     } else g.add(iron([{ geo: G.cyl(0.42, 0.25, 0.3, 8), color: ASHIRON, o: { y: 1.05 } }, ...[0, 1, 2].map((i) => ({ geo: G.segTo(Math.sin(i * 2.09) * 0.3, -1.0, Math.cos(i * 2.09) * 0.3, 0.04, 0.03, 4), color: ASHIRON, o: { y: 1.0 } }))]));
-    const coal = glowMat(0xff6a20), bed = new THREE.Mesh(G.cyl(0.34, 0.34, 0.05, 9), coal); bed.position.y = top; g.add(bed); glows.push(coal);
+    const coal = glowMat(0xff6a20), bed = new THREE.Mesh(G.cyl(bedR, bedR, 0.05, 9), coal); bed.position.y = top; g.add(bed); glows.push(coal);
     const fl = flameMesh(1.1); fl.position.y = top; g.add(fl);
     g.userData.setLit = (b) => { for (const m of glows) m.color.set(b ? 0xff6a20 : 0x1a1410); fl.visible = !!b; g.userData.lit = !!b; };
     g.userData.setLit(true);

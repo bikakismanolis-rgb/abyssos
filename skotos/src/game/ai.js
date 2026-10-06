@@ -9,7 +9,7 @@ import { setFluePumping, startFlues, flues, fluePeriod, setFlueHeat } from './fo
 import { refreshStats } from './stats.js';
 import { fire, area } from './projectiles.js';
 import { teleCircle, teleCone, teleLine, killTele, sparks, glowBurst, explosion, ring, bolt, P, puff, decal, flash } from '../gfx/fx.js';
-import { shake, addLight, R } from '../gfx/gfx.js';
+import { shake, addLight, removeLight, R } from '../gfx/gfx.js';
 import { emit } from '../ui/bus.js';
 import Audio from '../audio/audio.js';
 import { rand, angleTo, angleDiff, dampAngle, damp, clamp } from '../core/util.js';
@@ -1510,7 +1510,13 @@ function patrol(a, dt) {
 
 // ---------- the Smoke-eater: the lamps first, while any burns within 18 m; then the hero, and the Cradle on her hip ----------
 function snuffer(a, dt, pl, d) {
-  if (a.gorged > 0) { if ((a.gorged -= dt) <= 0) ungorge(a); else if (Math.random() < 0.3) P({ x: a.x + Math.sin(a.rot) * 0.3, y: 0.9, z: a.z + Math.cos(a.rot) * 0.3, vy: 0.8, life: 0.4, size: 0.12, size1: 0.02, color: 0xffa040, color1: 0xff3000 }); }
+  if (a.gorged > 0) {
+    if ((a.gorged -= dt) <= 0) ungorge(a);
+    else {
+      const L0 = a.gorgeLight; if (L0) { L0.x = a.x + Math.sin(a.rot) * 0.45; L0.z = a.z + Math.cos(a.rot) * 0.45; }
+      if (Math.random() < 0.3) P({ x: a.x + Math.sin(a.rot) * 0.3, y: 0.9, z: a.z + Math.cos(a.rot) * 0.3, vy: 0.8, life: 0.4, size: 0.12, size1: 0.02, color: 0xffa040, color1: 0xff3000 });
+    }
+  }
   if (a.dash) return dashStep(a, dt, pl);
   if (a.state === 'consume') return consume(a, dt);
   const fast = a.gorged > 0 ? 1.3 : 1;
@@ -1531,7 +1537,7 @@ function snuffer(a, dt, pl, d) {
     if (Math.hypot(L.x - a.x, L.z - a.z) < 1.9) {
       a.state = 'consume'; a.atkT = 0; a.hpMark = a.hp; a.interrupted = false; L.eater = a;
       a.tele = teleCircle(L.x, L.z, 1.2, 2.5, 0x9a9aa8);
-      a.avatar?.play('consume', 1, { loop: true }); Audio.sfx('smokeGulp', { x: a.x, z: a.z, vol: 0.6 }); tally(a, 'consume');
+      a.avatar?.play('consume', 1, { loop: true, fade: 0.35 }); Audio.sfx('smokeGulp', { x: a.x, z: a.z, vol: 0.6 }); tally(a, 'consume');
       return 0;
     }
     return seek(a, L.x, L.z, a.speed * fast, dt);
@@ -1571,17 +1577,23 @@ function consume(a, dt) {
   gorge(a); tally(a, 'ate');
   return 0;
 }
-// Gorged for 15 s: an ember in its throat, 30% faster, its claws burn
+// a creature's own embers flare (a Gorged throat, a tick about to leap): its emissive colour times k, plus some red
+function flare(mats, k, add) { for (const m of mats || []) { m.userData.em0 ??= m.emissive.clone(); m.emissive.copy(m.userData.em0).multiplyScalar(k).add(add); } }
+function unflare(mats) { for (const m of mats || []) if (m.userData.em0) m.emissive.copy(m.userData.em0); }
+// Gorged for 15 s: an ember in its throat (its own small light, so it reads in the ash), 30% faster, its claws burn
 function gorge(a) {
   a.gorged = 15;
   Audio.sfx('smokeGulp', { x: a.x, z: a.z });
   a.avatar?.setRim(0xff6a10, 1.1);
-  for (const m of a.throat || []) { m.userData.em0 ??= m.emissive.clone(); m.emissive.copy(m.userData.em0).multiplyScalar(3).add({ r: 0.3, g: 0.08, b: 0 }); }
+  flare(a.throat, 4, { r: 0.45, g: 0.12, b: 0 });
+  if (a.gorgeLight) removeLight(a.gorgeLight);
+  a.gorgeLight = addLight({ x: a.x, y: 1.0, z: a.z, color: 0xff6a20, intensity: 7, range: 3.2, flicker: 0.35 });
   glowBurst(a.x, 1, a.z, 0xff8030, 14, 2, 0.25, 0.5);
 }
 function ungorge(a) {
   a.gorged = 0; restoreRim(a);
-  for (const m of a.throat || []) if (m.userData.em0) m.emissive.copy(m.userData.em0);
+  unflare(a.throat);
+  if (a.gorgeLight) { removeLight(a.gorgeLight); a.gorgeLight = null; }
 }
 
 // ---------- the Ashwing: it wheels high over the hero (out of reach), takes the zone's one dive token every 6-8 s and comes
@@ -1589,7 +1601,7 @@ function ungorge(a) {
 function diver(a, dt, pl, d) {
   if (a.fly == null) { a.fly = 'roost'; a.airborne = false; a.y = 0; a.hy = 7; }
   if (a.dash) { const D = a.dash, u = 1 - D.t / D.t0; a.y = Math.max(0, D.y0 * (1 - u / D.low)); return dashStep(a, dt, pl); }
-  if (a.dazed > 0) { const v = dazedTick(a, dt); if (!(a.dazed > 0) && a.fly === 'ground') a.dmgTaken = 1.25; return v; }
+  if (a.dazed > 0) { const v = dazedTick(a, dt); if (!(a.dazed > 0) && a.fly === 'ground') { a.dmgTaken = 1.25; a.avatar?.play('perch', 1, { loop: true, fade: 0.3 }); } return v; }
   if (a.fly === 'roost') {
     // roosting on the drake's bones until the hero comes, or something hurts it
     if (!a.perched) { a.perched = true; a.avatar?.play('perch', 1, { loop: true }); }
@@ -1597,6 +1609,8 @@ function diver(a, dt, pl, d) {
     return 0;
   }
   if (a.fly === 'rise') {
+    // the takeoff clip crouches with its feet planted before the wings bite
+    if ((a.liftT -= dt) > 0) { a.y = 0; return 0; }
     a.y = Math.min(a.hy, a.y + dt * 4.5);
     if (a.y > 2) a.airborne = true;
     const v = fly(a, a.x + Math.sin(a.rot) * 2, a.z + Math.cos(a.rot) * 2, a.speed * 0.4, dt);
@@ -1635,6 +1649,8 @@ function diver(a, dt, pl, d) {
       a.tele = teleCone(a.x, a.z, a.rot, 2.2 + a.radius, 0.95, 0.5, 0xff7020); a.avatar?.play('bite', 1, { hitIn: 0.5 }); tally(a, 'bite');
       return 0;
     }
+    // on the ground between bites it crouches on folded wings (its idle is a flight pose)
+    if (!a.avatar?.anim.busy) a.avatar?.play('perch', 1, { loop: true, fade: 0.3 });
     face(a, pl, dt, 3);
     if (a.groundT <= 0) takeOff(a);
     return 0;
@@ -1642,7 +1658,7 @@ function diver(a, dt, pl, d) {
   return 0;
 }
 function takeOff(a) {
-  a.fly = 'rise'; a.dmgTaken = null; a.state = 'idle'; a.hy = rand.range(6, 8);
+  a.fly = 'rise'; a.dmgTaken = null; a.state = 'idle'; a.hy = rand.range(6, 8); a.liftT = 0.8;
   a.avatar?.play('takeoff', 1); Audio.sfx('ashwingScreech', { x: a.x, z: a.z, vol: 0.5 });
   puff(a.x, 0.3, a.z, 10, 0x5a5650, 1.4, 1.6, 1);
 }
@@ -1692,7 +1708,7 @@ function latcher(a, dt, pl, d) {
     a.atkT += dt;
     if (Math.random() < 0.5) P({ x: a.x, y: 0.3, z: a.z, vy: 0.5, life: 0.3, size: 0.2, size1: 0.05, color: 0xffc060, color1: 0xff3000 });
     if (a.atkT < 0.6) return 0;
-    killTele(a.tele); a.tele = null; a.state = 'leap'; a.atkT = 0; a.lx = a.x; a.lz = a.z; a.leapHit = false;
+    killTele(a.tele); a.tele = null; a.state = 'leap'; a.atkT = 0; a.lx = a.x; a.lz = a.z; a.leapHit = false; unflare(a.embers);
     Audio.sfx('spiderHiss', { x: a.x, z: a.z, vol: 0.6 });
   }
   if (a.state === 'leap') {
@@ -1714,6 +1730,9 @@ function latcher(a, dt, pl, d) {
     a.leapCd = rand.range(2.8, 3.6); a.state = 'crouch'; a.atkT = 0; a.leapDir = angleTo(a.x, a.z, pl.x, pl.z); a.rot = a.leapDir;
     a.tele = teleLine(a.x, a.z, a.leapDir, 5, 1, 0.6, 0xff7020);
     a.avatar?.play('leap', 1, { hitIn: 0.6 }); a.avatar?.setRim(0xffb040, 2.4); tally(a, 'crouch');
+    // its belly and seams brighten as it gathers (creatures.js drives emissiveIntensity, so the colour is raised)
+    a.embers ??= (a.avatar?.model.mats || []).filter((m) => m.emissive && m.emissiveMap);
+    flare(a.embers, 3, { r: 0.35, g: 0.12, b: 0 });
     return 0;
   }
   return AI.melee(a, dt, pl, d);
@@ -2176,8 +2195,10 @@ function breakCage(a, s) {
   emit('cageBroken', s, s.keeper, a); tally(a, 'cageBroken:' + s.keeper);
 }
 function cagesBroken(a) {
-  a.cages = null; a.lockPhase = null; a.hpFloor = 0; a.hp = Math.min(a.hp, a.hpMax * 0.299); a.ward = 0; restoreRim(a);
-  tally(a, 'cagesBroken'); daze(a, 2.5);
+  a.cages = null; a.hpFloor = a.hpMax * 0.2; a.hp = Math.min(a.hp, a.hpMax * 0.299); a.ward = 0; restoreRim(a);
+  tally(a, 'cagesBroken'); daze(a, 3.4);
+  // he staggers while the last keeper says her piece (no blow ends him there); then the last fire
+  later(3.4, () => { a.lockPhase = null; a.hpFloor = 0; });
 }
 // phase 3, The Last Fire: he drinks every fire in the arena, the Cradle's too, and is Shrouded; only the pools give light:
 // Isarn's lantern (the story's pool 'isarn', walking toward him) and four ghosts on the rim diagonals
