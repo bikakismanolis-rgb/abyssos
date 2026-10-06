@@ -72,7 +72,8 @@ export function updateActors(dt) {
     else if (a.status.fear > 0) speed = flee(a, dt, pl);
     else {
       speed = (AI[a.def.ai] || AI.melee)(a, dt, pl, d);
-      if (a.affixes.length) elite(a, dt, pl, d);
+      // no affix from what cannot be struck yet: a rootling still underground, an archer in the trees, a Rootwarden asleep
+      if (a.affixes.length && !(a.under && a.def.burst) && !a.hidden && !(a.def.ai === 'rooted' && !a.awake)) elite(a, dt, pl, d);
     }
     // knockback, separation, walls
     if (a.kx || a.kz) { a.x += a.kx * dt; a.z += a.kz * dt; const k = Math.exp(-dt * 7); a.kx *= k; a.kz *= k; if (Math.abs(a.kx) + Math.abs(a.kz) < 0.05) a.kx = a.kz = 0; }
@@ -655,11 +656,12 @@ function fly(a, tx, tz, sp, dt) {
   a.rot = dampAngle(a.rot, Math.atan2(dx, dz), 8, dt);
   return v;
 }
-// a thrown rock: a dark lump arcing through the air with dust streaming off it, landing on (x1, z1)
+// a thrown rock: a dark lump arcing through the air with dust streaming off it, landing on (x1, z1); it is gone if the hero leaves the zone
 function lob(x0, z0, x1, z1, dur, h, color, onLand) {
-  const n = Math.max(6, Math.round(dur / 0.03));
+  const n = Math.max(6, Math.round(dur / 0.03)), zone = G.zone;
   let i = 0;
   const step = () => {
+    if (G.zone !== zone) return;
     i++;
     const u = i / n, x = x0 + (x1 - x0) * u, z = z0 + (z1 - z0) * u, y = 2.6 + Math.sin(u * Math.PI) * h - u * 2.4;
     P({ add: false, x, y, z, life: 0.07, size: 1.3, size1: 1.3, color, alpha: 1, alpha1: 1 });
@@ -840,7 +842,7 @@ function petAI(a, dt) {
   if (a.life <= 0 || pl.dead) { a.dead = true; a.deadT = 0; return 0; }
   if (Math.random() < 0.3) P({ x: a.x + rand.range(-0.3, 0.3), y: rand.range(0.3, 1), z: a.z + rand.range(-0.3, 0.3), vy: 0.6, life: 0.6, size: 0.15, size1: 0.02, color: 0x90e0ff });
   let tg = null, bd = 1e9;
-  for (const f of foes(pl.x, pl.z, 10)) { if (f.prop) continue; const dd = (f.x - a.x) ** 2 + (f.z - a.z) ** 2; if (dd < bd) { bd = dd; tg = f; } }
+  for (const f of foes(pl.x, pl.z, 10)) { if (f.prop || f.disguised) continue; const dd = (f.x - a.x) ** 2 + (f.z - a.z) ** 2; if (dd < bd) { bd = dd; tg = f; } }
   if (a.state === 'attack') {
     if (tg) face(a, tg, dt, 10);
     if (attackTick(a, dt) && tg && Math.hypot(tg.x - a.x, tg.z - a.z) < a.def.reach + tg.radius + 0.4) damage(pl, tg, heroHit((a.dmgMult || 1) * 0.55), { knock: 1, quiet: false, noLoh: true, noRes: true, crit: false });
@@ -1105,7 +1107,7 @@ function callOfTheWood(a) {
 }
 // the hart goes into mist; three phantom harts gallop across the glade; it steps out at the end of the last with a stamp
 function phantomHerd(a, pl) {
-  const c = arena(a), R0 = gladeR();
+  const c = arena(a), R0 = gladeR(), hx = a.x, hz = a.z;
   a.hidden = true; a.invuln = 1e9; killTele(a.tele); a.tele = null;
   puff(a.x, 1, a.z, 24, 0xd8d4c8, 2, 2.4, 1.6); glowBurst(a.x, 1.6, a.z, 0xfff0d0, 30, 3, 0.3, 0.8);
   Audio.sfx('wraithWail', { vol: 0.6 }); Audio.sfx('hartBellow', { vol: 0.5 });
@@ -1118,7 +1120,10 @@ function phantomHerd(a, pl) {
     later(i * 0.5, inZone(a, () => { teleLine(sx, sz, dir, len, 2.8, 0.9, 0xfff0d0); later(0.9, inZone(a, () => { fire('phantomHart', a, sx, sz, dir, { y: 1.2, dmg: a.dmg * 1.2, life: len / 20 }); Audio.sfx('hartCharge', { x: sx, z: sz, vol: 0.6 }); })); }));
   }
   return { t: tEnd, noFace: true, fn() {
-    const f = G.zone.map.nearestFloor(end.x, end.z, 6);
+    // never out of the glade, nor behind the shut Root Gate: where the hero cannot walk to, it steps out where it went in
+    const map = G.zone.map, ex = end.x - c.x, ez = end.z - c.z, el = Math.hypot(ex, ez), k = el > R0 - 2 ? (R0 - 2) / el : 1;
+    let f = map.nearestFloor(c.x + ex * k, c.z + ez * k, 6);
+    if (map.flowDist(f.x, f.z) === 65535 || Math.hypot(f.x - c.x, f.z - c.z) > R0) f = { x: hx, z: hz };
     a.x = f.x; a.z = f.z; a.hidden = false; a.rot = angleTo(a.x, a.z, G.player.x, G.player.z);
     glowBurst(a.x, 1.6, a.z, 0xfff0d0, 30, 3, 0.3, 0.8); puff(a.x, 1, a.z, 12, 0xd8d4c8, 1.6, 2, 1.2);
     a.tele = teleCircle(a.x, a.z, 4, 0.6, 0xffc040);
@@ -1190,7 +1195,8 @@ function thornspear(a, pl) {
     return { t: 0.5, fn() { Audio.sfx('swingHeavy', { x: a.x, z: a.z }); if (meleeLands(a, G.player, 4.6, 1.0)) hitHero(a, G.player, 1.0); a.combo++; }, after: 0.2, chain: Math.hypot(G.player.x - a.x, G.player.z - a.z) < 7, chainFn: thornspear };
   }
   const len = a.phase >= 2 ? 8 : 6, dir = a.rot;
-  a.tele = teleLine(a.x, a.z, dir, len, 1.8, 0.5, 0xffa020);
+  // drawn as wide as it strikes (dashStep: her body and 0.6 m either side)
+  a.tele = teleLine(a.x, a.z, dir, len, 2 * (a.radius + 0.6), 0.5, 0xffa020);
   a.avatar?.play('heavyStab', 1.1);
   return { t: 0.5, noFace: true, fn() { startDash(a, dir, 26, len - 1, { probe: 0.6, dmg: 1.5, hitO: { push: 12 }, end() {} }); Audio.sfx('swingHeavy', { x: a.x, z: a.z }); a.combo++; }, after: 0.5 };
 }
@@ -1222,7 +1228,8 @@ function tears(a, pl) {
 // Song of Sorrow: a channel, then a ring of gold rolling outward; it roots whoever it catches (a dodge goes through it)
 function song(a) {
   a.avatar?.play('channel', 1, { loop: true }); Audio.sfx('amaranthSong');
-  const tele = teleCircle(a.x, a.z, 3, 1.6, 0xffd060);
+  // the whole reach of the wave is drawn while she sings
+  const tele = teleCircle(a.x, a.z, 14, 1.6, 0xffd060);
   for (let i = 0; i < 20; i++) later(i * 0.08, inZone(a, () => P({ x: a.x + rand.range(-1.2, 1.2), y: rand.range(0.5, 3), z: a.z + rand.range(-1.2, 1.2), vy: 1.2, life: 0.8, size: 0.14, size1: 0.02, color: 0xffe090 })));
   return { t: 1.6, noFace: true, fn() {
     killTele(tele); a.avatar?.anim.stop?.(0.1); a.avatar?.play('castUp', 1.4);
@@ -1246,6 +1253,8 @@ function rootDown(a) {
   a.nodes = spots.slice(0, 4).map((s, i) => {
     const f = G.zone.map.nearestFloor(s.x, s.z, 4);
     const n = spawnMonster('heartroot', f.x, f.z, { level: a.level });
+    // half the life of a thorn wall's Heartroot: four of them to fell, far apart, guarded
+    n.hpMax *= 0.5; n.hp = n.hpMax;
     n.bossNode = a; n.guards = ['hollowed', 'hollowed']; n.wakeIn = 0.6 + i * 0.35; n.sprout = false; n.aggro = true;
     G.actors.push(n);
     return n;
@@ -1324,7 +1333,8 @@ function comboStep(a, pl) {
 
 function boss(a, dt, pl, d, S) {
   if (!a.awake) {
-    if ((d < (S.wake || 13) || a.hp < a.hpMax) && G.zone.map.los(a.x, a.z, pl.x, pl.z)) { a.awake = true; a.aggro = true; a.mcd = {}; S.intro(a); a.cd = 1.5; }
+    // it wakes when it sees the hero, or when struck from anywhere; phase 0 is its first, so a phase it was hurt into still begins (the Lady's root)
+    if ((d < (S.wake || 13) && G.zone.map.los(a.x, a.z, pl.x, pl.z)) || a.hp < a.hpMax) { a.awake = true; a.aggro = true; a.mcd = {}; a.phase = 0; S.intro(a); a.cd = 1.5; }
     return 0;
   }
   const hpf = a.hp / a.hpMax, ph = S.phases || [S.name === 'lord' ? 0.6 : 0.5, 0.25];

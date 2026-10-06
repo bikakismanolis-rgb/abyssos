@@ -104,12 +104,12 @@ function tickDrips(dt) {
   teleCircle(f.x, f.z, 1.4, 1.2, 0xffb030);
   dripFall(f.x, f.z, 1.2, () => addSapPool(f.x, f.z, 1.4, 6));
 }
-// a long gold drop out of the canopy, landing after dur seconds
+// a long gold drop out of the canopy, landing after dur seconds (not if the hero has left the zone meanwhile)
 function dripFall(x, z, dur, land) {
-  const n = 10;
+  const n = 10, z0 = G.zone;
   for (let k = 0; k < n; k++) {
     const at = dur * (0.55 + 0.45 * (k / n));
     later(at, () => P({ x, y: 7 * (1 - k / n), z, vy: -9, life: 0.12, size: 0.22, size1: 0.12, color: 0xffd070, color1: 0xff9010 }));
   }
-  later(dur, land);
+  later(dur, () => { if (G.zone === z0) land(); });
 }
