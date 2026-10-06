@@ -145,14 +145,18 @@ export function weaponGeo(type, look = {}) {
     case 'lanternStaff': {
       p.push({ geo: G.cyl(0.025, 0.03, 2.0, 6), color: 0x4a3524, o: { y: 0.4 } });
       p.push({ geo: G.segTo(0.22, 0.08, 0, 0.015, 0.012, 4), color: darkSteel, o: { y: 1.35, metal: 1 } });
-      p.push({ geo: G.box(0.1, 0.14, 0.1), color: 0xffc070, o: { y: 1.3, x: 0.22, glow: 2.2 } });
+      // a dead lantern (the Lampless, Ivar) keeps a dim pale glass: look.glow, look.lamp
+      p.push({ geo: G.box(0.1, 0.14, 0.1), color: look.lamp ?? 0xffc070, o: { y: 1.3, x: 0.22, glow: look.glow ?? 2.2 } });
       p.push({ geo: G.cone(0.08, 0.06, 4), color: darkSteel, o: { y: 1.4, x: 0.22, metal: 1 } });
       return { parts: p, tip: 1.4, base: 1, gem: 1.3 };
     }
     case 'hammer': {
-      p.push({ geo: G.cyl(0.025, 0.028, 0.6, 6), color: wood, o: { y: 0.12 } });
-      p.push({ geo: G.box(0.22, 0.12, 0.12), color: darkSteel, o: { y: 0.45, metal: 1 } });
-      return { parts: p, tip: 0.5, base: 0.3 };
+      // look.len: a bigger maul for a bigger hand (the Hammerhorn's, Karthax's); look.ember: black iron with a vein of fire
+      const k = look.len ?? 1;
+      p.push({ geo: G.cyl(0.025 * k, 0.028 * k, 0.6 * k, 6), color: wood, o: { y: 0.12 * k } });
+      p.push({ geo: G.box(0.22 * k, 0.12 * k, 0.12 * k), color: look.ember ? 0x1a1816 : darkSteel, o: { y: 0.45 * k, metal: 1 } });
+      if (look.ember) p.push({ geo: G.box(0.23 * k, 0.02 * k, 0.125 * k), color: look.ember, o: { y: 0.45 * k, glow: 1.6 } });
+      return { parts: p, tip: 0.5 * k, base: 0.3 * k };
     }
     case 'spear': {
       // the Evergreen's living-wood spear: held a third of the way up, a leaf-shaped amber blade bound with leaves
@@ -207,6 +211,46 @@ export function veilParts() {
   const hem = G.torus(0.29, 0.008, 3, 24); hem.rotateX(Math.PI / 2); hem.translate(0, -0.64, 0.012);
   return [{ geo: g, color: 0x0c0b0e }, { geo: hem, color: 0x6a6860, o: { glow: 0.05 } }];
 }
+// ---------- Act IV worn and ground pieces (see game/actors.js) ----------
+const iron = 0x2a2826;
+// an Ashsmith's one-eyed iron mask: a curved plate over the face (head space, +z the face, y = 0 the eyes) and a coal in the brow
+export function maskParts() {
+  const p = [];
+  for (let i = -2; i <= 2; i++) { const a = i * 0.32; p.push({ geo: G.box(0.068, 0.17, 0.014), color: iron, o: { x: Math.sin(a) * 0.1, z: Math.cos(a) * 0.1, ry: a, metal: 0.8 } }); }
+  p.push({ geo: G.box(0.2, 0.022, 0.03), color: 0x3a3430, o: { y: 0.035, z: 0.105, metal: 0.8 } });
+  for (const x of [-0.06, 0.06]) p.push({ geo: G.ball(0.012, 4, 3), color: 0x5a5048, o: { x, y: -0.05, z: 0.108, metal: 1 } });
+  // the single eye: a coal set in the brow, the other socket a dark slit
+  p.push({ geo: G.ball(0.024, 6, 5), color: 0xff6a18, o: { x: 0.036, y: 0.0, z: 0.112, glow: 2.4 } });
+  p.push({ geo: G.box(0.04, 0.008, 0.01), color: 0x0a0806, o: { x: -0.036, y: 0.0, z: 0.113 } });
+  return p;
+}
+// iron shackles: a cuff (axis along the arm, x) and a collar (axis up, y)
+export function cuffParts(r = 0.07) { const g = G.torus(r, 0.022, 5, 12); g.rotateY(Math.PI / 2); return [{ geo: g, color: iron, o: { metal: 0.9 } }, { geo: G.box(0.03, 0.05, 0.03), color: 0x3a3430, o: { y: -r - 0.01, metal: 0.9 } }]; }
+export function collarParts(r = 0.11) { const g = G.torus(r, 0.026, 5, 14); g.rotateX(Math.PI / 2); return [{ geo: g, color: iron, o: { metal: 0.9 } }, { geo: G.torus(0.035, 0.01, 4, 8), color: 0x3a3430, o: { z: r + 0.02, y: -0.03, metal: 0.9 } }]; }
+// the Ash Crown on Karthax's brow (when the world has none): a black iron ring of prongs with four ember sockets
+export function ashCrownParts() {
+  const p = [];
+  const band = G.torus(0.105, 0.016, 4, 18); band.rotateX(Math.PI / 2);
+  p.push({ geo: band, color: 0x1a1816, o: { metal: 0.8, glow: 0.04 } });
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * 6.283, tall = i % 2 === 0; p.push({ geo: G.segTo(Math.sin(a) * 0.02, tall ? 0.13 : 0.07, Math.cos(a) * 0.02, 0.016, 0.003, 4), color: 0x1e1c1a, o: { x: Math.sin(a) * 0.105, z: Math.cos(a) * 0.105, metal: 0.8 } }); }
+  for (let i = 0; i < 4; i++) { const a = (i / 4) * 6.283 + 0.39; p.push({ geo: G.ball(0.02, 6, 4), color: 0xff7a20, o: { x: Math.sin(a) * 0.112, y: 0.02, z: Math.cos(a) * 0.112, glow: 2.2 } }); }
+  return p;
+}
+// a heap of ash over one of the Ash-Fallen (a hilt or a bow-tip showing), and the slag left where a foe fell near an Ashsmith
+export function ashMoundParts() {
+  const p = [{ geo: G.dome(0.7, 0.5, 10), color: 0x4a4642, o: { sy: 0.3 } }, { geo: G.dome(0.4, 0.5, 8), color: 0x5a5650, o: { sy: 0.45, x: 0.25, z: -0.1 } }];
+  p.push({ geo: G.cyl(0.02, 0.02, 0.5, 5), color: 0x3a3430, o: { x: -0.2, y: 0.25, z: 0.15, rz: 0.4, rx: 0.2, metal: 0.6 } });
+  p.push({ geo: G.box(0.14, 0.03, 0.04), color: 0x4a4038, o: { x: -0.3, y: 0.46, z: 0.2, rz: 0.4, metal: 0.6 } });
+  return p;
+}
+export function slagParts() {
+  const p = [{ geo: G.dome(0.55, 0.5, 9), color: 0x2a2220, o: { sy: 0.4 } }, { geo: G.dome(0.3, 0.5, 7), color: 0x3a2a22, o: { sy: 0.6, x: -0.15, z: 0.12 } }];
+  for (let i = 0; i < 6; i++) { const a = i * 1.1; p.push({ geo: G.box(0.3, 0.02, 0.03), color: 0xff5a10, o: { x: Math.sin(a) * 0.25, y: 0.14, z: Math.cos(a) * 0.25, ry: a, glow: 1.6 } }); }
+  return p;
+}
+// one iron link of a stoker's chain (axis along z)
+export function linkGeo() { const g = G.torus(0.07, 0.02, 4, 8); g.scale(1, 1.6, 1); g.rotateX(Math.PI / 2); return staticGeo([{ geo: g, color: iron, o: { metal: 0.9 } }]); }
+
 // a rootling's hiding place: a heap of turned soil with a tuft of gold leaves
 let mound = null;
 export function moundMesh() {

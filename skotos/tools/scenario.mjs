@@ -8,6 +8,19 @@ const page = await browser.newPage({ viewport: { width: +W, height: +H } });
 const logs = [];
 page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') { const t = m.text(); if (!t.includes('ERR_CERT')) logs.push(m.type() + ': ' + t); } });
 page.on('pageerror', (e) => logs.push('pageerror: ' + e.message + ' ' + (e.stack || '').split('\n').slice(0, 3).join(' | ')));
+// Act IV: a dialog advances on Enter (the key finishes the line, then moves on), whatever the frame rate; what is said is
+// recorded for the report
+const A4 = {
+  enter: (pg) => pg.evaluate(() => window.__D.emit('key', 'enter')),
+  async dialogs(pg, n = 10, until) {
+    for (let i = 0; i < n * 2 + 2; i++) {
+      if (until && await pg.evaluate(until)) return;
+      if (!(await pg.evaluate(() => !!document.querySelector('#dialog:not([hidden])')))) { if (!until) return; await pg.waitForTimeout(250); continue; }
+      await A4.enter(pg); await pg.waitForTimeout(220);
+    }
+  },
+  listen: (pg) => pg.evaluate(async () => { const B = await import('/src/ui/bus.js'); window.__says = []; B.on('say', (k) => window.__says.push(k)); })
+};
 const S = {
   combat: { q: 'auto=forest&sim=6&q=1', run: async (pg, shot) => {
     await pg.evaluate(() => { const G = window.__G; const p = G.zone.packs[1]; G.player.x = p.x; G.player.z = p.z + 5; G.player.hp = G.player.hpMax = 5000; });
@@ -339,6 +352,272 @@ const S = {
     });
     await pg.waitForTimeout(2500); await shot();
     return pg.evaluate(() => window.__G.actors.filter((a) => a.team === 'foe' && !a.dead).map((a) => a.kind + ':' + (a.avatar?.kind || '-')));
+  } },
+  // ---------- Act IV ----------
+  // q17 in town (the rest of the truth, Brokka and the Cradle, the fire leaving), then the Field of Ash: the camp, the five
+  // lamps and their memories (white ash), a lamp snuffed and lit again, the altars, the checkpoint, the packs
+  ashfield: { q: 'auto=town&sim=4&q=1&norender&lvl=23&cls=' + (process.env.CLS || 'warden'), run: async (pg, shot) => {
+    await A4.listen(pg);
+    await pg.evaluate(() => { const G = window.__G, h = G.hero; window.__immortal = true; h.quest = 16; h.act1 = h.act2 = h.act3 = 1; h.boons = ['ember', 'forge', 'amber']; Object.assign(h.flags, { act1: true, act2: true, act3: true, hart: true, autumn: true }); });
+    const talk = () => pg.evaluate(() => window.__D.emit('talk', 'wayfarer', window.__G.actors.find((a) => a.npc === 'wayfarer')));
+    await talk(); await A4.dialogs(pg, 6);
+    const q17 = await pg.evaluate(() => { const G = window.__G, p = G.panel; window.__D.closePanel(); return { quest: G.hero.quest, after3: G.hero.flags.after3, panel: p }; });
+    // the e-lines, Brokka walking up with the Cradle, her lines, then the scene
+    await talk();
+    for (let i = 0; i < 80 && !(await pg.evaluate(() => !!window.__G.cine)); i++) { await A4.enter(pg); await pg.waitForTimeout(300); }
+    await pg.waitForTimeout(3500); await shot();
+    await pg.waitForFunction(() => !window.__G.cine, null, { timeout: 120000 });
+    await A4.dialogs(pg, 6);
+    await pg.waitForTimeout(1500); await shot();
+    const town = await pg.evaluate(() => { const G = window.__G, z = G.zone, R = window.__R; return { quest: G.hero.quest, fireTaken: G.hero.flags.fireTaken, beaconOn: z.town?.beaconOn, beaconLight: [...R.sources].some((s) => s.key === 'beacon'), far: (z.town?.far || []).filter(Boolean).length, torches: z.actors.filter((a) => a.npc === 'villager' && a.avatar?.held.R).length, isarn: z.actors.some((a) => a.npc === 'wayfarer'), exitLocked: z.interact.find((i) => i.to === 'ashfield')?.locked }; });
+    // down the north path to the Field
+    await pg.evaluate(() => window.__G.zone.interact.find((i) => i.kind === 'exit' && i.to === 'ashfield').use());
+    await pg.waitForFunction(() => window.__G.zone?.id === 'ashfield' && !document.getElementById('fade')?.classList.contains('on'), null, { timeout: 180000 });
+    await pg.waitForTimeout(1500); await shot();
+    const field = await pg.evaluate(() => { const G = window.__G, z = G.zone; for (const p of z.packs) p.spawned = true; z.bossSpawned = true; return { quest: G.hero.quest, npcs: z.actors.filter((a) => a.npc).map((a) => a.key), lamps: z.act4.lamps.map((l) => l.id + (l.lit ? '*' : '')), altars: z.act4.altars.length, braziers: z.act4.braziers.filter((b) => b.lit).length, voices: z.voices.length, light: window.__act4.heroLightR() }; });
+    // Isarn and Brokka at the Dark Beacon
+    await pg.evaluate(() => { const G = window.__G, a = G.actors.find((x) => x.key === 'isarn'); G.player.x = a.x; G.player.z = a.z + 2; window.__D.emit('talk', 'wayfarer', a); });
+    await A4.dialogs(pg, 6);
+    await pg.evaluate(() => { const G = window.__G; window.__D.emit('talk', 'brokka', G.actors.find((x) => x.key === 'brokka')); });
+    await A4.dialogs(pg, 3); await pg.evaluate(() => window.__D.closePanel());
+    // the five lamps: each a short touch, a pool of light, a place to wake, and a memory in white ash
+    const lamps = [];
+    for (const id of ['l1', 'l2', 'l3', 'l4', 'l5']) {
+      await pg.evaluate((id) => { const G = window.__G, it = G.zone.interact.find((i) => i.kind === 'waylamp' && i.id === id), f = G.zone.map.nearestFloor(it.x + 1.4, it.z + 1.4); G.player.x = f.x; G.player.z = f.z; it.use(); }, id);
+      await pg.waitForFunction(() => !!window.__G.cine || document.querySelector('#dialog:not([hidden])'), null, { timeout: 30000 }).catch(() => {});
+      await pg.waitForTimeout(1200);
+      const mid = await pg.evaluate(() => ({ ash: document.body.classList.contains('memory-ash'), who: document.querySelector('#dialog .who')?.textContent, figs: window.__G.zone.actors.filter((a) => a.npc && ['isarnBoy', 'arna', 'arnaOld', 'ivarGhost'].includes(a.npc)).map((a) => a.npc) }));
+      if (id === 'l5') await shot();
+      await A4.dialogs(pg, 8);
+      await pg.waitForFunction(() => !window.__G.cine, null, { timeout: 60000 });
+      await pg.waitForTimeout(600);
+      lamps.push(await pg.evaluate((id) => { const G = window.__G, F = G.hero.flags, it = G.zone.interact.find((i) => i.kind === 'waylamp' && i.id === id); return { id, mid: 0, lit: it.lit, lamp: !!F['lamp_' + id], mem: !!F['mem_' + id], pool: !!window.__act4.getLightPool('lamp:' + id), buff: Math.round(G.player.buffs.memory || 0), ash: document.body.classList.contains('memory-ash'), quest: G.hero.quest }; }, id));
+      lamps[lamps.length - 1].mid = mid;
+    }
+    await pg.waitForTimeout(3000);
+    const after = await pg.evaluate(() => { const G = window.__G, z = G.zone; return { quest: G.hero.quest, checkpoint: z.checkpoint && [+z.checkpoint.x.toFixed(1), +z.checkpoint.z.toFixed(1)], hook: z.actors.some((a) => a.key === 'isarnHook'), camp: z.actors.some((a) => a.key === 'isarn'), voices: z.voices.filter((v) => v.done).length }; });
+    // a lamp put out (as a Smoke-eater would) and lit again by a touch
+    const snuff = await pg.evaluate(() => { const G = window.__G, it = G.zone.interact.find((i) => i.kind === 'waylamp' && i.id === 'l2'); it.snuff(); return { lit: it.lit, used: it.used, prompt: it.prompt, pool: !!window.__act4.getLightPool('lamp:l2') }; });
+    await pg.evaluate(() => { const G = window.__G, it = G.zone.interact.find((i) => i.kind === 'waylamp' && i.id === 'l2'), f = G.zone.map.nearestFloor(it.x + 1.4, it.z + 1.4); G.player.x = f.x; G.player.z = f.z; it.use(); });
+    await pg.waitForTimeout(2200);
+    snuff.relit = await pg.evaluate(() => { const it = window.__G.zone.interact.find((i) => i.kind === 'waylamp' && i.id === 'l2'); return { lit: it.lit, pool: !!window.__act4.getLightPool('lamp:l2') }; });
+    // Isarn at the empty hook
+    await pg.evaluate(() => { const G = window.__G, a = G.actors.find((x) => x.key === 'isarnHook'); if (a) window.__D.emit('talk', 'wayfarer', a); });
+    await A4.dialogs(pg, 5);
+    // the three altars: the Throne taken, the Forge and the Unfading refused
+    const armor0 = await pg.evaluate(() => window.__G.stats.armor);
+    const altars = [];
+    for (const [id, pick] of [['throne', 'taken'], ['forge', 'refused'], ['unfading', 'refused']]) {
+      await pg.evaluate((id) => { const G = window.__G, it = G.zone.interact.find((i) => i.kind === 'altar' && i.id === id), f = G.zone.map.nearestFloor(it.x, it.z); G.player.x = f.x; G.player.z = f.z; it.use(); }, id);
+      await A4.dialogs(pg, 3, () => window.__G.panel === 'altar');
+      const panel = await pg.evaluate(() => ({ panel: window.__G.panel, cards: [...document.querySelectorAll('[data-a^="gift:"]')].map((e) => e.dataset.a) }));
+      if (id === 'throne') await shot();
+      await pg.click(`[data-a="gift:${pick}"]`).catch(() => {});
+      await pg.waitForTimeout(600);
+      altars.push(await pg.evaluate((id) => { const G = window.__G, it = G.zone.interact.find((i) => i.kind === 'altar' && i.id === id); return { id, gift: G.hero.flags.gifts?.[id], state: it.mesh.userData.state, used: it.used }; }, id));
+      altars[altars.length - 1].panel = panel;
+    }
+    const gifts = await pg.evaluate((a0) => ({ armor0: a0, armor: window.__G.stats.armor, unbound: !!window.__G.hero.flags.unbound }), armor0);
+    // she falls: she wakes at the last lamp she lit
+    await pg.evaluate(() => { const G = window.__G; window.__immortal = false; G.player.dead = true; window.__D.emit('respawn', false); });
+    await pg.waitForFunction(() => window.__G.zone?.id === 'ashfield' && !document.getElementById('fade')?.classList.contains('on') && !window.__G.player.dead, null, { timeout: 60000 });
+    await pg.waitForTimeout(800);
+    const wake = await pg.evaluate(() => { const G = window.__G, c = G.zone.checkpoint; window.__immortal = true; return { d: +Math.hypot(G.player.x - c.x, G.player.z - c.z).toFixed(1) }; });
+    // the packs (the Ash-Fallen line, the bowmen, the Lampless, the Smoke-eaters, the ticks, the Ashwing)
+    const n = await pg.evaluate(() => { const z = window.__G.zone; for (const p of z.packs) p.spawned = false; return z.packs.length; });
+    for (let i = 0; i < n; i += 2) {
+      await pg.evaluate((i) => { const G = window.__G, p = G.zone.packs[i]; const f = G.zone.map.nearestFloor(p.x, p.z + 5); G.player.x = f.x; G.player.z = f.z; }, i);
+      for (let k = 0; k < 10; k++) { await pg.evaluate(() => { const G = window.__G; G.player.res = 100; G.player.hp = G.player.hpMax; window.__D.IN.events.push({ t: 'skill', i: [0, 0, 1, 2, 0, 4][Math.floor(Math.random() * 6)], aim: null }); }); await pg.waitForTimeout(300); }
+      if (i % 6 === 0) await shot();
+    }
+    return pg.evaluate((o) => { const G = window.__G, kinds = {}; for (const a of G.actors) if (a.team === 'foe' && !a.prop && !a.dead) kinds[a.kind] = (kinds[a.kind] || 0) + 1; return { ...o, kills: G.hero.stats.kills, lvl: G.hero.level, alive: kinds, says: window.__says.slice(0, 40) }; }, { q17, town, field, lamps, after, snuff, altars, gifts, wake });
+  } },
+  // Ivar at the Anvil Gate, fought to the end: his Dark (the braziers relit by hand), his son's light, the three falters, his
+  // last words, the Last Lamp lit, the Lampless kneeling, the gate open, quest 20
+  ivar: { q: 'auto=ashfield&sim=6&q=1&norender&lvl=24&cls=' + (process.env.CLS || 'warden'), run: async (pg, shot) => {
+    await A4.listen(pg);
+    await pg.evaluate(() => { const G = window.__G, h = G.hero; window.__immortal = true; h.quest = 19; for (const id of ['l1', 'l2', 'l3', 'l4', 'l5']) { h.flags['lamp_' + id] = true; h.flags['mem_' + id] = true; } Object.assign(h.flags, { act3: true, fireTaken: true }); window.__D.enterZone('ashfield', { fresh: true }); const z = G.zone, b = z.L.boss; for (const p of z.packs) p.spawned = true; const f = z.map.nearestFloor(b.x, b.z + 3); G.player.x = f.x; G.player.z = f.z; G.player.hp = G.player.hpMax = 99999; });
+    await pg.waitForTimeout(3500); await shot();
+    const swing = async (n) => { for (let k = 0; k < n; k++) { await pg.evaluate(() => { const G = window.__G; G.player.res = 100; window.__D.IN.events.push({ t: 'skill', i: [0, 1, 0, 2, 0, 4][Math.floor(Math.random() * 6)], aim: null }); }); await pg.waitForTimeout(350); } };
+    await swing(16);
+    const p0 = await pg.evaluate(() => { const b = window.__G.zone.boss; return b && { hp: Math.round(b.hp / b.hpMax * 100), phase: b.phase, awake: b.awake, moves: Object.keys(b.mcd || {}) }; });
+    // past 60%: the Dark
+    await pg.evaluate(() => window.__D.kill(window.__G.zone.boss));
+    await pg.waitForTimeout(2500);
+    const p1 = await pg.evaluate(() => { const G = window.__G, b = G.zone.boss, z = G.zone; return { phase: b.phase, shrouded: b.shrouded, light: window.__act4.heroLightR(), braziers: z.act4.braziers.filter((x) => x.lit).length }; });
+    await shot();
+    // the hero lights the three braziers again, one touch each
+    for (let i = 0; i < 3; i++) {
+      await pg.evaluate((i) => { const G = window.__G, it = G.zone.act4.braziers[i], f = G.zone.map.nearestFloor(it.x + 1.5, it.z + 1.5); G.player.x = f.x; G.player.z = f.z; G.player.act = null; it.use(); }, i);
+      await pg.waitForTimeout(1600);
+      await pg.evaluate((i) => { const it = window.__G.zone.act4.braziers[i]; if (!it.lit) it.relight(); }, i);
+    }
+    await pg.waitForTimeout(800);
+    const blind = await pg.evaluate(() => { const b = window.__G.zone.boss; return { allLit: b.allLit, dazed: b.dazed > 0, unshroud: b.unshroud > 0, braziers: window.__G.zone.act4.braziers.filter((x) => x.lit).length }; });
+    // past 30%: Remembering. Isarn runs in from the Graves; his lantern ends the dark
+    await pg.evaluate(() => { const b = window.__G.zone.boss; b.dazed = 0; window.__D.kill(b); });
+    await pg.waitForTimeout(6000); await shot();
+    const p2 = await pg.evaluate(() => { const G = window.__G, b = G.zone.boss, I = G.zone.ivarIsarn; return { phase: b.phase, dark: b.dark, gold: !!window.__act4.getLightPool('ivarGold'), light: window.__act4.heroLightR(), isarn: I && +Math.hypot(I.x - b.x, I.z - b.z).toFixed(1) }; });
+    for (const f of [0.24, 0.17, 0.09]) { await pg.evaluate((f) => { const b = window.__G.zone.boss; b.dazed = 0; b.hp = b.hpMax * f; }, f); await pg.waitForTimeout(900); }
+    const falters = await pg.evaluate(() => window.__G.zone.boss.falters);
+    // his death: the twist, the lantern's laugh, the Last Lamp, the gate
+    await pg.evaluate(() => { const b = window.__G.zone.boss; b.dazed = 0; b.hpFloor = 0; window.__D.kill(b); });
+    await pg.waitForFunction(() => !!window.__G.cine, null, { timeout: 20000 }).catch(() => {});
+    await pg.waitForTimeout(2000); await shot();
+    const words = [];
+    for (let i = 0; i < 40; i++) { const w = await pg.evaluate(() => document.querySelector('#dialog:not([hidden]) .txt')?.textContent?.slice(0, 30)); if (w && words[words.length - 1] !== w) words.push(w); await A4.enter(pg); await pg.waitForTimeout(300); if (await pg.evaluate(() => !window.__G.cine && !document.querySelector('#dialog:not([hidden])') && window.__G.hero.flags.ivar)) break; }
+    await pg.waitForFunction(() => !window.__G.cine && window.__G.hero.quest >= 20, null, { timeout: 90000 }).catch(() => {});
+    await pg.waitForTimeout(1500); await shot();
+    return pg.evaluate((o) => { const G = window.__G, z = G.zone, F = G.hero.flags, gate = z.L.gate; return { ...o, falters: o.falters, words: o.words.length, ivar: F.ivar, ivarDown: F.ivarDown, quest: G.hero.quest, gateOpen: gate.cells.every(([x, zz]) => z.map.walkable(x + 0.5, zz + 0.5)), gateProgress: +z.act4.gate.userData.progress.toFixed(2), lastLamp: z.act4.lastLampIt.lit, lampless: z.actors.filter((a) => a.kind === 'lampless' && !a.dead).length, isarn: z.actors.filter((a) => a.npc === 'wayfarer').length, echo: !!z.interact.find((i) => i.kind === 'echo'), exit: z.interact.find((i) => i.to === 'forge')?.locked, says: window.__says.filter((k) => /ivar|isarn|voice/.test(k)) }; }, { p0, p1, blind, p2, falters, words });
+  } },
+  // the Ashen Forge: the flues breathing, Brokka's camp, the three Great Bellows woken (a fire-pit snuffed and relit), the heat
+  // rising, the slag plug melting, Elati at the camp, quest 21
+  forge: { q: 'auto=forge&sim=6&q=1&norender&lvl=26&cls=' + (process.env.CLS || 'mage'), run: async (pg, shot) => {
+    await A4.listen(pg);
+    await pg.evaluate(() => { const G = window.__G, h = G.hero; window.__immortal = true; h.quest = 20; Object.assign(h.flags, { act3: true, fireTaken: true, ivar: true }); window.__D.enterZone('forge', { fresh: true }); G.player.hp = G.player.hpMax = 99999; for (const p of G.zone.packs) p.spawned = true; });
+    await pg.waitForTimeout(1500);
+    const B = await pg.evaluate(async () => { const G = window.__G, z = G.zone, Fg = await import('/src/game/forge.js'), Bd = await import('/src/world/build.js'); return { flues: (Fg.flues() || []).length, period: Fg.flues()?.[0] && Fg.fluePeriod(Fg.flues()[0]), heat: Bd.HEAT.k, bellows: z.act4.bellows.map((b) => b.id + (b.lit ? '*' : '')), npcs: z.actors.filter((a) => a.npc).map((a) => a.key), plug: !!z.act4.plug, boss: z.bossSpot?.kind || null }; });
+    await pg.evaluate(() => { const G = window.__G, a = G.actors.find((x) => x.key === 'brokka'); G.player.x = a.x; G.player.z = a.z + 2; window.__D.emit('talk', 'brokka', a); });
+    await A4.dialogs(pg, 4); await pg.evaluate(() => window.__D.closePanel());
+    await shot();
+    const runs = [];
+    for (const id of [0, 1, 2]) {
+      await pg.evaluate((id) => { const G = window.__G, z = G.zone, it = z.act4.bellows[id], f = z.map.nearestFloor(it.x, it.z); G.player.x = f.x; G.player.z = f.z; it.use(); }, id);
+      await pg.waitForFunction(() => window.__G.zone.run?.ready, null, { timeout: 40000 }).catch(() => {});
+      const r = await pg.evaluate(() => { const R0 = window.__G.zone.run; return R0 && { ready: R0.ready, t: +R0.t.toFixed(1), brokka: R0.it && +Math.hypot(window.__G.actors.find((a) => a.key === 'brokka').x - R0.b.pump.x, window.__G.actors.find((a) => a.key === 'brokka').z - R0.b.pump.z).toFixed(1) }; });
+      if (id === 0) {
+        // the fire-pit eaten: the hold waits until it burns again
+        await pg.evaluate(() => window.__G.zone.run.it.snuff());
+        await pg.waitForTimeout(800);
+        r.out = await pg.evaluate(() => ({ paused: window.__G.zone.run.paused, out: window.__G.zone.run.out, ring: !document.getElementById('ring')?.hidden }));
+        await shot();
+        await pg.evaluate(() => { const G = window.__G, it = G.zone.run.it; G.player.act = null; it.use(); });
+        await pg.waitForTimeout(1800);
+        await pg.evaluate(() => { const it = window.__G.zone.run?.it; if (it && !it.lit) it.relight(); });
+        r.relit = await pg.evaluate(() => window.__G.zone.run?.it.lit);
+      }
+      await pg.waitForTimeout(2500);
+      r.waves = await pg.evaluate(() => window.__G.zone.run?.wi);
+      await pg.evaluate(() => { const R0 = window.__G.zone.run; if (R0) R0.t = Math.max(R0.t, 18.5); });
+      await pg.waitForFunction(() => !window.__G.zone.run, null, { timeout: 30000 }).catch(() => {});
+      await pg.waitForTimeout(4000);
+      r.after = await pg.evaluate(async (id) => { const G = window.__G, Fg = await import('/src/game/forge.js'), Bd = await import('/src/world/build.js'); return { done: !!G.hero.flags['bellows' + id], heat: G.hero.flags.heat, heatK: +Bd.HEAT.k.toFixed(2), period: Fg.flues()?.[0] && Fg.fluePeriod(Fg.flues()[0]), quest: G.hero.quest }; }, id);
+      runs.push(r);
+    }
+    await pg.waitForTimeout(5000); await shot();
+    return pg.evaluate((o) => { const G = window.__G, z = G.zone, P0 = z.L.plug; return { ...o, plug: G.hero.flags.plug, open: P0.cells.every(([x, zz]) => z.map.walkable(x + 0.5, zz + 0.5)), quest: G.hero.quest, elati: z.actors.some((a) => a.key === 'elati'), boss: z.bossSpot?.kind || null, says: window.__says.filter((k) => /brokka|voice|forge/.test(k)) }; }, { B, runs });
+  } },
+  // Karthax at the Anvil of the Crown: his arrival (the brow-stone, the shards, the slag), the gifts taken back, the three
+  // cages broken by his own Hammerfall, Isarn's light in the last fire, the beacon-keeper's answer, his death, the Unmaking
+  karthax: { q: 'auto=forge&sim=6&q=1&norender&lvl=27&cls=' + (process.env.CLS || 'ranger'), run: async (pg, shot) => {
+    await A4.listen(pg);
+    await pg.evaluate(() => { const G = window.__G, h = G.hero; window.__immortal = true; h.quest = 21; Object.assign(h.flags, { act3: true, fireTaken: true, ivar: true, bellows0: true, bellows1: true, bellows2: true, heat: 3, plug: true, gifts: { throne: 'taken', forge: 'refused' } }); window.__D.refreshStats(); window.__D.enterZone('forge', { fresh: true }); const z = G.zone, b = z.L.boss; for (const p of z.packs) p.spawned = true; const f = z.map.nearestFloor(b.x, b.z + 15); G.player.x = f.x; G.player.z = f.z; G.player.hp = G.player.hpMax = 99999; });
+    const armor0 = await pg.evaluate(() => window.__G.stats.armor);
+    await pg.waitForTimeout(2000);
+    // closer: Karthax pours himself out of the slag
+    await pg.evaluate(() => { const G = window.__G, b = G.zone.L.boss, f = G.zone.map.nearestFloor(b.x, b.z + 8); G.player.x = f.x; G.player.z = f.z; });
+    await pg.waitForFunction(() => !!window.__G.cine, null, { timeout: 30000 }).catch(() => {});
+    const arrive = await pg.evaluate(() => { const b = window.__G.zone.boss; return { hidden: b?.hidden, hold: b?.holdWake }; });
+    for (let i = 0; i < 40 && (await pg.evaluate(() => !!window.__G.cine)); i++) { await A4.enter(pg); await pg.waitForTimeout(400); if (i === 12) await shot(); }
+    await pg.waitForTimeout(2500); await shot();
+    arrive.after = await pg.evaluate(() => { const G = window.__G, b = G.zone.boss; return { hidden: b.hidden, hold: b.holdWake, awake: b.awake, y: b.y, browstone: G.hero.flags.browstone, lantern: G.zone.act4.npcs.isarn?.a.lantern }; });
+    const swing = async (n) => { for (let k = 0; k < n; k++) { await pg.evaluate(() => { const G = window.__G; G.player.res = 100; window.__D.IN.events.push({ t: 'skill', i: [0, 1, 0, 2, 0, 4][Math.floor(Math.random() * 6)], aim: null }); }); await pg.waitForTimeout(350); } };
+    await swing(12);
+    // past 65%: the cages, the gifts taken back
+    await pg.evaluate(() => window.__D.kill(window.__G.zone.boss));
+    await pg.waitForTimeout(4000); await shot();
+    const cages = await pg.evaluate((a0) => { const G = window.__G, b = G.zone.boss; return { phase: b.phase, statues: (b.cages || []).map((s) => s.keeper + ':' + s.blows), giftsTaken: G.hero.flags.giftsTaken, armor0: a0, armor: G.stats.armor }; }, armor0);
+    // stand by each statue until his Hammerfall breaks it
+    for (let k = 0; k < 24; k++) {
+      const left = await pg.evaluate(() => { const G = window.__G, b = G.zone.boss, s = (b.cages || []).find((x) => !x.dead); if (!s) return 0; const a = Math.atan2(s.x - b.x, s.z - b.z), f = G.zone.map.nearestFloor(s.x - Math.sin(a) * 1.6, s.z - Math.cos(a) * 1.6); G.player.x = f.x; G.player.z = f.z; return (b.cages || []).filter((x) => !x.dead).length; });
+      if (!left) break;
+      await pg.waitForTimeout(2500);
+    }
+    const broken = await pg.evaluate(() => { const b = window.__G.zone.boss; return { cages: b.cages ? b.cages.filter((s) => !s.dead).length : 0, phase: b.phase, hp: Math.round(b.hp / b.hpMax * 100) }; });
+    // the last fire: Isarn's lantern walks toward him
+    await pg.evaluate(() => { const b = window.__G.zone.boss; if (b.cages) for (const s of b.cages) { s.dead = true; s.hp = 0; } b.dazed = 0; });
+    await pg.waitForTimeout(6500); await shot();
+    const last = await pg.evaluate(() => { const G = window.__G, z = G.zone, b = z.boss, I = z.act4.npcs.isarn?.a, P0 = window.__act4.getLightPool('isarn'); return { phase: b.phase, light: window.__act4.heroLightR(), pool: P0 && [+P0.x.toFixed(1), +P0.z.toFixed(1), P0.r], isarn: I && +Math.hypot(I.x - b.x, I.z - b.z).toFixed(1), ghosts: window.__act4.lightPools().filter((p) => p.tag === 'ghost').length }; });
+    await pg.evaluate(() => { const b = window.__G.zone.boss; b.dazed = 0; b.hp = b.hpMax * 0.14; });
+    await pg.waitForTimeout(5000);
+    // his death, and the Unmaking
+    await pg.evaluate(() => { const b = window.__G.zone.boss; b.dazed = 0; b.hpFloor = 0; window.__D.kill(b); });
+    await pg.waitForFunction(() => !!window.__G.cine, null, { timeout: 20000 }).catch(() => {});
+    const words = [];
+    for (let i = 0; i < 160; i++) {
+      const w = await pg.evaluate(() => document.querySelector('#dialog:not([hidden]) .who')?.textContent);
+      if (w && words[words.length - 1] !== w) words.push(w);
+      await A4.enter(pg); await pg.waitForTimeout(400);
+      if (i === 30 || i === 60) await shot();
+      if (await pg.evaluate(() => window.__G.hero.flags.crownUnmade && !window.__G.cine)) break;
+    }
+    await pg.waitForTimeout(9000); await shot();
+    return pg.evaluate(async (o) => { const G = window.__G, z = G.zone, F = G.hero.flags, Fg = await import('/src/game/forge.js'), Bd = await import('/src/world/build.js'); return { ...o, words: o.words, karthax: F.karthax, crownUnmade: F.crownUnmade, quest: G.hero.quest, heat: Bd.HEAT.k, flues: !!Fg.flues(), echo: !!z.interact.find((i) => i.kind === 'echo'), npcs: z.actors.filter((a) => a.npc && !a.removed).map((a) => a.npc), mode: G.mode, says: window.__says.filter((k) => /karthax|isarn|cage|u\.|k\./.test(k)) }; }, { arrive, cages, broken, last, words });
+  } },
+  // q22: the Night Without Fires in Whitecliff (the beacon cold, no far fires, the torches), Elianthe, the new fire lit from
+  // Isarn's lantern, the far fires answering one by one (the fourth too), the act panel, the Unbound blessing, the staff
+  ending4: { q: 'auto=town&sim=2&q=1&norender&lvl=27&cls=' + (process.env.CLS || 'ranger'), run: async (pg, shot) => {
+    await A4.listen(pg);
+    await pg.evaluate(() => { const G = window.__G, h = G.hero; window.__immortal = true; h.quest = 22; h.act1 = h.act2 = h.act3 = 1; h.boons = ['ember', 'forge', 'amber']; Object.assign(h.flags, { act1: true, act2: true, act3: true, after3: true, fireTaken: true, ivar: true, plug: true, heat: 3, karthax: true, crownUnmade: true, giftsTaken: true, gifts: { throne: 'refused', forge: 'refused', unfading: 'refused' }, unbound: true }); window.__D.refreshStats(); window.__D.enterZone('town', { fresh: true }); });
+    await pg.waitForTimeout(1200);
+    const night = await pg.evaluate(() => { const G = window.__G, z = G.zone, R = window.__R; return { beaconOn: z.town.beaconOn, beaconLight: [...R.sources].some((s) => s.key === 'beacon'), far: z.town.far.filter(Boolean).length, torches: z.actors.filter((a) => a.npc === 'villager' && a.avatar?.held.R).length, isarn: z.actors.some((a) => a.npc === 'wayfarer'), beacon: !!z.interact.find((i) => i.kind === 'beacon') }; });
+    await pg.waitForTimeout(1500);
+    const elianthe = await pg.evaluate(() => document.querySelector('#dialog:not([hidden]) .txt')?.textContent);
+    await A4.dialogs(pg, 3); await shot();
+    const crit0 = await pg.evaluate(() => window.__G.stats.critC);
+    await pg.evaluate(() => { const G = window.__G, it = G.zone.interact.find((i) => i.kind === 'beacon'); G.player.x = it.x; G.player.z = it.z + 1; it.use(); });
+    await pg.waitForFunction(() => !!window.__G.cine, null, { timeout: 20000 });
+    const at = (t) => pg.waitForFunction((t) => !window.__G.cine || window.__G.cine.t >= t, t, { timeout: 180000 });
+    await at(3); await shot();
+    await at(9); await shot();
+    await pg.waitForFunction(() => !window.__G.cine, null, { timeout: 120000 });
+    await pg.waitForTimeout(1500); await shot();
+    const act = await pg.evaluate(() => ({ panel: window.__G.panel, done: document.querySelector('.act-h')?.textContent, sub: document.querySelector('#panel .pn-b p')?.textContent, next: [...document.querySelectorAll('#panel .muted')].map((e) => e.textContent).pop() }));
+    await pg.click('[data-a="close"]').catch(() => {}); await pg.waitForTimeout(3000); await shot();
+    const boon = await pg.evaluate(() => ({ panel: window.__G.panel, title: document.querySelector('.act-h')?.textContent, unbound: document.querySelector('.unbound-k')?.textContent, cards: [...document.querySelectorAll('[data-a^="boon:"]')].map((e) => e.dataset.a + ' ' + e.querySelector('p')?.textContent) }));
+    await pg.click('[data-a="boon:lantern"]').catch(() => {}); await pg.waitForTimeout(1500);
+    const lit = await pg.evaluate((c0) => { const G = window.__G, z = G.zone, R = window.__R; return { newFire: G.hero.flags.newFire, beaconLight: [...R.sources].some((s) => s.key === 'beacon'), far: z.town.far.filter(Boolean).length, torches: z.actors.filter((a) => a.npc === 'villager' && a.avatar?.held.R).length, staff: !!z.town.staff, crit0: +c0.toFixed(1), crit: +G.stats.critC.toFixed(1), boons: G.hero.boons, quest: G.hero.quest, act4: G.hero.act4, flag: G.hero.flags.act4 }; }, crit0);
+    // the staff: «Rest.», and the Shadow Gates
+    await pg.evaluate(() => { const G = window.__G, it = G.zone.interact.find((i) => i.kind === 'staff'); G.player.x = it.x; G.player.z = it.z + 1.5; it.use(); });
+    await pg.waitForTimeout(2500);
+    lit.staffPanel = await pg.evaluate(() => window.__G.panel);
+    return { night, elianthe, act, boon, lit, says: await pg.evaluate(() => window.__says) };
+  } },
+  // Act IV's cast lined up on the Field (no fighting); &ZONE=forge to see them in the Forge
+  cast4: { q: 'auto=' + (process.env.ZONE || 'ashfield') + '&sim=1&q=' + (process.env.Q || '1') + '&lvl=23&cls=warden', run: async (pg, shot) => {
+    await pg.evaluate(async () => {
+      const G = window.__G, gfx = await import('/src/gfx/gfx.js'); window.__immortal = true;
+      for (const a of G.actors) if (a.team === 'foe') a.dead = true;
+      for (const p of G.zone.packs) p.spawned = true;
+      G.zone.bossSpawned = true;
+      const ids = ['lampless', 'ashSpear', 'ashDwarf', 'ashBow', 'smokeEater', 'ashwing', 'emberTick', 'ashsmith', 'hammerhorn', 'ivar', 'karthax'];
+      const c = G.zone.L.spots.camp || G.zone.L.spots.waypoint;
+      ids.forEach((id, i) => { const f = G.zone.map.nearestFloor(c.x - 12 + i * 2.4, c.z - 3); const m = window.__D.spawnMonster(id, f.x, f.z, { surface: true, free: true, dormant: false }); m.dormant = true; m.disguised = false; m.under = false; m.y = 0; m.airborne = false; m.aggro = false; if (m.avatar) m.avatar.group.visible = true; m.rot = 0; G.actors.push(m); });
+      const h = G.zone.map.nearestFloor(c.x, c.z + 6); G.player.x = h.x; G.player.z = h.z;
+      gfx.R.cam.dist = 25; gfx.updateCamera(0, c.x, c.z + 1, true);
+    });
+    await pg.waitForTimeout(2500); await shot();
+    return pg.evaluate(() => window.__G.actors.filter((a) => a.team === 'foe' && !a.dead).map((a) => a.kind + ':' + (a.avatar?.modelName || '-')));
+  } },
+  // after the Unmaking: the Last Lamp raises an echo of Ivar, the cold Anvil one of Karthax; fought again, no story touched
+  echo4: { q: 'auto=ashfield&sim=6&q=1&norender&lvl=27&cls=' + (process.env.CLS || 'warden'), run: async (pg, shot) => {
+    await A4.listen(pg);
+    const out = {};
+    for (const zid of ['ashfield', 'forge']) {
+      await pg.evaluate((zid) => { const G = window.__G, h = G.hero; window.__immortal = true; h.quest = 23; h.act4 = 1; Object.assign(h.flags, { act3: true, act4: true, fireTaken: true, ivar: true, bellows0: true, bellows1: true, bellows2: true, heat: 3, plug: true, karthax: true, crownUnmade: true, newFire: true, giftsTaken: true }); window.__D.enterZone(zid, { fresh: true }); G.player.hp = G.player.hpMax = 99999; for (const p of G.zone.packs) p.spawned = true; }, zid);
+      await pg.waitForTimeout(1500);
+      const before = await pg.evaluate(() => { const G = window.__G, z = G.zone, it = z.interact.find((i) => i.kind === 'echo'); if (!it) return { echo: false }; const f = z.map.nearestFloor(it.x, it.z + 2); G.player.x = f.x; G.player.z = f.z; it.use(); it.use(); return { echo: it.boss, prompt: window.__D.t(it.prompt), foes: z.actors.filter((a) => a.boss).length, braziers: z.act4.braziers?.filter((b) => b.lit).length }; });
+      await pg.waitForTimeout(3500); await shot();
+      const spawned = await pg.evaluate(() => { const G = window.__G, b = G.zone.boss; return b && { kind: b.kind, echo: b.echo, awake: b.awake, bar: G.bossActor === b, d: +Math.hypot(b.x - G.player.x, b.z - G.player.z).toFixed(1), hold: !!b.holdWake }; });
+      for (let k = 0; k < 18; k++) {
+        const st = await pg.evaluate(() => { const G = window.__G, b = G.zone.boss; if (!b || b.dead) return 'dead'; b.dazed = 0; if (b.cages) { for (const s of b.cages) { s.dead = true; s.hp = 0; } return 'cages'; } b.hpFloor = 0; window.__D.kill(b); return b.dead ? 'dead' : 'hit'; });
+        if (st === 'dead') break;
+        await pg.waitForTimeout(1200);
+      }
+      await pg.waitForTimeout(4000); await shot();
+      out[zid] = await pg.evaluate((o) => { const G = window.__G, z = G.zone, it = z.interact.find((i) => i.kind === 'echo'); return { ...o, dead: z.boss?.dead, bar: !!G.bossActor, quest: G.hero.quest, crownUnmade: G.hero.flags.crownUnmade, ivar: G.hero.flags.ivar, used: it?.used, mode: G.mode, dialog: !document.querySelector('#dialog')?.hidden, loot: G.pickups.filter((p) => p.item).length, toast: [...document.querySelectorAll('.toast')].map((e) => e.textContent).pop() }; }, { before, spawned });
+    }
+    return out;
   } },
   title: { q: 'sim=1&q=' + (process.env.Q || '1'), run: async (pg, shot) => {
     await pg.waitForTimeout(2500); await shot();

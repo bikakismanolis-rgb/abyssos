@@ -1,6 +1,6 @@
 // Modal panels: inventory, skills, shops, stash, waypoints, gates, pause, settings, credits, death, act end, map.
 import { G } from '../game/state.js';
-import { CLASSES, SKILLS, DIFFS, SLOTS, SKILL_MAX_RANK, BASES, DODGE, BOONS } from '../game/data.js';
+import { CLASSES, SKILLS, DIFFS, SLOTS, SKILL_MAX_RANK, BASES, DODGE, BOONS, GIFTS } from '../game/data.js';
 import { computeStats, skillRank, skillUnlocked, refreshStats } from '../game/stats.js';
 import { itemName, statLines, sellValue, equipSlots, usable, withItem, bestSlotFor, itemClass } from '../game/items.js';
 import { equip, unequip, sell, sellJunk, toStash, fromStash, gamble, gambleCost, reforge, reforgeCost } from '../game/inventory.js';
@@ -16,6 +16,11 @@ import { CREDITS, MIT_ROCKETBOX } from './credits.js';
 const $ = (id) => document.getElementById(id);
 const P = { name: null, sel: null, tab: 0, ctx: null, delSure: null };
 const ICON_OF = { sword: 'sword', axe: 'sword', mace: 'sword', crossbow: 'bolt', staff: 'flame', shield: 'shield', quiver: 'bolt', orb: 'orb', helm: 'skull', chest: 'shield', gloves: 'hand', boots: 'roll', amulet: 'star', ring: 'orb' };
+// the Act IV blessing reads as it counts: half again for a hero the crown never held (Unbound)
+const unboundBoon = (id) => !!G.hero?.flags?.unbound && BOONS[4].some((b) => b.id === id);
+const boonDesc = (id) => t('boon.' + id + (unboundBoon(id) ? '.du' : '.d'));
+// the Crown's Offers: each altar's gift and the keeper whose shard offers it
+const ALTAR_ICON = { throne: 'shield', forge: 'flame', unfading: 'potion' };
 
 export function initPanels() {
   const p = document.createElement('div'); p.id = 'panel'; p.hidden = true; document.getElementById('app').appendChild(p);
@@ -97,7 +102,7 @@ const R = {
       <div><span>${t('main.' + C.main)}</span><b>${fmt(s.main)}</b></div><div><span>${t('stat.reduction')}</span><b>${red}%</b></div>
       <div><span>${t('stat.crit')}</span><b>${s.critC.toFixed(1)}% · ${fmt(s.critD)}%</b></div><div><span>${t('stat.speed')}</span><b>${s.aps.toFixed(2)}</b></div>
       <div><span>${t('stat.kills')}</span><b>${fmt(h.stats.kills)}</b></div><div><span>${t('diff.' + DIFFS[h.diff].id)}</span><b style="color:${DIFFS[h.diff].color}">●</b></div>
-      ${(h.boons || []).filter(Boolean).map((id) => `<div style="grid-column:1/-1"><span>${ICON.flame} ${t('boon.' + id)}</span><b style="font-size:12px;color:var(--gold2)">${t('boon.' + id + '.d')}</b></div>`).join('')}</div>`;
+      ${(h.boons || []).filter(Boolean).map((id) => `<div style="grid-column:1/-1"><span>${ICON.flame} ${t('boon.' + id)}</span><b style="font-size:12px;color:var(--gold2)">${boonDesc(id)}</b></div>`).join('')}</div>`;
     let tp = '';
     if (P.sel) {
       const [w, k] = P.sel.split(':');
@@ -154,7 +159,11 @@ const R = {
   },
   waypoints() {
     const h = G.hero, inTown = G.zone?.id === 'town';
-    const list = ['town', 'forest', 'crypt', 'pass', 'halls', 'weep', 'heart'].filter((z) => h.wps.includes(z)).map((z) => `<button class="wp ${G.zone?.id === z ? 'here' : ''}" data-a="wp:${z}">${ICON.portal}<b>${t('zone.' + z)}</b><span class="muted">${t('zone.' + z + '.s')}</span></button>`).join('');
+    // Act IV's Field has a second waypoint, at Elati's camp at the mouth of the Lantern Graves ('ashfield@2')
+    const list = ['town', 'forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'ashfield@2', 'forge'].filter((z) => h.wps.includes(z)).map((w) => {
+      const z = w.split('@')[0], sub = w.endsWith('@2') ? t('wp.graves') : t('zone.' + z + '.s');
+      return `<button class="wp ${G.zone?.id === z ? 'here' : ''}" data-a="wp:${w}">${ICON.portal}<b>${t('zone.' + z)}</b><span class="muted">${sub}</span></button>`;
+    }).join('');
     const gates = h.quest >= 5 ? `<button class="wp" data-a="gates">${ICON.gate}<b>${t('gate.title')}</b><span class="muted">${t('gate.best', h.gateBest)}</span></button>` : '';
     const diffs = DIFFS.map((d, i) => { const lock = !diffUnlocked(i); return `<button class="chip ${h.diff === i ? 'on' : ''} ${lock ? 'lock' : ''}" data-a="diff:${i}" style="${h.diff === i ? 'color:' + d.color : ''}">${t('diff.' + d.id)}</button>`; }).join('');
     return `<div class="pn narrow">${head(t('wp.title'), false)}<div class="pn-b"><div style="display:grid;gap:6px">${list}${gates}</div><div class="logo-rule"></div><b style="font-family:var(--display);color:var(--gold)">${t('pick.diff')}</b><div class="chips" style="justify-content:flex-start;margin-top:6px">${diffs}</div><p class="muted">${inTown ? t('diff.' + DIFFS[h.diff].id + '.d') : t('wp.diffNote')}</p></div></div>`;
@@ -210,9 +219,18 @@ const R = {
       <p class="muted">${t(k + '.next')}</p><button class="btn" data-a="close">${t('act.cont')}</button></div></div>`;
   },
   boon() {
-    const act = P.ctx?.act || 1;
-    const cards = BOONS[act].map((b) => `<button class="pcard boon" data-a="boon:${b.id}"><div class="bi">${ICON[b.icon]}</div><h3>${t('boon.' + b.id)}</h3><p>${t('boon.' + b.id + '.d')}</p><p class="bq">${t('boon.' + b.id + '.q')}</p></button>`).join('');
-    return `<div class="pn" style="text-align:center"><div class="pn-b" style="padding:20px"><div class="act-h">${t('boon.h' + act)}</div><p style="font-style:italic;color:var(--ink2)">${t('boon.sub')}</p><div class="logo-rule"></div><div class="boons">${cards}</div></div></div>`;
+    const act = P.ctx?.act || 1, ub = act === 4 && !!G.hero.flags.unbound;
+    const cards = BOONS[act].map((b) => `<button class="pcard boon" data-a="boon:${b.id}"><div class="bi">${ICON[b.icon]}</div><h3>${t('boon.' + b.id)}</h3><p>${boonDesc(b.id)}</p><p class="bq">${t('boon.' + b.id + '.q')}</p></button>`).join('');
+    // Unbound: Isarn's words, and what they are worth
+    const note = ub ? `<p class="unbound">${t('d.isarn.unbound')}</p><p class="unbound-k">${t(G.hero.cls === 'ranger' ? 'boon.unbound.f' : 'boon.unbound')}</p>` : '';
+    return `<div class="pn" style="text-align:center"><div class="pn-b" style="padding:20px"><div class="act-h">${t('boon.h' + act)}</div><p style="font-style:italic;color:var(--ink2)">${t('boon.sub')}</p>${note}<div class="logo-rule"></div><div class="boons">${cards}</div></div></div>`;
+  },
+  // an Altar of the Wish: a shard offers its gift, with the cage that comes with it; or let it sleep
+  altar() {
+    const id = GIFTS[P.ctx?.id] ? P.ctx.id : 'throne';
+    const take = `<button class="pcard boon altar-take" data-a="gift:taken"><div class="bi">${ICON[ALTAR_ICON[id]] || ICON.star}</div><h3>${t('altar.accept')}: ${t('gift.' + id)}</h3><p><b class="r-2">${t('altar.gift')}</b> ${t('gift.' + id + '.d')}</p><p><b class="cage">${t('altar.cage')}</b> ${t('gift.' + id + '.c')}</p></button>`;
+    const refuse = `<button class="pcard boon altar-refuse" data-a="gift:refused"><div class="bi">${ICON.close}</div><h3>${t('altar.refuse')}</h3><p class="bq">${t('altar.refuse.d')}</p></button>`;
+    return `<div class="pn narrow" style="text-align:center"><div class="pn-b" style="padding:20px"><div class="act-h">${t('altar.title')}</div><p style="font-style:italic;color:var(--ink2)">${t('altar.sub')}</p><div class="logo-rule"></div><div class="boons">${take}${refuse}</div></div></div>`;
   },
   map() { return `<div class="pn" style="height:100%">${head(t('zone.' + G.zone.id), false)}<div class="pn-b" style="display:flex;align-items:center;justify-content:center"><canvas id="bigmap" width="800" height="800" style="max-width:100%;max-height:100%;aspect-ratio:1"></canvas></div></div>`; }
 };
@@ -247,7 +265,7 @@ function onClick(e) {
     case 'st': fromStash(+x); break;
     case 'tostash': toStash(+x); break;
     case 'rank': { h.skills[x] = Math.max(1, (h.skills[x] || 1)) + 1; h.points--; refreshStats(); Audio.sfx('equip'); break; }
-    case 'wp': close(); if (x !== G.zone.id) emit('travel', x, { at: 'waypoint' }); return;
+    case 'wp': { close(); const [zid, n] = x.split('@'); if (zid !== G.zone.id || n) emit('travel', zid, { at: n ? 'waypoint' + n : 'waypoint' }); return; }
     case 'gates': open('gates'); return;
     case 'tier': P.tier = +x; break;
     case 'gateGo': close(); emit('startGate', P.tier); return;
@@ -268,6 +286,7 @@ function onClick(e) {
     case 'vib': G.settings.vibrate = x === '1'; break;
     case 'num': G.settings.numbers = x === '1'; break;
     case 'boon': { const act = P.ctx?.act || 1; h.boons ||= []; h.boons[act - 1] = x; refreshStats(); writeSave(); close(); emit('boonTaken', x); return; }
+    case 'gift': { const id = P.ctx?.id; close(); if (id) emit('altarChoice', id, x); return; }
     case 'respawn': close(); emit('respawn', false); return;
     case 'respawnTown': close(); emit('respawn', true); return;
   }

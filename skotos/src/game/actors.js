@@ -8,7 +8,8 @@ import { Avatar } from '../gfx/anim.js';
 import { hasPerson, personModel } from '../gfx/people.js';
 import { hasCreature, creatureModel } from '../gfx/creatures.js';
 import { tex } from '../gfx/textures.js';
-import { MONSTERS, DIFFS, monsterHP, monsterDmg, AFFIXES, CLASSES, PACK_DORMANT } from './data.js';
+import { MONSTERS, DIFFS, monsterHP, monsterDmg, AFFIXES, CLASSES, PACK_DORMANT, PACK_LINE } from './data.js';
+import * as B from '../world/build.js';
 import { G, uid } from './state.js';
 import { rand, clamp } from '../core/util.js';
 import { list, t } from '../i18n/i18n.js';
@@ -46,12 +47,26 @@ const STAND_IN = {
   magmaHound: 'warg', caveBat: 'spiderling', deepworm: 'spider', stoneborn: 'villager1', stonebornArb: 'villager0', runepriest: 'wayfarer', brokka: 'smith', stonewarden: 'troll', moltenKing: 'ash',
   // Act III: the creatures (tools/creatures/act3) and the Evergreen (grove.glb, loaded with the woods)
   rootling: 'spiderling', amberBear: 'troll', silverhorn: 'warg', amberMoth: 'caveBat', rootwarden: 'troll',
-  hollowed: 'skeleton', rootsworn: 'warden', rootswornArcher: 'ranger', mourner: 'healer', amaranthe: 'healer', elati: 'ranger', linden: 'healer'
+  hollowed: 'skeleton', rootsworn: 'warden', rootswornArcher: 'ranger', mourner: 'healer', amaranthe: 'healer', elati: 'ranger', linden: 'healer',
+  // Act IV: the creatures (tools/creatures/act4) and the ash people (ash.glb); a list is tried in order
+  ashwing: ['caveBat', 'warg'], smokeEater: 'spider', emberTick: 'spiderling', hammerhorn: 'troll', karthax: ['moltenKing', 'troll'],
+  lampless: 'wayfarer', ivar: 'wayfarer', arna: 'wayfarer', arnaOld: 'wayfarer', isarnBoy: 'wayfarer',
+  ashSpear: 'warden', ashDwarf: 'stoneborn', ashBow: 'ranger', ashsmith: 'villager1'
 };
+// a stand-in drawn at another size than the model it stands for (model>stand-in)
+const STAND_SCALE = { 'ashwing>caveBat': 2.6, 'smokeEater>spider': 0.75, 'isarnBoy>wayfarer': 0.62 };
+const ready = (m) => hasPerson(m) || hasCreature(m) || !!BUILD[m];
+export function standIn(model) {
+  for (let i = 0; i < 4 && !ready(model) && STAND_IN[model]; i++) { const s = STAND_IN[model]; model = Array.isArray(s) ? s.find(ready) || s[s.length - 1] : s; }
+  return model;
+}
 export function makeAvatar(model, o = {}) {
-  for (let i = 0; i < 3 && !hasPerson(model) && !hasCreature(model) && !BUILD[model] && STAND_IN[model]; i++) model = STAND_IN[model];
+  const want = model;
+  model = standIn(model);
   const m = hasPerson(model) ? personModel(model) : hasCreature(model) ? creatureModel(model) : instance(model);
-  const av = new Avatar(m, { style: o.style || STYLE[model] || 'none', animSet: o.animSet, hunch: o.hunch, scale: o.scale, idle: o.idle });
+  const sc = (o.scale || 1) * (STAND_SCALE[want + '>' + model] || 1);
+  const av = new Avatar(m, { style: o.style || STYLE[model] || 'none', animSet: o.animSet, hunch: o.hunch, scale: sc, idle: o.idle });
+  av.modelName = model; av.standIn = model !== want;
   if (o.weapon) av.hold('R', o.weapon, o.look || {});
   if (o.offhand) av.hold('L', o.offhand, o.offLook || {});
   return av;
@@ -111,6 +126,8 @@ export class Actor {
     this.removed = true;
     if (this.avatar) { this.avatar.dispose(); this.avatar = null; }
     if (this.trail) { this.trail.dispose(); this.trail = null; }
+    // what it kept on the ground: a rootling's mound, an Ash-Fallen's heap, a stoker's chain
+    if (this.mesh) { this.mesh.parent?.remove(this.mesh); this.mesh = null; }
     if (this.light) { this.light = null; }
   }
 }
@@ -137,9 +154,12 @@ export function spawnMonster(id, x, z, o = {}) {
   const weapon = def.weapon && (id === 'skeleton' ? 'sword' : def.weapon);
   const wlook = def.wlook || (id === 'skeleton' ? { blade: 0x6a6052, len: 0.8 } : id === 'barrowLord' ? { blade: 0x9ad0ff, glow: 0.7 } : id === 'goblinArcher' ? { wood: 0x3a2a1a }
     : id === 'moltenKing' ? { head: 0x2a2220, glow: 0.9, rune: 0xff6a10 } : id === 'deadDwarf' ? { blade: 0x5a5248 } : id === 'runepriest' ? { gem: 0xff8a30, wood: 0x3a3028 } : {});
-  const av = makeAvatar(def.model, { style, animSet: def.ai === 'melee' && (id === 'skeleton') ? 'undead' : undefined, hunch: def.hunch, weapon, look: wlook, scale });
+  // a keeper's statue wears the keeper (o.model, o.scale: Karthax's cages)
+  if (o.scale) scale = o.scale;
+  const av = makeAvatar(o.model || def.model, { style, animSet: def.animSet || (def.ai === 'melee' && (id === 'skeleton') ? 'undead' : undefined), hunch: def.hunch, weapon, look: wlook, scale });
   if (id === 'skeleton' && Math.random() < 0.5) av.hold('L', 'shield', { face: 0x4a3a2a, rim: 0x5a5248, emblem: 0x3a3028, r: 0.26 });
   if (id === 'stoneborn') av.hold('L', 'shield', { face: 0x3a2a24, rim: 0x8a6a3a, emblem: 0xb07a30, r: 0.3 });
+  if (def.shield) av.hold('L', 'shield', def.shield);
   const a = new Actor({ x, z, team: 'foe', kind: id, def, radius: def.radius * scale, speed: def.speed * (o.elite ? 1.05 : 1), hp, dmg, level: lvl, avatar: av, elite: o.elite, affixes: o.affixes, boss: def.boss });
   a.scale = scale;
   // the tint an actor returns to after a freeze or a disguise
@@ -169,18 +189,129 @@ function actSpawn(id, def, a, av, o) {
     a.under = true; a.y = -1; av.group.visible = false;
     a.mesh = M.moundMesh(); a.mesh.position.set(a.x, 0, a.z); a.mesh.rotation.y = Math.random() * 6.28; R.scene.add(a.mesh);
   }
-  // the Hollowed of the hollows and the sleepers' cocoons pass for dead wood until the hero is close
+  // the dead that wait: the Hollowed pass for dead wood (a dark tint), the Ash-Fallen lie under the ash (a pose and a mound)
   const tag = o.packId != null && G.zone?.packs?.find((p) => p.id === o.packId)?.tag;
-  if (def.ai === 'hollow' && (o.dormant ?? (tag && PACK_DORMANT[tag]))) {
+  if (def.wake && (o.dormant ?? (tag && PACK_DORMANT[tag]))) {
     a.dormant = true; a.disguised = true;
-    av.setTint(0x2a2016, 0.85);
+    if (def.wake.pose) {
+      a.pose = def.wake.pose; av.play(a.pose, 1);
+      a.mesh = new THREE.Mesh(staticGeo(M.ashMoundParts()), moundMat()); a.mesh.position.set(a.x, 0, a.z); a.mesh.rotation.y = Math.random() * 6.28; R.scene.add(a.mesh);
+    } else av.setTint(0x2a2016, 0.85);
   }
+  if (tag && PACK_LINE[tag]) battleLine(a, o.packId);
   if (id === 'amaranthe') { amberCrown(av); shardGlow(a, av); a.hpFloor = a.hpMax * 0.649; a.dazeClip = 'kneel'; }
   if (id === 'mourner') veil(av);
+  act4Spawn(id, def, a, av, o);
+}
+// ---------- Act IV: what the ash people and the Forge's creatures wear ----------
+// (a tint above 1 drains the colour first: people.js)
+const TINT_IN = { lampless: [0x8a96a8, 1.6], ivar: [0x9aa0aa, 1.55], ashSpear: [0x8a8680, 1.7], ashDwarf: [0x9a8a70, 1.6], ashBow: [0x8a9078, 1.6], ashsmith: [0x6a5444, 1.4], smokeEater: [0x4a4440, 1.6], emberTick: [0xff6a20, 0.3], hammerhorn: [0x4a4440, 1.6], karthax: [0x4a4a52, 2.0], ashwing: [0xd8d0c0, 1.5] };
+function act4Spawn(id, def, a, av, o) {
+  const tint = (c, k) => { av.setTint(c, k); a.baseTint = c; a.baseTintAmt = k; };
+  // stand-ins wear the act's colours (ash-grey dead, a soot-black thrall, Karthax in black iron)
+  if (av.standIn && TINT_IN[id] && !o.elite) {
+    tint(...TINT_IN[id]);
+    // a Molten King standing in for Karthax: black iron with the fire banked low in its seams
+    if (id === 'karthax') for (const m of av.model.mats || []) if (m.emissive) m.emissive.multiplyScalar(0.12);
+  }
+  if (id === 'lampless') a.cone = lanternCone(av, 8, 0.7);
+  if (id === 'ashsmith') wear(av, 'head', M.maskParts(), 0.42, 0.0);
+  if (id === 'hammerhorn') shackle(a, av, o);
+  // a boss phase no single burst may skip (Ivar's dark, Karthax's cages)
+  if (id === 'ivar') a.hpFloor = a.hpMax * 0.599;
+  if (id === 'karthax') { a.crown = ashCrown(av); a.dazeClip = 'kneel'; a.hpFloor = a.hpMax * 0.649; }
+  if (id === 'smokeEater') a.throat = (av.model.mats || []).filter((m) => m.emissive && (/throat|ember|glow/i.test(m.name) || m.emissiveMap));
+  if (id === 'keeperStatue') keeper(a, av, o);
+}
+// something worn on a bone, upright in the rest pose: at k of the way from the bone to the top of the head (heads), or at y
+function wear(av, bone, parts, k, z = 0, y = 0) {
+  if (!av.bones[bone] || !av.heldMat) return null;
+  const mesh = new THREE.Mesh(staticGeo(parts), av.heldMat);
+  const at = attachUpright(av, bone, mesh, 0, 0, 0);
+  if (!at) return null;
+  attachUpright(av, bone, mesh, 0, bone === 'head' ? headTop(av, at.y) * k : y, z);
+  av.held[bone + 'Worn'] = { mesh };
+  return mesh;
+}
+let moundM = null;
+const moundMat = () => (moundM ||= makeCharMat({ rim: 0x6a6460, rimI: 0.15 }));
+// a Lampless's lantern throws a pale cone of detection: the world's (act4Prop 'cone') or a fan of light on the ground
+const CONE_VS = 'varying vec2 vUv; varying vec3 vP; void main(){ vUv = uv; vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }';
+const CONE_FS = `varying vec2 vUv; varying vec3 vP; uniform float uF; uniform float uA; uniform float uArc;
+void main(){ float d = length(vUv * 2.0 - 1.0); if (d > 1.0) discard;
+  float side = 1.0 - smoothstep(0.0, 0.05, uArc - abs(atan(vP.x, vP.z)));
+  float a = (0.006 + 0.03 * pow(1.0 - d, 1.5) + 0.06 * side * (1.0 - d * 0.7) + 0.035 * smoothstep(0.93, 1.0, d)) * (1.0 - smoothstep(0.97, 1.0, d)) * uA;
+  vec3 c = mix(vec3(0.6, 0.72, 1.0), vec3(1.0), uF);
+  gl_FragColor = vec4(c * a * (1.0 + uF * 4.0), 1.0); }`;
+export function lanternCone(av, len, arc) {
+  let m = null;
+  try { m = B.act4Prop?.('cone', { arc }); } catch (e) { m = null; }
+  if (!m?.children.length) {
+    const g = new THREE.CircleGeometry(1, 20, -Math.PI / 2 - arc, arc * 2); g.rotateX(-Math.PI / 2);
+    m = new THREE.Mesh(g, new THREE.ShaderMaterial({ uniforms: { uF: { value: 0 }, uA: { value: 1 }, uArc: { value: arc } }, vertexShader: CONE_VS, fragmentShader: CONE_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    m.renderOrder = 2; m.frustumCulled = false;
+    m.userData.flash = (k) => { m.material.uniforms.uF.value = k; };
+    m.userData.fade = (k) => { m.material.uniforms.uA.value = k; };
+    m.userData.dispose = () => { g.dispose(); m.material.dispose(); };
+  }
+  // flat on the ground: stretched only along it
+  if (!m.children.length) m.position.y = 0.06;
+  m.scale.set(len / (av.scale || 1), 1 / (av.scale || 1), len / (av.scale || 1));
+  av.group.add(m);
+  return m;
+}
+// the Hammerhorn's shackles; a stoker by a bellows station is chained to its post (9 m), drawn as links (ai.js chainTick)
+function shackle(a, av, o) {
+  wear(av, 'handR', M.cuffParts(), 0, 0);
+  wear(av, 'handL', M.cuffParts(), 0, 0);
+  wear(av, 'neck', M.collarParts(), 0, 0.02, 0.02);
+  const S = G.zone?.L?.spots?.stations || [];
+  let post = o.post || null;
+  if (!post && !o.free) for (const s of S) if (Math.hypot(s.x - a.x, s.z - a.z) < 6 && !G.actors.some((b) => b.post === s && !b.dead)) { post = s; break; }
+  if (!post) return;
+  a.post = post; a.chainLen = a.def.chain || 9;
+  a.home = { x: post.x + Math.sin(a.rot) * 1.4, z: post.z + Math.cos(a.rot) * 1.4 };
+  const n = 26, links = new THREE.InstancedMesh(linkG ||= M.linkGeo(), linkM ||= makeCharMat({ rim: 0x5a5048, rimI: 0.2 }), n);
+  links.frustumCulled = false; links.castShadow = false;
+  a.mesh = links; a.chainN = n; R.scene.add(links);
+}
+let linkG = null, linkM = null;
+// the Ash Crown on Karthax's brow: the world's (act4Prop 'crown', fitted to the head) or iron prongs with four ember sockets
+function ashCrown(av) {
+  let m = null;
+  try { m = B.act4Prop?.('crown'); } catch (e) { m = null; }
+  if (m?.children.length && av.bones.head) {
+    const box = new THREE.Box3().setFromObject(m), w = Math.max(box.max.x - box.min.x, box.max.z - box.min.z) || 1;
+    const g = new THREE.Group(); m.scale.multiplyScalar(0.27 / w); m.position.y -= box.min.y * (0.27 / w); g.add(m);
+    const at = attachUpright(av, 'head', g, 0, 0, 0);
+    if (at) { attachUpright(av, 'head', g, 0, headTop(av, at.y) - 0.06, 0); m.userData.setSockets?.(4); return m; }
+  }
+  return wear(av, 'head', M.ashCrownParts(), 0.8, 0, 0);
+}
+// a keeper's statue (o.model): frozen in a pose and grey with ash; the Hammerfall breaks it (ai.js)
+function keeper(a, av, o) {
+  const src = MONSTERS[o.model] || {};
+  if (src.weapon) av.hold('R', src.weapon, src.wlook || (o.model === 'moltenKing' ? { head: 0x2a2220, glow: 0 } : {}));
+  a.statue = true; a.statueTint = 0xa8a49c; a.baseTint = 0xa8a49c; a.baseTintAmt = 2.75;
+  av.setTint(a.baseTint, a.baseTintAmt); av.setRim(0xb0a898, 0.25);
+  // ash has no fire in it: the Molten King's veins go dark
+  for (const m of av.model.mats || []) if (m.emissive) { m.emissive.setRGB(0, 0, 0); m.emissiveMap = null; m.needsUpdate = true; }
+  av.play(o.pose || 'castUp', 1); av.update(o.poseT ?? 0.7, { speed: 0 });
+  a.keeper = o.keeper || null;
+}
+// the Ash-Fallen still hold their line: pack-mates in 1.5 m slots either side of the first, facing as it faces
+function battleLine(a, packId) {
+  const lead = G.actors.find((b) => b.packId === packId && b !== a && !b.dead);
+  const pl = G.player;
+  if (!lead) { if (pl) a.rot = Math.atan2(pl.x - a.x, pl.z - a.z); return; }
+  const i = G.actors.filter((b) => b.packId === packId && b !== a).length, side = i % 2 ? 1 : -1, k = Math.ceil(i / 2) * 1.5;
+  const px = Math.cos(lead.rot), pz = -Math.sin(lead.rot), x = lead.x + px * k * side, z = lead.z + pz * k * side;
+  a.rot = lead.rot;
+  if (G.zone?.map?.walkable(x, z)) { a.x = x; a.z = z; a.home = { x, z }; if (a.mesh) a.mesh.position.set(x, 0, z); }
 }
 // attach obj to a bone so that it stands upright in the rest pose, offset (in metres, character space) from the bone
 const _ma = new THREE.Matrix4(), _pa = new THREE.Vector3(), _qa = new THREE.Quaternion(), _sa = new THREE.Vector3();
-function attachUpright(av, boneName, obj, ox, oy, oz) {
+export function attachUpright(av, boneName, obj, ox, oy, oz) {
   const bone = av.bones[boneName]; if (!bone) return null;
   const root = av.model.mesh;
   root.updateMatrixWorld(true);
@@ -237,20 +368,32 @@ export function rollAffixes(n) { const pool = AFFIXES.slice(); rand.shuffle(pool
 
 // ---------- NPCs ----------
 export function spawnNpc(kind, x, z, rot) {
-  const model = kind === 'villager' ? 'villager' + (Math.floor(x + z) % 3) : kind;
+  const model = kind === 'villager' ? 'villager' + (Math.floor(x + z) % 3) : kind === 'ivarGhost' ? 'ivar' : kind === 'wayfarerGhost' ? 'lampless' : kind;
   const vi = Math.floor(x + z) % 3;
   const o = kind === 'wayfarer' ? { style: 'staff', weapon: 'lanternStaff', animSet: 'npc' } : kind === 'smith' ? { style: 'none', weapon: 'hammer', animSet: 'npc', idle: 'hammer' }
     : kind === 'brokka' ? { style: 'none', weapon: 'hammer', animSet: 'npc', idle: 'fold' }
     // Act III: Elati, the last Evergreen scout, bow in hand; Old Linden, half rooted, kneeling in her own roots
     : kind === 'elati' ? { style: 'none', weapon: 'bow', look: { blade: 0x4a3a24 }, animSet: 'npc', idle: 'fold' }
     : kind === 'linden' ? { style: 'none', animSet: 'npc', idle: 'kneel' }
-    : kind === 'healer' ? { style: 'none', animSet: 'npc', idle: 'talk' } : { style: 'none', animSet: 'npc', idle: ['fold', 'talk', 'Idle_Loop'][vi] };
+    : kind === 'healer' ? { style: 'none', animSet: 'npc', idle: 'talk' }
+    // Act IV: Arna with the first lantern (young, then old), Isarn as a boy, and the dead who walk with the fire
+    : kind === 'arna' ? { style: 'staff', weapon: 'lanternStaff', animSet: 'npc' } : kind === 'arnaOld' ? { style: 'staff', weapon: 'lanternStaff', animSet: 'npc', idle: 'lantern' }
+    : kind === 'isarnBoy' ? { style: 'none', animSet: 'npc', idle: 'Idle_Loop' }
+    : kind === 'ivarGhost' || kind === 'wayfarerGhost' ? { style: 'staff', weapon: 'lanternStaff', look: { glow: kind === 'ivarGhost' ? 2.2 : 0.4, lamp: kind === 'ivarGhost' ? 0xffc070 : 0xc8d8f0 }, animSet: 'npc', idle: 'lantern' }
+    : { style: 'none', animSet: 'npc', idle: ['fold', 'talk', 'Idle_Loop'][vi] };
   const av = makeAvatar(model, o);
   const a = new Actor({ x, z, team: 'npc', kind, radius: 0.5, speed: 0, hp: 1e9, avatar: av, rot });
   a.npc = kind;
   // a rooted elder does not turn to watch you, and barely stirs
   if (kind === 'linden') { a.still = true; a.animRate = 0.25; }
+  if (kind === 'ivarGhost' || kind === 'wayfarerGhost') ghostly(av);
+  else if (av.standIn && kind === 'isarnBoy') av.setTint(0xd8c8b0, 0.2);
   return a;
+}
+// the dead of the Wayfarers, seen for a moment: pale, see-through, a cold rim
+export function ghostly(av, opacity = 0.45) {
+  for (const m of av.model.mats || [av.mat]) { m.transparent = true; m.opacity = opacity; m.depthWrite = false; }
+  av.setTint(0xd8e4ff, 0.55); av.setRim(0xe0ecff, 1.8);
 }
 
 // ---------- the hero ----------
@@ -302,6 +445,6 @@ export function near(x, z, r, out = []) {
   return out;
 }
 // what can be hit: not dead, not underground, not hidden (an archer in the trees, the Hart gone into mist)
-export const foes = (x, z, r, out) => near(x, z, r, out).filter((a) => !a.dead && a.team === 'foe' && !a.under && !a.hidden);
+export const foes = (x, z, r, out) => near(x, z, r, out).filter((a) => !a.dead && a.team === 'foe' && !a.under && !a.hidden && !a.airborne && !a.cling);
 export const allies = (x, z, r) => near(x, z, r).filter((a) => !a.dead && a.team === 'hero');
 export { clamp, t };

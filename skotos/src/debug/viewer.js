@@ -57,11 +57,24 @@ export async function startViewer(q) {
     'p:rootswornArcher': () => { const a = new Avatar(personModel('rootswornArcher'), { style: 'bow' }); a.hold('R', 'bow', {}); return a; },
     'p:hollowed': () => new Avatar(personModel('hollowed'), { style: 'undead', hunch: 0.15 }),
     'p:mourner': () => new Avatar(personModel('mourner'), { style: 'staff' }),
-    'p:amaranthe': () => { const a = new Avatar(personModel('amaranthe'), { style: 'heavy' }); a.hold('R', 'spear', {}); return a; }
+    'p:amaranthe': () => { const a = new Avatar(personModel('amaranthe'), { style: 'heavy' }); a.hold('R', 'spear', {}); return a; },
+    // Act IV's people (ash.glb): the Lampless, the Ash-Fallen, an Ashsmith, the Wayfarers of the lamp memories, the bosses
+    'p:lampless': () => { const a = new Avatar(personModel('lampless'), { style: 'staff', animSet: 'formal' }); a.hold('R', 'lanternStaff', { glow: 0.05, lamp: 0x6a7684 }); return a; },
+    'p:ashSpear': () => { const a = new Avatar(personModel('ashSpear'), { style: 'heavy' }); a.hold('R', 'spear', { len: 2.0, blade: 0x6a645c, glow: 0, wood: 0x2a2420 }); a.hold('L', 'shield', { face: 0x3a3632, rim: 0x6a645c, emblem: 0x8a3a20, r: 0.32 }); return a; },
+    'p:ashDwarf': () => { const a = new Avatar(personModel('ashDwarf'), { style: 'sword' }); a.hold('R', 'axe', { blade: 0x6a5a48 }); a.hold('L', 'shield', { face: 0x4a3a28, rim: 0x9a7a40, emblem: 0xb07a30, r: 0.3 }); return a; },
+    'p:ashBow': () => { const a = new Avatar(personModel('ashBow'), { style: 'bow' }); a.hold('R', 'bow', { blade: 0x3a3028 }); return a; },
+    'p:ashsmith': () => { const a = new Avatar(personModel('ashsmith'), { style: 'none' }); a.hold('R', 'hammer', {}); return a; },
+    'p:ivar': () => { const a = new Avatar(personModel('ivar'), { style: 'staff' }); a.hold('R', 'lanternStaff', { glow: 0.05, lamp: 0x6a7684 }); return a; },
+    'p:arna': () => { const a = new Avatar(personModel('arna'), { style: 'staff', animSet: 'npc' }); a.hold('R', 'lanternStaff', {}); return a; },
+    'p:arnaOld': () => { const a = new Avatar(personModel('arnaOld'), { style: 'staff', animSet: 'npc' }); a.hold('R', 'lanternStaff', {}); return a; },
+    'p:isarnBoy': () => new Avatar(personModel('isarnBoy'), { animSet: 'npc' }),
+    'p:hammerhorn': () => { const a = new Avatar(personModel('hammerhorn'), { style: 'heavy' }); a.hold('R', 'hammer', {}); return a; },
+    'p:karthax': () => { const a = new Avatar(personModel('karthax'), { style: 'heavy' }); a.hold('R', 'hammer', { head: 0x1a1816, glow: 0.6, rune: 0xff5a10 }); return a; }
   };
   if (list.some((n) => n.startsWith('p:'))) await loadPeople();
   if (list.some((n) => /^p:(stoneborn|runepriest|brokka|moltenKing)/.test(n))) await loadFolk();
   if (list.some((n) => /^p:(elati|linden|rootsworn|hollowed|mourner|amaranthe)/.test(n))) await loadFolk('grove');
+  if (list.some((n) => /^p:(lampless|ash[A-Z]|ashsmith|ivar|arna|isarnBoy|hammerhorn|karthax)/.test(n))) await loadFolk('ash');
   // &sheet=slash1,slash2,...: one copy of the first model per clip, each posed at the clip's strike (or &t)
   const sheet = q.get('sheet') ? q.get('sheet').split(',') : null;
   if (sheet) { const m = list[0]; list.length = 0; for (const c of sheet) list.push(m); }
@@ -111,35 +124,45 @@ export async function startViewer(q) {
   loop();
 }
 
-// ?world=crypt|forest|town|pass|halls|weep|heart&seed=3&x=..&z=..&dist=..&at=..
+// ?world=crypt|forest|town|pass|halls|weep|heart|ashfield|forge&seed=3&x=..&z=..&dist=..&at=..
 // Act III: &at=glade|mere|boss|gate|lantern|deer|island|heart|thorns|chamber&n=..; &autumn=1 the First Autumn; &wind=1;
+// Act IV: &at=camp|lamp|altar|banners|drake|flats|graves|hook|gate|boss (the Field), camp|hall|rivers|flue|bellows|station|
+// moulds|plug|anvil|boss (the Forge), &n=..; &lit=1 (or l1,l3,w1) lights the waylamps, &night=stars|dawn, &heat=0..3|cold,
+// &open=1 the gate open and the plug melted, &state=taken|refused for the altars;
 // &live keeps rendering (otherwise it stops once FX have warmed up, which keeps software-rendered screenshots quick)
 export async function startWorld(q) {
   const { genForest, genCrypt, genTown } = await import('../world/gen.js');
   const { genPass, genHalls } = await import('../world/gen2.js');
   const { genWeep, genHeart } = await import('../world/gen3.js');
-  const { buildLevel, WIND, act3Prop, setAutumn } = await import('../world/build.js');
+  const { genAshfield, genForge } = await import('../world/gen4.js');
+  const { buildLevel, WIND, act3Prop, setAutumn, act4Prop, setHeat, setNight } = await import('../world/build.js');
   const { loadKits } = await import('../gfx/kits.js');
   const { loadEnv, loadPack } = await import('../gfx/env.js');
   const { loadCreatures } = await import('../gfx/creatures.js');
   const { ATMOS } = await import('../world/atmos.js');
   initGfx(+(q.get('q') || 2));
   await Promise.all([loadKits(['dungeon', 'grave', 'town']), q.has('noenv') ? null : loadEnv(R.quality)]);
-  const type = q.get('world'), seed = +(q.get('seed') || 3), act3 = type === 'weep' || type === 'heart';
-  if (type === 'pass' || type === 'halls') await loadPack('deep');
+  const type = q.get('world'), seed = +(q.get('seed') || 3), act3 = type === 'weep' || type === 'heart', act4 = type === 'ashfield' || type === 'forge';
+  if (type === 'pass' || type === 'halls' || type === 'forge') await loadPack('deep');
   if (act3) await Promise.all([loadPack('wood'), loadCreatures(), loadFolk('grove')]);
+  // Act IV: the cinder pack (whatever of it exists), its people and those of Acts II-III who come north, every creature
+  if (act4 && !q.has('nopack')) await Promise.all([loadPack('cinder'), loadCreatures(), loadFolk('ash'), loadFolk('folk'), loadFolk('grove')]);
+  // &fakecinder: stand the base and deep sets' scans and layers in for the cinder pack's (tests its code paths before it exists)
+  if (q.has('fakecinder')) { await loadPack('deep'); fakeCinder(); }
   if (R.quality >= 1) await loadPack('trees');
   if (!q.has('nohouses')) await loadPack('village');
   if (type === 'pass') WIND.uSnow.value = 1;
   const L = type === 'crypt' ? genCrypt(seed) : type === 'town' ? genTown() : type === 'pass' ? genPass(seed) : type === 'halls' ? genHalls(seed)
-    : type === 'weep' ? genWeep(seed) : type === 'heart' ? genHeart(seed) : genForest(seed);
-  const autumn = q.get('autumn') === '1';
-  setAtmosphere(ATMOS[act3 && autumn ? type + 'Autumn' : type]);
+    : type === 'weep' ? genWeep(seed) : type === 'heart' ? genHeart(seed) : type === 'ashfield' ? genAshfield(seed) : type === 'forge' ? genForge(seed) : genForest(seed);
+  const autumn = q.get('autumn') === '1', night = q.get('night') || 'ash', heat = q.get('heat') === 'cold' ? -1 : +(q.get('heat') || 0);
+  setAtmosphere(ATMOS[act3 && autumn ? type + 'Autumn' : type === 'ashfield' && night !== 'ash' ? 'ashfield' + night[0].toUpperCase() + night.slice(1) : type]);
   if (act3) { WIND.uWind.value = autumn || q.has('wind') ? 1 : 0; setAutumn(autumn ? 1 : 0); }
   if (q.has('nofog')) { R.scene.fog.density = 0; R.camera.far = 600; R.camera.updateProjectionMatrix(); R.hemi.intensity *= 1.6; }
   const lvl = buildLevel(L, R.quality);
   R.scene.add(lvl.group);
+  if (type === 'forge') setHeat(heat);
   for (const l of L.lights) addLight(l);
+  const act4Emit = act4 ? viewAct4(q, L, act4Prop, night) : [];
   // the Act III props the story places
   if (act3) {
     const put = (o, x, z, ry = 0) => { o.position.set(x, 0, z); o.rotation.y = ry; R.scene.add(o); return o; };
@@ -157,7 +180,7 @@ export async function startWorld(q) {
   }
   const at0 = q.get('at'), n0 = +(q.get('n') || 0);
   const sp = L.spots, off = (p, dz = 0, dx = 0) => p && { x: p.x + dx, z: p.z + dz };
-  const at = at0 === 'boss' ? L.boss : at0 === 'gate' ? (L.gate || off(sp.rootGate, 4)) : at0 === 'bridge' ? L.bridge
+  const at = act4 ? act4At(L, at0, n0) : at0 === 'boss' ? L.boss : at0 === 'gate' ? (L.gate || off(sp.rootGate, 4)) : at0 === 'bridge' ? L.bridge
     : at0 === 'glade' ? off(sp.glade, 6) : at0 === 'mere' ? off(sp.mere, 2) : at0 === 'lantern' ? off(sp.lanternglade, 3) : at0 === 'deer' ? off(sp.deer, 4)
       : at0 === 'island' ? off(sp.island, 1) : at0 === 'heart' ? off(sp.heart, 9) : at0 === 'thorns' ? off(L.thorns?.[n0], 0) : at0 === 'chamber' ? L.chambers?.[n0]
         : at0 === 'tear' ? off(sp.tears?.[n0], 2.5) : at0 === 'waypoint' ? off(sp.waypoint, 2) : L.start;
@@ -168,8 +191,9 @@ export async function startWorld(q) {
   if (q.get('pitch')) R.cam.pitch = +q.get('pitch');
   if (q.get('zoom')) R.cam.zoomT = R.cam.zoom = +q.get('zoom');
   const { setEmitters, setAmbient, initFX, updateFX } = await import('../gfx/fx.js');
-  initFX(R.quality); setEmitters(lvl.emitters);
-  setAmbient(act3 ? (autumn ? type + 'Autumn' : type) : { pass: 'snow' }[type] || type);
+  initFX(R.quality); setEmitters(lvl.emitters.concat(act4Emit));
+  setAmbient(act3 ? (autumn ? type + 'Autumn' : type) : { pass: 'snow', ashfield: 'ashfall', forge: heat < 0 ? 'forgeCold' : 'forge' }[type] || type);
+  if (type === 'ashfield') setNight(night);
   R.heroLight.position.set(x, 2.6, z);
   // let the particles and the ambient fill in before the first picture
   updateCamera(0, x, z, true);
@@ -199,4 +223,52 @@ export async function startWorld(q) {
     if (n < 3 || q.has('live')) requestAnimationFrame(loop);
   }
   loop();
+}
+
+// Act IV: place what the story places (lamps, altars, braziers, the gate, the bellows, the plug, the anvils) and the camp
+// people, the way world.js will; returns the extra emitters (the lit fires)
+function viewAct4(q, L, act4Prop, night) {
+  const sp = L.spots, emit = [], open = q.has('open'), lit = q.get('lit');
+  const put = (o, x, z, ry = 0) => { o.position.set(x, 0, z); o.rotation.y = ry; R.scene.add(o); return o; };
+  const isLit = (id) => lit === '1' || (lit || '').split(',').includes(id);
+  const pool = (x, z, r, c = 0xffb060) => { const g = act4Prop('lightRing'); g.scale.setScalar(r); g.userData.setColor(c); put(g, x, z); };
+  for (const p of [...(sp.lamps || []), ...(sp.waylamps || [])]) {
+    const m = put(act4Prop('waylamp', { lit: isLit(p.id) || night === 'dawn' }), p.x, p.z, p.r - Math.PI / 2);
+    if (m.userData.lit) { const f = m.userData.flameAt, a = p.r - Math.PI / 2, fx = p.x + Math.sin(a + Math.PI / 2) * f.x, fz = p.z + Math.cos(a + Math.PI / 2) * f.x; addLight({ x: fx, y: f.y, z: fz, color: 0xffb060, intensity: 16, range: 10, flicker: 0.15 }); pool(p.x, p.z, p.lightR || 8); }
+  }
+  for (const a of sp.altars || []) put(act4Prop('altar'), a.x, a.z, a.r).userData.setState(q.get('state') || 'idle');
+  for (const b of sp.braziers || []) { put(act4Prop('brazier'), b.x, b.z); addLight({ x: b.x, y: 1.6, z: b.z, color: 0xff8a3a, intensity: 18, range: 11, flicker: 0.35 }); emit.push({ x: b.x, y: 1.2, z: b.z, type: 'fire', s: 0.8 }); pool(b.x, b.z, 6); }
+  if (sp.lastLamp) put(act4Prop('lastLamp'), sp.lastLamp.x, sp.lastLamp.z, Math.PI / 2).userData.setLit(night !== 'ash');
+  if (L.gate) put(act4Prop('anvilGate'), L.gate.x, L.gate.z).userData.setOpen(open);
+  if (sp.hook) put(act4Prop('hook'), sp.hook.x, sp.hook.z, sp.hook.r);
+  for (const b of sp.bellows || []) { put(act4Prop('bellows'), b.prop.x, b.prop.z, b.prop.r); emit.push({ x: b.pit.x, y: 0.4, z: b.pit.z, type: 'fire', s: 1 }); }
+  if (L.plug && !open) R.scene.add(act4Prop('slagPlug', L.plug));
+  if (sp.anvil) put(act4Prop('anvil'), sp.anvil.x, sp.anvil.z);
+  for (const c of sp.cages || []) put(act4Prop('shardAnvil'), c.x, c.z, Math.atan2(sp.anvil.x - c.x, sp.anvil.z - c.z));
+  if (sp.mouth) put(act4Prop('forgeMouth', sp.mouth), sp.mouth.x, sp.mouth.z);
+  for (const k in sp.npcs || {}) {
+    const n = sp.npcs[k];
+    try { const a = new Avatar(personModel(k), { animSet: 'npc' }); a.group.position.set(n.x, 0, n.z); a.group.rotation.y = n.r || 0; a.update(0.5, { speed: 0 }); R.scene.add(a.group); } catch (e) { console.warn('npc', k, e.message); }
+  }
+  return emit;
+}
+function act4At(L, at, n) {
+  const sp = L.spots, off = (p, dz = 0, dx = 0) => p && { x: p.x + dx, z: p.z + dz };
+  const pick = {
+    camp: off(sp.camp, 2), lamp: off(sp.lamps?.[n], 2), waylamp: off(sp.waylamps?.[n], 2), altar: off(sp.altars?.[n], 3), banners: off(sp.banners, 3), drake: off(sp.drake, 4),
+    flats: sp.flats, graves: off(sp.graves, 6), hook: off(sp.hook, 2.5, 1.5), gate: L.gate && { x: L.gate.x, z: L.gate.z + 9 }, boss: L.boss, camp2: off(sp.camp2, 2), tower: off(sp.tower, 4),
+    hall: L.statues?.[n * 2] && { x: L.statues[n * 2].x + 4.6, z: L.statues[n * 2].z }, rivers: L.bridges?.[n], flue: L.flues?.[n] && { x: L.flues[n].x + Math.sin(L.flues[n].dir) * 10, z: L.flues[n].z + Math.cos(L.flues[n].dir) * 10 },
+    bellows: off(sp.bellows?.[n], 2), station: off(sp.stations?.[n], 1.5), moulds: sp.hall, plug: L.plug && { x: L.plug.x - Math.sin(L.plug.r) * 3, z: L.plug.z - Math.cos(L.plug.r) * 3 + 2 }, anvil: off(sp.anvil, 6)
+  }[at];
+  return pick || L.start;
+}
+
+async function fakeCinder() {
+  const { ENV } = await import('../gfx/env.js');
+  const P = { rockA: 'rockD', rockB: 'rockE', rockC: 'rockF', rockD: 'boulderD', boulder: 'boulderD', statue: 'statue', lantern: 'lantern', cagedLight: 'lantern', deadTree: 'treeDead', deadTreeB: 'treeDead',
+    shield: 'branches', sword: 'branches', warhammer: 'log', mace: 'stoneA', brazier: 'firepit', barrel: 'barrel', stump: 'stump', anvil: 'chest', bellows: 'chest', ruinedTower: 'cliffA', drakeRibs: 'log', drakeSpine: 'log', drakeSkull: 'boulderD', bullHead: 'stoneB', tongs: 'branches', quench: 'crate', toolRack: 'crate', crossPein: 'branches' };
+  for (const k in P) if (ENV.props[P[k]]) { ENV.props['cinder/' + k] = ENV.props[P[k]]; if (ENV.sizes[P[k]]) ENV.sizes['cinder/' + k] = ENV.sizes[P[k]]; }
+  const Ly = { ashGround: 'scree', ashTrod: 'gravel', scree: 'cave', road: 'gravel', cliffRock: 'cliff', forgeTiles: 'dslab', forgeHerring: 'herring', ironPlate: 'cave', grate: 'herring', rust: 'mud' };
+  for (const k in Ly) if (ENV.layers[Ly[k]]) ENV.layers['cinder/' + k] = ENV.layers[Ly[k]];
+  ENV.packs.cinder = true;
 }

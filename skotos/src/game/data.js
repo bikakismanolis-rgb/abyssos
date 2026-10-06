@@ -85,6 +85,21 @@ export const MONSTERS = {
   heartroot: { model: 'heartroot', hp: 6, dmg: 1, speed: 0, radius: 0.9, ai: 'node', reach: 0, atk: 'cast', atkTime: 9, flesh: 'wood', xp: 3, big: true, anchored: true },
   silverhorn: { model: 'silverhorn', hp: 52, dmg: 2.1, speed: 6.0, radius: 1.4, ai: 'silverhorn', reach: 4.6, atk: 'smash', atkTime: 1.6, flesh: 'flesh', xp: 110, boss: true, sfx: 'hart', look: { scale: 1.15, tint: 0xf0ece0, tintAmt: 0.15, rim: 0xffc060, rimI: 0.3 } },
   amaranthe: { model: 'amaranthe', hp: 80, dmg: 2.5, speed: 4.4, radius: 0.9, ai: 'amaranthe', reach: 4.6, atk: 'heavyStab', atkTime: 1.5, flesh: 'wood', xp: 160, boss: true, weapon: 'spear', wlook: { len: 1.3 }, style: 'heavy', dieClip: 'kneel', look: { scale: 1.45, rim: 0xffb040, rimI: 0.5 } },
+  // Act IV: the Field of Ash and the Ashen Forge. shroud: 30% damage outside light (light.js); guard: a shield arc in
+  // front (combat.js); wake: lies in the ash until the hero is close; fireproof: the Forge's Breath passes over it
+  lampless: { model: 'lampless', hp: 1.3, dmg: 1.15, speed: 3.8, radius: 0.5, ai: 'watch', reach: 2.2, atk: 'heavyStab', atkTime: 1.3, flesh: 'spirit', xp: 2, weapon: 'lanternStaff', wlook: { glow: 0.05, lamp: 0x6a7684 }, style: 'staff', animSet: 'formal', shroud: true, dieSfx: 'wraithDie', look: { rim: 0xb0c0d8, rimI: 0.35 } },
+  ashSpear: { model: 'ashSpear', hp: 1.6, dmg: 1.2, speed: 3.2, radius: 0.5, ai: 'melee', reach: 2.0, atk: 'heavyStab', atkTime: 1.3, flesh: 'ash', xp: 2, weapon: 'spear', wlook: { len: 2.0, blade: 0x6a645c, glow: 0, wood: 0x2a2420 }, style: 'heavy', guard: { arc: 1.05, k: 0.15 }, bashEvery: 3, shield: { face: 0x3a3632, rim: 0x6a645c, emblem: 0x8a3a20, r: 0.32 }, dieSfx: 'skeletonDie', wake: { d: 6, clip: 'rise', pose: 'bonePile', sfx: 'skeletonRattle', t: 2.0, speed: 1 } },
+  ashDwarf: { model: 'ashDwarf', hp: 1.7, dmg: 1.25, speed: 3.0, radius: 0.5, ai: 'melee', reach: 1.8, atk: 'chop', atkTime: 1.35, flesh: 'ash', xp: 2, weapon: 'axe', wlook: { blade: 0x6a5a48 }, style: 'sword', guard: { arc: 1.05, k: 0.15 }, bashEvery: 3, shield: { face: 0x4a3a28, rim: 0x9a7a40, emblem: 0xb07a30, r: 0.3 }, dieSfx: 'dwarfDie', wake: { d: 6, clip: 'rise', pose: 'bonePile', sfx: 'skeletonRattle', t: 2.0, speed: 1 } },
+  ashBow: { model: 'ashBow', hp: 0.9, dmg: 1.0, speed: 3.4, radius: 0.48, ai: 'ranged', reach: 12, atk: 'shoot', atkTime: 1.9, flesh: 'ash', xp: 1.5, weapon: 'bow', wlook: { blade: 0x3a3028 }, style: 'bow', proj: 'fireArrow', dieSfx: 'skeletonDie', wake: { d: 7, clip: 'rise', pose: 'bonePile', sfx: 'skeletonRattle', t: 2.0, speed: 1 } },
+  smokeEater: { model: 'smokeEater', hp: 0.7, dmg: 0.8, speed: 5.8, radius: 0.55, ai: 'snuffer', reach: 1.5, atk: 'claw', atkTime: 1.1, flesh: 'ash', xp: 1.4, dieSfx: 'wraithDie', look: { rim: 0x8a7a6a, rimI: 0.25 } },
+  ashwing: { model: 'ashwing', hp: 2.0, dmg: 1.4, speed: 7.5, radius: 1.0, ai: 'diver', reach: 2.2, atk: 'bite', atkTime: 1.2, flesh: 'bone', xp: 3, big: true, float: true, sfx: 'bat', dieSfx: 'skeletonDie', fireproof: true, look: { rim: 0xff7a30, rimI: 0.45 } },
+  emberTick: { model: 'emberTick', hp: 0.35, dmg: 0.6, speed: 6.2, radius: 0.35, ai: 'latcher', reach: 1.0, atk: 'bite', atkTime: 0.9, flesh: 'chitin', xp: 0.6, sfx: 'spider', fireproof: true, look: { rim: 0xff6a20, rimI: 0.5 } },
+  ashsmith: { model: 'ashsmith', hp: 1.1, dmg: 1.0, speed: 3.8, radius: 0.5, ai: 'forger', reach: 9, atk: 'throw', atkTime: 1.8, flesh: 'flesh', xp: 2.4, weapon: 'hammer', style: 'none', proj: 'ember', fireproof: true, dieSfx: 'dwarfDie' },
+  hammerhorn: { model: 'hammerhorn', hp: 4.5, dmg: 2.0, speed: 3.6, radius: 1.0, ai: 'brute', reach: 2.8, atk: 'smash', atkTime: 2.0, flesh: 'flesh', xp: 6, big: true, weapon: 'hammer', wlook: { len: 1.4 }, style: 'heavy', sfx: 'troll', chain: 9, fireproof: true, look: { scale: 1.3, rim: 0xff5a18, rimI: 0.3 } },
+  // a keeper's statue in Karthax's second phase: the real model (o.model), frozen and ash-grey; only his Hammerfall breaks it
+  keeperStatue: { model: 'barrowLord', hp: 1, dmg: 0, speed: 0, radius: 1.0, ai: 'node', reach: 0, atk: 'cast', atkTime: 9, flesh: 'stone', xp: 0, big: true, anchored: true, fireproof: true },
+  ivar: { model: 'ivar', hp: 58, dmg: 2.3, speed: 4.4, radius: 0.6, ai: 'ivar', reach: 4.4, atk: 'heavyStab', atkTime: 1.5, flesh: 'spirit', xp: 130, boss: true, weapon: 'lanternStaff', wlook: { glow: 0.05, lamp: 0x6a7684 }, style: 'staff', dieClip: 'kneel', dieSfx: 'wraithDie', look: { scale: 1.25, rim: 0xb0b8c8, rimI: 0.5 } },
+  karthax: { model: 'karthax', hp: 95, dmg: 2.7, speed: 4.0, radius: 1.3, ai: 'karthax', reach: 4.8, atk: 'smash', atkTime: 1.5, flesh: 'magma', xp: 220, boss: true, weapon: 'hammer', wlook: { len: 1.6, ember: 0xff5a10 }, style: 'heavy', dieClip: 'kneel', sfx: 'golem', fireproof: true, look: { scale: 1.8, rim: 0xff5a18, rimI: 0.6 } },
   // the ranger's companion
   spiritWolf: { model: 'spiritWolf', hp: 2, dmg: 1, speed: 7.5, radius: 0.55, ai: 'pet', reach: 1.7, atk: 'bite', atkTime: 0.8, flesh: 'spirit', xp: 0, pet: true }
 };
@@ -119,12 +134,26 @@ export const PACKS = {
   heartSleepers: [['hollowed', 4], ['rootling', 2]],
   heartWarden: [['rootwarden', 1], ['hollowed', 2], ['rootling', 3]],
   heartChoir: [['mourner', 2], ['rootsworn', 3], ['rootswornArcher', 1]],
-  heartDeep: [['hollowed', 3], ['rootsworn', 2], ['rootswornArcher', 1.5], ['amberBear', 0.4], ['mourner', 0.5]]
+  heartDeep: [['hollowed', 3], ['rootsworn', 2], ['rootswornArcher', 1.5], ['amberBear', 0.4], ['mourner', 0.5]],
+  // Act IV
+  ashLine: [['ashSpear', 4], ['ashDwarf', 3], ['ashBow', 2]],
+  ashBowmen: [['ashBow', 3], ['ashSpear', 1.5], ['emberTick', 1]],
+  lamplessPatrol: [['lampless', 1]],
+  snuffers: [['smokeEater', 3], ['ashSpear', 1]],
+  ticks: [['emberTick', 1]],
+  ashwing: [['ashwing', 1]],
+  smiths: [['ashsmith', 2], ['ashSpear', 2], ['ashDwarf', 1.5], ['emberTick', 1.5]],
+  stokers: [['hammerhorn', 1]],
+  mouldHall: [['ashsmith', 2], ['ashSpear', 2], ['ashBow', 1], ['emberTick', 2], ['smokeEater', 0.6], ['hammerhorn', 0.3]],
+  bellowsWave: [['ashSpear', 2], ['ashDwarf', 1.5], ['ashsmith', 1], ['emberTick', 2]]
 };
 // packs built around one creature: it comes first, exactly once (or the count given), and the rest are drawn without it
-export const PACK_LEAD = { weepDen: ['amberBear'], weepWeepers: ['rootwarden'], weepMourners: ['mourner'], heartWarden: ['rootwarden'], heartChoir: ['mourner', 'mourner'] };
-// packs whose Hollowed wait in disguise (dead trees, amber cocoons) until the hero is close
-export const PACK_DORMANT = { weepHollow: true, heartSleepers: true };
+export const PACK_LEAD = { weepDen: ['amberBear'], weepWeepers: ['rootwarden'], weepMourners: ['mourner'], heartWarden: ['rootwarden'], heartChoir: ['mourner', 'mourner'],
+  ashLine: ['ashSpear'], snuffers: ['smokeEater', 'smokeEater'], smiths: ['ashsmith'], mouldHall: ['ashsmith'], bellowsWave: ['ashsmith'] };
+// packs whose dead wait in disguise (Hollowed as dead trees and amber cocoons, the Ash-Fallen under the ash) until the hero is close
+export const PACK_DORMANT = { weepHollow: true, heartSleepers: true, ashLine: true };
+// packs that stand in a line, the shields toward the hero (the Ash-Fallen still holding the battle line where they fell)
+export const PACK_LINE = { ashLine: true };
 // the kinds to spawn for a pack of n: the leads, then weighted picks of the rest (pick = rand.weighted)
 export function packKinds(tag, n, pick) {
   const lead = PACK_LEAD[tag] || [], w = (PACKS[tag] || PACKS.goblins).filter(([k]) => !lead.includes(k));
@@ -148,7 +177,20 @@ export const BOONS = {
     { id: 'amber', icon: 'potion', stats: { lifeOnHit: 15, regen: 10 } },
     { id: 'hart', icon: 'leap', stats: { crit: 5, move: 6 } },
     { id: 'root', icon: 'shield', stats: { block: 10, lifePct: 8 } }
+  ],
+  // the fire lit by hand: worth half again to a hero the crown never held (h.flags.unbound, see stats.js)
+  4: [
+    { id: 'wayfarer', icon: 'roll', stats: { move: 8, cdr: 10 } },
+    { id: 'lantern', icon: 'star', stats: { crit: 6, critDmg: 25 } },
+    { id: 'rest', icon: 'shield', stats: { lifePct: 15, regen: 15 } }
   ]
+};
+export const UNBOUND = 1.5;
+// the Crown's Offers (Act IV altars): what each gift gives and takes while it is held (stats.js)
+export const GIFTS = {
+  throne: { armorPct: 25, lifePct: 10, move: -12 },
+  forge: { dmgPct: 20, critDmg: 15, armorPct: -20 },
+  unfading: { lifeOnHit: 15, regen: 15, atkSpd: -15 }
 };
 // timed hero buffs granted by the world (shrines live in world.js): seconds and what they do
 export const BUFFS = { memory: { dur: 60, dmg: 0.12, move: 0.08 } };

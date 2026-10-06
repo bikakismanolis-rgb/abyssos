@@ -11,7 +11,7 @@ import { WIND } from '../world/build.js';
 import { initInput, pollInput, takeEvents, IN } from '../core/input.js';
 import { loadSave, writeSave } from './save.js';
 import { refreshStats } from './stats.js';
-import { enterZone, updatePacks, nearestInteract, updatePortalFx, ZONES, zoneReady, zoneParts } from './world.js';
+import { enterZone, updatePacks, updateAct4, nearestInteract, updatePortalFx, ZONES, zoneReady, zoneParts } from './world.js';
 import { updatePlayer } from './player.js';
 import { damage } from './combat.js';
 import { updateActors } from './ai.js';
@@ -94,6 +94,9 @@ async function startHero(hero, isNew, zone = 'town') {
   hero.act2 ??= -1;
   if (hero.act2 >= 0) hero.flags.act2 = true;
   hero.act3 ??= -1;
+  // and from before Act IV: an Act III hero reads as Act III's end (no fire taken, no lamps, no gifts)
+  hero.act4 ??= -1;
+  if (hero.act4 >= 0) hero.flags.act4 = true;
   await zoneReady(zone);
   G.mode = 'play';
   showHud(true);
@@ -146,7 +149,8 @@ on('respawn', (town) => {
   pl.dead = false; pl.hp = pl.hpMax; pl.res = G.hero.cls === 'warden' ? 0 : G.stats.resMax; pl.status = freshStatus();
   refreshHeroLook();
   if (town || G.zone.id === 'gate') { G.gate = null; travel('town', { at: 'waypoint' }); }
-  else travel(G.zone.id, { at: G.zone.L.spots.waypoint ? 'waypoint' : 'start' });
+  // Act IV: she wakes at the last waylamp she lit, if there is one
+  else travel(G.zone.id, { at: G.zone.checkpoint || (G.zone.L.spots.waypoint ? 'waypoint' : 'start') });
 });
 on('heroDeath', () => {
   const pl = G.player; if (pl.dead) return;
@@ -258,7 +262,7 @@ function tick(dt, noDraw) {
     if (G.mode === 'play') updatePlayer(gdt);
     else { pl.avatar.update(gdt, { speed: 0 }); }
     updateActors(gdt);
-    updatePacks();
+    updatePacks(); updateAct4(gdt);
     updateProjs(gdt); updateAreas(gdt); updatePickups(gdt);
     for (let i = G.timers.length - 1; i >= 0; i--) { const tm = G.timers[i]; tm.t -= gdt; if (tm.t <= 0) { G.timers.splice(i, 1); try { tm.fn(); } catch (e) { fatal(e.stack || e); } } }
     comboTick(dt);
@@ -280,6 +284,8 @@ function tick(dt, noDraw) {
   // the Heartwood's heartbeat quickens toward the Heart Chamber
   const H = G.zone.id === 'heart' && G.zone.L.spots.heart;
   if (H) Audio.mood({ near: clamp(1 - (Math.hypot(H.x - pl.x, H.z - pl.z) - 16) / 90, 0, 1) });
+  // the Field's frame-drum heartbeat while the dead have seen her
+  if (G.zone.id === 'ashfield') Audio.mood({ seen: (pl.buffs.seen || 0) > 0 });
   if (noDraw || (NORENDER && !window.__shoot)) return;
   render();
   drawOverlay(dt);

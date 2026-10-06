@@ -25,7 +25,9 @@ const CAST = {
   wraith: ['wight', 1], barrowLord: ['barrowlord', 1.15],
   magmaHound: ['magmahound', 1], caveBat: ['bat', 1], deepworm: ['worm', 1], stonewarden: ['golem', 1],
   // Act III (tools/creatures/act3)
-  silverhorn: ['elk', 1], amberBear: ['bear', 1.12], amberMoth: ['moth', 1], rootling: ['mandrake', 1], rootwarden: ['treeman', 1]
+  silverhorn: ['elk', 1], amberBear: ['bear', 1.12], amberMoth: ['moth', 1], rootling: ['mandrake', 1], rootwarden: ['treeman', 1],
+  // Act IV (tools/creatures/act4)
+  ashwing: ['ashwing', 1], smokeEater: ['smokeeater', 1], emberTick: ['embertick', 1]
 };
 
 export const CREATURES = { tpl: {}, ready: false };
@@ -33,7 +35,8 @@ export const CREATURES = { tpl: {}, ready: false };
 const ACT_FILES = {
   act1: ['goblin', 'skeleton', 'wolf', 'spider', 'ashspawn', 'troll', 'wight', 'barrowlord'],
   act2: ['magmahound', 'bat', 'worm', 'golem'],
-  act3: ['elk', 'bear', 'moth', 'mandrake', 'treeman']
+  act3: ['elk', 'bear', 'moth', 'mandrake', 'treeman'],
+  act4: ['ashwing', 'smokeeater', 'embertick']
 };
 const loads = {};
 function loadFile(n) {
@@ -110,10 +113,14 @@ const MAP = {
   shoot: ['shoot', 'attack'], shootFast: ['shoot', 'attack'], volley: ['shoot', 'attack'], aim: ['shoot', 'attack'], reload: ['shoot'],
   cast: ['cast', 'attack'], castUp: ['cast'], channel: ['cast'], castLong: ['cast'], summon: ['cast', 'warcry'], blink: ['blink', 'cast'],
   hit: ['hit'], hit2: ['hit'], die: ['die'], dieFwd: ['die'], dieBones: ['die'],
-  rise: ['rise', 'riseStand'], riseStand: ['riseStand', 'rise'], spawn: ['rise', 'riseStand'], bonePile: ['bonePile'], block: ['hit'], blockHit: ['hit']
+  rise: ['rise', 'riseStand', 'spawn'], riseStand: ['riseStand', 'rise'], spawn: ['spawn', 'rise', 'riseStand'], bonePile: ['bonePile'], block: ['hit'], blockHit: ['hit'],
+  // Act IV: the Ashwing's flight, the Smoke-eater's meal and grab, the Ember Tick's hold
+  glide: ['glide', 'walk'], dive: ['dive', 'glide', 'attack'], land: ['land', 'hit'], takeoff: ['takeoff', 'glide'], consume: ['consume', 'cast', 'attack'],
+  cling: ['cling', 'idle'], perch: ['perch'], Shield_Dash: ['charge', 'attack2', 'attack'], Hit_Knockback: ['hit'], Idle_Shield_Break: ['hit'],
+  Idle_Rail_Call: ['howl', 'warcry', 'cast'], Melee_Hook: ['attack2', 'attack'], KK_Spellcast_Shoot: ['cast', 'attack']
 };
 const HOLD = new Set(['die', 'dieFwd', 'dieBones', 'bonePile', 'aim']);
-const LOOP = new Set(['channel', 'bonePile', 'spin']);
+const LOOP = new Set(['channel', 'bonePile', 'spin', 'glide', 'consume', 'cling', 'perch']);
 
 export class CreatureAnim {
   constructor(av) {

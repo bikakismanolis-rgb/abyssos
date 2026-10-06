@@ -1,13 +1,15 @@
 // Turns a layout into meshes: textured ground, instanced foliage and walls, merged static props.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { R, LIGHTS, beatPulse } from '../gfx/gfx.js';
-import { FX, puff, sapBurst } from '../gfx/fx.js';
+import { R, LIGHTS, beatPulse, setAtmosphere } from '../gfx/gfx.js';
+import { FX, puff, sapBurst, setAmbient, glowBurst } from '../gfx/fx.js';
 import { CREATURES, creatureModel, hasCreature } from '../gfx/creatures.js';
 import { heartWallH } from './gen3.js';
+import { groundY } from './gen4.js';
+import { heatAtmos } from './atmos.js';
 import { tex } from '../gfx/textures.js';
 import { G } from '../gfx/rig.js';
-import { RNG, fbm, clamp, smooth } from '../core/util.js';
+import { RNG, fbm, clamp, smooth, angleDiff } from '../core/util.js';
 import { KIT, KITMAT, KIT_SCALE } from '../gfx/kits.js';
 import { ENV } from '../gfx/env.js';
 
@@ -360,7 +362,9 @@ const TREE_MAT = new Map();
 const TREE_VAR = {
   gold: { leaf: 'float tl = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11)); diffuseColor.rgb = mix(diffuseColor.rgb, tl * vec3(2.25, 1.38, 0.4), 0.88);', bark: 'diffuseColor.rgb *= vec3(1.06, 0.98, 0.88);' },
   pale: { leaf: '', bark: 'float tl = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11)); diffuseColor.rgb = mix(diffuseColor.rgb, tl * vec3(2.1, 2.0, 1.85), 0.85);' },
-  white: { leaf: 'float tl = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11)); diffuseColor.rgb = clamp(tl * 3.0, 0.5, 1.2) * vec3(0.95, 0.88, 0.62);', bark: 'float tl = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11)); diffuseColor.rgb = clamp(tl * 5.0, 0.55, 1.15) * vec3(0.86, 0.84, 0.78);' }
+  white: { leaf: 'float tl = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11)); diffuseColor.rgb = clamp(tl * 3.0, 0.5, 1.2) * vec3(0.95, 0.88, 0.62);', bark: 'float tl = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11)); diffuseColor.rgb = clamp(tl * 5.0, 0.55, 1.15) * vec3(0.86, 0.84, 0.78);' },
+  // Act IV: the Field of Ash's dead trees, burnt black
+  char: { leaf: 'diffuseColor.rgb *= 0.07;', bark: 'float tl = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11)); diffuseColor.rgb = clamp(tl * 0.3, 0.0, 0.035) * vec3(1.0, 0.9, 0.82);' }
 };
 function treeMat(src, variant = '') {
   const cache = TREE_MAT.get(src) || {}; TREE_MAT.set(src, cache);
@@ -404,8 +408,9 @@ const TREE_POOL = { pine: ['treePine', 'treePine', 'treeSpruce'], pineS: ['treeP
 // ---------- instanced chunks ----------
 class Instancer {
   constructor(group) { this.group = group; this.sets = {}; }
-  add(type, x, z, ry = 0, s = 1, y = 0, sy, sz) {
-    (this.sets[type] ||= []).push([x, y, z, ry, s, sy ?? s, sz ?? s]);
+  // tilt: a lean about the prop's own z axis before it turns to ry (half-buried weapons, fallen lanterns)
+  add(type, x, z, ry = 0, s = 1, y = 0, sy, sz, tilt = 0) {
+    (this.sets[type] ||= []).push([x, y, z, ry, s, sy ?? s, sz ?? s, tilt]);
   }
   build(quality) {
     const M = mats(), out = {};
@@ -435,6 +440,11 @@ class Instancer {
         const g = KIT[kit]?.[m];
         if (!g) { console.warn('missing kit model', kit, m); continue; }
         def = { parts: [{ geo: g, material: kitMaterial(M, kit, m, type) }], shadow: !type.includes('#floor') };
+      } else if (type.startsWith('cin:')) {
+        // Act IV (the cinder pack): 'cin:<name>@<look>'; geometry-only scans take the game's ash rock or iron
+        const [name, v] = type.slice(4).split('@'), parts = ENV.props['cinder/' + name] || ENV.props[name];
+        if (!parts) { console.warn('missing cinder prop', name); continue; }
+        def = { parts: parts.map((p) => ({ geo: p.geo, material: cinMat(p.mat, v), glow: p.mat.transparent || /glow/i.test(p.mat.name) })), shadow: !/^(lantern|cagedLight)$/.test(name) };
       } else if (type.startsWith('env:')) {
         const name = type.slice(4), parts = ENV.props[name];
         if (!parts) { console.warn('missing env prop', name); continue; }
@@ -451,7 +461,7 @@ class Instancer {
         for (const part of def.parts) {
           const im = new THREE.InstancedMesh(part.geo, part.material, items.length);
           items.forEach((it, i) => {
-            _e.set(0, it[3], 0); _q.setFromEuler(_e);
+            _e.set(0, it[3], it[7] || 0); _q.setFromEuler(_e);
             _p.set(it[0], it[1], it[2]); _s.set(it[4], it[5], it[6] ?? it[4]);
             im.setMatrixAt(i, _m.compose(_p, _q, _s));
           });
@@ -526,6 +536,7 @@ const ENV_SWAP = {
 };
 const hash2 = (x, z) => { const v = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453; return v - Math.floor(v); };
 function addProp(B, I, p, L, rng, out) {
+  if (ACT4.has(L.type) && addProp4(B, I, p, L, rng, out)) return;
   const { x, z } = p, r = p.r || 0, s = p.s || 1;
   // the Weeping Woods' undergrowth (wood pack): autumn bracken and rosemary willow shrubs (the shrubs give way to bracken
   // on low quality); without the pack they are the summer ferns
@@ -609,7 +620,7 @@ function addProp(B, I, p, L, rng, out) {
       if (p.t === 'pillar') parts.push({ geo: G.box(0.9, 0.3, 0.9), color: DSTONE, o: { y: 0.35 + hh + 0.15 } });
       else if (!ENV.ready) parts.push({ geo: jitter(G.dodeca(0.4), 0.1, 3), color: STONE, o: { y: 0.3, x: 0.9, z: 0.4 } });
       else I.add('env:stoneA', x + Math.cos(r) * 0.9 + Math.sin(r) * 0.4, z - Math.sin(r) * 0.9 + Math.cos(r) * 0.4, r, 0.55);
-      B.add(p.dwarf && MAT.snowRock ? 'snowRock' : 'blocks', parts, x, z, r, s);
+      B.add(p.ash && MAT.ashBlocks ? 'ashBlocks' : p.dwarf && MAT.snowRock ? 'snowRock' : 'blocks', parts, x, z, r, s);
       break;
     }
     case 'statue':
@@ -926,7 +937,7 @@ function addProp(B, I, p, L, rng, out) {
       B.group.add(m);
       break;
     }
-    case 'bedroll': B.add('lam', [{ geo: G.box(0.9, 0.12, 2.0), color: 0x5a3a2a, o: { y: 0.06 } }, { geo: G.cyl(0.18, 0.18, 0.9, 7), color: 0x6a5040, o: { y: 0.18, z: -0.85, rz: Math.PI / 2 } }], x, z, r); break;
+    case 'bedroll': B.add('lam', [{ geo: G.box(0.9, 0.12, 2.0), color: ACT4.has(L.type) ? 0x3a2c24 : 0x5a3a2a, o: { y: 0.06 } }, { geo: G.cyl(0.18, 0.18, 0.9, 7), color: ACT4.has(L.type) ? 0x4a3c30 : 0x6a5040, o: { y: 0.18, z: -0.85, rz: Math.PI / 2 } }], x, z, r); break;
     case 'chandelier': {
       if (ENV.ready && ENV.props.chandelier) I.add('env:chandelier', x, z, r, 2.2, p.y || 5);
       B.add('lam', [{ geo: G.cyl(0.025, 0.025, 6, 4), color: IRON, o: { y: (p.y || 5) + 4.2 } }], x, z);
@@ -1053,6 +1064,18 @@ const GROUND = {
   // leaves, which are light already, near their own brightness)
   heart: { A: 'peat', B: 'rootwall', P: 'goldleaf', W: 'rootwall', s: [2.6, 2.2, 2.8], r: [0.85, 0.8, 0.92], ns: 1.1, tint: 0xd8ccc0, dual: [1, 0], sap: true, dry: true, dryK: 0.6, ws: 2.4, sat: 0.8 }
 };
+// Act IV: the cinder pack's layers, or (until it is there) the nearest the loaded packs have
+const lay4 = (...ids) => ids.find((k) => ENV.layers[k]) || null;
+function ground4(type) {
+  if (type === 'ashfield') {
+    const A = lay4('cinder/ashGround', 'scree', 'mud'), own = A === 'cinder/ashGround';
+    return { A, B: lay4('cinder/scree', 'cinder/ashTrod', 'scree', 'leaves'), P: lay4('cinder/road', 'gravel', 'trail'), W: lay4('cinder/cliffRock', 'cliff') || undefined,
+      s: [3.2, 2.6, 2.4], r: [0.95, 0.9, 0.85], ns: 1.0, tint: own ? 0xb0aaa4 : 0x8c8884, dual: [1, 0], ws: 3.4, sat: own ? 0.8 : 0.16 };
+  }
+  const A = lay4('cinder/forgeTiles', 'dslab', 'flags'), own = A === 'cinder/forgeTiles';
+  return { A, B: lay4('cinder/ironPlate', 'cinder/rust', 'cave', 'mud'), P: lay4('cinder/forgeHerring', 'herring', 'mcobble'), W: lay4('cinder/cliffRock', 'cavewall', 'dwall', 'wall'),
+    s: [2.6, 2.2, 2.2], r: [0.75, 0.55, 0.7], ns: 1.1, tint: own ? 0xc4bab0 : 0x9e968e, dual: [0, 0], ws: 2.6, sat: own ? 0.85 : 0.55 };
+}
 function buildGround(L, group) {
   const { w, h, cells, paint } = L;
   const geo = new THREE.PlaneGeometry(w, h, w, h);
@@ -1062,6 +1085,7 @@ function buildGround(L, group) {
   const col = new Float32Array(n * 3), blend = new Float32Array(n), lay = new Float32Array(n * 4);
   const D = L.dist, crypt = L.type === 'crypt', halls = L.type === 'halls', pass = L.type === 'pass';
   const heart = L.type === 'heart', act3 = heart || L.type === 'weep', LG = L.spots?.lanternglade;
+  const act4 = !!L.hgt, forge = L.type === 'forge'; // Act IV: the layout carries its own heights (gen4.js terrain)
   const sapW = act3 ? new Float32Array(n) : null;
   const cellAt = (x, z) => (x < 0 || z < 0 || x >= w || z >= h ? -1 : z * w + x);
   const roomAt = crypt ? new Uint8Array(w * h) : null;
@@ -1069,7 +1093,7 @@ function buildGround(L, group) {
   const cap = pass ? 12 : 9;
   for (let i = 0; i < n; i++) {
     const vx = Math.round(pos.getX(i)), vz = Math.round(pos.getZ(i));
-    let pv = 0, fl = 0, dd = 0, cnt = 0, rm = 0, hole = 0, cave = 0, ave = 0, dk = 0, sp = 0;
+    let pv = 0, fl = 0, dd = 0, cnt = 0, rm = 0, hole = 0, cave = 0, ave = 0, dk = 0, sp = 0, iron = 0;
     for (const [dx, dz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) {
       const c = cellAt(vx + dx, vz + dz); if (c < 0) { dd += cap; cnt++; continue; }
       pv += paint[c]; fl += cells[c]; dd += Math.min(D[c] === 255 ? cap : D[c], cap); cnt++;
@@ -1077,12 +1101,29 @@ function buildGround(L, group) {
       if (L.low && L.low[c]) hole++;
       if (act3) { if (L.deck[c]) dk++; sp += L.sap[c]; }
       if (halls && cells[c]) { cave += L.fk[c] === 2 ? 1 : 0; ave += L.fk[c] === 1 ? 1 : 0; }
+      if (forge && L.fk[c] === 2) iron++;
     }
     pv /= 4; fl /= 4; dd /= cnt; rm /= 4;
     const nz = fbm(vx * 0.15, vz * 0.15, L.seed || 1);
     const big = fbm(vx * 0.045 + 31, vz * 0.045 - 17, (L.seed || 1) + 5), mac = fbm(vx * 0.09 - 7, vz * 0.09 + 11, (L.seed || 1) + 9);
     let k, wb, wp;
-    if (halls) {
+    if (act4) {
+      // the Field: ash on the floor, black scree up the slopes, the rock face where they steepen; the Forge: volcanic tiles,
+      // iron plate in the galleries and bellows chambers, Karthax's herringbone on the Anvil, walls of black rock
+      const y = L.hgt[vz * (w + 1) + vx];
+      pos.setY(i, y);
+      let walls = 0;
+      for (let dz = -2; dz <= 1; dz++) for (let dx = -2; dx <= 1; dx++) { const c = cellAt(vx + dx, vz + dz); if (c < 0 || (!cells[c] && !L.low[c])) walls++; }
+      wp = clamp(pv * 1.25, 0, 1);
+      if (forge) {
+        k = fl > 0 || hole ? (0.96 + nz * 0.12) * (1 - Math.min(walls, 8) * 0.04) : 0.7 + nz * 0.24 - clamp(y / 16, 0, 0.22);
+        wb = clamp(iron / 4 * 1.3 + (nz - 0.5) * 0.5 - (fl > 0 ? 0 : 0.2), 0, 1);
+      } else {
+        k = fl > 0 || hole ? 0.9 + nz * 0.22 : Math.max(0.36, 0.86 - Math.min(y, 12) * 0.05) + (nz - 0.5) * 0.15;
+        wb = clamp((fl > 0 ? -0.18 + walls * 0.03 : 0.3 + dd * 0.08) + (nz - 0.5) * 1.8 + (big - 0.5) * 1.5, 0, 1);
+      }
+      if (hole) k *= 0.42;
+    } else if (halls) {
       // dressed slabs in the halls, herringbone paving on the king's road, raw rock in the mines; lava sits in cut channels
       let walls = 0;
       for (let dz = -2; dz <= 1; dz++) for (let dx = -2; dx <= 1; dx++) { const c = cellAt(vx + dx, vz + dz); if (c < 0 || (!cells[c] && !(L.low && L.low[c]))) walls++; }
@@ -1138,7 +1179,7 @@ function buildGround(L, group) {
   }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   geo.computeVertexNormals();
-  const cfg = GROUND[L.type] || GROUND.forest;
+  const cfg = GROUND[L.type] || (act4 ? ground4(L.type) : GROUND.forest);
   if (ENV.ready && ENV.layers[cfg.A]) {
     geo.setAttribute('aLay', new THREE.BufferAttribute(lay, 4));
     if (sapW) geo.setAttribute('aSap', new THREE.BufferAttribute(sapW, 1));
@@ -1287,14 +1328,17 @@ function buildLava(L, group) {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   const crust = ENV.layers.lava?.d;
+  // Act IV: the Forge's lava follows its heat (setHeat), the Field's ember sinks are mostly crust
+  const heat = L.type === 'forge' ? HEAT.uLava : L.type === 'ashfield' ? { value: 0.55 } : null;
   const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
   mat.toneMapped = false; // keep the glow saturated: ACES would wash it out to straw
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = WIND.uTime; sh.uniforms.tCrust = { value: crust || null };
+    if (heat) sh.uniforms.uHeat = heat;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec2 vLP;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLP = (modelMatrix * vec4(transformed, 1.0)).xz;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
-uniform float uTime; uniform sampler2D tCrust; varying vec2 vLP;
+uniform float uTime; uniform sampler2D tCrust; varying vec2 vLP;${heat ? '\nuniform float uHeat;' : ''}
 float lh(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float ln(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(lh(i), lh(i + vec2(1, 0)), f.x), mix(lh(i + vec2(0, 1)), lh(i + vec2(1, 1)), f.x), f.y); }`)
       .replace('#include <map_fragment>', `
@@ -1303,13 +1347,19 @@ float ln(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   float heat = ln(q * 3.0 + vec2(t * 0.11, -t * 0.07)) * 0.6 + ln(q * 7.0 - vec2(t * 0.05, t * 0.13)) * 0.4;
   ${crust ? `vec3 c1 = texture2D(tCrust, q * 0.9 + vec2(t * 0.012, t * 0.006)).rgb, c2 = texture2D(tCrust, q * 0.6 - vec2(t * 0.008, -t * 0.01) + 0.37).rgb;
   float crack = max(clamp((c1.r - c1.b) * 2.6 - 0.15, 0.0, 1.0), clamp((c2.r - c2.b) * 2.6 - 0.15, 0.0, 1.0) * 0.7);
-  float crustK = smoothstep(0.3, 0.62, 1.0 - heat) * (1.0 - crack);` : 'float crack = heat; float crustK = 1.0 - smoothstep(0.35, 0.7, heat);'}
-  vec3 hot = mix(vec3(0.95, 0.2, 0.02), vec3(1.0, 0.62, 0.16), smoothstep(0.6, 1.0, heat + crack * 0.35));
-  ${crust ? 'vec3 crustC = c1 * vec3(0.32, 0.26, 0.24);' : 'vec3 crustC = vec3(0.06, 0.04, 0.03);'}
-  vec3 col = mix(hot * (0.95 + 0.15 * sin(t * 1.7 + vLP.x * 0.4)), crustC + hot * 0.05, crustK * 0.95);
+  float crustK = smoothstep(0.3, 0.62, 1.0 - heat) * (1.0 - crack);` : `// no crust scan: veins where the noise crosses its middle
+  float crack = min(1.0, (1.0 - smoothstep(0.0, 0.07, abs(ln(q * 5.0 + vec2(t * 0.01, 0.0)) - 0.5))) * 0.9 + (1.0 - smoothstep(0.0, 0.045, abs(ln(q * 11.0 + 3.7) - 0.5))) * 0.5);
+  float crustK = smoothstep(0.3, 0.62, 1.0 - heat) * (1.0 - crack);`}
+  vec3 hot = mix(vec3(0.95, 0.2, 0.02), vec3(1.0, 0.62, 0.16), smoothstep(0.6, 1.0, heat + crack * 0.35));${heat ? `
+  // cooler: more of it crusts over and the seams dim; hotter: the crust breaks up and the melt brightens toward gold
+  crustK = clamp(crustK + (1.0 - min(uHeat, 1.0)) * 0.75 - max(uHeat - 1.0, 0.0) * 0.35, 0.0, 1.0);
+  hot = mix(hot * min(uHeat, 1.0), vec3(1.0, 0.55, 0.12), clamp(uHeat - 1.0, 0.0, 0.3) * 2.0);` : ''}
+  ${crust ? 'vec3 crustC = c1 * vec3(0.32, 0.26, 0.24);' : 'vec3 crustC = vec3(0.045, 0.035, 0.03);'}
+  vec3 col = mix(hot * (0.95 + 0.15 * sin(t * 1.7 + vLP.x * 0.4)), crustC + hot * 0.05, crustK * 0.95);${heat ? `
+  col *= mix(1.0, 0.5, clamp(crustK * (1.0 - min(uHeat, 1.0)) * 2.0, 0.0, 1.0)); // a cooler crust is a darker one` : ''}
   diffuseColor.rgb = col;`);
   };
-  mat.customProgramCacheKey = () => 'lava' + (crust ? 'c' : '');
+  mat.customProgramCacheKey = () => 'lava' + (crust ? 'c' : '') + (heat ? 'h' : '');
   const mesh = new THREE.Mesh(geo, mat);
   geo.computeBoundingSphere();
   group.add(mesh);
@@ -1899,6 +1949,701 @@ function deerProp(o) {
   return g;
 }
 
+// ======================= Act IV: the Field of Ash and the Ashen Forge =======================
+// The cinder pack's scans where it has them ('cin:' instancing, cinderProp), code-built stand-ins where it does not.
+// setHeat (the Forge), setNight (the Field) and setFlueGlow drive the shared uniforms below.
+export const HEAT = { k: 0, uLava: { value: 0.8 }, uGrate: { value: 0.2 }, gain: { k: 0.75 }, flue: [0, 1, 2, 3].map(() => ({ value: 0 })) };
+const NIGHT = { mode: 'ash', gain: { k: 1 }, stars: null, glow: null };
+const ACT4 = new Set(['ashfield', 'forge']);
+const cinder = (name) => ENV.props['cinder/' + name] || null;
+const DEAD = new THREE.Color(0x15130f), LIT = new THREE.Color(0xffc070);
+// the extent of a scanned prop (its parts' bounding boxes): { x, y, z, y0 }
+const SIZE4 = new Map();
+function size4(parts) {
+  if (!parts) return null;
+  if (SIZE4.has(parts)) return SIZE4.get(parts);
+  const b = new THREE.Box3();
+  for (const p of parts) { if (!p.geo.boundingBox) p.geo.computeBoundingBox(); b.union(p.geo.boundingBox); }
+  const s = { x: b.max.x - b.min.x, y: b.max.y - b.min.y, z: b.max.z - b.min.z, y0: b.min.y };
+  SIZE4.set(parts, s);
+  return s;
+}
+// a cinder scan placed at a wanted size: 'h' its height, 'l' its longest side; laid along local z when it is long in x
+function cin4(I, name, x, z, r, want, by = 'h', y = 0, look = '', tilt = 0, base = false) {
+  const parts = cinder(name) || (base && ENV.props[name]), sz = size4(parts);
+  if (!sz) return false;
+  // (by height, but never wider than 1.6 times what was asked: a flat scan must not balloon)
+  const k = by === 'h' ? Math.min(want / Math.max(0.01, sz.y), (want * 1.6) / Math.max(0.01, sz.x, sz.z)) : want / Math.max(0.01, sz.x, sz.y, sz.z);
+  I.add('cin:' + name + (look ? '@' + look : ''), x, z, r + (by === 'l' && sz.x > sz.z ? Math.PI / 2 : 0), k, y - sz.y0 * k, k, k, tilt);
+  return true;
+}
+// materials for the cinder scans: geometry-only rock takes the ash rock (or iron), the glass of a dead lantern is dark,
+// 'char' blackens a scan (dead trees on the Field)
+const CIN_MAT = new Map();
+function cinMat(mat, v) {
+  const M = mats();
+  if (!mat.map && !mat.normalMap && !mat.transparent && !/glow/i.test(mat.name)) return v === 'iron' || v === 'dead' ? M.iron : M.ashRockW || M.lam;
+  if ((mat.transparent || /glow|glass/i.test(mat.name)) && v === 'dead') return graveGlass();
+  if (!v || v === 'iron' || mat.transparent) return mat;
+  const key = mat.uuid + v;
+  if (!CIN_MAT.has(key)) {
+    // charred (or ash-dusted): darker, and most of the colour gone out of it
+    // ('dead': a lantern's brass gone to black iron)
+    const m = mat.clone(), sat = v === 'ash' ? 0.55 : 0.25;
+    m.color = m.color.clone().multiplyScalar(v === 'char' ? 0.42 : v === 'dead' ? 0.5 : 0.72);
+    occlude(m, (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+  diffuseColor.rgb = mix(vec3(dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11))), diffuseColor.rgb, ${sat.toFixed(2)});`); });
+    m.customProgramCacheKey = () => 'cin|' + v + '|' + m.type + '|occ';
+    CIN_MAT.set(key, m);
+  }
+  return CIN_MAT.get(key);
+}
+// the Graves' lantern glass: dead dark, lit warm at dawn (setNight)
+function graveGlass() {
+  return MAT.graveGlass ||= new THREE.MeshBasicMaterial({ color: (NIGHT.mode === 'dawn' ? LIT : DEAD).clone(), transparent: true, opacity: 0.92, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
+}
+function act4Mats() {
+  const M = mats(), key = (ENV.packs.cinder ? 'c' : '') + (ENV.packs.deep ? 'd' : '') + (ENV.ready ? 'e' : '');
+  if (MAT.act4Key === key) return M;
+  MAT.act4Key = key;
+  if (!MAT.iron) {
+    MAT.iron = occlude(new (Std())({ vertexColors: true, flatShading: true }));
+    if (MAT.iron.isMeshStandardMaterial) { MAT.iron.metalness = 0.35; MAT.iron.roughness = 0.68; MAT.iron.envMapIntensity = 0.12; }
+    MAT.obsidian = occlude(new (Std())({ vertexColors: true, flatShading: true }));
+    if (MAT.obsidian.isMeshStandardMaterial) { MAT.obsidian.metalness = 0.1; MAT.obsidian.roughness = 0.3; MAT.obsidian.envMapIntensity = 0.35; }
+  }
+  if (ENV.ready) {
+    // (no rock layer at all: a plain dark stone, never the base set's masonry)
+    const rock = lay4('cinder/cliffRock', 'cavewall', 'cliff'), own = rock === 'cinder/cliffRock';
+    MAT.ashRockW = rock ? worldMat(rock, { scale: 2.6, tri: true, rough: 0.9, tint: own ? 0xb4aea8 : 0x56524e }) : occlude(new THREE.MeshLambertMaterial({ color: 0x3a3836 }));
+    MAT.ashBlocks = worldMat(lay4('cinder/cliffRock', 'dwall', 'blocks'), { scale: 2.0, vc: 0.144, tri: true, rough: 0.85, tint: own ? 0xc0bab4 : 0x6a6662 });
+    MAT.flagsW = worldMat(lay4('cinder/forgeTiles', 'flags', 'blocks'), { scale: 2.6, rough: 0.8, tint: own ? 0x9a948e : 0x6e6a66 });
+  }
+  return M;
+}
+// grates in the Forge's floor: their slots glow with the heat (HEAT.uGrate) and with their flue's breath (HEAT.flue[g])
+let grateTex = null;
+function grateTexture() {
+  if (grateTex) return grateTex;
+  const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+  g.fillStyle = '#4a4440'; g.fillRect(0, 0, 64, 64);
+  g.fillStyle = '#080605'; for (let i = 0; i < 6; i++) g.fillRect(5 + i * 9.6, 6, 5, 52);
+  g.strokeStyle = '#2a2624'; g.lineWidth = 4; g.strokeRect(2, 2, 60, 60);
+  grateTex = new THREE.CanvasTexture(c); grateTex.colorSpace = THREE.SRGBColorSpace;
+  return grateTex;
+}
+function grateMat(gi) {
+  const k = 'grate' + gi;
+  if (MAT[k]) return MAT[k];
+  const L4 = ENV.layers['cinder/grate'], map = L4?.d || grateTexture();
+  const m = new THREE.MeshLambertMaterial({ map, color: 0x8a847e });
+  const u = { uHeat: HEAT.uGrate, uFlue: gi >= 0 ? HEAT.flue[gi] : HEAT.flue[3] };
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, u);
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uHeat; uniform float uFlue;')
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+  // the dark slots are the openings: fire shows through them
+  float slot = 1.0 - smoothstep(0.006, 0.045, dot(texture2D(map, vMapUv).rgb, vec3(0.3, 0.55, 0.15)));
+  totalEmissiveRadiance += vec3(0.8, 0.17, 0.02) * slot * (uHeat * 0.16 + uFlue * 1.6);`);
+  };
+  m.customProgramCacheKey = () => 'grate' + (L4 ? 'p' : 'c');
+  return (MAT[k] = m);
+}
+
+// ---------- code-built stand-ins (used when the cinder pack lacks a scan) ----------
+const BONE = 0x9e978c, ASHIRON = 0x2a2826, CHAR = 0x1e1a17;
+Object.assign(CAT, {
+  ashTuft: () => ({ mat: 'wind', shadow: false, geo: grassGeo(0x24201c, 0x625c52) }),
+  ashRockC: () => ({ mat: 'lam', shadow: true, parts: [{ geo: jitter(G.dodeca(0.7), 0.18, 211), color: 0x2c2a28, o: { y: 0.28, sy: 0.72 }, top: 1.15, jit: 0.2 }, { geo: jitter(G.dodeca(0.4), 0.1, 212), color: 0x262422, o: { y: 0.14, x: 0.6, z: 0.3, sy: 0.7 }, jit: 0.2 }] }),
+  ashStoneC: () => ({ mat: 'lam', shadow: false, parts: [{ geo: jitter(G.dodeca(0.4), 0.1, 213), color: 0x302e2c, o: { y: 0.08, sy: 0.6 }, jit: 0.2 }] }),
+  deadAsh: () => ({ mat: 'wind', shadow: true, parts: CAT.dead().parts.map((p) => ({ ...p, color: CHAR })) }),
+  slag: () => ({ mat: 'lam', shadow: false, parts: [0, 1, 2].map((i) => ({ geo: jitter(G.dodeca(0.22 - i * 0.04), 0.06, 220 + i), color: 0x1c1816, o: { x: Math.sin(i * 2.1) * 0.25, z: Math.cos(i * 2.1) * 0.25, y: 0.06, sy: 0.55 }, jit: 0.25 })) }),
+  slagGlow: () => ({ mat: 'glow', shadow: false, parts: [{ geo: G.box(0.16, 0.02, 0.03), color: 0xa02a06, o: { y: 0.11, rz: 0.2 } }, { geo: G.box(0.03, 0.02, 0.14), color: 0x8a2204, o: { x: 0.24, y: 0.1, z: 0.2 } }] }),
+  dbSword: () => ({ mat: 'lam', shadow: false, parts: [{ geo: G.blade(0.85, 0.07), color: 0x5e5e60, o: {} }, { geo: G.box(0.26, 0.04, 0.05), color: 0x3a3430, o: {} }, { geo: G.cyl(0.018, 0.02, 0.16, 5), color: 0x2a2018, o: { y: -0.09 } }, { geo: G.ball(0.03, 5, 4), color: 0x3a3430, o: { y: -0.18 } }] }),
+  dbShield: () => ({ mat: 'lam', shadow: false, parts: [{ geo: G.shape([[0, 0.55], [0.3, 0.42], [0.28, 0], [0, -0.5], [-0.28, 0], [-0.3, 0.42]], 0.05), color: 0x3c3834, o: {} }, { geo: G.oct(0.07), color: 0x5a5048, o: { z: 0.03, sz: 0.4 } }] }),
+  dbHammer: () => ({ mat: 'lam', shadow: false, parts: [{ geo: G.cyl(0.022, 0.026, 0.9, 5), color: 0x2a2018, o: { y: 0.45 } }, { geo: G.box(0.3, 0.13, 0.13), color: 0x3e3c3a, o: { y: 0.9 } }] }),
+  dbMace: () => ({ mat: 'lam', shadow: false, parts: [{ geo: G.cyl(0.02, 0.024, 0.7, 5), color: 0x2a2018, o: { y: 0.35 } }, { geo: jitter(G.ico(0.09, 0), 0.02, 214), color: 0x46423e, o: { y: 0.72 } }] }),
+  dbSpear: () => ({ mat: 'lam', shadow: false, parts: [{ geo: G.cyl(0.02, 0.024, 2.1, 5), color: 0x2e2418, o: { y: 1.05 } }, { geo: G.cone(0.04, 0.3, 4), color: 0x5a5a5c, o: { y: 2.25 } }] }),
+  dbHelm: () => ({ mat: 'lam', shadow: false, parts: [{ geo: G.dome(0.17, 0.55, 8), color: 0x4a4644, o: { sy: 1.15 } }, { geo: G.box(0.05, 0.16, 0.05), color: 0x3a3634, o: { z: 0.16, y: 0.02 } }] }),
+  lanternF: () => ({ mat: 'iron', shadow: false, parts: [{ geo: G.box(0.2, 0.03, 0.2), color: ASHIRON, o: { y: 0.02 } }, { geo: G.cone(0.15, 0.12, 4), color: ASHIRON, o: { y: 0.36, ry: 0.785 } }, ...[0, 1, 2, 3].map((i) => ({ geo: G.box(0.02, 0.3, 0.02), color: ASHIRON, o: { x: (i % 2 ? 1 : -1) * 0.085, z: (i > 1 ? 1 : -1) * 0.085, y: 0.17 } })), { geo: G.torus(0.04, 0.008, 3, 8), color: ASHIRON, o: { y: 0.46 } }] }),
+  lanternG: () => ({ material: graveGlass(), shadow: false, parts: [{ geo: G.box(0.15, 0.26, 0.15), color: 0xffffff, o: { y: 0.17 } }] }),
+  chainLink: () => ({ mat: 'iron', shadow: false, parts: [{ geo: G.torus(0.07, 0.018, 4, 8), color: ASHIRON, o: { sy: 1.5 } }] })
+});
+
+// a hanging (or fallen) dead lantern: the cinder scans in turn, the base set's lantern, or the code one
+function lantern4(I, x, y, z, r, k = 1, tilt = 0) {
+  const name = cinder('cagedLight') && hash2(x * 3.1, z) < 0.35 ? 'cagedLight' : 'lantern';
+  if (cin4(I, name, x, z, r, 0.55 * k, 'h', y, 'dead', tilt, true)) return;
+  I.add('lanternF', x, z, r, k, y, k, k, tilt); I.add('lanternG', x, z, r, k, y, k, k, tilt);
+}
+// iron pole for the Graves: post, foot, one or two arms, the hooks
+function gravePole(B, p) {
+  const parts = [{ geo: G.cyl(0.045, 0.06, p.h, 5), color: ASHIRON, o: { y: p.h / 2 } }, { geo: G.cyl(0.16, 0.2, 0.12, 6), color: 0x24221f, o: { y: 0.06 } }];
+  for (const a of p.arms) {
+    parts.push({ geo: G.box(0.04, 0.04, 0.7), color: ASHIRON, o: { y: p.h - 0.05, x: Math.sin(a) * 0.33, z: Math.cos(a) * 0.33, ry: a } });
+    parts.push({ geo: G.cyl(0.01, 0.01, 0.12, 3), color: ASHIRON, o: { y: p.h - 0.11, x: Math.sin(a) * 0.62, z: Math.cos(a) * 0.62 } });
+  }
+  B.add('iron', parts, p.x, p.z, 0, 1, p.y || 0);
+}
+// a debris piece of the old battle, half buried
+const DEBRIS = { shield: ['shield', 'dbShield', 0.95, 1.35], sword: ['sword', 'dbSword', 1.0, 0.6], warhammer: ['warhammer', 'dbHammer', 1.0, 0.7], mace: ['mace', 'dbMace', 0.8, 0.8], spear: [null, 'dbSpear', 2.3, 0.45], helm: [null, 'dbHelm', 0.4, 1.4] };
+function debris4(I, p) {
+  const [scan, code, len, lie] = DEBRIS[p.m] || DEBRIS.sword, s = p.s || 1, tilt = (p.tilt ?? 0.6) * (p.m === 'shield' ? 1.15 : 1);
+  if (scan && cinder(scan)) {
+    const sz = size4(cinder(scan)), up = sz.y >= Math.max(sz.x, sz.z);
+    if (cin4(I, scan, p.x, p.z, p.r || 0, len * s, 'l', -len * s * (up ? 0.22 : 0.05), 'ash', up ? Math.min(tilt, 1.1) : 0)) return;
+  }
+  I.add(code, p.x, p.z, p.r || 0, s, p.m === 'helm' ? 0.02 : -0.18 * s, s, s, p.m === 'helm' ? 1.4 : Math.min(tilt, lie > 1 ? 1.45 : 1.25));
+}
+// the bones of one of Karthax's war-drakes: spine, ribs arching over it, the skull at the front (local +z)
+function drakeBones(I, B, x, z, r) {
+  const at = (u, v = 0) => ({ x: x + Math.sin(r) * u + Math.cos(r) * v, z: z + Math.cos(r) * u - Math.sin(r) * v });
+  const sk = at(5.2), rb = at(0.3), sp = at(-3.6);
+  if (cinder('drakeRibs') && cinder('drakeSkull')) {
+    cin4(I, 'drakeRibs', rb.x, rb.z, r, 6, 'l', -0.25, 'ash');
+    if (!cin4(I, 'drakeSpine', sp.x, sp.z, r, 9, 'l', -0.15, 'ash')) B.add('lam', [{ geo: G.cyl(0.14, 0.05, 8, 5), color: BONE, o: { y: 0.1, rx: Math.PI / 2 } }], sp.x, sp.z, r);
+    cin4(I, 'drakeSkull', sk.x, sk.z, r + 0.25, 3.2, 'l', -0.2, 'ash');
+    return;
+  }
+  const rr = RNG(Math.round(x * 7 + z * 13)), parts = [];
+  // the spine: a sagging line of vertebrae, the tail curling off into the ash
+  const spine = []; for (let k = 0; k <= 16; k++) { const u = -9 + k * 0.85; spine.push(V3(Math.sin(k * 0.35) * 0.6 * (k < 6 ? 1 : 0.3), 0.35 + Math.sin(clamp((u + 4) / 9, 0, 1) * Math.PI) * 1.2, u)); }
+  parts.push({ geo: rootGeo(spine, 0.12, 0.18, 32, 6), color: BONE, o: {} });
+  for (let k = 2; k < 16; k += 1) { const p = spine[k]; parts.push({ geo: G.box(0.32, 0.28, 0.22), color: BONE, o: { x: p.x, y: p.y + 0.1, z: p.z, ry: 0.1 * k }, jit: 0.15 }, { geo: G.cone(0.06, 0.4, 4), color: BONE, o: { x: p.x, y: p.y + 0.4, z: p.z } }); }
+  // ribs: pairs arching up and over, some broken short
+  for (let k = 0; k < 7; k++) for (const sd of [-1, 1]) {
+    const u = -2.6 + k * 0.85, top = 1.5 + Math.sin(k / 6 * Math.PI) * 0.6, len = rr.chance(0.25) ? 0.55 : 1;
+    const pts = [[0, top, u], [sd * 1.4, top + 0.4, u - 0.15], [sd * 2.1, 1.0, u - 0.3], [sd * 1.9 * (len < 1 ? 1.1 : 1), 0.05, u - 0.4]].slice(0, len < 1 ? 3 : 4);
+    parts.push({ geo: rootGeo(pts, 0.11, 0.05, 12, 5), color: BONE, o: {} });
+  }
+  // the skull: long jaws, the brow ridge, two horns swept back
+  parts.push({ geo: jitter(G.box(1.1, 0.7, 2.4), 0.08, 215), color: BONE, o: { y: 0.4, z: 5.4, rx: -0.12 } }, { geo: G.box(0.8, 0.25, 1.8), color: 0x8a8378, o: { y: 0.05, z: 5.6, rx: 0.08 } });
+  for (const sd of [-1, 1]) { parts.push({ geo: G.segTo(sd * 0.6, 0.5, -1.6, 0.14, 0.03, 5), color: 0x7a7468, o: { x: sd * 0.4, y: 0.7, z: 4.6 } }, { geo: G.ball(0.16, 6, 5), color: 0x15120f, o: { x: sd * 0.36, y: 0.62, z: 5.0 } }); }
+  B.add('lam', parts, x, z, r);
+}
+// a fallen standard: the pole broken over the ground, the cloth spread out from its crossbar, the people's sign at the top
+const FACTION = [{ cloth: 0x262a30, sign: 0x6a6e74 }, { cloth: 0x3e1e16, sign: 0x7a5a30 }, { cloth: 0x232a1c, sign: 0x7a7040 }];
+function fallenBanner(B, p) {
+  const f = FACTION[p.faction] || FACTION[0], len = p.len || 13, rr = RNG(p.faction * 31 + 7);
+  const parts = [{ geo: G.cyl(0.13, 0.16, len * 0.62, 7), color: 0x2a2018, o: { y: 0.14, z: len * 0.19, rx: Math.PI / 2, rz: 0.03 } }, { geo: G.cyl(0.12, 0.14, len * 0.34, 7), color: 0x2a2018, o: { y: 0.13, x: 0.25, z: -len * 0.33, rx: Math.PI / 2, ry: 0.12 } }];
+  parts.push({ geo: G.box(3.4, 0.14, 0.14), color: 0x2a2018, o: { y: 0.16, z: len * 0.42 } });
+  // the sign: the Men's iron star, the Stoneborn's anvil, the Evergreen's leaf
+  const sg = p.faction === 1 ? G.box(0.7, 0.35, 0.45) : p.faction === 2 ? G.cone(0.32, 0.9, 4) : G.oct(0.45);
+  parts.push({ geo: sg, color: f.sign, o: { y: 0.3, z: len * 0.5 + 0.4, rx: Math.PI / 2, sz: p.faction === 2 ? 0.4 : 0.7 } });
+  B.add('lam', parts, p.x, p.z, p.r || 0);
+  // the cloth: draped in folds, its far edge torn
+  const W = 4.2, H = 7.2, g = new THREE.PlaneGeometry(W, H, 12, 22); g.rotateX(-Math.PI / 2);
+  const pos = g.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const u = pos.getX(i) / W + 0.5, v = pos.getZ(i) / H + 0.5;
+    const fold = Math.abs(Math.sin(u * 7.5 + v * 2.2 + p.faction)) * 0.14 + Math.sin(v * 9 + u * 3) * 0.04;
+    const torn = v < 0.12 ? rr.range(-0.4, 0.15) : 0;
+    pos.setXYZ(i, pos.getX(i) * (1 - (1 - v) * 0.12), 0.05 + fold * (0.4 + v * 0.6), pos.getZ(i) + torn);
+  }
+  g.computeVertexNormals(); g.translate(0, 0, len * 0.42 - H / 2 - 0.1);
+  B.add('lam', [{ geo: g, color: f.cloth, o: {}, jit: 0.12 }], p.x, p.z, p.r || 0);
+}
+// the cold beacon of the Dark Beacon camp: a squat tower on its knoll, the basket on top full of dead ash
+function darkBeacon(B, p) {
+  const M = act4Mats(), mat = M.ashBlocks ? 'ashBlocks' : 'lam';
+  B.add(mat, [{ geo: jitter(G.cyl(3.0, 3.9, 0.9, 12), 0.15, 230), color: 0x3a3632, o: { y: 0.1 }, jit: 0.1 }], p.x, p.z);
+  B.add(mat, [{ geo: G.cyl(1.55, 1.85, 5.2, 12), color: STONE, o: { y: 3.0 }, ao: 4 }, { geo: G.cyl(1.95, 1.7, 0.45, 12), color: DSTONE, o: { y: 5.75 } },
+    ...[0, 1, 2, 3, 4, 5, 6, 7].map((i) => ({ geo: G.box(0.5, 0.5, 0.36), color: 0x5a5650, o: { x: Math.sin(i * 0.785) * 1.8, z: Math.cos(i * 0.785) * 1.8, y: 6.2, ry: i * 0.785 }, jit: 0.1 }))], p.x, p.z, p.r || 0);
+  B.add('iron', [{ geo: G.cyl(0.9, 0.55, 0.6, 8), color: ASHIRON, o: { y: 6.3 } }, { geo: jitter(G.dome(0.8, 0.4, 8), 0.06, 231), color: 0x4a4642, o: { y: 6.5 } }], p.x, p.z);
+}
+// the watchtower of the dead Wayfarers: the cinder scan, or a broken round tower with a door to the road (local +z)
+function ruinedTower(I, B, p) {
+  if (cin4(I, 'ruinedTower', p.x, p.z, p.r || 0, 8.5, 'h', -0.1)) return;
+  const mat = act4Mats().ashBlocks ? 'ashBlocks' : 'lam', parts = [], rr = RNG(Math.round(p.x * 13 + p.z));
+  for (let k = 0; k < 14; k++) {
+    const a = (k / 14) * Math.PI * 2; if (Math.abs(angleDiff(a, 0)) < 0.3) continue;
+    const hgt = 3.5 + Math.abs(Math.sin(k * 1.7)) * 4.5 * (k > 3 && k < 11 ? 1 : 0.55);
+    parts.push({ geo: G.box(1.05, hgt, 0.7), color: k % 2 ? STONE : DSTONE, o: { x: Math.sin(a) * 2.1, z: Math.cos(a) * 2.1, y: hgt / 2, ry: a }, jit: 0.12 });
+  }
+  for (let k = 0; k < 7; k++) parts.push({ geo: jitter(G.dodeca(rr.range(0.3, 0.6)), 0.1, 240 + k), color: DSTONE, o: { x: rr.range(-3, 3), z: rr.range(1.5, 3.5), y: 0.15 } });
+  B.add(mat, parts, p.x, p.z, p.r || 0);
+}
+// the rock behind the Anvil Gate: the cliff of the Black Anvil, lava seams in it, the gate's obsidian jambs and lintel
+function anvilGateFrame(B, p, out) {
+  const M = act4Mats(), rock = M.ashRockW ? 'ashRockW' : 'lam', rr = RNG(Math.round(p.x * 17));
+  const cliff = [];
+  for (let k = 0; k < 16; k++) {
+    const sx = k % 2 ? 1 : -1, d = 6 + Math.floor(k / 2) * 3.4 + rr.range(-0.6, 0.6), hgt = rr.range(11, 19) - Math.floor(k / 2) * 0.3;
+    cliff.push({ geo: jitter(G.box(4.6, hgt, 5.5, 2, 4, 2), 0.5, 250 + k), color: 0x34302c, o: { x: sx * d, y: hgt / 2 - 0.5, z: -2.6 - rr.range(0, 2.5) }, jit: 0.15 });
+  }
+  cliff.push({ geo: jitter(G.box(14, 10, 6, 4, 3, 2), 0.5, 270), color: 0x302c28, o: { y: 15, z: -4.2 } }, { geo: jitter(G.box(60, 24, 10, 8, 4, 2), 0.9, 271), color: 0x2a2622, o: { y: 10, z: -12 } });
+  B.add(rock, cliff, p.x, p.z);
+  B.add('obsidian', [
+    ...[-1, 1].map((sx) => ({ geo: G.box(1.9, 9.2, 2.6), color: 0x16141a, o: { x: sx * 4.35, y: 4.6 } })),
+    ...[-1, 1].map((sx) => ({ geo: G.box(2.6, 1.0, 3.2), color: 0x1c1a20, o: { x: sx * 4.35, y: 0.5 } })),
+    { geo: G.box(11.4, 1.7, 3.0), color: 0x1a181e, o: { y: 9.9 } }, { geo: prism(12.4, 1.6, 3.2), color: 0x16141a, o: { y: 10.75 } }
+  ], p.x, p.z);
+  // the seams: lava running in the cracks of the mountain (they die with the forge: NIGHT.gain dims their light)
+  const seams = [];
+  for (let k = 0; k < 9; k++) {
+    let sx = (k % 2 ? 1 : -1) * rr.range(6, 22), sy = rr.range(1, 10);
+    for (let j = 0; j < 4; j++) { const dx = rr.range(-0.8, 0.8), dy = rr.range(0.9, 1.8); seams.push({ geo: G.segTo(dx, dy, 0, 0.06, 0.04, 3), color: 0xc0300a, o: { x: sx, y: sy, z: -0.1 - rr.range(0, 0.6) } }); sx += dx; sy += dy; }
+  }
+  seams.push({ geo: G.box(9, 0.08, 0.06), color: 0xd04010, o: { y: 9.0, z: 1.55 } }, ...[-1, 1].map((sx) => ({ geo: G.box(0.08, 7.6, 0.06), color: 0xb03008, o: { x: sx * 3.35, y: 4.6, z: 1.32 } })));
+  const sm = new THREE.Mesh(bake(seams), MAT.seam ||= new THREE.MeshBasicMaterial({ vertexColors: true, color: 0xffffff }));
+  sm.position.set(p.x, 0, p.z); out.group.add(sm);
+  NIGHT.seam = MAT.seam;
+}
+// a flagstone disc for the Anvil Gate's plaza, its rim set with kerbs
+function plaza(p, out) {
+  const M = act4Mats(), r = p.s || 14, g = new THREE.CircleGeometry(r + 0.4, 64);
+  const pos = g.attributes.position;
+  for (let i = 1; i < pos.count; i++) { const x = pos.getX(i), y = pos.getY(i), k = 1 + (fbm(x * 0.4, y * 0.4, 3) - 0.5) * 0.06; pos.setXY(i, x * k, y * k); }
+  g.rotateX(-Math.PI / 2);
+  const m = new THREE.Mesh(g, M.flagsW || new THREE.MeshLambertMaterial({ map: tex('flagstone'), color: 0x6e6a66 }));
+  m.position.set(p.x, 0.022, p.z); m.receiveShadow = true; out.group.add(m);
+  // a kerb of dark stone round its edge, flush with the flags
+  const kerb = new THREE.RingGeometry(r + 0.05, r + 0.75, 72, 1); kerb.rotateX(-Math.PI / 2);
+  const km = new THREE.Mesh(kerb, M.ashRockW || M.lam); km.position.set(p.x, 0.03, p.z); km.receiveShadow = true; out.group.add(km);
+}
+// ---------- the Forge ----------
+function forgeStatue(I, B, st) {
+  // an old king of the Ash on his plinth, his head struck off by the alliance
+  const M = act4Mats();
+  B.add(M.ashBlocks ? 'ashBlocks' : 'lam', [{ geo: G.box(2.3, 1.1, 2.3), color: DSTONE, o: { y: 0.55 }, ao: 1 }, { geo: G.box(2.0, 0.25, 2.0), color: STONE, o: { y: 1.22 } }], st.x, st.z, st.r);
+  if (cin4(I, 'statue', st.x, st.z, st.r, 5.6, 'h', 1.32, cinder('statue') ? 'ash' : 'char', 0, true)) return;
+  B.add(M.ashBlocks ? 'ashBlocks' : 'lam', [{ geo: G.cyl(0.55, 0.95, 4.2, 8), color: STONE, o: { y: 3.4 } }, { geo: G.box(1.8, 0.6, 0.8), color: STONE, o: { y: 5.2 } }], st.x, st.z, st.r);
+}
+function ironBridge(B, b) {
+  const len = b.len || 7, bw = b.w || 3.4, parts = [{ geo: G.box(bw, 0.22, len), color: 0x2e2a28, o: { y: -0.08 } }];
+  for (const sx of [-1, 1]) {
+    parts.push({ geo: G.box(0.24, 0.7, len + 0.6), color: ASHIRON, o: { x: sx * (bw / 2 + 0.05), y: -0.3 } });
+    for (let i = 0; i <= Math.floor(len / 1.6); i++) parts.push({ geo: G.box(0.1, 1.0, 0.1), color: ASHIRON, o: { x: sx * (bw / 2 + 0.05), y: 0.5, z: -len / 2 + 0.3 + i * 1.6 } });
+    parts.push({ geo: G.box(0.07, 0.07, len), color: ASHIRON, o: { x: sx * (bw / 2 + 0.05), y: 0.98 } });
+  }
+  for (let i = 0; i < Math.floor(len / 0.9); i++) parts.push({ geo: G.box(bw - 0.1, 0.04, 0.08), color: 0x3a3634, o: { y: 0.045, z: -len / 2 + 0.45 + i * 0.9 } });
+  B.add('iron', parts, b.x, b.z, b.r || 0);
+}
+function chains(I, list) {
+  for (const c of list) {
+    const n = Math.floor((c.y1 - c.y0) / 0.2);
+    for (let i = 0; i < n; i++) I.add('chainLink', c.x, c.z, (i % 2) * Math.PI / 2 + c.x, 1, c.y0 + i * 0.2);
+  }
+}
+function act4Level(L, I, B, out) {
+  act4Mats();
+  if (L.type === 'ashfield') {
+    for (const p of L.gravePoles || []) gravePole(B, p);
+    for (const l of L.graveLanterns || []) lantern4(I, l.x, l.y, l.z, l.r, 1, l.fallen || 0);
+    // the Black Anvil's red glow over the north horizon (seen when the camera lowers), and the stars after the Unmaking
+    if (L.anvilGlow) {
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex('dot'), color: 0xff3a10, blending: THREE.AdditiveBlending, fog: false, depthWrite: false, transparent: true, opacity: 0.55 }));
+      s.position.set(L.anvilGlow.x, L.anvilGlow.y, L.anvilGlow.z); s.scale.set(120, 60, 1);
+      out.group.add(s); NIGHT.glow = s;
+    }
+    NIGHT.stars = starField(out.group);
+    applyNight();
+    for (const l of L.lights) if (l.anvil) l.gain = NIGHT.gain;
+  } else {
+    for (const st of L.statues || []) forgeStatue(I, B, st);
+    for (const b of L.bridges || []) ironBridge(B, b);
+    chains(I, L.chains || []);
+    for (const gr of L.grates || []) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(gr.w, gr.l), grateMat(gr.g));
+      m.rotation.set(-Math.PI / 2, 0, gr.r || 0); m.position.set(gr.x, 0.03, gr.z); m.receiveShadow = true;
+      out.group.add(m);
+    }
+    for (const l of L.lights) if (l.heat) l.gain = HEAT.gain;
+  }
+}
+// stars over the Field after the Unmaking: a dome that follows the camera (seen when it lowers toward the horizon)
+function starField(group) {
+  const n = 900, pos = new Float32Array(n * 3), col = new Float32Array(n * 3), rr = RNG(77);
+  for (let i = 0; i < n; i++) {
+    const a = rr.range(0, Math.PI * 2), e = Math.asin(rr.range(0.04, 1)), r = 110;
+    pos.set([Math.cos(e) * Math.sin(a) * r, Math.sin(e) * r, Math.cos(e) * Math.cos(a) * r], i * 3);
+    const k = rr.range(0.45, 1); col.set([k * 0.85, k * 0.9, k], i * 3);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const pts = new THREE.Points(g, new THREE.PointsMaterial({ size: 1.6, sizeAttenuation: false, vertexColors: true, fog: false, transparent: true, opacity: 0.9, depthWrite: false }));
+  pts.frustumCulled = false; pts.renderOrder = -1;
+  pts.onBeforeRender = (r, s, cam) => { pts.position.copy(cam.position); pts.updateMatrixWorld(); };
+  group.add(pts);
+  return pts;
+}
+// The Field by night: 'ash' (ash falling, the Black Anvil glowing red, the dead lanterns dark), 'stars' (after the Unmaking:
+// no ash, stars, the mountain's fire out), 'dawn' (every lantern in the Graves lit). Sets the FX ambient too.
+export function setNight(mode = 'ash') {
+  NIGHT.mode = mode;
+  applyNight();
+  setAmbient(mode === 'stars' ? 'ashfieldStars' : mode === 'dawn' ? 'ashfieldDawn' : 'ashfall');
+}
+function applyNight() {
+  const mode = NIGHT.mode;
+  if (NIGHT.stars) { NIGHT.stars.visible = mode !== 'ash'; NIGHT.stars.material.opacity = mode === 'dawn' ? 0.2 : 0.9; }
+  if (NIGHT.glow) NIGHT.glow.visible = mode === 'ash';
+  NIGHT.gain.k = mode === 'ash' ? 1 : 0.05;
+  if (NIGHT.seam) NIGHT.seam.color.setScalar(mode === 'ash' ? 1 : 0.12);
+  if (MAT.graveGlass) MAT.graveGlass.color.copy(mode === 'dawn' ? LIT : DEAD);
+}
+// The Forge's heat, 0 (banked) to 3 (full breath), or -1 the cold forge after the Unmaking: the lava's glow, the grates,
+// the lights that follow the heat, and the Forge's atmosphere (call it after entering the Forge; fractions fade)
+export function setHeat(k = 0) {
+  HEAT.k = k;
+  const cold = k < 0, h = clamp(k, 0, 3);
+  HEAT.uLava.value = cold ? 0.05 : 0.8 + 0.16 * h;
+  HEAT.uGrate.value = cold ? 0 : 0.2 + 0.3 * h;
+  HEAT.gain.k = cold ? 0.06 : 0.75 + 0.2 * h;
+  setAtmosphere(heatAtmos(k));
+}
+// a flue's breath in its grates (forge.js: the inhale's glow, 0..1+); g 0-2 the galleries, 3 every other grate
+export function setFlueGlow(g, k) { if (HEAT.flue[g]) HEAT.flue[g].value = clamp(k, 0, 1.5); }
+
+// ---------- addProp for Act IV ----------
+function addProp4(B, I, p, L, rng, out) {
+  const { x, z } = p, r = p.r || 0, s = p.s || 1, y = p.y || 0, M = act4Mats();
+  switch (p.t) {
+    case 'ashTree': {
+      const d = p.d ?? 2;
+      if (d > 2 && hash2(x * 1.3, z * 0.7) > 0.6) return true; // thinner away from the open
+      if (cinder('deadTree') && cin4(I, hash2(x, z) < 0.5 || !cinder('deadTreeB') ? 'deadTree' : 'deadTreeB', x, z, r, s * 5.2, 'h', y, 'char')) return true;
+      if (ENV.props.treeDead && R.quality >= 1 && !NO_TREES) { const k = s * 0.8; I.add('tree:treeDead@char', x, z, r, k, y - 0.05, k * 0.95); return true; }
+      I.add('deadAsh', x, z, r, s, y);
+      return true;
+    }
+    case 'ashRock': case 'forgeRock': case 'ashCrag': {
+      const want = p.t === 'ashCrag' ? 3.4 : p.t === 'forgeRock' ? 1.6 : 1.1;
+      const pool = p.t === 'ashCrag' ? ['boulder', 'rockD', 'rockC'] : ['rockA', 'rockB', 'rockC', 'rockD'], name = pool[Math.floor(hash2(x, z) * pool.length)];
+      if (cin4(I, name, x, z, r, want * s, 'l', y)) return true;
+      const alt = ['rockA', 'rockB', 'rockC', 'boulder'][Math.floor(hash2(z, x) * 4)];
+      if (cin4(I, alt, x, z, r, want * s, 'l', y - 0.1, 'char', 0, true)) return true;
+      I.add('ashRockC', x, z, r, want * s * 0.85, y);
+      return true;
+    }
+    case 'ashStone': if (!cin4(I, ['rockA', 'rockB'][Math.floor(hash2(x, z) * 2)], x, z, r, 0.45 * s, 'l', -0.05) && !cin4(I, ['stoneA', 'stoneB', 'stoneC'][Math.floor(hash2(x, z) * 3)], x, z, r, 0.4 * s, 'l', -0.04, 'char', 0, true)) I.add('ashStoneC', x, z, r, s); return true;
+    case 'ashTuft': I.add('ashTuft', x, z, r, s, y, s); return true;
+    case 'debris': debris4(I, p); return true;
+    case 'slag': I.add('slag', x, z, r, s); if (hash2(x, z) < 0.4) I.add('slagGlow', x, z, r, s); return true;
+    case 'darkBeacon': darkBeacon(B, p); return true;
+    case 'campBrazier': {
+      if (!cin4(I, 'brazier', x, z, r, 1.25, 'h')) addProp(B, I, { t: 'brazier', x, z }, L, rng, out);
+      else { B.add('glow', [{ geo: G.cyl(0.3, 0.3, 0.04, 8), color: 0xff6a20, o: { y: 1.05 } }], x, z); out.emitters.push({ x, y: 1.12, z, type: 'fire', s: 0.8 }); }
+      return true;
+    }
+    case 'ruinedTower': ruinedTower(I, B, p); return true;
+    case 'fallenBanner': fallenBanner(B, p); return true;
+    case 'drakeBones': drakeBones(I, B, x, z, r); return true;
+    case 'tickNest': {
+      B.add('lam', [{ geo: jitter(G.dome(1.3, 0.45, 10), 0.14, 280), color: 0x2a2420, o: { sy: 0.5 }, jit: 0.25 }, ...[0, 1, 2, 3].map((i) => ({ geo: G.cyl(0.18, 0.12, 0.3, 6), color: 0x0a0806, o: { x: Math.sin(i * 1.6 + r) * 0.7, z: Math.cos(i * 1.6 + r) * 0.7, y: 0.45 - i * 0.05 } }))], x, z, r);
+      B.add('glow', [0, 1, 2].map((i) => ({ geo: G.ball(0.05, 4, 3), color: 0xff5a10, o: { x: Math.sin(i * 2.3) * 0.5, z: Math.cos(i * 2.3) * 0.5, y: 0.5 } })), x, z, r);
+      out.emitters.push({ x, y: 0.4, z, type: 'embers', s: 0.6 });
+      return true;
+    }
+    case 'rimStone': case 'rimPillar': addProp(B, I, { t: p.t === 'rimPillar' ? 'pillarBroken' : 'pillarBroken', x, z, r, s, h: p.t === 'rimPillar' ? 1.2 : 0.55, ash: true }, L, rng, out); return true;
+    case 'plaza': plaza(p, out); return true;
+    case 'anvilGateFrame': anvilGateFrame(B, p, out); return true;
+    // ---------- the Forge ----------
+    case 'forgePillar': B.add(M.ashBlocks ? 'ashBlocks' : 'lam', [{ geo: G.box(1.2, 0.5, 1.2), color: DSTONE, o: { y: 0.25 } }, { geo: G.box(0.95, 2.6, 0.95), color: STONE, o: { y: 1.8 }, ao: 2 }, { geo: jitter(G.box(1.0, 0.6, 1.0), 0.12, 350), color: DSTONE, o: { y: 3.3, ry: 0.3 } }], x, z, r); return true;
+    case 'bullHead': {
+      if (cin4(I, 'bullHead', x, z, r, 1.6, 'l', y, 'iron')) return true;
+      B.add('iron', [{ geo: G.box(0.9, 1.1, 0.35), color: ASHIRON, o: { y: y } }, { geo: G.box(0.55, 0.5, 0.5), color: ASHIRON, o: { y: y - 0.55, z: 0.2 } }, ...[-1, 1].map((sx) => ({ geo: G.segTo(sx * 0.7, 0.6, 0.15, 0.12, 0.03, 5), color: 0x3a3632, o: { x: sx * 0.4, y: y + 0.35, z: 0.1 } }))], x, z, r);
+      B.add('glow', [-1, 1].map((sx) => ({ geo: G.ball(0.06, 5, 4), color: 0xff5010, o: { x: sx * 0.2, y: y + 0.05, z: 0.19 } })), x, z, r);
+      return true;
+    }
+    case 'coldForge': {
+      // Brokka's cold side forge: a dead hearth, a hood, a chimney of black stone, ash in the fire-bed
+      B.add(M.ashBlocks ? 'ashBlocks' : 'lam', [{ geo: G.box(2.6, 1.2, 1.9), color: DSTONE, o: { y: 0.6 }, jit: 0.1 }, { geo: G.box(2.0, 0.2, 1.5), color: STONE, o: { y: 1.3 } }, { geo: G.cyl(0.6, 0.85, 3.2, 6), color: DSTONE, o: { y: 3.0, z: -0.4 } }, { geo: G.box(2.8, 0.6, 2.2), color: STONE, o: { y: 2.0, z: -0.1 } }], x, z, r);
+      B.add('lam', [{ geo: jitter(G.box(1.4, 0.12, 1.0), 0.04, 290), color: 0x4a4642, o: { y: 1.43 } }], x, z, r);
+      return true;
+    }
+    case 'forgeClutter': {
+      const want = { anvil: 0.75, tongs: 0.9, quench: 1.6, toolRack: 1.8, stump: 0.8, barrel: 1.0, crossPein: 0.8 }[p.m] || 1;
+      if (cin4(I, p.m, x, z, r, want * s, p.m === 'tongs' || p.m === 'crossPein' || p.m === 'quench' ? 'l' : 'h', p.m === 'tongs' || p.m === 'crossPein' ? 0.02 : 0)) return true;
+      if (p.m === 'anvil') addProp(B, I, { t: 'anvil', x, z, r }, L, rng, out);
+      else if (p.m === 'barrel' && ENV.props.barrel) I.add('env:barrel', x, z, r, s, 0);
+      else if (p.m === 'stump') I.add(ENV.props.stump ? 'env:stump' : 'ashStoneC', x, z, r, s * 0.8, 0);
+      else if (p.m === 'quench') B.add('iron', [{ geo: G.box(1.5, 0.6, 0.7), color: 0x2e2a26, o: { y: 0.3 } }, { geo: G.box(1.35, 0.05, 0.55), color: 0x101418, o: { y: 0.58 } }], x, z, r);
+      else if (p.m === 'toolRack') B.add('lam', [{ geo: G.box(1.6, 0.08, 0.12), color: DWOOD, o: { y: 1.5 } }, ...[-0.7, 0.7].map((dx) => ({ geo: G.box(0.1, 1.6, 0.1), color: DWOOD, o: { x: dx, y: 0.8 } })), ...[-0.45, -0.15, 0.15, 0.45].map((dx, i) => ({ geo: G.box(0.05, 0.6 + i * 0.05, 0.03), color: ASHIRON, o: { x: dx, y: 1.15, z: 0.06 } }))], x, z, r);
+      else I.add('dbHammer', x, z, r, s, 0.03, s, s, 1.45);
+      return true;
+    }
+    case 'crane': {
+      if (ENV.props.crane) { I.add('env:crane', x, z, r, 2.2, 0); return true; }
+      B.add('iron', [...[-1, 1].map((sx) => ({ geo: G.box(0.3, 7.5, 0.3), color: ASHIRON, o: { x: sx * 1.6, y: 3.75 } })), { geo: G.box(3.8, 0.35, 0.35), color: ASHIRON, o: { y: 7.4 } }, { geo: G.box(0.3, 0.3, 4.2), color: ASHIRON, o: { y: 7.6, z: 1.6 } }, { geo: G.cyl(0.02, 0.02, 4.5, 3), color: ASHIRON, o: { y: 5.2, z: 3.4 } }, { geo: G.torus(0.2, 0.04, 4, 8, Math.PI * 1.4), color: 0x3a3632, o: { y: 2.8, z: 3.4 } }], x, z, r);
+      return true;
+    }
+    case 'flueMouth': {
+      // the flue's maw at the gallery's end: iron jambs and lintel round the opening, a hood breathing over the grate
+      B.add('iron', [...[-1, 1].map((sx) => ({ geo: G.box(0.7, 6, 0.9), color: ASHIRON, o: { x: sx * 2.85, y: 3 } })), { geo: G.box(6.6, 1.1, 1.1), color: ASHIRON, o: { y: 5.6 } }, { geo: G.box(5.2, 0.5, 0.25), color: 0x1a1816, o: { y: 4.9, z: 0.25 } }], x, z, r + Math.PI);
+      B.add('glow', [{ geo: G.box(4.4, 0.08, 0.06), color: 0x9a2a08, o: { y: 4.62, z: 0.4 } }], x, z, r + Math.PI);
+      return true;
+    }
+    case 'station': {
+      // a stoker's station: the chain post and its ring, the small bellows against the wall, banked coals
+      B.add('iron', [{ geo: G.cyl(0.14, 0.2, 2.2, 6), color: ASHIRON, o: { y: 1.1 } }, { geo: G.torus(0.2, 0.05, 4, 8), color: 0x3a3632, o: { y: 1.5, rx: Math.PI / 2 } }, { geo: G.cyl(0.35, 0.4, 0.2, 7), color: 0x24221f, o: { y: 0.1 } }], x, z, r);
+      const bx = p.bx ?? x, bz = p.bz ?? z;
+      if (!cin4(I, 'bellows', bx, bz, r, 1.7, 'l', 0)) B.add('lam', [{ geo: G.box(1.0, 0.12, 1.5), color: DWOOD, o: { y: 0.5 } }, { geo: G.box(1.0, 0.12, 1.5), color: DWOOD, o: { y: 0.9, rx: -0.15 } }, { geo: G.box(0.9, 0.38, 1.3), color: 0x3a2418, o: { y: 0.7 } }, { geo: G.cone(0.12, 0.6, 5), color: ASHIRON, o: { y: 0.65, z: 1.0, rx: Math.PI / 2 } }], bx, bz, r);
+      B.add('glow', [{ geo: G.cyl(0.4, 0.45, 0.05, 8), color: 0x8a2006, o: { y: 0.05 } }], bx, bz);
+      return true;
+    }
+    case 'doorway': B.add('iron', [...[-1, 1].map((sx) => ({ geo: G.box(0.5, 4.2, 0.6), color: ASHIRON, o: { x: sx * 1.95, y: 2.1 } })), { geo: G.box(4.5, 0.6, 0.7), color: ASHIRON, o: { y: 4.3 } }], x, z, r + Math.PI / 2); return true;
+    case 'stairStep': B.add(M.ashBlocks ? 'ashBlocks' : 'lam', [{ geo: G.box(4.6, 0.12, 0.7), color: DSTONE, o: { y: 0.05 }, jit: 0.1 }], x, z, r); return true;
+    case 'mould': {
+      // a casting pit in the shape of a crown: a stone rim with points, the metal still molten in it
+      const parts = [{ geo: G.cyl(1.75, 1.85, 0.3, 14), color: 0x2e2a26, o: { y: 0.05 } }];
+      for (let k = 0; k < 5; k++) { const a = k * 1.2566 + r; parts.push({ geo: G.cone(0.22, 0.75, 4), color: 0x3a3632, o: { x: Math.sin(a) * 1.7, z: Math.cos(a) * 1.7, y: 0.5 } }); }
+      B.add('iron', parts, x, z, 0, s);
+      // the metal in the mould: a dark skin cooling at the rim, still bright where it was poured
+      B.add('glow', [{ geo: G.cyl(1.45, 1.45, 0.04, 14), color: 0x3a1206, o: { y: 0.21 } }, { geo: jitter(G.cyl(1.05, 1.05, 0.05, 11), 0.08, 360), color: 0x9a2a06, o: { y: 0.22 } }, { geo: jitter(G.cyl(0.55, 0.55, 0.05, 9), 0.06, 361), color: 0xe0601a, o: { y: 0.23 } }], x, z, r, s);
+      out.emitters.push({ x, y: 0.3, z, type: 'embers', s: 0.8 });
+      return true;
+    }
+  }
+  return false;
+}
+
+// ---------- act4Prop: what gameplay and story place, light, open and melt ----------
+// waylamp, brazier, lastLamp (userData.setLit(b)); altar (setState('idle'|'taken'|'refused')); anvilGate (setOpen(b),
+// open(dt) -> done); bellows (breathe(k) 0..1); slagPlug (o: L.plug, returned in place; melt()); anvil, shardAnvil;
+// forgeMouth (setWhite(k)); cradle (setLit(b)); crown (setSockets(n)); hook; staff (setLantern('gold'|'white'|'dark'));
+// lightRing (radius 1, warm, additive; setColor(c), setOpacity(a)); cone (length 1 along +z, o.arc the half-angle; flash(k)).
+export function act4Prop(kind, o = {}) {
+  act4Mats();
+  const f = PROP4[kind], g = f ? f(o) : new THREE.Group();
+  g.userData.kind = kind;
+  return g;
+}
+const glowMat = (c, o = {}) => new THREE.MeshBasicMaterial({ color: c, transparent: !!o.add || o.opacity != null, opacity: o.opacity ?? 1, blending: o.add ? THREE.AdditiveBlending : THREE.NormalBlending, depthWrite: !o.add, toneMapped: false });
+const iron = (parts) => solid(parts, MAT.iron);
+// a lantern: the cinder or base-set scan with its own glass (lit or dark), or the code one; userData.glass
+function lanternMesh(h = 0.55) {
+  const g = new THREE.Group(), glass = glowMat(DEAD.clone(), { opacity: 0.92 });
+  const parts = cinder('lantern') || ENV.props.lantern, sz = size4(parts);
+  if (parts) {
+    const k = h / Math.max(0.01, sz.y);
+    for (const p of parts) { const tr = p.mat.transparent || /glow|glass/i.test(p.mat.name); const m = new THREE.Mesh(p.geo, tr ? glass : cinMat(p.mat, 'dead')); m.castShadow = !tr; g.add(m); }
+    g.scale.setScalar(k); g.position.y = -sz.y0 * k;
+  } else {
+    g.add(iron(CAT.lanternF().parts));
+    g.add(new THREE.Mesh(bake([{ geo: G.box(0.15, 0.26, 0.15), color: 0xffffff, o: { y: 0.17 } }]), glass));
+    g.scale.setScalar(h / 0.48);
+  }
+  const w = new THREE.Group(); w.add(g); w.userData.glass = glass;
+  return w;
+}
+// a small flame of glow cones, and a soft halo sprite
+function flameMesh(s = 1, color = 0xffa040) {
+  const g = new THREE.Group();
+  const f = new THREE.Mesh(bake([{ geo: G.cone(0.09, 0.32, 6), color: 0xffd080, o: { y: 0.16 } }, { geo: G.cone(0.06, 0.22, 5), color: 0xffffff, o: { y: 0.12 } }]), glowMat(0xffffff));
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex('dot'), color, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false }));
+  halo.scale.setScalar(1.4); halo.position.y = 0.18;
+  g.add(f, halo); g.scale.setScalar(s);
+  let t = Math.random() * 10;
+  f.onBeforeRender = () => { t += 0.05; f.scale.set(1 + Math.sin(t * 3.1) * 0.08, 1 + Math.sin(t * 4.7) * 0.15, 1 + Math.cos(t * 3.7) * 0.08); };
+  g.userData.halo = halo;
+  return g;
+}
+const PROP4 = {
+  // a waylamp: a cairn of black stones, an iron post and arm, a dead lantern that the Cradle lights
+  waylamp(o) {
+    const g = new THREE.Group(), M = MAT;
+    g.add(solid([0, 1, 2, 3, 4].map((i) => ({ geo: jitter(G.dodeca(0.34 - i * 0.04), 0.06, 300 + i), color: i % 2 ? 0x3a3632 : 0x2e2a28, o: { x: Math.sin(i * 2.4) * (i < 3 ? 0.32 : 0.12), z: Math.cos(i * 2.4) * (i < 3 ? 0.32 : 0.12), y: 0.18 + (i < 3 ? 0 : (i - 2) * 0.3) }, jit: 0.15 })), M.ashRockW || M.lam));
+    g.add(iron([{ geo: G.cyl(0.05, 0.065, 2.5, 6), color: ASHIRON, o: { y: 1.25 } }, { geo: G.box(0.7, 0.05, 0.05), color: ASHIRON, o: { y: 2.42, x: 0.32 } }, { geo: G.box(0.04, 0.2, 0.04), color: ASHIRON, o: { y: 2.33, x: 0.08, rz: 0.8 } }, { geo: G.cyl(0.008, 0.008, 0.12, 3), color: ASHIRON, o: { y: 2.36, x: 0.62 } }]));
+    const lan = lanternMesh(0.5); lan.position.set(0.62, 1.8, 0); g.add(lan);
+    const fl = flameMesh(0.55); fl.position.set(0.62, 1.88, 0); g.add(fl);
+    g.userData.setLit = (b) => { lan.userData.glass.color.copy(b ? LIT : DEAD); fl.visible = !!b; g.userData.lit = !!b; };
+    g.userData.setLit(!!o.lit);
+    g.userData.flameAt = { x: 0.62, y: 2.05, z: 0 };
+    return g;
+  },
+  // a brazier (Ivar's arena, the camps): the Sky_Hunter scan or the iron bowl on three legs; coals and flame when lit
+  brazier() {
+    const g = new THREE.Group(), parts = cinder('brazier'), sz = size4(parts);
+    let top = 1.15, glows = [];
+    if (parts) {
+      const k = 1.25 / Math.max(0.01, sz.y);
+      for (const p of parts) { const gl = p.mat.transparent || /glow/i.test(p.mat.name); const mm = gl ? glowMat(0xff6a20) : cinMat(p.mat); const m = new THREE.Mesh(p.geo, mm); m.scale.setScalar(k); m.position.y = -sz.y0 * k; m.castShadow = !gl; g.add(m); if (gl) glows.push(mm); }
+      top = 1.18;
+    } else g.add(iron([{ geo: G.cyl(0.42, 0.25, 0.3, 8), color: ASHIRON, o: { y: 1.05 } }, ...[0, 1, 2].map((i) => ({ geo: G.segTo(Math.sin(i * 2.09) * 0.3, -1.0, Math.cos(i * 2.09) * 0.3, 0.04, 0.03, 4), color: ASHIRON, o: { y: 1.0 } }))]));
+    const coal = glowMat(0xff6a20), bed = new THREE.Mesh(G.cyl(0.34, 0.34, 0.05, 9), coal); bed.position.y = top; g.add(bed); glows.push(coal);
+    const fl = flameMesh(1.1); fl.position.y = top; g.add(fl);
+    g.userData.setLit = (b) => { for (const m of glows) m.color.set(b ? 0xff6a20 : 0x1a1410); fl.visible = !!b; g.userData.lit = !!b; };
+    g.userData.setLit(true);
+    g.userData.fireY = top + 0.05;
+    return g;
+  },
+  // an Altar of the Wish: a stepped plinth, a headless statue on it, a cracked basin before it where the shard stirs
+  altar() {
+    const g = new THREE.Group(), M = MAT;
+    g.add(solid([{ geo: G.box(2.2, 0.5, 1.6), color: DSTONE, o: { y: 0.25, z: -0.3 }, jit: 0.1 }, { geo: G.box(1.6, 0.6, 1.2), color: STONE, o: { y: 0.8, z: -0.35 } }], M.ashBlocks || M.lam));
+    const parts = cinder('statue'), sz = size4(parts);
+    if (parts) { const k = 2.3 / Math.max(0.01, sz.y); for (const p of parts) { const m = new THREE.Mesh(p.geo, cinMat(p.mat, 'ash')); m.scale.setScalar(k); m.position.set(0, 1.1 - sz.y0 * k, -0.35); m.castShadow = true; g.add(m); } }
+    else g.add(solid([{ geo: G.cyl(0.32, 0.55, 1.7, 8), color: 0x5a5650, o: { y: 1.95, z: -0.35 } }, { geo: G.box(0.95, 0.35, 0.45), color: 0x5a5650, o: { y: 2.85, z: -0.35 } }, { geo: G.cyl(0.12, 0.14, 0.18, 6), color: 0x3a3632, o: { y: 3.08, z: -0.35 } }], M.ashBlocks || M.lam));
+    const basin = solid([{ geo: G.lathe([[0, 0], [0.55, 0.05], [0.7, 0.35], [0.62, 0.42], [0.5, 0.2], [0, 0.18]], 12), color: 0x4a4642, o: { y: 0.0, z: 0.75 }, jit: 0.12 }], M.ashBlocks || M.lam);
+    const ember = glowMat(0xff8a30, { add: true, opacity: 0.8 }), pool = new THREE.Mesh(G.cyl(0.46, 0.46, 0.02, 12), ember); pool.position.set(0, 0.22, 0.75);
+    const crack = glowMat(0xff5a10), cr = new THREE.Mesh(bake([{ geo: G.box(0.04, 0.5, 0.02), color: 0xffffff, o: { y: 0.8, z: 0.26, rz: 0.4 } }, { geo: G.box(0.03, 0.35, 0.02), color: 0xffffff, o: { x: 0.15, y: 0.45, z: 0.81, rz: -0.6 } }]), crack);
+    g.add(basin, pool, cr);
+    g.userData.setState = (st) => {
+      g.userData.state = st;
+      ember.color.set(st === 'taken' ? 0xff3a10 : st === 'refused' ? 0x000000 : 0xff9a40); ember.opacity = st === 'taken' ? 1 : st === 'refused' ? 0 : 0.75;
+      crack.color.set(st === 'taken' ? 0xff4a10 : 0x221a16); cr.visible = st !== 'idle';
+    };
+    g.userData.setState('idle');
+    return g;
+  },
+  // the Last Lamp at the Anvil Gate: a tall dead lamp-post; Ivar's lantern lights it at last
+  lastLamp() {
+    const g = new THREE.Group();
+    g.add(iron([{ geo: G.cyl(0.32, 0.42, 0.3, 8), color: 0x24221f, o: { y: 0.15 } }, { geo: G.cyl(0.08, 0.11, 4.6, 7), color: ASHIRON, o: { y: 2.45 } }, { geo: G.box(1.1, 0.07, 0.07), color: ASHIRON, o: { y: 4.62, x: 0.48 } }, { geo: G.cone(0.12, 0.3, 6), color: ASHIRON, o: { y: 4.85 } }, { geo: G.torus(0.09, 0.015, 3, 8), color: ASHIRON, o: { y: 4.5, x: 0.96 } }]));
+    const lan = lanternMesh(0.75); lan.position.set(0.96, 3.66, 0); g.add(lan);
+    const fl = flameMesh(0.8, 0xffc070); fl.position.set(0.96, 3.8, 0); g.add(fl);
+    g.userData.setLit = (b) => { lan.userData.glass.color.copy(b ? LIT : DEAD); fl.visible = !!b; g.userData.lit = !!b; };
+    g.userData.setLit(false);
+    g.userData.flameAt = { x: 0.96, y: 4.05, z: 0 };
+    return g;
+  },
+  // the doors of the Anvil Gate: two leaves of black iron, ember runes; they swing in, away from the plaza (local -z)
+  anvilGate() {
+    const g = new THREE.Group(), leaves = [], rune = glowMat(0xc8400c);
+    for (const sx of [-1, 1]) {
+      const hinge = new THREE.Group(); hinge.position.set(sx * 3.35, 0, 0);
+      const leaf = iron([{ geo: G.box(3.3, 8.2, 0.45), color: 0x1e1c1c, o: { x: -sx * 1.65, y: 4.1 } }, ...[1.5, 4.1, 6.7].map((yy) => ({ geo: G.box(3.35, 0.22, 0.55), color: 0x2a2826, o: { x: -sx * 1.65, y: yy } })), { geo: G.torus(0.28, 0.06, 4, 10), color: 0x3a3632, o: { x: -sx * 0.5, y: 3.6, z: 0.32 } }]);
+      const rn = new THREE.Mesh(bake([{ geo: G.box(0.1, 5.2, 0.04), color: 0xffffff, o: { x: -sx * 1.65, y: 4.1, z: 0.25 } }, { geo: G.box(1.6, 0.1, 0.04), color: 0xffffff, o: { x: -sx * 1.65, y: 5.4, z: 0.25 } }]), rune);
+      hinge.add(leaf, rn); g.add(hinge); leaves.push({ hinge, sx });
+    }
+    g.userData.progress = 0;
+    g.userData.setProgress = (p) => { p = clamp(p, 0, 1); g.userData.progress = p; const e = 1 - (1 - p) ** 2; for (const l of leaves) l.hinge.rotation.y = l.sx * 1.5 * e; };
+    g.userData.open = (dt) => { g.userData.setProgress(g.userData.progress + dt / 2.4); return g.userData.progress >= 1; };
+    g.userData.setOpen = (b) => g.userData.setProgress(b ? 1 : 0);
+    g.userData.setRunes = (k) => rune.color.setRGB(0.78 * k, 0.25 * k, 0.05 * k);
+    return g;
+  },
+  // a Great Bellows: the Sketchfab bellows at five times life, or boards and leather; breathe(k) squashes it (k 1 = shut)
+  bellows() {
+    const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
+    const parts = cinder('bellows'), sz = size4(parts);
+    if (parts) { const k = 6 / Math.max(0.01, Math.max(sz.x, sz.z)); for (const p of parts) { const m = new THREE.Mesh(p.geo, cinMat(p.mat)); m.castShadow = true; m.receiveShadow = true; body.add(m); } body.scale.setScalar(k); body.position.y = -sz.y0 * k; if (sz.x > sz.z) body.rotation.y = Math.PI / 2; }
+    else {
+      // two great boards, the pleated leather between them, the iron nozzle toward the fire
+      const pleats = [0, 1, 2, 3].map((i) => ({ geo: G.box(3.4 - (i % 2) * 0.35, 0.42, 5.0 - i * 0.35), color: i % 2 ? 0x1e1610 : 0x2a1e16, o: { y: 1.0 + i * 0.5, z: -0.6 + i * 0.12 } }));
+      body.add(solid([{ geo: G.box(3.4, 0.3, 5.6), color: 0x241a12, o: { y: 0.6, z: -0.4 } }, { geo: G.box(3.6, 0.35, 5.8), color: 0x201810, o: { y: 3.0, z: -0.4, rx: -0.05 } }, ...pleats, { geo: G.cone(0.55, 2.4, 7), color: ASHIRON, o: { y: 1.4, z: 3.0, rx: Math.PI / 2 } }]));
+      body.add(iron([...[-1, 1].map((sx) => ({ geo: G.box(0.4, 5.2, 0.4), color: ASHIRON, o: { x: sx * 2.2, y: 2.6, z: -2.6 } })), { geo: G.box(4.8, 0.4, 0.4), color: ASHIRON, o: { y: 5.0, z: -2.6 } }, { geo: G.cyl(0.08, 0.08, 4.2, 5), color: 0x3a2a1e, o: { y: 4.4, z: -1.0, rx: 0.6 } }]));
+    }
+    g.userData.breathe = (k) => { k = clamp(k, 0, 1); body.scale.y = (body.userData.sy ||= body.scale.y) * (1 - 0.32 * k); };
+    return g;
+  },
+  // the plug of slag on the Great Stair (o = L.plug: placed at o.x/o.z turned by o.r); melt() runs it down over 1.5 s
+  slagPlug(o) {
+    const g = new THREE.Group(), rr = RNG(Math.round((o.x || 1) * 31 + (o.z || 1) * 7)), parts = [], seams = [];
+    for (let k = 0; k < 9; k++) { const v = -2.6 + k * 0.65, hgt = rr.range(1.6, 3.2); parts.push({ geo: jitter(G.ico(1.0, 1), 0.18, 320 + k), color: k % 2 ? 0x221c18 : 0x1a1512, o: { x: v, y: hgt * 0.4, z: rr.range(-0.4, 0.4), sx: 0.75, sy: hgt * 0.55, sz: 1.05 }, jit: 0.2 }); }
+    for (let k = 0; k < 14; k++) seams.push({ geo: G.box(rr.range(0.3, 0.9), 0.05, 0.05), color: 0xffffff, o: { x: rr.range(-2.8, 2.8), y: rr.range(0.3, 2.2), z: rr.range(-0.95, 0.95), rz: rr.range(-0.8, 0.8), ry: rr.range(0, 3) } });
+    const body = solid(parts, MAT.lam), sm = glowMat(0xb03008), seam = new THREE.Mesh(bake(seams), sm);
+    g.add(body, seam);
+    if (o.x != null) { g.position.set(o.x, 0, o.z); g.rotation.y = (o.r || 0) + Math.PI / 2; }
+    let t0 = 0;
+    g.userData.melt = () => { if (!t0) t0 = performance.now(); };
+    body.onBeforeRender = () => {
+      if (!t0) return;
+      const k = clamp((performance.now() - t0) / 1500, 0, 1);
+      sm.color.setRGB(1, 0.35 + 0.5 * k, 0.1 + 0.3 * k);
+      g.scale.set(1 + k * 0.25, Math.max(0.02, 1 - k * k), 1 + k * 0.25);
+      if (k >= 1) g.visible = false;
+    };
+    g.userData.melted = () => !g.visible;
+    return g;
+  },
+  // the Anvil of the Crown on its stepped block (2 x 2 cells), and the smaller anvils of the shards
+  anvil() { return anvilMesh(3.2, 1.0); },
+  shardAnvil() { return anvilMesh(1.6, 0.55); },
+  // the Forge Mouth: a rim of black stone round the fire below; setWhite(k) turns it from forge-red to white-gold
+  forgeMouth(o) {
+    const g = new THREE.Group(), r = o.r || 4;
+    g.add(solid(Array.from({ length: 24 }, (_, k) => { const a = (k / 24) * Math.PI * 2; return { geo: jitter(G.box(1.15, 0.32, 0.7), 0.06, 340 + k), color: 0x24201c, o: { x: Math.sin(a) * (r + 0.3), z: Math.cos(a) * (r + 0.3), y: 0.08, ry: a + Math.PI / 2 }, jit: 0.15 }; }), MAT.ashBlocks || MAT.lam));
+    const core = glowMat(0xfff4d8, { add: true, opacity: 0 }), m2 = new THREE.Mesh(new THREE.CircleGeometry(r * 0.95, 28), core);
+    m2.rotation.x = -Math.PI / 2; m2.position.y = -0.28; m2.renderOrder = 2;
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex('dot'), color: 0xff6a20, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
+    halo.scale.setScalar(r * 2.6); halo.position.y = 0.6;
+    g.add(m2, halo);
+    const A = new THREE.Color(0xff5a10), B2 = new THREE.Color(0xfff4d8);
+    let t = 0, wk = 0;
+    halo.onBeforeRender = () => { t += 0.016; core.opacity = wk * (0.8 + Math.sin(t * 2.3) * 0.1); };
+    g.userData.setWhite = (k) => { wk = clamp(k, 0, 1); halo.material.color.copy(A).lerp(B2, wk); halo.material.opacity = 0.35 + 0.45 * wk; halo.scale.setScalar(r * (2.6 + 1.4 * wk)); };
+    g.userData.setWhite(o.white || 0);
+    return g;
+  },
+  // the Ember Cradle: a small iron brazier on three feet, its coal and flame (combat hangs it at the hero's hip)
+  cradle() {
+    const g = new THREE.Group();
+    g.add(iron([{ geo: G.lathe([[0, 0], [0.09, 0.0], [0.14, 0.08], [0.15, 0.16], [0.13, 0.17], [0.11, 0.1], [0, 0.09]], 9), color: 0x2e2a26, o: { y: 0.04 } }, ...[0, 1, 2].map((i) => ({ geo: G.cyl(0.012, 0.01, 0.07, 3), color: ASHIRON, o: { x: Math.sin(i * 2.09) * 0.08, z: Math.cos(i * 2.09) * 0.08, y: 0.03 } })), { geo: G.torus(0.15, 0.012, 3, 12), color: 0x4a3a2a, o: { y: 0.18, rx: Math.PI / 2 } }]));
+    const coal = glowMat(0xff7a20), bed = new THREE.Mesh(G.cyl(0.11, 0.11, 0.02, 9), coal); bed.position.y = 0.17; g.add(bed);
+    const fl = flameMesh(0.4); fl.position.y = 0.17; g.add(fl);
+    g.userData.setLit = (b) => { coal.color.set(b ? 0xff7a20 : 0x2a1a10); fl.visible = !!b; };
+    // the fire's strength (light.js: 1 its own ring, more when it has drunk, a little when the ring is held down)
+    g.userData.setFire = (k) => { k = clamp(k, 0, 1.5); fl.visible = k > 0.02; fl.scale.setScalar(0.4 * Math.max(0.15, k)); coal.color.setRGB(1, 0.3 + 0.25 * Math.min(k, 1), 0.08 * k); };
+    g.userData.flame = fl;
+    return g;
+  },
+  // the Ash Crown: a ring of black iron with tines, four sockets that light as the shards come home
+  crown() {
+    const g = new THREE.Group();
+    g.add(iron([{ geo: G.torus(0.3, 0.05, 5, 18), color: 0x1e1c1c, o: { rx: Math.PI / 2 } }, ...Array.from({ length: 8 }, (_, k) => ({ geo: G.cone(0.045, 0.28 + (k % 2) * 0.12, 4), color: 0x24221f, o: { x: Math.sin(k * 0.785) * 0.3, z: Math.cos(k * 0.785) * 0.3, y: 0.16 + (k % 2) * 0.06 } }))]));
+    const sockets = [0, 1, 2, 3].map((k) => { const m = new THREE.Mesh(G.oct(0.06), glowMat(0x2a1a14)); m.position.set(Math.sin(k * 1.571 + 0.39) * 0.33, 0.04, Math.cos(k * 1.571 + 0.39) * 0.33); g.add(m); return m; });
+    g.userData.setSockets = (n) => sockets.forEach((m, k) => m.material.color.set(k < n ? (k === 3 ? 0xfff0c0 : 0xff6a20) : 0x2a1a14));
+    g.userData.setSockets(0);
+    return g;
+  },
+  // Ivar's hook in the Graves: an iron pole like the thousand round it, its one arm bare
+  hook() { return iron([{ geo: G.cyl(0.045, 0.06, 3.0, 5), color: ASHIRON, o: { y: 1.5 } }, { geo: G.cyl(0.16, 0.2, 0.12, 6), color: 0x24221f, o: { y: 0.06 } }, { geo: G.box(0.04, 0.04, 0.7), color: ASHIRON, o: { y: 2.95, z: 0.33 } }, { geo: G.torus(0.06, 0.012, 3, 8, Math.PI * 1.5), color: 0x3a3632, o: { y: 2.86, z: 0.64, rx: Math.PI / 2 } }]); },
+  // Isarn's staff, planted by the beacon: the lantern hangs from its crook
+  staff() {
+    const g = new THREE.Group();
+    g.add(solid([{ geo: G.cyl(0.028, 0.034, 2.1, 6), color: 0x4a3524, o: { y: 1.05 } }, { geo: G.segTo(0.24, 0.1, 0, 0.018, 0.014, 4), color: 0x4a3524, o: { y: 2.0 } }]));
+    const lan = lanternMesh(0.3); lan.position.set(0.24, 1.66, 0); g.add(lan);
+    const fl = flameMesh(0.35, 0xffd890); fl.position.set(0.24, 1.73, 0); g.add(fl);
+    g.rotation.z = -0.05;
+    const C = { gold: [0xffc070, 0xffa040], white: [0xfff6e8, 0xffffff], dark: [0x15130f, 0] };
+    g.userData.setLantern = (k) => { const c = C[k] || C.gold; lan.userData.glass.color.set(c[0]); fl.visible = k !== 'dark'; if (c[1]) fl.userData.halo.material.color.set(c[1]); };
+    g.userData.setLantern('gold');
+    return g;
+  },
+  // a light pool's rim on the ground (radius 1)
+  lightRing() {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ map: ringTexture(), color: 0xffb060, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+    m.rotation.x = -Math.PI / 2; m.position.y = 0.05; m.renderOrder = 2;
+    const g = new THREE.Group(); g.add(m);
+    g.userData.setColor = (c) => m.material.color.set(c);
+    g.userData.setOpacity = (a) => { m.material.opacity = a; };
+    return g;
+  },
+  // a Lampless lantern's cone on the ground: length 1 along +z, half-angle o.arc; flash(k) whitens it as the alarm nears
+  cone(o) {
+    const arc = o.arc ?? 0.7, n = 16, pos = [0, 0, 0], col = [1, 1, 1], idx = [];
+    for (let i = 0; i <= n; i++) { const a = -arc + (2 * arc * i) / n; pos.push(Math.sin(a), 0, Math.cos(a)); col.push(0.25, 0.25, 0.25); if (i) idx.push(0, i, i + 1); }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); geo.setIndex(idx);
+    const mat = new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x9ab8e0, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
+    const m = new THREE.Mesh(geo, mat); m.position.y = 0.06; m.renderOrder = 3;
+    const edge = new THREE.Line(new THREE.BufferGeometry().setFromPoints([V3(0, 0.07, 0), ...Array.from({ length: n + 1 }, (_, i) => { const a = -arc + (2 * arc * i) / n; return V3(Math.sin(a), 0.07, Math.cos(a)); }), V3(0, 0.07, 0)]), new THREE.LineBasicMaterial({ color: 0xb8d0f0, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }));
+    const g = new THREE.Group(); g.add(m, edge);
+    const base = new THREE.Color(0x9ab8e0), white = new THREE.Color(0xffffff);
+    g.userData.flash = (k) => { k = clamp(k, 0, 1); mat.color.copy(base).lerp(white, k); mat.opacity = 0.5 + 0.4 * k; edge.material.opacity = 0.6 + 0.4 * k; };
+    return g;
+  }
+};
+function anvilMesh(s, block) {
+  const g = new THREE.Group(), M = MAT;
+  g.add(solid([{ geo: G.box(2.3, block * 0.6, 2.3), color: DSTONE, o: { y: block * 0.3 }, jit: 0.08 }, { geo: G.box(1.8, block * 0.4, 1.8), color: STONE, o: { y: block * 0.8 } }].map((p) => ({ ...p, o: { ...p.o, sx: s / 3.2, sz: s / 3.2 } })), M.ashBlocks || M.lam));
+  const top = block;
+  const parts = cinder('anvil'), sz = size4(parts);
+  if (parts) { const k = s / Math.max(0.01, Math.max(sz.x, sz.z)); for (const p of parts) { const m = new THREE.Mesh(p.geo, cinMat(p.mat)); m.scale.setScalar(k); m.position.y = top - sz.y0 * k; m.castShadow = true; g.add(m); } if (sz.z > sz.x) g.children[g.children.length - 1].rotation.y = Math.PI / 2; }
+  else g.add(iron([{ geo: G.box(0.38 * s, 0.32 * s, 0.3 * s), color: 0x24221f, o: { y: top + 0.16 * s } }, { geo: G.box(0.7 * s, 0.17 * s, 0.32 * s), color: 0x2e2a28, o: { y: top + 0.4 * s } }, { geo: G.cone(0.13 * s, 0.32 * s, 5), color: 0x2e2a28, o: { y: top + 0.42 * s, x: 0.5 * s, rz: -Math.PI / 2 } }]));
+  g.userData.top = top + 0.5 * s;
+  return g;
+}
+let ringTex = null;
+function ringTexture() {
+  if (ringTex) return ringTex;
+  const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
+  const gr = g.createRadialGradient(64, 64, 0, 64, 64, 63);
+  gr.addColorStop(0, 'rgba(255,255,255,0.10)'); gr.addColorStop(0.72, 'rgba(255,255,255,0.16)'); gr.addColorStop(0.9, 'rgba(255,255,255,0.75)'); gr.addColorStop(0.96, 'rgba(255,255,255,0.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  return (ringTex = new THREE.CanvasTexture(c));
+}
+
 // ---------- entry ----------
 export function buildLevel(L, quality) {
   const group = new THREE.Group();
@@ -1911,6 +2656,7 @@ export function buildLevel(L, quality) {
   if (L.amberDeep) out.amber = buildAmber(L, group);
   for (const p of L.props) addProp(B, I, p, L, rng, out);
   if (L.type === 'weep' || L.type === 'heart') act3Level(L, I, B, out);
+  if (ACT4.has(L.type)) act4Level(L, I, B, out);
   if (L.type === 'town') townBeyond(L, I, group);
   // per-level shader globals, set whenever this level's ground is drawn (only the zone the hero is in): the Edge of Tears,
   // where the last of the wind still reaches the Weeping Woods, and the Heartwood's heart that the lights beat with

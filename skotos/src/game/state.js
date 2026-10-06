@@ -25,7 +25,7 @@ export function newHero(cls, diff) {
     id: 'h' + Date.now().toString(36), cls, level: 1, xp: 0, gold: 40, diff,
     skills: {}, points: 0,
     inv: new Array(32).fill(null), equip: {}, stash: new Array(48).fill(null),
-    quest: 0, flags: {}, wps: ['town'], act1: -1, act2: -1, act3: -1, gateBest: 0, boons: [],
+    quest: 0, flags: {}, wps: ['town'], act1: -1, act2: -1, act3: -1, act4: -1, gateBest: 0, boons: [],
     stats: { kills: 0, deaths: 0, time: 0, legs: 0, elites: 0 },
     created: Date.now(), played: Date.now()
   };

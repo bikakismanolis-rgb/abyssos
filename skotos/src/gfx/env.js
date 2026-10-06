@@ -7,6 +7,27 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 // ENV.layers[id] = { d: diffuse texture (sRGB), n: OpenGL normal map }; ENV.props[name] = [{ geo, mat }] (one part per material)
 export const ENV = { layers: {}, props: {}, pivots: {}, sizes: {}, extras: {}, packs: {}, ready: false, quality: 1 };
 
+// Packs may reuse a name (Act IV's 'cinder' has its own rockA, statue, lantern and scree). Every prop and layer is kept as
+// '<pack>/<name>' too; the bare name belongs to the earliest pack in PACK_ORDER that has it: a later pack never takes a
+// bare name from an earlier one, and an earlier one loaded later takes it back. So no older zone ever changes its look,
+// whatever order the packs arrive in, and two packs can be active at once (the Forge uses 'cinder' and 'deep').
+const PACK_ORDER = ['env', 'village', 'trees', 'deep', 'wood', 'cinder'];
+const owners = { props: {}, layers: {} };
+const rank = (p) => { const i = PACK_ORDER.indexOf(p); return i < 0 ? PACK_ORDER.length : i; };
+function claim(kind, name, pack) {
+  const o = owners[kind][name];
+  if (o != null && o !== pack && rank(o) <= rank(pack)) return false;
+  owners[kind][name] = pack;
+  return true;
+}
+function putLayer(pack, id, layer) {
+  ENV.layers[pack + '/' + id] = layer;
+  if (claim('layers', id, pack)) ENV.layers[id] = layer;
+}
+// a pack's own prop or layer, whoever holds the bare name ('cinder', 'rockA' -> the cinder rock, if that pack has one)
+export const packProp = (pack, name) => ENV.props[pack + '/' + name] || null;
+export const packLayer = (pack, id) => ENV.layers[pack + '/' + id] || null;
+
 async function bytes(url) {
   // inlined builds carry assets as data URIs: decode them instead of fetching
   if (url.startsWith('data:')) {
@@ -54,7 +75,7 @@ function lambert(mat, quality) {
   LAMB.set(mat, m);
   return m;
 }
-function readProps(gltf, quality) {
+function readProps(gltf, quality, pack = 'env') {
   const root = gltf.scene;
   // node extras straight from the file: the loader's userData copy loses some keys (pivot)
   const extras = {};
@@ -84,11 +105,13 @@ function readProps(gltf, quality) {
       else m.envMapIntensity = 0.5;
       parts.push({ geo, mat: m });
     }
-    ENV.props[holder.name] = parts;
-    const ex = extras[holder.name] || holder.userData;
-    if (ex.pivot) ENV.pivots[holder.name] = new THREE.Vector3().fromArray(ex.pivot);
-    if (ex.size) ENV.sizes[holder.name] = ex.size;
-    ENV.extras[holder.name] = ex;
+    const ex = extras[holder.name] || holder.userData, pv = ex.pivot ? new THREE.Vector3().fromArray(ex.pivot) : null;
+    for (const name of [pack + '/' + holder.name].concat(claim('props', holder.name, pack) ? [holder.name] : [])) {
+      ENV.props[name] = parts;
+      if (pv) ENV.pivots[name] = pv;
+      if (ex.size) ENV.sizes[name] = ex.size;
+      ENV.extras[name] = ex;
+    }
   }
 }
 
@@ -114,9 +137,9 @@ export function loadPack(name) {
     const tex = Object.entries(packLayers(name)).map(async ([id, u]) => {
       const [ud, un] = await Promise.all([u.d(), q >= 1 && u.n ? u.n() : null]);
       const [td, tn] = await Promise.all([texture(ud, true, q), un ? texture(un, false, q) : null]);
-      ENV.layers[id] = { d: td, n: tn };
+      putLayer(name, id, { d: td, n: tn });
     });
-    const glb = PACK_GLB[glbKey] ? PACK_GLB[glbKey]().then(bytes).then((b) => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(b, '')).then((g) => readProps(g, q)) : null;
+    const glb = PACK_GLB[glbKey] ? PACK_GLB[glbKey]().then(bytes).then((b) => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(b, '')).then((g) => readProps(g, q, name)) : null;
     await Promise.all([...tex, glb]);
     ENV.packs[name] = true;
   })().catch((e) => { delete packs[name]; throw e; }); // a failed fetch can be tried again
@@ -133,9 +156,9 @@ export function loadEnv(quality = 1) {
     const tex = Object.entries(packLayers('env')).map(async ([id, u]) => {
       const [ud, un] = await Promise.all([u.d(), quality >= 1 && u.n ? u.n() : null]);
       const [td, tn] = await Promise.all([texture(ud, true, quality), un ? texture(un, false, quality) : null]);
-      ENV.layers[id] = { d: td, n: tn };
+      putLayer('env', id, { d: td, n: tn });
     });
-    const glb = PACK_GLB['../assets/env.glb']().then(bytes).then((b) => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(b, '')).then((g) => readProps(g, quality));
+    const glb = PACK_GLB['../assets/env.glb']().then(bytes).then((b) => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(b, '')).then((g) => readProps(g, quality, 'env'));
     await Promise.all([...tex, glb]);
     ENV.ready = true;
   })();

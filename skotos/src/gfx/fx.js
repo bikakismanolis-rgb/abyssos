@@ -197,6 +197,17 @@ export function sapBurst(x, z, s = 1) {
   decal(x, z, 'amber', 1.4 * s);
 }
 
+// Act IV: fire drawn out of a flame into the Ember Cradle (call it every tenth of a second or so while the Cradle drinks).
+// from/to: { x, y, z } (y defaults to 0.6 and 0.9); n sparks arc over and land in the Cradle
+export function fireStream(from, to, n = 4) {
+  const y0 = from.y ?? 0.6, y1 = to.y ?? 0.9, g = 6;
+  for (let i = 0; i < n; i++) {
+    const t = rr(0.35, 0.55), x0 = from.x + rr(-0.25, 0.25), z0 = from.z + rr(-0.25, 0.25), yy = y0 + rr(0, 0.3);
+    P({ x: x0, y: yy, z: z0, vx: (to.x - x0) / t, vy: (y1 - yy + (g * t * t) / 2) / t, vz: (to.z - z0) / t, grav: g, life: t, size: rr(0.1, 0.16), size1: 0.05, color: 0xffd880, color1: 0xff5a10, alpha: 0.95, alpha1: 0.4 });
+  }
+  if (Math.random() < 0.3) P({ x: from.x, y: y0 + 0.2, z: from.z, vy: 0.6, life: 0.4, size: 0.6, size1: 0.2, color: 0xffa040, color1: 0xff4010, alpha: 0.5, alpha1: 0 });
+}
+
 // ---------- ground rings (shockwaves) ----------
 const ringGeo = new THREE.RingGeometry(0.85, 1, 48);
 ringGeo.rotateX(-Math.PI / 2);
@@ -379,13 +390,23 @@ function emit(e, dt, cx, cz) {
       if (e.acc > (e.next ||= rr(2.5, 6))) { e.acc = 0; e.next = rr(2.5, 6); const x = e.x + rr(-1.2, 1.2), z = e.z + rr(-1.2, 1.2), y = e.y || 3.5; P({ x, y, z, vy: -0.5, life: Math.sqrt((2 * y) / 9.8), size: 0.09, size1: 0.07, color: 0xffc050, color1: 0xff9a20, alpha: 0.95, alpha1: 0.9, grav: 9.8 }); }
       break;
     }
+    // Act IV: an ember sink on the Field: a few embers, a thread of ash-smoke
+    case 'embersink': {
+      while (e.acc > 0.7) {
+        e.acc -= 0.7;
+        P({ x: e.x + rr(-1.2, 1.2), y: -0.2, z: e.z + rr(-1.2, 1.2), vx: rr(-0.2, 0.2), vy: rr(0.6, 1.6), vz: rr(-0.2, 0.2), life: rr(1, 2.2), size: 0.06, size1: 0.02, color: 0xffb050, color1: 0xff3000, drag: 0.4 });
+        if (Math.random() < 0.3) P({ add: false, x: e.x + rr(-1, 1), y: 0.1, z: e.z + rr(-1, 1), vx: rr(0.05, 0.25), vy: rr(0.4, 0.8), vz: rr(-0.1, 0.1), life: rr(3, 5), size: 0.8, size1: 2.6, color: 0x2a2420, alpha: 0.22, alpha1: 0, drag: 0.2 });
+      }
+      break;
+    }
     case 'mist': while (e.acc > 0.3) { e.acc -= 0.3; P({ add: false, x: e.x + rr(-1.2, 1.2), y: 0.3, z: e.z + rr(0, 1), vx: rr(-0.2, 0.2), vy: 0.05, vz: rr(0.2, 0.6), life: rr(3, 5), size: 1.5, size1: 3.5, color: 0x8aa0b8, alpha: 0.22, alpha1: 0, drag: 0.2 }); } break;
   }
 }
 function ambient(dt, cx, cz) {
   const k = FX.ambient; if (!k) return;
   FX.ambAcc = (FX.ambAcc || 0) + dt;
-  const rate = k === 'forest' ? 0.06 : k === 'town' ? 0.05 : k === 'snow' ? 0.012 : k === 'halls' ? 0.07 : k === 'weep' ? 0.07 : k === 'weepAutumn' ? 0.045 : k === 'heart' || k === 'heartAutumn' ? 0.08 : 0.09;
+  const rate = k === 'forest' ? 0.06 : k === 'town' ? 0.05 : k === 'snow' ? 0.012 : k === 'halls' ? 0.07 : k === 'weep' ? 0.07 : k === 'weepAutumn' ? 0.045 : k === 'heart' || k === 'heartAutumn' ? 0.08
+    : k === 'ashfall' ? 0.022 : k === 'ashfieldStars' ? 0.16 : k === 'ashfieldDawn' ? 0.07 : k === 'forge' ? 0.045 : k === 'forgeCold' ? 0.08 : 0.09;
   while (FX.ambAcc > rate) {
     FX.ambAcc -= rate;
     const x = cx + rr(-16, 16), z = cz + rr(-14, 12);
@@ -425,6 +446,30 @@ function ambient(dt, cx, cz) {
       else if (q < 0.7 && !autumn) { const y = rr(4.5, 7); P({ x, y, z, vy: -0.4, life: Math.sqrt((2 * y) / 9.8), size: 0.08, size1: 0.06, color: 0xffc050, color1: 0xff9020, alpha: 0.9, alpha1: 0.85, grav: 9.8 }); }
       else if (q < 0.82 && autumn) { const y = rr(4, 7), vy = rr(-0.9, -0.55); P({ leaf: true, x, y, z, vx: rr(-0.2, 0.2), vy, vz: rr(-0.2, 0.2), life: (y / -vy) * 0.97, size: rr(0.24, 0.36), size1: 0.28, color: Math.random() < 0.6 ? 0xd09030 : 0x8a5a2a, alpha: 1, alpha1: 0.8 }); }
       else P({ add: false, x, y: rr(0.8, 1.4), z, vx: rr(-0.08, 0.08), vy: 0, vz: rr(-0.08, 0.08), life: rr(5, 8), size: 2, size1: 3, color: 0x4a3018, alpha: 0.12, alpha1: 0 });
+    } else if (k === 'ashfall') {
+      // the Field of Ash: grey and black flakes coming down slow on a wind from the mountain; now and then an ember going up
+      const q = Math.random();
+      if (q < 0.84) P({ add: false, x: x - 2, y: rr(3, 8.5), z, vx: rr(0.15, 0.5), vy: rr(-0.6, -0.32), vz: rr(-0.12, 0.18), life: rr(8, 12), size: rr(0.07, 0.13), size1: 0.08, color: Math.random() < 0.45 ? 0x4a4542 : 0x9a948c, alpha: 0.9, alpha1: 0 });
+      else if (q < 0.9) P({ x, y: rr(0.2, 1.4), z, vx: rr(-0.12, 0.12), vy: rr(0.3, 0.8), vz: rr(-0.12, 0.12), life: rr(2, 4), size: 0.05, size1: 0.02, color: 0xffa040, color1: 0xff3a00, alpha: 0.9, alpha1: 0 });
+      else P({ add: false, x, y: rr(0.4, 1.3), z, vx: rr(0.1, 0.35), vy: 0, vz: rr(-0.05, 0.05), life: rr(6, 9), size: 2.6, size1: 4.2, color: 0x2e2a28, alpha: 0.12, alpha1: 0 });
+    } else if (k === 'ashfieldStars') {
+      // the Night Without Fires: still, cold air; a little frost-dust, a low mist
+      if (Math.random() < 0.6) P({ x, y: rr(0.3, 3), z, vx: rr(-0.04, 0.04), vy: rr(-0.02, 0.02), vz: rr(-0.04, 0.04), life: rr(4, 7), size: 0.04, size1: 0.03, color: 0xa8c0f0, color1: 0x6080c0, alpha: 0.7, alpha1: 0 });
+      else P({ add: false, x, y: rr(0.4, 1.1), z, vx: rr(-0.05, 0.05), vy: 0, vz: rr(-0.05, 0.05), life: rr(6, 9), size: 2.4, size1: 3.6, color: 0x5a6a88, alpha: 0.08, alpha1: 0 });
+    } else if (k === 'ashfieldDawn') {
+      // the first dawn after: dust motes hanging gold in the light
+      if (Math.random() < 0.8) P({ x, y: rr(0.4, 4), z, vx: rr(-0.05, 0.05), vy: rr(-0.01, 0.04), vz: rr(-0.05, 0.05), life: rr(4, 7), size: rr(0.04, 0.08), size1: 0.04, color: 0xffe0b0, color1: 0xffb070, alpha: 0.8, alpha1: 0 });
+      else P({ add: false, x, y: rr(0.6, 1.5), z, vx: rr(0.05, 0.15), vy: 0, vz: rr(-0.05, 0.05), life: rr(6, 9), size: 2.4, size1: 3.6, color: 0xc8a888, alpha: 0.07, alpha1: 0 });
+    } else if (k === 'forge') {
+      // inside the Black Anvil: embers rising on the heat, soot drifting, a warm haze low down
+      const q = Math.random();
+      if (q < 0.6) P({ x, y: rr(0, 2.5), z, vx: rr(-0.25, 0.25), vy: rr(0.5, 1.4), vz: rr(-0.25, 0.25), life: rr(2, 4.5), size: rr(0.04, 0.07), size1: 0.02, color: 0xffb050, color1: 0xff3000, alpha: 0.95, alpha1: 0, drag: 0.3 });
+      else if (q < 0.88) P({ add: false, x, y: rr(1, 5), z, vx: rr(-0.15, 0.15), vy: rr(-0.15, 0.05), vz: rr(-0.15, 0.15), life: rr(5, 8), size: rr(0.05, 0.09), size1: 0.06, color: 0x1e1a18, alpha: 0.8, alpha1: 0 });
+      else P({ add: false, x, y: rr(0.3, 1.2), z, vx: rr(-0.1, 0.1), vy: 0.03, vz: rr(-0.1, 0.1), life: rr(5, 8), size: 2.4, size1: 3.8, color: 0x4a2414, alpha: 0.1, alpha1: 0 });
+    } else if (k === 'forgeCold') {
+      // the cold forge: grey ash settling, nothing rising
+      if (Math.random() < 0.75) P({ add: false, x, y: rr(1, 6), z, vx: rr(-0.08, 0.08), vy: rr(-0.25, -0.1), vz: rr(-0.08, 0.08), life: rr(6, 10), size: rr(0.05, 0.08), size1: 0.05, color: 0x8a8884, alpha: 0.75, alpha1: 0 });
+      else P({ add: false, x, y: rr(0.3, 1.0), z, vx: rr(-0.05, 0.05), vy: 0, vz: rr(-0.05, 0.05), life: rr(6, 9), size: 2.4, size1: 3.6, color: 0x3a3a40, alpha: 0.1, alpha1: 0 });
     } else if (k === 'gate') {
       P({ x, y: rr(0.2, 3), z, vx: rr(-0.2, 0.2), vy: rr(0.2, 0.6), vz: rr(-0.2, 0.2), life: rr(2, 4), size: 0.1, size1: 0.02, color: 0xc080ff, color1: 0x4010a0, alpha: 0.9, alpha1: 0 });
     }

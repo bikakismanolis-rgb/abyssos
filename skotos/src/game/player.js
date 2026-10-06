@@ -4,8 +4,9 @@ import { G } from './state.js';
 import { CLASSES, SKILLS } from './data.js';
 import { IN, takeEvents } from '../core/input.js';
 import { basicAttack, useSkill, dodge, drinkPotion, updateAction, trailOn, nearestFoe } from './skills.js';
-import { tickStatus, moveMul, rootHero } from './combat.js';
+import { tickStatus, moveMul, rootHero, tickCling } from './combat.js';
 import { sapAt } from './sap.js';
+import { tickLight } from './light.js';
 import { foes } from './actors.js';
 import { Trail, P } from '../gfx/fx.js';
 import { R } from '../gfx/gfx.js';
@@ -29,6 +30,8 @@ export function updatePlayer(dt) {
   pl.dodgeCd = Math.max(0, pl.dodgeCd - dt); pl.potionCd = Math.max(0, pl.potionCd - dt);
   for (const k in pl.buffs) { pl.buffs[k] -= dt; if (pl.buffs[k] <= 0) delete pl.buffs[k]; }
   tickStatus(pl, dt);
+  // Act IV: Ember Ticks on her back burn and slow her (a dodge throws them off: skills.js)
+  tickCling(dt);
   // regeneration; fury drains only when out of combat
   pl.hp = Math.min(pl.hpMax, pl.hp + (s.regen + pl.hpMax * 0.004) * dt);
   lastHit += dt;
@@ -68,6 +71,13 @@ export function updatePlayer(dt) {
   const m = moveMul(pl);
   let mx = IN.mx, mz = IN.mz;
   if (G.panel) mx = mz = 0;
+  // dragged by Karthax's tongs: no say in where she goes until it is over
+  if (pl.pull) {
+    const T = pl.pull; T.t -= dt; const u = clamp(1 - T.t / T.t0, 0, 1);
+    pl.x = T.sx + (T.x - T.sx) * u; pl.z = T.sz + (T.z - T.sz) * u; mx = mz = 0;
+    if (Math.random() < 0.6) P({ add: false, x: pl.x, y: 0.15, z: pl.z, vy: 0.3, life: 0.5, size: 0.4, size1: 0.9, color: 0x4a4038, alpha: 0.4 });
+    if (T.t <= 0) pl.pull = null;
+  }
   let speed = 0;
   if (!pl.act || pl.act.move) {
     const k = pl.act ? pl.act.move : 1;
@@ -100,10 +110,14 @@ export function updatePlayer(dt) {
   // buffs glow
   if (pl.buffs.cry > 0 && Math.random() < 0.3) P({ x: pl.x + (Math.random() - 0.5) * 0.8, y: Math.random() * 1.8, z: pl.z + (Math.random() - 0.5) * 0.8, vy: 1.2, life: 0.6, size: 0.1, size1: 0.02, color: 0xff6030 });
   if (pl.buffs.memory > 0 && Math.random() < 0.25) P({ x: pl.x + (Math.random() - 0.5) * 0.9, y: Math.random() * 2, z: pl.z + (Math.random() - 0.5) * 0.9, vy: 0.7, life: 0.9, size: 0.09, size1: 0.02, color: 0xffe0a0, color1: 0xffa030 });
+  // Seen: a cold eye's glint over her head
+  if (pl.buffs.seen > 0 && Math.random() < 0.2) P({ x: pl.x + (Math.random() - 0.5) * 0.4, y: 2.3, z: pl.z + (Math.random() - 0.5) * 0.4, vy: 0.3, life: 0.5, size: 0.14, size1: 0.02, color: 0xd8e8ff, color1: 0x6080c0 });
   if (pl.shield > 0 && Math.random() < 0.4) P({ x: pl.x + Math.sin(R.time * 5) * 0.7, y: 1 + Math.sin(R.time * 3) * 0.6, z: pl.z + Math.cos(R.time * 5) * 0.7, life: 0.4, size: 0.15, size1: 0.02, color: 0xffd080 });
   // hero light follows
   R.heroLight.position.set(pl.x, 2.6 + (pl.y || 0), pl.z + 0.4);
   R.heroLight.intensity = (R.heroLight.userData.base ?? 30) * (0.94 + Math.sin(R.time * 9) * 0.03 + Math.sin(R.time * 23) * 0.03);
+  // Act IV: on the Field of Ash and in the Forge her light is the Ember Cradle's (light.js: the ring, the hip, the drinking)
+  tickLight(dt);
   // in combat?
   G.inCombat = lastHit < 4 || foes(pl.x, pl.z, 9).some((f) => f.aggro && !f.prop);
 }
