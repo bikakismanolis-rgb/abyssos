@@ -12,7 +12,7 @@ import { kitMesh } from '../gfx/kits.js';
 import { tex } from '../gfx/textures.js';
 import { envMesh, envChest, hasEnv, loadPack } from '../gfx/env.js';
 import { loadFolk } from '../gfx/people.js';
-import { loadCreatures } from '../gfx/creatures.js';
+import { loadCreatures, creatureCount } from '../gfx/creatures.js';
 import { setEmitters, setAmbient, clearFX, glowBurst, puff, sparks, ring, P, explosion, FX, sapBurst } from '../gfx/fx.js';
 import { Actor, spawnMonster, spawnNpc, createPlayer, rollAffixes, monsterLevel } from './actors.js';
 import { PACKS, DIFFS, MONSTERS, PACK_LEAD, packKinds } from './data.js';
@@ -48,11 +48,14 @@ export function farFire(p, color = 0xffa040) {
 }
 // the zone's extra assets (Act II's stone, snow and lava; Act III's wood, its Evergreen and its beasts), fetched the
 // first time it is visited
-export function zoneReady(id) {
+export function zoneReady(id, onPart) {
   const p = ZONES[id]?.pack;
   if (!p) return Promise.resolve();
-  return p === 'wood' ? Promise.all([loadPack('wood'), loadFolk('grove'), loadCreatures('act3')]) : Promise.all([loadPack(p), loadFolk(), loadCreatures('act2')]);
+  const wood = p === 'wood', part = (pr) => pr.then((v) => { onPart?.(); return v; });
+  return Promise.all([part(loadPack(p)), part(loadFolk(wood ? 'grove' : 'folk')), loadCreatures(wood ? 'act3' : 'act2', onPart)]);
 }
+// how many parts zoneReady reports (0: nothing to fetch)
+export const zoneParts = (id) => { const p = ZONES[id]?.pack; return p ? 2 + creatureCount(p === 'wood' ? 'act3' : 'act2') : 0; };
 
 function seedFor(id) {
   G.hero.seeds ||= {};
@@ -228,7 +231,9 @@ export function updatePacks() {
     p.spawned = true;
     spawnPack(z, p, D);
   }
-  if (z.bossSpot && !z.bossSpawned && Math.hypot(z.bossSpot.x - pl.x, z.bossSpot.z - pl.z) < 30) {
+  // Silverhorn rises only once the Long Sorrow is known (the bellow after the third Tear sets quest 13)
+  const asleep = z.bossSpot?.kind === 'silverhorn' && G.hero.quest < 13;
+  if (z.bossSpot && !z.bossSpawned && !asleep && Math.hypot(z.bossSpot.x - pl.x, z.bossSpot.z - pl.z) < 30) {
     z.bossSpawned = true;
     const first = z.bossSpot.kind === 'weaver' || z.bossSpot.kind === 'stonewarden' || z.bossSpot.kind === 'silverhorn';
     const b = spawnMonster(z.bossSpot.kind, z.bossSpot.x, z.bossSpot.z, { level: Math.max(z.level + (first ? 2 : 3), G.hero.level + 1) });
@@ -236,7 +241,7 @@ export function updatePacks() {
     z.actors.push(b); z.boss = b;
   }
   // Act III: the Lady's voice in the still trees, once per place (never after the First Autumn)
-  if (z.voices && !G.hero.flags.autumn) for (const v of z.voices) if (!v.done && Math.hypot(v.x - pl.x, v.z - pl.z) < v.r) { v.done = true; emit('voice', v.key, v); }
+  if (z.voices && !G.hero.flags.autumn && !G.hero.flags.ladyDown) for (const v of z.voices) if (!v.done && Math.hypot(v.x - pl.x, v.z - pl.z) < v.r) { v.done = true; emit('voice', v.key, v); }
 }
 function spawnPack(z, p, D) {
   const tag = z.id === 'gate' ? 'gate' : p.tag;
@@ -416,7 +421,8 @@ function act3Zone(z) {
     if (!aut) {
       // sleepers in amber in the four alcoves, for the Lady to wake (pushed back against the wall, clear of the Heartroots)
       A.cocoons = (L.spots.alcoves || []).map((s) => { const a = Math.atan2(s.x - H.x, s.z - H.z); return put(z, act3Prop('cocoon'), s.x + Math.sin(a) * 1.3, s.z + Math.cos(a) * 1.3, a + Math.PI); });
-      z.bossSpot = { kind: 'amaranthe', x: L.boss.x, z: L.boss.z };
+      // fallen but the Autumn not yet seen (the game closed during her last words): story.js replays them on entry
+      if (!F.ladyDown) z.bossSpot = { kind: 'amaranthe', x: L.boss.x, z: L.boss.z };
     } else { A.sapling = put(z, act3Prop('sapling'), L.boss.x, L.boss.z); echoAt(z, 'amaranthe', L.boss.x, L.boss.z); }
     npc('elati', L.spots.npcs.elati);
     const ch = (L.chambers || []).slice().sort((a, b) => b.z - a.z);

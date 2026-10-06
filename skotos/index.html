@@ -23,16 +23,32 @@
 </div>
 <script>
 (function () {
-  var t0 = Date.now(), bar = document.getElementById('boot-bar'), msg = document.getElementById('boot-msg'), label = 'Φόρτωση', bad = false;
-  function show() { if (!bad) msg.textContent = label + ' · ' + Math.round((Date.now() - t0) / 1000) + ' δ.'; }
+  // the save's language (or the browser's), before any module has arrived
+  var lang = 'el';
+  try { var sv = JSON.parse(localStorage.getItem('skotos.save.v1') || 'null'); lang = (sv && sv.settings && sv.settings.lang) || (/^el/.test(navigator.language || 'el') ? 'el' : 'en'); } catch (e) {}
+  var L = lang === 'el' ? { load: 'Φόρτωση', game: 'Φόρτωση του παιχνιδιού', world: 'Φόρτωση του κόσμου', sec: ' δ.', fail: 'Σφάλμα φόρτωσης: ' }
+    : { load: 'Loading', game: 'Loading the game', world: 'Loading the world', sec: ' s', fail: 'Loading failed: ' };
+  var t0 = Date.now(), bar = document.getElementById('boot-bar'), msg = document.getElementById('boot-msg'), label = L.load, bad = false;
+  document.documentElement.lang = lang;
+  function show() { if (!bad) msg.textContent = label + ' · ' + Math.round((Date.now() - t0) / 1000) + L.sec; }
   var tick = setInterval(show, 1000);
+  show();
   window.__boot = {
-    p: 0.02,
+    p: 0.02, L: L,
     set: function (p, text) { this.p = Math.max(this.p, p); bar.style.width = Math.round(this.p * 100) + '%'; if (text) label = text; show(); },
-    fail: function (m) { bad = true; clearInterval(tick); msg.style.color = '#ff9a8a'; msg.textContent = 'Σφάλμα φόρτωσης: ' + m; },
+    fail: function (m) { bad = true; clearInterval(tick); msg.style.color = '#ff9a8a'; msg.textContent = L.fail + m; },
     done: function () { clearInterval(tick); var b = document.getElementById('boot'); if (b) b.remove(); }
   };
-  window.addEventListener('error', function (e) { if (document.getElementById('boot')) window.__boot.fail((e.message || 'script') + (e.filename ? ' (' + e.filename.split('/').pop() + ')' : '')); }, true);
+  // a script or module preload that failed: name the file, and never let a bare resource error hide a real message
+  window.addEventListener('error', function (e) {
+    if (!document.getElementById('boot')) return;
+    var el = e.target, src = el && el !== window && (el.src || el.href);
+    if (!e.message) {
+      if (bad || !el || !(el.tagName === 'SCRIPT' || (el.tagName === 'LINK' && el.rel === 'modulepreload'))) return;
+      return window.__boot.fail(String(src || 'script').split('/').pop().split('?')[0]);
+    }
+    window.__boot.fail(e.message + (e.filename ? ' (' + e.filename.split('/').pop() + ')' : ''));
+  }, true);
   window.addEventListener('unhandledrejection', function (e) { if (document.getElementById('boot')) window.__boot.fail(String(e.reason && e.reason.message || e.reason)); });
 })();
 </script>

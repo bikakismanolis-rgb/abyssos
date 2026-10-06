@@ -119,7 +119,7 @@ export function loadPack(name) {
     const glb = PACK_GLB[glbKey] ? PACK_GLB[glbKey]().then(bytes).then((b) => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(b, '')).then((g) => readProps(g, q)) : null;
     await Promise.all([...tex, glb]);
     ENV.packs[name] = true;
-  })();
+  })().catch((e) => { delete packs[name]; throw e; }); // a failed fetch can be tried again
   return packs[name];
 }
 export const packReady = (name) => !!ENV.packs[name];

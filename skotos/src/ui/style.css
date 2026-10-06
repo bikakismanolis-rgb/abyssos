@@ -255,6 +255,10 @@ body.memory #stage::after { opacity: 1; }
 #letterbox.on::before, #letterbox.on::after { height: 11vh; }
 #fade { position: fixed; inset: 0; background: #000; z-index: 20; pointer-events: none; opacity: 0; transition: opacity .5s ease; }
 #fade.on { opacity: 1; }
+#fade .load { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); width: 200px; max-width: 60vw; text-align: center; color: #8a7a5a; font: 400 13px/1.5 Alegreya, Georgia, serif; letter-spacing: 1px; opacity: 0; transition: opacity .3s; }
+#fade .load.on { opacity: 1; }
+#fade .load .bar { margin-top: 8px; height: 3px; background: #221c12; border-radius: 2px; overflow: hidden; }
+#fade .load .bar i { display: block; height: 100%; background: #d8b46a; transform-origin: left; transform: scaleX(0); transition: transform .3s; }
 #loading { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: var(--night); font: 700 16px var(--display); color: var(--gold); letter-spacing: 3px; }
 .act-h { font: 800 clamp(26px, 5vw, 42px) var(--display); color: var(--gold2); letter-spacing: 3px; text-shadow: 0 0 20px rgba(255, 160, 50, .5); }
 .gate-tiers { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; margin: 10px 0; }

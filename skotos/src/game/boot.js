@@ -11,7 +11,7 @@ import { WIND } from '../world/build.js';
 import { initInput, pollInput, takeEvents, IN } from '../core/input.js';
 import { loadSave, writeSave } from './save.js';
 import { refreshStats } from './stats.js';
-import { enterZone, updatePacks, nearestInteract, updatePortalFx, ZONES, zoneReady } from './world.js';
+import { enterZone, updatePacks, nearestInteract, updatePortalFx, ZONES, zoneReady, zoneParts } from './world.js';
 import { updatePlayer } from './player.js';
 import { damage } from './combat.js';
 import { updateActors } from './ai.js';
@@ -40,7 +40,7 @@ window.addEventListener('unhandledrejection', (e) => fatal('promise: ' + (e.reas
 export async function boot(q) {
   // the loading screen is in index.html; each finished part moves its bar
   const B = window.__boot, step = (p, text) => B?.set(p, text);
-  step(0.12, 'Φόρτωση του κόσμου');
+  step(0.12, B?.L?.world);
   loadSave();
   setLang(G.settings.lang || (navigator.language?.startsWith('el') ? 'el' : (G.save.heroes.length ? 'el' : 'el')));
   const mobile = matchMedia('(pointer: coarse)').matches || /Android|iPhone|iPad/i.test(navigator.userAgent);
@@ -110,13 +110,29 @@ function travel(zone, o = {}) {
   travelling = true;
   const f = document.getElementById('fade'); f.classList.add('on');
   Audio.sfx('waypoint');
-  // the fade covers any first-visit loading (Act II's stone and lava)
-  Promise.all([zoneReady(zone).catch((e) => fatal(e.stack || e)), new Promise((r) => setTimeout(r, 450))]).then(() => {
+  // the fade covers any first-visit loading (Act II's stone and lava, Act III's wood); if that takes a while, a bar
+  const n = zoneParts(zone), bar = fadeBar(f);
+  let k = 0, shown = false;
+  const draw = () => { bar.firstChild.textContent = t('load.zone'); bar.lastChild.firstChild.style.transform = `scaleX(${n ? Math.min(1, k / n) : 0})`; };
+  const show = setTimeout(() => { shown = true; draw(); bar.classList.add('on'); }, 600);
+  const hide = () => { clearTimeout(show); bar.classList.remove('on'); };
+  Promise.all([zoneReady(zone, () => { k++; if (shown) draw(); }), new Promise((r) => setTimeout(r, 450))]).then(() => {
+    hide();
     try { enterZone(zone, o); } catch (e) { fatal(e.stack || e); }
     clearOverlay();
     setTimeout(() => { f.classList.remove('on'); travelling = false; }, 120);
     writeSave();
+  }, (e) => {
+    // nothing has been left yet: stay here and say why (the next try fetches again)
+    hide(); f.classList.remove('on'); travelling = false;
+    console.error(e);
+    emit('toast', t('load.fail') + (e?.message ? ': ' + e.message : ''), 'big');
   });
+}
+function fadeBar(f) {
+  let b = f.querySelector('.load');
+  if (!b) { b = document.createElement('div'); b.className = 'load'; b.innerHTML = '<div></div><div class="bar"><i></i></div>'; f.appendChild(b); }
+  return b;
 }
 on('travel', travel);
 on('townPortal', () => {
@@ -192,6 +208,8 @@ on('gateKill', (a) => {
 // keyboard shortcuts and dialog advance
 on('key', (k) => {
   if (dialogOpen()) { if (k === 'enter' || k === ' ' || k === 'e') advanceDialog(); return; }
+  // death, the act's end and a blessing close only through their own buttons
+  if (G.panel === 'dead' || G.panel === 'act' || G.panel === 'boon') return;
   if (k === 'escape') { if (panelOpen()) closePanel(); else if (G.mode === 'play') openPanel('pause'); }
   else if (k === 'i' || k === 'b') panelOpen() && G.panel === 'inventory' ? closePanel() : openPanel('inventory');
   else if (k === 'k' || k === 's' && false) panelOpen() && G.panel === 'skills' ? closePanel() : openPanel('skills');

@@ -102,11 +102,13 @@ on('zoneEnter', (id, z) => {
   // a step whose flags were saved but whose quest change was still on a timer when the game closed: catch up quietly
   if (id === 'weep' && q === 12 && tearsSeen() >= 3) setQuest(13, true);
   if ((id === 'weep' || id === 'heart') && F.hart && q >= 11 && q < 14) setQuest(14, true);
+  // the Lady fell but the Autumn was never seen: her last words and the Autumn play now, where she fell
+  if (id === 'heart' && F.ladyDown && !F.autumn) later(2.2, () => { if (G.zone === z) ladyFalls(z, { x: z.L.boss.x, z: z.L.boss.z, rot: 0 }); });
   // the Lady does not rise again: if her shard was never taken (the game closed after the Autumn), it waits at her sapling
   if (id === 'heart' && F.autumn && q < 15 && !G.pickups.some((p) => p.kind === 'shard')) dropShard(z.L.boss.x, z.L.boss.z + 1.4);
   if ((id === 'weep' || id === 'heart') && z && !z.greeted) {
     z.greeted = true;
-    if (!F.autumn) later(2.6, () => { if (G.zone === z) say(id === 'weep' ? 'd.lady.w1' : 'd.lady.h1'); });
+    if (!F.autumn && !F.ladyDown) later(2.6, () => { if (G.zone === z) say(id === 'weep' ? 'd.lady.w1' : 'd.lady.h1'); });
     else if (id === 'weep' && !F.autumnWeep) { F.autumnWeep = true; later(2.6, () => { if (G.zone === z) emit('say', 'd.autumn.w'); }); }
   }
 });
@@ -196,13 +198,22 @@ on('kill', (a) => {
     G.bossActor = null;
     emit('bossDown', a);
     const z = G.zone;
-    if (!G.hero.flags.autumn) later(1.6, () => emit('dialog', { who: 'amaranthe', lines: rls(['d.amaranthe.die1', 'd.amaranthe.die2', 'd.amaranthe.die3', 'd.amaranthe.die4']), end: () => autumnFalls(z, a) }));
+    // saved at once: if the game closes during her last words, she does not rise again (zoneEnter replays them)
+    if (!G.hero.flags.autumn) { G.hero.flags.ladyDown = true; later(1.6, () => { if (G.zone === z) ladyFalls(z, a); }); }
     else if (G.hero.quest < 15) later(1.5, () => dropShard(a.x, a.z + 1));
     writeSave();
   }
   if (G.gate && G.zone.id === 'gate') emit('gateKill', a);
 });
+// her lucid moment, then the Autumn (at the kill, or on the next entry if the game closed or the hero left first)
+function ladyFalls(z, a) {
+  if (z.ladyFalling) return;
+  z.ladyFalling = true;
+  emit('dialog', { who: 'amaranthe', lines: rls(['d.amaranthe.die1', 'd.amaranthe.die2', 'd.amaranthe.die3', 'd.amaranthe.die4']), end: () => autumnFalls(z, a) });
+}
 function autumnFalls(z, a) {
+  // the hero died or left while she spoke: the Autumn waits for the next entry (zoneEnter)
+  if (G.zone !== z) { z.ladyFalling = false; return; }
   G.hero.flags.autumn = true;
   writeSave();
   emit('cine', {
@@ -351,6 +362,7 @@ on('boonTaken', (id) => {
   glowBurst(p.x, 1.2, p.z, 0xffb050, 30, 4, 0.4, 0.9);
   ring(p.x, p.z, 3.2, 0xffa040, 0.7);
   emit('toast', t('boon.taken', t('boon.' + id)), 'quest');
+  later(2.5, offerBoons);
 });
 function actComplete(act) {
   const h = G.hero;
