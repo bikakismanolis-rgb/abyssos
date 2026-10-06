@@ -23,9 +23,9 @@
 </div>
 <script>
 (function () {
-  // the save's language (or the browser's), before any module has arrived
+  // the save's language, before any module has arrived (Greek until the player picks another, as in the game)
   var lang = 'el';
-  try { var sv = JSON.parse(localStorage.getItem('skotos.save.v1') || 'null'); lang = (sv && sv.settings && sv.settings.lang) || (/^el/.test(navigator.language || 'el') ? 'el' : 'en'); } catch (e) {}
+  try { var sv = JSON.parse(localStorage.getItem('skotos.save.v1') || 'null'); lang = (sv && sv.settings && sv.settings.lang) || 'el'; } catch (e) {}
   var L = lang === 'el' ? { load: 'Φόρτωση', game: 'Φόρτωση του παιχνιδιού', world: 'Φόρτωση του κόσμου', sec: ' δ.', fail: 'Σφάλμα φόρτωσης: ' }
     : { load: 'Loading', game: 'Loading the game', world: 'Loading the world', sec: ' s', fail: 'Loading failed: ' };
   var t0 = Date.now(), bar = document.getElementById('boot-bar'), msg = document.getElementById('boot-msg'), label = L.load, bad = false;
