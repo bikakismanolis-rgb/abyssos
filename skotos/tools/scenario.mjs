@@ -19,7 +19,16 @@ const A4 = {
       await A4.enter(pg); await pg.waitForTimeout(220);
     }
   },
-  listen: (pg) => pg.evaluate(async () => { const B = await import('/src/ui/bus.js'); window.__says = []; B.on('say', (k) => window.__says.push(k)); })
+  listen: (pg) => pg.evaluate(async () => { const B = await import('/src/ui/bus.js'); window.__says = []; B.on('say', (k) => window.__says.push(k)); }),
+  // strike the boss down to frac of its life (null: to death), through a dark step, a daze or a burst floor
+  async hit(pg, frac) {
+    for (let i = 0; i < 10; i++) {
+      const ok = await pg.evaluate((frac) => { const b = window.__G.zone.boss; if (!b || b.dead) return true; b.dazed = 0; b.hidden = false; b.invuln = 0; if (frac == null) b.hpFloor = 0; window.__D.kill(b); return frac == null ? b.dead : b.hp <= b.hpMax * frac + 1; }, frac);
+      if (ok) return true;
+      await pg.waitForTimeout(700);
+    }
+    return false;
+  }
 };
 const S = {
   combat: { q: 'auto=forest&sim=6&q=1', run: async (pg, shot) => {
@@ -442,7 +451,7 @@ const S = {
     await swing(16);
     const p0 = await pg.evaluate(() => { const b = window.__G.zone.boss; return b && { hp: Math.round(b.hp / b.hpMax * 100), phase: b.phase, awake: b.awake, moves: Object.keys(b.mcd || {}) }; });
     // past 60%: the Dark
-    await pg.evaluate(() => window.__D.kill(window.__G.zone.boss));
+    await A4.hit(pg, 0.6);
     await pg.waitForTimeout(2500);
     const p1 = await pg.evaluate(() => { const G = window.__G, b = G.zone.boss, z = G.zone; return { phase: b.phase, shrouded: b.shrouded, light: window.__act4.heroLightR(), braziers: z.act4.braziers.filter((x) => x.lit).length }; });
     await shot();
@@ -452,16 +461,18 @@ const S = {
       await pg.waitForTimeout(1600);
       await pg.evaluate((i) => { const it = window.__G.zone.act4.braziers[i]; if (!it.lit) it.relight(); }, i);
     }
-    await pg.waitForTimeout(800);
+    // (his Lantern Sweep may have put one out again meanwhile: all three burning at once is what blinds him)
+    await pg.evaluate(() => { for (const it of window.__G.zone.act4.braziers) if (!it.lit) it.relight(); });
+    await pg.waitForTimeout(500);
     const blind = await pg.evaluate(() => { const b = window.__G.zone.boss; return { allLit: b.allLit, dazed: b.dazed > 0, unshroud: b.unshroud > 0, braziers: window.__G.zone.act4.braziers.filter((x) => x.lit).length }; });
     // past 30%: Remembering. Isarn runs in from the Graves; his lantern ends the dark
-    await pg.evaluate(() => { const b = window.__G.zone.boss; b.dazed = 0; window.__D.kill(b); });
+    await A4.hit(pg, 0.3);
     await pg.waitForTimeout(6000); await shot();
     const p2 = await pg.evaluate(() => { const G = window.__G, b = G.zone.boss, I = G.zone.ivarIsarn; return { phase: b.phase, dark: b.dark, gold: !!window.__act4.getLightPool('ivarGold'), light: window.__act4.heroLightR(), isarn: I && +Math.hypot(I.x - b.x, I.z - b.z).toFixed(1) }; });
     for (const f of [0.24, 0.17, 0.09]) { await pg.evaluate((f) => { const b = window.__G.zone.boss; b.dazed = 0; b.hp = b.hpMax * f; }, f); await pg.waitForTimeout(900); }
     const falters = await pg.evaluate(() => window.__G.zone.boss.falters);
     // his death: the twist, the lantern's laugh, the Last Lamp, the gate
-    await pg.evaluate(() => { const b = window.__G.zone.boss; b.dazed = 0; b.hpFloor = 0; window.__D.kill(b); });
+    await A4.hit(pg, null);
     await pg.waitForFunction(() => !!window.__G.cine, null, { timeout: 20000 }).catch(() => {});
     await pg.waitForTimeout(2000); await shot();
     const words = [];
@@ -524,7 +535,7 @@ const S = {
     const swing = async (n) => { for (let k = 0; k < n; k++) { await pg.evaluate(() => { const G = window.__G; G.player.res = 100; window.__D.IN.events.push({ t: 'skill', i: [0, 1, 0, 2, 0, 4][Math.floor(Math.random() * 6)], aim: null }); }); await pg.waitForTimeout(350); } };
     await swing(12);
     // past 65%: the cages, the gifts taken back
-    await pg.evaluate(() => window.__D.kill(window.__G.zone.boss));
+    await A4.hit(pg, 0.65);
     await pg.waitForTimeout(4000); await shot();
     const cages = await pg.evaluate((a0) => { const G = window.__G, b = G.zone.boss; return { phase: b.phase, statues: (b.cages || []).map((s) => s.keeper + ':' + s.blows), giftsTaken: G.hero.flags.giftsTaken, armor0: a0, armor: G.stats.armor }; }, armor0);
     // stand by each statue until his Hammerfall breaks it
@@ -541,7 +552,7 @@ const S = {
     await pg.evaluate(() => { const b = window.__G.zone.boss; b.dazed = 0; b.hp = b.hpMax * 0.14; });
     await pg.waitForTimeout(5000);
     // his death, and the Unmaking
-    await pg.evaluate(() => { const b = window.__G.zone.boss; b.dazed = 0; b.hpFloor = 0; window.__D.kill(b); });
+    await A4.hit(pg, null);
     await pg.waitForFunction(() => !!window.__G.cine, null, { timeout: 20000 }).catch(() => {});
     const words = [];
     for (let i = 0; i < 160; i++) {
