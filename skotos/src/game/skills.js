@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { G, later } from './state.js';
 import { SKILLS, DODGE, POTION, CLASSES } from './data.js';
 import { skillMult, skillRank, skillUnlocked } from './stats.js';
-import { damage, heroHit, healHero, freeHero } from './combat.js';
+import { damage, heroHit, healHero, freeHero, shakeOff } from './combat.js';
 import { foes, spawnMonster, Actor } from './actors.js';
 import { fire, area } from './projectiles.js';
 import { sparks, glowBurst, explosion, ring, bolt, puff, P, flash, decal, teleCircle } from '../gfx/fx.js';
@@ -108,7 +108,7 @@ function basicWarden(aim) {
       swingFx(n, third);
       if (third) {
         ring(pl.x, pl.z, 3, 0xffe0b0, 0.3);
-        if (G.stats.legs.has('cleaverOfAsh')) for (let i = 1; i <= 5; i++) later(i * 0.06, () => { const x = pl.x + Math.sin(pl.rot) * i * 1.4, z = pl.z + Math.cos(pl.rot) * i * 1.4; explosion(x, z, 1.4, 0xff6a20, { shake: 0.05 }); circleHit(x, z, 1.6, (f) => damage(pl, f, heroHit(skillMult(sk) * 0.6, { area: true }), { burn: 4, quiet: true })); });
+        if (G.stats.legs.has('cleaverOfAsh')) for (let i = 1; i <= 5; i++) later(i * 0.06, () => { const x = pl.x + Math.sin(pl.rot) * i * 1.4, z = pl.z + Math.cos(pl.rot) * i * 1.4; explosion(x, z, 1.4, 0xff6a20, { shake: 0.05 }); circleHit(x, z, 1.6, (f) => damage(pl, f, heroHit(skillMult(sk) * 0.6, { area: true }), { burn: 4, quiet: true, area: true })); });
       }
     }]]
   });
@@ -182,7 +182,7 @@ const SKILL_FN = {
         if (snd <= 0) { snd = 0.55; Audio.sfx('whirlwind', { vol: 0.7 }); }
         if (tick <= 0) {
           tick = sk.tick;
-          const n = circleHit(pl.x, pl.z, sk.radius, (f) => damage(pl, f, heroHit(mult, { area: true }), { knock: 1.6, kx: f.x - pl.x, kz: f.z - pl.z, quiet: true, resMul: 0.3 }));
+          const n = circleHit(pl.x, pl.z, sk.radius, (f) => damage(pl, f, heroHit(mult, { area: true }), { knock: 1.6, kx: f.x - pl.x, kz: f.z - pl.z, quiet: true, resMul: 0.3, area: true }));
           if (n) { Audio.sfx('hitFlesh', { vol: 0.5 }); G.hitstop = Math.max(G.hitstop, 0.02); }
           for (let k = 0; k < 6; k++) { const a = Math.random() * 6.28; P({ x: pl.x + Math.sin(a) * sk.radius * 0.9, y: 0.8, z: pl.z + Math.cos(a) * sk.radius * 0.9, vx: Math.cos(a) * 3, vy: 0.3, vz: -Math.sin(a) * 3, life: 0.25, size: 0.35, size1: 0.05, color: 0xfff0d0, color1: 0x8090c0 }); }
         }
@@ -214,7 +214,7 @@ const SKILL_FN = {
       },
       events: [[0.56, () => {
         pl.y = 0;
-        const n = circleHit(tx, tz, sk.radius, (f) => damage(pl, f, heroHit(mult, { area: true }), { knock: 5, kx: f.x - tx, kz: f.z - tz, stun: 1.2 }));
+        const n = circleHit(tx, tz, sk.radius, (f) => damage(pl, f, heroHit(mult, { area: true }), { knock: 5, kx: f.x - tx, kz: f.z - tz, stun: 1.2, area: true, breakGuard: true }));
         explosion(tx, tz, sk.radius * 0.8, 0xffc080, { smoke: 0x5a4a3a, shake: 0.55 });
         for (let i = 0; i < 16; i++) { const a = Math.random() * 6.28; P({ add: false, x: tx, y: 0.2, z: tz, vx: Math.cos(a) * 6, vy: rand.range(2, 5), vz: Math.sin(a) * 6, life: 0.8, size: 0.18, size1: 0.12, color: 0x5a4a3a, alpha: 1, grav: 14 }); }
         Audio.sfx('slam'); kick(0, 0.4, 1);
@@ -253,7 +253,7 @@ const SKILL_FN = {
           puff(x, 0.3, z, 2, 0x4a4038, 0.8, 0.6, 0.7);
           decal(x, z, 'scorch', 1.4);
           if (i % 3 === 0) Audio.sfx('hitBone', { x, z, vol: 0.5 });
-          circleHit(x, z, 1.7, (f) => { if (hit.has(f)) return; hit.add(f); damage(pl, f, heroHit(mult, { area: true }), { knock: 3, kx: Math.sin(dir), kz: Math.cos(dir), stun: 0.6 }); });
+          circleHit(x, z, 1.7, (f) => { if (hit.has(f)) return; hit.add(f); damage(pl, f, heroHit(mult, { area: true }), { knock: 3, kx: Math.sin(dir), kz: Math.cos(dir), stun: 0.6, area: true, breakGuard: true }); });
         });
       }]]
     });
@@ -303,7 +303,7 @@ const SKILL_FN = {
       update(dt, a) { if (a.t < 0.3 * a.clip) { const o = handPoint(V); P({ x: o.x + rand.range(-0.3, 0.3), y: o.y + rand.range(-0.3, 0.3), z: o.z + rand.range(-0.3, 0.3), vx: 0, vy: 0, vz: 0, life: 0.2, size: 0.15, size1: 0.3, color: 0xffe0a0 }); } },
       events: [[0.3, () => {
         const o = handPoint(V);
-        fire('pierce', pl, o.x, o.z, pl.rot, { y: 1.25, dmg: heroHit(mult), pierce: 99, life: 0.75, opts: { knock: 4 } });
+        fire('pierce', pl, o.x, o.z, pl.rot, { y: 1.25, dmg: heroHit(mult), pierce: 99, life: 0.75, opts: { knock: 4, breakGuard: true } });
         flash(o.x, o.y, o.z, 0xfff0c0, 2.5, 0.12); shake(0.2); kick(-Math.sin(pl.rot), -Math.cos(pl.rot), 0.4);
         Audio.sfx('arrowShoot'); Audio.sfx('crit', { vol: 0.5 });
       }]]
@@ -315,7 +315,7 @@ const SKILL_FN = {
     const boom = (x, z, r, m, small) => {
       explosion(x, z, r, 0xff7a20, { shake: small ? 0.12 : 0.3 });
       Audio.sfx('explosion', { x, z, vol: small ? 0.6 : 1 });
-      circleHit(x, z, r, (f) => damage(pl, f, heroHit(m, { area: true }), { knock: small ? 2 : 4, kx: f.x - x, kz: f.z - z, burn: heroHit(m * 0.3) }));
+      circleHit(x, z, r, (f) => damage(pl, f, heroHit(m, { area: true }), { knock: small ? 2 : 4, kx: f.x - x, kz: f.z - z, burn: heroHit(m * 0.3), area: true }));
     };
     act({
       name: 'fireball', anim: 'cast', speed: 1.6, face: aim.dir, cut: 0.45,
@@ -343,7 +343,7 @@ const SKILL_FN = {
         ring(pl.x, pl.z, r, 0xa0e0ff, 0.5); ring(pl.x, pl.z, r * 0.6, 0xffffff, 0.35);
         addLight({ x: pl.x, y: 1.5, z: pl.z, color: 0x80c8ff, intensity: 45, range: r * 2.5, life: 0.5, fade: 0.5 });
         Audio.sfx('frost'); shake(0.2);
-        circleHit(pl.x, pl.z, r, (f) => { damage(pl, f, heroHit(mult, { area: true }), { freeze: sk.freeze + 0.2 * rank }); glowBurst(f.x, 1, f.z, 0xb0e8ff, 6, 2, 0.25, 0.5); });
+        circleHit(pl.x, pl.z, r, (f) => { damage(pl, f, heroHit(mult, { area: true }), { freeze: sk.freeze + 0.2 * rank, area: true }); glowBurst(f.x, 1, f.z, 0xb0e8ff, 6, 2, 0.25, 0.5); });
       }]]
     });
   },
@@ -382,7 +382,7 @@ const SKILL_FN = {
           explosion(x, z, r, 0xff5a10, { shake: 0.7 });
           Audio.sfx('explosion', { x, z });
           G.hitstop = 0.08;
-          circleHit(x, z, r, (f) => damage(pl, f, heroHit(mult, { area: true }), { knock: 6, kx: f.x - x, kz: f.z - z, burn: heroHit(mult * 0.2) }));
+          circleHit(x, z, r, (f) => damage(pl, f, heroHit(mult, { area: true }), { knock: 6, kx: f.x - x, kz: f.z - z, burn: heroHit(mult * 0.2), area: true }));
           area('fire', x, z, r * 0.8, 3 + rank * 0.3, { tick: 0.5, dmg: heroHit(mult * 0.12, { area: true }) });
         });
       }]]
@@ -395,9 +395,13 @@ export function dodge(ev) {
   const pl = p(), D = DODGE[G.hero.cls];
   if (pl.dodgeCd > 0) { Audio.sfx('denied', { vol: 0.4 }); return; }
   if (pl.act && pl.act.name === 'leap') return;
+  // dragged by the tongs, there is no rolling free
+  if (pl.pull) return;
   pl.act = null;
-  // a dodge always breaks free of amber, and clears the build-up
+  // a dodge always breaks free of amber, and clears the build-up; it throws off any Ember Ticks (Act IV)
   freeHero();
+  shakeOff();
+  pl.dodgeStamp = (pl.dodgeStamp || 0) + 1;
   pl.dodgeCd = D.cd * (G.stats.legs.has('swiftboots') ? 0.5 : 1);
   const mv = Math.hypot(G.input.mx, G.input.mz) > 0.2 ? Math.atan2(G.input.mx, G.input.mz) : (ev?.aim?.dir ? Math.atan2(ev.aim.dir.x, ev.aim.dir.z) : pl.rot);
   const map = G.zone.map;

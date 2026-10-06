@@ -9,10 +9,10 @@ import { ANIMS } from './anims.data.js';
 // lazy, so inlined builds keep these megabytes out of the scripts the game needs before its loading screen
 const peopleUrl = () => import('../assets/people.glb?url').then((m) => m.default);
 const movesUrl = () => import('../assets/moves.bin?url').then((m) => m.default);
-// extra sets of people, each loaded with the zones that need it (tools/creatures/act2/folk.mjs builds both):
-// 'folk' = Act II's dwarves (folk.glb), 'grove' = Act III's Evergreen (grove.glb)
+// extra sets of people, each loaded with the zones that need it (tools/creatures/act2/folk.mjs builds them):
+// 'folk' = Act II's dwarves (folk.glb), 'grove' = Act III's Evergreen (grove.glb), 'ash' = Act IV's dead and bosses (ash.glb)
 // (lazy: each set's URL is fetched only when a zone asks for it, which keeps inlined builds in small chunks)
-const SET_URLS = Object.fromEntries(Object.entries(import.meta.glob(['../assets/folk.glb', '../assets/grove.glb'], { query: '?url', import: 'default' }))
+const SET_URLS = Object.fromEntries(Object.entries(import.meta.glob(['../assets/folk.glb', '../assets/grove.glb', '../assets/ash.glb'], { query: '?url', import: 'default' }))
   .map(([path, load]) => [path.match(/(\w+)\.glb$/)[1], load]));
 
 export const PEOPLE = { scenes: {}, moves: null, ready: false };
@@ -82,7 +82,12 @@ varying vec3 vWPos;
 uniform float uFlash; uniform float uDissolve; uniform vec3 uRimColor; uniform float uRim; uniform vec3 uTint; uniform float uTintAmt; uniform vec3 uBurn;
 ${NOISE}`)
     .replace('#include <color_fragment>', `#include <color_fragment>
-diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * uTint * 1.6, uTintAmt);
+// a tint above 1 also drains the colour (1.8: 80% grey, then tinted fully), above 2 it evens it out toward a mid grey
+// (2.7: an ash statue of anyone, however dark they were): the Shrouded, the keepers' statues
+float tL = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
+vec3 tC = mix(diffuseColor.rgb, vec3(tL), clamp(uTintAmt - 1.0, 0.0, 1.0));
+tC = mix(tC, vec3(0.3 + 0.6 * tL), clamp(uTintAmt - 2.0, 0.0, 1.0));
+diffuseColor.rgb = mix(tC, tC * uTint * 1.6, min(uTintAmt, 1.0));
 float dn = 1.0;
 if (uDissolve > 0.0) { dn = pnoise(vWPos * 4.0) * 0.7 + pnoise(vWPos * 11.0) * 0.3; if (dn < uDissolve) discard; }`)
     .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
@@ -216,7 +221,9 @@ const SETS = {
   claw: { idle: 'Zombie_Idle_Loop', walk: 'Zombie_Walk_Fwd_Loop', run: 'KK_Running_C' },
   undead: { idle: 'Zombie_Idle_Loop', walk: 'Zombie_Walk_Fwd_Loop', run: 'KK_Running_C' },
   none: { idle: 'Idle_Loop', walk: 'Walk_Loop', run: 'Jog_Fwd_Loop' },
-  npc: { idle: 'Idle_Loop', walk: 'Walk_Loop', run: 'Jog_Fwd_Loop' }
+  npc: { idle: 'Idle_Loop', walk: 'Walk_Loop', run: 'Jog_Fwd_Loop' },
+  // the Lampless: an upright formal walk, the dead lantern held out when they stand
+  formal: { idle: 'Idle_Lantern_Loop', walk: 'Walk_Formal_Loop', run: 'Jog_Fwd_Loop' }
 };
 // logical action -> clip (same names the KayKit humanoids use)
 export const PERSON_ACTIONS = {

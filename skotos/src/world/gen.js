@@ -468,6 +468,17 @@ export function genTown() {
   L.exits.push({ x: 6.2, z: 27.3, to: 'weep', label: 'exit.weep', locked: 'act2' });
   L.props.push({ t: 'lamp', x: 7.2, z: 25.4 });
   L.lights.push({ x: 7.2, y: 2.2, z: 25.4, color: 0xffb060, intensity: 9, range: 9, flicker: 0.2 });
+  // the north path (Act IV): down the far side of the beacon hill toward the Field of Ash. Cut last as well, clear of the
+  // beacon's stones; only the trees and rocks on it go.
+  const before4 = L.cells.slice(), paint4 = L.paint.slice();
+  carveLine(L, CX - 3.5, 17.5, 24, 9.8, 1.3, 0.8);
+  carveLine(L, 24, 9.8, CX - 13.5, 7.2, 1.4, 0.8);
+  carveLine(L, CX - 13.5, 7.2, CX - 14, 3.6, 1.4, 0.8);
+  const north = [];
+  for (let i = 0; i < w * h; i++) if ((L.cells[i] && !before4[i]) || L.paint[i] > paint4[i] + 0.3) north.push([i % w + 0.5, Math.floor(i / w) + 0.5]);
+  L.props = L.props.filter((p) => !clearR[p.t] || !north.some(([x, z]) => Math.hypot(p.x - x, p.z - z) < clearR[p.t]));
+  L.dist = distField(L, 12);
+  L.exits.push({ x: CX - 14, z: 4, to: 'ashfield', label: 'exit.ashfield', locked: 'act3' });
   L.spots.npcs = { wayfarer: { x: CX - 2.6, z: 20.5, r: 0.4 }, smith: { x: 24.6, z: 33.4, r: -1.2 }, healer: { x: 41.2, z: 35.6, r: 0.8 }, villagers: [{ x: 27, z: 43, r: 0.8 }, { x: 38, z: 45, r: -0.6 }, { x: 34, z: 27, r: 2.8 }] };
   return L;
 }

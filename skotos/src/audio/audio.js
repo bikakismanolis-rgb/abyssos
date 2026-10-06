@@ -1231,6 +1231,105 @@ const SFX = {
     s.connect(bp); bp.connect(e); e.connect(v.out); s2.connect(hp); hp.connect(e2); e2.connect(v.out);
     v.wet(0.5);
   },
+
+  // ── Act IV: the Field of Ash and the Ashen Forge ──
+  // a flue draws breath: two seconds of air rushing up into the grate, the leather of the bellows creaking
+  bellowsInhale(v, t, p) {
+    const d = 2, s = v.N('p', t, t + d + 0.2), bp = v.F('bandpass', 200 * p, 1.1), e = v.G(0);
+    bp.frequency.setValueAtTime(170 * p, t); bp.frequency.exponentialRampToValueAtTime(1100 * p, t + d);
+    e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(0.55, t + d * 0.93); e.gain.linearRampToValueAtTime(0, t + d + 0.08);
+    s.connect(bp); bp.connect(e); e.connect(v.out);
+    nb(v, t + 0.3, { k: 'b', f: 240 * p, q: 4, a: 0.6, pk: 0.14, d: 1.1, am: [rand(11, 16), 0.85] });
+    tn(v, t, { w: 'triangle', f: 40, fe: 62, sw: d, a: 1.4, pk: 0.25, d: 0.6 });
+    v.wet(0.45);
+  },
+  // and breathes out fire: a deep roar, the rush of flame, embers crackling
+  bellowsRoar(v, t, p) {
+    roar(v, t, 52 * p, 1.3, 0.55, 5);
+    nb(v, t, { k: 'p', ft: 'lowpass', f: 600 * p, fp: 3200 * p, fe: 420 * p, q: 0.8, a: 0.06, pk: 0.75, d: 1.2, drive: 2 });
+    const s = v.N('w', t + 0.1, t + 1.4), hp = v.F('highpass', 2400, 0.7), e = v.G(0);
+    spikes(e.gain, t + 0.1, 1.2, 40, 0.25, 0.008, 1.4);
+    s.connect(hp); hp.connect(e); e.connect(v.out);
+    v.wet(0.45);
+  },
+  // the Ember Cradle drinks a fire: a sucking rush that rises into a small, warm glow
+  lanternDrink(v, t, p) {
+    nb(v, t, { k: 'p', ft: 'bandpass', f: 2400 * p, fe: 380 * p, q: 1.2, a: 0.25, pk: 0.4, d: 0.45 });
+    tn(v, t + 0.15, { f: 260 * p, fe: 620 * p, sw: 0.35, a: 0.08, pk: 0.12, d: 0.5 });
+    INS.bell(v, t + 0.42, 81, { vel: 0.03, dec: 1.6 });
+    v.wet(0.4);
+  },
+  // a stoker's chain: links knocking together
+  chainRattle(v, t, p) {
+    for (let k = 0; k < 7; k++) metal(v, t + k * rand(0.03, 0.07), 1700 * p * rand(0.85, 1.15), [1, 2.4, 3.9], 0.12, 0.05);
+    v.wet(0.2);
+  },
+  // and the chain tearing from its post: a hard iron snap, links flying
+  chainSnap(v, t, p) {
+    metal(v, t, 880 * p, [1, 2.76, 5.4, 8.9], 0.7, 0.32);
+    nb(v, t, { k: 'w', ft: 'highpass', f: 3500, q: 0.7, a: 0.001, pk: 0.5, d: 0.08 });
+    for (let k = 0; k < 6; k++) metal(v, t + 0.12 + k * rand(0.05, 0.11), 1900 * rand(0.8, 1.2), [1, 2.4, 3.9], 0.1, 0.05);
+    v.wet(0.3);
+  },
+  // a spearman's shield takes the blow: a wooden thud with an iron rim
+  shieldBlock(v, t, p) {
+    tn(v, t, { w: 'triangle', f: 190 * p, fe: 110 * p, pk: 0.5, d: 0.12 });
+    metal(v, t, 620 * p, [1, 2.3, 4.1], 0.25, 0.14);
+    nb(v, t, { k: 'p', ft: 'lowpass', f: 1200, q: 0.8, a: 0.002, pk: 0.4, d: 0.08 });
+    v.wet(0.2);
+  },
+  // an Ember Tick latches on: a chitin click and a sizzle
+  tickLatch(v, t, p) {
+    SFX.hitChitin(v, t, p * 1.3);
+    nb(v, t + 0.05, { k: 'w', ft: 'highpass', f: 4200, q: 0.7, a: 0.02, pk: 0.16, d: 0.5, am: [rand(30, 44), 0.6] });
+    v.wet(0.2);
+  },
+  // a Smoke-eater swallows a flame: a wet, cold gulp
+  smokeGulp(v, t, p) {
+    tn(v, t, { f: 190 * p, fe: 80 * p, sw: 0.25, pk: 0.4, d: 0.3 });
+    nb(v, t, { k: 'b', ft: 'lowpass', f: 700 * p, q: 1, a: 0.05, pk: 0.35, d: 0.35, am: [rand(18, 26), 0.7] });
+    nb(v, t + 0.12, { k: 'p', ft: 'bandpass', f: 1400 * p, fe: 500 * p, q: 1.5, a: 0.1, pk: 0.15, d: 0.4 });
+    v.wet(0.3);
+  },
+  // an Ashwing's cry from the dark above: a long raw shriek
+  ashwingScreech(v, t, p) {
+    vox(v, t, { f: 460 * p, d: 0.8, c: [[0, 0.8], [0.15, 1.45], [0.8, 0.85]], vow: 'a', to: 'e', mt: 0.5, growl: [32, 0.5], drive: 4, breath: 0.6, pk: 0.28, fg: 3, a: 0.03, hold: 0.55 });
+    nb(v, t, { k: 'w', ft: 'highpass', f: 3000 * p, q: 0.8, a: 0.02, pk: 0.14, d: 0.6, am: [40, 0.5] });
+    v.wet(0.6);
+  },
+  // a shard cracks: glass and iron at once, ringing
+  crownCrack(v, t, p) {
+    const s = v.N('w', t, t + 0.3), hp = v.F('highpass', 3000 * p, 0.8), e = v.G(0);
+    spikes(e.gain, t, 0.25, 10, 0.7, 0.005, 2);
+    s.connect(hp); hp.connect(e); e.connect(v.out);
+    metal(v, t, 1250 * p, [1, 1.52, 2.73, 4.3], 1.6, 0.16);
+    tn(v, t, { f: 90 * p, fe: 45, pk: 0.35, d: 0.3 });
+    v.wet(0.55);
+  },
+  // the Lampless horn: a falling fourth, far off
+  hornCall(v, t, p) {
+    INS.brass(v, t, [62], 0.6, { vel: 0.2, att: 0.22, rel: 0.5, bright: 900 });
+    INS.brass(v, t + 0.75, [57], 1.0, { vel: 0.2, att: 0.18, rel: 0.9, bright: 780 });
+    v.wet(0.85);
+  },
+  // a lamp catches: a soft whump of flame and a warm glint
+  lampLight(v, t, p) {
+    nb(v, t, { k: 'p', ft: 'lowpass', f: 300 * p, fp: 1800 * p, fe: 500 * p, q: 0.9, a: 0.08, pk: 0.4, d: 0.5 });
+    const s = v.N('w', t + 0.05, t + 0.7), hp = v.F('highpass', 2200, 0.7), e = v.G(0);
+    spikes(e.gain, t + 0.05, 0.6, 14, 0.18, 0.006);
+    s.connect(hp); hp.connect(e); e.connect(v.out);
+    INS.bell(v, t + 0.1, 86, { vel: 0.035, dec: 2 });
+    v.wet(0.45);
+  },
+  // a keeper's statue of ash comes apart: a crack, then rubble
+  statueBreak(v, t, p) {
+    SFX.stoneCrack(v, t, p * 0.8);
+    const s = v.N('b', t + 0.1, t + 1.2), lp = v.F('lowpass', 900, 0.7), e = v.G(0);
+    spikes(e.gain, t + 0.1, 1, 30, 0.45, 0.02, 1.5);
+    s.connect(lp); lp.connect(e); e.connect(v.out);
+    tn(v, t, { f: 60 * p, fe: 32, pk: 0.5, d: 0.6 });
+    v.wet(0.45);
+  },
 };
 
 // name → [max calls, window seconds]; extras inside the window are dropped
@@ -1240,6 +1339,7 @@ const LIMITS = {
   wraithWail: [2, 0.5], door: [1, 0.3], fireCrackle: [2, 0.1],
   hartBellow: [1, 1.2], bearRoar: [2, 0.6], rootlingShriek: [2, 0.3], hollowCrack: [3, 0.15], mournerKeen: [2, 0.6],
   amaranthSong: [1, 1], sapRoot: [1, 0.5], sapCrack: [2, 0.2], thornWither: [2, 0.4], windGust: [1, 2], woodHit: [5, 0.05],
+  bellowsInhale: [2, 1], bellowsRoar: [2, 1], hornCall: [1, 2.5], chainRattle: [2, 0.4], tickLatch: [2, 0.2], lanternDrink: [1, 0.5], smokeGulp: [2, 0.4], ashwingScreech: [1, 0.8], crownCrack: [2, 0.25], statueBreak: [1, 0.5], shieldBlock: [3, 0.08],
 };
 const DEF_LIMIT = [5, 0.06];
 
@@ -1254,7 +1354,7 @@ const TRIM = {
   footstep: 0.5, beaconIgnite: 0.85, fireCrackle: 1.6,
   woodHit: 1.6, hollowCrack: 1.6, sapCrack: 2.2, windGust: 1.5, mournerKeen: 0.85,
 };
-const STING_TRIM = { victory: 0.8, death: 0.55, bossIntro: 0.5, quest: 1.3, memory: 0.9 };
+const STING_TRIM = { victory: 0.8, death: 0.55, bossIntro: 0.5, quest: 1.3, memory: 0.9, lantern: 1.1 };
 
 // ───────────────────────────── 5. stings ─────────────────────────────
 
@@ -1340,6 +1440,16 @@ const STINGS = {
     nb(v, t, { k: 'w', ft: 'highpass', f: 6000, q: 0.7, a: 1.2, pk: 0.04, d: 2.4 });
     v.wet(0.75);
     return 4.2;
+  },
+  // the lantern's motif (A C B E), a waylamp lit: then a warm major third blooms under it
+  lantern(v, t) {
+    let x = t;
+    const seq = MOTIF.map(([m, b]) => { const n = [m, x, b * 0.3 - 0.02]; x += b * 0.3; return n; });
+    INS.flute(v, seq, { vel: 0.13 });
+    INS.strings(v, t + 0.9, [62, 66, 69], 1.5, { vel: 0.17, att: 0.5, rel: 1.6, cut: 1400 });
+    INS.bell(v, t + 0.92, 88, { vel: 0.04, dec: 3 });
+    v.wet(0.6);
+    return 2.6;
   },
   beacon(v, t) {
     INS.taiko(v, t, 0.6, { f: 95 });
@@ -1465,6 +1575,14 @@ const DRUMS = {
     os: [0, null, null, null, 7, null, null, null, 12, null, null, null, null, null, null, null],
     tf: 72, osAt: 0.55,
   },
+  // 6/8 on a twelve-cell bar (three beats of two): the weight on one and four (Karthax)
+  six: {
+    tk: [1, 0, 0, 0, 0, 0, 0.85, 0, 0, 0, 0.4, 0, 0, 0, 0, 0],
+    tm: [0, 0, 0, 0, 0.45, 0, 0, 0, 0, 0, 0, 0.5, 0, 0, 0, 0],
+    rm: [0, 0, 0.35, 0, 0, 0, 0, 0, 0.35, 0, 0, 0, 0, 0, 0, 0],
+    os: [0, null, null, null, 0, null, 6, null, null, null, 6, null, null, null, null, null],
+    tf: 78, osAt: 0.2,
+  },
   boss: {
     tk: [1, 0, 0, 0.55, 0, 0, 0.8, 0, 0.95, 0, 0, 0.55, 0, 0, 0.7, 0.45],
     tm: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -1508,7 +1626,40 @@ function drumStep(S, P) {
 
 // what the story tells the music: the First Autumn has come (weep, heart), how near the Heart Chamber is (0-1, the
 // heartbeat's tempo), and the Lady's phase (her waltz gains brass)
-const MOOD = { autumn: false, near: 0, phase: 0 };
+const MOOD = { autumn: false, near: 0, phase: 0, heat: 0, night: 0, seen: false, breath: 0, roar: 0, keeper: 0, answer: 0 };
+// what the story may set, and how far (Act IV: the Forge's heat runs from -1, cold, to 3; a keeper 1-3; a far fire 1-4).
+// breath, roar, keeper and answer are moments: the theme playing takes them on its next step and clears them.
+const MOOD_RANGE = { heat: [-1, 3], keeper: [0, 3], answer: [0, 4], breath: [0, 1], roar: [0, 1] };
+// Act IV: the lantern's motif (A C B E, [midi, beats]); it resolves to D at the very end
+const MOTIF = [[69, 1.5], [72, 0.5], [71, 1], [76, 2.5]];
+function motif(th, t, beat, o = {}) {
+  let x = t;
+  const seq = MOTIF.map(([m, b]) => { const n = [m + (o.tr || 0), x, b * beat - 0.02]; x += b * beat; return n; });
+  if (o.resolve) seq.push([74 + (o.tr || 0), x, beat * 3]);
+  INS.flute(nv(th), seq, { vel: o.vel ?? 0.1, wet: o.wet ?? 0.6 });
+}
+// the motif on a pure sine, alone in the dark
+function sineLine(v, seq, vel) { for (const [m, s, d] of seq) tn(v, s, { f: mf(m), a: 0.12, pk: vel, d: d + 0.8 }); v.wet(0.7); }
+// the Forge's breath in the music: an inhale swell over the 2 s telegraph, then the exhale's roar
+function inhale(v, t, d) {
+  const s = v.N('p', t, t + d + 0.2), bp = v.F('bandpass', 200, 1), e = v.G(0);
+  bp.frequency.setValueAtTime(160, t); bp.frequency.exponentialRampToValueAtTime(1000, t + d);
+  e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(0.32, t + d * 0.92); e.gain.linearRampToValueAtTime(0, t + d + 0.1);
+  s.connect(bp); bp.connect(e); e.connect(v.out);
+  v.wet(0.5);
+}
+function exhale(v, t) { roar(v, t, 46, 1.1, 0.3, 4); nb(v, t, { k: 'p', ft: 'lowpass', f: 2600, fe: 300, q: 0.8, a: 0.03, pk: 0.35, d: 1.1 }); v.wet(0.4); }
+// a keeper's statue breaks: a breath of its old music (the crypt's bell, the halls' anvil, the Lady's harp)
+function keeperMotif(th, t, k, bd) {
+  if (k === 1) { INS.bell(nv(th), t, 48, { vel: 0.12, dec: 6, wet: 0.7 }); INS.choir(nv(th), t, [60, 63, 67], bd * 2, { vel: 0.16, att: 0.4, rel: 1.6, vowel: 'o', wet: 0.6 }); }
+  else if (k === 2) { for (const d of [0, bd / 2]) metal(nv(th), t + d, 330, [1, 2.76, 5.4, 8.93], 1, 0.06); INS.choir(nv(th), t, [52, 55, 59], bd * 2, { vel: 0.16, att: 0.4, rel: 1.6, vowel: 'o', wet: 0.6 }); }
+  else { [57, 60, 64, 69, 64, 60].forEach((m, i) => INS.pluck(nv(th), t + i * bd / 6, m, { vel: 0.1, dec: 1.2, bright: 5, saw: 0.2, wet: 0.5 })); INS.choir(nv(th), t, [64, 69, 72], bd * 2, { vel: 0.15, att: 0.5, rel: 1.8, vowel: 'a', wet: 0.6 }); }
+}
+// the Field of Ash: D phrygian under the falling ash, D major at dawn
+const ASH_PROGS = [['Dm', 'Eb', 'Dm', 'C'], ['Dm', 'Bb', 'Eb', 'Dm'], ['Gm', 'Eb', 'Dm', 'Dm'], ['Dm', 'C', 'Bb', 'Eb']];
+const ASH_DAWN = [['D', 'G', 'D', 'A'], ['Bm', 'G', 'D', 'A'], ['D', 'Em', 'G', 'D']];
+// the title's theme, its first phrase turned to D major: what the village sings as the fires answer
+const ANSWER = [[69, 2], [74, 1], [76, 1], [78, 3], [76, 0.5], [74, 0.5], [73, 2], [74, 2]];
 const WEEP_PROGS = [['Am', 'F', 'C', 'G'], ['Am', 'Dm', 'F', 'E'], ['F', 'C', 'Dm', 'Am'], ['Am', 'G', 'F', 'E']];
 const WEEP_AUT = [['Am', 'F', 'C', 'G'], ['F', 'C', 'G', 'A'], ['Am', 'Dm', 'F', 'E'], ['C', 'G', 'Am', 'A']];
 // the Heartwood's heartbeat: a low, filtered thump
@@ -1809,6 +1960,143 @@ const THEMES = {
     },
   },
 
+  // ── Act IV ──
+  // the Field of Ash: about 60 bpm in D phrygian. A low bowed drone and an organ pad, D against E-flat, the ash wind; far off
+  // every 20-30 s the Lampless horn, a falling fourth. No drums: only a frame-drum heartbeat while the dead have seen her.
+  // Under the stars after the Unmaking: no wind, high bells; at dawn D major, and a lark.
+  ashfield: {
+    bpm: 60, beats: 4, sub: 2, bpc: 2, gain: 1.3,
+    get scale() { return MOOD.night === 2 ? [2, 4, 6, 7, 9, 11, 1] : [2, 3, 5, 7, 9, 10, 0]; },
+    get progs() { return MOOD.night === 2 ? ASH_DAWN : ASH_PROGS; },
+    bar(S) {
+      const { th, t, bd, ch } = S, st = th.st, n = MOOD.night;
+      if (S.bar % 8 === 0) { INS.drone(nv(th), t, 26, bd * 8 + 2, { vel: n === 2 ? 0.08 : 0.16 }); if (n === 0) INS.drone(nv(th), t + bd, 27, bd * 6, { vel: 0.045, cut: 300 }); }
+      if (S.nc) {
+        st.pv = voicing(ch, 43, 60, st.pv, 3);
+        INS.strings(nv(th), t, st.pv, S.cd + 0.4, { vel: n === 2 ? 0.12 : 0.15, att: 2.2, rel: 3, cut: n === 2 ? 950 : 560, wet: 0.45 });
+        if (n === 0) INS.choir(nv(th), t + 0.2, voicing(ch, 50, 62, null, 3), S.cd, { vel: 0.07, att: 3, rel: 3, vowel: 'o', wet: 0.6 });
+      }
+      if (n === 0 && chance(0.35)) INS.whisper(nv(th), t + rand(0, bd * 0.5), rand(3, 5), { vel: 0.1, wet: 0.6 });
+      if (n === 0 && t >= (st.horn ??= t + rand(6, 12))) {
+        st.horn = t + rand(20, 30);
+        const h = t + rand(0, bd * 0.5);
+        INS.brass(nv(th), h, [62], bd * 0.45, { vel: 0.09, att: 0.3, rel: 0.6, bright: 800, wet: 0.85 });
+        INS.brass(nv(th), h + bd * 0.55, [57], bd * 0.8, { vel: 0.09, att: 0.25, rel: 1, bright: 700, wet: 0.85 });
+      }
+      if (n === 1 && chance(0.4)) INS.bell(nv(th), t + rand(0, bd), pick([86, 88, 93, 95]), { vel: 0.03, dec: 5, wet: 0.95 });
+      if (n === 2 && chance(0.4)) bird(nv(th), t + rand(0, bd));
+      if (MOOD.seen && n === 0) for (const [dt, a] of [[0, 1], [0.38, 0.7]]) thump(nv(th), t + dt * S.sd * S.d.sub, a * 0.75);
+      if (S.nc && th.ci === 0 && chance(0.3)) { const c = th.prog.map(chordOf); phrase(th, t + bd, genMelody([c[0], c[1], c[1]], 4, S.d.scale, 62, 74, 62, 0.35), S.sd * S.d.sub, { vel: 0.06, wet: 0.75 }); }
+    },
+    step(S) {
+      // in a fight the low strings pulse on the root, quietly (the Field has no drums)
+      if (S.lvl > 0.3 && S.i % 2 === 0) INS.ost(nv(S.th), S.t, bassNote(S.ch, 38), S.sd * 1.6, 0.06 * S.lvl, { br: 5 });
+      if (!chance(0.05)) return;
+      INS.pluck(nv(S.th), S.t, pick(scaleTones(S.d.scale, 69, 86)), { vel: 0.04, dec: 3, bright: 2, saw: 0.05, wet: 1 });
+    },
+  },
+
+  // Ivar: the horn call is the bass ostinato; his Dark strips it to a drone and a heartbeat; remembering, the lantern's motif
+  // comes in under the fight (MOOD.phase)
+  ivar: {
+    bpm: 104, beats: 4, sub: 4, gain: 0.85, int: 'always', order: [0], scale: [2, 3, 5, 7, 9, 10, 0],
+    get drums() { return MOOD.phase === 1 ? null : 'boss'; },
+    progs: [['Dm', 'Eb', 'Dm', 'C'], ['Dm', 'Bb', 'C', 'Dm'], ['Gm', 'Eb', 'Dm', 'A'], ['Dm', 'Eb', 'Bb', 'A']],
+    bar(S) {
+      const { th, t, bd, ch } = S, st = th.st, ph = MOOD.phase, r = bassNote(ch, 38);
+      if (ph === 1) {
+        if (S.bar % 4 === 0) INS.drone(nv(th), t, 26, bd * 4 + 1, { vel: 0.18 });
+        for (const [dt, a] of [[0, 1], [0.4, 0.7]]) thump(nv(th), t + dt * S.sd * 4, a * 0.8);
+        if (S.nc) INS.strings(nv(th), t, [r + 12, r + 13], S.cd, { vel: 0.07, att: 1.5, rel: 1.5, cut: 500 });
+        return;
+      }
+      INS.brass(nv(th), t, [r, r + 12], bd * 0.3, { vel: 0.24, att: 0.03, rel: 0.3, bright: 1600, drive: 1.3 });
+      INS.brass(nv(th), t + bd * 0.5, [r - 5, r + 7], bd * 0.35, { vel: 0.22, att: 0.03, rel: 0.35, bright: 1400, drive: 1.3 });
+      st.pv = voicing(ch, 60, 76, st.pv, 3);
+      INS.strings(nv(th), t, st.pv, bd - 0.1, { vel: 0.14, att: 0.25, rel: 0.6, cut: 2000 });
+      if (S.bar % 2 === 0) INS.choir(nv(th), t, voicing(ch, 55, 70, null, 3), bd * 0.9, { vel: 0.15, att: 0.1, rel: 0.7, vowel: 'o', wet: 0.4 });
+      if (ph >= 2 && S.bar % 4 === 0) motif(th, t, S.sd * 3, { vel: 0.13, wet: 0.5 });
+    },
+  },
+
+  // the Ashen Forge: 6/8 in C phrygian dominant, its rhythm the mountain's own breath (MOOD.breath, MOOD.roar from the
+  // flues); each stage of the heat adds a layer: a brass drone, then the anvil on one and four, then a low choir on 'ah'.
+  // Cold (heat -1): one low note and the wind in the flues.
+  forge: {
+    bpm: 126, beats: 3, sub: 2, bpc: 2, gain: 1.2, scale: [0, 1, 4, 5, 7, 8, 10],
+    progs: [['C', 'Db', 'C', 'C'], ['Fm', 'Db', 'C', 'C'], ['C', 'Bbm', 'Db', 'C'], ['Fm', 'Ab', 'Db', 'C']],
+    bar(S) {
+      const { th, t, bd, ch } = S, st = th.st, h = MOOD.heat;
+      if (h < 0) {
+        if (S.bar % 8 === 0) INS.drone(nv(th), t, 24, bd * 8 + 3, { vel: 0.12, cut: 260 });
+        if (chance(0.3)) INS.whisper(nv(th), t + rand(0, bd), rand(3, 5), { vel: 0.07, wet: 0.7 });
+        if (chance(0.12)) INS.bell(nv(th), t + rand(0, bd), pick([48, 55, 60]), { vel: 0.06, dec: 7, wet: 0.85 });
+        return;
+      }
+      if (S.bar % 8 === 0) INS.drone(nv(th), t, 24, bd * 8 + 2, { vel: 0.17 });
+      if (S.nc) {
+        st.pv = voicing(ch, 43, 58, st.pv, 3);
+        const b = bassNote(ch, 36);
+        INS.strings(nv(th), t, st.pv, S.cd + 0.3, { vel: 0.14, att: 1.6, rel: 2.2, cut: 520, wet: 0.4 });
+        if (h >= 1) INS.brass(nv(th), t, [b, b + 7], S.cd * 0.9, { vel: 0.08 + 0.02 * h, att: 1.2, rel: 1.2, bright: 700, wet: 0.4 });
+        if (h >= 3) INS.choir(nv(th), t, voicing(ch, 45, 57, null, 3), S.cd, { vel: 0.17, att: 1.4, rel: 2, vowel: 'a', wet: 0.5 });
+      }
+      if (h >= 2) for (const k of [0, 3]) metal(nv(th), t + k * S.sd, 330 * rand(0.99, 1.01), [1, 2.76, 5.4, 8.93], 0.7, k ? 0.04 : 0.06);
+      else if (S.bar % 2 === 0) metal(nv(th), t, 300, [1, 2.76, 5.4, 8.93], 1.1, 0.025);
+    },
+    step(S) {
+      const th = S.th;
+      if (MOOD.breath) { MOOD.breath = 0; if (MOOD.heat >= 0) inhale(nv(th), S.t, 2.0); }
+      if (MOOD.roar) { MOOD.roar = 0; if (MOOD.heat >= 0) { exhale(nv(th), S.t); for (const k of [0, 3]) metal(nv(th), S.t + k * S.sd, 330, [1, 2.76, 5.4, 8.93, 13.3], 1, 0.07); } }
+      if (S.lvl > 0.3 && MOOD.heat >= 0 && S.i % 3 === 0) INS.ost(nv(th), S.t, bassNote(S.ch, 36), S.sd * 2.6, 0.07 * S.lvl, { br: 6 });
+    },
+  },
+
+  // Karthax: 6/8, a tritone in the bass and the full choir; as each keeper's statue breaks its old music surfaces; in his last
+  // fire everything drops to one held low note, and the lantern's motif plays alone on a pure sine and a flute
+  karthax: {
+    bpm: 144, beats: 3, sub: 2, gain: 0.85, int: 'always', order: [0], scale: [0, 1, 4, 5, 7, 8, 10],
+    get drums() { return MOOD.phase >= 2 ? null : 'six'; },
+    progs: [['Cm', 'F#', 'Cm', 'Ab'], ['Cm', 'Db', 'F#', 'G'], ['Fm', 'B', 'Cm', 'G']],
+    bar(S) {
+      const { th, t, bd, ch } = S, st = th.st, ph = MOOD.phase;
+      if (ph >= 2) {
+        if (S.bar % 8 === 0) INS.drone(nv(th), t, 24, bd * 8 + 2, { vel: 0.2, cut: 240 });
+        if (S.bar % 6 === 2) { const b = bd * 0.5; let x = t; const seq = MOTIF.map(([m, k]) => { const n = [m, x, k * b]; x += k * b; return n; }); sineLine(nv(th), seq, 0.07); INS.flute(nv(th), seq.map(([m, s0, d]) => [m + 12, s0, d - 0.02]), { vel: 0.05, wet: 0.8 }); }
+        return;
+      }
+      const r = bassNote(ch, 36);
+      INS.brass(nv(th), t, [r, r + 6], bd * 0.45, { vel: 0.26, att: 0.03, rel: 0.3, bright: 1500, drive: 1.6 });
+      INS.brass(nv(th), t + bd / 2, [r], bd * 0.3, { vel: 0.2, att: 0.03, rel: 0.25, bright: 1300, drive: 1.6 });
+      if (S.bar % 2 === 0) INS.choir(nv(th), t, voicing(ch, 52, 72, null, 4), bd * 1.8, { vel: 0.22, att: 0.15, rel: 0.8, vowel: S.bar % 4 ? 'o' : 'a', wet: 0.45 });
+      st.pv = voicing(ch, 60, 76, st.pv, 3);
+      INS.strings(nv(th), t, st.pv, bd, { vel: 0.13, att: 0.2, rel: 0.5, cut: 2200 });
+      if (MOOD.keeper) { const k = MOOD.keeper; MOOD.keeper = 0; keeperMotif(th, t, k, bd); }
+    },
+  },
+
+  // the new fire (q22): the lantern's motif harmonised and slow, resolving to D major; as each far fire answers, the
+  // village's tune
+  newfire: {
+    bpm: 66, beats: 4, sub: 2, gain: 1.0, order: [0], scale: [2, 4, 6, 7, 9, 11, 1],
+    progs: [['D', 'G', 'Bm', 'A'], ['D', 'Em', 'G', 'D'], ['G', 'D', 'A', 'D']],
+    bar(S) {
+      const { th, t, bd, ch } = S, st = th.st;
+      if (S.bar % 8 === 0) INS.drone(nv(th), t, 38, bd * 8 + 2, { vel: 0.1 });
+      st.pv = voicing(ch, 55, 71, st.pv, 4);
+      INS.strings(nv(th), t, st.pv, bd + 0.3, { vel: 0.16, att: 1, rel: 2, cut: 1500, wet: 0.4 });
+      if (S.bar % 2 === 0) INS.choir(nv(th), t, voicing(ch, 62, 74, null, 3), bd * 2, { vel: 0.12, att: 1.2, rel: 2, vowel: 'a', wet: 0.55 });
+      if (S.bar % 4 === 0) motif(th, t + bd * 0.25, S.sd * 1.8, { vel: 0.12, wet: 0.6, resolve: true });
+      if (MOOD.answer) { MOOD.answer = 0; phrase(th, t + bd * 0.5, ANSWER, S.sd * 1.2, { vel: 0.09, wet: 0.6 }); INS.bell(nv(th), t, 86, { vel: 0.06, dec: 4, wet: 0.8 }); }
+    },
+    step(S) {
+      const { th, i } = S, st = th.st;
+      if (i === 0) { st.arp = pick(ARP8); st.at = tones(S.ch, 62, 81); }
+      const k = st.arp[i];
+      if (k != null) INS.pluck(nv(th), S.t + rand(0, 0.01), st.at[Math.min(k, st.at.length - 1)], { vel: rand(0.06, 0.09), dec: 2, bright: 4, saw: 0.15, wet: 0.5 });
+    },
+  },
+
   victory: {
     bpm: 60, beats: 4, sub: 1, gain: 0.8, once: true, fadeIn: 0.03, xfade: 1.2,
     play(S) { fanfare(() => nv(S.th), S.t, true); },
@@ -2044,9 +2332,11 @@ export const Audio = {
     } catch (e) { /* ignore */ }
   },
 
-  /** Story state the music follows: { autumn: bool, near: 0..1 (the Heartwood's heartbeat), phase: 0..2 (the Lady) }. */
+  /** Story state the music follows: { autumn: bool, near: 0..1 (the Heartwood's heartbeat), phase: 0..2 (a boss), heat: -1..3
+   * (the Forge), night: 0 ash | 1 stars | 2 dawn (the Field), seen: bool; and moments: breath, roar (a flue), keeper 1-3 (a
+   * statue breaks), answer 1-4 (a far fire) }. */
   mood(o) {
-    if (o && typeof o === 'object') for (const k in o) if (k in MOOD) MOOD[k] = typeof MOOD[k] === 'boolean' ? !!o[k] : clamp(num(o[k], MOOD[k]), 0, 2);
+    if (o && typeof o === 'object') for (const k in o) if (k in MOOD) { const r = MOOD_RANGE[k] || [0, 2]; MOOD[k] = typeof MOOD[k] === 'boolean' ? !!o[k] : clamp(num(o[k], MOOD[k]), r[0], r[1]); }
   },
 
   /** 0..1 combat intensity. Cheap: only stores the target; smoothing happens in the scheduler. */

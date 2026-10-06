@@ -11,5 +11,22 @@ export const ATMOS = {
   // inside the First Oak: dark, warm and close; the channels and cocoons give the light
   heart: { fog: 0x0c0804, density: 0.038, sky: 0x6a4420, ground: 0x140c06, hemi: 0.42, moon: 0xffb060, moonI: 0.0, exposure: 1.4, heroI: 30, heroRange: 13, zoom: 1, heroColor: 0xffc890 },
   heartAutumn: { fog: 0x0e0a06, density: 0.034, sky: 0x7a5430, ground: 0x160e08, hemi: 0.48, moon: 0xffc890, moonI: 0.3, exposure: 1.4, heroI: 30, heroRange: 13, zoom: 1, heroColor: 0xffc890 },
-  gate: { fog: 0x0a0612, density: 0.035, sky: 0x5a3a7a, ground: 0x120a10, hemi: 0.55, moon: 0xc0a0ff, moonI: 0.6, exposure: 1.2, heroI: 34, heroRange: 14, zoom: 1 }
+  gate: { fog: 0x0a0612, density: 0.035, sky: 0x5a3a7a, ground: 0x120a10, hemi: 0.55, moon: 0xc0a0ff, moonI: 0.6, exposure: 1.2, heroI: 34, heroRange: 14, zoom: 1 },
+  // Act IV: the Field of Ash under a dull red sun behind the ash (the Cradle is the light that matters); after the
+  // Unmaking the sky clears to stars; at the new fire's dawn the light comes back warm
+  ashfield: { fog: 0x1c1816, density: 0.028, sky: 0x5a4a46, ground: 0x1c1612, hemi: 0.62, moon: 0x9a5a48, moonI: 0.55, exposure: 1.28, heroI: 24, heroRange: 10, zoom: 1, heroColor: 0xffb070 },
+  ashfieldStars: { fog: 0x0e121a, density: 0.022, sky: 0x46567a, ground: 0x12141a, hemi: 0.5, moon: 0x8aa4d8, moonI: 0.7, exposure: 1.28, heroI: 22, heroRange: 10, zoom: 1, heroColor: 0xffc890 },
+  ashfieldDawn: { fog: 0x2c2a30, density: 0.018, sky: 0xc8a0a0, ground: 0x2a2420, hemi: 0.95, moon: 0xffd8a8, moonI: 1.3, exposure: 1.2, heroI: 20, heroRange: 13, zoom: 1.05 },
+  // inside the Black Anvil: a banked forge, warming with each breath of the Great Bellows (heatAtmos); cold after the Unmaking
+  forge: { fog: 0x0e0705, density: 0.032, sky: 0x4a2014, ground: 0x160b07, hemi: 0.42, moon: 0xff7a40, moonI: 0.12, exposure: 1.32, heroI: 26, heroRange: 11, zoom: 1, heroColor: 0xffb070 },
+  forgeHot: { fog: 0x2a1206, density: 0.029, sky: 0x7a3016, ground: 0x24100a, hemi: 0.55, moon: 0xff8a40, moonI: 0.28, exposure: 1.34, heroI: 26, heroRange: 11, zoom: 1, heroColor: 0xffb070 },
+  forgeCold: { fog: 0x1a1a1c, density: 0.03, sky: 0x40404a, ground: 0x121214, hemi: 0.45, moon: 0x9aa0b0, moonI: 0.15, exposure: 1.28, heroI: 26, heroRange: 11, zoom: 1, heroColor: 0xffc890 }
 };
+// the Forge at heat k (0 banked .. 3 full breath; fractions blend; below 0 the cold forge)
+const mixHex = (a, b, t) => { let o = 0; for (const sh of [16, 8, 0]) o |= Math.round(((a >> sh) & 255) + ((((b >> sh) & 255) - ((a >> sh) & 255)) * t)) << sh; return o; };
+export function heatAtmos(k) {
+  if (k < 0) return ATMOS.forgeCold;
+  const A = ATMOS.forge, B = ATMOS.forgeHot, t = Math.min(k, 3) / 3, o = {};
+  for (const key in A) o[key] = typeof A[key] !== 'number' ? A[key] : /fog|sky|ground|moon$|Color/.test(key) ? mixHex(A[key], B[key], t) : A[key] + (B[key] - A[key]) * t;
+  return o;
+}

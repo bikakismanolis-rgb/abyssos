@@ -7,12 +7,16 @@ import { P, sparks, glowBurst, explosion, hitFx, puff, ring, decal } from '../gf
 import { damage } from './combat.js';
 import { foes, near, makeAvatar } from './actors.js';
 import { updateSap, clearSap } from './sap.js';
+import { updateRemains, clearRemains } from './combat.js';
+import { clearLight } from './light.js';
+import { tickFlues } from './forge.js';
 import Audio from '../audio/audio.js';
 import { rand } from '../core/util.js';
 
 let boltGeo = null, arrowGeo = null, pinGeo = null, pmat = null;
 function meshFor(kind) {
   pmat ||= new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x111111 });
+  if (kind === 'fireArrow') kind = 'arrow';
   if (kind === 'bolt' || kind === 'arrow' || kind === 'pin') {
     const g = kind === 'bolt' ? (boltGeo ||= staticGeo([{ geo: GEO.cyl(0.02, 0.02, 0.7, 4), color: 0x6a5038, o: { rx: Math.PI / 2 } }, { geo: GEO.cone(0.045, 0.14, 4), color: 0xc0c8d0, o: { rx: Math.PI / 2, z: 0.4 } }, { geo: GEO.box(0.12, 0.01, 0.12), color: 0xe0e0d8, o: { z: -0.3 } }]))
       : kind === 'pin' ? (pinGeo ||= staticGeo([{ geo: GEO.cyl(0.018, 0.018, 0.7, 4), color: 0x4a3a20, o: { rx: Math.PI / 2 } }, { geo: GEO.cone(0.045, 0.14, 4), color: 0xc09030, o: { rx: Math.PI / 2, z: 0.4 } }, { geo: GEO.box(0.14, 0.01, 0.16), color: 0x6ad040, o: { z: -0.28 } }, { geo: GEO.box(0.01, 0.14, 0.16), color: 0x6ad040, o: { z: -0.28 } }]))
@@ -48,7 +52,9 @@ const KIND = {
   firewave: { speed: 14, r: 1.2, life: 1.4, color: 0xff6a20, light: 0xff5010 },
   // Act III: the Rootsworn's pinning arrow (slows, never roots) and the Hart's phantom herd
   pin: { speed: 18, r: 0.45, life: 1.4, color: 0x9aff70 },
-  phantomHart: { speed: 20, r: 1.4, life: 1.4, color: 0xfff0d0, light: 0xffe0a0 }
+  phantomHart: { speed: 20, r: 1.4, life: 1.4, color: 0xfff0d0, light: 0xffe0a0 },
+  // Act IV: the Ash-Fallen bowmen's fire arrows leave a patch of fire where they land (the Cradle can drink it)
+  fireArrow: { speed: 16, r: 0.45, life: 1.4, color: 0xffa040, light: 0xff6a10, patch: { r: 1.5, dur: 3 } }
 };
 const PASS_WALLS = new Set(['spectral', 'firewave', 'phantomHart']);
 
@@ -74,6 +80,8 @@ function endProj(p, i, hitWall) {
   if (p.light) removeLight(p.light);
   G.projs.splice(i, 1);
   p.onEnd?.(p.x, p.z, hitWall);
+  const pa = KIND[p.kind].patch;
+  if (pa && G.zone) { const f = G.zone.map.walkable(p.x, p.z) ? p : G.zone.map.nearestFloor(p.x, p.z, 2); area('fire', f.x, f.z, pa.r, pa.dur, { team: p.team, src: p.src, dmg: p.dmg * 0.22, tick: 0.5 }); }
 }
 
 export function updateProjs(dt) {
@@ -103,6 +111,8 @@ export function updateProjs(dt) {
       if (Math.random() < 0.4) P({ add: false, x: p.x, y: 0.2, z: p.z, vy: 0.3, life: 1.2, size: 1.2, size1: 2.6, color: 0xd8d0c0, alpha: 0.18, alpha1: 0 });
     } else if (p.kind === 'pin') {
       if (Math.random() < 0.6) P({ x: p.x, y: p.y, z: p.z, life: 0.25, size: 0.12, size1: 0.02, color: 0xb0ff80 });
+    } else if (p.kind === 'fireArrow') {
+      P({ x: p.x, y: p.y, z: p.z, vx: -p.vx * 0.04, vy: rand.range(0.2, 0.6), vz: -p.vz * 0.04, life: 0.3, size: 0.35, size1: 0.05, color: 0xffc060, color1: 0xff3000 });
     } else if (p.kind === 'ember') {
       for (let k = 0; k < 2; k++) P({ x: p.x + rand.range(-0.1, 0.1), y: p.y + rand.range(-0.1, 0.1), z: p.z + rand.range(-0.1, 0.1), vx: -p.vx * 0.05, vy: rand.range(0.2, 0.8), vz: -p.vz * 0.05, life: rand.range(0.2, 0.4), size: 0.45, size1: 0.08, color: 0xffc060, color1: 0xff3000 });
     } else if (p.kind === 'acid') {
@@ -161,6 +171,7 @@ export function area(kind, x, z, r, dur, o = {}) {
   if (kind === 'poison') decal(x, z, 'goo', r * 2, dur);
   if (kind === 'web') decal(x, z, 'ecto', r * 2, dur);
   if (kind === 'amberDust') a.light = addLight({ x, y: 0.8, z, color: 0xffc050, intensity: 8, range: r * 3, flicker: 0.3 });
+  if (kind === 'coldFire') a.light = addLight({ x, y: 0.6, z, color: 0x9ab8ff, intensity: 8, range: r * 3, flicker: 0.3 });
   G.areas.push(a);
   return a;
 }
@@ -168,6 +179,8 @@ const slowBy = (s, t, k) => { s.slow = Math.max(s.slow, t); s.slowK = Math.max(s
 export function updateAreas(dt) {
   const pl = G.player;
   updateSap(dt);
+  updateRemains(dt);
+  tickFlues(dt);
   for (let i = G.areas.length - 1; i >= 0; i--) {
     const a = G.areas[i];
     a.t += dt; a.tickT -= dt;
@@ -197,14 +210,18 @@ export function updateAreas(dt) {
     else if (a.kind === 'tornado') { for (let k = 0; k < 3; k++) { const ang = a.t * 9 + k * 2.09, h = (a.t * 3 + k) % 2.6; P({ x: a.x + Math.cos(ang) * (0.3 + h * 0.3), y: h, z: a.z + Math.sin(ang) * (0.3 + h * 0.3), life: 0.3, size: 0.45, size1: 0.1, color: 0xffc060, color1: 0xff3000 }); } }
     else if (a.kind === 'frostOrb') { P({ x: a.x, y: 1, z: a.z, life: 0.2, size: 1.2 + Math.sin(a.t * 10) * 0.2, size1: 0.6, color: 0xc0f0ff, color1: 0x4090ff }); }
     else if (a.kind === 'web') { /* decal only */ }
+    // Act IV: the ash Ivar's Long Road leaves behind him, and his dead lanterns' cold fire: both only slow
+    else if (a.kind === 'ash') { if (Math.random() < 0.5) P({ add: false, x: a.x + rand.range(-a.r, a.r) * 0.7, y: 0.15, z: a.z + rand.range(-a.r, a.r) * 0.7, vy: 0.3, life: 1.2, size: 0.6, size1: 1.3, color: 0x6a6660, alpha: 0.35, alpha1: 0 }); }
+    else if (a.kind === 'coldFire') { if (Math.random() < 0.6) P({ x: a.x + rand.range(-a.r, a.r) * 0.7, y: 0.1, z: a.z + rand.range(-a.r, a.r) * 0.7, vy: rand.range(0.6, 1.4), life: 0.6, size: 0.35, size1: 0.05, color: 0xd0e4ff, color1: 0x4a70c0 }); }
     if (a.tickT <= 0 && a.t <= a.dur) {
       a.tickT += a.tick;
       if (a.team === 'hero') {
-        for (const f of foes(a.x, a.z, a.r)) damage(a.src || pl, f, a.dmg, Object.assign({ quiet: a.kind !== 'rain', noFx: a.kind === 'fire', dot: a.kind === 'fire', lohMul: 0.2 }, a.opts));
+        for (const f of foes(a.x, a.z, a.r)) damage(a.src || pl, f, a.dmg, Object.assign({ quiet: a.kind !== 'rain', noFx: a.kind === 'fire', dot: a.kind === 'fire', lohMul: 0.2, area: true }, a.opts));
       } else if (pl && !pl.dead) {
         const d = Math.hypot(pl.x - a.x, pl.z - a.z);
         if (d < a.r + pl.radius * 0.5) {
           if (a.kind === 'web') { pl.status.slow = Math.max(pl.status.slow, 0.4); pl.status.slowK = Math.max(pl.status.slowK, 0.55); }
+          else if (a.kind === 'ash' || a.kind === 'coldFire') slowBy(pl.status, 0.6, a.kind === 'ash' ? 0.4 : 0.2);
           else if (a.kind === 'frostOrb') { /* explodes at the end */ }
           else damage(a.src, pl, a.dmg, Object.assign({ dot: a.kind === 'poison' || a.kind === 'fire' }, a.opts));
         }
@@ -223,7 +240,7 @@ export function updateAreas(dt) {
 }
 export function clearProjs() {
   for (let i = G.projs.length - 1; i >= 0; i--) { const p = G.projs[i]; if (p.mesh) R.scene.remove(p.mesh); if (p.light) removeLight(p.light); if (p.av) { p.av.dispose(); p.av = null; } }
-  clearSap();
+  clearSap(); clearRemains(); clearLight();
   G.projs.length = 0;
   for (const a of G.areas) if (a.light) removeLight(a.light);
   G.areas.length = 0;

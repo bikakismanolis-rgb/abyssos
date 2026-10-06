@@ -23,7 +23,13 @@ export const CREDITS = [
     ['Animated Peacock Moth (the amber moths)', 'OsianOHM (Osian CG)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/animated-peacock-moth-1c3db0798f1c46be9764e99631cbb0a7'],
     ['Mandrake (the rootlings)', 'timsblends', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/mandrake-31f9f793011b43e38ce9421298f90b80'],
     ['Treeman (the Rootwardens)', 'DJMaesen (sketchfab.com/bumstrum)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/treeman-e3a094316a8c4820a94d271afffe497c'],
-    ['The Evergreen (Elati, Old Linden, the Rootsworn, the Hollowed, the Mourners, Amaranthe): Quaternius characters re-proportioned for Skotos, with bark from bark_brown_02 by Rob Tuytel (Poly Haven)', 'Quaternius; Rob Tuytel', 'CC0', 'https://quaternius.com']
+    ['The Evergreen (Elati, Old Linden, the Rootsworn, the Hollowed, the Mourners, Amaranthe): Quaternius characters re-proportioned for Skotos, with bark from bark_brown_02 by Rob Tuytel (Poly Haven)', 'Quaternius; Rob Tuytel', 'CC0', 'https://quaternius.com'],
+    ['Prowler Dragon Variant Rig (the Ashwings)', 'SuperKapoo913 (DM-913)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/prowler-dragon-variant-rig-7ee71aaf323d426bbbdf28d73d55bbd9'],
+    ['Lesser Cyclops Variant Rig (the Smoke-eaters)', 'SuperKapoo913 (DM-913)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/lesser-cyclops-variant-rig-40d31731af1b46b59addd81ed5750db0'],
+    ['Fireborne Blight Drone (the Ember Ticks)', 'HighPolyDensity', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/fireborne-blight-drone-bbc26cb4e7c1408a9e9c18f5adec914c'],
+    ['Minotaur Berserker - Free Game-Ready Character (the Hammerhorns)', 'Yury Misiyuk (Tim0)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/minotaur-berserker-free-game-ready-character-42da47ae59574ed5a6b86b49734294cc'],
+    ['Overlord (Karthax, the Ash King)', 'DJMaesen (sketchfab.com/bumstrum)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/overlord-4e61da8bb7f3440db3df42ee26c4b797'],
+    ['The dead of the Field of Ash (the Lampless, the Ash-Fallen, the Ashsmiths, Ivar, Arna, the boy Isarn): Quaternius characters re-proportioned for Skotos, with ember cracks from bark_brown_02 by Rob Tuytel (Poly Haven)', 'Quaternius; Rob Tuytel', 'CC0', 'https://quaternius.com']
   ], note: 'cr.modified' },
   { h: 'cr.world', items: [
     ['Dungeon Remastered, Medieval Hexagon Pack, Halloween Bits', 'Kay Lousberg (KayKit)', 'CC0', 'https://kaylousberg.com'],
@@ -47,7 +53,16 @@ export const CREDITS = [
     ['Realistic HD Rosemary willow (63/99)', 'PlantCatalog', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/realistic-hd-rosemary-willow-6399-6d25c2941dae4065b9476f0705b4f0d3'],
     ['Bracken Fern Low Poly', 'Marcin.Kwiatkowski', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/bracken-fern-low-poly-b64381d3ea9547b88581f98178800627'],
     ['Realistic Mushroom - 01', 'SanForge', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/realistic-mushroom-01-aededce1ec0f48f8b0f50cc1762a3f86'],
-    ['The Giants\' Stair and Deepstone: snow_02, rocks_ground_02/05 (Rob Tuytel); dark_rock, dark_rock_02, stone_wall_04, rock_wall_10 (Amal Kumar); rock_tile_floor_02, volcanic_herringbone_01 (Charlotte Baglioni); slab_tiles (Dario Barresi, Dimitrios Savva); cliffs, rock faces, mountainside and boulders (Dario Barresi, Rico Cilliers, Jenelle van Heerden, Greg Zaal); large_iron_gate (Josh Dean); large_castle_door (Tina); lantern_chandelier_01 (Kirill Sannikov); overhead_crane (Timothy3D); wooden_ladder (Miroslav Turura)', 'Poly Haven', 'CC0', 'https://polyhaven.com']
+    ['The Giants\' Stair and Deepstone: snow_02, rocks_ground_02/05 (Rob Tuytel); dark_rock, dark_rock_02, stone_wall_04, rock_wall_10 (Amal Kumar); rock_tile_floor_02, volcanic_herringbone_01 (Charlotte Baglioni); slab_tiles (Dario Barresi, Dimitrios Savva); cliffs, rock faces, mountainside and boulders (Dario Barresi, Rico Cilliers, Jenelle van Heerden, Greg Zaal); large_iron_gate (Josh Dean); large_castle_door (Tina); lantern_chandelier_01 (Kirill Sannikov); overhead_crane (Timothy3D); wooden_ladder (Miroslav Turura)', 'Poly Haven', 'CC0', 'https://polyhaven.com'],
+    ['The Field of Ash and the Ashen Forge: burned_ground_01, rocks_ground_09, metal_plate_02, dead_tree_trunk_02 (Rob Tuytel, Jenelle van Heerden, Rico Cilliers); moon_footprints_01, moon_rock_01/04/05/06 (Greg Zaal, Rico Cilliers, Jenelle van Heerden, Dario Barresi); gray_rocks, rust_coarse_01 (Dimitrios Savva, Rico Cilliers); dark_rock_02 (Amal Kumar); volcanic_rock_tiles, volcanic_herringbone_01 (Charlotte Baglioni); dead_quiver_trunk, wine_barrel_01 (James Ray Cock, Dario Barresi, Rico Cilliers); namaqualand_boulder_02 (Greg Zaal, Rico Cilliers); kite_shield, antique_estoc, ornate_war_hammer, ornate_medieval_mace (Ulan Cabanilla, James Ray Cock); gothic_statue (Benny Weimer); Lantern_01 (Rajil Jose Macatangay); brass_diya_lantern (Bhargav Kubal); cross_pein_hammer (Tics); bull_head (Tina)', 'Poly Haven', 'CC0', 'https://polyhaven.com'],
+    ['Ribs (the war-drake\'s bones)', 'Bregorn', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/ribs-328309ecbdef4e9ebd148d4b730aab35'],
+    ['Spine (the war-drake\'s bones)', 'Bregorn', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/spine-c5512ed80ce442aca263cc43585c7d0d'],
+    ['Dragon Skull (the war-drake\'s bones)', 'Bregorn', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/dragon-skull-326d0f7359af43c995217f654aba0fec'],
+    ['Ruined Tower (the Wayfarers\' watchtower)', 'Cianon', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/ruined-tower-a345f230525a43749f97927b3429e734'],
+    ['Medieval Brazier (the braziers of the Anvil Gate and the camps)', 'Sky_Hunter', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/medieval-brazier-cff29e533e3a4298a5d112cf7bb2558c'],
+    ['Medieval Blacksmith Bellows (the Great Bellows and the stokers\' bellows)', 'TomasKiniulis', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/medieval-blacksmith-bellows-b9eaf7057b194e36b73da1f49cf49886'],
+    ['PBR Anvil (the Anvil of the Crown and the shard-anvils)', 'NOT_Lonely (not_lonely)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/pbr-anvil-3529b9ef4e2c4a32add55948b5361609'],
+    ['Asset Pack - Blacksmith Equipment (tongs, quench trough, tool racks, stumps)', 'Mike Farrant (MikeFarrant)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/asset-pack-blacksmith-equipment-0f358eaab21d4e70836ad855de34c423']
   ] },
   { h: 'cr.type', items: [
     ['Alegreya, Alegreya SC', 'Juan Pablo del Peral, Huerta Tipográfica', 'SIL OFL 1.1', 'https://fonts.google.com/specimen/Alegreya']

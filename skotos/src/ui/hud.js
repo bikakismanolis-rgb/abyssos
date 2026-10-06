@@ -15,23 +15,28 @@ const $ = (id) => document.getElementById(id);
 const el = (html) => { const d = document.createElement('div'); d.innerHTML = html.trim(); return d.firstChild; };
 // a drop of amber: the sap status and the Memory of the Evergreen
 const TEAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c3.2 4.6 6 8 6 11.2A6 6 0 0 1 6 14.2C6 11 8.8 7.6 12 3z"/><path d="M9.5 14.5a2.6 2.6 0 0 0 2.4 2.6" opacity=".7"/></svg>';
+// Act IV: the eye of the dead (Seen), an Ember Tick on her back (Clinging)
+const EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.8"/></svg>';
+const TICK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="13.5" rx="4.6" ry="5.6"/><circle cx="12" cy="6.4" r="2"/><path d="M7.6 10.5 4 8.5M7.4 14H3.5M7.8 17.2 4.6 20M16.4 10.5 20 8.5M16.6 14h3.9M16.2 17.2l3.2 2.8"/></svg>';
 let built = false;
-const S = { hpW: 1, lagW: 1, minimapT: 0, toastN: 0, dialog: null };
+const S = { hpW: 1, lagW: 1, minimapT: 0, toastN: 0, dialog: null, flue: 0 };
 
 export function buildHud() {
   if (built) return; built = true;
   const app = $('app');
   app.appendChild(el(`<div id="vignette"></div>`));
   const hud = el(`<div id="hud" hidden>
-    <div id="hurt"></div>
+    <div id="hurt"></div><div id="flue"></div>
     <div id="hud-tl"><div id="portrait"><span id="pic"></span><div id="lvl">1</div></div>
       <div id="bars"><div class="bar hp"><i class="lag"></i><i class="fill"></i><i class="shield"></i><span></span></div><div class="bar res"><i class="fill"></i></div><div id="xpbar"><i></i></div><div id="buffs"></div>
-        <div id="amber" hidden><span class="ic">${TEAR}</span><div class="ab"><i></i></div><b></b></div></div></div>
+        <div id="amber" hidden><span class="ic">${TEAR}</span><div class="ab"><i></i></div><b></b></div>
+        <div id="cling" hidden><span class="ic">${TICK}</span><b></b></div></div></div>
     <div id="hud-tr"><canvas id="minimap" width="264" height="264"></canvas>
       <div id="hud-btns"><button class="hbtn" id="h-bag" aria-label="bag">${ICON.bag}</button><button class="hbtn" id="h-skills" aria-label="skills">${ICON.book}</button><button class="hbtn" id="h-menu" aria-label="menu">${ICON.menu}</button></div>
       <div id="quest"></div></div>
     <div id="bossbar" hidden><div class="nm"></div><div class="ti"></div><div class="bar"><i class="fill"></i></div></div>
     <div id="gatebar" hidden><div class="nm"></div><div class="bar"><i class="fill"></i></div></div>
+    <div id="ring" hidden><svg viewBox="0 0 48 48"><circle class="bg" cx="24" cy="24" r="20"/><circle class="fg" cx="24" cy="24" r="20"/></svg><span class="n"></span><b></b></div>
     <div id="zonename"><div class="a"></div><div class="rule"></div><div class="b"></div></div>
     <div id="levelup"><div class="a"></div><div class="b"></div></div>
     <div id="massacre"></div>
@@ -118,7 +123,7 @@ export function updateHud(dt) {
   } else u.hidden = true;
   // buffs
   const bf = [];
-  for (const k in pl.buffs) if (pl.buffs[k] > 0 && k !== 'evergreen') bf.push(`<div class="bf${k === 'memory' ? ' mem' : ''}">${k === 'memory' ? TEAR : ICON[{ cry: 'horn', shrineFury: 'flame', shrineSpeed: 'roll', shrineFortune: 'coin', shrineShield: 'shield' }[k] || 'star']}<b>${Math.ceil(pl.buffs[k])}</b></div>`);
+  for (const k in pl.buffs) if (pl.buffs[k] > 0 && k !== 'evergreen') bf.push(`<div class="bf${k === 'memory' ? ' mem' : k === 'seen' ? ' seen' : ''}"${k === 'seen' ? ` title="${t('hud.seen')}"` : ''}>${k === 'memory' ? TEAR : k === 'seen' ? EYE : ICON[{ cry: 'horn', shrineFury: 'flame', shrineSpeed: 'roll', shrineFortune: 'coin', shrineShield: 'shield' }[k] || 'star']}<b>${Math.ceil(pl.buffs[k])}</b></div>`);
   const bh = bf.join('');
   if (bh !== S.bh) { $('buffs').innerHTML = bh; S.bh = bh; }
   // amber sap: the build-up toward an amber-lock, then the lock itself (a dodge breaks it)
@@ -131,6 +136,21 @@ export function updateHud(dt) {
     const lb = rooted ? t('hud.rooted') : t('hud.sap');
     if (S.amb !== lb) { am.querySelector('b').textContent = lb; S.amb = lb; }
   }
+  // Act IV: Ember Ticks on her back (a dodge throws them off)
+  const nc = pl.cling?.length || 0, cl = $('cling');
+  if (cl.hidden === nc > 0) cl.hidden = !(nc > 0);
+  if (nc > 0) { const lb = t('hud.clinging') + (nc > 1 ? ' ×' + nc : ''); if (S.cl !== lb) { cl.querySelector('b').textContent = lb; S.cl = lb; } }
+  // the Forge's breath is drawing in down the gallery she stands in: the screen's edge glows red
+  $('flue').style.opacity = S.flue.toFixed(3); S.flue = Math.max(0, S.flue - dt * 2.5);
+  // a Great Bellows being woken: the ring fills over its 20 s (it waits while the fire is out or she is away)
+  const run = G.zone?.run, rg = $('ring');
+  if (rg.hidden === !!run) rg.hidden = !run;
+  if (run) {
+    rg.querySelector('.fg').style.strokeDashoffset = ((1 - run.k) * 125.66).toFixed(2);
+    rg.classList.toggle('paused', !!run.paused);
+    const lb = run.out ? t('hud.bellowsOut') : run.away ? t('hud.bellowsAway') : t('hud.bellows'), n = run.ready ? String(Math.max(0, Math.ceil(run.dur - run.t))) : '';
+    if (S.rg !== lb + n) { rg.querySelector('b').textContent = lb; rg.querySelector('.n').textContent = n; S.rg = lb + n; }
+  }
   // boss
   const b = G.bossActor;
   const bb = $('bossbar');
@@ -141,7 +161,7 @@ export function updateHud(dt) {
   // quest
   const q = h.quest >= 5 && G.zone?.id === 'gate' ? '' : `<b>${t('q.title')}</b>${questText()}`;
   if (q !== S.q) { $('quest').innerHTML = q; S.q = q; }
-  for (const a of G.actors) if (a.npc) a.quest = npcHasNews(a.npc);
+  for (const a of G.actors) if (a.npc) a.quest = npcHasNews(a.npc, a);
   // minimap at 15 fps
   S.minimapT -= dt;
   if (S.minimapT <= 0) { S.minimapT = 0.066; drawMinimap(); }
@@ -190,10 +210,11 @@ function drawMinimap(big) {
   const P = (x, y) => [ox + x * sc, oy + y * sc];
   const dot = (x, y, r, c) => { const [px, py] = P(x, y); g.fillStyle = c; g.beginPath(); g.arc(px, py, r, 0, 6.283); g.fill(); };
   for (const it of z.interact) {
-    if (it.used) continue;
+    // a lit waylamp is spent as a thing to touch, but it is still a light on the map
+    if (it.used && !(it.kind === 'waylamp' && it.lit)) continue;
     const ex = z.map.explored[Math.floor(it.z) * z.map.w + Math.floor(it.x)];
     if (!ex && z.id !== 'town') continue;
-    const c = { waypoint: '#6aa8ff', exit: '#f0e0c0', chest: '#f2d24a', shrine: '#ffe0a0', npc: '#f0c860', stash: '#c0a060', portal: '#6aa8ff', tear: '#ffa030' }[it.kind] || '#fff';
+    const c = it.kind === 'waylamp' ? (it.lit ? '#ffd070' : '#8a8274') : { waypoint: '#6aa8ff', exit: '#f0e0c0', chest: '#f2d24a', shrine: '#ffe0a0', npc: '#f0c860', stash: '#c0a060', portal: '#6aa8ff', tear: '#ffa030', altar: '#ff7a40', brazier: '#ff9a40', bellows: '#ff6a20', echo: '#e8e0d0', staff: '#ffe8b0', beacon: '#ffd040' }[it.kind] || '#fff';
     dot(it.x, it.z, it.kind === 'npc' ? 3.5 : 4, c);
   }
   for (const a of G.actors) {
@@ -215,7 +236,7 @@ function drawMinimap(big) {
 export const drawBigMap = (cv) => drawMinimap(cv);
 function questGoal() {
   const z = G.zone, q = G.hero.quest, F = G.hero.flags, L = z.L;
-  if (z.id === 'town') { if (q >= 11 && q <= 14) return L.exits.find((e) => e.to === 'weep'); if (q === 0 || q === 4 || q >= 5) return L.spots.npcs.wayfarer; if (q >= 1 && q < 4) return L.exits[0]; }
+  if (z.id === 'town') { if (q >= 11 && q <= 14) return L.exits.find((e) => e.to === 'weep'); if (q >= 18 && q <= 21) return L.exits.find((e) => e.to === 'ashfield'); if (q === 0 || q === 4 || q >= 5) return L.spots.npcs.wayfarer; if (q >= 1 && q < 4) return L.exits[0]; }
   if (z.id === 'forest') { if (q <= 2 && !G.hero.flags.weaver) return L.boss; if (q >= 2 && q < 4) return L.barrowDoor; if (q >= 4) return L.exits.find((e) => e.to === 'town'); }
   if (z.id === 'crypt') { if (q < 4) return L.boss; }
   // Act III: the Lanternglade, the nearest unseen verse of the Long Sorrow, the Glade of Stones, the gate, the walls, the Lady
@@ -229,6 +250,19 @@ function questGoal() {
   if (z.id === 'heart') {
     if (q === 14) { const i = [0, 1, 2].find((k) => !F['thorn' + k]); return i != null ? L.thorns[i].node : L.boss; }
     if (q === 15) return L.exits.find((e) => e.to === 'weep');
+  }
+  // Act IV: the nearest lamp still to light (or to remember), the Anvil Gate, the Great Bellows, the Anvil, the road home
+  const near = (list) => { let best = null, bd = 1e9; for (const s of list) { const d = Math.hypot(s.x - G.player.x, s.z - G.player.z); if (d < bd) { bd = d; best = s; } } return best; };
+  if (z.id === 'ashfield') {
+    if (q === 18) return near((z.act4?.lamps || []).filter((l) => l.memory && (!l.lit || !F['mem_' + l.id]))) || L.boss;
+    if (q === 19) return L.boss;
+    if (q === 20 || q === 21) return L.exits.find((e) => e.to === 'forge');
+    if (q === 22) return L.exits.find((e) => e.to === 'town');
+  }
+  if (z.id === 'forge') {
+    if (q === 20) { const b = near((z.act4?.bellows || []).filter((it) => !F['bellows' + it.id])); return b || null; }
+    if (q === 21) return L.boss;
+    if (q === 22) return L.exits.find((e) => e.to === 'ashfield');
   }
   return null;
 }
@@ -259,17 +293,18 @@ on('levelUp', (lvl, sk) => {
   lu.classList.remove('on'); void lu.offsetWidth; lu.classList.add('on');
 });
 on('hurt', (f) => { S.hurt = Math.min(0.7, (S.hurt || 0) + f * 3); });
+on('flueWarn', (k) => { S.flue = Math.max(S.flue, 0.25 + 0.55 * k); });
 on('bossIntro', (a) => {
   G.bossActor = a;
   const bb = $('bossbar');
   bb.querySelector('.nm').textContent = a.name || t('mon.' + a.kind);
   bb.querySelector('.ti').textContent = a.name ? t('gate.guardianName') : t('mon.' + a.kind + '.t');
-  // the Lady has a waltz of her own; it gains brass as she loses her roots
-  if (a.kind === 'amaranthe') { Audio.mood({ phase: 0 }); Audio.music('amaranthe'); } else Audio.music('boss');
+  // the Lady has a waltz of her own; it gains brass as she loses her roots. Ivar and Karthax have theirs.
+  if (a.kind === 'amaranthe' || a.kind === 'ivar' || a.kind === 'karthax') { Audio.mood({ phase: 0 }); Audio.music(a.kind); } else Audio.music('boss');
   Audio.sting('bossIntro');
   emit('toast', (a.name || t('mon.' + a.kind)).toUpperCase(), 'big');
 });
-on('bossPhase', (a, ph) => { if (a?.kind === 'amaranthe') Audio.mood({ phase: ph }); });
+on('bossPhase', (a, ph) => { if (a?.kind === 'amaranthe' || a?.kind === 'ivar' || a?.kind === 'karthax') Audio.mood({ phase: ph }); });
 on('bossDown', () => { Audio.music(G.zone.id === 'gate' ? 'gate' : G.zone.id); Audio.sting('victory'); });
 let masT = 0;
 export function comboTick(dt) {
@@ -285,8 +320,20 @@ on('dialog', (d) => {
   showLine();
   Audio.sfx('click');
 });
-// the Lady's voice in the still trees, and the Ash King's whispers, read differently from a spoken line
-on('say', (key) => emit('toast', '«' + t(key) + '»', key.startsWith('d.ash') || key === 'd.amaranthe.p2' ? 'quest ash' : key.startsWith('d.lady') || key.startsWith('d.amaranthe') ? 'quest voice' : key.startsWith('d.autumn') ? 'quest wind' : 'quest'));
+// the Lady's voice in the still trees, and the Ash King's whispers, read differently from a spoken line; what the scene
+// tells (the First Autumn's wind, the fire leaving the beacon, the Unmaking) is told without quotes
+const NARR = /^d\.(leave|k|u|field|forge|answer\.0|ivar\.lamp|altar\.(took|refused))\b/;
+function sayClass(k) {
+  if (k.startsWith('d.ash') || k === 'd.amaranthe.p2' || k.startsWith('d.karthax')) return 'quest ash';
+  if (k.startsWith('d.voice')) return 'quest flame';
+  if (k.startsWith('d.ivar') || k === 'd.staff') return 'quest pale';
+  if (k.startsWith('d.lady') || k.startsWith('d.amaranthe') || k.startsWith('d.cage') || k.startsWith('d.altar')) return 'quest voice';
+  return 'quest';
+}
+on('say', (key) => {
+  const narr = key.startsWith('d.autumn') || NARR.test(key);
+  emit('toast', narr ? t(key) : '«' + t(key) + '»', narr ? 'quest wind' : sayClass(key));
+});
 // a line is a key, or [key, who] when a scene has more than one speaker (an Amber Tear's memory)
 function showLine() {
   const d = S.dialog, ln = d.lines[d.i], key = Array.isArray(ln) ? ln[0] : ln, who = Array.isArray(ln) ? ln[1] : d.who;
