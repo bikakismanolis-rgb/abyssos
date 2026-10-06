@@ -4,6 +4,7 @@
 // each vertex's per-bone transforms (scale the flesh about the bone, move it with the bone's new joint).
 // usage: node folk.mjs [people.glb] [out.glb]                  Act II's dwarves -> src/assets/folk.glb
 //        node folk.mjs --set=grove [people.glb] [out.glb]    Act III's Evergreen (elves) -> src/assets/grove.glb
+//        node folk.mjs --set=ash [people.glb] [out.glb]      Act IV's dead, smiths, Wayfarers and bosses -> src/assets/ash.glb
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { mergeDocuments, prune, dedup, textureCompress, weld, unpartition, quantize, meshopt } from '@gltf-transform/functions';
@@ -11,7 +12,7 @@ import { MeshoptEncoder, MeshoptDecoder } from 'meshoptimizer';
 import sharp from 'sharp';
 import * as THREE from 'three';
 import { statSync } from 'node:fs';
-import { load, normalise, dropLoose, locals, worlds } from './lib.mjs';
+import { load, normalise, dropLoose, locals, worlds, smooth } from './lib.mjs';
 import { simplifyPrim } from '../../envlib.mjs';
 
 const SET = process.argv.find((a) => a.startsWith('--set='))?.slice(6) || 'folk';
@@ -167,6 +168,38 @@ for (const [m, u] of [['Left', 'l'], ['Right', 'r']]) {
     for (let i = 1; i <= 4; i++) MIXAMO[m + 'Hand' + f + i] = uf + (i < 4 ? '_0' + i + '_' : '_04_leaf_') + u;
 }
 const ALIGN = [['LeftArm', 'LeftForeArm'], ['LeftForeArm', 'LeftHand'], ['LeftHand', 'LeftHandMiddle1'], ['RightArm', 'RightForeArm'], ['RightForeArm', 'RightHand'], ['RightHand', 'RightHandMiddle1']];
+// rigs that are not Mixamo's: their joint names (without the exporter's numeric suffixes) -> Mixamo names, so the
+// rest of rebind() reads them like any Mixamo rig; '*' entries are written once per side (* = L / R -> Left / Right)
+const BONEMAPS = {
+  // "Overlord" by bumstrum: two spine joints (the lower is about where the UE spine_02 sits), five three-joint fingers
+  overlord: { hips: 'Hips', spine: 'Spine1', chest: 'Spine2', neck: 'Neck', head: 'Head', tip: 'HeadTop_End',
+    '*_shoulder': '*Shoulder', '*_arm': '*Arm', '*_elbow': '*ForeArm', '*_wrist': '*Hand', '*_leg': '*UpLeg', '*_knee': '*Leg', '*_ankle': '*Foot', '*_foot': '*ToeBase', '*_toes': '*Toe_End',
+    ...Object.fromEntries([['thumb', 'Thumb'], ['point', 'Index'], ['middle', 'Middle'], ['ring', 'Ring'], ['pink', 'Pinky']].flatMap(([a, b]) => [1, 2, 3].map((i) => ['*_' + a + i, '*Hand' + b + i]))) }
+};
+function renameJoints(md, map) {
+  const full = {};
+  for (const [k, v] of Object.entries(map)) if (k.includes('*')) for (const [s, S] of [['L', 'Left'], ['R', 'Right']]) full[k.replace('*', s)] = v.replace('*', S); else full[k] = v;
+  for (const j of md.getRoot().listSkins()[0].listJoints()) { const m = full[j.getName().replace(/(_\d+)+$/, '')]; if (m) j.setName('mixamorig:' + m); }
+}
+// some exports keep an animated frame as the node rest pose (legs astride, arms down): put every joint back where the
+// skin was bound (its inverse bind matrix), joints without one keep their offset from the parent
+function toBindPose(md) {
+  const root = md.getRoot(), skin = root.listSkins()[0], js = skin.listJoints(), ibm = skin.getInverseBindMatrices().getArray();
+  const W = worlds(md, locals(md, null, 0)), MW = W.get(root.listNodes().find((n) => n.getSkin() === skin));
+  const BW = new Map();
+  const I = new THREE.Matrix4().elements;
+  js.forEach((j, i) => { const m = new THREE.Matrix4().fromArray(ibm, i * 16); if (m.elements.some((e, k) => Math.abs(e - I[k]) > 1e-6)) BW.set(j, MW.clone().multiply(m.invert())); });
+  const parentOf = new Map(); for (const n of root.listNodes()) for (const c of n.listChildren()) parentOf.set(c, n);
+  const NW = new Map();
+  const visit = (n) => {
+    const par = parentOf.get(n), pw = par ? NW.get(par) || W.get(par) : new THREE.Matrix4();
+    const w = BW.get(n) || pw.clone().multiply(new THREE.Matrix4().compose(new THREE.Vector3(...n.getTranslation()), new THREE.Quaternion(...n.getRotation()), new THREE.Vector3(...n.getScale())));
+    NW.set(n, w);
+    if (BW.has(n)) { const p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(); pw.clone().invert().multiply(w).decompose(p, q, s); n.setTranslation(p.toArray()).setRotation(q.toArray()).setScale(s.toArray()); }
+    for (const c of n.listChildren()) visit(c);
+  };
+  for (const j of js) if (!js.includes(parentOf.get(j))) visit(j);
+}
 async function rebind(doc, R) {
   const root = doc.getRoot(), sc = root.getDefaultScene();
   const { W, P } = worldOf(sc);
@@ -175,6 +208,9 @@ async function rebind(doc, R) {
   // the body to carry
   const md = await load(R.body);
   dropLoose(md);
+  if (R.bonemap) renameJoints(md, R.bonemap);
+  if (R.bindPose) toBindPose(md);
+  if (R.prep) await R.prep(md);
   normalise(md, { height: R.height });
   const mroot = md.getRoot(), mskin = mroot.listSkins()[0], mj = mskin.listJoints();
   const base = (n) => n.getName().replace(/^mixamorig:/, '').replace(/_\d+$/, '');
@@ -217,7 +253,7 @@ async function rebind(doc, R) {
   const mats = new Map();
   const matOf = (m) => {
     if (mats.has(m)) return mats.get(m);
-    const n = doc.createMaterial(R.name + '_body').setBaseColorFactor(m.getBaseColorFactor()).setEmissiveFactor(m.getEmissiveFactor())
+    const n = doc.createMaterial(R.matNames ? m.getName() : R.name + '_body').setBaseColorFactor(m.getBaseColorFactor()).setEmissiveFactor(m.getEmissiveFactor())
       .setMetallicFactor(m.getMetallicFactor()).setRoughnessFactor(m.getRoughnessFactor()).setExtras({ part: 'cloth' });
     if (m.getBaseColorTexture()) n.setBaseColorTexture(texOf(m.getBaseColorTexture()));
     if (m.getEmissiveTexture()) n.setEmissiveTexture(texOf(m.getEmissiveTexture()));
@@ -251,6 +287,8 @@ async function rebind(doc, R) {
         const top = [...sum].sort((a, b) => b[1] - a[1]).slice(0, 4), tot = top.reduce((a, b) => a + b[1], 0) || 1;
         top.forEach(([t, w], c) => { J2[i * 4 + c] = t; W2[i * 4 + c] = w / tot; });
       }
+      // a recipe may re-weight a piece the source rig left on one bone (a tabard on the hips)
+      if (R.reweight) R.reweight({ material: pr.getMaterial()?.getName(), P: P2, J: J2, W: W2, joint: (nm) => ueJoints.indexOf(ue.get(nm)), at: (nm) => pos(Wn.get(ue.get(nm))) });
       const p = doc.createPrimitive().setMaterial(matOf(pr.getMaterial()))
         .setAttribute('POSITION', doc.createAccessor().setType('VEC3').setArray(P2).setBuffer(buf))
         .setAttribute('JOINTS_0', doc.createAccessor().setType('VEC4').setArray(J2).setBuffer(buf))
@@ -337,13 +375,13 @@ async function grainOf(w, h) {
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const j = (y % th) * tw + (x % tw); out[y * w + x] = (g[j] - lo[j]) / sd; }
   grains.set(key, out); return out;
 }
-async function barkify(img, amt, cracks = 0) {
+async function barkify(img, amt, cracks = 0, lo = 1.3) {
   const { data, info } = await sharp(img).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   const G = await grainOf(info.width, info.height), em = cracks ? Buffer.alloc(data.length) : null;
   for (let p = 0; p < G.length; p++) {
     const f = Math.max(0.15, 1 + amt * 0.32 * G[p]);
     for (let c = 0; c < 3; c++) data[p * 3 + c] = Math.min(255, Math.round(data[p * 3 + c] * f));
-    if (em) { const k = Math.min(1, Math.max(0, (-G[p] - 1.3) / 1.2)) * cracks; em[p * 3] = Math.round(255 * k); em[p * 3 + 1] = Math.round(150 * k); em[p * 3 + 2] = Math.round(40 * k); }
+    if (em) { const k = Math.min(1, Math.max(0, (-G[p] - lo) / 1.2)) * cracks; em[p * 3] = Math.round(255 * k); em[p * 3 + 1] = Math.round(150 * k); em[p * 3 + 2] = Math.round(40 * k); }
   }
   const png = (b) => sharp(b, { raw: { width: info.width, height: info.height, channels: 3 } }).png().toBuffer();
   // the glow is soft and low in detail: half size is plenty
@@ -351,7 +389,8 @@ async function barkify(img, amt, cracks = 0) {
 }
 // eyes: the brown iris (a disc in the middle of the map) goes amber; with `glow` an emissive mask lights the iris and,
 // at `white`, the sclera, so the eyes burn amber in the dark
-async function amberEyes(img, { tint = 1, glow = 0, white = 0, fill = 0 } = {}) {
+// (`col` swaps the amber for another light: the cold eyes of the dead Wayfarers)
+async function amberEyes(img, { tint = 1, glow = 0, white = 0, fill = 0, col = [1, 0.62, 0.16] } = {}) {
   const { data, info } = await sharp(img).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   const W = info.width, H = info.height, cx = W * 0.496, cy = H * 0.497, rad = W * 0.11, em = Buffer.alloc(data.length);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
@@ -359,7 +398,7 @@ async function amberEyes(img, { tint = 1, glow = 0, white = 0, fill = 0 } = {}) 
     const iris = band(Math.hypot(x - cx, y - cy) / rad, [-1, 1], 0.12), sclera = (1 - iris) * unit(s, [0, 0.2], 0.05) * unit(mx, [0.66, 1], 0.06);
     // amber of the same darkness, brighter towards the rim of the iris (darker when it glows: the light is its own);
     // `fill` floods the white of the eye with amber too
-    const v = glow ? Math.min(1, mx * 1.3 + 0.06) : Math.min(1, mx * 2.2 + 0.12), am = [v, v * 0.62, v * 0.16], k = Math.max(iris * tint, sclera * fill * 0.8);
+    const v = glow ? Math.min(1, mx * 1.3 + 0.06) : Math.min(1, mx * 2.2 + 0.12), am = [v * col[0], v * col[1], v * col[2]], k = Math.max(iris * tint, sclera * fill * 0.8);
     data[i] = Math.round((r * (1 - k) + am[0] * k) * 255); data[i + 1] = Math.round((g * (1 - k) + am[1] * k) * 255); data[i + 2] = Math.round((b * (1 - k) + am[2] * k) * 255);
     const e = Math.min(1, iris * glow + sclera * white) * 255; em[i] = em[i + 1] = em[i + 2] = Math.round(e);
   }
@@ -448,10 +487,10 @@ function span(doc) {
   return [lo, hi];
 }
 // the heaviest pieces (boots, bracers, gloves: thousands of vertices of straps and buckles) thinned for a crowd of them
-function lighten(doc, most = 3200) {
+function lighten(doc, most = 3200, floor = 0.4) {
   for (const m of doc.getRoot().listMeshes()) for (const p of m.listPrimitives()) {
     const n = p.getAttribute('POSITION').getCount();
-    if (n > most) simplifyPrim(p, Math.max(0.4, most / n), 0.01);
+    if (n > most) simplifyPrim(p, Math.max(floor, most / n), 0.01);
   }
 }
 
@@ -490,8 +529,196 @@ const GROVE = {
 };
 const GROVE_CREDIT = { credit: 'Quaternius characters (people.glb); bark grain: "Bark Brown 02" by Rob Tuytel, polyhaven.com/a/bark_brown_02', license: 'CC0' };
 for (const R of Object.values(GROVE)) R.extras = { ...GROVE_CREDIT, ...R.extras };
-const SETS = { folk: RECIPES, grove: GROVE };
-if (!SETS[SET]) throw new Error(`unknown set ${SET} (folk, grove)`);
+
+// ---------- Act IV: the Field of Ash and the Ashen Forge (--set=ash) ----------
+// proportion tables (morph(): `len` scales a joint's offset from its parent, so `calf` is the thigh bone's length,
+// `foot` the shin's, `Head` the neck's and `thigh` the width of the hips; `girth` scales flesh across a bone)
+const every = (names, f) => Object.fromEntries(names.map((n) => [n, f]));
+const TRUNK = ['pelvis', 'spine_01', 'spine_02', 'spine_03', 'neck_01', 'thigh', 'calf', 'upperarm', 'lowerarm', 'clavicle'];
+// the Lampless: Isarn's body wasted to the bone, long in the thigh, shin, forearm and neck
+const GAUNT = { len: { thigh: 0.96, calf: 1.08, foot: 1.08, lowerarm: 1.06, hand: 1.06, Head: 1.06 }, girth: { ...every(TRUNK, 0.82), pelvis: 0.86, clavicle: 0.9 }, size: { Head: 0.95, hand: 0.98 } };
+// old men (Ivar, old Arna): a longer, thinner neck, big hands, the flesh gone a little
+const ELDER = { len: { Head: 1.08, hand: 1.04, upperarm: 0.97 }, girth: { ...every(TRUNK, 0.9), neck_01: 0.84, clavicle: 0.94 }, size: { hand: 1.08 } };
+// young Arna: a little short in the leg, slim, the head a touch large
+const YOUTH = { len: { calf: 0.97, foot: 0.97 }, girth: every(TRUNK, 0.92), size: { Head: 1.04 } };
+// a boy of ten, before shrink() takes the whole body to 0.74 (1.34 m): a big head on a short neck, short legs, thin
+const CHILD = { len: { calf: 0.92, foot: 0.92, spine_01: 0.96, spine_02: 0.96, Head: 0.88, lowerarm: 0.96, hand: 0.96 }, girth: { ...every(TRUNK, 0.86), neck_01: 0.84 }, size: { Head: 1.22, hand: 1.04 } };
+// Karthax's smiths: heavy shoulders and forearms, a barrel chest (the hunch is the game's: an additive spine turn)
+const SMITH = { len: { upperarm: 1.06 }, girth: { clavicle: 1.2, upperarm: 1.25, lowerarm: 1.25, spine_02: 1.08, spine_03: 1.15, neck_01: 1.15 }, size: { hand: 1.15 } };
+// no change of shape (morph() still bakes the rest pose into the skin, so every recipe is measured and lightened alike)
+const SAME = { len: {}, girth: {}, size: {} };
+
+// the whole body to f of its size, about the ground under it (after morph(): the skins hold world-space rest positions)
+function shrink(doc, f) {
+  const root = doc.getRoot(), sc = root.getDefaultScene(), buf = root.listBuffers()[0];
+  const joints = new Set(); for (const sk of root.listSkins()) for (const j of sk.listJoints()) joints.add(j);
+  for (const j of joints) j.setTranslation(j.getTranslation().map((v) => v * f));
+  const { W } = worldOf(sc);
+  for (const node of root.listNodes()) {
+    const mesh = node.getMesh(), skin = node.getSkin(); if (!mesh || !skin) continue;
+    for (const prim of mesh.listPrimitives()) { const a = prim.getAttribute('POSITION'); prim.setAttribute('POSITION', doc.createAccessor().setType('VEC3').setArray(a.getArray().map((v) => v * f)).setBuffer(buf)); }
+    const js = skin.listJoints(), arr = new Float32Array(js.length * 16);
+    js.forEach((j, i) => W.get(j).clone().invert().toArray(arr, i * 16));
+    skin.setInverseBindMatrices(doc.createAccessor().setType('MAT4').setArray(arr).setBuffer(buf));
+  }
+}
+
+// ash dust over a regraded map: everything drawn toward a pale ash of the tint, the darks most (a dead man's dark
+// coat reads grey, not black)
+async function dust(img, k, tint = [0.62, 0.6, 0.6]) {
+  const { data, info } = await sharp(img).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  for (let i = 0; i < data.length; i += 3) for (let c = 0; c < 3; c++) data[i + c] = Math.round(data[i + c] * (1 - k) + 255 * 0.8 * tint[c] * k);
+  return sharp(data, { raw: { width: info.width, height: info.height, channels: 3 } }).png().toBuffer();
+}
+// a metal/rough map made duller: hide, cloth and fur at least `hide` rough, metal at least `metal`
+async function roughen(img, [hide, metal]) {
+  const { data, info } = await sharp(img).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  for (let i = 0; i < data.length; i += 3) { const m = data[i + 2] / 255; data[i + 1] = Math.round(Math.max(data[i + 1], 255 * (hide * (1 - m) + metal * m))); }
+  return sharp(data, { raw: { width: info.width, height: info.height, channels: 3 } }).png().toBuffer();
+}
+// a mark burned into a material's map where the body's surface passes through it: every texel of the material's
+// triangles is put back on the body (rest pose, metres) and `fn(p, n)` answers [glow, scorch] in 0..1; the base colour
+// darkens by the scorch, the glow comes back as an ember map (added to `emit`, if the map already glows)
+const EMBER = [255, 112, 26];
+async function burn(doc, mat, img, emit, fn, S = 512, on = null) {
+  const E = new Float32Array(S * S), D = new Float32Array(S * S), cov = new Uint8Array(S * S);
+  const pa = new THREE.Vector3(), pb = new THREE.Vector3(), pc = new THREE.Vector3(), na = new THREE.Vector3(), nb = new THREE.Vector3(), nc = new THREE.Vector3(), p = new THREE.Vector3(), n = new THREE.Vector3();
+  const e = [];
+  for (const node of doc.getRoot().listNodes()) for (const prim of node.getMesh()?.listPrimitives() || []) {
+    if (prim.getMaterial() !== mat) continue;
+    const P = prim.getAttribute('POSITION'), N = prim.getAttribute('NORMAL'), U = prim.getAttribute('TEXCOORD_0'), idx = prim.getIndices().getArray();
+    // `on`: only where the skin hangs mostly on these joints (the chest, not a beard or a strap that crosses it)
+    const share = new Float32Array(P.getCount()).fill(1);
+    if (on) { const js = node.getSkin().listJoints().map((j) => on.test(j.getName())), J = prim.getAttribute('JOINTS_0'), Wt = prim.getAttribute('WEIGHTS_0'), je = [], we = []; for (let i = 0; i < share.length; i++) { J.getElement(i, je); Wt.getElement(i, we); share[i] = we.reduce((a, w, k) => a + (js[je[k]] ? w : 0), 0); } }
+    for (let t = 0; t < idx.length; t += 3) {
+      const ia = idx[t], ib = idx[t + 1], ic = idx[t + 2];
+      if (share[ia] + share[ib] + share[ic] < 1.5) continue;
+      const ua = U.getElement(ia, []), ub = U.getElement(ib, []), uc = U.getElement(ic, []);
+      const ax = ua[0] * S - 0.5, ay = ua[1] * S - 0.5, bx = ub[0] * S - 0.5, by = ub[1] * S - 0.5, cx = uc[0] * S - 0.5, cy = uc[1] * S - 0.5;
+      const den = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy); if (Math.abs(den) < 1e-9) continue;
+      pa.fromArray(P.getElement(ia, e)); pb.fromArray(P.getElement(ib, e)); pc.fromArray(P.getElement(ic, e));
+      na.fromArray(N.getElement(ia, e)); nb.fromArray(N.getElement(ib, e)); nc.fromArray(N.getElement(ic, e));
+      const x0 = Math.max(0, Math.floor(Math.min(ax, bx, cx))), x1 = Math.min(S - 1, Math.ceil(Math.max(ax, bx, cx))), y0 = Math.max(0, Math.floor(Math.min(ay, by, cy))), y1 = Math.min(S - 1, Math.ceil(Math.max(ay, by, cy)));
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+        const w0 = ((by - cy) * (x - cx) + (cx - bx) * (y - cy)) / den, w1 = ((cy - ay) * (x - cx) + (ax - cx) * (y - cy)) / den, w2 = 1 - w0 - w1;
+        if (w0 < -0.02 || w1 < -0.02 || w2 < -0.02) continue;
+        p.copy(pa).multiplyScalar(w0).addScaledVector(pb, w1).addScaledVector(pc, w2);
+        n.copy(na).multiplyScalar(w0).addScaledVector(nb, w1).addScaledVector(nc, w2).normalize();
+        const [g, s] = fn(p, n), k = y * S + x;
+        E[k] = Math.max(E[k], g); D[k] = Math.max(D[k], s); cov[k] = 1;
+      }
+    }
+  }
+  // grow the marks two texels past the islands' edges, so filtering does not bleed the unmarked gutter in
+  for (let pass = 0; pass < 2; pass++) {
+    const c2 = cov.slice();
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const k = y * S + x; if (cov[k]) continue;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= S || yy >= S || !cov[yy * S + xx]) continue; const q = yy * S + xx; E[k] = Math.max(E[k], E[q]); D[k] = Math.max(D[k], D[q]); c2[k] = 1; }
+    }
+    cov.set(c2);
+  }
+  const { data, info } = await sharp(img).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  for (let y = 0; y < info.height; y++) for (let x = 0; x < info.width; x++) {
+    const d = D[Math.min(S - 1, Math.floor((y * S) / info.height)) * S + Math.min(S - 1, Math.floor((x * S) / info.width))], i = (y * info.width + x) * 3;
+    for (let c = 0; c < 3; c++) data[i + c] = Math.round(data[i + c] * (1 - d));
+  }
+  const em = Buffer.alloc(S * S * 3);
+  const prev = emit ? await sharp(emit).removeAlpha().resize(S, S).raw().toBuffer() : null;
+  for (let k = 0; k < S * S; k++) for (let c = 0; c < 3; c++) em[k * 3 + c] = Math.max(prev ? prev[k * 3 + c] : 0, Math.round(EMBER[c] * Math.min(1, E[k])));
+  const png = (b, w, h) => sharp(b, { raw: { width: w, height: h, channels: 3 } }).png().toBuffer();
+  return { img: await png(data, info.width, info.height), emit: await png(em, S, S) };
+}
+// the forge-brand: Karthax's crowned ring, burned into the left breast as a beast is branded (r: ring radius, metres)
+const sdSeg = (x, y, ax, ay, bx, by) => { const px = x - ax, py = y - ay, dx = bx - ax, dy = by - ay, h = Math.min(1, Math.max(0, (px * dx + py * dy) / (dx * dx + dy * dy))); return Math.hypot(px - dx * h, py - dy * h); };
+function brandMark(doc, r = 0.075) {
+  const { W } = worldOf(doc.getRoot().getDefaultScene()), at = (nm) => new THREE.Vector3().setFromMatrixPosition(W.get(doc.getRoot().listNodes().find((n) => n.getName() === nm)));
+  const c = at('spine_03').lerp(at('neck_01'), 0.3); c.x += 0.15;
+  return (p, n) => {
+    if (n.z < 0.3 || p.z < c.z - 0.02) return [0, 0];
+    const x = (p.x - c.x) / r, y = (p.y - c.y) / r;
+    const d = Math.min(Math.abs(Math.hypot(x, y) - 1), sdSeg(x, y, -0.48, 0.88, -0.62, 1.55), sdSeg(x, y, 0, 1, 0, 1.78), sdSeg(x, y, 0.48, 0.88, 0.62, 1.55), sdSeg(x, y, 0, -0.55, 0, 0.45));
+    const g = 1 - smooth((d - 0.1) / 0.12), halo = 1 - smooth((Math.hypot(x, y * 0.85) - 1.3) / 0.9);
+    return [g, Math.max(g * 0.85, halo * 0.45)];
+  };
+}
+
+// Karthax: "Overlord" is a spec/gloss model whose bronze lives in the specular map (the diffuse is black under the
+// plate): the plate becomes black iron read from the specular's light and dark, its engraved grooves glow as ember
+// seams, the dark red undersuit and tabard go to soot, and the material becomes metal/rough
+async function blackIron(md) {
+  const SG = 'KHR_materials_pbrSpecularGlossiness';
+  for (const m of md.getRoot().listMaterials()) {
+    const sg = m.getExtension(SG); if (!sg) continue;
+    const { data: d, info } = await sharp(Buffer.from(sg.getDiffuseTexture().getImage())).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    const w = info.width, h = info.height, N = w * h;
+    const { data: s } = await sharp(Buffer.from(sg.getSpecularGlossinessTexture().getImage())).resize(w, h).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const L = Buffer.alloc(N); for (let i = 0; i < N; i++) L[i] = Math.round(0.3 * s[i * 4] + 0.55 * s[i * 4 + 1] + 0.15 * s[i * 4 + 2]);
+    const blur = (sig) => sharp(L, { raw: { width: w, height: h, channels: 1 } }).blur(sig).extractChannel(0).raw().toBuffer();
+    const [L2, L6] = [await blur(1.6 * w / 1024), await blur(6 * w / 1024)];
+    const base = Buffer.alloc(N * 3), mr = Buffer.alloc(N * 3), em = Buffer.alloc(N * 3);
+    for (let i = 0; i < N; i++) {
+      const ls = L[i] / 255, plate = smooth((L6[i] / 255 - 0.16) / 0.16), groove = smooth(((L2[i] - L[i]) / 255 - 0.055) / 0.09) * plate * 0.8;
+      const iron = 0.07 + 0.3 * ls, dl = (0.3 * d[i * 3] + 0.55 * d[i * 3 + 1] + 0.15 * d[i * 3 + 2]) / 255, soot = dl * 0.7 + 0.02;
+      const rgb = [iron * plate + soot * 1.12 * (1 - plate), iron * 0.97 * plate + soot * 0.86 * (1 - plate), iron * 0.93 * plate + soot * 0.78 * (1 - plate)];
+      for (let c = 0; c < 3; c++) { base[i * 3 + c] = Math.round(255 * Math.min(1, rgb[c])); em[i * 3 + c] = Math.round(EMBER[c] * groove); }
+      const gloss = s[i * 4 + 3] / 255;
+      mr[i * 3] = 255; mr[i * 3 + 1] = Math.round(255 * (plate * (0.85 - 0.45 * gloss) + (1 - plate) * 0.9)); mr[i * 3 + 2] = Math.round(255 * plate * 0.8);
+    }
+    const tex = async (b, nm) => md.createTexture(m.getName() + nm).setImage(new Uint8Array(await sharp(b, { raw: { width: w, height: h, channels: 3 } }).png().toBuffer())).setMimeType('image/png');
+    m.setBaseColorTexture(await tex(base, '_iron')).setMetallicRoughnessTexture(await tex(mr, '_mr')).setEmissiveTexture(await tex(em, '_seams'))
+      .setBaseColorFactor([1, 1, 1, 1]).setMetallicFactor(1).setRoughnessFactor(1).setEmissiveFactor([1, 1, 1]);
+    m.setExtension(SG, null);
+  }
+}
+// the Overlord's tabard is skinned to the hips alone: its lower half follows the thighs (each side its own, the middle
+// both), so a stride swings it instead of passing through it
+function tabard({ material, P, J, W, joint, at }) {
+  if (material !== 'cloth') return;
+  const pel = joint('pelvis'), tl = joint('thigh_l'), tr = joint('thigh_r'), top = at('thigh_l').y, knee = at('calf_l').y, half = at('thigh_l').x;
+  for (let i = 0; i < P.length / 3; i++) {
+    const x = P[i * 3], y = P[i * 3 + 1], h = 0.85 * smooth((top - 0.04 - y) / (top - knee)), s = smooth(0.5 + x / (2.4 * half));
+    J.set([pel, tl, tr, 0], i * 4); W.set([1 - h, h * s, h * (1 - s), 0], i * 4);
+  }
+}
+
+const COLD = [0.62, 0.66, 0.72], SILVER = [0.7, 0.7, 0.74], IRON = [0.6, 0.6, 0.62], BRONZE = [0.74, 0.6, 0.42], MOSS = [0.56, 0.6, 0.48], SCORCH = [0.5, 0.4, 0.32];
+const DEAD_FACE = [0.34, 0.36, 0.4], ASH_SKIN = [0.56, 0.55, 0.54], CHAR = [0.4, 0.33, 0.28];
+const COLD_EYES = (glow) => ({ eyes: { tint: 1, glow, white: 0.35 * glow, fill: 0.7, col: [0.78, 0.88, 1], emit: [0.5, 0.66, 0.95] } });
+// the dead of the war: ash skin and outfit, embers in the cracks and in the eyes
+const fallen = (outfit, tint, skins) => ({ [outfit]: { ash: 0.85, tint, dust: 0.22, bark: 0.3, cracks: 0.45 }, ...each(skins, { ash: 0.9, tint: ASH_SKIN, bark: 0.5, cracks: 0.9 }), MI_Eyes: AMBER_EYES });
+// hood down: the warden's parted hair on a Wayfarer, in the Wayfarer's hair material (both men share one skeleton)
+const BARE = { drop: ['Male_Ranger_Head_Hood', 'Hair_Beard'], hair: ['warden', 'Hair_SimpleParted', 'MI_Hair_1_wayfarer'] };
+// soot: the bull's hide, fur, horns and straps all go to soot-black, the hide keeping a warm undertone
+const SOOT = [{ h: [-30, 60], to: 18, sat: 0.4, bri: 0.36 }, { s: [0, 0.12], v: [0.45, 1], bri: 0.5 }, { s: [0, 1], bri: 0.4 }];
+const ASHSET = {
+  // the Lampless: dead Wayfarers on the watch, hooded, cold blue-grey and pale, the face gone dark under the hood
+  lampless: { src: 'wayfarer', table: GAUNT, mats: { MI_Ranger_wayfarer: { ash: 0.9, tint: COLD }, ...each(SKIN_M, { ash: 0.95, tint: DEAD_FACE }), MI_Eyes: COLD_EYES(0.45) }, color: { MI_Hair_1_wayfarer: '#3a3e46' } },
+  // the Ash-Fallen: Men (iron-grey), the Stoneborn (bronze), the Evergreen bowmen (bark-green)
+  ashSpear: { src: 'warden', table: SAME, mats: fallen('MI_Ranger_warden', IRON, SKIN_M), color: { MI_Hair_1_warden: '#3a3836' } },
+  ashDwarf: { src: 'warden', table: DWARF, mats: fallen('MI_Ranger_warden', BRONZE, SKIN_M), color: { MI_Hair_1_warden: '#3e3630' } },
+  ashBow: { src: 'ranger', table: ELF, mats: fallen('MI_Ranger', MOSS, SKIN_F), color: { MI_Hair_2_ranger: '#3a3a34' } },
+  // an Ashsmith: the peasant villager, heavy-armed, scorched brown, embers in the cracks of the bare forearms (the game
+  // hides the face under a one-eyed iron mask)
+  ashsmith: { src: 'villager1', table: SMITH, mats: { MI_Peasant_smith: { ash: 0.7, tint: SCORCH, bark: 0.25 }, MI_Superhero_Male: { ash: 0.85, tint: CHAR, bark: 0.45 }, MI_Regular_Male: { ash: 0.85, tint: CHAR, bark: 0.6, cracks: 1, crackLo: 0.45 } }, color: { MI_Hair_1_villager1: '#241e1a' } },
+  // Ivar, captain of the Lampless: Isarn's body grown old, silver-ash, white beard, cold light in the eyes
+  ivar: { src: 'wayfarer', table: ELDER, mats: { MI_Ranger_wayfarer: { ash: 0.75, tint: SILVER }, ...each(SKIN_M, { ash: 0.75, tint: SILVER }), MI_Eyes: COLD_EYES(1) }, color: { MI_Hair_1_wayfarer: '#c8cacc' } },
+  // Arna, the first Wayfarer, in the lamp memories: young and bare-headed with auburn hair; old, grey and bearded
+  arna: { src: 'wayfarer', table: YOUTH, ...BARE, color: { MI_Hair_1_wayfarer: '#7a3416' } },
+  arnaOld: { src: 'wayfarer', table: ELDER, drop: ['Male_Ranger_Head_Hood'], hair: BARE.hair, color: { MI_Hair_1_wayfarer: '#a6a6a2' } },
+  // Isarn at ten, the night he took the lantern
+  isarnBoy: { src: 'wayfarer', table: CHILD, shrink: 0.74, ...BARE, color: { MI_Hair_1_wayfarer: '#4a2c1a' } },
+  // the Hammerhorns: "Minotaur Berserker" by Tim0 (Yury Misiyuk), CC-BY 4.0, a Mixamo rig, soot-black with the forge-brand
+  hammerhorn: { src: 'warden', body: '/tmp/claude-0/sf/models/minotaur/model.glb', height: 2.3, bindPose: true, matNames: true, mats: { WarriorMaterial: { grade: SOOT, brand: true, rough: [0.82, 0.5] } },
+    extras: { weaponScale: 1.25, credit: '"Minotaur Berserker - Free Game-Ready Character" by Yury Misiyuk (sketchfab.com/Tim0), CC-BY 4.0 - rebound onto the people skeleton, soot-black regrade, forge-brand added for Skotos', license: 'CC-BY-4.0' } },
+  // Karthax, the Ash King: "Overlord" by DJMaesen (sketchfab.com/bumstrum), CC-BY 4.0, its rig renamed to Mixamo's
+  karthax: { src: 'warden', body: '/tmp/claude-0/sf/models/overlord/model.glb', height: 2.0, bonemap: BONEMAPS.overlord, bindPose: true, matNames: true, prep: blackIron, reweight: tabard,
+    extras: { weaponScale: 1.6, credit: '"Overlord" by DJMaesen (sketchfab.com/bumstrum), CC-BY 4.0 - rebound onto the people skeleton, black iron with ember seams for Skotos', license: 'CC-BY-4.0' } }
+};
+const ASH_CREDIT = { credit: 'Quaternius characters (people.glb); ember-crack grain: "Bark Brown 02" by Rob Tuytel, polyhaven.com/a/bark_brown_02', license: 'CC0' };
+for (const R of Object.values(ASHSET)) R.extras = { ...(R.body ? {} : ASH_CREDIT), ...R.extras };
+const SETS = { folk: RECIPES, grove: GROVE, ash: ASHSET };
+if (!SETS[SET]) throw new Error(`unknown set ${SET} (folk, grove, ash)`);
 
 let out = null;
 for (const [name, R] of Object.entries(SETS[SET])) {
@@ -499,6 +726,10 @@ for (const [name, R] of Object.entries(SETS[SET])) {
   if (R.drop || R.hair) await restyle(doc, R);
   if (R.dwarf) morph(doc, DWARF);
   if (R.elf) { morph(doc, R.elf === true ? ELF : stretch(ELF, R.elf)); lighten(doc); console.log(name, 'stands', span(doc).map((v) => v.toFixed(3)).join(' to '), 'm'); }
+  // the ash set is a crowd seen from the game's camera: boots and bracers go down to a quarter, before the body is
+  // re-proportioned, so every recipe of one source keeps the same triangles, UVs and weights (shared in the file)
+  if (R.table) { lighten(doc, 2200, 0.24); morph(doc, R.table); }
+  if (R.shrink) shrink(doc, R.shrink);
   if (R.body) await rebind(doc, { ...R, name });
   if (R.barkArm) barkLimb(doc, R.barkArm, doc.createTexture(`${name}_bark`).setImage(new Uint8Array(await sharp(BARK).resize(256, 256).modulate({ saturation: 0.75, brightness: 1.15 }).png().toBuffer())).setMimeType('image/png'));
   if (R.split) split(doc, R.split);
@@ -510,14 +741,19 @@ for (const [name, R] of Object.entries(SETS[SET])) {
       if (op.hsv) img = await recolor(img, op.hsv);
       if (op.grade) img = await grade(img, op.grade);
       if (op.ash) img = await ashen(img, op.ash, op.tint);
-      if (op.bark) ({ img, emit } = await barkify(img, op.bark, op.cracks));
+      if (op.dust) img = await dust(img, op.dust, op.tint);
+      if (op.bark || op.cracks) ({ img, emit } = await barkify(img, op.bark || 0, op.cracks, op.crackLo));
       if (op.eyes) ({ img, emit } = await amberEyes(img, op.eyes));
+      if (op.brand) ({ img, emit } = await burn(doc, mat, img, emit, brandMark(doc), 512, /^(spine_0[123]|clavicle_l)$/));
+      if (op.rough && mat.getMetallicRoughnessTexture()) mat.setMetallicRoughnessTexture(doc.createTexture(`${name}_${mn}_mr`).setImage(new Uint8Array(await roughen(Buffer.from(mat.getMetallicRoughnessTexture().getImage()), op.rough))).setMimeType('image/png'));
       mat.setBaseColorTexture(doc.createTexture(`${name}_${mn}`).setImage(new Uint8Array(img)).setMimeType('image/png'));
-      if (emit) mat.setEmissiveTexture(doc.createTexture(`${name}_${mn}_glow`).setImage(new Uint8Array(emit)).setMimeType('image/png')).setEmissiveFactor(op.eyes ? [0.9, 0.38, 0.05] : [1, 1, 1]);
+      if (emit) mat.setEmissiveTexture(doc.createTexture(`${name}_${mn}_glow`).setImage(new Uint8Array(emit)).setMimeType('image/png')).setEmissiveFactor(op.eyes ? op.eyes.emit || [0.9, 0.38, 0.05] : [1, 1, 1]);
     }
     if (R.color?.[mn]) mat.setBaseColorFactor([...hexRGB(R.color[mn]), 1]);
     mat.setName(`${mn}_${name}`);
   }
+  // the ash set records how tall each one stands (the game sizes bosses and stand-ins against it)
+  if (SET === 'ash') { const [lo, hi] = span(doc); R.extras = { ...R.extras, height: +(hi - lo).toFixed(2) }; console.log(name.padEnd(11), 'stands', (hi - lo).toFixed(2), 'm, lowest point', lo.toFixed(3)); }
   root.getDefaultScene().setName(name).setExtras({ folk: true, ...R.extras });
   if (!out) { out = doc; continue; }
   mergeDocuments(out, doc);
@@ -530,6 +766,7 @@ await out.transform(
   dedup(), weld(),
   textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [512, 512], quality: SET === 'folk' ? 80 : 75 }),
   quantize(SET === 'folk' ? { quantizePosition: 14, quantizeNormal: 10, quantizeTexcoord: 12, quantizeWeight: 8 } : { quantizePosition: 12, quantizeNormal: 8, quantizeTexcoord: 12, quantizeWeight: 8 }),
+  ...(SET === 'ash' ? [dedup()] : []),
   prune({ keepAttributes: false, keepLeaves: false }),
   meshopt({ encoder: MeshoptEncoder, level: SET === 'folk' ? 'medium' : 'high' }),
   prune({ keepAttributes: false, keepLeaves: false }),
