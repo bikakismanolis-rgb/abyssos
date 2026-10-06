@@ -83,7 +83,7 @@ export function updateProjs(dt) {
     p.t += dt; p.life -= dt;
     if (p.homing && p.team === 'hero') {
       let best = null, bd = 64;
-      for (const f of foes(p.x, p.z, 8)) { if (p.hit.has(f) || f.prop) continue; const d = (f.x - p.x) ** 2 + (f.z - p.z) ** 2; if (d < bd) { bd = d; best = f; } }
+      for (const f of foes(p.x, p.z, 8)) { if (p.hit.has(f) || f.prop || f.disguised) continue; const d = (f.x - p.x) ** 2 + (f.z - p.z) ** 2; if (d < bd) { bd = d; best = f; } }
       if (best) {
         const sp = Math.hypot(p.vx, p.vz), want = Math.atan2(best.x - p.x, best.z - p.z), cur = Math.atan2(p.vx, p.vz);
         let d = want - cur; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2;

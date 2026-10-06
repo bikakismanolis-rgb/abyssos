@@ -21,7 +21,8 @@ const fx = (x, z) => ({ x, z });
 export function nearestFoe(range, dir = null, from = p()) {
   let best = null, bs = 1e9;
   for (const f of foes(from.x, from.z, range)) {
-    if ((f.prop && !f.hp) || f.hidden) continue;
+    // a Hollowed passing for dead wood is no target until it shows itself (aim at it, or catch it in an area)
+    if ((f.prop && !f.hp) || f.hidden || f.disguised) continue;
     const d = Math.hypot(f.x - from.x, f.z - from.z) - f.radius;
     let s = d + (f.prop ? 4 : 0);
     if (dir != null) s += Math.abs(angleDiff(dir, angleTo(from.x, from.z, f.x, f.z))) * 1.6;
@@ -363,7 +364,7 @@ const SKILL_FN = {
           later(j * 0.07, () => { bolt(sx, sy, sz, target.x, 1.1, target.z, 0x9ad8ff, 1.1); damage(pl, target, heroHit(mult * (1 - j * 0.06)), { stun: 0.25, quiet: j > 0 }); if (j) Audio.sfx('lightning', { x: target.x, z: target.z, vol: 0.5 }); });
           hit.add(target); fx0 = target.x; fy0 = 1.1; fz0 = target.z;
           let nb = null, nd = 64;
-          for (const f of foes(target.x, target.z, 7)) { if (hit.has(f) || f.prop) continue; const d = (f.x - target.x) ** 2 + (f.z - target.z) ** 2; if (d < nd) { nd = d; nb = f; } }
+          for (const f of foes(target.x, target.z, 7)) { if (hit.has(f) || f.prop || f.disguised) continue; const d = (f.x - target.x) ** 2 + (f.z - target.z) ** 2; if (d < nd) { nd = d; nb = f; } }
           cur = nb;
         }
       }]]
