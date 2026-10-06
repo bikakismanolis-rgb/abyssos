@@ -387,6 +387,17 @@ async function barkify(img, amt, cracks = 0, lo = 1.3) {
   // the glow is soft and low in detail: half size is plenty
   return { img: await png(data), emit: em && await sharp(await png(em)).resize(info.width >> 1, info.height >> 1).blur(0.8).png().toBuffer() };
 }
+// ash flecks: the bark grain's highest ridges (read across the map at another scale, so they do not follow the cracks)
+// lightened toward pale ash, a mottle of grey on soot
+async function flecks(img, k) {
+  const { data, info } = await sharp(img).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const W = info.width, H = info.height, G = await grainOf(Math.round(W * 1.37), Math.round(H * 1.37)), GW = Math.round(W * 1.37);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const p = y * W + x, f = Math.min(1, Math.max(0, (G[(y + 7) * GW + x + 11] - 1.5) / 0.9)) * k;
+    for (let c = 0; c < 3; c++) data[p * 3 + c] = Math.round(data[p * 3 + c] * (1 - f) + [150, 146, 140][c] * f);
+  }
+  return sharp(data, { raw: { width: W, height: H, channels: 3 } }).png().toBuffer();
+}
 // eyes: the brown iris (a disc in the middle of the map) goes amber; with `glow` an emissive mask lights the iris and,
 // at `white`, the sclera, so the eyes burn amber in the dark
 // (`col` swaps the amber for another light: the cold eyes of the dead Wayfarers)
@@ -683,7 +694,7 @@ function tabard({ material, P, J, W, joint, at }) {
 }
 
 const COLD = [0.62, 0.66, 0.72], SILVER = [0.7, 0.7, 0.74], IRON = [0.6, 0.6, 0.62], BRONZE = [0.74, 0.6, 0.42], MOSS = [0.56, 0.6, 0.48], SCORCH = [0.5, 0.4, 0.32];
-const DEAD_FACE = [0.34, 0.36, 0.4], ASH_SKIN = [0.56, 0.55, 0.54], CHAR = [0.4, 0.33, 0.28];
+const DEAD_FACE = [0.34, 0.36, 0.4], ASH_SKIN = [0.56, 0.55, 0.54], SOOT_SKIN = [0.24, 0.23, 0.22];
 const COLD_EYES = (glow) => ({ eyes: { tint: 1, glow, white: 0.35 * glow, fill: 0.7, col: [0.78, 0.88, 1], emit: [0.5, 0.66, 0.95] } });
 // the dead of the war: ash skin and outfit, embers in the cracks and in the eyes
 const fallen = (outfit, tint, skins) => ({ [outfit]: { ash: 0.85, tint, dust: 0.22, bark: 0.3, cracks: 0.45 }, ...each(skins, { ash: 0.9, tint: ASH_SKIN, bark: 0.5, cracks: 0.9 }), MI_Eyes: AMBER_EYES });
@@ -698,9 +709,9 @@ const ASHSET = {
   ashSpear: { src: 'warden', table: SAME, mats: fallen('MI_Ranger_warden', IRON, SKIN_M), color: { MI_Hair_1_warden: '#3a3836' } },
   ashDwarf: { src: 'warden', table: DWARF, mats: fallen('MI_Ranger_warden', BRONZE, SKIN_M), color: { MI_Hair_1_warden: '#3e3630' } },
   ashBow: { src: 'ranger', table: ELF, mats: fallen('MI_Ranger', MOSS, SKIN_F), color: { MI_Hair_2_ranger: '#3a3a34' } },
-  // an Ashsmith: the peasant villager, heavy-armed, scorched brown, embers in the cracks of the bare forearms (the game
-  // hides the face under a one-eyed iron mask)
-  ashsmith: { src: 'villager1', table: SMITH, mats: { MI_Peasant_smith: { ash: 0.7, tint: SCORCH, bark: 0.25 }, MI_Superhero_Male: { ash: 0.85, tint: CHAR, bark: 0.45 }, MI_Regular_Male: { ash: 0.85, tint: CHAR, bark: 0.6, cracks: 1, crackLo: 0.45 } }, color: { MI_Hair_1_villager1: '#241e1a' } },
+  // an Ashsmith: the peasant villager, heavy-armed and burnt: soot grey-black skin flecked with ash, embers in the cracks
+  // of the face, the neck and the bare forearms, the beard gone ash-grey (the game hides the face under a one-eyed iron mask)
+  ashsmith: { src: 'villager1', table: SMITH, mats: { MI_Peasant_smith: { ash: 0.7, tint: SCORCH, bark: 0.25 }, ...each(SKIN_M, { ash: 0.9, tint: SOOT_SKIN, bark: 0.55, flecks: 0.55, cracks: 1, crackLo: 0.45 }) }, color: { MI_Hair_1_villager1: '#605c58' } },
   // Ivar, captain of the Lampless: Isarn's body grown old, silver-ash, white beard, cold light in the eyes
   ivar: { src: 'wayfarer', table: ELDER, mats: { MI_Ranger_wayfarer: { ash: 0.75, tint: SILVER }, ...each(SKIN_M, { ash: 0.75, tint: SILVER }), MI_Eyes: COLD_EYES(1) }, color: { MI_Hair_1_wayfarer: '#c8cacc' } },
   // Arna, the first Wayfarer, in the lamp memories: young and bare-headed with auburn hair; old, grey and bearded
@@ -742,6 +753,7 @@ for (const [name, R] of Object.entries(SETS[SET])) {
       if (op.grade) img = await grade(img, op.grade);
       if (op.ash) img = await ashen(img, op.ash, op.tint);
       if (op.dust) img = await dust(img, op.dust, op.tint);
+      if (op.flecks) img = await flecks(img, op.flecks);
       if (op.bark || op.cracks) ({ img, emit } = await barkify(img, op.bark || 0, op.cracks, op.crackLo));
       if (op.eyes) ({ img, emit } = await amberEyes(img, op.eyes));
       if (op.brand) ({ img, emit } = await burn(doc, mat, img, emit, brandMark(doc), 512, /^(spine_0[123]|clavicle_l)$/));

@@ -38,7 +38,7 @@ ACT IV MONSTERS AND PEOPLE (src/assets/creatures/, src/assets/ash.glb; adapted f
 - Ember Ticks: "Fireborne Blight Drone" by HighPolyDensity (sketchfab.com/HighPolyDensity). CC-BY 4.0, modified (decimated, re-textured; run, spawn, leap, cling, hit and death animations made for Skotos). https://sketchfab.com/3d-models/fireborne-blight-drone-bbc26cb4e7c1408a9e9c18f5adec914c
 - Hammerhorns: "Minotaur Berserker - Free Game-Ready Character" by Yury Misiyuk (sketchfab.com/Tim0). CC-BY 4.0, modified (rebound onto the people's skeleton, soot-black regrade, forge-brand added; shackles and chains made in code). https://sketchfab.com/3d-models/minotaur-berserker-free-game-ready-character-42da47ae59574ed5a6b86b49734294cc
 - Karthax, the Ash King: "Overlord" by DJMaesen (sketchfab.com/bumstrum). CC-BY 4.0, modified (rebound onto the people's skeleton, black iron with ember seams; the Ash Crown made in code). https://sketchfab.com/3d-models/overlord-4e61da8bb7f3440db3df42ee26c4b797
-- The dead of the Field of Ash (the Lampless, the Ash-Fallen, the Ashsmiths, Ivar, Arna and the boy Isarn): Quaternius characters (CC0), re-proportioned and re-coloured for Skotos, with ember cracks from "Bark Brown 02" by Rob Tuytel (Poly Haven, CC0, https://polyhaven.com/a/bark_brown_02). Their lanterns, masks, cones and shackles are made in code. The keepers' statues in Karthax's cages are the Barrow Lord, Durgan and Amaranthe, turned to ash in code.
+- The dead of the Field of Ash (the Lampless, the Ash-Fallen, the Ashsmiths, Ivar, Arna and the boy Isarn): Quaternius characters (CC0, https://quaternius.com), re-proportioned and re-coloured for Skotos, with ember cracks and ash flecks from "Bark Brown 02" by Rob Tuytel (Poly Haven, CC0, https://polyhaven.com/a/bark_brown_02). Their lanterns, masks, cones and shackles are made in code. The keepers' statues in Karthax's cages are the Barrow Lord, Durgan and Amaranthe, turned to ash in code.
 
 WORLD
 - Dungeon Remastered, Medieval Hexagon Pack, Halloween Bits by Kay Lousberg / KayKit. CC0 1.0.
@@ -53,9 +53,37 @@ WORLD
   "Realistic HD Rosemary willow (63/99)" by PlantCatalog, https://sketchfab.com/3d-models/realistic-hd-rosemary-willow-6399-6d25c2941dae4065b9476f0705b4f0d3
   "Bracken Fern Low Poly" by Marcin.Kwiatkowski, https://sketchfab.com/3d-models/bracken-fern-low-poly-b64381d3ea9547b88581f98178800627
   "Realistic Mushroom - 01" by SanForge, https://sketchfab.com/3d-models/realistic-mushroom-01-aededce1ec0f48f8b0f50cc1762a3f86
-- Act IV ground, rock, iron and props (the Field of Ash and the Ashen Forge) from Poly Haven (polyhaven.com), CC0: burned_ground_01, rocks_ground_09, metal_plate_02 and dead_tree_trunk_02 by Rob Tuytel (with Jenelle van Heerden, Rico Cilliers); moon_footprints_01 and moon_rock_01/04/05/06 by Greg Zaal, Rico Cilliers, Jenelle van Heerden, Dario Barresi; gray_rocks and rust_coarse_01 by Dimitrios Savva (with Rico Cilliers); dark_rock_02 by Amal Kumar; volcanic_rock_tiles and volcanic_herringbone_01 by Charlotte Baglioni; dead_quiver_trunk by James Ray Cock, Dario Barresi, Rico Cilliers; wine_barrel_01 by James Ray Cock; namaqualand_boulder_02 by Greg Zaal, Rico Cilliers; kite_shield, antique_estoc, ornate_war_hammer and ornate_medieval_mace by Ulan Cabanilla (with James Ray Cock); gothic_statue by Benny Weimer; Lantern_01 by Rajil Jose Macatangay; brass_diya_lantern by Bhargav Kubal; cross_pein_hammer by Tics; bull_head by Tina. Per-asset details in src/assets/cinder/CREDITS.txt.
-- Act IV props from sketchfab.com, CC-BY 4.0, modified (decimated, re-centred, rescaled, re-graded to ash and iron; src/assets/cinder.glb):
-  "Ribs", "Spine" and "Dragon Skull" by Bregorn (the war-drake's bones), https://sketchfab.com/3d-models/ribs-328309ecbdef4e9ebd148d4b730aab35, https://sketchfab.com/3d-models/spine-c5512ed80ce442aca263cc43585c7d0d, https://sketchfab.com/3d-models/dragon-skull-326d0f7359af43c995217f654aba0fec
+- Act IV ground, rock, iron and props (the Field of Ash and the Ashen Forge; src/assets/cinder/ and src/assets/cinder.glb) from Poly Haven (polyhaven.com), CC0 1.0, modified (resized, re-graded to ash and iron, props decimated; per-asset details in src/assets/cinder/CREDITS.txt):
+  burned_ground_01 by Rob Tuytel (the ash), https://polyhaven.com/a/burned_ground_01
+  moon_footprints_01 by Greg Zaal, Rico Cilliers, Jenelle van Heerden, Dario Barresi (trodden ash), https://polyhaven.com/a/moon_footprints_01
+  gray_rocks by Dimitrios Savva (scree), https://polyhaven.com/a/gray_rocks
+  rocks_ground_09 by Rob Tuytel (the Wayfarers' Road), https://polyhaven.com/a/rocks_ground_09
+  dark_rock_02 by Amal Kumar (the cliffs), https://polyhaven.com/a/dark_rock_02
+  volcanic_rock_tiles by Charlotte Baglioni (the Forge's floors), https://polyhaven.com/a/volcanic_rock_tiles
+  volcanic_herringbone_01 by Charlotte Baglioni (the Anvil of the Crown), https://polyhaven.com/a/volcanic_herringbone_01
+  metal_plate_02 by Rob Tuytel (iron plate and the grates), https://polyhaven.com/a/metal_plate_02
+  rust_coarse_01 by Dimitrios Savva, Rico Cilliers (rust and the grates), https://polyhaven.com/a/rust_coarse_01
+  dead_quiver_trunk by James Ray Cock, Dario Barresi, Rico Cilliers (dead trees), https://polyhaven.com/a/dead_quiver_trunk
+  dead_tree_trunk_02 by Jenelle van Heerden, Rico Cilliers (dead trees), https://polyhaven.com/a/dead_tree_trunk_02
+  moon_rock_01 by Greg Zaal, Rico Cilliers, Jenelle van Heerden, Dario Barresi (rocks), https://polyhaven.com/a/moon_rock_01
+  moon_rock_04 by Greg Zaal, Rico Cilliers, Jenelle van Heerden (rocks), https://polyhaven.com/a/moon_rock_04
+  moon_rock_05 by Greg Zaal, Rico Cilliers, Jenelle van Heerden (rocks), https://polyhaven.com/a/moon_rock_05
+  moon_rock_06 by Greg Zaal, Jenelle van Heerden, Rico Cilliers (rocks), https://polyhaven.com/a/moon_rock_06
+  namaqualand_boulder_02 by Greg Zaal, Rico Cilliers (boulders), https://polyhaven.com/a/namaqualand_boulder_02
+  kite_shield by Ulan Cabanilla (the war's debris), https://polyhaven.com/a/kite_shield
+  antique_estoc by James Ray Cock, Ulan Cabanilla (the war's debris), https://polyhaven.com/a/antique_estoc
+  ornate_war_hammer by James Ray Cock, Ulan Cabanilla (the war's debris), https://polyhaven.com/a/ornate_war_hammer
+  ornate_medieval_mace by Ulan Cabanilla (the war's debris), https://polyhaven.com/a/ornate_medieval_mace
+  gothic_statue by Benny Weimer (the headless statues and the altars), https://polyhaven.com/a/gothic_statue
+  Lantern_01 by Rajil Jose Macatangay (the waylamps and the Graves' lanterns), https://polyhaven.com/a/Lantern_01
+  brass_diya_lantern by Bhargav Kubal (caged lights), https://polyhaven.com/a/brass_diya_lantern
+  wine_barrel_01 by James Ray Cock (the Forge's clutter), https://polyhaven.com/a/wine_barrel_01
+  cross_pein_hammer by Tics (the Forge's clutter), https://polyhaven.com/a/cross_pein_hammer
+  bull_head by Tina (the bull heads on the Forge's walls), https://polyhaven.com/a/bull_head
+- Act IV props from sketchfab.com, CC-BY 4.0 (https://creativecommons.org/licenses/by/4.0/), modified (decimated, re-centred, rescaled, re-graded to ash and iron; src/assets/cinder.glb):
+  "Ribs" by Bregorn (the war-drake's ribs), https://sketchfab.com/3d-models/ribs-328309ecbdef4e9ebd148d4b730aab35
+  "Spine" by Bregorn (the war-drake's spine), https://sketchfab.com/3d-models/spine-c5512ed80ce442aca263cc43585c7d0d
+  "Dragon Skull" by Bregorn (the war-drake's skull), https://sketchfab.com/3d-models/dragon-skull-326d0f7359af43c995217f654aba0fec
   "Ruined Tower" by Cianon (the Wayfarers' watchtower), https://sketchfab.com/3d-models/ruined-tower-a345f230525a43749f97927b3429e734
   "Medieval Brazier" by Sky_Hunter (the braziers), https://sketchfab.com/3d-models/medieval-brazier-cff29e533e3a4298a5d112cf7bb2558c
   "Medieval Blacksmith Bellows" by TomasKiniulis (the Great Bellows and the stokers' bellows), https://sketchfab.com/3d-models/medieval-blacksmith-bellows-b9eaf7057b194e36b73da1f49cf49886

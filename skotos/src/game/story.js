@@ -551,12 +551,13 @@ on('lamp', (it, z) => {
     if (k === 'isarnBoy' && it.id !== 'l5') a.avatar?.group.scale.multiplyScalar(0.9);
     if (k === 'arnaOld') a.avatar?.play('lantern', 1);
     if (k === 'ivarGhost' && M0.who.length > 1) a.avatar?.play('kneel', 1);
-    if (a.avatar) { ghostly(a.avatar, 0.62); a.avatar.setTint(0xf2eee6, 1.6); a.avatar.setRim(0xffffff, 1.2); }
+    // (grey enough to keep their shading against the white of the memory)
+    if (a.avatar) { ghostly(a.avatar, 0.85); a.avatar.setTint(0xb4aea4, 1.6); a.avatar.setRim(0xfaf6ee, 0.8); }
     z.actors.push(a); figs.push(a);
     puff(f.x, 1, f.z, 10, 0xd8d4cc, 1.2, 0.8, 1.4);
   });
   emit('cine', {
-    x: it.x, z: it.z, dur: 3.2, zoom: 1.75, until: () => done,
+    x: it.x, z: it.z, dur: 3.2, zoom: 1.3, until: () => done,
     steps: [[0.7, raise], [1.0, () => emit('dialog', { who: AM, lines, end: () => { done = true; } })]],
     end: () => endLampMemory(it, z, figs)
   });

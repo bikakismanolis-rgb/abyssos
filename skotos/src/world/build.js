@@ -1353,7 +1353,7 @@ float ln(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   vec3 hot = mix(vec3(0.95, 0.2, 0.02), vec3(1.0, 0.62, 0.16), smoothstep(0.6, 1.0, heat + crack * 0.35));${heat ? `
   // cooler: more of it crusts over and the seams dim; hotter: the crust breaks up and the melt brightens toward gold
   crustK = clamp(crustK + (1.0 - min(uHeat, 1.0)) * 0.75 - max(uHeat - 1.0, 0.0) * 0.35, 0.0, 1.0);
-  hot = mix(hot * min(uHeat, 1.0), vec3(1.0, 0.55, 0.12), clamp(uHeat - 1.0, 0.0, 0.3) * 2.0);` : ''}
+  hot = mix(hot * min(uHeat, 1.0), vec3(1.0, 0.42, 0.07), clamp(uHeat - 1.0, 0.0, 0.3) * 1.4);` : ''}
   ${crust ? 'vec3 crustC = c1 * vec3(0.32, 0.26, 0.24);' : 'vec3 crustC = vec3(0.045, 0.035, 0.03);'}
   vec3 col = mix(hot * (0.95 + 0.15 * sin(t * 1.7 + vLP.x * 0.4)), crustC + hot * 0.05, crustK * 0.95);${heat ? `
   col *= mix(1.0, 0.5, clamp(crustK * (1.0 - min(uHeat, 1.0)) * 2.0, 0.0, 1.0)); // a cooler crust is a darker one` : ''}
@@ -2410,6 +2410,7 @@ function addProp4(B, I, p, L, rng, out) {
 // open(dt) -> done); bellows (breathe(k) 0..1); slagPlug (o: L.plug, returned in place; melt()); anvil, shardAnvil;
 // forgeMouth (setWhite(k)); cradle (setLit(b)); crown (setSockets(n)); hook; staff (setLantern('gold'|'white'|'dark'));
 // lightRing (radius 1, warm, additive; setColor(c), setOpacity(a)); cone (length 1 along +z, o.arc the half-angle; flash(k)).
+// lightRing and cone are ground decals: drape() lays them over the Act IV terrain wherever they are moved.
 export function act4Prop(kind, o = {}) {
   act4Mats();
   const f = PROP4[kind], g = f ? f(o) : new THREE.Group();
@@ -2612,24 +2613,35 @@ const PROP4 = {
   },
   // a light pool's rim on the ground (radius 1)
   lightRing() {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ map: ringTexture(), color: 0xffb060, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
-    m.rotation.x = -Math.PI / 2; m.position.y = 0.05; m.renderOrder = 2;
+    const m = new THREE.Mesh(drapable(new THREE.PlaneGeometry(2, 2, 16, 16).rotateX(-Math.PI / 2), 0.05), new THREE.MeshBasicMaterial({ map: ringTexture(), color: 0xffb060, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+    m.renderOrder = 2;
     const g = new THREE.Group(); g.add(m);
     g.userData.setColor = (c) => m.material.color.set(c);
     g.userData.setOpacity = (a) => { m.material.opacity = a; };
     return g;
   },
-  // a Lampless lantern's cone on the ground: length 1 along +z, half-angle o.arc; flash(k) whitens it as the alarm nears
+  // a Lampless lantern's cone on the ground: length 1 along +z, half-angle o.arc. The lantern's light falls off along it and
+  // its edge is a faint line, so a patrol's reach reads without flooding the Graves; flash(k) whitens it as the alarm nears
   cone(o) {
-    const arc = o.arc ?? 0.7, n = 16, pos = [0, 0, 0], col = [1, 1, 1], idx = [];
-    for (let i = 0; i <= n; i++) { const a = -arc + (2 * arc * i) / n; pos.push(Math.sin(a), 0, Math.cos(a)); col.push(0.25, 0.25, 0.25); if (i) idx.push(0, i, i + 1); }
+    const arc = o.arc ?? 0.7, n = 16, nr = 8, pos = [0, 0, 0], col = [0.2, 0.2, 0.2], idx = [];
+    for (let j = 1; j <= nr; j++) {
+      const r = j / nr, k = 0.025 + 0.15 * Math.pow(1 - r, 1.6);
+      for (let i = 0; i <= n; i++) {
+        const a = -arc + (2 * arc * i) / n, v = 1 + (j - 1) * (n + 1) + i;
+        pos.push(Math.sin(a) * r, 0, Math.cos(a) * r); col.push(k, k, k);
+        if (!i) continue;
+        if (j === 1) idx.push(0, v - 1, v); else idx.push(v - n - 2, v - 1, v, v - n - 2, v, v - n - 1);
+      }
+    }
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); geo.setIndex(idx);
     const mat = new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x9ab8e0, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
-    const m = new THREE.Mesh(geo, mat); m.position.y = 0.06; m.renderOrder = 3;
-    const edge = new THREE.Line(new THREE.BufferGeometry().setFromPoints([V3(0, 0.07, 0), ...Array.from({ length: n + 1 }, (_, i) => { const a = -arc + (2 * arc * i) / n; return V3(Math.sin(a), 0.07, Math.cos(a)); }), V3(0, 0.07, 0)]), new THREE.LineBasicMaterial({ color: 0xb8d0f0, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }));
+    const m = new THREE.Mesh(drapable(geo, 0.06), mat); m.renderOrder = 3;
+    const side = (a) => Array.from({ length: nr }, (_, j) => V3(Math.sin(a) * (j + 1) / nr, 0, Math.cos(a) * (j + 1) / nr));
+    const rim = Array.from({ length: n + 1 }, (_, i) => { const a = -arc + (2 * arc * i) / n; return V3(Math.sin(a), 0, Math.cos(a)); });
+    const edge = new THREE.Line(drapable(new THREE.BufferGeometry().setFromPoints([V3(0, 0, 0), ...side(-arc), ...rim, ...side(arc).reverse(), V3(0, 0, 0)]), 0.07), new THREE.LineBasicMaterial({ color: 0xb8d0f0, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false }));
     const g = new THREE.Group(); g.add(m, edge);
     const base = new THREE.Color(0x9ab8e0), white = new THREE.Color(0xffffff);
-    g.userData.flash = (k) => { k = clamp(k, 0, 1); mat.color.copy(base).lerp(white, k); mat.opacity = 0.5 + 0.4 * k; edge.material.opacity = 0.6 + 0.4 * k; };
+    g.userData.flash = (k) => { k = clamp(k, 0, 1); mat.color.copy(base).lerp(white, k); mat.opacity = 0.5 + 0.5 * k; edge.material.opacity = 0.3 + 0.6 * k; };
     return g;
   }
 };
@@ -2642,6 +2654,30 @@ function anvilMesh(s, block) {
   else g.add(iron([{ geo: G.box(0.38 * s, 0.32 * s, 0.3 * s), color: 0x24221f, o: { y: top + 0.16 * s } }, { geo: G.box(0.7 * s, 0.17 * s, 0.32 * s), color: 0x2e2a28, o: { y: top + 0.4 * s } }, { geo: G.cone(0.13 * s, 0.32 * s, 5), color: 0x2e2a28, o: { y: top + 0.42 * s, x: 0.5 * s, rz: -Math.PI / 2 } }]));
   g.userData.top = top + 0.5 * s;
   return g;
+}
+// ---------- ground decals over the Act IV terrain ----------
+// a flat geometry (in its local XZ) that drape() can lay on the ground, `lift` above it (on flat ground, as made)
+export function drapable(geo, lift) {
+  const P = geo.attributes.position, xz = new Float32Array(P.count * 2);
+  for (let i = 0; i < P.count; i++) { xz[i * 2] = P.getX(i); xz[i * 2 + 1] = P.getZ(i); P.setY(i, lift); }
+  geo.userData.drape = { xz, lift };
+  return geo;
+}
+// every drapable geometry under obj follows the ground of layout L (L.hgt, gen4.js) where obj now stands; obj may be moved,
+// turned about y and scaled (the decals of the other acts' flat ground need none of it)
+export function drape(obj, L) {
+  if (!L?.hgt || !obj) return;
+  obj.updateWorldMatrix(true, true);
+  obj.traverse((o) => {
+    const D = o.geometry?.userData.drape; if (!D) return;
+    const e = o.matrixWorld.elements, sy = e[5] || 1, P = o.geometry.attributes.position, A = P.array, xz = D.xz;
+    for (let i = 0; i < P.count; i++) {
+      const x = xz[i * 2], z = xz[i * 2 + 1];
+      A[i * 3 + 1] = (groundY(L, e[0] * x + e[8] * z + e[12], e[2] * x + e[10] * z + e[14]) + D.lift - e[13]) / sy;
+    }
+    P.needsUpdate = true;
+    o.geometry.computeBoundingSphere();
+  });
 }
 let ringTex = null;
 function ringTexture() {

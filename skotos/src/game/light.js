@@ -86,7 +86,7 @@ export function addLightPool(x, z, r, dur = Infinity, tag = null, o = {}) {
   const p = { x, z, r, r0: r, t: 0, dur, tag, owner: o.owner || null, shrinkT: 0, color: o.color ?? 0xffc070 };
   if (o.fx !== false) {
     p.light = addLight({ x, y: 1.8, z, color: p.color, intensity: o.intensity ?? 12 + r * 2, range: r * 2, flicker: o.flicker ?? 0.12 });
-    p.mesh = discMesh(p.color, 0.3); p.mesh.position.set(x, 0.07, z); p.mesh.scale.setScalar(r); R.scene.add(p.mesh);
+    p.mesh = discMesh(p.color, 0.3); p.mesh.position.set(x, 0, z); p.mesh.scale.setScalar(r); B.drape(p.mesh, G.zone?.L); R.scene.add(p.mesh);
   }
   S.pools.push(p);
   return p;
@@ -100,7 +100,7 @@ export function shrinkPool(p, r, t) { if (!p) return; p.r = Math.min(p.r, r); p.
 function dropPool(i) {
   const p = S.pools[i];
   if (p.light) removeLight(p.light);
-  if (p.mesh) { R.scene.remove(p.mesh); p.mesh.material.dispose(); }
+  if (p.mesh) { R.scene.remove(p.mesh); p.mesh.geometry.dispose(); p.mesh.material.dispose(); }
   S.pools.splice(i, 1);
 }
 
@@ -110,9 +110,9 @@ const DISC_FS = `varying vec2 vUv; uniform vec3 uColor; uniform float uA; unifor
 void main(){ float d = length(vUv * 2.0 - 1.0); if (d > 1.0) discard;
   float a = (1.0 - smoothstep(0.55, 1.0, d)) * 0.45 + uRim * smoothstep(0.86, 0.97, d) * (1.0 - smoothstep(0.97, 1.0, d)) * 2.2;
   gl_FragColor = vec4(uColor * a * uA, 1.0); }`;
-const discGeo = new THREE.PlaneGeometry(2, 2); discGeo.rotateX(-Math.PI / 2);
+// (each its own geometry: on the Act IV slopes it is laid over the ground where it lies, build.js drape)
 function discMesh(color, a, rim = 0.6) {
-  const m = new THREE.Mesh(discGeo, new THREE.ShaderMaterial({ uniforms: { uColor: { value: new THREE.Color(color) }, uA: { value: a }, uRim: { value: rim } }, vertexShader: DISC_VS, fragmentShader: DISC_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  const m = new THREE.Mesh(B.drapable(new THREE.PlaneGeometry(2, 2, 16, 16).rotateX(-Math.PI / 2), 0.07), new THREE.ShaderMaterial({ uniforms: { uColor: { value: new THREE.Color(color) }, uA: { value: a }, uRim: { value: rim } }, vertexShader: DISC_VS, fragmentShader: DISC_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
   m.renderOrder = 2; m.frustumCulled = false;
   return m;
 }
@@ -194,7 +194,11 @@ export function tickLight(dt) {
     if (p.shrinkT > 0 && (p.shrinkT -= dt) <= 0) p.r = p.r0;
     const fade = Math.min(1, (p.dur - p.t) / 1.5);
     if (p.light) { p.light.x = p.x; p.light.z = p.z; p.light.range = p.r * 2; }
-    if (p.mesh) { p.mesh.position.set(p.x, 0.07, p.z); p.mesh.scale.setScalar(Math.max(0.01, p.r)); p.mesh.material.uniforms.uA.value = 0.3 * fade * (1 + Math.sin(p.t * 3 + p.x) * 0.08); }
+    if (p.mesh) {
+      const m = p.mesh, r = Math.max(0.01, p.r);
+      if (m.position.x !== p.x || m.position.z !== p.z || m.scale.x !== r) { m.position.set(p.x, 0, p.z); m.scale.setScalar(r); B.drape(m, z?.L); }
+      m.material.uniforms.uA.value = 0.3 * fade * (1 + Math.sin(p.t * 3 + p.x) * 0.08);
+    }
   }
   if (!on) { if (S.ring) S.ring.visible = false; if (S.cradle) S.cradle.visible = false; return; }
   if (S.swellT > 0) S.swellT -= dt;
@@ -205,7 +209,8 @@ export function tickLight(dt) {
   S.ringR = damp(S.ringR, r, 5, dt);
   if (!ring.parent) R.scene.add(ring);
   ring.visible = S.ringR > 0.15 && !pl.dead;
-  ring.position.set(pl.x, 0.06, pl.z); ring.scale.set(Math.max(0.01, S.ringR), 1, Math.max(0.01, S.ringR));
+  ring.position.set(pl.x, 0, pl.z); ring.scale.set(Math.max(0.01, S.ringR), 1, Math.max(0.01, S.ringR));
+  if (ring.visible) B.drape(ring, z.L);
   // the Cradle rides on the hero's hip (a new avatar after a change of gear gets it again)
   if (pl.avatar && S.cradleAv !== pl.avatar) attachCradle(pl.avatar);
   if (S.cradle) {

@@ -10,6 +10,7 @@ import { refreshStats } from './stats.js';
 import { fire, area } from './projectiles.js';
 import { teleCircle, teleCone, teleLine, killTele, sparks, glowBurst, explosion, ring, bolt, P, puff, decal, flash } from '../gfx/fx.js';
 import { shake, addLight, removeLight, R } from '../gfx/gfx.js';
+import { drape } from '../world/build.js';
 import { emit } from '../ui/bus.js';
 import Audio from '../audio/audio.js';
 import { rand, angleTo, angleDiff, dampAngle, damp, clamp } from '../core/util.js';
@@ -102,6 +103,8 @@ export function updateActors(dt) {
     if (av) {
       av.group.position.set(a.x, a.y || 0, a.z);
       av.group.rotation.y = a.rot;
+      // a Lampless's cone lies over the slopes it sweeps
+      if (a.cone?.visible) drape(a.cone, G.zone.L);
       const frozen = a.status.freeze > 0 || (a.statue && !a.awake);
       av.update(frozen ? 0 : dt * (a.affixes.includes('fast') ? 1.25 : 1), { speed: speed * (frozen ? 0 : 1), runSpeed: a.speed, walkSpeed: Math.min(2.4, a.speed * 0.5), runNat: 5, float: a.def.float });
       av.setFlash(a.flash * 0.9);

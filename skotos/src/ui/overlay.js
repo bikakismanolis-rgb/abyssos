@@ -38,8 +38,8 @@ export function drawOverlay(dt) {
   g.clearRect(0, 0, innerWidth, innerHeight);
   if (G.mode !== 'play' && G.mode !== 'cine') { OV.nums.length = 0; return; }
   g.textAlign = 'center'; g.textBaseline = 'middle';
-  // loot on the ground
-  for (const p of G.pickups) {
+  // loot on the ground (not over a cinematic: a boss's drop would label the scene of his death)
+  for (const p of G.mode === 'cine' ? [] : G.pickups) {
     if (p.kind !== 'item' || p.y > 0.3) continue;
     toScreen(p.x, 0.35, p.z, sp); if (!sp.vis) continue;
     const name = itemName(p.item);

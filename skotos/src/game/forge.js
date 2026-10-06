@@ -1,7 +1,8 @@
 // The Forge's Breath (Act IV, the Ashen Forge). Each flue (L.flues: mouth x, z, dir, len, w, period, phase, gallery)
 // breathes: a 2.0 s inhale (a telegraph down the whole flue, the grate glowing, embers drawn in; never shortened), then
-// 1.2 s of fire roaring down it that hits once per breath for 20% of max life plus burn (12% on the first difficulty).
-// Anything solid between the mouth and the hero is cover (map.los). Fireproof monsters ignore it; the rest take a quarter.
+// 1.2 s of fire roaring down it (a sheet of fire on the floor behind the front) that hits once per breath for 20% of max
+// life plus burn (12% on the first difficulty). Anything solid between the mouth and the hero is cover (map.los).
+// Fireproof monsters ignore it; the rest take a quarter.
 // Periods: 10 s, 5 s while a Hammerhorn pumps its station (setFluePumping), 1.5 s less per stage of the Forge Heat, never
 // under 4.5 s. Only flues within 40 m breathe. Also here: slag dripping from the dark over the Slag Rivers, and the vents of
 // a Great Bellows chamber that has breathed. startFlues(L.flues) / stopFlues() from world.js; ticked from updateAreas.
@@ -21,11 +22,11 @@ const F = { list: null, zone: null, heat: 0, pumping: new Set(), dripT: 6, ventT
 export function startFlues(list) {
   F.zone = G.zone; F.pumping.clear();
   F.heat = G.hero?.flags?.heat || 0;
-  F.list = (list || []).map((f, i) => ({ ...f, i, st: 'idle', t: f.phase ?? rand.range(1, 6), tele: null, light: null, hit: new Set() }));
+  F.list = (list || []).map((f, i) => ({ ...f, i, st: 'idle', t: f.phase ?? rand.range(1, 6), tele: null, sheet: null, light: null, hit: new Set() }));
   F.dripT = rand.range(4, 7); F.ventT = 6;
 }
 export function stopFlues() {
-  for (const f of F.list || []) { killTele(f.tele); if (f.light) removeLight(f.light); }
+  for (const f of F.list || []) { killTele(f.tele); killTele(f.sheet); if (f.light) removeLight(f.light); }
   F.list = null; F.zone = null; F.pumping.clear();
 }
 export function setFlueHeat(k) { F.heat = Math.max(0, Math.min(3, k | 0)); }
@@ -60,10 +61,10 @@ export function tickFlues(dt) {
       if (f.t <= 0) roar(f);
     } else if (f.st === 'fire') {
       const u = 1 - f.t / BREATH.fire, front = Math.min(f.len, f.len * (u / 0.33)), ux = Math.sin(f.dir), uz = Math.cos(f.dir);
-      for (let k = 0; k < 6; k++) { const d = rand.range(0, front), v = rand.range(-f.w / 2, f.w / 2) * 0.8, x = f.x + ux * d - uz * v, z = f.z + uz * d + ux * v; P({ x, y: rand.range(0.2, 2.2), z, vx: ux * 9, vy: rand.range(0.5, 2), vz: uz * 9, life: rand.range(0.25, 0.5), size: rand.range(0.6, 1.1), size1: 0.2, color: 0xffd070, color1: 0xff3000 }); }
+      for (let k = 0, n = Math.min(14, Math.max(6, Math.ceil(f.len * f.w / 8))); k < n; k++) { const d = rand.range(0, front), v = rand.range(-f.w / 2, f.w / 2) * 0.8, x = f.x + ux * d - uz * v, z = f.z + uz * d + ux * v; P({ x, y: rand.range(0.2, 2.2), z, vx: ux * 9, vy: rand.range(0.5, 2), vz: uz * 9, life: rand.range(0.25, 0.5), size: rand.range(0.6, 1.1), size1: 0.2, color: 0xffd070, color1: 0xff3000 }); }
       if (f.light) { f.light.x = f.x + ux * front * 0.7; f.light.z = f.z + uz * front * 0.7; f.light.intensity = 40; }
       burn(f, front);
-      if (f.t <= 0) { f.st = 'idle'; f.t = fluePeriod(f) - BREATH.inhale - BREATH.fire; if (f.light) { removeLight(f.light); f.light = null; } }
+      if (f.t <= 0) { f.st = 'idle'; f.t = fluePeriod(f) - BREATH.inhale - BREATH.fire; killTele(f.sheet); f.sheet = null; if (f.light) { removeLight(f.light); f.light = null; } }
     }
   }
   drips(dt, pl);
@@ -78,6 +79,8 @@ function inhale(f) {
 }
 function roar(f) {
   f.st = 'fire'; f.t = BREATH.fire; killTele(f.tele); f.tele = null;
+  // the fire's sheet on the floor, running down the flue with the front (a third of the breath) and burning till it ends
+  f.sheet = teleLine(f.x, f.z, f.dir, f.len, f.w, BREATH.fire * 0.33, 0xffa040);
   Audio.sfx('bellowsRoar', { x: f.x, z: f.z });
   const pl = G.player;
   if (pl && Math.hypot(pl.x - f.x, pl.z - f.z) < f.len + 6) shake(0.25);

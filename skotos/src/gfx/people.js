@@ -243,6 +243,8 @@ const STYLE_ACTIONS = {
   bow: { shoot: 'Pistol_Shoot', shootFast: 'Pistol_Shoot', aim: 'Pistol_Aim_Neutral', reload: 'Pistol_Reload', volley: 'Pistol_Shoot' }
 };
 const HOLD = new Set(['die', 'dieFwd', 'dieBones', 'lie', 'sit', 'bonePile']);
+// a locomotion clip played as an action gets a copy of its own (PersonAnim.play), one per clip for every avatar
+const ACT_COPY = new WeakMap();
 const LOOP = new Set(['spin', 'channel', 'sit', 'lie', 'aim', 'bonePile', 'talk', 'fold', 'lantern', 'torch', 'kneel', 'harvest', 'hammer']);
 
 export class PersonAnim {
@@ -273,7 +275,10 @@ export class PersonAnim {
   }
   play(name, speed = 1, o = {}) {
     const clipName = this.acts[name] || name;
-    const clip = personClip(clipName, this.hipH); if (!clip) return 0;
+    let clip = personClip(clipName, this.hipH); if (!clip) return 0;
+    // a walk or a run asked for as an action (a scripted walk) plays from its own copy of the clip: the locomotion blend
+    // sets the weights of its own actions every frame, and would hold this one at nothing
+    if (Object.values(this.loco).some((l) => l.getClip() === clip)) { if (!ACT_COPY.has(clip)) ACT_COPY.set(clip, clip.clone()); clip = ACT_COPY.get(clip); }
     if (this.act && this.act.getClip() !== clip) this.act.fadeOut(0.1);
     const a = this.mixer.clipAction(clip);
     a.reset();
