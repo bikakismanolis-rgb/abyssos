@@ -326,3 +326,7 @@ body:not(.desk) .sk .key { display: none; }
 .cr .cr-i span { color: var(--ink2); }
 .cr .cr-i a { color: #9ab8ff; font-size: 12px; word-break: break-all; text-decoration: none; }
 .cr .cr-lic { white-space: pre-wrap; font: 10.5px/1.4 ui-monospace, Menlo, monospace; color: var(--ink2); background: rgba(0, 0, 0, .3); padding: 8px; border-radius: 6px; user-select: text; -webkit-user-select: text; }
+/* how to play */
+.help { margin: 4px 0 12px; padding-left: 18px; line-height: 1.45; }
+.help li { margin: 5px 0; }
+.help b { color: var(--gold, #d8b46a); font-weight: 600; }
