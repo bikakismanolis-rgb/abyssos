@@ -896,7 +896,7 @@ function petAI(a, dt) {
   if (a.life <= 0 || pl.dead) { a.dead = true; a.deadT = 0; return 0; }
   if (Math.random() < 0.3) P({ x: a.x + rand.range(-0.3, 0.3), y: rand.range(0.3, 1), z: a.z + rand.range(-0.3, 0.3), vy: 0.6, life: 0.6, size: 0.15, size1: 0.02, color: 0x90e0ff });
   let tg = null, bd = 1e9;
-  for (const f of foes(pl.x, pl.z, 10)) { if (f.prop || f.disguised) continue; const dd = (f.x - a.x) ** 2 + (f.z - a.z) ** 2; if (dd < bd) { bd = dd; tg = f; } }
+  for (const f of foes(pl.x, pl.z, 10)) { if (f.prop || f.disguised || f.keeper) continue; const dd = (f.x - a.x) ** 2 + (f.z - a.z) ** 2; if (dd < bd) { bd = dd; tg = f; } }
   if (a.state === 'attack') {
     if (tg) face(a, tg, dt, 10);
     if (attackTick(a, dt) && tg && Math.hypot(tg.x - a.x, tg.z - a.z) < a.def.reach + tg.radius + 0.4) damage(pl, tg, heroHit((a.dmgMult || 1) * 0.55), { knock: 1, quiet: false, noLoh: true, noRes: true, crit: false });
@@ -1452,6 +1452,10 @@ function inLine(x, z, rot, len, w, p) {
 const alive = (list) => (list || []).filter((m) => !m.dead && !m.removed);
 const rimAt = (c, r, ang) => G.zone.map.nearestFloor(c.x + Math.sin(ang) * r, c.z + Math.cos(ang) * r, 4);
 const arenaR = (r) => G.zone.L.boss?.r ?? r;
+// is the hero in the boss's arena (its circle and pad metres more)? Its arena-wide moves stay there; its dark holds there,
+// or near the boss wherever the fight has drifted (heroNear), not across the whole zone
+const heroInArena = (a, pad = 6) => { const c = arena(a), p = G.player; return Math.hypot(p.x - c.x, p.z - c.z) < arenaR(16) + pad; };
+const heroNear = (a, r = 20) => heroInArena(a) || Math.hypot(G.player.x - a.x, G.player.z - a.z) < r;
 // a channel broken by a stun (updateActors skips the AI while stunned, and marks it)
 const interrupted = (a) => { const i = a.interrupted; a.interrupted = false; return i || a.status.stun > 0 || a.status.freeze > 0 || a.status.fear > 0; };
 
@@ -1537,13 +1541,18 @@ function snuffer(a, dt, pl, d) {
   const L = a.lamp;
   if (L?.lit) {
     a.aggro = true;
-    if (Math.hypot(L.x - a.x, L.z - a.z) < 1.9) {
+    const dl = Math.hypot(L.x - a.x, L.z - a.z) || 1;
+    if (dl < 1.9) {
       a.state = 'consume'; a.atkT = 0; a.hpMark = a.hp; a.interrupted = false; L.eater = a;
       a.tele = teleCircle(L.x, L.z, 1.2, 2.5, 0x9a9aa8);
       a.avatar?.play('consume', 1, { loop: true, fade: 0.35 }); Audio.sfx('smokeGulp', { x: a.x, z: a.z, vol: 0.6 }); tally(a, 'consume');
       return 0;
     }
-    return seek(a, L.x, L.z, a.speed * fast, dt);
+    // no nearer for 2 s (no way through to it): it lets that lamp be for a while and comes for the hero
+    if (a.lampOf !== L || dl < a.lampD - 0.25) { a.lampOf = L; a.lampD = dl; a.lampStall = 0; }
+    else if ((a.lampStall += dt) > 2) { a.lamp = a.lampOf = null; a.lampT = 4; tally(a, 'lampGiveUp'); }
+    // the lamp stands in its own solid cell: make for the floor beside it, on this side
+    if (a.lamp) { const ap = G.zone.map.nearestFloor(L.x + ((a.x - L.x) / dl) * 1.3, L.z + ((a.z - L.z) / dl) * 1.3, 2); return seek(a, ap.x, ap.z, a.speed * fast, dt); }
   }
   if (!aggroCheck(a, pl, d)) return idle(a, dt);
   if (d < a.def.reach + pl.radius + 0.1) {
@@ -1949,12 +1958,14 @@ const IVAR = {
     if (ph === 2) ivarRemember(a);
   },
   tick(a, dt) {
-    // his dark and his son's light hold for as long as he does (a hero back from the waypoint finds them again)
-    if (a.dark) setHeroLight(2.5, a);
+    // his dark and his son's light hold for as long as he does (a hero back from the waypoint finds them again); the dark
+    // is the fight's, not the whole field's
+    if (a.dark) setHeroLight(heroNear(a) ? 2.5 : null, a);
     else if (a.phase === 2 && !getLightPool('ivarGold')) { a.dark = true; ivarEndDark(a); }
-    // the dark: three braziers lit at once blind him (dazed 4 s, the shroud broken 8 s)
+    // the dark: three braziers lit at once blind him (dazed 4 s), and his shroud stays broken (8 s at least) while all three burn
     if (a.dark) {
       const lit = braziers(a).filter((b) => b.lit).length;
+      if (lit >= 3) a.unshroud = Math.max(a.unshroud || 0, 0.5);
       if (lit >= 3 && !a.allLit) { a.allLit = true; a.unshroud = 8; daze(a, 4); say('d.ivar.blind'); emit('ivarBlinded', a); tally(a, 'blinded'); return 0; }
       if (lit < 3) a.allLit = false;
     }
@@ -1967,8 +1978,9 @@ const IVAR = {
   },
   moves: [
     { id: 'nova', when: (a, d) => a.phase >= 2 && d < 9, cd: 12, run: (a, pl) => lanternNova(a, pl) },
-    { id: 'step', when: (a, d) => a.phase >= 1 && d > 5, cd: 9, run: (a, pl) => darkStep(a, pl) },
-    { id: 'call', when: (a) => a.phase < 2 && alive(a.summons).length < 3, cd: 18, run: (a) => callLampless(a) },
+    { id: 'step', when: (a, d) => a.phase >= 1 && d > 5 && d < 16, cd: 9, run: (a, pl) => darkStep(a, pl) },
+    // no Lampless called in the dark (the Smoke-eaters are its pressure on the braziers)
+    { id: 'call', when: (a) => a.phase < 2 && !a.dark && alive(a.summons).length < 3, cd: 18, run: (a) => callLampless(a) },
     { id: 'eaters', when: (a) => a.dark && alive(a.eaters).length < 2 && braziers(a).length > 0, cd: 30, run: (a) => callEater(a) },
     { id: 'lanterns', when: (a, d) => a.phase >= 1 && d < 16, cd: 11, run: (a, pl) => deadLanterns(a, pl) },
     { id: 'road', when: (a, d) => d > 4 && d < 18, phaseCd: [9, 9, 8], run: (a, pl) => { a.roadN = 0; return longRoad(a, pl); } },
@@ -1995,6 +2007,8 @@ function ivarRemember(a) {
 function ivarEndDark(a) {
   if (!a.dark) return;
   a.dark = false; a.shrouded = false;
+  // ended while the hero is in another zone (Isarn's run arrives after she left): the gold light is lit when she is back
+  if (!G.actors.includes(a)) return;
   setHeroLight(null);
   const c = a.echo && G.zone.L.spots?.lastLamp ? G.zone.L.spots.lastLamp : arena(a);
   addLightPool(c.x, c.z, arenaR(14) + 2, Infinity, 'ivarGold', { owner: a, color: 0xffd080, intensity: 26 });
@@ -2124,8 +2138,9 @@ const KARTHAX = {
       if (a.beamT <= 0) { a.beamT = 0.3; for (const s of up) bolt(s.x, 2.2, s.z, a.x, 2.6 * (a.scale || 1), a.z, s.keeper === 'lady' ? 0xffb040 : 0xc8c0b0, s.keeper === 'lady' ? 0.9 : 0.5); }
     }
     if (a.phase === 2) {
-      // the last fire holds for as long as he does (a hero back from the waypoint finds it again)
-      setHeroLight(0, a); setLightDark(true, a);
+      // the last fire holds for as long as he does (a hero back from the waypoint finds it again), where the fight is
+      const inside = heroNear(a);
+      setHeroLight(inside ? 0 : null, a); setLightDark(inside, a);
       if (!getLightPool('ghost')) ghostPools(a);
       if (a.isarnT == null && !getLightPool('isarn')) a.isarnT = 3;
       // without the story's lantern (an echo), a still 6 m light on the anvil
@@ -2136,11 +2151,12 @@ const KARTHAX = {
   },
   moves: [
     // every 15 s (cooldowns run a quarter faster in a last phase)
-    { id: 'dark', when: (a) => a.phase >= 2, cd: 18.75, run: (a) => theDark(a) },
+    { id: 'dark', when: (a) => a.phase >= 2 && heroNear(a), cd: 18.75, run: (a) => theDark(a) },
     { id: 'breath', when: (a, d) => a.phase >= 2 && !!getLightPool('isarn'), cd: 10, run: (a, pl) => ashBreath(a, pl) },
-    { id: 'hammerfall', when: (a, d) => a.phase === 1 || (d > 3 && d < 16), phaseCd: [9, 7, 8], run: (a, pl) => hammerfall(a, pl) },
+    // behind the cages one every 5 s, wherever she is in the arena (the statues break only to it); never far out of it
+    { id: 'hammerfall', when: (a, d) => (a.phase === 1 && heroInArena(a)) || (d > 3 && d < 16), phaseCd: [9, 5, 8], run: (a, pl) => hammerfall(a, pl) },
     { id: 'kneel', when: (a, d) => a.phase === 1 && cageUp(a, 'lord') && d < 8.5, cd: 12, run: (a) => kneel(a) },
-    { id: 'rain', when: (a) => a.phase === 1 && cageUp(a, 'king'), cd: 10, run: (a, pl) => moltenRain(a, pl) },
+    { id: 'rain', when: (a) => a.phase === 1 && cageUp(a, 'king') && heroInArena(a), cd: 10, run: (a, pl) => moltenRain(a, pl) },
     { id: 'host', when: (a) => a.phase === 0 && alive(a.host).length < 4, cd: 22, run: (a) => raiseHost(a) },
     { id: 'tongs', when: (a, d) => a.phase !== 1 && d > 3.5 && d < 10, cd: 12, run: (a, pl) => tongs(a, pl) },
     { id: 'gaze', when: (a, d) => a.phase !== 1 && d > 4, phaseCd: [9, 9, 8], run: (a, pl) => gaze(a, pl) },
@@ -2169,7 +2185,7 @@ function threeCages(a) {
     G.actors.push(m);
     return m;
   });
-  a.mcd.hammerfall = 3;
+  a.mcd.hammerfall = 2;
   emit('karthaxCages', a, a.cages);
 }
 function crackLook(s) { s.avatar?.setRim(0xff5a18, 0.9); s.baseTint = 0x9a948c; s.statueTint = 0x9a948c; for (let i = 0; i < 12; i++) sparks(s.x, rand.range(0.5, 2.5), s.z, 1, 0xff8030, 2); }
@@ -2238,13 +2254,15 @@ function emberCombo(a, pl) {
 // Hammerfall: a 4.5 m circle on the hero (1.6 s while the cages stand, else 1.0 s); he leaps to bring the hammer down on it
 function hammerfall(a, pl) {
   const caged = !!a.cages, wind = caged ? 1.6 : 1.0, tx = pl.x, tz = pl.z, d = Math.hypot(tx - a.x, tz - a.z), dir = angleTo(a.x, a.z, tx, tz);
+  // after three misses running the statues break within 6 m (cageBlow), and the circle shows it; she is still hit within 4.5 m
+  const R0 = caged && a.misses >= 3 ? 6 : 4.5;
   a.rot = dir;
-  a.tele = teleCircle(tx, tz, 4.5, wind, 0xff5010);
+  a.tele = teleCircle(tx, tz, R0, wind, 0xff5010);
   const leap = d > 4.8;
   if (leap) { const k = d - 2.6, f = G.zone.map.nearestFloor(a.x + Math.sin(dir) * k, a.z + Math.cos(dir) * k, 3); a.lx = a.x; a.lz = a.z; a.leapTo = f; }
   a.avatar?.play('chop', 1, { hitIn: wind }); Audio.sfx('swingHeavy', { x: a.x, z: a.z });
   return { t: wind, leap, noFace: true, fn() {
-    explosion(tx, tz, 4.5, 0xff6a10, { smoke: 0x2a1a10, shake: 0.7 }); ring(tx, tz, 4.8, 0xffa040, 0.6);
+    explosion(tx, tz, R0, 0xff6a10, { smoke: 0x2a1a10, shake: 0.7 }); ring(tx, tz, R0 + 0.3, 0xffa040, 0.6);
     Audio.sfx('slam'); Audio.sfx('anvil', { x: tx, z: tz });
     const p = G.player; if (Math.hypot(p.x - tx, p.z - tz) < 4.5 + p.radius * 0.5) hitHero(a, p, 1.5, { stun: 0.4, burn: a.dmg * 0.5 });
     for (let i = 0; i < 3; i++) { const ang = i * 2.094 + rand.range(0, 1), r = rand.range(1.2, 3), x = tx + Math.sin(ang) * r, z = tz + Math.cos(ang) * r; if (G.zone.map.walkable(x, z)) area('fire', x, z, 1.3, 4, { team: 'foe', src: a, dmg: a.dmg * 0.3, tick: 0.5 }); }
@@ -2327,9 +2345,10 @@ function moltenRain(a, pl) {
   }
   return { t: 0.6, fn() {}, after: 0.4 };
 }
-// The Dark: every 15 s the whole platform burns for anyone not standing in a light (Isarn's 6 m, the ghosts' 4 m)
+// The Dark: every 15 s the whole platform burns for anyone not standing in a light (Isarn's 6 m, the ghosts' 4 m);
+// a fight drawn off the platform burns around him
 function theDark(a) {
-  const c = arena(a), R0 = arenaR(16) + 3;
+  const c = heroInArena(a) ? arena(a) : { x: a.x, z: a.z }, R0 = arenaR(16) + 3;
   a.tele = teleCircle(c.x, c.z, R0, 1.8, 0xff2010);
   const safes = lightPools().filter((p) => p.r > 0).map((p) => teleCircle(p.x, p.z, p.r, 1.8, 0x60c0ff));
   a.avatar?.play('summon', 0.8); Audio.sfx('bossRoar', { vol: 0.6 }); shake(0.3);
@@ -2337,7 +2356,7 @@ function theDark(a) {
     for (const s of safes) killTele(s);
     for (let i = 0; i < 60; i++) { const ang = Math.random() * 6.28, r = Math.random() * R0; P({ x: c.x + Math.sin(ang) * r, y: 0.2, z: c.z + Math.cos(ang) * r, vy: rand.range(2, 5), life: 0.6, size: 0.9, size1: 0.2, color: 0xff6020, color1: 0x300800 }); }
     shake(0.6); Audio.sfx('explosion', { vol: 0.8 });
-    const p = G.player; if (!p.dead && !lightAt(p.x, p.z)) { hitHero(a, p, 2.0, { burn: a.dmg * 0.5 }); tally(a, 'darkHit'); } else tally(a, 'darkSafe');
+    const p = G.player; if (!p.dead && Math.hypot(p.x - c.x, p.z - c.z) < R0 && !lightAt(p.x, p.z)) { hitHero(a, p, 2.0, { burn: a.dmg * 0.5 }); tally(a, 'darkHit'); } else tally(a, 'darkSafe');
   }, after: 0.6 };
 }
 // Ash Breath at the Lantern: an 8 m cone at Isarn; it dims his light to 3 m for 6 s unless the hero stands in it and takes it

@@ -139,25 +139,30 @@ on('zoneEnter', (id, z) => {
   }
   // Act IV. The gifts are suspended in a Shadow Gate (stats.js reads the zone): recount on every entry
   if (F.gifts) refreshStats();
-  // steps whose flags were saved but whose quest change was still on a timer when the game closed: catch up quietly
-  if (id === 'ashfield') {
-    if (F.fireTaken && q < 18) setQuest(18, true);
+  // steps whose flags were saved but whose quest change was still on a timer (or at a scene's end) when the game closed:
+  // caught up quietly wherever the hero comes back in (the town, the Field, the Forge)
+  const q4 = G.hero.quest;
+  if (id === 'town' || id === 'ashfield' || id === 'forge') {
+    if (F.fireTaken && G.hero.quest < 18) setQuest(18, true);
     if (memsSeen() >= 5 && G.hero.quest === 18) setQuest(19, true);
     if (F.ivar && G.hero.quest < 20) setQuest(20, true);
+    if (F.plug && G.hero.quest < 21) setQuest(21, true);
+    if (F.crownUnmade && G.hero.quest < 22) setQuest(22, true);
+  }
+  if (id === 'ashfield') {
     // Ivar fell but never hung up his lantern (the game closed): his last words play again where he stood
     if (F.ivarDown && !F.ivar) later(2.2, () => { if (G.zone === z) { const b = z.L.boss, f = z.map.nearestFloor(b.x, b.z - 5, 3); ivarFalls(z, { x: f.x, z: f.z, rot: Math.PI }); } });
     if (z && !z.greeted && F.crownUnmade) { z.greeted = true; later(2.4, () => { if (G.zone === z) emit('say', F.newFire ? 'd.field.dawn' : 'd.field.stars'); }); }
   }
   if (id === 'forge') {
-    if (F.ivar && G.hero.quest < 20) setQuest(20, true);
-    if (F.plug && G.hero.quest < 21) setQuest(21, true);
-    if (F.crownUnmade && G.hero.quest < 22) setQuest(22, true);
     // Karthax fell but the crown was never unmade (the game closed): it is unmade now, at the Anvil
     if (F.karthax && !F.crownUnmade) later(2.2, () => { if (G.zone === z) { const an = z.L.spots.anvil || z.L.boss; karthaxFalls(z, { x: an.x, z: an.z - 3 }); } });
     if (z && !z.greeted && F.crownUnmade) { z.greeted = true; later(2.4, () => { if (G.zone === z) emit('say', 'd.forge.cold'); }); }
   }
   if (id === 'town') {
-    if (q === 22 && !F.backHome) { F.backHome = true; later(1.6, () => { if (G.zone === z && G.mode === 'play') emit('dialog', { who: 'healer', lines: ['d.elianthe.back'] }); }); }
+    // (townFires ran before this: after a catch-up to q22 the beacon to light is looked at again)
+    if (G.hero.quest !== q4) townPresence(z);
+    if (G.hero.quest === 22 && !F.backHome) { F.backHome = true; later(1.6, () => { if (G.zone === z && G.mode === 'play') emit('dialog', { who: 'healer', lines: ['d.elianthe.back'] }); }); }
     // the new fire was lit but the act never closed (the game closed during the answer)
     if (F.newFire && (G.hero.act4 ?? -1) < 0) later(2, () => actComplete(4));
   }
@@ -473,13 +478,35 @@ function actComplete(act) {
 // q17 at the beacon: what Isarn owes, Brokka and the Ember Cradle, the last fire leaving Whitecliff
 function act4Begins() {
   const z = G.zone;
+  // once: Isarn is not to be talked to again while the scene plays (a second word, or one E too many, would start it twice)
+  if (z.fireSeq) return;
+  fireSeq(z, true);
   emit('dialog', { who: 'wayfarer', lines: ['d.isarn.e1', 'd.isarn.e2', 'd.isarn.e3', 'd.isarn.e4', 'd.isarn.e5', 'd.isarn.e6'], end: () => brokkaArrives(z) });
 }
-// Brokka comes up from the village with the Cradle she and Halda forged (her people are loaded with the Act II zones)
+// the scene's guard on the town: Isarn's word is taken away while it plays, and given back if the scene has to wait
+function fireSeq(z, on) {
+  z.fireSeq = on;
+  const w = z.townNpc?.wayfarer; if (!w) return;
+  const i = z.interact.indexOf(w.it);
+  if (on && i >= 0) z.interact.splice(i, 1);
+  if (!on && i < 0 && !w.leaving && z.actors.includes(w.a)) z.interact.push(w.it);
+}
+// Brokka comes up from the village with the Cradle she and Halda forged (her people are loaded with the Act II zones).
+// The scene belongs to the town: if the hero has gone before it plays out, it waits (Brokka with it, by the beacon) for the
+// next word with Isarn
 function brokkaArrives(z) {
-  const s = z.L.spots.npcs.wayfarer, talk = () => emit('dialog', { who: 'brokka', lines: [['d.brokka.c1', 'brokka'], ['d.brokka.c2', 'brokka'], ['d.isarn.e7', 'wayfarer'], ['d.brokka.c3', 'brokka']], end: () => beaconScene(4, 'leave') });
+  const s = z.L.spots.npcs.wayfarer, stop = () => fireSeq(z, false);
+  // (gone, or already on the road: the fade of a travel is on)
+  const away = () => G.zone !== z || !!document.getElementById('fade')?.classList.contains('on');
+  const talk = () => {
+    if (away()) { stop(); return; }
+    emit('dialog', { who: 'brokka', lines: [['d.brokka.c1', 'brokka'], ['d.brokka.c2', 'brokka'], ['d.isarn.e7', 'wayfarer'], ['d.brokka.c3', 'brokka']], end: () => { if (away()) stop(); else beaconScene(4, 'leave'); } });
+  };
+  const br0 = z.townBrokka;
+  if (br0 && !br0.removed && z.actors.includes(br0)) { talk(); return; }
   loadFolk('folk').then(() => {
-    if (G.zone !== z || G.mode !== 'play') { talk(); return; }
+    if (away()) { stop(); return; }
+    if (G.mode !== 'play') { talk(); return; }
     const from = z.map.nearestFloor(s.x + 1.5, s.z + 9, 4), br = spawnNpc('brokka', from.x, from.z, Math.PI);
     z.actors.push(br); z.townBrokka = br;
     walkTo(br, s.x + 1.7, s.z + 1.4, 2.6, () => { br.home = angleTo(br.x, br.z, s.x, s.z); talk(); });
@@ -488,7 +515,10 @@ function brokkaArrives(z) {
 // the Last Fire Leaves: the beacon's fire comes down into the Cradle and the stone goes cold; the village comes out with
 // torches; the far fires flicker but hold. The flag is saved first, so a game closed mid-scene finds the fire gone.
 function fireLeaves() {
-  const z = G.zone, b = z.L.beacon, F = G.hero.flags, top = { x: b.x, y: 9.2, z: b.z };
+  const z = G.zone; if (z?.id !== 'town') return;
+  const b = z.L.beacon, F = G.hero.flags, top = { x: b.x, y: 9.2, z: b.z };
+  // Isarn stays through the scene (townPresence lets a leaving Isarn be): he goes ahead down the north path at its end
+  const w = z.townNpc?.wayfarer; if (w) w.leaving = true;
   F.fireTaken = true; writeSave();
   const pour = (n) => { if (G.zone !== z || n <= 0) return; const c = cradlePoint(); fireStream(top, { x: c.x, y: c.y, z: c.z }, 5); later(0.05, () => pour(n - 1)); };
   emit('cine', {
@@ -499,12 +529,13 @@ function fireLeaves() {
       [3.4, () => { setBeacon(z, false); puff(b.x, 9.4, b.z, 22, 0x4a4642, 2.4, 1.6, 2.4); Audio.sfx('windGust', { vol: 0.6 }); Audio.sting('lantern'); }],
       [4.8, () => townFires(z)],
       [6.4, () => emit('say', 'd.halda.stars')],
-      [8.4, () => { for (const f of z.town?.far || []) if (f) { const s0 = f.spr.scale.x; f.spr.scale.setScalar(s0 * 0.4); later(0.6, () => f.spr.scale.setScalar(s0)); } }]
+      [8.4, () => { for (const f of z.town?.far || []) if (f) { f.spr.userData.k = 0.4; later(0.6, () => { f.spr.userData.k = 1; }); } }]
     ],
     end: () => emit('dialog', { who: 'wayfarer', lines: ['d.isarn.go'], end: () => {
+      z.fireSeq = false;
       setQuest(18); emit('toast', t('q.fireTaken'), 'quest');
       // Isarn and Brokka go ahead, down the path behind the beacon hill
-      const w = z.townNpc?.wayfarer, br = z.townBrokka, path = [{ x: b.x - 3.5, z: 17.5 }, { x: 24, z: 9.8 }, { x: b.x - 13.5, z: 7.2 }];
+      const br = z.townBrokka, path = [{ x: b.x - 3.5, z: 17.5 }, { x: 24, z: 9.8 }, { x: b.x - 13.5, z: 7.2 }];
       if (w) { w.leaving = true; const i = z.interact.indexOf(w.it); if (i >= 0) z.interact.splice(i, 1); walkPath(w.a, path, 1.6, () => vanish(z, w.a, 1, () => { w.leaving = false; townPresence(z); })); }
       if (br) later(0.8, () => walkPath(br, path, 1.6, () => vanish(z, br, 1)));
     } })
@@ -610,10 +641,13 @@ on('ivarRemember', (a) => {
   let n = ['isarnHook', 'isarn'].map((k) => A.npcs[k]).find((x) => x && z.actors.includes(x.a)), I = n?.a;
   const run = S.isarnRun || { x: z.L.boss.x, z: z.L.boss.z + 18 };
   if (n) { n.busy = true; act4Presence(z); } else { I = spawnNpc('wayfarer', run.x, run.z, Math.PI); z.actors.push(I); }
+  // still at the camp (the fight came before the fifth lamp): he comes from the Graves all the same, not through the cliffs
+  if (n && Math.hypot(I.x - run.x, I.z - run.z) > 25) { const f = z.map.nearestFloor(run.x, run.z, 3); I.x = f.x; I.z = f.z; }
   z.ivarIsarn = I;
   isarnLantern(I, 'gold');
   const to = () => { const d = Math.hypot(a.x - run.x, a.z - run.z) || 1, f = z.map.nearestFloor(a.x + ((run.x - a.x) / d) * 5, a.z + ((run.z - a.z) / d) * 5, 3); return f; };
-  const arrive = () => { I.home = I.rot = angleTo(I.x, I.z, a.x, a.z); say('d.isarn.father'); Audio.sting('lantern'); a.endDark?.(); };
+  // (the hero gone to another zone meanwhile: the dark ends unheard, and the gold light waits for her return)
+  const arrive = () => { I.home = I.rot = angleTo(I.x, I.z, a.x, a.z); if (G.zone !== z) { a.endDark?.(); return; } say('d.isarn.father'); Audio.sting('lantern'); a.endDark?.(); };
   walkTo(I, run.x, run.z, 5.5, () => { const f = to(); walkTo(I, f.x, f.z, 5, arrive); });
 });
 on('ivarFalter', (a, n) => { if (!a.echo) say('d.isarn.call' + (n + 1)); });
@@ -624,15 +658,18 @@ function ivarFalls(z, at) {
   z.ivarFalling = true;
   const S = z.L.spots, A = z.act4, ll = S.lastLamp || z.L.boss;
   const g = spawnNpc('ivarGhost', at.x, at.z, at.rot || 0); g.still = true; g.home = at.rot || 0; z.actors.push(g); g.avatar?.play('kneel', 1);
+  const near = z.map.nearestFloor(at.x + Math.sin((at.rot || 0)) * 1.7, at.z + Math.cos((at.rot || 0)) * 1.7, 2);
   let I = z.ivarIsarn;
   if (!I || I.removed) {
-    // after a reload Isarn is still at the hook (or the camp): he comes from there
+    // after a reload Isarn is still at the hook (or the camp): he comes from there, brought in off camera a few steps away
+    // (he is by his father as they speak)
     const n = ['isarnHook', 'isarn'].map((k) => A?.npcs[k]).find((x) => x && !x.a.removed && z.actors.includes(x.a));
     if (n) { n.busy = true; act4Presence(z); I = n.a; } else { const run = S.isarnRun || ll, f = z.map.nearestFloor(run.x, run.z, 3); I = spawnNpc('wayfarer', f.x, f.z, 0); z.actors.push(I); }
+    const dI = Math.hypot(I.x - near.x, I.z - near.z);
+    if (dI > 8) { const f = z.map.nearestFloor(near.x + ((I.x - near.x) / dI) * 3, near.z + ((I.z - near.z) / dI) * 3, 2); I.x = f.x; I.z = f.z; }
     z.ivarIsarn = I;
   }
   isarnLantern(I, 'gold');
-  const near = z.map.nearestFloor(at.x + Math.sin((at.rot || 0)) * 1.7, at.z + Math.cos((at.rot || 0)) * 1.7, 2);
   walkTo(I, near.x, near.z, 2.4, () => { I.home = I.rot = angleTo(I.x, I.z, g.x, g.z); I.avatar?.play('kneel', 1); });
   let done = false;
   const laugh = () => {

@@ -2,10 +2,13 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { clamp, damp, noise2 } from '../core/util.js';
+import { lang } from '../i18n/i18n.js';
 
 export const R = {
   renderer: null, scene: null, camera: null,
   quality: 1,           // 0 low, 1 medium, 2 high
+  mobile: false,        // a phone or tablet: high quality is capped (shadow map, pixel ratio) and maps are halved (gltf.js)
+  lost: false, reload: false, // the GL context was lost: nothing is drawn any more, the page reloads (onContextLost)
   basePR: 1, prScale: 1,
   w: 1, h: 1,
   hemi: null, moon: null, heroLight: null,
@@ -18,8 +21,11 @@ export const R = {
 const POOL_SIZE = [3, 6, 8];
 const SHADOW = [0, 1024, 2048];
 
-export function initGfx(quality) {
+// o.mobile: a phone (boot.js); o.lost(hidden): called when the GL context is lost, before the page reloads (boot.js saves,
+// lowers the quality unless the page was hidden: a phone may drop a backgrounded tab's context; and stops the game)
+export function initGfx(quality, o = {}) {
   R.quality = quality;
+  R.mobile = !!o.mobile;
   const renderer = new THREE.WebGLRenderer({ antialias: quality >= 1, powerPreference: 'high-performance', stencil: false });
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -28,6 +34,8 @@ export function initGfx(quality) {
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.domElement.id = 'gl';
   document.getElementById('stage').prepend(renderer.domElement);
+  renderer.domElement.addEventListener('webglcontextlost', () => onContextLost(o));
+  renderer.domElement.addEventListener('webglcontextrestored', () => { if (R.reload) location.reload(); });
   R.renderer = renderer;
 
   const scene = new THREE.Scene();
@@ -50,7 +58,9 @@ export function initGfx(quality) {
   moon.position.set(-12, 30, 8);
   moon.castShadow = quality >= 1;
   if (moon.castShadow) {
-    moon.shadow.mapSize.set(SHADOW[quality], SHADOW[quality]);
+    // (a phone's high quality keeps the medium map: 8 MB of GPU memory instead of 32)
+    const sm = R.mobile ? Math.min(SHADOW[quality], 1024) : SHADOW[quality];
+    moon.shadow.mapSize.set(sm, sm);
     const s = moon.shadow.camera; s.left = -20; s.right = 20; s.top = 20; s.bottom = -20; s.near = 1; s.far = 70;
     moon.shadow.bias = -0.0008; moon.shadow.normalBias = 0.03;
   }
@@ -77,7 +87,7 @@ export function resize(force) {
   if (!force && w === R.w && h === R.h) return;
   R.w = w; R.h = h;
   const dpr = window.devicePixelRatio || 1;
-  R.basePR = Math.min(dpr, [1, 1.5, 2][R.quality]);
+  R.basePR = Math.min(dpr, [1, 1.5, R.mobile ? 1.5 : 2][R.quality]);
   R.renderer.setPixelRatio(R.basePR * R.prScale);
   R.renderer.setSize(w, h, false);
   R.renderer.domElement.style.width = w + 'px';
@@ -213,7 +223,30 @@ export function frame(dt) {
   updateLights(dt);
 }
 
-export function render() { R.renderer.render(R.scene, R.camera); }
+export function render() { if (!R.lost) R.renderer.render(R.scene, R.camera); }
+
+// A lost GL context (a phone out of memory, a GPU reset). The decoded images were let go once uploaded (gltf.js), so it
+// cannot be drawn again as it was: the game is saved (o.lost, which also lowers the quality one step) and the page reloads,
+// with a word on the screen. If it is lost again within a minute and a half at the lowest quality, it waits for a tap.
+function onContextLost(o) {
+  if (R.lost) return;
+  R.lost = true;
+  let again = false;
+  try { again = Date.now() - (+sessionStorage.getItem('skotos.glLost') || 0) < 90000; sessionStorage.setItem('skotos.glLost', String(Date.now())); } catch (e) { /* no storage: as if the first time */ }
+  const low = R.quality === 0, lower = !low && !document.hidden;
+  try { o.lost?.(document.hidden); } catch (e) { /* the reload matters more */ }
+  R.reload = !(again && low);
+  const el = document.createElement('div');
+  el.id = 'gl-lost';
+  el.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;background:rgba(5,7,10,0.92);color:#e8dcc8;font:16px/1.5 serif';
+  const en = lang() === 'en';
+  el.textContent = !R.reload ? (en ? 'The graphics ran out of memory again. Saved. Tap to reload.' : 'Η μνήμη γραφικών εξαντλήθηκε ξανά. Αποθηκεύτηκε. Πάτησε για επαναφόρτωση.')
+    : lower ? (en ? 'The graphics ran out of memory. Saved; reloading at a lower quality...' : 'Η μνήμη γραφικών εξαντλήθηκε. Αποθηκεύτηκε· επαναφόρτωση σε χαμηλότερη ποιότητα...')
+    : (en ? 'The graphics were lost. Saved; reloading...' : 'Τα γραφικά χάθηκαν. Αποθηκεύτηκε· επαναφόρτωση...');
+  el.onclick = () => location.reload();
+  document.body.appendChild(el);
+  if (R.reload) setTimeout(() => location.reload(), 1800);
+}
 
 // ---------- projections ----------
 const v3 = new THREE.Vector3();

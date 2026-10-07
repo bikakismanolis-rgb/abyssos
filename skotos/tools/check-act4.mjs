@@ -5,10 +5,11 @@
 // plug in place every chamber, bellows, fire-pit, door, station, flue mouth and the camp can be reached, and the Anvil of
 // the Crown cannot; with the plug melted the Anvil, the cages, the ghosts' spots and Isarn's place can; each gallery is
 // straight, five cells wide over its whole flue. And that nothing stands where it should not (a prop over a hole, an NPC
-// or a lamp in rock). Exits 1 if a hard check fails. GEN=<path> checks another copy of gen4.js.
+// or a lamp in rock, a chest in a sink or a pit, a prop laid at 0 over ground that sinks, battle debris on a shrine, chest
+// or waylamp). Exits 1 if a hard check fails. GEN=<path> checks another copy of gen4.js.
 import { pathToFileURL } from 'node:url';
 const GEN = process.env.GEN ? pathToFileURL(process.env.GEN).href : '../src/world/gen4.js';
-const { genAshfield, genForge, reach, nearReach } = await import(GEN);
+const { genAshfield, genForge, reach, nearReach, groundY } = await import(GEN);
 const N = +(process.argv[2] || 2000), S0 = +(process.argv[3] || 5);
 const fails = {}, soft = {}, HARD = new Set();
 const add = (o, k, s) => { (o[k] ||= new Set()).add(s); };
@@ -19,6 +20,19 @@ const floor = (L, x, z) => !!L.cells[cellOf(L, x, z)];
 // props that stand on the ground: over a hole they hang in the air
 const GROUNDED = new Set(['ashTuft', 'ashStone', 'debris', 'bones', 'tickNest', 'slag', 'fallenBanner', 'forgeClutter', 'bedroll', 'campfire', 'stairStep']);
 const stats = { ashfield: { lanterns: 0, poles: 0, packs: 0, props: 0 }, forge: { packs: 0, props: 0, flueLen: [] } };
+// a chest stands on floor, out of every hole, on level ground (build.js lays it at 0; its loot is thrown round it)
+function chests(L, z, seed) {
+  for (const c of L.spots.chests) {
+    if (!floor(L, c.x, c.z) || L.low[cellOf(L, c.x, c.z)]) bad(z + '.chest.inHole', seed);
+    let lo = 0, hi = 0;
+    for (let k = 0; k < 9; k++) { const y = groundY(L, c.x + (k ? Math.sin(k * 0.785) * 0.6 : 0), c.z + (k ? Math.cos(k * 0.785) * 0.6 : 0)); lo = Math.min(lo, y); hi = Math.max(hi, y); }
+    if (lo < -0.12 || hi > 0.12) odd(z + '.chest.notLevel', seed);
+  }
+}
+// grounded props laid at 0 (no y) over ground that sinks beside a hole hang in the air
+function sunk(L, z, seed) {
+  for (const p of L.props) if (GROUNDED.has(p.t) && p.y == null && groundY(L, p.x, p.z) < -0.15) odd(z + '.propOverSunkGround.' + p.t, seed);
+}
 
 function ashfield(seed) {
   const L = genAshfield(seed);
@@ -51,6 +65,8 @@ function ashfield(seed) {
   for (const p of L.props) if (GROUNDED.has(p.t) && L.low[cellOf(L, p.x, p.z)]) odd('ash.overSink.' + p.t, seed);
   for (const p of [...sp.lamps, ...sp.waylamps]) if (L.low[cellOf(L, p.x, p.z)]) bad('ash.lampInSink', seed);
   if (L.hgt.length !== (L.w + 1) * (L.h + 1)) bad('ash.hgt', seed);
+  chests(L, 'ash', seed); sunk(L, 'ash', seed);
+  for (const q of [...sp.shrines, ...sp.chests, ...sp.waylamps]) if (L.props.some((p) => p.t === 'debris' && Math.hypot(p.x - q.x, p.z - q.z) < 1.2)) odd('ash.debrisOnSpot', seed);
   const s = stats.ashfield; s.lanterns += L.graveLanterns.length; s.poles += L.gravePoles.length; s.packs += L.packs.length; s.props += L.props.length;
 }
 
@@ -99,6 +115,7 @@ function forge(seed) {
   for (const p of L.packs) if (far0(p, 3.5)) bad('forge.pack.' + p.tag + '.unreachable', seed);
   for (const t of ['smiths', 'stokers', 'mouldHall', 'ticks']) if (!L.packs.some((p) => p.tag === t)) bad('forge.noPack.' + t, seed);
   for (const p of L.props) if (GROUNDED.has(p.t) && L.low[cellOf(L, p.x, p.z)]) odd('forge.overHole.' + p.t, seed);
+  chests(L, 'forge', seed); sunk(L, 'forge', seed);
   const s = stats.forge; s.packs += L.packs.length; s.props += L.props.length;
 }
 

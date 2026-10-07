@@ -76,21 +76,21 @@ const S = {
     await pg.evaluate(() => { const G = window.__G; const b = G.zone.L.boss; G.player.x = b.x; G.player.z = b.z + 9; G.player.hp = G.player.hpMax = 99999; for (const p of G.zone.packs) p.spawned = true; });
     await pg.waitForTimeout(2500); await shot();
     for (let k = 0; k < 40; k++) { await pg.evaluate(() => { const G = window.__G; G.player.res = 100; G.player.hp = G.player.hpMax; window.__D.IN.events.push({ t: 'skill', i: [0, 1, 0, 2, 0, 4][Math.floor(Math.random() * 6)], aim: null }); }); await pg.waitForTimeout(400); if (k % 10 === 9) await shot(); }
-    // software rendering runs few game frames per second: keep swinging until the boss falls (game time, not wall time)
-    for (let k = 0; k < 6; k++) {
-      const dead = await pg.evaluate(async () => {
-        const G = window.__G, b = G.zone.boss, p = G.player;
-        if (!b || b.dead) return true;
-        b.hp = 1; p.x = b.x; p.z = b.z + b.radius + 1;
-        window.__D.IN.events.push({ t: 'skill', i: 0, aim: { x: b.x, z: b.z } });
-        let seen = false;
-        for (let i = 0; i < 120; i++) { await new Promise((ok) => setTimeout(ok, 100)); if (p.act) seen = true; if (b.dead || (seen && !p.act)) break; }
-        return b.dead;
-      });
-      if (dead) break;
-    }
-    await pg.waitForTimeout(4000); await shot();
-    return pg.evaluate(() => { const G = window.__G, pa = G.player.act; return { act: pa && { name: pa.name, t: +pa.t.toFixed(2), dur: +pa.dur.toFixed(2) }, d: G.zone.boss && +Math.hypot(G.zone.boss.x - G.player.x, G.zone.boss.z - G.player.z).toFixed(2), boss: G.zone.boss?.dead, hp: G.zone.boss && Math.round(G.zone.boss.hp), flag: G.hero.flags.weaver, quest: G.hero.quest, pickups: G.pickups.map(p => p.kind + (p.item ? ':' + p.item.rar : '')) }; });
+    // software rendering under load runs few game frames per second: keep swinging until the boss falls, measured in game
+    // time (a swing is dropped mid-leap, or misses while she blinks: the hero swings again as soon as she is free to)
+    const swung = await pg.evaluate(async () => {
+      const G = window.__G, b = G.zone.boss, p = G.player, t0 = G.hero.stats.time, w0 = performance.now();
+      while (b && !b.dead && G.hero.stats.time - t0 < 20 && performance.now() - w0 < 300000) {
+        if (!p.act && !window.__D.IN.events.some((e) => e.t === 'skill')) { b.hp = 1; p.x = b.x; p.z = b.z + b.radius + 1; window.__D.IN.events.push({ t: 'skill', i: 0, aim: { x: b.x, z: b.z } }); }
+        await new Promise((ok) => setTimeout(ok, 250));
+      }
+      return !b || b.dead ? true : +(G.hero.stats.time - t0).toFixed(1);
+    });
+    // the hero's own swings never landed: the story still gets its kill, and the report says so (forced: the game seconds tried)
+    if (swung !== true) await A4.hit(pg, null);
+    await pg.waitForFunction(() => window.__G.hero.quest >= 2, null, { timeout: 60000 }).catch(() => {});
+    await pg.waitForTimeout(1000); await shot();
+    return pg.evaluate((forced) => { const G = window.__G, pa = G.player.act; return { act: pa && { name: pa.name, t: +pa.t.toFixed(2), dur: +pa.dur.toFixed(2) }, d: G.zone.boss && +Math.hypot(G.zone.boss.x - G.player.x, G.zone.boss.z - G.player.z).toFixed(2), boss: G.zone.boss?.dead, hp: G.zone.boss && Math.round(G.zone.boss.hp), flag: G.hero.flags.weaver, quest: G.hero.quest, pickups: G.pickups.map(p => p.kind + (p.item ? ':' + p.item.rar : '')), ...(forced != null ? { forced } : {}) }; }, swung === true ? null : swung);
   } },
   lord: { q: 'auto=crypt&sim=6&q=1&lvl=8&cls=mage', run: async (pg, shot) => {
     await pg.evaluate(() => { const G = window.__G; G.hero.flags.weaver = true; G.hero.quest = 3; const b = G.zone.L.boss; G.player.x = b.x; G.player.z = b.z + 9; G.player.hp = G.player.hpMax = 99999; for (const p of G.zone.packs) p.spawned = true; });

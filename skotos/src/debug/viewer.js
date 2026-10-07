@@ -5,6 +5,7 @@ import { tex } from '../gfx/textures.js';
 import * as M from '../gfx/models.js';
 import { Avatar } from '../gfx/anim.js';
 import { loadPeople, loadFolk, personModel } from '../gfx/people.js';
+import { envChest, hasEnv } from '../gfx/env.js';
 
 // people: ?viewer&only=p:warden,p:ranger (realistic characters), grip tests with &grip=X,1.57,Y,0
 export async function startViewer(q) {
@@ -128,7 +129,8 @@ export async function startViewer(q) {
 // Act III: &at=glade|mere|boss|gate|lantern|deer|island|heart|thorns|chamber&n=..; &autumn=1 the First Autumn; &wind=1;
 // Act IV: &at=camp|lamp|altar|banners|drake|flats|graves|hook|gate|boss (the Field), camp|hall|rivers|flue|bellows|station|
 // moulds|plug|anvil|boss (the Forge), &n=..; &lit=1 (or l1,l3,w1) lights the waylamps, &night=stars|dawn, &heat=0..3|cold,
-// &open=1 the gate open and the plug melted, &state=taken|refused for the altars;
+// &open=1 the gate open and the plug melted, &state=taken|refused for the altars, &white=0..1 the Forge Mouth's whitening
+// (with &heat=cold: after the Unmaking); the chests stand where the story puts them; &at=chest&n=.. looks at one;
 // &live keeps rendering (otherwise it stops once FX have warmed up, which keeps software-rendered screenshots quick)
 export async function startWorld(q) {
   const { genForest, genCrypt, genTown } = await import('../world/gen.js');
@@ -245,7 +247,8 @@ function viewAct4(q, L, act4Prop, night) {
   if (L.plug && !open) R.scene.add(act4Prop('slagPlug', L.plug));
   if (sp.anvil) put(act4Prop('anvil'), sp.anvil.x, sp.anvil.z);
   for (const c of sp.cages || []) put(act4Prop('shardAnvil'), c.x, c.z, Math.atan2(sp.anvil.x - c.x, sp.anvil.z - c.z));
-  if (sp.mouth) put(act4Prop('forgeMouth', sp.mouth), sp.mouth.x, sp.mouth.z);
+  if (sp.mouth) { const m = put(act4Prop('forgeMouth', sp.mouth), sp.mouth.x, sp.mouth.z); m.userData.setWhite(+(q.get('white') || 0)); if (q.get('heat') === 'cold') m.children.find((c) => c.isSprite).visible = false; }
+  for (const c of sp.chests || []) put(hasEnv('chest') ? envChest(c.rare ? 1.15 : 1) : new THREE.Group(), c.x, c.z, 0.2);
   for (const k in sp.npcs || {}) {
     const n = sp.npcs[k];
     try { const a = new Avatar(personModel(k), { animSet: 'npc' }); a.group.position.set(n.x, 0, n.z); a.group.rotation.y = n.r || 0; a.update(0.5, { speed: 0 }); R.scene.add(a.group); } catch (e) { console.warn('npc', k, e.message); }
@@ -258,7 +261,7 @@ function act4At(L, at, n) {
     camp: off(sp.camp, 2), lamp: off(sp.lamps?.[n], 2), waylamp: off(sp.waylamps?.[n], 2), altar: off(sp.altars?.[n], 3), banners: off(sp.banners, 3), drake: off(sp.drake, 4),
     flats: sp.flats, graves: off(sp.graves, 6), hook: off(sp.hook, 2.5, 1.5), gate: L.gate && { x: L.gate.x, z: L.gate.z + 9 }, boss: L.boss, camp2: off(sp.camp2, 2), tower: off(sp.tower, 4),
     hall: L.statues?.[n * 2] && { x: L.statues[n * 2].x + 4.6, z: L.statues[n * 2].z }, rivers: L.bridges?.[n], flue: L.flues?.[n] && { x: L.flues[n].x + Math.sin(L.flues[n].dir) * 10, z: L.flues[n].z + Math.cos(L.flues[n].dir) * 10 },
-    bellows: off(sp.bellows?.[n], 2), station: off(sp.stations?.[n], 1.5), moulds: sp.hall, plug: L.plug && { x: L.plug.x - Math.sin(L.plug.r) * 3, z: L.plug.z - Math.cos(L.plug.r) * 3 + 2 }, anvil: off(sp.anvil, 6)
+    bellows: off(sp.bellows?.[n], 2), station: off(sp.stations?.[n], 1.5), moulds: sp.hall, chest: off(sp.chests?.[n], 1.6), workshop: sp.workshop, mouth: off(sp.mouth, -6), plug: L.plug && { x: L.plug.x - Math.sin(L.plug.r) * 3, z: L.plug.z - Math.cos(L.plug.r) * 3 + 2 }, anvil: off(sp.anvil, 6)
   }[at];
   return pick || L.start;
 }

@@ -5,6 +5,7 @@ import { gltfLoader } from './gltf.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { clamp, damp, smooth } from '../core/util.js';
 import { ANIMS } from './anims.data.js';
+import { R } from './gfx.js';
 // lazy, so inlined builds keep these megabytes out of the scripts the game needs before its loading screen
 const peopleUrl = () => import('../assets/people.glb?url').then((m) => m.default);
 const movesUrl = () => import('../assets/moves.bin?url').then((m) => m.default);
@@ -46,12 +47,13 @@ export function loadPeople() {
   })();
   return loading;
 }
-async function addScenes(glb) {
+// crowd: a zone set's people (the extra sets: mostly the dead and the warriors who come in packs)
+async function addScenes(glb, crowd = false) {
   const gltf = await gltfLoader().parseAsync(glb, '');
   for (const s of gltf.scenes) {
     // GLTFLoader makes node names unique across the file (pelvis, pelvis_1, ...): restore the originals
     s.traverse((o) => { if (o.userData?.name) o.name = o.userData.name; });
-    prepareTemplate(s);
+    prepareTemplate(s, crowd);
     PEOPLE.scenes[s.name] = s;
   }
 }
@@ -59,7 +61,7 @@ const sets = {};
 export function loadFolk(set = 'folk') {
   const load = SET_URLS[set];
   if (!load) return Promise.resolve();
-  sets[set] ||= loadPeople().then(async () => addScenes(await bytes(await load()))).catch((e) => { console.warn(set + ' failed to load', e); delete sets[set]; });
+  sets[set] ||= loadPeople().then(async () => addScenes(await bytes(await load()), true)).catch((e) => { console.warn(set + ' failed to load', e); delete sets[set]; });
   return sets[set];
 }
 export const hasPerson = (name) => !!PEOPLE.scenes[name];
@@ -107,7 +109,7 @@ export function personUniforms(o = {}) {
 // ---------- templates ----------
 const FINGER = /^(index|middle|ring|pinky|thumb)_\d\d_[lr]$/;
 const _q = new THREE.Quaternion(), _v = new THREE.Vector3();
-function prepareTemplate(scene) {
+function prepareTemplate(scene, crowd) {
   scene.updateMatrixWorld(true);
   const bones = {};
   scene.traverse((o) => { if (o.isBone) bones[o.name] = o; });
@@ -130,14 +132,93 @@ function prepareTemplate(scene) {
   }
   const box = new THREE.Box3().setFromObject(scene);
   scene.userData.tpl = { grip, height: box.max.y - box.min.y, hip: bones.pelvis.getWorldPosition(_v).y, weaponScale: scene.userData.weaponScale || 1 };
+  mergeParts(scene);
   scene.traverse((o) => {
     if (!o.isMesh) return;
     const part = o.material.userData?.part || 'cloth';
     o.material.envMapIntensity = part === 'skin' ? 0.35 : part === 'eyes' ? 0.8 : 0.45;
-    o.castShadow = part === 'cloth';
+    // a zone's crowds cast real shadows on high quality only, as the creatures do (blob shadows always)
+    o.castShadow = part === 'cloth' && (!crowd || R.quality >= 2);
     o.receiveShadow = false;
     o.frustumCulled = false;
   });
+}
+
+// One draw per material: a character's parts that share a material and the same attributes (the nine pieces of a ranger's
+// cloth, a hair's two) become one skinned mesh, so a person is about 7 draws instead of 14 and its moon shadow 2 instead
+// of 9. gltfpack quantizes each part in its own frame and folds that into the part's inverse bind matrices; the parts are
+// taken into one frame over one joint list and quantized again over their union. A part whose bind matrices differ from
+// the others' by more than such a frame is left as it is (its whole group is).
+const _qa = new THREE.Matrix4(), _qb = new THREE.Matrix4(), _n3 = new THREE.Matrix3(), _p3 = new THREE.Vector3();
+function mergeParts(scene) {
+  const groups = new Map();
+  scene.traverse((o) => {
+    if (!o.isSkinnedMesh || Array.isArray(o.material) || o.morphTargetInfluences || !o.geometry.index) return;
+    const k = o.material.uuid + '|' + Object.keys(o.geometry.attributes).sort().join();
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(o);
+  });
+  for (const list of groups.values()) if (list.length > 1) mergeGroup(list);
+}
+const near = (a, b) => a.elements.every((v, i) => Math.abs(v - b.elements[i]) <= 1e-4 * (1 + Math.abs(v)));
+function mergeGroup(list) {
+  // the group's joints and their inverse bind matrices; each part's frame q: inv[j] * q = part.boneInverses[j] * part.bindMatrix
+  const bones = [], inv = [], at = new Map(), frames = [];
+  for (const m of list) {
+    const sk = m.skeleton, own = sk.boneInverses.map((b) => b.clone().multiply(m.bindMatrix));
+    const j0 = sk.bones.findIndex((b) => at.has(b));
+    const q = j0 >= 0 ? _qa.copy(inv[at.get(sk.bones[j0])]).invert().multiply(own[j0]).clone() : new THREE.Matrix4();
+    const qi = q.clone().invert();
+    for (let j = 0; j < sk.bones.length; j++) {
+      const b = sk.bones[j];
+      if (at.has(b)) { if (!near(_qb.copy(inv[at.get(b)]).multiply(q), own[j])) return; }
+      else { at.set(b, bones.length); bones.push(b); inv.push(own[j].clone().multiply(qi)); }
+    }
+    frames.push(q);
+  }
+  // positions in the group's frame, and the box round them all
+  const box = new THREE.Box3(), pos = list.map((m, k) => {
+    const P = m.geometry.attributes.position, out = new Float32Array(P.count * 3);
+    for (let i = 0; i < P.count; i++) { _p3.set(P.getComponent(i, 0), P.getComponent(i, 1), P.getComponent(i, 2)).applyMatrix4(frames[k]); _p3.toArray(out, i * 3); box.expandByPoint(_p3); }
+    return out;
+  });
+  const g0 = list[0].geometry, A0 = g0.attributes, total = list.reduce((n, m) => n + m.geometry.attributes.position.count, 0);
+  // quantized again (int16 over the union) when every part was; otherwise plain floats
+  const q16 = list.every((m) => m.geometry.attributes.position.normalized && m.geometry.attributes.position.array instanceof Int16Array);
+  const c = box.getCenter(new THREE.Vector3()), e = Math.max(1e-6, ...box.getSize(new THREE.Vector3()).toArray()) / 2 * 1.0001;
+  const geo = new THREE.BufferGeometry();
+  for (const name of Object.keys(A0)) {
+    const a0 = A0[name], same = list.every((m) => { const a = m.geometry.attributes[name]; return a.array.constructor === a0.array.constructor && a.normalized === a0.normalized && a.itemSize === a0.itemSize; });
+    let Arr = same ? a0.array.constructor : Float32Array, norm = same && a0.normalized;
+    if (name === 'position') { Arr = q16 ? Int16Array : Float32Array; norm = q16; }
+    if (name === 'skinIndex') { Arr = bones.length > 255 ? Uint16Array : Uint8Array; norm = false; }
+    geo.setAttribute(name, new THREE.BufferAttribute(new Arr(total * a0.itemSize), a0.itemSize, norm));
+  }
+  const index = [];
+  let base = 0;
+  list.forEach((m, k) => {
+    const A = m.geometry.attributes, n = A.position.count, map = m.skeleton.bones.map((b) => at.get(b));
+    _n3.setFromMatrix4(frames[k]); // (as the skinning shader turns normals: by the matrix itself)
+    for (const name of Object.keys(A0)) {
+      const src = A[name], dst = geo.attributes[name], s = src.itemSize;
+      for (let i = 0; i < n; i++) {
+        if (name === 'position') { for (let t = 0; t < 3; t++) { const v = pos[k][i * 3 + t]; dst.setComponent(base + i, t, q16 ? clamp((v - c.getComponent(t)) / e, -1, 1) : v); } continue; }
+        if (name === 'normal') { _p3.set(src.getComponent(i, 0), src.getComponent(i, 1), src.getComponent(i, 2)).applyMatrix3(_n3).normalize(); for (let t = 0; t < 3; t++) dst.setComponent(base + i, t, _p3.getComponent(t)); continue; }
+        for (let t = 0; t < s; t++) dst.setComponent(base + i, t, name === 'skinIndex' ? map[src.getComponent(i, t)] ?? 0 : src.getComponent(i, t));
+      }
+    }
+    const I = m.geometry.index;
+    for (let i = 0; i < I.count; i++) index.push(I.getX(i) + base);
+    base += n;
+  });
+  geo.setIndex(index);
+  // the frame the int16 positions are read in goes into the inverse bind matrices
+  const Qc = new THREE.Matrix4().makeScale(e, e, e).setPosition(c);
+  const mesh = new THREE.SkinnedMesh(geo, list[0].material);
+  mesh.name = list[0].name; mesh.userData = { ...list[0].userData };
+  list[0].parent.add(mesh);
+  mesh.bind(new THREE.Skeleton(bones, inv.map((m) => (q16 ? m.clone().multiply(Qc) : m))), new THREE.Matrix4());
+  for (const m of list) m.parent.remove(m);
 }
 
 // Skinned meshes cull against a generous sphere around the standing character (in each mesh's own space),
@@ -178,7 +259,8 @@ export function personModel(name, o = {}) {
   return {
     mesh: group, bones, mat, mats, kind: 'person', grip: t.grip, hip: t.hip, height: t.height, weaponScale: t.weaponScale,
     rest: { hips: { y: t.hip } }, dims: { s: t.height / 1.8 },
-    dispose() { mat.dispose(); }
+    // (each skinned part's skeleton holds its bone matrices in a GL texture of its own)
+    dispose() { mat.dispose(); group.traverse((o) => o.skeleton?.dispose()); }
   };
 }
 

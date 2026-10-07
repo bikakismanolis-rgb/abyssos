@@ -1,7 +1,7 @@
 // Photoreal environment set (Poly Haven, CC0; packed by tools/pack-env.mjs):
 // tiling layers for ground and stone (src/assets/env/*.webp) and props (src/assets/env.glb).
 import * as THREE from 'three';
-import { gltfLoader } from './gltf.js';
+import { gltfLoader, shrink, release } from './gltf.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 // ENV.layers[id] = { d: diffuse texture (sRGB), n: OpenGL normal map }; ENV.props[name] = [{ geo, mat }] (one part per material)
 export const ENV = { layers: {}, props: {}, pivots: {}, sizes: {}, extras: {}, packs: {}, ready: false, quality: 1 };
@@ -37,10 +37,11 @@ async function bytes(url) {
   return (await fetch(url)).arrayBuffer();
 }
 // Decoded straight from bytes (no image URL is ever loaded). Rows stay in file order (flipY off): row 0 is v = 0.
+// (Half size on low and medium quality and on phones, and the decoded copy let go once uploaded: gltf.js.)
 async function texture(url, srgb, quality) {
   const blob = new Blob([await bytes(url)], { type: 'image/webp' });
   let img;
-  try { img = await createImageBitmap(blob); } catch (e) {
+  try { img = await shrink(await createImageBitmap(blob)); } catch (e) {
     img = await new Promise((ok, fail) => { const im = new Image(); im.onload = () => ok(im); im.onerror = fail; im.src = URL.createObjectURL(blob); });
   }
   const t = new THREE.Texture(img);
@@ -49,6 +50,7 @@ async function texture(url, srgb, quality) {
   t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
   t.anisotropy = [1, 2, 4][quality] ?? 2;
   t.needsUpdate = true;
+  t.onUpdate = release;
   return t;
 }
 

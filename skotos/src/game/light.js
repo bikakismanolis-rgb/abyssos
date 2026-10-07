@@ -142,10 +142,10 @@ function cradleMesh() {
   return g;
 }
 function attachCradle(av) {
-  if (S.cradle) S.cradle.parent?.remove(S.cradle);
-  S.cradle = cradleMesh();
+  // one Cradle for the whole game, moved to each new avatar (a new one per avatar leaked its geometries and materials)
+  if (S.cradle) S.cradle.parent?.remove(S.cradle); else S.cradle = cradleMesh();
   // on the left hip, clear of the sword arm
-  if (!attachUpright(av, 'hips', S.cradle, 0.19, -0.04, -0.02)) { S.cradle.position.set(0.22, 0.95, 0); av.group.add(S.cradle); }
+  if (!attachUpright(av, 'hips', S.cradle, 0.19, -0.04, -0.02)) { S.cradle.quaternion.identity(); S.cradle.scale.setScalar(1); S.cradle.position.set(0.22, 0.95, 0); av.group.add(S.cradle); }
   S.cradleAv = av;
 }
 // where the fire goes when the Cradle drinks
