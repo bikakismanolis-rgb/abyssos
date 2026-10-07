@@ -46,7 +46,7 @@ export async function boot(q) {
   const mobile = matchMedia('(pointer: coarse)').matches || /Android|iPhone|iPad/i.test(navigator.userAgent);
   if (G.settings.quality < 0) G.settings.quality = mobile ? 1 : 2;
   if (q.has('q')) G.settings.quality = +q.get('q');
-  initGfx(G.settings.quality);
+  initGfx(G.settings.quality, { mobile, lost: (hidden) => { if (!hidden) G.settings.quality = Math.max(0, G.settings.quality - 1); writeSave(); G.mode = 'lost'; } });
   initFX(G.settings.quality);
   initInput(); G.input = IN;
   initOverlay(); buildHud(); initPanels();

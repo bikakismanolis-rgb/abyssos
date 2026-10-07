@@ -98,7 +98,7 @@ export function creatureModel(model, o = {}) {
     // weapons are made for a human hand: a goblin's crossbow is smaller, a troll's club bigger
     weaponScale: clamp(T.height / 1.8, 0.62, 1.35),
     rest: { hips: { y: 1 } }, dims: { s: (T.height * base) / 1.8 },
-    dispose() { mat.dispose(); }
+    dispose() { mat.dispose(); root.traverse((o) => o.skeleton?.dispose()); } // (and the skeletons' bone-matrix textures)
   };
 }
 

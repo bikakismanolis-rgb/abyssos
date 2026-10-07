@@ -41,6 +41,21 @@ function circleCells(L, cx, cz, r) {
   return out;
 }
 const mark = (m, L, cx, cz, r) => { for (const [x, z] of circleCells(L, cx, cz, r)) m[z * L.w + x] = 1; };
+// a cell with a hole among its 8 neighbours: some corner of it sinks with the hole (terrain), so it is no level floor
+const nearLow = (L, i) => { const w = L.w; return [-1, 1, -w, w, -w - 1, -w + 1, w - 1, w + 1].some((o) => L.low[i + o]); };
+// a chest's spot: the nearest free floor cell to (x0, z0) where the ground (L.hgt) is level under it and round it (0.8 m;
+// else 0.5, else 0.3): not on the slope down to a hole or up to a wall; clear of `off` ({ x, z, r }); off the cells reserved in
+// res, and reserved there (res may be null: a room that is all reserved). Or null
+const level = (L, x, z, r) => [[0, 0], ...Array.from({ length: 8 }, (_, k) => [Math.sin(k * 0.785) * r, Math.cos(k * 0.785) * r])].every(([u, v]) => Math.abs(groundY(L, x + u, z + v)) < 0.06);
+function chestSpot(L, res, x0, z0, off) {
+  let best = null, bd = 1e9;
+  for (const r of [0.8, 0.5, 0.3]) if (!best) for (let dz = -4; dz <= 4; dz++) for (let dx = -4; dx <= 4; dx++) {
+    const cx = x0 + dx, cz = z0 + dz, d = Math.hypot(dx, dz);
+    if (d < bd && isFloor(L, cx, cz) && !res?.[cellAt(L, cx, cz)] && (!off || Math.hypot(cx - off.x, cz - off.z) > off.r) && level(L, cx, cz, r)) { bd = d; best = { x: cx, z: cz }; }
+  }
+  if (best && res) mark(res, L, best.x, best.z, 2);
+  return best;
+}
 const snap = (v) => Math.floor(v) + 0.5;
 // a trail walker steered toward (tx, tz), carving as it goes (never heading back south for long)
 function walkTo(L, st, tx, tz, rng, trail, o) {
@@ -340,15 +355,19 @@ function tryAshfield(seed, o, last) {
     for (let k = -2; k <= 2; k++) for (const sd of [-1, 1]) { const u = k * 1.15, x = dx + Math.sin(dr) * u + Math.cos(dr) * sd * 1.7, z = dz + Math.cos(dr) * u - Math.sin(dr) * sd * 1.7; blockCircle(L, x, z, 0.4); }
     mark(res, L, dx, dz, 6.5);
     L.packs.push({ x: dx - Math.cos(dr) * 4.5, z: dz + Math.sin(dr) * 4.5, n: rng.int(1, 2), tag: 'ashwing', elite: rng.chance(0.35) ? 'rare' : null });
-    sp.chests.push({ x: dx + Math.sin(dr) * 7.8, z: dz + Math.cos(dr) * 7.8, rare: true });
+    const dc = chestSpot(L, res, dx + Math.sin(dr) * 7.8, dz + Math.cos(dr) * 7.8);
+    if (dc) sp.chests.push({ ...dc, rare: true });
+    // the shrine and waylamp 1 before the debris, which keeps off them (and off every reserved spot)
+    const shrine = { x: FB.x - FB.hw * 0.55, z: FB.z + FB.hd * 0.5 };
+    sp.shrines.push(shrine); mark(res, L, shrine.x, shrine.z, 2);
+    lamp(cx - Math.sin(a0) * 2.2, cz - Math.cos(a0) * 2.2, 'w1', false, a0);
     // battle debris half buried everywhere in the Field
     for (let k = 0; k < 90; k++) {
       const x = FB.x + rng.range(-FB.hw + 2, FB.hw - 2), z = FB.z + rng.range(-FB.hd + 2, FB.hd - 2);
       if (!isFloor(L, x, z) || Math.hypot(x - dx, z - dz) < 4.5) continue;
-      L.props.push({ t: 'debris', m: rng.pick(['shield', 'sword', 'warhammer', 'mace', 'sword', 'shield', 'spear', 'helm']), x, z, r: rng.range(0, 6.28), s: rng.range(0.85, 1.15), tilt: rng.range(0.15, 1.2) });
+      const p = { t: 'debris', m: rng.pick(['shield', 'sword', 'warhammer', 'mace', 'sword', 'shield', 'spear', 'helm']), x, z, r: rng.range(0, 6.28), s: rng.range(0.85, 1.15), tilt: rng.range(0.15, 1.2) };
+      if (!res[cellAt(L, x, z)] && !nearLow(L, cellAt(L, x, z))) L.props.push(p);
     }
-    sp.shrines.push({ x: FB.x - FB.hw * 0.55, z: FB.z + FB.hd * 0.5 });
-    lamp(cx - Math.sin(a0) * 2.2, cz - Math.cos(a0) * 2.2, 'w1', false, a0);
   }
   // ---- the Ember Flats: tick nests between the sinks ----
   {
@@ -360,10 +379,11 @@ function tryAshfield(seed, o, last) {
       if (open < 10) continue;
       spots.push({ x, z });
       L.packs.push({ x, z, n: rng.int(4, 6), tag: 'ticks', elite: rng.chance(0.3) ? 'champion' : null });
-      L.props.push({ t: 'tickNest', x, z, r: rng.range(0, 6.28) });
+      L.props.push({ t: 'tickNest', x, z, r: rng.range(0, 6.28), y: Math.min(0, groundY(L, x, z)) });
     }
     sp.flats = { x: EF.x, z: EF.z, r: EF.r };
-    if (spots[0]) sp.chests.push({ x: spots[0].x + 1.6, z: spots[0].z - 1.2, rare: rng.chance(0.5) });
+    // the chest by the first nest, clear of it
+    if (spots[0]) { const rare = rng.chance(0.5), c = chestSpot(L, res, spots[0].x + 1.6, spots[0].z - 1.2, { ...spots[0], r: 2.2 }); if (c) sp.chests.push({ ...c, rare }); }
     if (spots[1]) lamp(spots[1].x + 1.6, spots[1].z + 1.6, 'w2', false, rng.range(0, 6.28));
   }
   // ---- the Lantern Graves: rows of iron poles, a dead lantern on every arm; Lampless walk the aisles ----
@@ -469,10 +489,12 @@ function tryAshfield(seed, o, last) {
     if (d === 0) {
       if (!L.cells[i]) continue;
       const edge = D[i - 1] === 1 || D[i + 1] === 1 || D[i - w] === 1 || D[i + w] === 1;
-      if (L.paint[i] < 0.3 && rng.chance(edge ? 0.16 : 0.07)) L.props.push({ t: 'ashTuft', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.7, 1.2) });
-      if (rng.chance(0.012)) L.props.push({ t: 'ashStone', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.3, 0.6) });
-      if (L.paint[i] < 0.2 && rng.chance(0.0035)) L.props.push({ t: 'debris', m: rng.pick(['shield', 'sword', 'mace', 'spear', 'helm']), x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.85, 1.1), tilt: rng.range(0.2, 1) });
-      if (L.paint[i] < 0.2 && rng.chance(edge ? 0.012 : 0.002)) L.props.push({ t: 'bones', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: 1 });
+      // (none beside a sink: a corner touching a hole sinks, and these stand at 0; the draws are made all the same)
+      const put = nearLow(L, i) ? () => {} : (p) => L.props.push(p);
+      if (L.paint[i] < 0.3 && rng.chance(edge ? 0.16 : 0.07)) put({ t: 'ashTuft', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.7, 1.2) });
+      if (rng.chance(0.012)) put({ t: 'ashStone', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.3, 0.6) });
+      if (L.paint[i] < 0.2 && rng.chance(0.0035)) put({ t: 'debris', m: rng.pick(['shield', 'sword', 'mace', 'spear', 'helm']), x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.85, 1.1), tilt: rng.range(0.2, 1) });
+      if (L.paint[i] < 0.2 && rng.chance(edge ? 0.012 : 0.002)) put({ t: 'bones', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: 1 });
       continue;
     }
     if (d === 255) continue;
@@ -783,12 +805,12 @@ function tryForge(seed, o, last) {
       const a = rng.range(0, 6.28), x = HM.x + Math.sin(a) * rng.range(HM.hw - 2.2, HM.hw - 1.2), z = HM.z + Math.cos(a) * rng.range(HM.hd - 2.2, HM.hd - 1.2);
       if (!isFloor(L, x, z) || res[cellAt(L, x, z)]) continue;
       const m = rng.pick(clut), sc = rng.range(0.9, 1.1);
-      // (one piece to a place: two anvils dropped into each other read as a glitch)
-      if (L.props.some((q) => q.t === 'forgeClutter' && Math.hypot(q.x - x, q.z - z) < 1.6)) continue;
+      // (one piece to a place: two anvils dropped into each other read as a glitch; none on the ground sunk by a pit)
+      if (L.props.some((q) => q.t === 'forgeClutter' && Math.hypot(q.x - x, q.z - z) < 1.6) || nearLow(L, cellAt(L, x, z))) continue;
       L.props.push({ t: 'forgeClutter', m, x, z, r: Math.atan2(HM.x - x, HM.z - z), s: sc });
       if (m !== 'tongs' && m !== 'crossPein') blockCircle(L, x, z, 0.5);
     }
-    sp.chests.push({ x: HM.x + s * (HM.hw - 2), z: HM.z - HM.hd + 2.4, rare: rng.chance(0.6) });
+    { const rare = rng.chance(0.6), c = chestSpot(L, null, HM.x + s * (HM.hw - 2), HM.z - HM.hd + 2.4); if (c) sp.chests.push({ ...c, rare }); } // (off the casting pits)
     sp.hall = { x: HM.x, z: HM.z, r: HM.hw };
     L.lights.push({ x: HM.x, y: 3, z: HM.z, color: 0xff7a30, intensity: 14, range: 14, flicker: 0.2, heat: true });
     for (let k = 0; k < 4; k++) L.chains.push({ x: HM.x + rng.range(-6, 6), z: HM.z + rng.range(-6, 6), y0: rng.range(2.5, 5), y1: 14 });
@@ -805,11 +827,11 @@ function tryForge(seed, o, last) {
     }
     for (const [m, a] of [['anvil', 0.4], ['quench', -0.5], ['toolRack', 1.5], ['barrel', -1.4], ['crossPein', 0.9]]) {
       const x = WS.x + Math.sin(toR + Math.PI + a * 1.6) * (WS.r - 1.3), z = WS.z + Math.cos(toR + Math.PI + a * 1.6) * (WS.r - 1.3);
-      if (!isFloor(L, x, z)) continue;
+      if (!isFloor(L, x, z) || nearLow(L, cellAt(L, x, z))) continue;
       L.props.push({ t: 'forgeClutter', m, x, z, r: Math.atan2(WS.x - x, WS.z - z), s: 1 });
       if (m !== 'crossPein') blockCircle(L, x, z, 0.5);
     }
-    sp.chests.push({ x: WS.x - Math.sin(toR) * 1.5, z: WS.z + 1.6, rare: rng.chance(0.4) });
+    sp.chests.push({ x: WS.x + Math.sin(toR) * 1.5, z: WS.z + 1.6, rare: rng.chance(0.4) }); // (the nave side: the moulds are at the back)
     L.packs.push({ x: WS.x + Math.sin(toR) * 1.5, z: WS.z, n: rng.int(3, 5), tag: 'smiths', elite: rng.chance(0.4) ? 'champion' : null });
     L.lights.push({ x: WS.x, y: 2.4, z: WS.z, color: 0xff6a20, intensity: 10, range: 10, flicker: 0.25, heat: true });
     sp.workshop = { x: WS.x, z: WS.z, r: WS.r };
@@ -834,7 +856,8 @@ function tryForge(seed, o, last) {
     if (d === 0) {
       if (!L.cells[i]) continue;
       const edge = D[i - 1] === 1 || D[i + 1] === 1 || D[i - w] === 1 || D[i + w] === 1;
-      if (edge && L.fk[i] !== 2 && rng.chance(0.05)) L.props.push({ t: 'slag', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.4, 0.8) });
+      const put = nearLow(L, i) ? () => {} : (p) => L.props.push(p); // (as in the Field: none where the floor sinks)
+      if (edge && L.fk[i] !== 2 && rng.chance(0.05)) put({ t: 'slag', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.4, 0.8) });
       // fallen rock at the foot of the walls (never up on them, near the camera)
       else if (edge && L.fk[i] !== 2 && rng.chance(0.022)) L.props.push({ t: 'forgeRock', x: x + 0.5, z: z + 0.5, r: toFloor(L, D, x, z), s: rng.range(0.4, 0.75), y: -0.1 });
       continue;

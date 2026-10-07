@@ -22,6 +22,7 @@ export function updatePlayer(dt) {
   if (!pl) return;
   const av = pl.avatar;
   if (pl.dead) { av.update(dt, { speed: 0 }); pl.trail?.push(VB, VT, false); return; }
+  const x0 = pl.x, z0 = pl.z, zone0 = G.zone;
 
   // timers
   pl.iframes = Math.max(0, (pl.iframes || 0) - dt);
@@ -92,9 +93,21 @@ export function updatePlayer(dt) {
   for (const f of foes(pl.x, pl.z, 1.5)) {
     if (f.prop || f.status.freeze > 0 && false) continue;
     const dx = pl.x - f.x, dz = pl.z - f.z, d = Math.hypot(dx, dz), min = pl.radius + f.radius * 0.85;
-    if (d < min && d > 0.001) { const push = (min - d) * (f.boss || f.def.big ? 1 : 0.6); pl.x += (dx / d) * push; pl.z += (dz / d) * push; }
+    if (d < min && d > 0.001) {
+      let push = (min - d) * (f.boss || f.def.big ? 1 : 0.6);
+      // a body never shoves her past a wall face (Karthax's would put her centre in the Anvil's rim)
+      push *= G.zone.map.castT(pl.x, pl.z, pl.x + (dx / d) * push, pl.z + (dz / d) * push);
+      pl.x += (dx / d) * push; pl.z += (dz / d) * push;
+    }
   }
-  G.zone.map.collide(pl, pl.radius);
+  const map = G.zone.map;
+  map.collide(pl, pl.radius);
+  // never left inside the rock, whatever put her there: back where she stood this frame, or out to the nearest floor
+  if (!map.walkable(pl.x, pl.z)) {
+    const f = G.zone === zone0 && map.walkable(x0, z0) ? { x: x0, z: z0 } : map.nearestFloor(pl.x, pl.z, 48);
+    if (map.walkable(f.x, f.z)) { pl.x = f.x; pl.z = f.z; } else { pl.x = G.zone.L.start.x; pl.z = G.zone.L.start.z; }
+    pl.kx = pl.kz = 0;
+  }
 
   // visuals
   av.group.position.set(pl.x, pl.y || 0, pl.z);

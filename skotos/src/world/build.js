@@ -2078,10 +2078,11 @@ Object.assign(CAT, {
   chainLink: () => ({ mat: 'iron', shadow: false, parts: [{ geo: G.torus(0.07, 0.018, 4, 8), color: ASHIRON, o: { sy: 1.5 } }] })
 });
 
-// a hanging (or fallen) dead lantern: the cinder scans in turn, the base set's lantern, or the code one
+// a hanging (or fallen) dead lantern: the cinder scans in turn, the base set's lantern, or the code one. Below high quality
+// always the code one: the Graves hang some 250 of them, and a 2,000-triangle scan each is most of a phone's frame
 function lantern4(I, x, y, z, r, k = 1, tilt = 0) {
   const name = cinder('cagedLight') && hash2(x * 3.1, z) < 0.35 ? 'cagedLight' : 'lantern';
-  if (cin4(I, name, x, z, r, 0.55 * k, 'h', y, 'dead', tilt, true)) return;
+  if (R.quality >= 2 && cin4(I, name, x, z, r, 0.55 * k, 'h', y, 'dead', tilt, true)) return;
   I.add('lanternF', x, z, r, k, y, k, k, tilt); I.add('lanternG', x, z, r, k, y, k, k, tilt);
 }
 // iron pole for the Graves: post, foot, one or two arms, the hooks
@@ -2095,9 +2096,10 @@ function gravePole(B, p) {
 }
 // a debris piece of the old battle, half buried
 const DEBRIS = { shield: ['shield', 'dbShield', 0.95, 1.35], sword: ['sword', 'dbSword', 1.0, 0.6], warhammer: ['warhammer', 'dbHammer', 1.0, 0.7], mace: ['mace', 'dbMace', 0.8, 0.8], spear: [null, 'dbSpear', 2.3, 0.45], helm: [null, 'dbHelm', 0.4, 1.4] };
+// (below high quality the code pieces: a Field holds about 90, and the scans cost 1,300-2,400 triangles each and a shadow)
 function debris4(I, p) {
   const [scan, code, len, lie] = DEBRIS[p.m] || DEBRIS.sword, s = p.s || 1, tilt = (p.tilt ?? 0.6) * (p.m === 'shield' ? 1.15 : 1);
-  if (scan && cinder(scan)) {
+  if (scan && cinder(scan) && R.quality >= 2) {
     const sz = size4(cinder(scan)), up = sz.y >= Math.max(sz.x, sz.z);
     if (cin4(I, scan, p.x, p.z, p.r || 0, len * s, 'l', -len * s * (up ? 0.22 : 0.05), 'ash', up ? Math.min(tilt, 1.1) : 0)) return;
   }
@@ -2337,9 +2339,9 @@ function addProp4(B, I, p, L, rng, out) {
     case 'fallenBanner': fallenBanner(B, p); return true;
     case 'drakeBones': drakeBones(I, B, x, z, r); return true;
     case 'tickNest': {
-      B.add('lam', [{ geo: jitter(G.dome(1.3, 0.45, 10), 0.14, 280), color: 0x2a2420, o: { sy: 0.5 }, jit: 0.25 }, ...[0, 1, 2, 3].map((i) => ({ geo: G.cyl(0.18, 0.12, 0.3, 6), color: 0x0a0806, o: { x: Math.sin(i * 1.6 + r) * 0.7, z: Math.cos(i * 1.6 + r) * 0.7, y: 0.45 - i * 0.05 } }))], x, z, r);
-      B.add('glow', [0, 1, 2].map((i) => ({ geo: G.ball(0.05, 4, 3), color: 0xff5a10, o: { x: Math.sin(i * 2.3) * 0.5, z: Math.cos(i * 2.3) * 0.5, y: 0.5 } })), x, z, r);
-      out.emitters.push({ x, y: 0.4, z, type: 'embers', s: 0.6 });
+      B.add('lam', [{ geo: jitter(G.dome(1.3, 0.45, 10), 0.14, 280), color: 0x2a2420, o: { sy: 0.5 }, jit: 0.25 }, ...[0, 1, 2, 3].map((i) => ({ geo: G.cyl(0.18, 0.12, 0.3, 6), color: 0x0a0806, o: { x: Math.sin(i * 1.6 + r) * 0.7, z: Math.cos(i * 1.6 + r) * 0.7, y: 0.45 - i * 0.05 } }))], x, z, r, 1, y);
+      B.add('glow', [0, 1, 2].map((i) => ({ geo: G.ball(0.05, 4, 3), color: 0xff5a10, o: { x: Math.sin(i * 2.3) * 0.5, z: Math.cos(i * 2.3) * 0.5, y: 0.5 } })), x, z, r, 1, y);
+      out.emitters.push({ x, y: 0.4 + y, z, type: 'embers', s: 0.6 });
       return true;
     }
     case 'rimStone': case 'rimPillar': addProp(B, I, { t: p.t === 'rimPillar' ? 'pillarBroken' : 'pillarBroken', x, z, r, s, h: p.t === 'rimPillar' ? 1.2 : 0.55, ash: true }, L, rng, out); return true;
@@ -2389,7 +2391,8 @@ function addProp4(B, I, p, L, rng, out) {
       B.add('glow', [{ geo: G.cyl(0.4, 0.45, 0.05, 8), color: 0x8a2006, o: { y: 0.05 } }], bx, bz);
       return true;
     }
-    case 'doorway': B.add('iron', [...[-1, 1].map((sx) => ({ geo: G.box(0.5, 4.2, 0.6), color: ASHIRON, o: { x: sx * 1.95, y: 2.1 } })), { geo: G.box(4.5, 0.6, 0.7), color: ASHIRON, o: { y: 4.3 } }], x, z, r + Math.PI / 2); return true;
+    // (r is the tunnel's direction: local x, the jambs' axis, then runs across it)
+    case 'doorway': B.add('iron', [...[-1, 1].map((sx) => ({ geo: G.box(0.5, 4.2, 0.6), color: ASHIRON, o: { x: sx * 1.95, y: 2.1 } })), { geo: G.box(4.5, 0.6, 0.7), color: ASHIRON, o: { y: 4.3 } }], x, z, r); return true;
     case 'stairStep': B.add(M.ashBlocks ? 'ashBlocks' : 'lam', [{ geo: G.box(4.6, 0.12, 0.7), color: DSTONE, o: { y: 0.05 }, jit: 0.1 }], x, z, r); return true;
     case 'mould': {
       // a casting pit in the shape of a crown: a stone rim with points, the metal still molten in it
@@ -2540,11 +2543,12 @@ const PROP4 = {
   // the plug of slag on the Great Stair (o = L.plug: placed at o.x/o.z turned by o.r); melt() runs it down over 1.5 s
   slagPlug(o) {
     const g = new THREE.Group(), rr = RNG(Math.round((o.x || 1) * 31 + (o.z || 1) * 7)), parts = [], seams = [];
-    for (let k = 0; k < 9; k++) { const v = -2.6 + k * 0.65, hgt = rr.range(1.6, 3.2); parts.push({ geo: jitter(G.ico(1.0, 1), 0.18, 320 + k), color: k % 2 ? 0x221c18 : 0x1a1512, o: { x: v, y: hgt * 0.4, z: rr.range(-0.4, 0.4), sx: 0.75, sy: hgt * 0.55, sz: 1.05 }, jit: 0.2 }); }
+    // (the blobs run across the stair, local x, as the cells it blocks do: about 2.2 m either side, 1.1 m along it)
+    for (let k = 0; k < 9; k++) { const v = -2.2 + k * 0.55, hgt = rr.range(1.6, 3.2); parts.push({ geo: jitter(G.ico(1.0, 1), 0.18, 320 + k), color: k % 2 ? 0x221c18 : 0x1a1512, o: { x: v, y: hgt * 0.4, z: rr.range(-0.25, 0.25), sx: 0.75, sy: hgt * 0.55, sz: 1.05 }, jit: 0.2 }); }
     for (let k = 0; k < 14; k++) seams.push({ geo: G.box(rr.range(0.3, 0.9), 0.05, 0.05), color: 0xffffff, o: { x: rr.range(-2.8, 2.8), y: rr.range(0.3, 2.2), z: rr.range(-0.95, 0.95), rz: rr.range(-0.8, 0.8), ry: rr.range(0, 3) } });
     const body = solid(parts, MAT.lam), sm = glowMat(0xb03008), seam = new THREE.Mesh(bake(seams), sm);
     g.add(body, seam);
-    if (o.x != null) { g.position.set(o.x, 0, o.z); g.rotation.y = (o.r || 0) + Math.PI / 2; }
+    if (o.x != null) { g.position.set(o.x, 0, o.z); g.rotation.y = o.r || 0; }
     let t0 = 0;
     g.userData.melt = () => { if (!t0) t0 = performance.now(); };
     body.onBeforeRender = () => {
@@ -2563,7 +2567,8 @@ const PROP4 = {
   // the Forge Mouth: a rim of black stone round the fire below; setWhite(k) turns it from forge-red to white-gold
   forgeMouth(o) {
     const g = new THREE.Group(), r = o.r || 4;
-    g.add(solid(Array.from({ length: 24 }, (_, k) => { const a = (k / 24) * Math.PI * 2; return { geo: jitter(G.box(1.15, 0.32, 0.7), 0.06, 340 + k), color: 0x24201c, o: { x: Math.sin(a) * (r + 0.3), z: Math.cos(a) * (r + 0.3), y: 0.08, ry: a + Math.PI / 2 }, jit: 0.15 }; }), MAT.ashBlocks || MAT.lam));
+    // (none on the south, where the mouth opens into the moat; the rest reach down into the ground sunk round the hole)
+    g.add(solid(Array.from({ length: 24 }, (_, k) => { const a = (k / 24) * Math.PI * 2; return Math.cos(a) > 0.55 ? null : { geo: jitter(G.box(1.15, 0.8, 0.7), 0.06, 340 + k), color: 0x24201c, o: { x: Math.sin(a) * (r + 0.3), z: Math.cos(a) * (r + 0.3), y: -0.16, ry: a + Math.PI / 2 }, jit: 0.15 }; }).filter(Boolean), MAT.ashBlocks || MAT.lam));
     const core = glowMat(0xfff4d8, { add: true, opacity: 0 }), m2 = new THREE.Mesh(new THREE.CircleGeometry(r * 0.95, 28), core);
     m2.rotation.x = -Math.PI / 2; m2.position.y = -0.28; m2.renderOrder = 2;
     const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex('dot'), color: 0xff6a20, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
@@ -2572,7 +2577,8 @@ const PROP4 = {
     const A = new THREE.Color(0xff5a10), B2 = new THREE.Color(0xfff4d8);
     let t = 0, wk = 0;
     halo.onBeforeRender = () => { t += 0.016; core.opacity = wk * (0.8 + Math.sin(t * 2.3) * 0.1); };
-    g.userData.setWhite = (k) => { wk = clamp(k, 0, 1); halo.material.color.copy(A).lerp(B2, wk); halo.material.opacity = 0.35 + 0.45 * wk; halo.scale.setScalar(r * (2.6 + 1.4 * wk)); };
+    // (the core follows here too: the halo is hidden once the forge goes cold, and its onBeforeRender with it)
+    g.userData.setWhite = (k) => { wk = clamp(k, 0, 1); core.opacity = wk * 0.8; halo.material.color.copy(A).lerp(B2, wk); halo.material.opacity = 0.35 + 0.45 * wk; halo.scale.setScalar(r * (2.6 + 1.4 * wk)); };
     g.userData.setWhite(o.white || 0);
     return g;
   },
@@ -2586,6 +2592,8 @@ const PROP4 = {
     // the fire's strength (light.js: 1 its own ring, more when it has drunk, a little when the ring is held down)
     g.userData.setFire = (k) => { k = clamp(k, 0, 1.5); fl.visible = k > 0.02; fl.scale.setScalar(0.4 * Math.max(0.15, k)); coal.color.setRGB(1, 0.3 + 0.25 * Math.min(k, 1), 0.08 * k); };
     g.userData.flame = fl;
+    // everything here is its own but the iron and the halo's dot (light.js, when the hero's look is rebuilt)
+    g.userData.dispose = () => g.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); if (o.material !== MAT.iron) o.material.dispose(); } else if (o.isSprite) o.material.dispose(); });
     return g;
   },
   // the Ash Crown: a ring of black iron with tines, four sockets that light as the shards come home
@@ -2642,6 +2650,8 @@ const PROP4 = {
     const g = new THREE.Group(); g.add(m, edge);
     const base = new THREE.Color(0x9ab8e0), white = new THREE.Color(0xffffff);
     g.userData.flash = (k) => { k = clamp(k, 0, 1); mat.color.copy(base).lerp(white, k); mat.opacity = 0.5 + 0.5 * k; edge.material.opacity = 0.3 + 0.6 * k; };
+    // (its Lampless frees it when it dies: ai.js)
+    g.userData.dispose = () => { geo.dispose(); mat.dispose(); edge.geometry.dispose(); edge.material.dispose(); };
     return g;
   }
 };

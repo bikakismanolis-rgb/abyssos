@@ -24,6 +24,8 @@ export function startFlues(list) {
   F.heat = G.hero?.flags?.heat || 0;
   F.list = (list || []).map((f, i) => ({ ...f, i, st: 'idle', t: f.phase ?? rand.range(1, 6), tele: null, sheet: null, light: null, hit: new Set() }));
   F.dripT = rand.range(4, 7); F.ventT = 6;
+  // the Hammerhorns still at their stations from the last visit (G.actors is already the Forge's) go on pumping
+  for (const a of G.actors || []) if (a.post && a.pumping && !a.dead) F.pumping.add(a.post.flue);
 }
 export function stopFlues() {
   for (const f of F.list || []) { killTele(f.tele); killTele(f.sheet); if (f.light) removeLight(f.light); }

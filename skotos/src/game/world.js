@@ -47,11 +47,11 @@ export const ZONES = {
 // Evergreen's old beacon-tree far in the west, green-gold, that no hand lit (offsets from our beacon). After the Unmaking
 // they are dark until the new fire, and then a fourth burns far to the north, on the Dark Beacon (seed: no hilltop of ours)
 export const FAR_BEACONS = [{ dx: -40, dz: -60, y: 14 }, { dx: 46, dz: -58, y: 17 }, { dx: -44, dz: -32, y: 8, color: 0xb8e060 }, { dx: 0, dz: -72, y: 12, color: 0xfff0c0, seed: true }];
-// a far-off beacon: a glow seen through the fog (sprites ignore it), breathing like a fire
+// a far-off beacon: a glow seen through the fog (sprites ignore it), breathing like a fire (userData.k: a scene may shrink it)
 export function farFire(p, color = 0xffa040) {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex('dot'), color, blending: THREE.AdditiveBlending, fog: false, depthWrite: false, transparent: true }));
   s.position.set(p.x, p.y, p.z); s.scale.setScalar(7);
-  s.onBeforeRender = () => { const k = 1 + Math.sin(performance.now() * 0.007) * 0.08 + Math.sin(performance.now() * 0.019) * 0.05; s.scale.setScalar(7 * k); };
+  s.onBeforeRender = () => { const k = 1 + Math.sin(performance.now() * 0.007) * 0.08 + Math.sin(performance.now() * 0.019) * 0.05; s.scale.setScalar(7 * k * (s.userData.k ?? 1)); };
   return s;
 }
 // the zone's extra assets, fetched the first time it is visited: Act II's stone, snow and lava with the dwarves and the
@@ -351,7 +351,8 @@ function swingLid(lid) {
 function takeExit(z, e) {
   if (e.locked && !G.hero.flags[e.locked]) {
     emit('toast', t('locked')); Audio.sfx('denied');
-    const why = { weaver: 'd.weaver', stonewarden: 'd.gateShut', act1: 'd.mountainShut', act2: 'd.woodShut', hart: 'd.rootShut', fireTaken: 'd.roadShut', ivar: 'd.anvilShut' }[e.locked];
+    // (the north road: only a hero at Act III's end is sent to Isarn about it)
+    const why = { weaver: 'd.weaver', stonewarden: 'd.gateShut', act1: 'd.mountainShut', act2: 'd.woodShut', hart: 'd.rootShut', fireTaken: G.hero.flags.act3 ? 'd.roadShut' : 'd.northShut', ivar: 'd.anvilShut' }[e.locked];
     if (why) emit('say', why);
     return;
   }
@@ -628,8 +629,9 @@ function act4Zone(z) {
     // the Voice in the Cradle, once between one lamp and the next (only after the first of them burns)
     const lamps = S.lamps || [];
     z.voices = lamps.slice(0, -1).map((l, i) => { const n = lamps[i + 1]; return { x: (l.x + n.x) / 2, z: (l.z + n.z) / 2, r: 7, key: 'd.voice.' + Math.min(i + 1, 4), need: 'lamp_' + l.id }; });
+    // (Ivar fallen but his lantern never hung: the replayed Last Lamp brings his echo, story.js lastLamp)
     if (!F.ivar && !F.ivarDown) z.bossSpot = { kind: 'ivar', ...z.map.nearestFloor(L.boss.x, L.boss.z - 6, 4) };
-    else if (ll) echoAt(z, 'ivar', ll.x, ll.z + 1.4);
+    else if (F.ivar && ll) echoAt(z, 'ivar', ll.x, ll.z + 1.4);
   } else {
     // the three Great Bellows; the interactable is the fire-pit before each (to a Smoke-eater, a lamp)
     A.bellows = (S.bellows || []).map((b) => {
@@ -663,7 +665,9 @@ function act4Enter(z) {
     setNight(mode);
     Audio.mood({ night: mode === 'ash' ? 0 : mode === 'stars' ? 1 : 2, heat: 0 });
     for (const it of A.lamps) setLamp(z, it, mode === 'dawn' || (mode === 'ash' && !!F['lamp_' + it.id]));
-    for (const it of A.braziers) setBrazier(z, it, mode !== 'stars', true);
+    // (in Ivar's dark the braziers stay as they were: a death and a respawn here do not relight them for nothing)
+    const dark = z.boss && !z.boss.dead && z.boss.dark;
+    for (const it of A.braziers) setBrazier(z, it, dark ? it.lit : mode !== 'stars', true);
     for (const it of A.altars) { const st = F.gifts?.[it.id]; it.mesh.userData.setState(st || 'idle'); it.used = !!st || !!F.giftsTaken || !!F.crownUnmade; }
     setLastLamp(z, !!F.ivar);
     // the Lampless are released after the Unmaking: none walk the Graves any more
@@ -676,6 +680,9 @@ function act4Enter(z) {
     for (const it of A.bellows) setPit(z, it, k >= 0, true);
     if (A.mouth) { A.mouth.userData.setWhite(0); mouthHalo(A.mouth, k >= 0); }
     if (k >= 0) { startFlues(L.flues); setFlueHeat(k); } else stopFlues();
+    // Isarn's lantern in Karthax's last fire walks on after a death and a respawn here (pools are cleared on leaving)
+    const W = z.isarnWalk;
+    if (W?.a && !W.a.removed && z.boss && !z.boss.dead) W.pool = addLightPool(W.a.x, W.a.z, 6, Infinity, 'isarn', { color: 0xfff0c8, intensity: 26 });
   }
   act4Presence(z);
   refreshEmit(z);
@@ -756,10 +763,10 @@ function touch(dur, it, y, done) {
   const pl = G.player; if (!pl || pl.dead || pl.act) return;
   pl.rot = angleTo(pl.x, pl.z, it.x, it.z);
   const c = new THREE.Vector3();
-  pl.act = { name: 'touch', t: 0, dur, ev: [], clip: dur, move: 0, hp: pl.hp, st: 0,
+  pl.act = { name: 'touch', t: 0, dur, ev: [], clip: dur, move: 0, blows: pl.blows || 0, st: 0,
     update(dt, a) {
-      if (pl.hp < a.hp - 0.5) { a.dur = Infinity; pl.act = null; pl.avatar.anim.stop?.(0.15); return; }
-      a.hp = Math.min(a.hp, pl.hp);
+      // a blow that reaches her life breaks it (combat.js hurtHero counts them); a burn or a poison tick does not
+      if ((pl.blows || 0) !== a.blows) { a.dur = Infinity; pl.act = null; pl.avatar.anim.stop?.(0.15); return; }
       if ((a.st -= dt) <= 0) { a.st = 0.08; cradlePoint(c); fireStream({ x: c.x, y: c.y, z: c.z }, { x: it.x, y, z: it.z }, 3); }
     },
     end() { done(); } };
@@ -1043,9 +1050,10 @@ export function setBeacon(z, on) {
 function townTorches(z, on) {
   const T = z.town; if (T.torches === on) return;
   T.torches = on;
-  z.actors.forEach((a, n) => {
+  // (each light is keyed by its holder: the actors' order shifts as people come and go)
+  z.actors.forEach((a) => {
     if (a.npc !== 'villager' && a.npc !== 'healer') return;
-    const key = 'torch' + n, av = a.avatar; if (!av) return;
+    const key = 'torch' + a.id, av = a.avatar; if (!av) return;
     for (const l of z.L.lights.filter((x) => x.key === key)) z.L.lights.splice(z.L.lights.indexOf(l), 1);
     if (G.zone === z) for (const s of liveLights(key)) removeLight(s);
     if (on) {

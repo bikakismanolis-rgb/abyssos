@@ -477,6 +477,7 @@ export const TEXT = {
   'd.leave.1': ['Η φωτιά κατεβαίνει από τη φρυκτωρία και χωράει ολόκληρη στην Κούνια. Η πέτρα κρυώνει.', 'The fire comes down from the beacon and fits whole into the Cradle. The stone goes cold.'],
   'd.halda.stars': ['Πρώτη φορά στη ζωή μου βλέπω αστέρια πάνω από τη φρυκτωρία. Είναι τόσα πολλά.', 'First time in my life I see stars over the beacon. There are so many.'],
   'd.isarn.go': ['Ο δρόμος βόρεια κατεβαίνει πίσω από τον λόφο της φρυκτωρίας. Θα σε περιμένω στη Σβηστή Φρυκτωρία, εκεί που αρχίζει ο Δρόμος των Οδοιπόρων.', 'The road north goes down behind the beacon hill. I\'ll wait for you at the Dark Beacon, where the Wayfarers\' Road begins.'],
+  'd.northShut': ['Ο βόρειος δρόμος είναι κλειστός.', 'The north road is closed.'],
   'd.roadShut': ['Ο βόρειος δρόμος πάει στο Πεδίο της Τέφρας. Κανείς δεν τον περπατά χωρίς φωτιά. Μίλα πρώτα με τον Ίσαρν.', 'The north road leads to the Field of Ash. No one walks it without fire. Speak with Isarn first.'],
   'd.anvilShut': ['Η Πύλη του Αμονιού είναι κλειστή. Κάποιος φυλάει ακόμα το Τελευταίο Λυχνάρι.', 'The Anvil Gate is shut. Someone still keeps the Last Lamp.'],
   // q18: the Field of Ash

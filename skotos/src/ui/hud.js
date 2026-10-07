@@ -324,6 +324,8 @@ on('dialog', (d) => {
 // tells (the First Autumn's wind, the fire leaving the beacon, the Unmaking) is told without quotes
 const NARR = /^d\.(leave|k|u|field|forge|answer\.0|ivar\.lamp|altar\.(took|refused))\b/;
 function sayClass(k) {
+  // (Isarn's shout in the cages phase is his, not the Ash King's, whatever its key)
+  if (k === 'd.karthax.hint') return 'quest';
   if (k.startsWith('d.ash') || k === 'd.amaranthe.p2' || k.startsWith('d.karthax')) return 'quest ash';
   if (k.startsWith('d.voice')) return 'quest flame';
   if (k.startsWith('d.ivar') || k === 'd.staff') return 'quest pale';

@@ -4,7 +4,7 @@ import { DIFFS, monsterXP, xpToNext, MAX_LEVEL, SKILLS, CLASSES, BUFFS } from '.
 import { makeItem } from './items.js';
 import { refreshStats } from './stats.js';
 import { number } from '../ui/overlay.js';
-import { emit } from '../ui/bus.js';
+import { emit, on } from '../ui/bus.js';
 import { hitFx, sparks, glowBurst, explosion, decal, puff, flash, ring, bolt, P } from '../gfx/fx.js';
 import { shake, addLight, removeLight } from '../gfx/gfx.js';
 import Audio from '../audio/audio.js';
@@ -132,6 +132,8 @@ function hurtHero(src, amount, o) {
   number(p.x, 2.2, p.z, amount, 'hurt');
   emit('hurt', amount / p.hpMax);
   if (!o.dot) {
+    // blows that reached her life, counted (a touch that takes a moment is broken by a blow, not by a burn: world.js)
+    p.blows = (p.blows || 0) + 1;
     if (amount > p.hpMax * 0.08) { shake(0.25); vibrate(40); Audio.sfx('playerHurt', { vol: 0.8 }); }
     if (src && s.thorns && !src.dead && src.team === 'foe') damage(p, src, s.thorns, { noFx: true, quiet: true, noLoh: true, noRes: true });
     if (src?.affixes?.includes('vampiric')) { src.hp = Math.min(src.hpMax, src.hp + amount * 2); }
@@ -254,13 +256,25 @@ export function shakeOff() {
   emit('cling', 0);
   return n;
 }
+// a zone change, a death (and the respawn after it): the ticks on her back let go where they were, and the tongs' drag ends
+function releaseHero() {
+  const p = G.player; if (!p) return;
+  p.pull = null;
+  if (!p.cling?.length) return;
+  for (const a of p.cling) { a.cling = false; a.y = 0; a.state = 'chase'; a.avatar?.anim.stop?.(0.1); }
+  p.cling.length = 0;
+  emit('cling', 0);
+}
+on('zoneEnter', releaseHero);
+on('heroDeath', releaseHero);
 export function tickCling(dt) {
   const p = G.player, c = p?.cling; if (!c?.length) return;
   for (let i = c.length - 1; i >= 0; i--) {
-    const a = c[i];
+    // (a burn tick that kills her lets them all go at once: releaseHero)
+    const a = c[i]; if (!a) continue;
     if (a.dead || a.removed || !a.cling || p.dead) { a.cling = false; c.splice(i, 1); emit('cling', c.length); continue; }
     a.clingT += dt; a.clingTick -= dt;
-    if (a.clingTick <= 0) { a.clingTick += 1; hurtHero(a, a.dmg * 0.45, { dot: true }); sparks(a.x, a.y || 1.2, a.z, 4, 0xff8030, 2); }
+    if (a.clingTick <= 0) { a.clingTick += 1; hurtHero(a, a.dmg * 0.45, { dot: true }); sparks(a.x, a.y || 1.2, a.z, 4, 0xff8030, 2); if (!a.cling) continue; }
     if (a.clingT >= 3) { c.splice(i, 1); emit('cling', c.length); tickBurst(a); }
   }
 }
@@ -317,8 +331,9 @@ export function tickStatus(a, dt) {
   s.dotT = (s.dotT || 0) + dt;
   if (s.dotT >= 0.5) {
     s.dotT -= 0.5;
-    if (s.burn > 0) { const d = s.burnDps * 0.5; s.burn -= 0.5; if (a.hero) hurtHero(null, d, { dot: true }); else damage(G.player, a, d, { dot: true, noFx: true }); if (!a.dead) sparks(a.x, 1, a.z, 3, 0xff8030, 2); }
-    if (s.poison > 0) { const d = s.poisonDps * 0.5; s.poison -= 0.5; if (a.hero) hurtHero(null, d, { dot: true }); else damage(G.player, a, d, { dot: true, noFx: true }); }
+    // a burn (a poison) runs out with its rate: only burns that overlap keep the higher one
+    if (s.burn > 0) { const d = s.burnDps * 0.5; s.burn -= 0.5; if (s.burn <= 0) s.burnDps = 0; if (a.hero) hurtHero(null, d, { dot: true }); else damage(G.player, a, d, { dot: true, noFx: true }); if (!a.dead) sparks(a.x, 1, a.z, 3, 0xff8030, 2); }
+    if (s.poison > 0) { const d = s.poisonDps * 0.5; s.poison -= 0.5; if (s.poison <= 0) s.poisonDps = 0; if (a.hero) hurtHero(null, d, { dot: true }); else damage(G.player, a, d, { dot: true, noFx: true }); }
   }
 }
 export function moveMul(a) {
