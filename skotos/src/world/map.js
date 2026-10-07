@@ -47,9 +47,12 @@ export class GridMap {
         let dx = p.x - cx, dz = p.z - cz, d2 = dx * dx + dz * dz;
         if (d2 >= r * r) continue;
         hit = true;
-        if (d2 < 1e-8) { // center inside the cell: push toward the nearest free side
-          const l = p.x - ix, rr = ix + 1 - p.x, t = p.z - iz, b = iz + 1 - p.z, m = Math.min(l, rr, t, b);
-          if (m === l) p.x = ix - r; else if (m === rr) p.x = ix + 1 + r; else if (m === t) p.z = iz - r; else p.z = iz + 1 + r;
+        if (d2 < 1e-8) { // center inside the cell: out through the nearest side with floor beyond it (a side into more
+          // rock only sinks it a cell deeper each frame, off the map in the end); rock on all four sides: the nearest floor
+          const l = this.solid(ix - 1, iz) ? 9 : p.x - ix, rr = this.solid(ix + 1, iz) ? 9 : ix + 1 - p.x;
+          const t = this.solid(ix, iz - 1) ? 9 : p.z - iz, b = this.solid(ix, iz + 1) ? 9 : iz + 1 - p.z, m = Math.min(l, rr, t, b);
+          if (m === 9) { const f = this.nearestFloor(p.x, p.z); p.x = f.x; p.z = f.z; }
+          else if (m === l) p.x = ix - r; else if (m === rr) p.x = ix + 1 + r; else if (m === t) p.z = iz - r; else p.z = iz + 1 + r;
           continue;
         }
         const d = Math.sqrt(d2), push = (r - d) / d;
