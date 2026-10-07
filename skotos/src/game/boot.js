@@ -104,6 +104,8 @@ async function startHero(hero, isNew, zone = 'town') {
   G.player.res = hero.cls === 'warden' ? 0 : 100;
   writeSave();
   if (isNew) later(1.2, () => emit('toast', t('q.new') + ': ' + t('q.0'), 'quest'));
+  // the first game on this device: how to play, once
+  if (isNew && !G.settings.helpSeen) later(2.4, () => { G.settings.helpSeen = true; writeSave(); if (G.mode === 'play' && !G.panel) openPanel('help'); });
   else later(1.5, offerBoons);
 }
 on('startHero', (h, isNew) => { startHero(h, isNew).catch((e) => fatal(e.stack || e)); });
@@ -219,6 +221,7 @@ on('key', (k) => {
   else if (k === 'k' || k === 's' && false) panelOpen() && G.panel === 'skills' ? closePanel() : openPanel('skills');
   else if (k === 'm' || k === 'tab') panelOpen() && G.panel === 'map' ? closePanel() : openPanel('map');
   else if (k === 'e' || k === 'f') G.focus?.use();
+  else if (k === 'h') panelOpen() && G.panel === 'help' ? closePanel() : openPanel('help');
 });
 window.addEventListener('keydown', (e) => { if (G.mode !== 'play') return; const k = e.key.toLowerCase(); if ((k === 'enter' || k === ' ') && dialogOpen()) { advanceDialog(); e.preventDefault(); } });
 document.addEventListener('visibilitychange', () => { if (document.hidden) { Audio.suspend(); writeSave(); } else Audio.resume(); });

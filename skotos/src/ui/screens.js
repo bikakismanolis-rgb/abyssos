@@ -84,11 +84,13 @@ function mainMenu() {
     <div class="menu">${last ? `<button class="btn" id="m-cont">${t('menu.continue')} · ${t('class.' + last.cls)} ${t('hud.level', last.level)}</button>` : ''}
     <button class="btn ${last ? 'ghost' : ''}" id="m-new">${t('menu.new')}</button>
     ${heroes.length > 1 ? `<div class="slots">${slots}</div>` : ''}
-    <button class="btn ghost" id="m-set">${t('menu.settings')}</button></div><div class="credit">${t('menu.credits')}</div>`);
+    <button class="btn ghost" id="m-set">${t('menu.settings')}</button>
+    <button class="btn ghost" id="m-help">${t('help.title')}</button></div><div class="credit">${t('menu.credits')}</div>`);
   s.onpointerdown = null;
   if (last) $('m-cont').onclick = () => { Audio.sfx('click'); emit('startHero', last, false); };
   $('m-new').onclick = () => { Audio.sfx('click'); showPick(); };
   $('m-set').onclick = () => { Audio.sfx('click'); emit('openPanel', 'settings'); };
+  $('m-help').onclick = () => { Audio.sfx('click'); emit('openPanel', 'help'); };
   s.querySelectorAll('.slot').forEach((el) => el.onclick = (e) => {
     const del = e.target.closest('[data-del]');
     if (del) { if (TS.delSure === del.dataset.del) { deleteHero(del.dataset.del); TS.delSure = null; } else TS.delSure = del.dataset.del; mainMenu(); return; }

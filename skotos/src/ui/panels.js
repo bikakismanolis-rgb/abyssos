@@ -181,7 +181,15 @@ const R = {
       ${inTown ? '' : `<button class="btn ghost" data-a="portal">${t('pause.town')}</button>`}
       <button class="btn ghost" data-a="map">${t('hud.map')}</button>
       <button class="btn ghost" data-a="settings">${t('menu.settings')}</button>
+      <button class="btn ghost" data-a="help">${t('help.title')}</button>
       <button class="btn ghost" data-a="quit">${t('pause.quit')}</button></div></div></div>`;
+  },
+  // how to play: touch, keyboard and a few tips
+  help() {
+    const list = (pre, n) => `<ul class="help">${Array.from({ length: n }, (_, i) => `<li>${t(pre + (i + 1))}</li>`).join('')}</ul>`;
+    return `<div class="pn narrow">${head(t('help.title'), false)}<div class="pn-b">
+      <h4>${t('help.touch')}</h4>${list('help.t', 7)}<h4>${t('help.keys')}</h4>${list('help.k', 6)}<h4>${t('help.tips')}</h4>${list('help.p', 6)}
+      <button class="btn" data-a="close" style="width:100%">${t('panel.close')}</button></div></div>`;
   },
   settings() {
     const s = G.settings, q = s.quality;
@@ -280,6 +288,7 @@ function onClick(e) {
     case 'portal': close(); emit('townPortal'); return;
     case 'map': open('map'); return;
     case 'settings': open('settings'); return;
+    case 'help': open('help'); return;
     case 'credits': open('credits'); return;
     case 'quit': close(); emit('quit'); return;
     case 'q': G.settings.quality = +x; emit('settings'); break;
