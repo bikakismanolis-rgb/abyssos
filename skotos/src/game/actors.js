@@ -431,17 +431,21 @@ export function refreshHeroLook() {
 // ---------- neighbours ----------
 const CELL = 4;
 const hash = new Map();
+// the widest body in the hash: a query looks that much further for centres (a boss's centre can lie a few cells away
+// while its body is within reach)
+let maxR = 0;
 export function rebuildHash() {
-  hash.clear();
+  hash.clear(); maxR = 0;
   for (const a of G.actors) {
     if (a.dead || a.team === 'npc') continue;
     const k = ((Math.floor(a.x / CELL) & 1023) << 10) | (Math.floor(a.z / CELL) & 1023);
     let b = hash.get(k); if (!b) hash.set(k, (b = [])); b.push(a);
+    if (a.radius > maxR) maxR = a.radius;
   }
 }
 export function near(x, z, r, out = []) {
   out.length = 0;
-  const x0 = Math.floor((x - r) / CELL), x1 = Math.floor((x + r) / CELL), z0 = Math.floor((z - r) / CELL), z1 = Math.floor((z + r) / CELL);
+  const R = r + maxR, x0 = Math.floor((x - R) / CELL), x1 = Math.floor((x + R) / CELL), z0 = Math.floor((z - R) / CELL), z1 = Math.floor((z + R) / CELL);
   for (let i = x0; i <= x1; i++) for (let j = z0; j <= z1; j++) {
     const b = hash.get(((i & 1023) << 10) | (j & 1023)); if (!b) continue;
     for (const a of b) { const dx = a.x - x, dz = a.z - z, rr = r + a.radius; if (dx * dx + dz * dz <= rr * rr) out.push(a); }
