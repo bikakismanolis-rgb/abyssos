@@ -1,8 +1,7 @@
 // Photoreal environment set (Poly Haven, CC0; packed by tools/pack-env.mjs):
 // tiling layers for ground and stone (src/assets/env/*.webp) and props (src/assets/env.glb).
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { gltfLoader } from './gltf.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 // ENV.layers[id] = { d: diffuse texture (sRGB), n: OpenGL normal map }; ENV.props[name] = [{ geo, mat }] (one part per material)
 export const ENV = { layers: {}, props: {}, pivots: {}, sizes: {}, extras: {}, packs: {}, ready: false, quality: 1 };
@@ -139,7 +138,7 @@ export function loadPack(name) {
       const [td, tn] = await Promise.all([texture(ud, true, q), un ? texture(un, false, q) : null]);
       putLayer(name, id, { d: td, n: tn });
     });
-    const glb = PACK_GLB[glbKey] ? PACK_GLB[glbKey]().then(bytes).then((b) => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(b, '')).then((g) => readProps(g, q, name)) : null;
+    const glb = PACK_GLB[glbKey] ? PACK_GLB[glbKey]().then(bytes).then((b) => gltfLoader().parseAsync(b, '')).then((g) => readProps(g, q, name)) : null;
     await Promise.all([...tex, glb]);
     ENV.packs[name] = true;
   })().catch((e) => { delete packs[name]; throw e; }); // a failed fetch can be tried again
@@ -158,7 +157,7 @@ export function loadEnv(quality = 1) {
       const [td, tn] = await Promise.all([texture(ud, true, quality), un ? texture(un, false, quality) : null]);
       putLayer('env', id, { d: td, n: tn });
     });
-    const glb = PACK_GLB['../assets/env.glb']().then(bytes).then((b) => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(b, '')).then((g) => readProps(g, quality, 'env'));
+    const glb = PACK_GLB['../assets/env.glb']().then(bytes).then((b) => gltfLoader().parseAsync(b, '')).then((g) => readProps(g, quality, 'env'));
     await Promise.all([...tex, glb]);
     ENV.ready = true;
   })();

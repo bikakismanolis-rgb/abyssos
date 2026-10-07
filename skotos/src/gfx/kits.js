@@ -1,6 +1,6 @@
 // Loads the packed KayKit kits (CC0) and exposes each model as one merged geometry in model space.
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { gltfLoader } from './gltf.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 // lazy (see people.js)
 const URLS = { dungeon: () => import('../assets/dungeon.glb?url'), grave: () => import('../assets/grave.glb?url'), town: () => import('../assets/town.glb?url') };
@@ -54,8 +54,8 @@ export function loadKit(kit) {
     if (url.startsWith('data:')) {
       const b64 = url.slice(url.indexOf(',') + 1), bin = atob(b64), u8 = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-      new GLTFLoader().parse(u8.buffer, '', onLoad, reject);
-    } else new GLTFLoader().load(url, onLoad, undefined, reject);
+      gltfLoader().parse(u8.buffer, '', onLoad, reject);
+    } else gltfLoader().load(url, onLoad, undefined, reject);
   }));
   return loading[kit];
 }

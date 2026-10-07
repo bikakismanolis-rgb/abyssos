@@ -1,8 +1,7 @@
 // Realistic humans: Quaternius characters (CC0) on a UE-style skeleton, animated from moves.bin
 // (Quaternius Universal Animation Library plus retargeted KayKit clips, see tools/pack-ue-anims.mjs).
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { gltfLoader } from './gltf.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { clamp, damp, smooth } from '../core/util.js';
 import { ANIMS } from './anims.data.js';
@@ -48,7 +47,7 @@ export function loadPeople() {
   return loading;
 }
 async function addScenes(glb) {
-  const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(glb, '');
+  const gltf = await gltfLoader().parseAsync(glb, '');
   for (const s of gltf.scenes) {
     // GLTFLoader makes node names unique across the file (pelvis, pelvis_1, ...): restore the originals
     s.traverse((o) => { if (o.userData?.name) o.name = o.userData.name; });
