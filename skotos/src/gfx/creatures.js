@@ -2,8 +2,7 @@
 // clips idle/walk/run/attack/attack2/hit/die plus extras, scene extras { hit: {clip: seconds}, height, credit,
 // walkSpeed, runSpeed }, and grip_R / grip_L nodes under the hands where weapons are parented (+Y along the blade).
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { gltfLoader } from './gltf.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { clamp, damp, smooth } from '../core/util.js';
 import { bytes, patchPerson, personUniforms, cullSphere } from './people.js';
@@ -42,7 +41,7 @@ const loads = {};
 function loadFile(n) {
   return (loads[n] ||= (async () => {
     try {
-      const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).parseAsync(await bytes(await URLS[n]()), '');
+      const gltf = await gltfLoader().parseAsync(await bytes(await URLS[n]()), '');
       CREATURES.tpl[n] = prepare(gltf);
     } catch (e) { console.warn('creature ' + n + ' failed to load', e); delete loads[n]; } // the next zone tries again
   })());
