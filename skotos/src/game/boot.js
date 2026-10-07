@@ -106,7 +106,8 @@ async function startHero(hero, isNew, zone = 'town') {
   if (isNew) later(1.2, () => emit('toast', t('q.new') + ': ' + t('q.0'), 'quest'));
   // the first game on this device: how to play, once
   if (isNew && !G.settings.helpSeen) later(2.4, () => { G.settings.helpSeen = true; writeSave(); if (G.mode === 'play' && !G.panel) openPanel('help'); });
-  else later(1.5, offerBoons);
+  // a hero taken up again: any blessing still owed
+  if (!isNew) later(1.5, offerBoons);
 }
 on('startHero', (h, isNew) => { startHero(h, isNew).catch((e) => fatal(e.stack || e)); });
 let travelling = false;
