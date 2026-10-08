@@ -122,15 +122,16 @@ export function groundY(L, x, z) {
   return fx + fz <= 1 ? a + (b - a) * fx + (c - a) * fz : d + (c - d) * (1 - fx) + (b - d) * (1 - fz);
 }
 // a Forge crane (env 'crane', the overhead_crane scan) lies on the floor: its girder and end carriages take local x -6.2..6.2,
-// z -1..1.5 (times its scale s); its rails run on to z 3.05 at the ends (|x| 6.0..6.25), a hand's breadth under the floor.
+// z -1..1.5 (times its scale s); its two rails run at the ends (|x| 6.0..6.25) from z -0.96 to 3.05, a hand's breadth under
+// the floor (so they must be buried wherever they reach, beside the girder too).
 // Local x is world (cos r, -sin r) and local z (sin r, cos r), as the Instancer turns it. fn(x, z, rail) for points no more
 // than 0.5 m apart, ends included; false from fn stops the walk (and the answer is false)
 export function craneSamples(c, fn) {
   const { x, z, r, s } = c, cx = Math.cos(r), cz = -Math.sin(r), ux = Math.sin(r), uz = Math.cos(r);
   const at = (t, u, rail) => fn(x + cx * t + ux * u, z + cz * t + uz * u, rail) !== false;
-  const nT = Math.ceil((12.4 * s) / 0.5), nU = Math.ceil((2.5 * s) / 0.5), nR = Math.ceil((1.55 * s) / 0.35);
+  const nT = Math.ceil((12.4 * s) / 0.5), nU = Math.ceil((2.5 * s) / 0.5), nR = Math.ceil((4.01 * s) / 0.35);
   for (let i = 0; i <= nT; i++) for (let j = 0; j <= nU; j++) if (!at(-6.2 * s + (12.4 * s * i) / nT, -s + (2.5 * s * j) / nU, false)) return false;
-  for (const e of [-1, 1]) for (const t of [6.0, 6.125, 6.25]) for (let j = 0; j <= nR; j++) if (!at(e * t * s, (1.5 + (1.55 * j) / nR) * s, true)) return false;
+  for (const e of [-1, 1]) for (const t of [6.0, 6.125, 6.25]) for (let j = 0; j <= nR; j++) if (!at(e * t * s, (-0.96 + (4.01 * j) / nR) * s, true)) return false;
   return true;
 }
 // a straight walk from a to b stays on floor cells (patrol legs)
@@ -876,9 +877,9 @@ function tryForge(seed, o, last) {
   });
   for (const side of [-1, 1]) {
     let fit = null;
-    for (const s of [1.6, 1.4, 1.2, 1.0, 0.8]) for (let k = 0; k < 60 && !fit; k++) {
+    for (const s of [1.6, 1.4, 1.2, 1.0, 0.8]) for (let k = 0; k < 200 && !fit; k++) {
       const c = { s, x: X + side * crng.range(3, SR.hw - 3), z: crng.range(SR.z0 + 1, SR.z1 - 1), r: (crng.chance(0.5) ? 0 : Math.PI) + crng.range(-0.15, 0.15) };
-      // (its rails reach out on the hook side only: turned the other way it may fit where it did not)
+      // (its rails reach 3.05 on the hook side, 0.96 on the other: turned round it may fit where it did not)
       const turned = { ...c, r: c.r + Math.PI };
       fit = craneOk(c) ? c : craneOk(turned) ? turned : null;
     }

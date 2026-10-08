@@ -84,6 +84,7 @@ function forge(seed) {
   for (const p of cranes) craneSamples(p, (x, z, rail) => {
     const i = cellOf(L, x, z);
     if (L.lava[i]) bad(rail ? 'forge.craneRailOverLava' : 'forge.craneOverLava', seed);
+    else if (rail && groundY(L, x, z) < -0.041 * p.s) bad('forge.craneRailBare', seed);
     else if (!rail && !L.cells[i]) odd('forge.craneInRock', seed);
   });
   for (const b of sp.bellows) {
