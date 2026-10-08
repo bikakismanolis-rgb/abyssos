@@ -156,25 +156,32 @@ function dying(a, dt) {
 // ---------- movement helpers ----------
 function seek(a, tx, tz, sp, dt, map = G.zone.map) {
   const d = Math.hypot(tx - a.x, tz - a.z);
+  // clear() follows the centre, not the body: pinned last frame on a corner the straight line clips, it takes the way
+  // round for a moment
+  if (a.seekT > a.t - dt * 1.5 && a.seekStep > 1e-3 && Math.hypot(a.x - a.seekX, a.z - a.seekZ) < a.seekStep * 0.2) a.detourT = 0.8;
+  a.detourT = (a.detourT || 0) - dt;
   let dx, dz;
-  if (d < 1.5 || (d < 22 && map.clear(a.x, a.z, tx, tz))) { dx = (tx - a.x) / (d || 1); dz = (tz - a.z) / (d || 1); }
+  if (d < 1.5 || (d < 22 && !(a.detourT > 0) && map.clear(a.x, a.z, tx, tz))) { dx = (tx - a.x) / (d || 1); dz = (tz - a.z) / (d || 1); }
   else {
-    // the flow field leads to the hero: anything else (a mould's rim, a lamp, its post) is felt for round what is in the way
+    // the flow field leads to the hero; anything else (a mould's rim, a patrol post, a lamp) gets a small field of its own,
+    // and past its reach (20 m) is felt for round what is in the way
     const toHero = Math.max(Math.abs(Math.floor(tx) - map.flowT.x), Math.abs(Math.floor(tz) - map.flowT.z)) <= 3;
-    const f = toHero ? map.flowDir(a.x, a.z, dirTmp) : skirt(a, tx, tz, map);
+    const f = toHero ? map.flowDir(a.x, a.z, dirTmp) : map.stepToward(a.path ||= {}, a.x, a.z, tx, tz, dirTmp) || skirt(a, tx, tz, map);
     if (!f) return 0; dx = f.x; dz = f.z;
   }
   const v = sp * moveMul(a);
+  a.seekT = a.t; a.seekX = a.x; a.seekZ = a.z; a.seekStep = v * dt;
   a.x += dx * v * dt; a.z += dz * v * dt;
   turnTo(a, Math.atan2(dx, dz), 10, dt);
   return v;
 }
-// the first open way within ~125° of the target, keeping to the side it last turned to (so it follows a wall, not dithers)
+// the first open way within ~125° of the target, the side it last turned to first (so it follows a wall, not dithers).
+// The probe reaches past its body: collide() keeps its centre a radius off every wall, so a shorter one always looks open
 function skirt(a, tx, tz, map) {
-  const base = Math.atan2(tx - a.x, tz - a.z), sd = a.skirtS || 1;
-  for (const o of [0, 0.5, -0.5, 1, -1, 1.5, -1.5, 2.2, -2.2]) {
-    const ang = base + o * sd;
-    if (!map.clear(a.x, a.z, a.x + Math.sin(ang) * 0.9, a.z + Math.cos(ang) * 0.9)) continue;
+  const base = Math.atan2(tx - a.x, tz - a.z), sd = a.skirtS || 1, L = Math.min(a.radius || 0.5, 0.9) + 0.45;
+  for (const o of [0, 0.5, 1, 1.5, 2.2, -0.5, -1, -1.5, -2.2]) {
+    const ang = base + o * sd, px = a.x + Math.sin(ang) * L, pz = a.z + Math.cos(ang) * L;
+    if (!map.walkable(px, pz) || !map.clear(a.x, a.z, px, pz)) continue;
     if (o) a.skirtS = Math.sign(o) * sd;
     dirTmp.x = Math.sin(ang); dirTmp.z = Math.cos(ang);
     return dirTmp;
@@ -1797,13 +1804,18 @@ function forger(a, dt, pl, d) {
     return seek(a, q.x, q.z, a.speed, dt);
   }
   const M = G.zone.L.spots?.moulds;
+  if (a.mouldSkip && (a.mouldSkipT -= dt) <= 0) a.mouldSkip = null;
   if (M?.length && (a.mouldCd = (a.mouldCd ?? 3) - dt) <= 0) {
-    const m = M.find((p) => !(p.busy && !p.busy.dead && p.busy.state === 'mend') && Math.hypot(p.x - a.x, p.z - a.z) < 8);
-    if (m) {
-      const dm = Math.hypot(m.x - a.x, m.z - a.z) || 1;
-      if (dm < Math.max(2.2, m.r + 0.9)) { m.busy = a; startMend(a, 'mould', m, 8); return 0; }
-      // the mould is a pit: make for its rim, on this side
+    const m = M.find((p) => p !== a.mouldSkip && !(p.busy && !p.busy.dead && p.busy.state === 'mend') && Math.hypot(p.x - a.x, p.z - a.z) < 8);
+    // no nearer for 3 s (a gap too narrow for its body): it lets that mould be for 20 s and fights
+    if (m && (a.mouldOf !== m || Math.hypot(m.x - a.x, m.z - a.z) < a.mouldD - 0.25)) { a.mouldOf = m; a.mouldD = Math.hypot(m.x - a.x, m.z - a.z); a.mouldStall = 0; }
+    else if (m && (a.mouldStall += dt) > 3) { a.mouldSkip = m; a.mouldSkipT = 20; a.mouldOf = null; tally(a, 'mouldGiveUp'); }
+    if (m && m !== a.mouldSkip) {
+      // the mould is a pit: make for its rim, on this side, and kneel there (a carved cell's corner reaches m.r + 0.71, and
+      // the smith's body keeps its radius off it)
+      const dm = Math.hypot(m.x - a.x, m.z - a.z) || 1, ar = Math.min(a.radius || 0.5, 0.9);
       const f = G.zone.map.nearestFloor(m.x + ((a.x - m.x) / dm) * (m.r + 0.6), m.z + ((a.z - m.z) / dm) * (m.r + 0.6), 2);
+      if (dm < m.r + 0.8 + ar || Math.hypot(f.x - a.x, f.z - a.z) < ar + 0.4) { m.busy = a; startMend(a, 'mould', m, 8); return 0; }
       return seek(a, f.x, f.z, a.speed, dt);
     }
   }

@@ -121,6 +121,18 @@ export function groundY(L, x, z) {
   const a = H[z0 * W + x0], b = H[z0 * W + x0 + 1], c = H[(z0 + 1) * W + x0], d = H[(z0 + 1) * W + x0 + 1];
   return fx + fz <= 1 ? a + (b - a) * fx + (c - a) * fz : d + (c - d) * (1 - fx) + (b - d) * (1 - fz);
 }
+// a Forge crane (env 'crane', the overhead_crane scan) lies on the floor: its girder and end carriages take local x -6.2..6.2,
+// z -1..1.5 (times its scale s); its rails run on to z 3.05 at the ends (|x| 6.0..6.25), a hand's breadth under the floor.
+// Local x is world (cos r, -sin r) and local z (sin r, cos r), as the Instancer turns it. fn(x, z, rail) for points no more
+// than 0.5 m apart, ends included; false from fn stops the walk (and the answer is false)
+export function craneSamples(c, fn) {
+  const { x, z, r, s } = c, cx = Math.cos(r), cz = -Math.sin(r), ux = Math.sin(r), uz = Math.cos(r);
+  const at = (t, u, rail) => fn(x + cx * t + ux * u, z + cz * t + uz * u, rail) !== false;
+  const nT = Math.ceil((12.4 * s) / 0.5), nU = Math.ceil((2.5 * s) / 0.5), nR = Math.ceil((1.55 * s) / 0.35);
+  for (let i = 0; i <= nT; i++) for (let j = 0; j <= nU; j++) if (!at(-6.2 * s + (12.4 * s * i) / nT, -s + (2.5 * s * j) / nU, false)) return false;
+  for (const e of [-1, 1]) for (const t of [6.0, 6.125, 6.25]) for (let j = 0; j <= nR; j++) if (!at(e * t * s, (1.5 + (1.55 * j) / nR) * s, true)) return false;
+  return true;
+}
 // a straight walk from a to b stays on floor cells (patrol legs)
 function clearLine(L, ax, az, bx, bz) {
   const n = Math.ceil(Math.hypot(bx - ax, bz - az) * 3);
@@ -725,28 +737,9 @@ function tryForge(seed, o, last) {
   }
   // ---- the Slag Rivers: bridges, slag dripping out of the dark, crane hoists, chains ----
   for (const b of L.bridges) if (!b.stair) mark(res, L, b.x, b.z, 3);
-  // a crane is a girder ~12.5 m long at scale 1 (its hook side +z): it lies along a bank, all of it on floor, off the slag and the bridges
-  // (claim = true: keep the dressing, and the other crane, off it)
-  const craneFits = (x, z, r, s, claim) => {
-    const cx = Math.cos(r), cz = -Math.sin(r), ux = Math.sin(r), uz = Math.cos(r);
-    for (let t = -6.2 * s; t <= 6.2 * s; t += 0.5) for (let u = -1 * s; u <= 1.5 * s; u += 0.5) {
-      const px = x + cx * t + ux * u, pz = z + cz * t + uz * u, i = cellAt(L, px, pz);
-      if (claim) { res[i] = 1; continue; }
-      if (!L.cells[i] || L.lava[i] || res[i]) return false;
-      // nor across the walk up to a bridge
-      if (L.bridges.some((b) => !b.stair && Math.abs(px - b.x) < b.w / 2 + 1.5 && Math.abs(pz - b.z) < 10)) return false;
-    }
-    return true;
-  };
-  // one each side of the hall, on any of the three banks; the biggest that fits. Their own dice: the two draws the cranes
-  // always took from rng are all they take, so a saved seed lays out the rest of the Forge as it did before
+  // the cranes' own dice (laid at the end, before the dressing): the two draws they always took from rng are all they take,
+  // so a saved seed lays out the rest of the Forge as it did before
   const crng = RNG(((rng.next() * 4294967296) ^ (rng.next() * 65536)) >>> 0);
-  for (const side of [-1, 1]) {
-    const tries = [];
-    for (const s of [1.6, 1.4, 1.2, 1.0]) for (let k = 0; k < 60; k++) tries.push({ s, x: X + side * crng.range(3, SR.hw - 3), z: crng.range(SR.z0 + 1, SR.z1 - 1), r: (crng.chance(0.5) ? 0 : Math.PI) + crng.range(-0.15, 0.15) });
-    const c = tries.find((c) => craneFits(c.x, c.z, c.r, c.s));
-    if (c) { L.props.push({ t: 'crane', ...c }); craneFits(c.x, c.z, c.r, c.s, true); }
-  }
   for (let k = 0; k < 7; k++) L.chains.push({ x: X + rng.range(-SR.hw + 3, SR.hw - 3), z: rng.range(SR.z0 + 2, SR.z1 - 2), y0: rng.range(2.5, 6), y1: 16 });
   // ---- the hub: an iron disc, a sigil over the north gallery ----
   for (const [x, z] of circleCells(L, HB.x, HB.z, HB.r)) L.fk[z * w + x] = 2;
@@ -870,6 +863,29 @@ function tryForge(seed, o, last) {
   sp.trail = [{ x: X, z: NV.z0 - 4 }, { x: X, z: NV.z1 + 2 }, { x: L.bridges[0].x, z: rivers[0] }, { x: L.bridges[2].x, z: rivers[1] }, { x: HB.x, z: HB.z }, { x: X, z: CH[2].z + CH[2].r }, { x: CH[2].x, z: CH[2].z }, stair[0], { x: pc.x - Math.sin(pa) * 1.6, z: pc.z - Math.cos(pa) * 1.6 }];
   L.start = { x: S.x, z: S.z };
   L.exits.push({ x: S.x, z: h - 6, to: 'ashfield', label: 'exit.ashfield' });
+  // ---- the Slag Rivers' cranes: one each side of the hall, on any of the three banks, the biggest that fits. Off the slag,
+  // the bridges' approaches and the smiths' clutter; its girder claimed from the dressing ----
+  const ban = new Uint8Array(N);
+  for (const b of L.bridges) if (!b.stair) for (let z = Math.floor(b.z - 10); z < b.z + 10; z++) for (let x = Math.floor(b.x - b.w / 2 - 1.5); x < b.x + b.w / 2 + 1.5; x++) ban[cellAt(L, x, z)] = 1;
+  for (const q of L.props) if (q.t === 'forgeClutter') for (const [x, z] of circleCells(L, q.x, q.z, 1.2)) ban[z * w + x] = 1;
+  const craneOk = (c) => craneSamples(c, (x, z, rail) => {
+    const i = cellAt(L, x, z);
+    // the rails lie a hand's breadth under the floor: buried in rock, bare over the slag or a sinking bank
+    if (rail) return !L.lava[i] && !L.low[i] && groundY(L, x, z) >= -0.04 * c.s;
+    return !!L.cells[i] && !L.lava[i] && !res[i] && !ban[i];
+  });
+  for (const side of [-1, 1]) {
+    let fit = null;
+    for (const s of [1.6, 1.4, 1.2, 1.0, 0.8]) for (let k = 0; k < 60 && !fit; k++) {
+      const c = { s, x: X + side * crng.range(3, SR.hw - 3), z: crng.range(SR.z0 + 1, SR.z1 - 1), r: (crng.chance(0.5) ? 0 : Math.PI) + crng.range(-0.15, 0.15) };
+      // (its rails reach out on the hook side only: turned the other way it may fit where it did not)
+      const turned = { ...c, r: c.r + Math.PI };
+      fit = craneOk(c) ? c : craneOk(turned) ? turned : null;
+    }
+    if (!fit) continue;
+    L.props.push({ t: 'crane', ...fit });
+    craneSamples(fit, (x, z, rail) => { if (!rail) res[cellAt(L, x, z)] = 1; });
+  }
   // ---- dressing: rubble and slag at the foot of the walls ----
   for (let z = 0; z < h; z++) for (let x = 0; x < w; x++) {
     const i = z * w + x, d = D[i];

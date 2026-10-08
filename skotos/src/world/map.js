@@ -9,6 +9,7 @@ export class GridMap {
     this.flowT = { x: -1, z: -1, t: 0 };
     this.queue = new Int32Array(w * h);
     this.explored = new Uint8Array(w * h);
+    this.ver = 0;                               // bumped whenever cells change at runtime (stepToward's windows rebuild)
   }
   solid(ix, iz) {
     if (ix < 0 || iz < 0 || ix >= this.w || iz >= this.h) return true;
@@ -21,7 +22,7 @@ export class GridMap {
     const i = iz * this.w + ix;
     return this.cells[i] === 0 && !(this.low && this.low[i]);
   }
-  setSolid(ix, iz, v = true) { if (ix >= 0 && iz >= 0 && ix < this.w && iz < this.h) this.cells[iz * this.w + ix] = v ? 0 : 1; }
+  setSolid(ix, iz, v = true) { if (ix >= 0 && iz >= 0 && ix < this.w && iz < this.h) { this.cells[iz * this.w + ix] = v ? 0 : 1; this.ver++; } }
   // reopen cells at runtime (broken standing stones, withered thorns, the Root Gate): [[ix, iz], ...] become floor and
   // the flow field is rebuilt on its next update. Nothing ever turns solid around the hero this way.
   open(cells) {
@@ -32,7 +33,7 @@ export class GridMap {
       if (this.cells[i] === 0) { this.cells[i] = 1; n++; }
       if (this.low) this.low[i] = 0;
     }
-    if (n) this.flowT.x = -1;
+    if (n) { this.flowT.x = -1; this.ver++; }
     return n;
   }
 
@@ -136,6 +137,53 @@ export class GridMap {
     out.x = tx / l; out.z = tz / l;
     return out;
   }
+  // the way to a point that is not the hero (a mould's rim, a patrol post, a lamp): a small flow field of the caller's own,
+  // BFS over a (2R+1)^2 window round the target's nearest floor, kept in P (an object the caller owns) while the target
+  // cell and the map hold. A direction from (x, z), or null if (x, z) is outside the window or cut off from the target
+  stepToward(P, x, z, tx, tz, out, R = 20) {
+    const f = this.nearestFloor(tx, tz, 3), ix = Math.floor(f.x), iz = Math.floor(f.z);
+    if (this.solid(ix, iz)) return null;
+    if (P.ix !== ix || P.iz !== iz || P.ver !== this.ver || P.R !== R) this.fillWindow(P, ix, iz, R);
+    const W = 2 * R + 1, cx = Math.floor(x) - P.x0, cz = Math.floor(z) - P.z0;
+    if (cx < 0 || cz < 0 || cx >= W || cz >= W) return null;
+    let best = P.d[cz * W + cx], bx = 0, bz = 0;
+    if (best === 65535) return null;
+    const gx = Math.floor(x), gz = Math.floor(z);
+    for (let k = 0; k < 8; k++) {
+      const nx = cx + DX[k], nz = cz + DZ[k];
+      if (nx < 0 || nz < 0 || nx >= W || nz >= W) continue;
+      if (k >= 4 && (this.solid(gx + DX[k], gz) || this.solid(gx, gz + DZ[k]))) continue;
+      const v = P.d[nz * W + nx];
+      if (v < best) { best = v; bx = DX[k]; bz = DZ[k]; }
+    }
+    // in the target's cell (or as near as the floor goes): straight at the point
+    const ax = bx || bz ? gx + bx + 0.5 : f.x, az = bx || bz ? gz + bz + 0.5 : f.z;
+    const dx = ax - x, dz = az - z, l = Math.hypot(dx, dz);
+    if (l < 1e-6) return null;
+    out.x = dx / l; out.z = dz / l;
+    return out;
+  }
+  fillWindow(P, ix, iz, R) {
+    const W = 2 * R + 1, N = W * W, { w, h, cells } = this;
+    if (!P.d || P.d.length !== N) P.d = new Uint16Array(N);
+    if (WQ.length < N * 4) WQ = new Int32Array(N * 4); // (a cell can be queued again when a shorter way reaches it)
+    Object.assign(P, { ix, iz, R, ver: this.ver, x0: ix - R, z0: iz - R });
+    const d = P.d, x0 = P.x0, z0 = P.z0;
+    d.fill(65535);
+    let head = 0, tail = 0;
+    d[R * W + R] = 0; WQ[tail++] = R * W + R;
+    while (head < tail) {
+      const c = WQ[head++], dc = d[c], cx = c % W, cz = (c - cx) / W;
+      for (let k = 0; k < 8; k++) {
+        const nx = cx + DX[k], nz = cz + DZ[k], gx = x0 + nx, gz = z0 + nz;
+        if (nx < 0 || nz < 0 || nx >= W || nz >= W || gx < 0 || gz < 0 || gx >= w || gz >= h) continue;
+        if (cells[gz * w + gx] === 0) continue;
+        if (k >= 4 && (cells[(z0 + cz) * w + gx] === 0 || cells[gz * w + x0 + cx] === 0)) continue; // no corner cutting
+        const n = nz * W + nx, nd = dc + (k < 4 ? 10 : 14);
+        if (nd < d[n]) { d[n] = nd; WQ[tail++] = n; }
+      }
+    }
+  }
   flowDist(x, z) { const ix = Math.floor(x), iz = Math.floor(z); if (this.solid(ix, iz)) return 65535; return this.flow[iz * this.w + ix]; }
 
   // nearest floor cell center to a point
@@ -162,3 +210,4 @@ export class GridMap {
   }
 }
 const DX = [1, -1, 0, 0, 1, 1, -1, -1], DZ = [0, 0, 1, -1, 1, -1, 1, -1];
+let WQ = new Int32Array(0); // stepToward's BFS queue, shared
