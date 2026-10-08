@@ -9,7 +9,7 @@
 // or waylamp). Exits 1 if a hard check fails. GEN=<path> checks another copy of gen4.js.
 import { pathToFileURL } from 'node:url';
 const GEN = process.env.GEN ? pathToFileURL(process.env.GEN).href : '../src/world/gen4.js';
-const { genAshfield, genForge, reach, nearReach, groundY } = await import(GEN);
+const { genAshfield, genForge, reach, nearReach, groundY, craneSamples } = await import(GEN);
 const N = +(process.argv[2] || 2000), S0 = +(process.argv[3] || 5);
 const fails = {}, soft = {}, HARD = new Set();
 const add = (o, k, s) => { (o[k] ||= new Set()).add(s); };
@@ -78,16 +78,14 @@ function forge(seed) {
   const c1 = L.cells.slice(); for (const [x, z] of L.plug.cells) c1[z * w + x] = 1;
   const R1 = reach(L, L.start.x, L.start.z, c1), far1 = (p, r = 1.6) => nearReach(L, R1, p.x, p.z, 5) > r;
   if (sp.bellows.length !== 3) bad('forge.bellows!=3', seed);
-  // a crane's girder lies on floor end to end, never over the slag
+  // a crane's girder lies on floor end to end, its rails never bare over the slag (craneSamples: gen4's own footprint)
   const cranes = L.props.filter((p) => p.t === 'crane');
   if (!cranes.length) odd('forge.noCrane', seed);
-  for (const p of cranes) {
-    const cx = Math.cos(p.r), cz = -Math.sin(p.r), ux = Math.sin(p.r), uz = Math.cos(p.r);
-    for (let t = -6.2 * p.s; t <= 6.2 * p.s; t += 0.5) for (let u = -p.s; u <= 1.5 * p.s; u += 0.5) {
-      const i = cellOf(L, p.x + cx * t + ux * u, p.z + cz * t + uz * u);
-      if (L.lava[i]) bad('forge.craneOverLava', seed); else if (!L.cells[i]) odd('forge.craneInRock', seed);
-    }
-  }
+  for (const p of cranes) craneSamples(p, (x, z, rail) => {
+    const i = cellOf(L, x, z);
+    if (L.lava[i]) bad(rail ? 'forge.craneRailOverLava' : 'forge.craneOverLava', seed);
+    else if (!rail && !L.cells[i]) odd('forge.craneInRock', seed);
+  });
   for (const b of sp.bellows) {
     if (far0(b, 1.5)) bad('forge.chamber' + b.id + '.unreachable', seed);
     if (far0(b.pit, 2)) bad('forge.pit.unreachable', seed);

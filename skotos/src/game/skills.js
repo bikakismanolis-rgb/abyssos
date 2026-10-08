@@ -410,7 +410,7 @@ export function dodge(ev) {
     let tx = pl.x + Math.sin(mv) * D.dist, tz = pl.z + Math.cos(mv) * D.dist;
     const k = map.castT(pl.x, pl.z, tx, tz, 0.4); tx = pl.x + (tx - pl.x) * k; tz = pl.z + (tz - pl.z) * k;
     glowBurst(pl.x, 1, pl.z, 0xa070ff, 30, 4, 0.3, 0.5); flash(pl.x, 1, pl.z, 0xc0a0ff, 3, 0.15);
-    pl.x = tx; pl.z = tz; pl.rot = mv; pl.iframes = 0.35;
+    pl.x = tx; pl.z = tz; pl.rot = mv; pl.iframes = Math.max(pl.iframes || 0, 0.35);
     glowBurst(tx, 1, tz, 0xa070ff, 30, 4, 0.3, 0.5); ring(tx, tz, 2, 0xa070ff, 0.3);
     Audio.sfx('blink');
     act({ name: 'blink', anim: 'blink', speed: 2.5, cut: 0.3 });
@@ -423,7 +423,7 @@ export function dodge(ev) {
     name: 'roll', anim: 'roll', speed: (pl.avatar.anim.duration?.('roll') || 0.42) / 0.5, dur: 0.42,
     update(dt) {
       const nx = pl.x + Math.sin(mv) * sp * dt, nz = pl.z + Math.cos(mv) * sp * dt;
-      pl.x = nx; pl.z = nz; pl.iframes = 0.08;
+      pl.x = nx; pl.z = nz; pl.iframes = Math.max(pl.iframes || 0, 0.08);
       if (Math.random() < 0.5) P({ add: false, x: pl.x, y: 0.15, z: pl.z, vx: rand.range(-0.5, 0.5), vy: 0.4, vz: rand.range(-0.5, 0.5), life: 0.6, size: 0.4, size1: 1, color: 0x6a5a48, alpha: 0.4 });
     }
   });
