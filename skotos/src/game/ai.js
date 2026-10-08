@@ -163,9 +163,11 @@ function seek(a, tx, tz, sp, dt, map = G.zone.map) {
   let dx, dz;
   if (d < 1.5 || (d < 22 && !(a.detourT > 0) && map.clear(a.x, a.z, tx, tz))) { dx = (tx - a.x) / (d || 1); dz = (tz - a.z) / (d || 1); }
   else {
-    // the flow field leads to the hero; anything else (a mould's rim, a patrol post, a lamp) gets a small field of its own,
-    // and past its reach (20 m) is felt for round what is in the way
-    const toHero = Math.max(Math.abs(Math.floor(tx) - map.flowT.x), Math.abs(Math.floor(tz) - map.flowT.z)) <= 3;
+    // the flow field leads to the hero: a target at her side and nearer her than the actor is (a chase, a pet's place behind
+    // her, a foe beside her). Anything else (a point to back off to, a mould's rim, a patrol post, a lamp) gets a small field
+    // of its own, and past its reach (20 m) is felt for round what is in the way
+    const pl = G.player, hd = pl ? Math.hypot(tx - pl.x, tz - pl.z) : Infinity;
+    const toHero = hd <= 3 && hd < Math.hypot(a.x - pl.x, a.z - pl.z);
     const f = toHero ? map.flowDir(a.x, a.z, dirTmp) : map.stepToward(a.path ||= {}, a.x, a.z, tx, tz, dirTmp) || skirt(a, tx, tz, map);
     if (!f) return 0; dx = f.x; dz = f.z;
   }
@@ -1807,15 +1809,16 @@ function forger(a, dt, pl, d) {
   if (a.mouldSkip && (a.mouldSkipT -= dt) <= 0) a.mouldSkip = null;
   if (M?.length && (a.mouldCd = (a.mouldCd ?? 3) - dt) <= 0) {
     const m = M.find((p) => p !== a.mouldSkip && !(p.busy && !p.busy.dead && p.busy.state === 'mend') && Math.hypot(p.x - a.x, p.z - a.z) < 8);
-    // no nearer for 3 s (a gap too narrow for its body): it lets that mould be for 20 s and fights
-    if (m && (a.mouldOf !== m || Math.hypot(m.x - a.x, m.z - a.z) < a.mouldD - 0.25)) { a.mouldOf = m; a.mouldD = Math.hypot(m.x - a.x, m.z - a.z); a.mouldStall = 0; }
+    // no nearer for 3 s of one unbroken approach (a gap too narrow for its body): it lets that mould be for 20 s and fights
+    const dm0 = m && Math.hypot(m.x - a.x, m.z - a.z);
+    if (m && (a.mouldOf !== m || a.t - (a.mouldSeen ?? -1) > 0.25 || dm0 < a.mouldD - 0.25)) { a.mouldOf = m; a.mouldD = dm0; a.mouldStall = 0; }
     else if (m && (a.mouldStall += dt) > 3) { a.mouldSkip = m; a.mouldSkipT = 20; a.mouldOf = null; tally(a, 'mouldGiveUp'); }
+    a.mouldSeen = a.t;
     if (m && m !== a.mouldSkip) {
       // the mould is a pit: make for its rim, on this side, and kneel there (a carved cell's corner reaches m.r + 0.71, and
       // the smith's body keeps its radius off it)
-      const dm = Math.hypot(m.x - a.x, m.z - a.z) || 1, ar = Math.min(a.radius || 0.5, 0.9);
-      const f = G.zone.map.nearestFloor(m.x + ((a.x - m.x) / dm) * (m.r + 0.6), m.z + ((a.z - m.z) / dm) * (m.r + 0.6), 2);
-      if (dm < m.r + 0.8 + ar || Math.hypot(f.x - a.x, f.z - a.z) < ar + 0.4) { m.busy = a; startMend(a, 'mould', m, 8); return 0; }
+      const dm = dm0 || 1, ar = Math.min(a.radius || 0.5, 0.9), f = rimSpot(m, a, dm);
+      if (dm < m.r + 0.8 + ar || (Math.hypot(f.x - m.x, f.z - m.z) < m.r + 1.2 && Math.hypot(f.x - a.x, f.z - a.z) < ar + 0.4)) { m.busy = a; startMend(a, 'mould', m, 8); return 0; }
       return seek(a, f.x, f.z, a.speed, dt);
     }
   }
@@ -1823,6 +1826,19 @@ function forger(a, dt, pl, d) {
   if (d < 6 && los) { const ang = angleTo(pl.x, pl.z, a.x, a.z), nx = a.x + Math.sin(ang) * 3, nz = a.z + Math.cos(ang) * 3; if (G.zone.map.walkable(nx, nz)) return seek(a, nx, nz, a.speed * 0.85, dt); }
   if (d < a.def.reach && los) { face(a, pl, dt); if (a.cd <= 0) startAttack(a, 'throw', { hit: 0.55, dur: 1.0 }); return 0; }
   return seek(a, pl.x, pl.z, a.speed, dt);
+}
+// the floor at a mould's rim on the smith's side; where clutter stands on it, the free cell nearest the pit beside it
+function rimSpot(m, a, dm) {
+  const map = G.zone.map, rx = m.x + ((a.x - m.x) / dm) * (m.r + 0.6), rz = m.z + ((a.z - m.z) / dm) * (m.r + 0.6);
+  if (map.walkable(rx, rz)) return { x: rx, z: rz };
+  let f = { x: rx, z: rz }, bd = Infinity;
+  for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+    const cx = Math.floor(rx) + dx + 0.5, cz = Math.floor(rz) + dz + 0.5;
+    if (!map.walkable(cx, cz)) continue;
+    const k = Math.hypot(cx - m.x, cz - m.z) + 0.5 * Math.hypot(cx - rx, cz - rz);
+    if (k < bd) { bd = k; f = { x: cx, z: cz }; }
+  }
+  return f;
 }
 function startMend(a, kind, at, dur) {
   a.state = 'mend'; a.mendKind = kind; a.mendAt = at; a.mendT = 0; a.mendDur = dur; a.mendHp = a.hp; a.interrupted = false;
