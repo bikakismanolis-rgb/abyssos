@@ -71,7 +71,9 @@ export function showTitle() {
   G.mode = 'title'; TS.cam = 'orbit';
   if (!TS.audio) {
     const s = screen(`<div class="logo">${t('game.title')}</div><div class="logo-rule"></div><div class="logo-sub">${t('game.sub')}</div><div class="tapgo">${t('menu.tap')}</div><div class="credit">${t('menu.credits')}</div>`);
-    s.onpointerdown = () => { s.onpointerdown = null; TS.audio = true; Audio.init(); Audio.setVolumes({ master: 1, music: G.settings.music, sfx: G.settings.sfx }); Audio.music('title'); Audio.sfx('beaconIgnite', { vol: 0.5 }); mainMenu(); };
+    // the menu comes up on the click, not the press: a press that swapped the screen let the same touch land on the
+    // menu's first button (Continue) and started the game before the player could choose a save
+    s.onclick = () => { s.onclick = null; TS.audio = true; Audio.init(); Audio.setVolumes({ master: 1, music: G.settings.music, sfx: G.settings.sfx }); Audio.music('title'); Audio.sfx('beaconIgnite', { vol: 0.5 }); mainMenu(); };
     return;
   }
   mainMenu();
@@ -86,12 +88,15 @@ function mainMenu() {
     ${heroes.length > 1 ? `<div class="slots">${slots}</div>` : ''}
     <button class="btn ghost" id="m-set">${t('menu.settings')}</button>
     <button class="btn ghost" id="m-help">${t('help.title')}</button></div><div class="credit">${t('menu.credits')}</div>`);
-  s.onpointerdown = null;
-  if (last) $('m-cont').onclick = () => { Audio.sfx('click'); emit('startHero', last, false); };
-  $('m-new').onclick = () => { Audio.sfx('click'); showPick(); };
-  $('m-set').onclick = () => { Audio.sfx('click'); emit('openPanel', 'settings'); };
-  $('m-help').onclick = () => { Audio.sfx('click'); emit('openPanel', 'help'); };
+  s.onpointerdown = null; s.onclick = null;
+  // and the menu ignores touches for a moment after it appears, whatever brought it up
+  const at = performance.now(), ready = () => performance.now() - at > 450;
+  if (last) $('m-cont').onclick = () => { if (!ready()) return; Audio.sfx('click'); emit('startHero', last, false); };
+  $('m-new').onclick = () => { if (!ready()) return; Audio.sfx('click'); showPick(); };
+  $('m-set').onclick = () => { if (!ready()) return; Audio.sfx('click'); emit('openPanel', 'settings'); };
+  $('m-help').onclick = () => { if (!ready()) return; Audio.sfx('click'); emit('openPanel', 'help'); };
   s.querySelectorAll('.slot').forEach((el) => el.onclick = (e) => {
+    if (!ready()) return;
     const del = e.target.closest('[data-del]');
     if (del) { if (TS.delSure === del.dataset.del) { deleteHero(del.dataset.del); TS.delSure = null; } else TS.delSure = del.dataset.del; mainMenu(); return; }
     const h = G.save.heroes.find((x) => x.id === el.dataset.id); if (h) emit('startHero', h, false);
