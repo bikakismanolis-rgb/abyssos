@@ -725,7 +725,28 @@ function tryForge(seed, o, last) {
   }
   // ---- the Slag Rivers: bridges, slag dripping out of the dark, crane hoists, chains ----
   for (const b of L.bridges) if (!b.stair) mark(res, L, b.x, b.z, 3);
-  for (const [dx, dz] of [[-SR.hw + 4, 3.5], [SR.hw - 4, SR.z1 - SR.z0 - 4]]) L.props.push({ t: 'crane', x: X + dx, z: SR.z0 + dz, r: rng.range(0, 6.28) });
+  // a crane is a girder ~12.5 m long at scale 1 (its hook side +z): it lies along a bank, all of it on floor, off the slag and the bridges
+  // (claim = true: keep the dressing, and the other crane, off it)
+  const craneFits = (x, z, r, s, claim) => {
+    const cx = Math.cos(r), cz = -Math.sin(r), ux = Math.sin(r), uz = Math.cos(r);
+    for (let t = -6.2 * s; t <= 6.2 * s; t += 0.5) for (let u = -1 * s; u <= 1.5 * s; u += 0.5) {
+      const px = x + cx * t + ux * u, pz = z + cz * t + uz * u, i = cellAt(L, px, pz);
+      if (claim) { res[i] = 1; continue; }
+      if (!L.cells[i] || L.lava[i] || res[i]) return false;
+      // nor across the walk up to a bridge
+      if (L.bridges.some((b) => !b.stair && Math.abs(px - b.x) < b.w / 2 + 1.5 && Math.abs(pz - b.z) < 10)) return false;
+    }
+    return true;
+  };
+  // one each side of the hall, on any of the three banks; the biggest that fits. Their own dice: the two draws the cranes
+  // always took from rng are all they take, so a saved seed lays out the rest of the Forge as it did before
+  const crng = RNG(((rng.next() * 4294967296) ^ (rng.next() * 65536)) >>> 0);
+  for (const side of [-1, 1]) {
+    const tries = [];
+    for (const s of [1.6, 1.4, 1.2, 1.0]) for (let k = 0; k < 60; k++) tries.push({ s, x: X + side * crng.range(3, SR.hw - 3), z: crng.range(SR.z0 + 1, SR.z1 - 1), r: (crng.chance(0.5) ? 0 : Math.PI) + crng.range(-0.15, 0.15) });
+    const c = tries.find((c) => craneFits(c.x, c.z, c.r, c.s));
+    if (c) { L.props.push({ t: 'crane', ...c }); craneFits(c.x, c.z, c.r, c.s, true); }
+  }
   for (let k = 0; k < 7; k++) L.chains.push({ x: X + rng.range(-SR.hw + 3, SR.hw - 3), z: rng.range(SR.z0 + 2, SR.z1 - 2), y0: rng.range(2.5, 6), y1: 16 });
   // ---- the hub: an iron disc, a sigil over the north gallery ----
   for (const [x, z] of circleCells(L, HB.x, HB.z, HB.r)) L.fk[z * w + x] = 2;

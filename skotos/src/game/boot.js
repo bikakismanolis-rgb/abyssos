@@ -311,6 +311,8 @@ function cineTick(dt) {
   updateCamera(dt, pl.x + (c.x - pl.x) * w, pl.z + (c.z - pl.z) * w);
   if (c.t >= c.dur) {
     G.mode = 'play'; G.cine = null; R.cam.lookY = 0.9; R.cam.zoomT = 1.05; R.cam.pitch = c.p0;
+    // the world kept moving under the scene: a blow wound up meanwhile does not land the instant she can move again
+    pl.iframes = Math.max(pl.iframes || 0, 1);
     showHud(true); document.getElementById('letterbox').classList.remove('on');
     c.end?.();
   }

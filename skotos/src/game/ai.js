@@ -158,11 +158,28 @@ function seek(a, tx, tz, sp, dt, map = G.zone.map) {
   const d = Math.hypot(tx - a.x, tz - a.z);
   let dx, dz;
   if (d < 1.5 || (d < 22 && map.clear(a.x, a.z, tx, tz))) { dx = (tx - a.x) / (d || 1); dz = (tz - a.z) / (d || 1); }
-  else { const f = map.flowDir(a.x, a.z, dirTmp); if (!f) return 0; dx = f.x; dz = f.z; }
+  else {
+    // the flow field leads to the hero: anything else (a mould's rim, a lamp, its post) is felt for round what is in the way
+    const toHero = Math.max(Math.abs(Math.floor(tx) - map.flowT.x), Math.abs(Math.floor(tz) - map.flowT.z)) <= 3;
+    const f = toHero ? map.flowDir(a.x, a.z, dirTmp) : skirt(a, tx, tz, map);
+    if (!f) return 0; dx = f.x; dz = f.z;
+  }
   const v = sp * moveMul(a);
   a.x += dx * v * dt; a.z += dz * v * dt;
   turnTo(a, Math.atan2(dx, dz), 10, dt);
   return v;
+}
+// the first open way within ~125° of the target, keeping to the side it last turned to (so it follows a wall, not dithers)
+function skirt(a, tx, tz, map) {
+  const base = Math.atan2(tx - a.x, tz - a.z), sd = a.skirtS || 1;
+  for (const o of [0, 0.5, -0.5, 1, -1, 1.5, -1.5, 2.2, -2.2]) {
+    const ang = base + o * sd;
+    if (!map.clear(a.x, a.z, a.x + Math.sin(ang) * 0.9, a.z + Math.cos(ang) * 0.9)) continue;
+    if (o) a.skirtS = Math.sign(o) * sd;
+    dirTmp.x = Math.sin(ang); dirTmp.z = Math.cos(ang);
+    return dirTmp;
+  }
+  return null;
 }
 // the Ash-Fallen turn slowly behind their shields (2.2 rad/s): roll past one and it is open
 function turnTo(a, ang, k, dt) {
@@ -1434,7 +1451,7 @@ function boss(a, dt, pl, d, S) {
     pick = choices.find((m) => m.id !== 'bite' && m.id !== 'combo' && !m.basic) || choices[0];
   }
   if (!pick) return a.rooted ? 0 : seek(a, pl.x, pl.z, a.speed * fast, dt);
-  a.mcd[pick.id] = pick.phaseCd ? pick.phaseCd[phase] : pick.cd;
+  a.mcd[pick.id] = pick.cdOf?.(a, phase) ?? (pick.phaseCd ? pick.phaseCd[phase] : pick.cd);
   tally(a, pick.id);
   const m = pick.run(a, pl);
   m.t0 = m.t; m.fired = false;
@@ -1782,7 +1799,13 @@ function forger(a, dt, pl, d) {
   const M = G.zone.L.spots?.moulds;
   if (M?.length && (a.mouldCd = (a.mouldCd ?? 3) - dt) <= 0) {
     const m = M.find((p) => !(p.busy && !p.busy.dead && p.busy.state === 'mend') && Math.hypot(p.x - a.x, p.z - a.z) < 8);
-    if (m) { if (Math.hypot(m.x - a.x, m.z - a.z) < 2.2) { m.busy = a; startMend(a, 'mould', m, 8); return 0; } return seek(a, m.x, m.z, a.speed, dt); }
+    if (m) {
+      const dm = Math.hypot(m.x - a.x, m.z - a.z) || 1;
+      if (dm < Math.max(2.2, m.r + 0.9)) { m.busy = a; startMend(a, 'mould', m, 8); return 0; }
+      // the mould is a pit: make for its rim, on this side
+      const f = G.zone.map.nearestFloor(m.x + ((a.x - m.x) / dm) * (m.r + 0.6), m.z + ((a.z - m.z) / dm) * (m.r + 0.6), 2);
+      return seek(a, f.x, f.z, a.speed, dt);
+    }
   }
   const los = G.zone.map.los(a.x, a.z, pl.x, pl.z);
   if (d < 6 && los) { const ang = angleTo(pl.x, pl.z, a.x, a.z), nx = a.x + Math.sin(ang) * 3, nz = a.z + Math.cos(ang) * 3; if (G.zone.map.walkable(nx, nz)) return seek(a, nx, nz, a.speed * 0.85, dt); }
@@ -2153,8 +2176,9 @@ const KARTHAX = {
     // every 15 s (cooldowns run a quarter faster in a last phase)
     { id: 'dark', when: (a) => a.phase >= 2 && heroNear(a), cd: 18.75, run: (a) => theDark(a) },
     { id: 'breath', when: (a, d) => a.phase >= 2 && !!getLightPool('isarn'), cd: 10, run: (a, pl) => ashBreath(a, pl) },
-    // behind the cages one every 5 s, wherever she is in the arena (the statues break only to it); never far out of it
-    { id: 'hammerfall', when: (a, d) => (a.phase === 1 && heroInArena(a)) || (d > 3 && d < 16), phaseCd: [9, 5, 8], run: (a, pl) => hammerfall(a, pl) },
+    // behind the cages one every 5 s, wherever she is in the arena (the statues break only to it); never far out of it.
+    // Statues risen whole (gifts taken) take more blows, so he strikes faster: 5 s for three blows, 3.2 s for six (~30 s)
+    { id: 'hammerfall', when: (a, d) => (a.phase === 1 && heroInArena(a)) || (d > 3 && d < 16), phaseCd: [9, 5, 8], cdOf: (a, ph) => (ph === 1 && a.cageBlows ? 5 - 0.6 * (a.cageBlows - 3) : null), run: (a, pl) => hammerfall(a, pl) },
     { id: 'kneel', when: (a, d) => a.phase === 1 && cageUp(a, 'lord') && d < 8.5, cd: 12, run: (a) => kneel(a) },
     { id: 'rain', when: (a) => a.phase === 1 && cageUp(a, 'king') && heroInArena(a), cd: 10, run: (a, pl) => moltenRain(a, pl) },
     { id: 'host', when: (a) => a.phase === 0 && alive(a.host).length < 4, cd: 22, run: (a) => raiseHost(a) },
@@ -2185,6 +2209,7 @@ function threeCages(a) {
     G.actors.push(m);
     return m;
   });
+  a.cageBlows = a.cages.reduce((n, s) => n + s.blows, 0);
   a.mcd.hammerfall = 2;
   emit('karthaxCages', a, a.cages);
 }
