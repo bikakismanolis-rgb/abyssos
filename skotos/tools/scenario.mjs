@@ -576,6 +576,32 @@ const S = {
     await pg.waitForTimeout(9000); await shot();
     return pg.evaluate(async (o) => { const G = window.__G, z = G.zone, F = G.hero.flags, Fg = await import('/src/game/forge.js'), Bd = await import('/src/world/build.js'); return { ...o, words: o.words, karthax: F.karthax, crownUnmade: F.crownUnmade, quest: G.hero.quest, heat: Bd.HEAT.k, flues: !!Fg.flues(), echo: !!z.interact.find((i) => i.kind === 'echo'), npcs: z.actors.filter((a) => a.npc && !a.removed).map((a) => a.npc), mode: G.mode, says: window.__says.filter((k) => /karthax|isarn|cage|u\.|k\./.test(k)) }; }, { arrive, cages, broken, last, words });
   } },
+  // how long the Three Cages last (game seconds), the hero keeping by a standing statue as a player would. GIFTS=taken|refused
+  // (all three); RUNS=n fights
+  cagetime: { q: 'auto=forge&sim=6&q=1&norender&lvl=27&cls=' + (process.env.CLS || 'ranger'), run: async (pg) => {
+    const gift = process.env.GIFTS || 'taken', out = [];
+    for (let run = 0; run < +(process.env.RUNS || 3); run++) {
+      await pg.evaluate((gift) => { const G = window.__G, h = G.hero; window.__immortal = window.__tough = true; h.quest = 21; Object.assign(h.flags, { act3: true, fireTaken: true, ivar: true, bellows0: true, bellows1: true, bellows2: true, heat: 3, plug: true, karthax: false, giftsTaken: false, gifts: { throne: gift, forge: gift, unfading: gift } }); window.__D.refreshStats(); window.__D.enterZone('forge', { fresh: true }); const z = G.zone, b = z.L.boss; for (const p of z.packs) p.spawned = true; const f = z.map.nearestFloor(b.x, b.z + 8); G.player.x = f.x; G.player.z = f.z; G.player.hp = G.player.hpMax = 99999; }, gift);
+      await pg.waitForFunction(() => !!window.__G.cine, null, { timeout: 30000 }).catch(() => {});
+      for (let i = 0; i < 40 && (await pg.evaluate(() => !!window.__G.cine || !!document.querySelector('#dialog:not([hidden])'))); i++) { await A4.enter(pg); await pg.waitForTimeout(300); }
+      await pg.waitForFunction(() => window.__G.zone.boss?.awake, null, { timeout: 20000 }).catch(() => {});
+      await A4.hit(pg, 0.65);
+      await pg.waitForFunction(() => !!window.__G.zone.boss?.cages, null, { timeout: 20000 }).catch(() => {});
+      for (let i = 0; i < 20 && (await pg.evaluate(() => !!document.querySelector('#dialog:not([hidden])'))); i++) { await A4.enter(pg); await pg.waitForTimeout(200); }
+      const t0 = await pg.evaluate(() => window.__G.hero.stats.time);
+      let r = null;
+      for (let k = 0; k < 600; k++) {
+        r = await pg.evaluate((t0) => { const G = window.__G, b = G.zone.boss, t = G.hero.stats.time - t0; if (!b.cages) return { t, done: true }; if (G.mode !== 'play') return { t };
+          const pl = G.player, up = b.cages.filter((s) => !s.dead); let s = up.find((x) => x === window.__keepBy) || up.sort((p, q) => Math.hypot(p.x - pl.x, p.z - pl.z) - Math.hypot(q.x - pl.x, q.z - pl.z))[0]; window.__keepBy = s;
+          if (Math.hypot(s.x - pl.x, s.z - pl.z) > 2.6) { const a = Math.atan2(s.x - b.x, s.z - b.z), f = G.zone.map.nearestFloor(s.x - Math.sin(a) * 1.8, s.z - Math.cos(a) * 1.8); pl.x = f.x; pl.z = f.z; }
+          return { t, left: up.map((x) => x.keeper + x.blows).join(' ') }; }, t0);
+        if (r.done || r.t > 150) break;
+        await pg.waitForTimeout(250);
+      }
+      out.push(+r.t.toFixed(1));
+    }
+    return { gift, secs: out };
+  } },
   // q22: the Night Without Fires in Whitecliff (the beacon cold, no far fires, the torches), Elianthe, the new fire lit from
   // Isarn's lantern, the far fires answering one by one (the fourth too), the act panel, the Unbound blessing, the staff
   ending4: { q: 'auto=town&sim=2&q=1&norender&lvl=27&cls=' + (process.env.CLS || 'ranger'), run: async (pg, shot) => {

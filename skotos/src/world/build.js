@@ -2373,7 +2373,7 @@ function addProp4(B, I, p, L, rng, out) {
       return true;
     }
     case 'crane': {
-      if (ENV.props.crane) { I.add('env:crane', x, z, r, 2.2, 0); return true; }
+      if (ENV.props.crane) { I.add('env:crane', x, z, r, p.s ?? 2.2, 0); return true; }
       B.add('iron', [...[-1, 1].map((sx) => ({ geo: G.box(0.3, 7.5, 0.3), color: ASHIRON, o: { x: sx * 1.6, y: 3.75 } })), { geo: G.box(3.8, 0.35, 0.35), color: ASHIRON, o: { y: 7.4 } }, { geo: G.box(0.3, 0.3, 4.2), color: ASHIRON, o: { y: 7.6, z: 1.6 } }, { geo: G.cyl(0.02, 0.02, 4.5, 3), color: ASHIRON, o: { y: 5.2, z: 3.4 } }, { geo: G.torus(0.2, 0.04, 4, 8, Math.PI * 1.4), color: 0x3a3632, o: { y: 2.8, z: 3.4 } }], x, z, r);
       return true;
     }

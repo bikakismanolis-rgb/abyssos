@@ -26,6 +26,13 @@ Read this first when picking the project up in a new session.
 
 ## Open items
 
-- Balance (owner's call): in Ivar's Dark a Mage is faster ignoring the braziers, because her own fire counts as light; with all three altar gifts taken, Karthax's cage phase lasts about 42 s against a ~30 s target.
 - Not yet confirmed on a real phone that the memory changes stop the crash at high quality.
-- Optional: unload the people sets, packs and creature files of other acts when far from them; the Forge's cranes can stand over lava in some seeds; Forgers and Hammerhorns share the seek() fallback that was fixed for Smoke-eaters; cinematics do not make the hero invulnerable (any act).
+- Optional: unload the people sets, packs and creature files of other acts when far from them (only if phones still crash).
+
+## Done in the last session
+
+- Ivar's Dark: in a boss's darkness the hero's own fire (a Mage's Meteor) counts as light only for its first 0.5 s (`FLARE`, light.js), so the braziers are the way through again.
+- Karthax's cages: the Hammerfall's cooldown in the cages phase is `5 - 0.6 * (blows - 3)` s (5 s for three cracked statues, 3.2 s for six blows): all gifts taken ~30 s, all refused ~21 s as before. `GIFTS=taken|refused RUNS=n node tools/scenario.mjs cagetime <out>` measures it.
+- Forge cranes: laid along a bank, the whole girder on floor, off the slag and the walks up to the bridges, scale 1.0-1.6 (`craneFits`, gen4.js); they draw from their own RNG, so saved seeds keep the rest of the Forge. `check-act4.mjs` checks it (hard: craneOverLava; soft: about 1.5% of seeds get no crane).
+- `seek()`: the flow field leads only to the hero; any other target (a mould's rim, a post, a lamp) is now skirted locally (`skirt`, ai.js) instead of following the hero's field. Forgers make for a mould's rim, not the pit's centre.
+- Every cinematic ends with 1 s of hero iframes (boot.js cineTick); the hero already took no damage during one.
