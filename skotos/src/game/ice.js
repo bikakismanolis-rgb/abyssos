@@ -37,7 +37,7 @@ const LIVE = 1, WARNF = 2, PEND = 4, REO = 8, BRK = 16, SLU = 32, HIT = 64;
 const N4 = [1, -1, 0, 0], M4 = [0, 0, 1, -1];
 export let ICE = null;
 // what the scenarios read
-export const ICE_LOG = { breaks: 0, refreezes: 0, slushed: 0, batches: 0, plunges: [], drowned: 0, floundered: 0, warns: 0, bumps: [] };
+export const ICE_LOG = { breaks: 0, refreezes: 0, slushed: 0, batches: 0, plunges: [], drowned: 0, floundered: 0, warns: 0, bumps: [], cost: { n: 0, ms: 0, max: 0 } };
 // a kind's own rule when its cell breaks under it (a, cell, zone) -> true when handled (combat's, stage C)
 export const FALLS = {};
 const haz = () => HAZ5[G.hero?.diff ?? 1] || HAZ5[1];
@@ -69,7 +69,14 @@ export function resetIce(z) {
 }
 
 // ---------- per frame (projectiles.js updateAreas, after tickTide) ----------
+// (its cost is kept in ICE_LOG.cost, as the tide's)
 export function tickIce(dt) {
+  const t0 = performance.now();
+  tick(dt);
+  const c = ICE_LOG.cost, ms = performance.now() - t0; c.n++; c.ms += ms; if (ms > c.max) c.max = ms;
+  if (PROBE) window.__act5?.probe?.(dt);
+}
+function tick(dt) {
   const z = G.zone;
   ICE = z?.L?.ice && z.ice ? z.ice : null;
   const I = ICE;
@@ -82,10 +89,11 @@ export function tickIce(dt) {
     if ((I.batchT -= dt) <= 0) { I.batchT = BATCH; batch(z, I); }
     ringTick(z, I, dt);
     floeTick(z, I);
+    // MOOD.ice: how much of the ground round her is thin ice (the ice song sings more often on it)
+    if ((I.moodT = (I.moodT ?? 0) - dt) <= 0) { I.moodT = 0.5; I.near = thinNear(z, I); Audio.mood({ ice: I.near }); }
     I.upT -= dt;
     if (I.dirty && I.upT <= 0) { I.tex.needsUpdate = true; I.dirty = false; I.upT = UP; }
   }
-  if (PROBE) window.__act5?.probe?.(dt);
 }
 
 // ---------- weight ----------
@@ -241,7 +249,7 @@ function batch(z, I) {
   if (close.length) {
     const c0 = close[0];
     Audio.sfx('iceBreak', { x: c0 % w + 0.5, z: (c0 - c0 % w) / w + 0.5 });
-    close.forEach((i, k) => { if (k < 6) splash(i % w + 0.5, (i - i % w) / w + 0.5, 1); addFloes(z, I, i); });
+    close.forEach((i, k) => { if (k < 6) { const x = i % w + 0.5, y = (i - i % w) / w + 0.5; splash(x, y, 1); if (k < 3) fx('iceShards', x, y, 9); } addFloes(z, I, i); });
     // the chain: crazed cells beside a break go 0.3 s later
     for (const i of close) {
       const x = i % w, y = (i - x) / w;
@@ -274,13 +282,14 @@ function roomy(z, s) {
   return q.length >= 9;
 }
 // where she climbs out: the nearest safe cell within 3 m (one ahead of her way only if none lies behind), else the
-// oldest safe point of the last 2 s
+// oldest safe point of the last 2 s; on a scrap of ice the breaks have cut off, the scrap (a cell within 3 m, then the
+// ring) before anything further: never a jump past 3 m that the rules do not name
 function landing(z, I, pl) {
   const L = z.L, w = L.w, ring = I.ring;
   let mx = 0, mz = 0;
   for (let j = ring.length - 1; j >= 0; j--) if (I.clock - ring[j].t >= 0.3) { mx = pl.x - ring[j].x; mz = pl.z - ring[j].z; break; }
   const ml = Math.hypot(mx, mz);
-  let best = null, bs = 1e9;
+  let best = null, bs = 1e9, scrap = null, ss = 1e9;
   for (let cz = Math.floor(pl.z - 3); cz <= Math.floor(pl.z + 3); cz++) for (let cx = Math.floor(pl.x - 3); cx <= Math.floor(pl.x + 3); cx++) {
     if (cx < 0 || cz < 0 || cx >= w || cz >= L.h) continue;
     const i = cz * w + cx, x = cx + 0.5, y = cz + 0.5, d = Math.hypot(x - pl.x, y - pl.z);
@@ -288,9 +297,13 @@ function landing(z, I, pl) {
     const ahead = ml > 0.3 && ((x - pl.x) * mx + (y - pl.z) * mz) / (ml * Math.max(d, 1e-3)) > 0.3;
     const sc = d + (ahead ? 1.5 : 0);
     if (sc < bs && roomy(z, i)) { bs = sc; best = { x, z: y, how: 'near' }; }
+    else if (sc < ss) { ss = sc; scrap = { x, z: y, how: 'scrap' }; }
   }
   if (best) return best;
-  for (const p of ring) { const i = Math.floor(p.z) * w + Math.floor(p.x); if (safeCell(z, I, i) && roomy(z, i)) return { x: p.x, z: p.z, how: 'ring', age: +(I.clock - p.t).toFixed(2) }; }
+  const age = (p) => +(I.clock - p.t).toFixed(2), rs = (p) => Math.floor(p.z) * w + Math.floor(p.x);
+  for (const p of ring) if (safeCell(z, I, rs(p)) && roomy(z, rs(p))) return { x: p.x, z: p.z, how: 'ring', age: age(p) };
+  if (scrap) return scrap;
+  for (const p of ring) if (safeCell(z, I, rs(p))) return { x: p.x, z: p.z, how: 'ring', age: age(p) };
   // (nothing safe within 3 m and no safe point in the last 2 s: the nearest safe ground further out, ring by ring)
   for (let r = 4; r <= 12; r++) for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
     if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
@@ -365,6 +378,17 @@ function floeTick(z, I) {
     m.setMatrixAt(k, _m.compose(_p, _q, _s.set(f.s, 1, f.s)));
   });
   m.count = I.floes.length; m.instanceMatrix.needsUpdate = true;
+}
+
+// the share of the cells within 6 m of her that are thin ice still holding (0-1)
+function thinNear(z, I) {
+  const pl = G.player, L = z.L; if (!pl) return 0;
+  let n = 0, t = 0;
+  for (let cz = Math.floor(pl.z) - 6; cz <= Math.floor(pl.z) + 6; cz++) for (let cx = Math.floor(pl.x) - 6; cx <= Math.floor(pl.x) + 6; cx++) {
+    if (cx < 0 || cz < 0 || cx >= L.w || cz >= L.h || (cx + 0.5 - pl.x) ** 2 + (cz + 0.5 - pl.z) ** 2 > 36) continue;
+    const i = cz * L.w + cx; t++; if (L.ice[i] && I.stage[i] < 4) n++;
+  }
+  return t ? +(n / t).toFixed(2) : 0;
 }
 
 // ---------- her safe points of the last 2 s (a plunge's fallback) ----------

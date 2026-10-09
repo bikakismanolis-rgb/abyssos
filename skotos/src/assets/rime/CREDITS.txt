@@ -21,7 +21,7 @@ Tiling layers (src/assets/rime/*.webp) - CC0 (public domain):
   snowTrod: snow_03 by Rob Tuytel - https://polyhaven.com/a/snow_03 (CC0)
   shore: low_tide_rocks by Dimitrios Savva - https://polyhaven.com/a/low_tide_rocks (CC0)
   seaCliff: seaside_rock by Dimitrios Savva - https://polyhaven.com/a/seaside_rock (CC0)
-  ice: Ice002 by ambientCG - https://ambientcg.com/a/Ice002 (CC0)
+  ice: Ice002 by ambientCG (Lennart Demes) - https://ambientcg.com/a/Ice002 (CC0)
   planks: wood_planks_grey by Rob Tuytel - https://polyhaven.com/a/wood_planks_grey (CC0)
 
 Props (src/assets/rime.glb):
@@ -39,7 +39,7 @@ Props (src/assets/rime.glb):
   runestone: "Monumental Runic Stone - Optimised, 20k" by Thomas Flynn (nebulousflynn) - https://sketchfab.com/3d-models/monumental-runic-stone-optimised-20k-d95a850cd9114828a18b5dd72878d9ec (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
   barnacleRock: "Beach Rock with Barnacles Photoscan" by EFX (evan4129) - https://sketchfab.com/3d-models/beach-rock-with-barnacles-photoscan-21c9848ca38b4d289e2f38a98a905f86 (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
   driftwood: "Large Pine Driftwood (Pacific Northwest)" by Crew Froebel (crufro) - https://sketchfab.com/3d-models/large-pine-driftwood-pacific-northwest-95d1087e513e4fb992a27b7b8a05ca9e (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
-  kelp: "Scan of Kelp and Seaweed on sand beach" by sterlingcrispin - https://sketchfab.com/3d-models/scan-of-kelp-and-seaweed-on-sand-beach-c9b5ef07047a4b7a90a4ffd6930ec22c (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  kelp: "Scan of Kelp and Seaweed on sand beach" by sterlingcrispin - https://sketchfab.com/3d-models/scan-of-kelp-and-seaweed-on-sand-beach-c9b5ef07047a4b7a90a4ffd6930ec22c (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/); credited under the CC-BY 4.0 licence its page carries, though its description says cc0
   icicle: "Icicle 01" by Elin Hohler (ElinHohler) - https://sketchfab.com/3d-models/icicle-01-2dc75ae22f1c4d11abbfd32819312a12 (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
   shack: "Wooden Shack" by Dominic Baker (Domuk) - https://sketchfab.com/3d-models/wooden-shack-b0bc474f7803488dbe0fa5aeef2e9ace (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
   ship: dutch_ship_medium by James Ray Cock, Rico Cilliers, Nicolò Zubbini - https://polyhaven.com/a/dutch_ship_medium (CC0)

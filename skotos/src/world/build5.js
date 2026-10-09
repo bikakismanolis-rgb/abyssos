@@ -13,7 +13,7 @@ import { ENV, packProp } from '../gfx/env.js';
 import { tex } from '../gfx/textures.js';
 import { G } from '../gfx/rig.js';
 import { RNG, clamp, fbm, lerp } from '../core/util.js';
-import { BED_DRY, ICE_Y, groundY } from './genlib.js';
+import { BED_DRY, groundY } from './genlib.js';
 import { SEA, SEA_U, SEA_LIT, SEA_GLSL, noiseTex, iceMat, beamMesh, swellY, TICKS } from './sea.js';
 import { MAT, mats, worldMat, bake, jitter, prism, size4, glowMat, flameMesh, lanternMesh, lay4, hash2, act4Mats, act4Prop, occlude } from './build.js';
 
@@ -118,7 +118,19 @@ function instDef(k, name, M, quality) {
     return { parts: [{ geo: c.geo, material: k === 'icy' ? MAT.icy5 : k === 'cliff5' ? MAT.cliff5 : MAT[c.mat] || M.lam }], shadow: c.shadow ?? true };
   }
   const parts = ENV.props[name]; if (!parts) return null;
-  return { parts: parts.map((p) => ({ geo: p.geo, material: k === 'icy' ? MAT.icy5 : MAT.cliff5 })), shadow: k !== 'icy' || quality >= 2 };
+  return { parts: parts.map((p) => ({ geo: k === 'icy' ? p.geo : withVC(p.geo), material: k === 'icy' ? MAT.icy5 : MAT.cliff5 })), shadow: k !== 'icy' || quality >= 2 };
+}
+// (the sea-cliff stone is a vertex-coloured material, its layer times colour / GREY: a scan with no colours of its own
+// would read black, so it gets a copy coloured GREY throughout)
+const VC = new Map();
+function withVC(geo) {
+  if (geo.attributes.color) return geo;
+  if (VC.has(geo)) return VC.get(geo);
+  const g = geo.clone(), n = g.attributes.position.count, c = new THREE.Color(GREY), a = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; }
+  g.setAttribute('color', new THREE.BufferAttribute(a, 3)); g.userData.shared = true;
+  VC.set(geo, g);
+  return g;
 }
 const glowPart = () => (MAT.glow5 ||= new THREE.MeshBasicMaterial({ color: 0xffb35a, transparent: true, opacity: 0.92, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
 // code models shared by the instancer (each baked once)
@@ -736,12 +748,12 @@ const PROP5 = {
     g.userData.setCarved(false);
     return g;
   },
-  // the pit under an ice window: the thick frame flush with the ice round the pane, the pit's walls down to the figure,
-  // a small cold light in it (the Drowned Lights' windows: o.drowned, a warm lantern lies below instead)
+  // the pit under an ice window (its 2 x 2 cells, which the ground leaves open: the thick ice round it lies flat to their
+  // edge): the pit's walls of old blue ice down to the figure, its floor, a small cold light in it (the Drowned Lights'
+  // windows: o.drowned, a warm lantern lies below instead)
   iceWindow(o) {
     const g = new THREE.Group(), d = 2.2, parts = [];
-    for (const [x, z, w, dd] of [[0, -1.5, 4, 1], [0, 1.5, 4, 1], [-1.5, 0, 1, 2], [1.5, 0, 1, 2]]) parts.push({ geo: G.box(w, 0.3, dd), color: 0xffffff, o: { x, y: ICE_Y - 0.15, z } });
-    for (const [x, z, w, dd] of [[0, -1.02, 2, 0.06], [0, 1.02, 2, 0.06], [-1.02, 0, 0.06, 2], [1.02, 0, 0.06, 2]]) parts.push({ geo: G.box(w, d, dd), color: 0xffffff, o: { x, y: -d / 2, z } });
+    for (const [x, z, w, dd] of [[0, -1.02, 2.1, 0.06], [0, 1.02, 2.1, 0.06], [-1.02, 0, 0.06, 2.1], [1.02, 0, 0.06, 2.1]]) parts.push({ geo: G.box(w, d, dd), color: 0xffffff, o: { x, y: -d / 2 - 0.01, z } });
     parts.push({ geo: G.box(2, 0.1, 2), color: 0xffffff, o: { y: -d - 0.05 } });
     // (the window's cells lie square to the grid whatever way the prop is turned: this part takes the turn off again)
     const inner = new THREE.Group(); g.add(inner);

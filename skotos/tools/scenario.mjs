@@ -727,7 +727,8 @@ const S = {
   // pointer, MSAA; adaptive resolution pinned at 1.0, the scale it would have picked reported beside it) in the Shallows at
   // high water and mid Ice Road, against the Field of Ash measured the same way: each within the Field's + 15%. Quality 0
   // is measured too, as a floor. The three zones are open at once and measured in turn, ROUNDS times over (the other two
-  // pages draw nothing meanwhile), so a load that drifts hits them alike; the packs are kept from spawning everywhere (the
+  // pages draw nothing and run no game logic meanwhile), so a load that drifts hits them alike, and each zone's verdict is
+  // the median of its round-by-round ratios to the Field; the packs are kept from spawning everywhere (the
   // gate is the world's look: terrain, water, ice, props, FX). Env: QS (default '1,0'), FRAMES (frames per sample, 16),
   // ROUNDS (3), PACKS=1 lets the packs spawn
   perf5: { q: 'world=town&q=0&noenv', run: async (pg, shot) => {
@@ -759,7 +760,8 @@ const S = {
         }, { src: spots[zone].toString(), packs: process.env.PACKS === '1' });
         pages[zone] = p;
       }
-      const freeze = (p, on) => p.evaluate((on) => { window.__R.lost = on; }, on);
+      // (a page on hold draws nothing and runs no game logic either: its loop only ticks the clock)
+      const freeze = (p, on) => p.evaluate((on) => { const G = window.__G; window.__R.lost = on; if (on && G.mode !== 'hold') { window.__mode0 = G.mode; G.mode = 'hold'; } if (!on && G.mode === 'hold') G.mode = window.__mode0; }, on);
       const samples = {};
       for (const p of Object.values(pages)) await freeze(p, true);
       for (let r = 0; r < ROUNDS; r++) for (const [zone, p] of Object.entries(pages)) {
@@ -783,8 +785,13 @@ const S = {
         await p.screenshot({ path: shot.dir + '/perf5-' + zone + '-q' + Q + '.png', timeout: 240000 }).catch((e) => logs.push('perf5 shot ' + zone + ': ' + e.message.split('\n')[0]));
         await freeze(p, true);
       }
-      const F = out['ashfield@q' + Q]?.ms;
-      for (const z of ['coast', 'farlight']) { const o = out[z + '@q' + Q]; if (F && o?.ms) { o.vsField = +(o.ms / F).toFixed(3); o.pass = o.ms <= F * 1.15; } }
+      // (the ratio to the Field is taken round by round, each zone against the Field measured beside it, and the median of
+      // those ratios is the verdict: a load that swells or eases between rounds cancels out)
+      const F = samples.ashfield;
+      for (const z of ['coast', 'farlight']) {
+        const o = out[z + '@q' + Q], s = samples[z];
+        if (F?.length && s?.length) { o.ratios = s.map((v, i) => +(v / F[i]).toFixed(3)); o.vsField = med(o.ratios); o.pass = o.vsField <= 1.15; }
+      }
       await ctx.close();
     }
     out.pass = ['coast@q1', 'farlight@q1'].every((k) => !out[k] || out[k].pass) && !!out['coast@q1']?.ms && !!out['farlight@q1']?.ms;

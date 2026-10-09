@@ -28,7 +28,8 @@ const CAST = {
   // Act IV (tools/creatures/act4)
   ashwing: ['ashwing', 1], smokeEater: ['smokeeater', 1], emberTick: ['embertick', 1],
   // Act V (tools/creatures/act5)
-  tower: ['crab', 1], reefback: ['crab', 1]
+  tower: ['crab', 1], reefback: ['crab', 1],
+  skotosHand: ['tentacle', 1], skotos: ['skotos', 1]
 };
 
 export const CREATURES = { tpl: {}, ready: false };
@@ -38,7 +39,7 @@ const ACT_FILES = {
   act2: ['magmahound', 'bat', 'worm', 'golem'],
   act3: ['elk', 'bear', 'moth', 'mandrake', 'treeman'],
   act4: ['ashwing', 'smokeeater', 'embertick'],
-  act5: ['crab']
+  act5: ['crab', 'skotos', 'tentacle']
 };
 const loads = {};
 function loadFile(n) {

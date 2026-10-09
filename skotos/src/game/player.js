@@ -85,7 +85,7 @@ export function updatePlayer(dt) {
       pl.x = a.x + (b.x - a.x) * f; pl.z = a.z + (b.z - a.z) * f;
     } else { pl.x = T.sx + (T.x - T.sx) * u; pl.z = T.sz + (T.z - T.sz) * u; }
     mx = mz = 0;
-    if (Math.random() < 0.6) P({ add: false, x: pl.x, y: 0.15, z: pl.z, vy: 0.3, life: 0.5, size: 0.4, size1: 0.9, color: 0x4a4038, alpha: 0.4 });
+    if (Math.random() < 0.6) P({ add: false, x: pl.x, y: 0.15, z: pl.z, vy: 0.3, life: 0.5, size: 0.4, size1: 0.9, color: T.wash ? 0xcfe2ee : 0x4a4038, alpha: 0.4 });
     if (T.t <= 0) pl.pull = null;
   }
   let speed = 0;

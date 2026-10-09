@@ -314,7 +314,11 @@ export function updatePacks() {
   if (z.tide && PACKS.floodWave) {
     const alive = new Set(); for (const a of z.actors) if (!a.dead && a.packId?.startsWith?.('wave')) alive.add(a.packId);
     const s = alive.size < 2 && floodWave(z);
-    if (s) { const p = { x: s.x, z: s.z, n: 3, tag: 'floodWave', id: 'wave' + (z.tide.waves = (z.tide.waves || 0) + 1), spawned: true, wave: true }; z.packs.push(p); spawnPack(z, p, D); }
+    if (s) {
+      // (the waves gone under are dropped from the list, so it does not grow all evening)
+      for (let k = z.packs.length - 1; k >= 0; k--) if (z.packs[k].wave && !alive.has(z.packs[k].id)) z.packs.splice(k, 1);
+      const p = { x: s.x, z: s.z, n: 3, tag: 'floodWave', id: 'wave' + (z.tide.waves = (z.tide.waves || 0) + 1), spawned: true, wave: true }; z.packs.push(p); spawnPack(z, p, D);
+    }
   }
   // the voices that speak once per place: Act III's Lady in the still trees (until the First Autumn), Act IV's Voice in
   // the Cradle between the lamps (until Ivar is at rest; v.need: only after that lamp burns)

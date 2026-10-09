@@ -10,8 +10,10 @@ export async function startCreatureView(q) {
   if (q.get('tilt')) { const [ax, a] = q.get('tilt').split(','); window.__tilt = [ax, +a]; }
   initGfx(2);
   setAtmosphere({ fog: 0x0a0d12, density: 0.01, sky: 0x6070a0, ground: 0x2a2018, hemi: 1.2, moon: 0xb0c4ff, moonI: 1.6, exposure: 1.2, heroI: 0 });
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshLambertMaterial({ map: tex('grass') }));
-  ground.material.map.repeat.set(20, 20); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; R.scene.add(ground);
+  // &sea: a dark sea for the ground (the Skotos and its Hands stand in water)
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), q.has('sea') ? new THREE.MeshStandardMaterial({ color: 0x0a1822, roughness: 0.3, metalness: 0.2 }) : new THREE.MeshLambertMaterial({ map: tex('grass') }));
+  if (!q.has('sea')) ground.material.map.repeat.set(20, 20);
+  ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; R.scene.add(ground);
   await Promise.all([loadCreatures(), loadPeople()]);
   const list = (q.get('only') || 'goblin,goblinArcher,skeleton,warg,troll,spider,ash,wraith,barrowLord').split(',').filter(hasCreature);
   const clips = q.get('clips') ? q.get('clips').split(',') : null;
@@ -21,12 +23,17 @@ export async function startCreatureView(q) {
   if (q.has('ref')) items.unshift(['ref', null]);
   const W = { goblin: 'dagger', goblinArcher: 'crossbow', goblinShaman: 'staffSkull', skeleton: 'sword', skeletonArcher: 'crossbow', ash: 'cleaver', troll: 'club', barrowLord: 'greatsword' };
   const gap = +(q.get('gap') || 2.6), avs = [];
+  // &skin: the Skotos's skin (sea.js skotosSkin, as the game patches keepMat creatures), &rough= its roughness, &aur= the aurora
+  const S = q.has('skin') ? await import('../world/sea.js') : null;
+  if (S) { S.SEA.uAur.value = +(q.get('aur') ?? 0.7); S.SEA.uAurDark.value = 0; }
   items.forEach(([m, clip, ft], i) => {
     const a = m === 'ref' ? new Avatar(personModel('warden'), { style: 'sword' }) : new Avatar(creatureModel(m), { style: 'none' });
     if (m !== 'ref' && q.get('weapon') !== 'none' && (q.get('weapon') || W[m])) a.hold('R', q.get('weapon') || W[m], {});
     a.group.position.set((i - (items.length - 1) / 2) * gap, 0, 0);
     a.group.rotation.y = +(q.get('rot') || 0.5);
     if (m !== 'ref' && q.get('scale')) a.group.scale.setScalar(+q.get('scale')); // as the game sizes it (look.scale)
+    if (m !== 'ref' && q.get('y')) a.group.position.y = +q.get('y'); // how deep it stands (the Skotos: a.y -3)
+    if (S && m !== 'ref') for (const mt of a.model.mats || []) { S.skotosSkin(mt); mt.roughness = +(q.get('rough') || 0.26); mt.envMapIntensity = 1; }
     R.scene.add(a.group); avs.push(a);
     let d = 1, at = ft ?? +(q.get('t') || 0);
     if (clip) { d = a.play(clip, 1) || 1; if (!q.get('t') && ft == null) at = a.anim.hitAt?.(clip) ?? 0.5; }
