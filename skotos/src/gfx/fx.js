@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { R, addLight, shake, LIGHTS } from './gfx.js';
 import { tex } from './textures.js';
 import { rand, clamp, lerp, TAU } from '../core/util.js';
+import { BED_DRY } from '../world/genlib.js';
 
 // ---------- particles ----------
 const VS = `
@@ -400,13 +401,39 @@ function emit(e, dt, cx, cz) {
       break;
     }
     case 'mist': while (e.acc > 0.3) { e.acc -= 0.3; P({ add: false, x: e.x + rr(-1.2, 1.2), y: 0.3, z: e.z + rr(0, 1), vx: rr(-0.2, 0.2), vy: 0.05, vz: rr(0.2, 0.6), life: rr(3, 5), size: 1.5, size1: 3.5, color: 0x8aa0b8, alpha: 0.22, alpha1: 0, drag: 0.2 }); } break;
+    // Act V: sea smoke rising off open water that is warmer than the air (e.cells: the water cells' centres near the
+    // emitter, build5.js; e.s how much of its square is water). Not under the black aurora's frozen coast (diamond dust)
+    case 'seasmoke': {
+      if (FX.ambient === 'coastFrozen') { e.acc = 0; break; }
+      const iv = 0.7 / Math.max(0.25, s);
+      while (e.acc > iv) {
+        e.acc -= iv;
+        const k = Math.floor(Math.random() * (e.cells.length / 2)) * 2, x = e.cells[k] + rr(-0.5, 0.5), z = e.cells[k + 1] + rr(-0.5, 0.5);
+        P({ add: false, x, y: rr(0.05, 0.3), z, vx: rr(-0.45, -0.15), vy: rr(0.12, 0.3), vz: rr(0.05, 0.3), life: rr(5, 8), size: rr(1.2, 2), size1: rr(3.5, 5), color: 0x9aa8b4, alpha: 0.13, alpha1: 0, drag: 0.08 });
+      }
+      break;
+    }
+    // a wreck dripping as the tide leaves it: while the water has lately stood higher than it stands now, round its bed
+    // (e.bed; FX.tideLv/FX.wetLv from sea.js), drops fall from its timbers (e.y the hull's height, e.s its half length)
+    case 'seaDrip': {
+      const ebb = clamp(((FX.wetLv || 0) - (FX.tideLv || 0)) / 0.3, 0, 1) * (FX.wetLv > (e.bed ?? 0.6) - 0.15 ? 1 : 0);
+      if (ebb <= 0) { e.acc = 0; break; }
+      const iv = 0.09 / ebb;
+      while (e.acc > iv) {
+        e.acc -= iv;
+        const y = rr(0.5, 1) * (e.y || 2), x = e.x + rr(-s, s) * 2.5, z = e.z + rr(-s, s) * 2.5;
+        P({ add: false, x, y, z, vy: -0.4, life: Math.sqrt((2 * y) / 9.8), size: 0.06, size1: 0.05, color: 0xb8c8d4, alpha: 0.85, alpha1: 0.7, grav: 9.8 });
+      }
+      break;
+    }
   }
 }
 function ambient(dt, cx, cz) {
   const k = FX.ambient; if (!k) return;
   FX.ambAcc = (FX.ambAcc || 0) + dt;
   const rate = k === 'forest' ? 0.06 : k === 'town' ? 0.05 : k === 'snow' ? 0.012 : k === 'halls' ? 0.07 : k === 'weep' ? 0.07 : k === 'weepAutumn' ? 0.045 : k === 'heart' || k === 'heartAutumn' ? 0.08
-    : k === 'ashfall' ? 0.022 : k === 'ashfieldStars' ? 0.16 : k === 'ashfieldDawn' ? 0.07 : k === 'forge' ? 0.045 : k === 'forgeCold' ? 0.08 : 0.09;
+    : k === 'ashfall' ? 0.022 : k === 'ashfieldStars' ? 0.16 : k === 'ashfieldDawn' ? 0.07 : k === 'forge' ? 0.045 : k === 'forgeCold' ? 0.08
+      : k === 'coast' ? 0.028 : k === 'coastFrozen' ? 0.03 : k === 'farlight' ? 0.034 : k === 'blizzard' ? 0.0045 : 0.09;
   while (FX.ambAcc > rate) {
     FX.ambAcc -= rate;
     const x = cx + rr(-16, 16), z = cz + rr(-14, 12);
@@ -470,6 +497,25 @@ function ambient(dt, cx, cz) {
       // the cold forge: grey ash settling, nothing rising
       if (Math.random() < 0.75) P({ add: false, x, y: rr(1, 6), z, vx: rr(-0.08, 0.08), vy: rr(-0.25, -0.1), vz: rr(-0.08, 0.08), life: rr(6, 10), size: rr(0.05, 0.08), size1: 0.05, color: 0x8a8884, alpha: 0.75, alpha1: 0 });
       else P({ add: false, x, y: rr(0.3, 1.0), z, vx: rr(-0.05, 0.05), vy: 0, vz: rr(-0.05, 0.05), life: rr(6, 9), size: 2.4, size1: 3.6, color: 0x3a3a40, alpha: 0.1, alpha1: 0 });
+    } else if (k === 'coast' || k === 'coastFrozen') {
+      // the Frozen Coast: light snow on the wind off the sea (out of the north-east), spindrift ribbons running along the
+      // ground; after the Freeze, diamond dust glinting in the still air instead of the sea's smoke
+      const q = Math.random(), g = 0.6 + Math.sin(FX.time * 0.3) * 0.4, frz = k === 'coastFrozen';
+      if (q < (frz ? 0.5 : 0.8)) P({ add: false, x: x + 4, y: rr(4, 9), z: z - 3, vx: rr(-1.1, -0.5) * (0.7 + g * 0.5), vy: rr(-1.2, -0.75), vz: rr(0.2, 0.6), life: rr(5, 8), size: rr(0.05, 0.1), size1: 0.06, color: 0xeef3fa, alpha: 0.85, alpha1: 0 });
+      else if (q < (frz ? 0.85 : 0.93) && frz) P({ x, y: rr(0.4, 4), z, vx: rr(-0.06, 0.06), vy: rr(-0.04, 0.02), vz: rr(-0.06, 0.06), life: rr(1.2, 2.6), size: rr(0.035, 0.06), size1: 0.02, color: 0xe8f4ff, color1: 0x9ac8ff, alpha: 0.95, alpha1: 0 });
+      else P({ add: false, x: x + 5, y: rr(0.08, 0.4), z: z - 2, vx: rr(-3.6, -2.2) * g, vy: 0.02, vz: rr(0.8, 1.6) * g, life: rr(1.5, 2.6), size: rr(0.9, 1.4), size1: rr(2.4, 3.4), color: 0xdce6f0, alpha: 0.11 * g, alpha1: 0 });
+    } else if (k === 'farlight') {
+      // the frozen sea: diamond dust hanging glittering in the cold air, spindrift creeping over the ice
+      const q = Math.random(), g = 0.5 + Math.sin(FX.time * 0.25) * 0.5;
+      if (q < 0.62) P({ x, y: rr(0.3, 4.5), z, vx: rr(-0.08, 0.08), vy: rr(-0.05, 0.03), vz: rr(-0.08, 0.08), life: rr(1.2, 3), size: rr(0.03, 0.065), size1: 0.02, color: 0xf0f8ff, color1: 0x8ab8ff, alpha: 0.95, alpha1: 0 });
+      else if (q < 0.82) P({ add: false, x: x + 3, y: rr(4, 8), z, vx: rr(-0.8, -0.3), vy: rr(-0.9, -0.6), vz: rr(0.1, 0.3), life: rr(6, 9), size: rr(0.05, 0.08), size1: 0.05, color: 0xe8eef8, alpha: 0.8, alpha1: 0 });
+      else P({ add: false, x: x + 5, y: rr(0.06, 0.3), z, vx: rr(-2.6, -1.4) * (0.5 + g), vy: 0.01, vz: rr(-0.3, 0.3), life: rr(1.8, 3), size: rr(0.8, 1.2), size1: rr(2.2, 3.2), color: 0xd4dee8, alpha: 0.09 + 0.05 * g, alpha1: 0 });
+    } else if (k === 'blizzard') {
+      // a gust off the open ice, and the Skotos's Night: snow driven sideways, thick streaming veils along the ground
+      const q = Math.random();
+      if (q < 0.72) P({ add: false, x: x + 12, y: rr(0.3, 7), z: z + rr(-2, 2), vx: rr(-11, -7), vy: rr(-1.4, -0.4), vz: rr(-0.8, 0.8), life: rr(1.6, 2.6), size: rr(0.06, 0.13), size1: 0.07, color: 0xf2f6fc, alpha: 0.9, alpha1: 0.3 });
+      else if (q < 0.94) P({ add: false, x: x + 10, y: rr(0.1, 1.2), z: z + rr(-2, 2), vx: rr(-8, -5), vy: rr(-0.05, 0.15), vz: rr(-0.6, 0.6), life: rr(1.5, 2.5), size: rr(1.4, 2.2), size1: rr(3.5, 5), color: 0xdfe8f2, alpha: 0.16, alpha1: 0 });
+      else P({ add: false, x, y: rr(1, 3), z, vx: rr(-3, -1.5), vy: 0, vz: 0, life: rr(2, 3.5), size: 5, size1: 8, color: 0xc8d2de, alpha: 0.07, alpha1: 0 });
     } else if (k === 'gate') {
       P({ x, y: rr(0.2, 3), z, vx: rr(-0.2, 0.2), vy: rr(0.2, 0.6), vz: rr(-0.2, 0.2), life: rr(2, 4), size: 0.1, size1: 0.02, color: 0xc080ff, color1: 0x4010a0, alpha: 0.9, alpha1: 0 });
     }
@@ -480,6 +526,8 @@ export function updateFX(dt, cx, cz) {
   FX.time += dt;
   for (const e of FX.emitters) emit(e, dt, cx, cz);
   ambient(dt, cx, cz);
+  if (AMB5.has(FX.ambient)) walk5(dt, cx, cz); else FX.walk = null;
+  if (PRINTS.mesh) tickPrints(dt);
   FX.add.update(dt); FX.alpha.update(dt); FX.leaf.update(dt);
   for (let i = FX.rings.length - 1; i >= 0; i--) {
     const r = FX.rings[i]; r.t += dt; const k = r.t / r.life;
@@ -502,7 +550,134 @@ export function updateFX(dt, cx, cz) {
 }
 export function clearFX() {
   FX.add.clear(); FX.alpha.clear(); FX.leaf.clear();
+  clearPrints(); FX.walk = null;
   for (const r of FX.rings) { FX.group.remove(r.m); r.m.material.dispose(); } FX.rings = [];
   for (const d of FX.decals) { FX.group.remove(d.m); d.m.material.dispose(); } FX.decals = [];
   for (const t of FX.teles) { FX.group.remove(t.m); t.m.material.dispose(); } FX.teles = [];
+}
+
+// ---------- Act V: water, ice, breath, footprints ----------
+const AMB5 = new Set(['coast', 'coastFrozen', 'farlight', 'blizzard']);
+// a splash where something goes into the water (s its size): spray thrown up, a foam burst, a ring on the surface
+export function splash(x, z, s = 1) {
+  for (let i = 0; i < 14 * s; i++) { const a = rr(0, TAU), v = rr(1, 3) * s; P({ add: false, x, y: 0.25, z, vx: Math.cos(a) * v * 0.5, vy: rr(2.5, 5) * Math.sqrt(s), vz: Math.sin(a) * v * 0.5, grav: 9.8, life: rr(0.5, 0.9), size: rr(0.08, 0.16), size1: 0.05, color: 0xd8e6ee, alpha: 0.9, alpha1: 0.2 }); }
+  P({ add: false, x, y: 0.3, z, vy: 0.4, life: 0.8, size: 0.8 * s, size1: 2.2 * s, color: 0xe8f0f4, alpha: 0.4, alpha1: 0 });
+  ring(x, z, 1.6 * s, 0xa8c4d4, 0.7, 0.3);
+}
+// ice breaking: shards flung out and skittering, a puff of powder
+export function iceShards(x, z, n = 12) {
+  for (let i = 0; i < n; i++) { const a = rr(0, TAU), v = rr(1.2, 3.5); P({ x, y: 0.1, z, vx: Math.cos(a) * v, vy: rr(1.5, 3.5), vz: Math.sin(a) * v, grav: 9.8, drag: 0.6, life: rr(0.6, 1.2), size: rr(0.08, 0.15), size1: 0.06, color: 0xe0f2ff, color1: 0x7ab4e0, alpha: 0.95, alpha1: 0.3 }); }
+  P({ add: false, x, y: 0.2, z, vy: 0.3, life: 1.1, size: 0.9, size1: 2.4, color: 0xe4ecf2, alpha: 0.35, alpha1: 0 });
+}
+// a freeze front's crystals: glints round a circle of radius r rising a little and going out
+export function freezeCrystals(x, z, r = 2, n = 16) {
+  for (let i = 0; i < n; i++) { const a = rr(0, TAU), d = r * rr(0.85, 1.05); P({ x: x + Math.cos(a) * d, y: rr(0.05, 0.4), z: z + Math.sin(a) * d, vx: Math.cos(a) * 0.3, vy: rr(0.2, 0.7), vz: Math.sin(a) * 0.3, life: rr(0.7, 1.5), size: rr(0.06, 0.12), size1: 0.02, color: 0xf4fbff, color1: 0x8ad0ff, alpha: 1, alpha1: 0, drag: 0.8 }); }
+}
+// a breath in the cold, from (x, y, z) toward (dx, dz): a small cloud drifting out and up; k (0-1, Chilled and worse) thicker
+export function breath(x, y, z, k = 0, dx = 0, dz = 1) {
+  for (let i = 0; i < 2 + Math.round(k * 3); i++) P({ add: false, x: x + dx * 0.1, y: y + rr(-0.04, 0.04), z: z + dz * 0.1, vx: dx * rr(0.3, 0.6) + rr(-0.1, 0.1), vy: rr(0.08, 0.25), vz: dz * rr(0.3, 0.6) + rr(-0.1, 0.1), life: rr(1.1, 1.8), size: rr(0.1, 0.16), size1: rr(0.55, 0.8) * (1 + k * 0.4), color: 0xeef2f6, alpha: 0.22 + k * 0.12, alpha1: 0, drag: 0.9 });
+}
+// in an Act V zone, round the hero (the camera's target): a breath every 2.5 s (FX.chill 0-1, cold.js, quickens it and
+// thickens it), and her footprints in the snow every 0.7 m (not at quality 0)
+function walk5(dt, cx, cz) {
+  const w = FX.walk ||= { x: cx, z: cz, d: 0, side: 1, dx: 0, dz: 1, bt: 1 };
+  const mx = cx - w.x, mz = cz - w.z, m = Math.hypot(mx, mz);
+  w.x = cx; w.z = cz;
+  if (m > 3) { w.d = 0; return; }
+  if (m > 0.001) { w.dx = mx / m; w.dz = mz / m; }
+  const chill = clamp(FX.chill || 0, 0, 1);
+  if ((w.bt -= dt) <= 0) { w.bt = lerp(2.5, 1.4, chill) * rr(0.9, 1.1); breath(cx + w.dx * 0.22, 1.6, cz + w.dz * 0.22, chill, w.dx, w.dz); }
+  if (FX.q < 1 || !FX.L5) return;
+  w.d += m;
+  if (w.d < 0.7) return;
+  w.d = 0; w.side = -w.side;
+  const px = cx - w.dz * 0.13 * w.side, pz = cz + w.dx * 0.13 * w.side;
+  if (snowAt(FX.L5, px, pz)) footprint(px, pz, Math.atan2(w.dx, w.dz));
+}
+// a cell of snow (land, or thick ice under its snow; not thin ice, water, a window or the jetty)
+function snowAt(L, x, z) {
+  const ix = Math.floor(x), iz = Math.floor(z);
+  if (ix < 0 || iz < 0 || ix >= L.w || iz >= L.h) return false;
+  const i = iz * L.w + ix;
+  return !!L.cells[i] && !L.ice?.[i] && !L.low?.[i] && !L.window?.[i] && !L.deck?.[i] && (!L.bed || L.bed[i] >= BED_DRY || !!L.thick?.[i]);
+}
+// footprints: 48 instanced prints pressed into the snow, each fading out over its last 3 of 12 s
+const PRINTS = { mesh: null, fade: null, t: new Float32Array(48), n: 0 };
+let printTex = null;
+function printTexture() {
+  if (printTex) return printTex;
+  const c = document.createElement('canvas'); c.width = 32; c.height = 64; const g = c.getContext('2d');
+  const gr = g.createRadialGradient(16, 22, 2, 16, 22, 14); gr.addColorStop(0, 'rgba(255,255,255,0.95)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.beginPath(); g.ellipse(16, 22, 10, 15, 0, 0, TAU); g.fill();
+  const gh = g.createRadialGradient(16, 50, 1, 16, 50, 9); gh.addColorStop(0, 'rgba(255,255,255,0.9)'); gh.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gh; g.beginPath(); g.ellipse(16, 50, 8, 9, 0, 0, TAU); g.fill();
+  return (printTex = new THREE.CanvasTexture(c));
+}
+function printMesh() {
+  const geo = new THREE.PlaneGeometry(0.16, 0.3); geo.rotateX(-Math.PI / 2);
+  const fade = new THREE.InstancedBufferAttribute(new Float32Array(48), 1); fade.setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('aFade', fade);
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uTex: { value: printTexture() } }, transparent: true, depthWrite: false,
+    vertexShader: 'attribute float aFade; varying vec2 vUv; varying float vF; void main(){ vUv = uv; vF = aFade; gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0); }',
+    fragmentShader: 'uniform sampler2D uTex; varying vec2 vUv; varying float vF; void main(){ float a = texture2D(uTex, vUv).a * vF; if (a < 0.01) discard; gl_FragColor = vec4(0.13, 0.16, 0.23, a * 0.5); }'
+  });
+  const m = new THREE.InstancedMesh(geo, mat, 48);
+  m.count = 0; m.frustumCulled = false; m.renderOrder = 2;
+  FX.group.add(m);
+  PRINTS.mesh = m; PRINTS.fade = fade;
+  return m;
+}
+const _pm = new THREE.Matrix4(), _pq = new THREE.Quaternion(), _pp = new THREE.Vector3(), _ps = new THREE.Vector3(1, 1, 1), _py = new THREE.Vector3(0, 1, 0);
+export function footprint(x, z, rot) {
+  const m = PRINTS.mesh || printMesh(), i = PRINTS.n++ % 48;
+  m.setMatrixAt(i, _pm.compose(_pp.set(x, 0.026, z), _pq.setFromAxisAngle(_py, rot), _ps));
+  m.instanceMatrix.needsUpdate = true;
+  PRINTS.t[i] = 12;
+  m.count = Math.min(48, PRINTS.n);
+}
+function tickPrints(dt) {
+  const f = PRINTS.fade.array;
+  for (let i = 0; i < PRINTS.mesh.count; i++) { PRINTS.t[i] = Math.max(0, PRINTS.t[i] - dt); f[i] = Math.min(1, PRINTS.t[i] / 3); }
+  PRINTS.fade.needsUpdate = true;
+}
+function clearPrints() { if (PRINTS.mesh) { PRINTS.mesh.count = 0; PRINTS.n = 0; PRINTS.t.fill(0); } }
+
+// ---------- Act V: the frost at the screen's edges (hud.js lays it over the screen under a CSS mask that follows Cold) ----------
+// frostImage(): a data URL (the CSP allows data: images) of frost feathers growing in from the edges, clear in the middle;
+// frostVignette(v): for Cold v (0-100) how far in it reaches (inner/outer, % of the half-diagonal) and how strong it is
+let frostURL = null;
+export function frostImage() {
+  if (frostURL) return frostURL;
+  const N = 512, c = document.createElement('canvas'); c.width = c.height = N; const g = c.getContext('2d');
+  const R0 = N * 0.5;
+  // a soft white rim, then frost feathers: branches grown inward from the edge, each splitting into fine needles
+  const rim = g.createRadialGradient(R0, R0, R0 * 0.55, R0, R0, R0 * 1.42);
+  rim.addColorStop(0, 'rgba(230,242,255,0)'); rim.addColorStop(0.55, 'rgba(220,236,250,0.18)'); rim.addColorStop(1, 'rgba(240,248,255,0.75)');
+  g.fillStyle = rim; g.fillRect(0, 0, N, N);
+  const rnd = (() => { let s = 7; return () => { s = (s * 16807) % 2147483647; return s / 2147483647; }; })();
+  const branch = (x, y, a, len, w, depth) => {
+    if (depth > 4 || len < 3) return;
+    const x1 = x + Math.cos(a) * len, y1 = y + Math.sin(a) * len;
+    g.strokeStyle = `rgba(245,250,255,${0.55 - depth * 0.08})`; g.lineWidth = w;
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x1, y1); g.stroke();
+    const n = 3 - Math.min(depth, 2);
+    for (let k = 1; k <= n; k++) {
+      const t = k / (n + 1), bx = x + (x1 - x) * t, by = y + (y1 - y) * t;
+      branch(bx, by, a + 0.75 + (rnd() - 0.5) * 0.3, len * 0.42, w * 0.6, depth + 1);
+      branch(bx, by, a - 0.75 + (rnd() - 0.5) * 0.3, len * 0.42, w * 0.6, depth + 1);
+    }
+    branch(x1, y1, a + (rnd() - 0.5) * 0.4, len * 0.6, w * 0.75, depth + 1);
+  };
+  for (let k = 0; k < 64; k++) {
+    const t = k / 64, side = k % 4, u = rnd() * N;
+    const [x, y, a] = side === 0 ? [u, 0, Math.PI / 2] : side === 1 ? [N, u, Math.PI] : side === 2 ? [u, N, -Math.PI / 2] : [0, u, 0];
+    branch(x, y, a + (rnd() - 0.5) * 0.9, 40 + rnd() * 70, 2.2, 0);
+    void t;
+  }
+  return (frostURL = c.toDataURL('image/png'));
+}
+export function frostVignette(v) {
+  const k = clamp((v - 25) / 75, 0, 1);
+  return { inner: Math.round(lerp(78, 30, k)), outer: Math.round(lerp(118, 82, k)), opacity: +(k > 0 ? 0.25 + 0.75 * k : 0).toFixed(3) };
 }

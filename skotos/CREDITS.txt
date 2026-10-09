@@ -40,6 +40,10 @@ ACT IV MONSTERS AND PEOPLE (src/assets/creatures/, src/assets/ash.glb; adapted f
 - Karthax, the Ash King: "Overlord" by DJMaesen (sketchfab.com/bumstrum). CC-BY 4.0, modified (rebound onto the people's skeleton, black iron with ember seams; the Ash Crown made in code). https://sketchfab.com/3d-models/overlord-4e61da8bb7f3440db3df42ee26c4b797
 - The dead of the Field of Ash (the Lampless, the Ash-Fallen, the Ashsmiths, Ivar, Arna and the boy Isarn): Quaternius characters (CC0, https://quaternius.com), re-proportioned and re-coloured for Skotos, with ember cracks and ash flecks from "Bark Brown 02" by Rob Tuytel (Poly Haven, CC0, https://polyhaven.com/a/bark_brown_02). Their lanterns, masks, cones and shackles are made in code. The keepers' statues in Karthax's cages are the Barrow Lord, Durgan and Amaranthe, turned to ash in code.
 
+ACT V MONSTERS AND PEOPLE (src/assets/creatures/, src/assets/frost.glb; adapted for Skotos)
+- Skerry, the Walking Tower, and the Reefbacks: "Crab mountain" by pro100voron (sketchfab.com/pro100voron). CC-BY 4.0, modified (re-rigged, decimated, regraded to slate chitin and rimed stone; every animation but the idle made for Skotos; the ruin on its back is made in code). https://sketchfab.com/3d-models/crab-mountain-ac8fa79586f84c84a8a55dd86b7a2e2f
+- The Sunken, the Ice Singers and the Saltborn (Alkyone, Selna, Tern, Tamarisk, Old Glaukos): Quaternius characters (CC0, https://quaternius.com), re-proportioned and re-dyed for Skotos (drowned, sea-soaked and salt-weathered). Their kelp, barnacles, hoods, caps, collars, the eye band, the boat-hook, the harpoon and the sea-lanterns are made in code.
+
 WORLD
 - Dungeon Remastered, Medieval Hexagon Pack, Halloween Bits by Kay Lousberg / KayKit. CC0 1.0.
 - Ground, stone, bark and props from Poly Haven (polyhaven.com). CC0. Per-asset authors in src/assets/env/CREDITS.txt.
@@ -89,6 +93,32 @@ WORLD
   "Medieval Blacksmith Bellows" by TomasKiniulis (the Great Bellows and the stokers' bellows), https://sketchfab.com/3d-models/medieval-blacksmith-bellows-b9eaf7057b194e36b73da1f49cf49886
   "PBR Anvil" by NOT_Lonely (the Anvil of the Crown and the shard-anvils), https://sketchfab.com/3d-models/pbr-anvil-3529b9ef4e2c4a32add55948b5361609
   "Asset Pack - Blacksmith Equipment" by Mike Farrant (tongs, quench trough, tool racks, stumps), https://sketchfab.com/3d-models/asset-pack-blacksmith-equipment-0f358eaab21d4e70836ad855de34c423
+- Act V ground, ice, cliffs and props (the Frozen Coast and the Farthest Light; src/assets/rime/ and src/assets/rime.glb), CC0 1.0, modified (resized, re-graded to snow, sea-rock and ice, props cut and decimated; per-asset details in src/assets/rime/CREDITS.txt):
+  snow_02, snow_03 by Rob Tuytel (snow, trodden snow), https://polyhaven.com/a/snow_02, https://polyhaven.com/a/snow_03
+  low_tide_rocks, seaside_rock by Dimitrios Savva (the shore, the sea-cliffs), https://polyhaven.com/a/low_tide_rocks, https://polyhaven.com/a/seaside_rock
+  wood_planks_grey by Rob Tuytel (the jetty, huts and decks), https://polyhaven.com/a/wood_planks_grey
+  Ice002 by ambientCG (Lennart Demes) (the sea ice), https://ambientcg.com/a/Ice002
+  dutch_ship_medium by James Ray Cock, Rico Cilliers, Nicolò Zubbini (the Icebound Ship), https://polyhaven.com/a/dutch_ship_medium
+  wooden_barrels_01 by James Ray Cock (whale-oil casks), https://polyhaven.com/a/wooden_barrels_01
+  wooden_crate_02 by James Ray Cock, Jurita Burger (crates), https://polyhaven.com/a/wooden_crate_02
+  vintage_oil_lamp by Monsta3D (the sea-lanterns), https://polyhaven.com/a/vintage_oil_lamp
+  coastal_cliff_01 by Rob Tuytel, Rico Cilliers; rock_face_01 by Dario Barresi (cliff faces), https://polyhaven.com/a/coastal_cliff_01, https://polyhaven.com/a/rock_face_01
+- Act V props from sketchfab.com, CC-BY 4.0 (https://creativecommons.org/licenses/by/4.0/), modified (cut, decimated, re-centred, rescaled, re-graded to frost; src/assets/rime.glb):
+  "The Dalarö wreck/ Bodekull part 2" by the Swedish National Maritime and Transport History Museums (maritima) (the hero wreck), https://sketchfab.com/3d-models/the-dalaro-wreck-bodekull-part-2-027900c8fdf840f589cadb9f4a60d78c
+  "Gislinge Viking Boat" by Opus Poly (the keel-boats), https://sketchfab.com/3d-models/gislinge-viking-boat-01098ad7973647a9b558f41d2ebc5193
+  "Old Rowboat" by TooManyDemons (rowboats), https://sketchfab.com/3d-models/old-rowboat-9922d5678af84adeb1c9b479856446ca
+  "Broken Row Boat" by megamaniac (broken hulls), https://sketchfab.com/3d-models/broken-row-boat-41c2bcc5ca544897a132be71f3b2673a
+  "Pack of old towers in ruins" by JB3D (taz83) (the sea-lights and the Skerry Light), https://sketchfab.com/3d-models/pack-of-old-towers-in-ruins-f213359c6cbb4c29bf8880764faa0fb8
+  "Old Lighthouse" by Nirved Kamble (the Farthest Light's shaft), https://sketchfab.com/3d-models/old-lighthouse-19e1ff049db74dc8b6173976417c1048
+  "Medieval Anchor (Free)" by wolfgar74 (anchors), https://sketchfab.com/3d-models/medieval-anchor-free-5896ac54d63e4b84bd32e0b232619dfd
+  "Sunken Anchor" by guillaume.biju-duval (the Icebound Ship's anchor), https://sketchfab.com/3d-models/sunken-anchor-e654cb6e6e2c4217a7decb6bb9c0010d
+  "Skeleton - North Atlantic Right Whale" by Ingenium Canada (technoscience3d) (the whale on the strand), https://sketchfab.com/3d-models/skeleton-north-atlantic-right-whale-5c8664c56f9a4cf3ae6d9b8ec33b8dba
+  "Monumental Runic Stone - Optimised, 20k" by Thomas Flynn (nebulousflynn) (the Name-stones), https://sketchfab.com/3d-models/monumental-runic-stone-optimised-20k-d95a850cd9114828a18b5dd72878d9ec
+  "Beach Rock with Barnacles Photoscan" by EFX (evan4129) (barnacle rocks), https://sketchfab.com/3d-models/beach-rock-with-barnacles-photoscan-21c9848ca38b4d289e2f38a98a905f86
+  "Large Pine Driftwood (Pacific Northwest)" by Crew Froebel (crufro) (driftwood), https://sketchfab.com/3d-models/large-pine-driftwood-pacific-northwest-95d1087e513e4fb992a27b7b8a05ca9e
+  "Scan of Kelp and Seaweed on sand beach" by sterlingcrispin (kelp heaps), https://sketchfab.com/3d-models/scan-of-kelp-and-seaweed-on-sand-beach-c9b5ef07047a4b7a90a4ffd6930ec22c
+  "Icicle 01" by Elin Hohler (ElinHohler) (icicles), https://sketchfab.com/3d-models/icicle-01-2dc75ae22f1c4d11abbfd32819312a12
+  "Wooden Shack" by Dominic Baker (Domuk) (the Landing's huts), https://sketchfab.com/3d-models/wooden-shack-b0bc474f7803488dbe0fa5aeef2e9ace
 - Village of Lefkovrachos (src/assets/village.glb; rescaled, decimated, textures re-encoded, window glow added), all CC-BY 4.0 from sketchfab.com, per-model links in src/assets/VILLAGE_CREDITS.txt:
   "Medieval House 1", "Medieval House 2", "Medieval House 3", "Medieval House 4" by Animau3D;
   "Medieval house | Generic Textures | Game ready" by by__Rx; "Medieval house" by Young_Wizard; "Medieval Warehouse" by timowes;

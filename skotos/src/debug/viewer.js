@@ -1,6 +1,6 @@
 // Model and animation viewer for screenshots: ?viewer&clip=slash1&t=0.5&speed=0&cam=front
 import * as THREE from 'three';
-import { initGfx, R, setAtmosphere, frame, render, updateCamera, addLight } from '../gfx/gfx.js';
+import { initGfx, R, setAtmosphere, frame, render, updateCamera, addLight, toScreen } from '../gfx/gfx.js';
 import { tex } from '../gfx/textures.js';
 import * as M from '../gfx/models.js';
 import { Avatar } from '../gfx/anim.js';
@@ -297,23 +297,20 @@ function act4At(L, at, n) {
   return pick || L.start;
 }
 
-// Act V: gen5's layout, or (until it is there) the viewer's stand-in (debug/fake5.js); &gen=fake forces the stand-in
+// Act V: gen5's layouts (&frozen: the coast after the Freeze; &sealed=0,1: the Farthest Light with those leads sealed)
 async function layout5(q, type, seed) {
-  const G5 = import.meta.glob('../world/gen5.js');
-  const frozen = q.has('frozen');
-  if (G5['../world/gen5.js'] && q.get('gen') !== 'fake') {
-    const m = await G5['../world/gen5.js'](), gen = type === 'coast' ? m.genCoast : m.genFarlight;
-    const L = gen?.(seed, { frozen });
-    if (L) return L;
-  }
-  const F = await import('./fake5.js');
-  return type === 'coast' ? F.fakeCoast(seed, { frozen, tide: +(q.get('tide') || 0) }) : F.fakeFarlight(seed);
+  const m = await import('../world/gen5.js');
+  if (type === 'coast') return m.genCoast(seed, { frozen: q.has('frozen') });
+  const L = m.genFarlight(seed);
+  // &sealed=0,1: those holes sealed before the build, as world.js lays them out on a later entry
+  for (const k of (q.get('sealed') || '').split(',').filter(Boolean).map(Number)) for (const [x, z] of L.spots.holes[k]?.lead || []) { const i = z * L.w + x; L.cells[i] = 1; L.low[i] = 0; L.sea[i] = 0; L.ice[i] = 0; L.thick[i] = 1; }
+  return L;
 }
 // the sea's states: &tide=0..1.2 (&wet= the wet line), &freeze=0..1 (the Freeze), &wave=t (hole 0's wave), &ring=p (its
 // ring closing), &crack=1 (crack stages 1-5 round the hero), &shade=1 (a shape under the ice), &wake=1, &beam=1 (a lit
 // sea-light's beam and its light path, &theta=), &tele=1 (a telegraph, a light pool, the Cradle's ring, a decal and a blob
 // shadow round the hero: the draw order over the water), &sky=1 (the aurora dome; lower the camera with &pitch=0.2),
-// &aur=, &dark=, &front= (override the atmosphere's aurora)
+// &aur=, &dark=, &front= (override the atmosphere's aurora), &skin=1 (the Skotos's skin on a test sphere by the hero)
 async function viewAct5(q, L) {
   const S = await import('../world/sea.js'), B = await import('../world/build.js'), FXm = await import('../gfx/fx.js');
   const num = (k, d) => (q.has(k) ? +q.get(k) : d);
@@ -327,6 +324,9 @@ async function viewAct5(q, L) {
   if (q.has('wave') && h0) S.SEA.uFreeze.value[0].set(h0.x, h0.z, 70, num('wave', 0.4));
   if (q.has('ring') && h0) S.freezeRing(0, h0.x, h0.z, 4.6, num('ring', 0.5));
   S.SEA.sky = q.has('sky');
+  // (for the scenarios: this page's own modules, not fresh imports of them)
+  window.__v5 = { S, B, fx: FXm, R, toScreen };
+  props5(q, L, (await import('../world/build5.js')).act5Prop);
   const extra = [];
   let beam = null;
   return {
@@ -354,6 +354,13 @@ async function viewAct5(q, L) {
         addLight({ x: bx, y: 9, z: bz, color: 0xffd8a0, intensity: 30, range: 16 });
         const p = beam.userData.point(14); addLight({ x: p.x, y: Math.max(1.5, p.y), z: p.z, color: 0xfff0d8, intensity: 14, range: 9 });
       }
+      if (q.has('skin')) {
+        for (const [dx, M] of [[-3, THREE.MeshStandardMaterial], [3, THREE.MeshLambertMaterial]]) {
+          const m = new THREE.Mesh(new THREE.SphereGeometry(1.2, 32, 20), S.skotosSkin(new M({ color: 0x0c0a14 })));
+          m.position.set(x + dx, 1.4, z - 2); R.scene.add(m); extra.push(m);
+        }
+        S.SEA.uBeam.value[0].set(x - 8, 6, z - 2, 1); S.SEA.uBeam.value[1].set(0.97, -0.243, 0, 26);
+      }
       if (q.has('tele')) {
         FXm.teleCircle(x + 2.5, z - 2, 1.8, 30);
         FXm.teleCone(x - 1, z - 3, 0.3, 4, 0.5, 30, 0x30e0b0);
@@ -367,6 +374,42 @@ async function viewAct5(q, L) {
     tick(dt) { beam?.userData.tick(dt); }
   };
 }
+
+// Act V: the story's props where world.js puts them (act5Zone); &lit=1 lights them all (or a list: grey,wreck,fall,hearth,
+// stones,lamps,cairns,far), &beams=1 their beams, &tower=down the dead Tower on its island, &carved=1 the door-stone carved
+function props5(q, L, act5Prop) {
+  const S = L.spots, lit = q.get('lit') || '', on = (k) => lit === '1' || lit.split(',').includes(k), beams = q.has('beams');
+  const put = (o, x, z, ry = 0) => { o.position.set(x, 0, z); o.rotation.y = ry; R.scene.add(o); return o; };
+  const light = (m, k, r = 7, c = 0xffe8c8) => { m.userData.setLit?.(on(k)); if (on(k)) addLight({ x: m.position.x, y: 1.8, z: m.position.z, color: c, intensity: 22, range: r * 2, flicker: 0.12 }); };
+  window.__props5 = [];
+  const keep = (m) => { window.__props5.push(m); return m; };
+  if (L.type === 'coast') {
+    S.sealights.forEach((s, k) => {
+      const m = keep(put(act5Prop('sealight', { v: k, id: s.id }), s.x, s.z, s.r)); light(m, s.id);
+      if (beams && on(s.id)) m.userData.setBeam(s.r + 0.6);
+      keep(put(act5Prop('iceWindow', { id: s.id }), s.window.x, s.window.z, s.r));
+    });
+    light(keep(put(act5Prop('hearth'), S.hearth.x, S.hearth.z)), 'hearth', 8, 0xffb070);
+    keep(put(act5Prop('bell'), S.bell.x, S.bell.z, Math.PI / 2));
+    for (const b of S.boats) keep(put(act5Prop('boat'), b.x, b.z, b.r)).userData.setLevel(+(q.get('tide') || 0));
+    for (const st of S.stones) light(keep(put(act5Prop('nameStone', { id: st.id }), st.x, st.z, st.r)), 'stones', 3);
+    for (const c of S.casks) keep(put(act5Prop('cask'), c.x, c.z, hashA(c.x, c.z)));
+    if (q.get('tower') === 'down') { const m = keep(put(act5Prop('skerryLight'), S.skerry.x, S.skerry.z)); m.userData.setLit(true); if (beams) m.userData.setBeam(2.4); }
+  } else {
+    const sealed = (q.get('sealed') || '').split(',').filter(Boolean).map(Number);
+    for (const ho of S.holes) {
+      if (sealed.includes(ho.id)) { const m = keep(put(act5Prop('markerLight'), ho.x, ho.z)); if (beams) m.userData.setBeam(ho.id * 1.7); continue; }
+      ho.lamps.forEach((p) => light(keep(put(act5Prop('holeLamp'), p.x, p.z, Math.atan2(ho.x - p.x, ho.z - p.z))), 'lamps', 4.5, 0xffb060));
+    }
+    for (const f of S.fires) light(keep(put(act5Prop('cairn'), f.x, f.z)), 'cairns', 5, 0xffb060);
+    const FL = S.farLight, m = keep(put(act5Prop('farLight'), FL.x, FL.z, Math.PI));
+    m.userData.setLit(on('far')); if (beams && on('far')) m.userData.setBeam(Math.PI + 0.3);
+    keep(put(act5Prop('doorStone'), FL.door.x, FL.door.z, Math.PI)).userData.setCarved(q.has('carved'));
+    for (const dl of S.drowned) keep(put(act5Prop('iceWindow', { drowned: true }), dl.window.x, dl.window.z));
+    for (const c of S.casks) keep(put(act5Prop('cask'), c.x, c.z, hashA(c.x, c.z)));
+  }
+}
+const hashA = (x, z) => (Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 6.28;
 
 async function fakeCinder() {
   const { ENV } = await import('../gfx/env.js');

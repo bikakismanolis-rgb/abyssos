@@ -103,7 +103,7 @@ function tryCoast(seed, last) {
   // ---- dry land: the Graveyard's shore and its point, the Neck and its overlook, the Landing, the strand, the den ----
   const gEnd = 97 + rng.range(0, 6);
   for (let z = 89; z < 96; z++) for (let x = 55; x < gEnd + (fbm(z * 0.3, 3.3, seed + 9) - 0.5) * 4; x++) K[z * w + x] = LAND;
-  seg(WL.x + 2, 48, WL.x, WL.z, 3.2, LAND); disc(WL.x, WL.z, 4.6, LAND);
+  seg(WL.x + 1.5, WL.z - 9, WL.x, WL.z, 3.2, LAND); disc(WL.x, WL.z, 4.6, LAND);
   const M = { x: snap(clamp(NK.x + rng.range(-8, 6), 42, 62)), z: 153 };
   let neckE = 0;
   {

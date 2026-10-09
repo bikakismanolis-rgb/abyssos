@@ -7,6 +7,7 @@ import { basicAttack, useSkill, dodge, drinkPotion, updateAction, trailOn, neare
 import { tickStatus, moveMul, rootHero, tickCling } from './combat.js';
 import { sapAt } from './sap.js';
 import { tickLight } from './light.js';
+import { wadeAt } from './tide.js';
 import { foes } from './actors.js';
 import { Trail, P } from '../gfx/fx.js';
 import { R } from '../gfx/gfx.js';
@@ -66,16 +67,24 @@ export function updatePlayer(dt) {
   if (pl.onSap && !(st.root > 0)) { st.stick += dt; if (st.stick >= 1.5) { st.stick = 0; rootHero(1.2); } }
   else if (!pl.onSap) st.stick = Math.max(0, st.stick - dt * 3);
   if ((st.root > 0) !== !!pl.amberTint) { pl.amberTint = st.root > 0; av.setTint(0xffb040, pl.amberTint ? 0.55 : 0); }
+  // Act V: wading in the tide, brine or slush (moveMul; cold.js)
+  pl.inWater = airborne ? null : wadeAt(pl.x, pl.z);
   if (st.root > 0 && Math.random() < 0.4) P({ x: pl.x + (Math.random() - 0.5) * 0.7, y: Math.random() * 0.8, z: pl.z + (Math.random() - 0.5) * 0.7, vy: 0.2, life: 0.5, size: 0.12, size1: 0.02, color: 0xffd080 });
 
   // movement
   const m = moveMul(pl);
   let mx = IN.mx, mz = IN.mz;
   if (G.panel) mx = mz = 0;
-  // dragged by Karthax's tongs: no say in where she goes until it is over
+  // dragged by Karthax's tongs: no say in where she goes until it is over (a tide's wash-out follows its lane's cells:
+  // T.path, a polyline with each point's distance d along it, T.len in all)
   if (pl.pull) {
     const T = pl.pull; T.t -= dt; const u = clamp(1 - T.t / T.t0, 0, 1);
-    pl.x = T.sx + (T.x - T.sx) * u; pl.z = T.sz + (T.z - T.sz) * u; mx = mz = 0;
+    if (T.path) {
+      const P = T.path, d = u * T.len; let k = 1; while (k < P.length - 1 && P[k].d < d) k++;
+      const a = P[k - 1], b = P[k], f = b.d > a.d ? clamp((d - a.d) / (b.d - a.d), 0, 1) : 1;
+      pl.x = a.x + (b.x - a.x) * f; pl.z = a.z + (b.z - a.z) * f;
+    } else { pl.x = T.sx + (T.x - T.sx) * u; pl.z = T.sz + (T.z - T.sz) * u; }
+    mx = mz = 0;
     if (Math.random() < 0.6) P({ add: false, x: pl.x, y: 0.15, z: pl.z, vy: 0.3, life: 0.5, size: 0.4, size1: 0.9, color: 0x4a4038, alpha: 0.4 });
     if (T.t <= 0) pl.pull = null;
   }

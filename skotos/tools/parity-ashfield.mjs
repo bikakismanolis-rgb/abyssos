@@ -1,15 +1,15 @@
 // The Field of Ash against a committed copy: node tools/parity-ashfield.mjs [n=2000] [seed0=5] (check-act4's sweep)
 // The Anvil's Neck (gen4.js neck(), Act V) is carved after tryAshfield returns, so a saved seed's Field must be the same
 // layout but for the corridor: its cells and plug (L.neck), the 2-cell band round them (heights blended, dressing dropped,
-// its own scree and trees), and the one exit pushed at its top. This builds genAshfield from REF (default HEAD; the world
-// and core modules it imports, extracted from git) and from the working tree, and lists every difference outside that.
-// Exits 1 on any. REF=<commit> compares against another commit.
+// its own scree and trees), and the one exit pushed at its top. This builds genAshfield from REF (default f932304, the
+// code the Act V contract cites, the last without the Neck; the world and core modules it imports, extracted from git)
+// and from the working tree, and lists every difference outside that. Exits 1 on any. REF=<commit> compares with another.
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, posix } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..'), REF = process.env.REF || 'HEAD';
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..'), REF = process.env.REF || 'f932304';
 const N = +(process.argv[2] || 2000), S0 = +(process.argv[3] || 5);
 // gen4.js at REF and whatever it imports (relative imports only), copied into a scratch tree
 const tmp = mkdtempSync(join(tmpdir(), 'parity-'));

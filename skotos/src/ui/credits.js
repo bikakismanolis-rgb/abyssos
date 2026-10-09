@@ -29,7 +29,9 @@ export const CREDITS = [
     ['Fireborne Blight Drone (the Ember Ticks)', 'HighPolyDensity', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/fireborne-blight-drone-bbc26cb4e7c1408a9e9c18f5adec914c'],
     ['Minotaur Berserker - Free Game-Ready Character (the Hammerhorns)', 'Yury Misiyuk (Tim0)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/minotaur-berserker-free-game-ready-character-42da47ae59574ed5a6b86b49734294cc'],
     ['Overlord (Karthax, the Ash King)', 'DJMaesen (sketchfab.com/bumstrum)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/overlord-4e61da8bb7f3440db3df42ee26c4b797'],
-    ['The dead of the Field of Ash (the Lampless, the Ash-Fallen, the Ashsmiths, Ivar, Arna, the boy Isarn): Quaternius characters re-proportioned for Skotos, with ember cracks from bark_brown_02 by Rob Tuytel (Poly Haven)', 'Quaternius; Rob Tuytel', 'CC0', 'https://quaternius.com']
+    ['The dead of the Field of Ash (the Lampless, the Ash-Fallen, the Ashsmiths, Ivar, Arna, the boy Isarn): Quaternius characters re-proportioned for Skotos, with ember cracks from bark_brown_02 by Rob Tuytel (Poly Haven)', 'Quaternius; Rob Tuytel', 'CC0', 'https://quaternius.com'],
+    ['The Sunken, the Ice Singers and the Saltborn (Alkyone, Selna, Tern, Tamarisk, Old Glaukos): Quaternius characters re-proportioned and re-dyed for Skotos', 'Quaternius', 'CC0', 'https://quaternius.com'],
+    ['Crab mountain (Skerry, the Walking Tower; the Reefbacks)', 'pro100voron', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/crab-mountain-ac8fa79586f84c84a8a55dd86b7a2e2f']
   ], note: 'cr.modified' },
   { h: 'cr.world', items: [
     ['Dungeon Remastered, Medieval Hexagon Pack, Halloween Bits', 'Kay Lousberg (KayKit)', 'CC0', 'https://kaylousberg.com'],
@@ -62,7 +64,24 @@ export const CREDITS = [
     ['Medieval Brazier (the braziers of the Anvil Gate and the camps)', 'Sky_Hunter', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/medieval-brazier-cff29e533e3a4298a5d112cf7bb2558c'],
     ['Medieval Blacksmith Bellows (the Great Bellows and the stokers\' bellows)', 'TomasKiniulis', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/medieval-blacksmith-bellows-b9eaf7057b194e36b73da1f49cf49886'],
     ['PBR Anvil (the Anvil of the Crown and the shard-anvils)', 'NOT_Lonely (not_lonely)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/pbr-anvil-3529b9ef4e2c4a32add55948b5361609'],
-    ['Asset Pack - Blacksmith Equipment (tongs, quench trough, tool racks, stumps)', 'Mike Farrant (MikeFarrant)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/asset-pack-blacksmith-equipment-0f358eaab21d4e70836ad855de34c423']
+    ['Asset Pack - Blacksmith Equipment (tongs, quench trough, tool racks, stumps)', 'Mike Farrant (MikeFarrant)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/asset-pack-blacksmith-equipment-0f358eaab21d4e70836ad855de34c423'],
+    ['The Frozen Coast and the Farthest Light: snow_02, snow_03, wood_planks_grey (Rob Tuytel); low_tide_rocks, seaside_rock (Dimitrios Savva); dutch_ship_medium (James Ray Cock, Rico Cilliers, Nicolò Zubbini); wooden_barrels_01, wooden_crate_02 (James Ray Cock, Jurita Burger); vintage_oil_lamp (Monsta3D); coastal_cliff_01 (Rob Tuytel, Rico Cilliers); rock_face_01 (Dario Barresi)', 'Poly Haven', 'CC0', 'https://polyhaven.com'],
+    ['Ice002 (the sea ice)', 'ambientCG (Lennart Demes)', 'CC0', 'https://ambientcg.com/a/Ice002'],
+    ['The Dalarö wreck/ Bodekull part 2 (the hero wreck)', 'Swedish National Maritime and Transport History Museums (maritima)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/the-dalaro-wreck-bodekull-part-2-027900c8fdf840f589cadb9f4a60d78c'],
+    ['Gislinge Viking Boat (the keel-boats)', 'Opus Poly', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/gislinge-viking-boat-01098ad7973647a9b558f41d2ebc5193'],
+    ['Old Rowboat', 'TooManyDemons', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/old-rowboat-9922d5678af84adeb1c9b479856446ca'],
+    ['Broken Row Boat', 'megamaniac', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/broken-row-boat-41c2bcc5ca544897a132be71f3b2673a'],
+    ['Pack of old towers in ruins (the sea-lights)', 'JB3D (taz83)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/pack-of-old-towers-in-ruins-f213359c6cbb4c29bf8880764faa0fb8'],
+    ['Old Lighthouse (the Farthest Light\'s shaft)', 'Nirved Kamble', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/old-lighthouse-19e1ff049db74dc8b6173976417c1048'],
+    ['Medieval Anchor (Free)', 'wolfgar74', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/medieval-anchor-free-5896ac54d63e4b84bd32e0b232619dfd'],
+    ['Sunken Anchor', 'guillaume.biju-duval', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/sunken-anchor-e654cb6e6e2c4217a7decb6bb9c0010d'],
+    ['Skeleton - North Atlantic Right Whale (the whale on the strand)', 'Ingenium Canada (technoscience3d)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/skeleton-north-atlantic-right-whale-5c8664c56f9a4cf3ae6d9b8ec33b8dba'],
+    ['Monumental Runic Stone - Optimised, 20k (the Name-stones)', 'Thomas Flynn (nebulousflynn)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/monumental-runic-stone-optimised-20k-d95a850cd9114828a18b5dd72878d9ec'],
+    ['Beach Rock with Barnacles Photoscan', 'EFX (evan4129)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/beach-rock-with-barnacles-photoscan-21c9848ca38b4d289e2f38a98a905f86'],
+    ['Large Pine Driftwood (Pacific Northwest)', 'Crew Froebel (crufro)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/large-pine-driftwood-pacific-northwest-95d1087e513e4fb992a27b7b8a05ca9e'],
+    ['Scan of Kelp and Seaweed on sand beach', 'sterlingcrispin', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/scan-of-kelp-and-seaweed-on-sand-beach-c9b5ef07047a4b7a90a4ffd6930ec22c'],
+    ['Icicle 01', 'Elin Hohler (ElinHohler)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/icicle-01-2dc75ae22f1c4d11abbfd32819312a12'],
+    ['Wooden Shack (the Landing\'s huts)', 'Dominic Baker (Domuk)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/wooden-shack-b0bc474f7803488dbe0fa5aeef2e9ace']
   ] },
   { h: 'cr.type', items: [
     ['Alegreya, Alegreya SC', 'Juan Pablo del Peral, Huerta Tipográfica', 'SIL OFL 1.1', 'https://fonts.google.com/specimen/Alegreya']

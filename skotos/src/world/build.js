@@ -14,7 +14,7 @@ import { KIT, KITMAT, KIT_SCALE } from '../gfx/kits.js';
 import { ENV } from '../gfx/env.js';
 import { BED_DRY } from './genlib.js';
 import { SEA, SEA_U, SEA_LIT, SEA_GLSL, buildSea, buildIce, seaBeyond, cornerBeds, noiseTex } from './sea.js';
-import { act5Level } from './build5.js';
+import { act5Level, instDef5 } from './build5.js';
 
 // uWind: amplitude of all tree and grass sway (Act III's Still Wood sets 0 until the First Autumn). uEdge (z0, z1): south of
 // z1 the wind blows whatever uWind says, fading out by z0 (the Edge of Tears); (0, 0) is off. uAutumn: see setAutumn().
@@ -449,6 +449,10 @@ class Instancer {
         const [name, v] = type.slice(4).split('@'), parts = ENV.props['cinder/' + name] || ENV.props[name];
         if (!parts) { console.warn('missing cinder prop', name); continue; }
         def = { parts: parts.map((p) => ({ geo: p.geo, material: cinMat(p.mat, v), glow: p.mat.transparent || /glow/i.test(p.mat.name) })), shadow: !/^(lantern|cagedLight)$/.test(name) };
+      } else if (/^(icy|cliff5|rime|c5):/.test(type)) {
+        // Act V (build5.js): scans and code models in the shared ice or sea-cliff material, the rime pack's own, code dressing
+        def = instDef5(type, M, quality);
+        if (!def) continue;
       } else if (type.startsWith('env:')) {
         const name = type.slice(4), parts = ENV.props[name];
         if (!parts) { console.warn('missing env prop', name); continue; }
@@ -509,6 +513,12 @@ class Batch {
     _e.set(0, ry, 0); _q.setFromEuler(_e); _p.set(x, y, z); _s.set(s, s, s);
     g.applyMatrix4(_m.compose(_p, _q, _s));
     this.buckets.get(k).geos.push(g);
+  }
+  // a baked geometry (bake(), or one carrying the same position/normal/color attributes) under a full transform (a tilt)
+  put(mat, geo, m) {
+    const k = mat + '|' + Math.floor(m.elements[12] / CHUNK) + ',' + Math.floor(m.elements[14] / CHUNK);
+    if (!this.buckets.has(k)) this.buckets.set(k, { mat, geos: [] });
+    this.buckets.get(k).geos.push(geo.clone().applyMatrix4(m));
   }
   build(quality) {
     const M = mats();
@@ -1087,8 +1097,10 @@ function ground5(type) {
   const A = lay4('rime/snow', 'snow', 'flags'), own = A === 'rime/snow', snowy = own || A === 'snow';
   const B = type === 'coast' ? lay4('rime/shore', 'gravel', 'mud') : lay4('rime/ice', 'snow', 'flags');
   return { A, B, P: lay4('rime/snowTrod', 'snow', 'trail'), W: lay4('rime/seaCliff', 'cliff', 'wall') || undefined,
-    s: [3.2, 2.4, 2.6], r: [0.6, 0.8, 0.85], ns: 1.0, tint: own ? 0xeef0f4 : 0xd8dce4, dual: [1, 0], ws: 3.2, sat: own ? 0.9 : 0.75,
-    hueB: type === 'farlight' && B !== 'rime/ice' ? [0.62, 0.82, 1.08] : null, fake: !snowy, glint: true, wet: type === 'coast', aur: true };
+    s: [3.2, 2.4, 2.6], r: [0.6, 0.8, 0.85], ns: 1.0, tint: own ? 0xd4dae4 : 0xbcc4d0, dual: [1, 0], ws: 3.2, sat: own ? 0.9 : snowy ? 0.75 : 0.35,
+    // (a stand-in shore is drawn cold and grey: the base set's mud would read as a meadow)
+    hueB: type === 'farlight' ? (B !== 'rime/ice' ? [0.62, 0.82, 1.08] : null) : B === 'rime/shore' ? null : B === 'gravel' ? [0.86, 0.9, 0.96] : [0.62, 0.66, 0.74],
+    fake: !snowy, glint: true, wet: type === 'coast', aur: true };
 }
 function buildGround(L, group) {
   const { w, h, cells, paint } = L;
@@ -1333,7 +1345,7 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
     gc = mix(gc, cW, steep); gh = mix(gh, gH(cW), steep);
   }` : '') + (X5.fake ? `
   // (no snow layer loaded: whiten whatever stands in for it, keeping its relief)
-  gc = mix(gc, vec3(0.78, 0.81, 0.86) * (0.8 + 0.34 * gh), 0.8 * (1.0 - wB) * (1.0 - wP * 0.4));` : '') + (X5.wet ? `
+  gc = mix(gc, vec3(0.7, 0.74, 0.8) * (0.8 + 0.34 * gh), 0.8 * (1.0 - wB) * (1.0 - wP * 0.4));` : '') + (X5.wet ? `
   // wet sand: dark and glossy where the tide has been within the last 20 s (and under the water now)
   float gWet = smoothstep(-0.03, 0.06, uWetLevel - vBed) * (1.0 - wP * 0.6);
   gc *= mix(vec3(1.0), vec3(0.46, 0.5, 0.54), gWet);` : '') + (X5.any ? `
@@ -2787,7 +2799,9 @@ export function buildLevel(L, quality) {
   // per-level shader globals, set whenever this level's ground is drawn (only the zone the hero is in): the Edge of Tears,
   // where the last of the wind still reaches the Weeping Woods, and the Heartwood's heart that the lights beat with
   const edge = L.type === 'weep' ? [L.h - 40, L.h - 26] : [0, 0], heartAt = L.type === 'heart' ? L.spots.heart : null;
-  if (out.ground) out.ground.onBeforeRender = () => { WIND.uEdge.value.set(edge[0], edge[1]); LIGHTS.heart = heartAt; };
+  // (FX.L5: an Act V layout for fx.js's footprints, which lie only on its snow)
+  const l5 = ACT5.has(L.type) ? L : null;
+  if (out.ground) out.ground.onBeforeRender = () => { WIND.uEdge.value.set(edge[0], edge[1]); LIGHTS.heart = heartAt; FX.L5 = l5; };
   const inst = I.build(quality);
   B.build(quality);
   const cut = [];
@@ -2857,3 +2871,5 @@ export function runeDisc(r = 1.2, color = 0x5aa8ff) {
   m.rotation.x = -Math.PI / 2; m.position.y = 0.17;
   return m;
 }
+// (for build5.js: Act V's props share the materials, the geometry helpers and the Act IV fire looks)
+export { MAT, mats, worldMat, bake, jitter, prism, solid, size4, glowMat, flameMesh, lanternMesh, lay4, hash2, act4Mats, Std };

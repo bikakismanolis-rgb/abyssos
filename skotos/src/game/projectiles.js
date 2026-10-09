@@ -10,6 +10,8 @@ import { updateSap, clearSap } from './sap.js';
 import { updateRemains, clearRemains } from './combat.js';
 import { clearLight } from './light.js';
 import { tickFlues } from './forge.js';
+import { tickTide } from './tide.js';
+import { tickIce } from './ice.js';
 import Audio from '../audio/audio.js';
 import { rand } from '../core/util.js';
 
@@ -181,6 +183,8 @@ export function updateAreas(dt) {
   updateSap(dt);
   updateRemains(dt);
   tickFlues(dt);
+  // Act V: the tide's steps, then the ice's loads and batches (a plunge is placed in its break's batch)
+  tickTide(dt); tickIce(dt);
   for (let i = G.areas.length - 1; i >= 0; i--) {
     const a = G.areas[i];
     a.t += dt; a.tickT -= dt;

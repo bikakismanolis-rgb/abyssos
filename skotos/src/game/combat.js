@@ -343,6 +343,8 @@ export function moveMul(a) {
   if (s.slow > 0) m *= 1 - s.slowK;
   // amber sap: the hero wades at 55%, flesh at 65% (wood and floaters never get onSap, see ai.js)
   if (a.onSap) m *= a.hero ? 0.55 : 0.65;
+  // Act V: wading (the tide, brine, slush; tide.js wadeAt): the hero at 70%, monsters at 75%, swimmers as on land
+  if (a.inWater && !a.def?.swim) m *= a.hero ? 0.7 : 0.75;
   if (a.hero && a.buffs?.shrineSpeed > 0) m *= 1.4;
   if (a.hero && a.buffs?.evergreen > 0) m *= 1.3;
   if (a.hero && a.buffs?.memory > 0) m *= 1 + BUFFS.memory.move;

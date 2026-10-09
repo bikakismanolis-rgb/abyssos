@@ -72,6 +72,8 @@ export async function boot(q) {
     if (q.has('quest')) h.quest = +q.get('quest');
     for (const f of (q.get('flags') || '').split(',').filter(Boolean)) h.flags[f] = true;
     if (q.get('auto') === 'farlight') h.flags.frozen = true;
+    // &seed=N: the zone's layout seed (Act V's are kept per difficulty)
+    if (q.has('seed')) { const z = q.get('auto'); h.seeds = { [z]: +q.get('seed'), [z + '@' + h.diff]: +q.get('seed') }; }
     await startHero(h, false, q.get('auto'));
   } else showTitle();
   requestAnimationFrame(loop);

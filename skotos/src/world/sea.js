@@ -2,7 +2,8 @@
 // into, the aurora (in the water and the ice in play, as a sky in the cines), the sea-lights' beams and the Skotos's skin.
 // No render targets: everything is one forward pass. Every image has a quality-0 path (built first: depth colour, edge
 // line, foam, shades, cracks) and the richer paths on top (two noise reads, the aurora reflection, light paths, parallax,
-// the drowned lanterns). Draw order in Act V zones: ice -1, water 1, light pools, rings, blob shadows, decals 2, telegraphs 3.
+// the drowned lanterns). Draw order in Act V zones: ice -1, the leads' opaque water -0.5, the sea 1, blob shadows 1.5,
+// light pools, rings and decals 2, telegraphs 3.
 import * as THREE from 'three';
 import { R } from '../gfx/gfx.js';
 import { FX } from '../gfx/fx.js';
@@ -120,7 +121,7 @@ export const SEA_U = (extra = {}) => Object.assign({
 // the swell, the same in JS (floes, ice.js) as in the water's vertex shader
 export function swellY(x, z, t = SEA.uTime.value) { return (Math.sin(x * 0.21 + z * 0.13 + t * 1.1) + Math.sin(-x * 0.09 + z * 0.27 + t * 0.83)) * 0.5; }
 const SWELL = 'float swell(vec2 p, float t) { return (sin(p.x * 0.21 + p.y * 0.13 + t * 1.1) + sin(-p.x * 0.09 + p.y * 0.27 + t * 0.83)) * 0.5; }';
-// the freeze state of a water point (0 open, 1 frozen; .y the bright front), from the Freeze and the three freeze slots
+// the freeze state of a water point, from the Freeze and the three freeze slots
 const FREEZE = `
 uniform vec4 uFreeze[3]; uniform float uFreezeAll; uniform float uFrzOn;
 // x: the Freeze's ice (it keeps the crests it caught), y: a freeze wave's (flat, walkable), z: the bright front
@@ -148,16 +149,17 @@ function seaMat(o = {}) {
   const hi = R.quality >= 1, key = (o.low ? 'l' : 't') + (o.far ? 'f' : '') + (hi ? 'h' : '');
   if (SEA_MATS.has(key)) return SEA_MATS.get(key);
   noiseTex();
-  const m = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false });
-  const u = SEA_U({ uLevel: SEA.uLevel, uFreeze: SEA.uFreeze, uFreezeAll: SEA.uFreezeAll, uFrzT: SEA.uFrzT, uFrzOn: SEA.uFrzOn, uWake: SEA.uWake, uLights: SEA.uLights }, LIT);
-  Object.assign(u, LIT);
+  // (the Farthest Light's leads have no tide and are never see-through: opaque, drawn first with the ice, so the sea bed
+  // under them is turned away by the depth test instead of shaded)
+  const m = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: !o.low, depthWrite: !!o.low });
+  const u = Object.assign(SEA_U({ uLevel: SEA.uLevel, uFreeze: SEA.uFreeze, uFreezeAll: SEA.uFreezeAll, uFrzT: SEA.uFrzT, uFrzOn: SEA.uFrzOn, uWake: SEA.uWake, uLights: SEA.uLights }), LIT);
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
-    sh.defines = Object.assign(sh.defines || {}, hi ? { SEA_HI: '' } : {}, o.low ? { SEA_LOW: '' } : {}, o.far ? { SEA_FAR: '' } : {}, typeof location !== 'undefined' && location.search.includes('seadbg') ? { SEA_DBG: '' } : {});
+    sh.defines = Object.assign(sh.defines || {}, hi ? { SEA_HI: '' } : {}, o.low ? { SEA_LOW: '' } : {}, o.far ? { SEA_FAR: '' } : {});
     sh.vertexShader = sh.vertexShader.replace('#include <common>', `#include <common>
-attribute float aBed; attribute float aHold; attribute float aLead; attribute float aShore;
+attribute float aBed; attribute float aHold; attribute float aLead; attribute float aShore; attribute float aFrz;
 uniform float uLevel; uniform float uTime; uniform float uFrzT;
-varying vec3 vWP; varying float vDep; varying float vLead; varying float vShore; varying float vSw; varying float vHold;
+varying vec3 vWP; varying float vDep; varying float vLead; varying float vShore; varying float vSw; varying float vHold; varying float vFrz;
 ${SWELL}
 ${FREEZE}`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
@@ -171,6 +173,7 @@ ${FREEZE}`)
   vec3 frz = vec3(0.0);
 #else
   vec3 frz = freezeIf(wp0.xz, aLead, aShore);
+  frz.y = max(frz.y, aFrz);
 #endif
   // the Freeze holds the swell where it stopped: the crests it caught stay as ice
   float st = mix(uTime, uFrzT, step(0.001, uFreezeAll));
@@ -186,12 +189,12 @@ ${FREEZE}`)
 #endif
   y = mix(y, ${(ICE_Y - 0.005).toFixed(3)}, frz.y);
   transformed.y = y;
-  vWP = vec3(wp0.x, y, wp0.z); vDep = dep; vLead = aLead; vShore = aShore; vSw = sw; vHold = aHold;`);
+  vWP = vec3(wp0.x, y, wp0.z); vDep = dep; vLead = aLead; vShore = aShore; vSw = sw; vHold = aHold; vFrz = aFrz;`);
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
 ${COMMON}
 uniform float uFrzT; uniform vec4 uWake; uniform vec4 uLights[2];
 uniform float uAmbK; uniform vec3 uSkyC; uniform vec3 uMoonD; uniform vec3 uMoonC; uniform vec3 uHeroP; uniform vec3 uHeroC; uniform float uHeroR;
-varying vec3 vWP; varying float vDep; varying float vLead; varying float vShore; varying float vSw; varying float vHold;
+varying vec3 vWP; varying float vDep; varying float vLead; varying float vShore; varying float vSw; varying float vHold; varying float vFrz;
 ${FREEZE}`)
       .replace('#include <map_fragment>', `
   float t = uTime, dep = vDep;
@@ -233,11 +236,12 @@ ${FREEZE}`)
   // the hero's lantern: it lights the shallows and glints on the water
   vec3 hd = uHeroP - vWP; float hl = length(hd); hd /= max(hl, 0.001);
   float ha = pow(clamp(1.0 - pow(hl / uHeroR, 4.0), 0.0, 1.0), 2.0) / max(pow(hl, 1.4), 0.5);
-  col += uHeroC * ha * (0.008 * (1.0 - deep) * max(hd.y, 0.0) + pow(max(dot(Rf, hd), 0.0), 60.0) * 0.03);
+  col += uHeroC * ha * (0.008 * (1.0 - deep) * max(hd.y, 0.0) + pow(max(dot(Rf, hd), 0.0), 140.0) * 0.016);
 #ifdef SEA_HI
-  // the aurora in the water: the reflected ray meets a sheet of sky 70 m up
+  // the aurora in the water: the reflected ray meets a sheet of sky 70 m up (not under the black aurora, where it would
+  // be all but black: it comes back with the returning front)
   vec2 sp = P + Rc.xz * ((70.0 - vWP.y) / max(Rc.y, 0.04)), spw = fwidth(sp);
-  if (uAur > 0.001) col += aurora(sp, 1.0, length(spw)) * (0.12 + 0.8 * F) * mix(0.25, 1.0, deep) * smoothstep(0.04, 0.3, Rc.y);
+  if (uAur * max(1.0 - uAurDark, uAurFront) > 0.02) col += aurora(sp, 1.0, length(spw)) * (0.12 + 0.8 * F) * mix(0.25, 1.0, deep) * smoothstep(0.04, 0.3, Rc.y);
   // light paths: the long broken streaks a lit sea-light lays across the water toward the eye
   // (glints off the small ripple, so the path breaks into sparks, over a faint glow off the swell)
   vec3 Ng = normalize(vec3((n2.a - 0.5) * 0.22 + g.x * 0.05, 1.0, (n2.b - 0.5) * 0.22 + g.y * 0.05)), Rg = reflect(-V, Ng);
@@ -275,6 +279,7 @@ ${FREEZE}`)
 #ifndef SEA_FAR
   // frozen: white rime in a frost-crystal pattern; the front glitters as it races out
   vec3 frz = freezeIf(P, vLead, vShore);
+  frz.y = max(frz.y, vFrz);
   float fk = max(frz.x, frz.y);
   if (fk > 0.001 || frz.z > 0.001) {
     vec4 nc = texture2D(tNoise, P * 0.6);
@@ -288,10 +293,7 @@ ${FREEZE}`)
     col += vec3(0.5, 0.7, 0.85) * frz.z * (0.35 + cry); a = max(a, frz.z * 0.8);
   }
 #endif
-  diffuseColor = vec4(col, a);
-#ifdef SEA_DBG
-  diffuseColor = vec4(clamp(dep, 0.0, 1.0), foam, deep, 1.0);
-#endif`);
+  diffuseColor = vec4(col, a);`);
   };
   m.customProgramCacheKey = () => 'sea|' + key;
   SEA_MATS.set(key, m);
@@ -322,7 +324,9 @@ export function buildSea(L, group, quality = R.quality) {
   // (a blocked footprint standing in the water, a hull or a boulder, keeps the water round and under it: gen5 takes the
   // corners' beds before the footprints)
   const under = (i) => { if (!L.bed || L.cells[i] || L.low?.[i]) return false; const x = i % w, z = (i - x) / w; return vb[z * W + x] < BED_DRY - 1 && vb[z * W + x + 1] < BED_DRY - 1 && vb[(z + 1) * W + x] < BED_DRY - 1 && vb[(z + 1) * W + x + 1] < BED_DRY - 1; };
-  const wet = (i) => !!(L.sea?.[i] || L.ice?.[i] || (L.bed && L.bed[i] < BED_DRY && !L.thick?.[i] && !L.window?.[i]) || under(i));
+  // (a lead sealed before this build, thick ice over the sea's bed, keeps its water, held frozen: aFrz)
+  const sealed = (i) => { if (!L.thick?.[i] || !L.hgt) return false; const x = i % w, z = (i - x) / w; return L.hgt[z * W + x] < -0.5 || L.hgt[(z + 1) * W + x + 1] < -0.5; };
+  const wet = (i) => !!(L.sea?.[i] || L.ice?.[i] || (L.bed && L.bed[i] < BED_DRY && !L.thick?.[i] && !L.window?.[i]) || under(i) || sealed(i));
   const iceLike = (i) => !!(L.ice?.[i] || L.thick?.[i] || L.window?.[i] || L.deck?.[i]);
   const flat = (i) => L.bed && L.bed[i] > -0.5 && L.bed[i] < BED_DRY && !iceLike(i);
   // which lead each cell belongs to (the Breathing-holes: a freeze slot only freezes its own lead)
@@ -335,7 +339,7 @@ export function buildSea(L, group, quality = R.quality) {
   }
   // how far each water cell lies from land (cells): the Freeze grows out from the shore
   const D = new Float32Array(N).fill(99), q = [];
-  for (let i = 0; i < N; i++) if (!wet(i) || L.thick?.[i]) { D[i] = 0; q.push(i); }
+  for (let i = 0; i < N; i++) if (!wet(i) || (L.thick?.[i] && !sealed(i))) { D[i] = 0; q.push(i); }
   for (let hd = 0; hd < q.length; hd++) {
     const i = q[hd], cx = i % w, cz = (i - cx) / w;
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = cx + dx, nz = cz + dz, n = nz * w + nx; if (nx >= 0 && nz >= 0 && nx < w && nz < h && D[n] > D[i] + 1) { D[n] = D[i] + 1; q.push(n); } }
@@ -344,18 +348,18 @@ export function buildSea(L, group, quality = R.quality) {
   const out = new THREE.Group(); out.name = 'sea';
   const hook = () => { SEA.uMap.value.set(w, h); };
   for (let cz0 = 0; cz0 < h; cz0 += CH) for (let cx0 = 0; cx0 < w; cx0 += CH) {
-    const vid = new Map(), pos = [], bed = [], hold = [], ld = [], sh = [], idx = [];
+    const vid = new Map(), pos = [], bed = [], hold = [], ld = [], sh = [], fr = [], idx = [];
     const vert = (vx, vz) => {
       const key = vz * W + vx;
       let k = vid.get(key);
       if (k != null) return k;
       k = pos.length / 3; vid.set(key, k);
-      let ice = 0, fl = 0, le = 0, sd = 99;
+      let ice = 0, fl = 0, le = 0, sd = 99, sl = 0, wt = 0;
       for (const [dx, dz] of CORNER) {
         const x = vx + dx, z = vz + dz; if (x < 0 || z < 0 || x >= w || z >= h) continue;
-        const i = z * w + x; if (iceLike(i)) ice++; if (flat(i)) fl++; if (lead[i]) le = lead[i]; if (wet(i)) sd = Math.min(sd, D[i]);
+        const i = z * w + x; if (iceLike(i)) ice++; if (flat(i)) fl++; if (lead[i]) le = lead[i]; if (wet(i)) { sd = Math.min(sd, D[i]); wt++; if (sealed(i)) sl++; }
       }
-      pos.push(vx, 0, vz); bed.push(vb[key]); hold.push(ice && !fl ? 1 : 0); ld.push(le); sh.push(sd === 99 ? 0 : sd);
+      pos.push(vx, 0, vz); bed.push(vb[key]); hold.push(ice && !fl ? 1 : 0); ld.push(le); sh.push(sd === 99 ? 0 : sd); fr.push(sl ? 1 : 0);
       return k;
     };
     for (let z = cz0; z < Math.min(h, cz0 + CH); z++) for (let x = cx0; x < Math.min(w, cx0 + CH); x++) {
@@ -371,10 +375,11 @@ export function buildSea(L, group, quality = R.quality) {
     geo.setAttribute('aHold', new THREE.Float32BufferAttribute(hold, 1));
     geo.setAttribute('aLead', new THREE.Float32BufferAttribute(ld, 1));
     geo.setAttribute('aShore', new THREE.Float32BufferAttribute(sh, 1));
+    geo.setAttribute('aFrz', new THREE.Float32BufferAttribute(fr, 1));
     geo.setIndex(idx);
     geo.computeBoundingBox(); geo.boundingBox.min.y = -0.2; geo.boundingBox.max.y = 0.6; geo.computeBoundingSphere();
     const m = new THREE.Mesh(geo, mat);
-    m.renderOrder = 1; m.receiveShadow = false; m.castShadow = false;
+    m.renderOrder = low ? -0.5 : 1; m.receiveShadow = false; m.castShadow = false;
     m.onBeforeRender = hook;
     out.add(m);
   }
@@ -407,12 +412,12 @@ export function seaBeyond(L, group, o = {}) {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geo.setAttribute('aBed', new THREE.Float32BufferAttribute(bed, 1));
-    for (const a of ['aHold', 'aLead', 'aShore']) geo.setAttribute(a, new THREE.Float32BufferAttribute(z0s, 1));
+    for (const a of ['aHold', 'aLead', 'aShore', 'aFrz']) geo.setAttribute(a, new THREE.Float32BufferAttribute(z0s, 1));
     geo.computeVertexNormals(); geo.computeBoundingSphere();
     return geo;
   };
-  if (water.length) { const m = new THREE.Mesh(make(water, 0), seaMat({ low: !L.bed, far: true })); m.renderOrder = 1; g.add(m); }
-  if (ice.length) { const m = new THREE.Mesh(make(ice, ICE_Y - 0.01), iceMat({ far: true })); m.renderOrder = -1; m.receiveShadow = true; g.add(m); }
+  if (water.length) { const m = new THREE.Mesh(make(water, 0), seaMat({ low: !L.bed, far: true })); m.renderOrder = L.bed ? 1 : -0.5; g.add(m); }
+  if (ice.length) { const m = new THREE.Mesh(make(ice, ICE_Y - 0.01), iceMat({ far: true })); m.renderOrder = -1; m.receiveShadow = R.quality >= 2; g.add(m); }
   group.add(g);
   return g;
 }
@@ -432,13 +437,14 @@ export function iceMat(o = {}) {
   if (ICE_MATS.has(key)) return ICE_MATS.get(key);
   noiseTex(); crackTex();
   const lay = ENV.layers['rime/ice'] || null;
-  const m = hi ? new THREE.MeshPhongMaterial({ color: 0xffffff, specular: new THREE.Color(o.window ? 0x5a6876 : 0x3a4652), shininess: o.window ? 300 : 260 })
+  // (quality 2: Phong, every lamp glints in it; quality 1: Lambert and one glint of the hero's lantern, worked out here)
+  const m = R.quality >= 2 ? new THREE.MeshPhongMaterial({ color: 0xffffff, specular: new THREE.Color(o.window ? 0x5a6876 : 0x3a4652), shininess: o.window ? 300 : 260 })
     : new THREE.MeshLambertMaterial({ color: 0xffffff });
   if (o.window) { m.transparent = true; m.depthWrite = false; }
-  const u = SEA_U({ tCrack: SEA.tCrack, uShade: SEA.uShade, uGlow: SEA.uGlow, uLights: SEA.uLights, uFreezeAll: SEA.uFreezeAll, tIceL: { value: lay?.d || null }, uSkyC: LIT.uSkyC });
+  const u = SEA_U({ tCrack: SEA.tCrack, uShade: SEA.uShade, uGlow: SEA.uGlow, uLights: SEA.uLights, uFreezeAll: SEA.uFreezeAll, tIceL: { value: lay?.d || null }, uSkyC: LIT.uSkyC, uHeroP: LIT.uHeroP, uHeroC: LIT.uHeroC, uHeroR: LIT.uHeroR });
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
-    sh.defines = Object.assign(sh.defines || {}, hi ? { ICE_HI: '' } : {}, o.far ? { ICE_FAR: '' } : {}, o.window ? { ICE_WINDOW: '' } : {}, o.floe ? { ICE_FLOE: '' } : {}, lay ? { ICE_LAY: '' } : {});
+    sh.defines = Object.assign(sh.defines || {}, hi ? { ICE_HI: '' } : {}, hi && R.quality < 2 ? { ICE_GLINT: '' } : {}, o.far ? { ICE_FAR: '' } : {}, o.window ? { ICE_WINDOW: '' } : {}, o.floe ? { ICE_FLOE: '' } : {}, lay ? { ICE_LAY: '' } : {});
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec2 aC;\nvarying vec3 vIP;\nvarying vec2 vIC;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>
   vec4 ipp = vec4(transformed, 1.0);
@@ -448,7 +454,7 @@ export function iceMat(o = {}) {
   vIP = (modelMatrix * ipp).xyz; vIC = aC;`);
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
 ${COMMON}
-uniform sampler2D tCrack; uniform vec4 uShade[4]; uniform vec4 uGlow[8]; uniform vec4 uLights[2]; uniform sampler2D tIceL; uniform vec3 uSkyC;
+uniform sampler2D tCrack; uniform vec4 uShade[4]; uniform vec4 uGlow[8]; uniform vec4 uLights[2]; uniform sampler2D tIceL; uniform vec3 uSkyC; uniform vec3 uHeroP; uniform vec3 uHeroC; uniform float uHeroR;
 varying vec3 vIP; varying vec2 vIC;
 uniform float uFreezeAll;
 // the edge distance of a world-space Voronoi at p (about 0 on the cell walls): the crack lines
@@ -472,11 +478,16 @@ vec3 iceEm = vec3(0.0);`)
   vec2 par = -V.xz / max(V.y, 0.25);
   // (each read turned off the grid: value noise cut by a threshold along its own axes would show its lattice)
   vec2 Pr = mat2(0.8, -0.6, 0.6, 0.8) * P;
-  vec4 nS = texture2D(tNoise, Pr * 0.045);
+  // (the surface read is drawn out along the wind: the snow lies in streaks)
+  vec4 nS = texture2D(tNoise, vec2(P.x * 0.022 + P.y * 0.006, P.y * 0.075) + 0.71);
 #if defined(ICE_HI) && !defined(ICE_WINDOW)
-  // read through the surface: what lies deeper slides further as the eye moves
+  // read through the surface: what lies deeper slides further as the eye moves (the deep mottle on high quality only)
   vec4 nB = texture2D(tNoise, mat2(0.6, 0.8, -0.8, 0.6) * (P + par * 0.3) * 0.9 + 0.13);
+#ifdef ICE_GLINT
+  vec4 nD = vec4(nS.g, nB.r, nS.a, nS.b);
+#else
   vec4 nD = texture2D(tNoise, (Pr + par * 1.6) * 0.09 + 0.37);
+#endif
 #else
   vec4 nB = nS.abgr, nD = nS.gbar;
 #endif
@@ -486,9 +497,7 @@ vec3 iceEm = vec3(0.0);`)
   col += vec3(0.006, 0.011, 0.015) * smoothstep(0.62, 0.85, nD.b);
   float bub = smoothstep(0.78, 0.9, nB.a) * smoothstep(0.55, 0.75, nB.r);
   col += vec3(0.07, 0.09, 0.1) * bub;
-  // (snow drifts lie in streaks along the wind, grained)
-  vec4 nW = texture2D(tNoise, vec2(P.x * 0.022 + P.y * 0.006, P.y * 0.075) + 0.71);
-  float frost = smoothstep(0.58, 0.72, nW.r * 0.75 + nW.b * 0.25 + (nB.a - 0.5) * 0.12) * 0.55 + smoothstep(0.72, 0.9, nS.b) * 0.1;
+  float frost = smoothstep(0.58, 0.72, nS.r * 0.75 + nS.b * 0.25 + (nB.a - 0.5) * 0.12) * 0.55 + smoothstep(0.72, 0.9, nS.g) * 0.1;
 #ifdef ICE_LAY
   vec3 lay = texture2D(tIceL, P * 0.32).rgb;
   col *= 0.55 + lay * 1.1;
@@ -516,6 +525,7 @@ vec3 iceEm = vec3(0.0);`)
     vec4 gl = uGlow[i];
     if (gl.w <= 0.0) continue;
     vec2 qq = P + par * gl.y - gl.xz; float d2 = dot(qq, qq);
+    if (d2 > 900.0) continue;
     vec2 q2 = P + par * gl.y * 0.35 - gl.xz; float e2 = dot(q2, q2);
     iceEm += vec3(1.0, 0.62, 0.26) * gl.w * (exp(-d2 * 1.6) * 1.4 + exp(-e2 * 0.09) * 0.16) * (0.85 + 0.15 * sin(t * 2.3 + gl.x));
   }
@@ -555,19 +565,26 @@ vec3 iceEm = vec3(0.0);`)
   col = mix(col, vec3(0.55, 0.62, 0.68), uFreezeAll * 0.5);
 #endif
   // glassy: the sky in it at a low angle
-  vec3 Nr = normalize(vec3((nS.g - 0.5) * 0.06, 1.0, (nS.b - 0.5) * 0.06));
+  vec3 Nr = normalize(vec3((nS.g - 0.5) * 0.03, 1.0, (nS.b - 0.5) * 0.03));
   float F = 0.03 + 0.97 * pow(1.0 - clamp(dot(Nr, V), 0.0, 1.0), 5.0);
   iceEm += uSkyC * F * 0.5 * (1.0 - frost);
 #ifdef ICE_HI
   // the aurora mirrored in the ice; the lit sea-lights' lanterns
   vec3 Rf = reflect(-V, Nr);
   vec2 sp = P + Rf.xz * ((70.0 - vIP.y) / max(Rf.y, 0.04)), spw = fwidth(sp);
-  if (uAur > 0.001) iceEm += aurora(sp, 1.0, length(spw)) * (0.1 + 0.7 * F) * (1.0 - frost * 0.6) * smoothstep(0.04, 0.3, Rf.y);
+  if (uAur * max(1.0 - uAurDark, uAurFront) > 0.02) iceEm += aurora(sp, 1.0, length(spw)) * (0.1 + 0.3 * F) * (1.0 - frost * 0.6) * smoothstep(0.04, 0.3, Rf.y);
   for (int i = 0; i < 2; i++) {
     vec4 Lp = uLights[i];
     if (Lp.w <= 0.0) continue;
     vec3 ld = Lp.xyz - vIP; float dl = length(ld); ld /= dl;
     iceEm += vec3(1.0, 0.82, 0.55) * (pow(max(dot(Rf, ld), 0.0), 60.0) + pow(max(dot(Rf, ld), 0.0), 8.0) * 0.05) * Lp.w * 0.9 / (1.0 + dl * 0.04);
+  }
+#endif
+#ifdef ICE_GLINT
+  {
+    vec3 hd = uHeroP - vIP; float hl = length(hd);
+    float ha = pow(clamp(1.0 - pow(hl / uHeroR, 4.0), 0.0, 1.0), 2.0) / max(pow(hl, 1.4), 0.5);
+    iceEm += uHeroC * ha * pow(max(dot(Rf, hd / hl), 0.0), 420.0) * 0.14;
   }
 #endif
   diffuseColor.rgb = col;
@@ -576,7 +593,7 @@ vec3 iceEm = vec3(0.0);`)
 #endif`)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += iceEm;');
   };
-  m.customProgramCacheKey = () => 'ice|' + key + (lay ? '|l' : '');
+  m.customProgramCacheKey = () => 'ice|' + key + (lay ? '|l' : '') + '|' + m.type;
   ICE_MATS.set(key, m);
   return m;
 }
@@ -611,7 +628,8 @@ export function buildIce(L, group, quality = R.quality) {
     geo.setAttribute('aC', new THREE.Float32BufferAttribute(cc, 2));
     geo.setIndex(idx); geo.computeVertexNormals(); geo.computeBoundingSphere();
     const m = new THREE.Mesh(geo, mat);
-    m.renderOrder = -1; m.receiveShadow = quality >= 1;
+    // (black ice shows a shadow hardly at all: the shadow map's taps are kept for high quality)
+    m.renderOrder = -1; m.receiveShadow = quality >= 2;
     mesh.add(m);
   }
   // the windows: a clear pane over each pit (the figure lies 2.2 m down)
@@ -634,7 +652,7 @@ export function buildIce(L, group, quality = R.quality) {
   const pp = fg.attributes.position; for (let i = 0; i < pp.count; i++) { const a = Math.atan2(pp.getZ(i), pp.getX(i)); const k = 0.8 + 0.35 * Math.abs(Math.sin(a * 2.7 + 1.3)); pp.setX(i, pp.getX(i) * k); pp.setZ(i, pp.getZ(i) * k); }
   fg.setAttribute('aC', new THREE.Float32BufferAttribute(new Float32Array(pp.count * 2).fill(-1), 2)); fg.computeVertexNormals();
   const floes = new THREE.InstancedMesh(fg, iceMat({ floe: true }), 32);
-  floes.count = 0; floes.frustumCulled = false; floes.castShadow = false; floes.receiveShadow = quality >= 1;
+  floes.count = 0; floes.frustumCulled = false; floes.castShadow = false; floes.receiveShadow = quality >= 2;
   group.add(floes);
   // this level's drowned lanterns, written to uGlow while it draws (zones are cached: each keeps its own)
   const glow = Array.from({ length: 8 }, V4);
@@ -704,6 +722,11 @@ void main() {
   R.scene.add(dome);
   return dome;
 }
+// per-frame tickers of the props in the scene (build5.js: a beam's motes and its cut-off): { obj, tick(dt) }, each run
+// while obj stands in the scene (a cached zone's props wait)
+export const TICKS = new Set();
+const inScene = (o) => { while (o) { if (o === R.scene) return true; o = o.parent; } return false; };
+let tickT = -1;
 // gfx.js render(): the dome shows while the sky may (SEA.sky) and the camera looks low enough to see any of it
 R.skyHook = () => {
   frameHook();
@@ -711,7 +734,13 @@ R.skyHook = () => {
   if (on && !dome) auroraSky();
   if (dome) { dome.visible = on; if (on && dome.parent !== R.scene) R.scene.add(dome); }
   tickTweens();
+  // (the water level for fx.js: the wrecks' drips and the sea smoke read it)
+  FX.tideLv = SEA.uLevel.value; FX.wetLv = SEA.uWetLevel.value;
+  const dt = tickT < 0 ? 0 : clamp(R.time - tickT, 0, 0.1); tickT = R.time;
+  if (dt > 0) for (const t of TICKS) if (inScene(t.obj)) t.tick(dt);
 };
+// (the scenarios read the shared uniforms here: a fresh import of this module after a hot update is another instance)
+if (typeof window !== 'undefined') (window.__act5 ||= {}).sea = SEA;
 // gfx.js setAtmosphere(): the aurora's brightness and darkness from the ATMOS entry (missing keys read 0)
 R.atmosHook = (a) => { SEA.uAur.value = a.aur || 0; SEA.uAurDark.value = a.aurDark || 0; };
 

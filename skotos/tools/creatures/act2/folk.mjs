@@ -836,19 +836,15 @@ async function paint(doc, mat, img, { base = [], parts = [], fx }) {
       for (let i = 0; i < 3; i++) out[k * 3 + i] = Math.round(255 * Math.min(1, Math.max(0, c[i])));
     }
   }
+  // FROST_DEBUG=<dir>: each map's nodes drawn over it (red, green, blue, yellow... in the order printed) and each node's
+  // mean value, to set a new recipe's dyes against
   if (process.env.FROST_DEBUG) {
     const dbg = Buffer.from(out), pal = [[255, 0, 0], [0, 255, 0], [0, 80, 255], [255, 255, 0], [255, 0, 255], [0, 255, 255], [255, 255, 255], [255, 128, 0]];
     for (let k = 0; k < S * S; k++) { const id = T.node[k]; for (let i = 0; i < 3; i++) dbg[k * 3 + i] = id < 0 ? 0 : dbg[k * 3 + i] * 0.5 + pal[id % 8][i] * 0.5; }
     await sharp(dbg, { raw: { width: S, height: S, channels: 3 } }).png().toFile(`${process.env.FROST_DEBUG}/${mat.getName()}_nodes.png`);
-    const src = await sharp(img).removeAlpha().raw().toBuffer(), acc = T.names.map(() => [0, 0, 0, 0]);
+    const acc = T.names.map(() => [0, 0, 0, 0]);
     for (let k = 0; k < S * S; k++) { const id = T.node[k]; if (id < 0) continue; const mx = Math.max(src[k * 3], src[k * 3 + 1], src[k * 3 + 2]) / 255; acc[id][0] += mx; acc[id][1]++; if (mx > 0.55) { acc[id][2] += mx; acc[id][3]++; } }
     console.log(mat.getName(), 'nodes', T.names.map((n, i) => `${i}:${n} v${(acc[i][0] / acc[i][1]).toFixed(2)} light ${(acc[i][3] / acc[i][1]).toFixed(2)}@${(acc[i][2] / (acc[i][3] || 1)).toFixed(2)}`).join(' '));
-    if (process.env.FROST_HIST) for (let id = 0; id < T.names.length; id++) {
-      const bins = Array.from({ length: 10 }, () => [0, 0, 0]);
-      for (let k = 0; k < S * S; k++) { if (T.node[k] !== id) continue; const r = src[k * 3] / 255, g = src[k * 3 + 1] / 255, b = src[k * 3 + 2] / 255, mx = Math.max(r, g, b), d = mx - Math.min(r, g, b); let h = d < 1e-4 ? 0 : mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h = (h * 60 + 360) % 360; const B = bins[Math.min(9, Math.floor(mx * 10))]; B[0]++; B[1] += h; B[2] += mx ? d / mx : 0; }
-      const tot = bins.reduce((a, b) => a + b[0], 0);
-      console.log('  ', T.names[id], bins.map((B, i) => B[0] / tot > 0.01 ? `${i / 10}:${(100 * B[0] / tot).toFixed(0)}%h${(B[1] / B[0]).toFixed(0)}s${(B[2] / B[0]).toFixed(2)}` : '').filter(Boolean).join(' '));
-    }
   }
   return sharp(out, { raw: { width: S, height: S, channels: 3 } }).png().toBuffer();
 }
@@ -873,10 +869,10 @@ const sodden = ({ wet = 0.45, line = 0.95, weed = [0.2, 0.24, 0.13], weedK = 0.5
   mixC(c, salt.map((v) => v * (0.75 + 0.25 * m)), tide * saltK * smooth((m - 0.42) / 0.2));
 };
 // a keeper's weathering: salt dried on the boots and the trouser hems (a broken pale rim and specks), wear on the knees
-const salted = ({ top = 0.42, k = 0.45, salt = [0.78, 0.77, 0.72] } = {}) => (c, p) => {
+const salted = ({ top = 0.42, k = 0.32, salt = [0.66, 0.66, 0.62] } = {}) => (c, p) => {
   const n = fbm(p, 6), m = fbm(p, 31);
-  const rim = 1 - smooth(Math.abs(p.y - top * (0.55 + 0.45 * n)) / 0.04), low = 1 - smooth((p.y - top * 0.7) / 0.12);
-  mixC(c, salt, k * Math.max(rim * smooth((m - 0.35) / 0.2), low * smooth((m - 0.62) / 0.1) * 0.7));
+  const rim = 1 - smooth(Math.abs(p.y - top * (0.55 + 0.45 * n)) / 0.03), low = 1 - smooth((p.y - top * 0.7) / 0.12);
+  mixC(c, salt, k * Math.max(rim * smooth((m - 0.4) / 0.2), low * smooth((m - 0.7) / 0.08) * 0.5));
 };
 const SKIN = { tone: true, flat: ['mr'] }, EYES = { flat: ['normal'] };
 // the Sunken's and the Ice Singers' eyes: a cold pale iris and a clouded white, the map its own faint glow
@@ -888,7 +884,7 @@ const FROST = {
     MI_Peasant: { px: 256, paint: { base: [dye(100, 0.15, 0.16)], parts: [
       [/Body/, [dye(112, 0.18, 0.28, { v: [0.4, 1] }), dye(70, 0.3, 0.1)]],
       [/Legs/, [dye(110, 0.25, 0.07)]], [/Feet/, [dye(60, 0.3, 0.07)]], [/Arms/, [dye(70, 0.3, 0.08)]]], fx: sodden({ wet: 0.4, weedK: 0.7 }) } } },
-    color: { MI_Hair_1_villager0: '#29312b', ...each(SKIN_M, toned('#6a7768')) }, rough: { MI_Peasant: 0.85, ...each(SKIN_M, 0.5), MI_Hair_1_villager0: 0.5 } },
+    color: { MI_Hair_1_villager0: '#29312b', ...each(SKIN_M, toned('#6b756d')) }, rough: { MI_Peasant: 0.85, ...each(SKIN_M, 0.5), MI_Hair_1_villager0: 0.5 } },
   // the Ice Singers: drowned women (the healer) gone to a crone's frame, skin pale blue, the dress soaked to blue-black
   // and sea-green, the long hair white-green and wet
   icesinger: { src: 'healer', table: CRONE, mats: { MI_Superhero_Female: SKIN, MI_Eyes: DROWNED_EYES,
@@ -905,21 +901,21 @@ const FROST = {
       [/Arms/, [dye(218, 0.4, 0.26, { v: [0.4, 1] }), dye(24, 0.45, 0.14)]],
       [/Body/, [dye(36, 0.6, 0.34, { v: [0.25, 1] }), dye(22, 0.5, 0.14)]],
       [/Legs/, [dye(62, 0.45, 0.22)]], [/Feet/, [dye(25, 0.3, 0.13)]]], fx: salted() } } },
-    color: { MI_Hair_2_healer: '#d4d0c4', MI_Superhero_Female: toned('#a06c55') }, brows: '#6e655c', rough: { MI_Peasant_healer: 0.8 } },
+    color: { MI_Hair_2_healer: '#d4d0c4', MI_Superhero_Female: toned('#9a654f') }, brows: '#6e655c', rough: { MI_Peasant_healer: 0.8 } },
   // Selna, the eldest keeper, seventy-five: the smith's body with the old woman's table (the stoop is the game's), white
   // hair in its buns, oatmeal wool sleeves and grey mitts, a slate-black oilskin bodice, charcoal trousers, grey sealskin
   selna: { src: 'smith', table: ELDER, mats: { MI_Superhero_Female: SKIN, MI_Eyes: EYES,
     MI_Peasant_smith: { paint: { base: [dye(30, 0.15, 0.18)], parts: [
       [/Arms/, [dye(40, 0.12, 0.6, { v: [0.4, 1] }), dye(30, 0.08, 0.2)]],
       [/Body/, [dye(25, 0.3, 0.1, { v: [0, 0.16] }), dye(214, 0.22, 0.2)]],
-      [/Legs/, [dye(215, 0.05, 0.17)]], [/Feet/, [dye(32, 0.1, 0.2)]]], fx: salted({ k: 0.35 }) } } },
+      [/Legs/, [dye(215, 0.05, 0.17)]], [/Feet/, [dye(32, 0.1, 0.2)]]], fx: salted({ k: 0.25 }) } } },
     color: { MI_Hair_2_smith: '#e2e0da', MI_Superhero_Female: toned('#b48b78') }, brows: '#a8a39b', rough: { MI_Peasant_smith: 0.8 } },
   // Tern, ten: villager0 with the boy's table, sandy hair, a blue-grey knitted gansey, ochre oilskin trousers, sealskin
   // boots (the wool cap and the small lantern are code; the same scene is the boy Einar and the Whitecliff child)
   tern: { src: 'villager0', table: CHILD, shrink: 0.74, mats: { ...each(SKIN_M, SKIN), MI_Eyes: EYES,
     MI_Peasant: { paint: { base: [dye(26, 0.45, 0.16)], parts: [
       [/Body/, [dye(214, 0.28, 0.4, { v: [0.4, 1] }), dye(26, 0.45, 0.16)]],
-      [/Legs/, [dye(40, 0.55, 0.32)]], [/Feet/, [dye(26, 0.3, 0.16)]]], fx: salted({ top: 0.3, k: 0.35 }) } } },
+      [/Legs/, [dye(40, 0.55, 0.32)]], [/Feet/, [dye(26, 0.3, 0.16)]]], fx: salted({ top: 0.3, k: 0.25 }) } } },
     color: { MI_Hair_1_villager0: '#8c6c48', ...each(SKIN_M, toned('#b4836a')) } },
   // Tamarisk, a nursery child of the Evergreen grown up among the Saltborn: the ranger's body with Elati's table, hood and
   // pauldrons off, villager2's short cut gone salt-white, the cloth a deep sea-grey, the leathers the Saltborn's
@@ -927,7 +923,7 @@ const FROST = {
   tamarisk: { src: 'ranger', table: ELF, drop: ['Female_Ranger_Head_Hood', 'Female_Ranger_Acc_Pauldrons'], hair: ['villager2', 'Hair_BuzzedFemale', 'MI_Hair_1_villager2'],
     mats: { ...each(SKIN_F, SKIN), MI_Eyes: EYES,
       MI_Ranger: { paint: { base: [dye(205, 0.18, 0.3, { h: [45, 180] }), dye(32, 0.5, 0.3)], parts: [
-        [/Legs/, [dye(210, 0.12, 0.16)]], [/Feet/, [dye(28, 0.4, 0.2)]]], fx: salted({ top: 0.5, k: 0.3 }) } } },
+        [/Legs/, [dye(210, 0.12, 0.16)]], [/Feet/, [dye(28, 0.4, 0.2)]]], fx: salted({ top: 0.5, k: 0.22 }) } } },
     color: { MI_Hair_1_villager2: '#d8d4c8', MI_Hair_2_ranger: '#9a9388', ...each(SKIN_F, toned('#b89684')) } },
   // Old Glaukos, the Landing's blind elder: the Wayfarer bare-headed with the old man's table (old Arna's look, so he is
   // old Arna in the last memory), white hair and beard, an oatmeal wool shirt under a sealskin jerkin, dark wool trousers,
@@ -936,7 +932,7 @@ const FROST = {
     mats: { ...each(SKIN_M, SKIN), MI_Eyes: EYES,
       MI_Ranger_wayfarer: { paint: { base: [dye(26, 0.35, 0.18)], parts: [
         [/Arms$/, [dye(38, 0.12, 0.45, { s: [0, 0.45] }), dye(26, 0.35, 0.16)]], [/Body$/, [dye(28, 0.25, 0.16)]],
-        [/Legs/, [dye(30, 0.06, 0.12)]], [/Feet/, [dye(25, 0.3, 0.12)]]], fx: salted({ top: 0.5, k: 0.3 }) } } },
+        [/Legs/, [dye(30, 0.06, 0.12)]], [/Feet/, [dye(25, 0.3, 0.12)]]], fx: salted({ top: 0.5, k: 0.22 }) } } },
     color: { MI_Hair_1_wayfarer: '#d2d0ca', ...each(SKIN_M, toned('#a2725c')) } }
 };
 const FROST_CREDIT = { credit: 'Quaternius characters (people.glb)', license: 'CC0' };

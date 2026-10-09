@@ -15,24 +15,27 @@ export async function startCreatureView(q) {
   await Promise.all([loadCreatures(), loadPeople()]);
   const list = (q.get('only') || 'goblin,goblinArcher,skeleton,warg,troll,spider,ash,wraith,barrowLord').split(',').filter(hasCreature);
   const clips = q.get('clips') ? q.get('clips').split(',') : null;
-  const items = clips ? clips.map((c) => [list[0], c]) : list.map((m) => [m, q.get('clip')]);
+  // ts=0.1,0.5,0.9: frames of one clip side by side
+  const ts = q.get('ts') ? q.get('ts').split(',').map(Number) : null;
+  const items = ts ? ts.map((t) => [list[0], q.get('clip'), t]) : clips ? clips.map((c) => [list[0], c]) : list.map((m) => [m, q.get('clip')]);
   if (q.has('ref')) items.unshift(['ref', null]);
   const W = { goblin: 'dagger', goblinArcher: 'crossbow', goblinShaman: 'staffSkull', skeleton: 'sword', skeletonArcher: 'crossbow', ash: 'cleaver', troll: 'club', barrowLord: 'greatsword' };
   const gap = +(q.get('gap') || 2.6), avs = [];
-  items.forEach(([m, clip], i) => {
+  items.forEach(([m, clip, ft], i) => {
     const a = m === 'ref' ? new Avatar(personModel('warden'), { style: 'sword' }) : new Avatar(creatureModel(m), { style: 'none' });
     if (m !== 'ref' && q.get('weapon') !== 'none' && (q.get('weapon') || W[m])) a.hold('R', q.get('weapon') || W[m], {});
     a.group.position.set((i - (items.length - 1) / 2) * gap, 0, 0);
     a.group.rotation.y = +(q.get('rot') || 0.5);
+    if (m !== 'ref' && q.get('scale')) a.group.scale.setScalar(+q.get('scale')); // as the game sizes it (look.scale)
     R.scene.add(a.group); avs.push(a);
-    let d = 1, at = +(q.get('t') || 0);
-    if (clip) { d = a.play(clip, 1) || 1; if (!q.get('t')) at = a.anim.hitAt?.(clip) ?? 0.5; }
+    let d = 1, at = ft ?? +(q.get('t') || 0);
+    if (clip) { d = a.play(clip, 1) || 1; if (!q.get('t') && ft == null) at = a.anim.hitAt?.(clip) ?? 0.5; }
     const steps = 20, dur = d * at + (clip ? 0 : 0.6);
     for (let k = 0; k < steps; k++) a.update(dur / steps, { speed: +(q.get('speed') || 0), runSpeed: 5 });
-    a.label = (m === 'ref' ? 'warden 1.8m' : m) + (clip ? ' · ' + clip : '');
+    a.label = (m === 'ref' ? 'warden 1.8m' : m) + (clip ? ' · ' + clip : '') + (ft != null ? ' @' + ft : '');
   });
   addLight({ x: 0, y: 4, z: 4, color: 0xffa860, intensity: 50, range: 24 });
-  R.cam.dist = +(q.get('dist') || items.length * gap * 0.75 + 4); R.cam.pitch = +(q.get('pitch') || 0.3); R.cam.lookY = 1;
+  R.cam.dist = +(q.get('dist') || items.length * gap * 0.75 + 4); R.cam.pitch = +(q.get('pitch') || 0.3); R.cam.lookY = +(q.get('lookY') || 1);
   updateCamera(0, 0, 0, true);
   const lay = document.createElement('div'); lay.style.cssText = 'position:fixed;inset:0;pointer-events:none;font:600 13px sans-serif;color:#fff;text-shadow:0 1px 2px #000'; document.body.appendChild(lay);
   let n = 0;
