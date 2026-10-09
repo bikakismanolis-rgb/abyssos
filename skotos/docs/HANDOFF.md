@@ -26,8 +26,7 @@ Read this first when picking the project up in a new session.
 
 ## Open items
 
-- Not yet confirmed on a real phone that the memory changes stop the crash at high quality.
-- Optional: unload the people sets, packs and creature files of other acts when far from them (only if phones still crash).
+- None known. The owner confirmed on a real phone (version 11) that high quality no longer crashes and runs smoothly, so unloading other acts' assets is not needed for now.
 
 ## Done in the last session
 
