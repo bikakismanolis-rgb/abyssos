@@ -13,7 +13,7 @@ import { RNG, fbm, clamp, smooth, angleDiff } from '../core/util.js';
 import { KIT, KITMAT, KIT_SCALE } from '../gfx/kits.js';
 import { ENV } from '../gfx/env.js';
 import { BED_DRY } from './genlib.js';
-import { SEA, SEA_U, SEA_LIT, SEA_GLSL, buildSea, buildIce, seaBeyond, cornerBeds, noiseTex } from './sea.js';
+import { SEA, SEA_U, SEA_LIT, SEA_GLSL, buildSea, buildIce, seaBeyond, noiseTex } from './sea.js';
 import { act5Level, instDef5 } from './build5.js';
 
 // uWind: amplitude of all tree and grass sway (Act III's Still Wood sets 0 until the First Autumn). uEdge (z0, z1): south of
@@ -1102,6 +1102,18 @@ function ground5(type) {
     hueB: type === 'farlight' ? (B !== 'rime/ice' ? [0.62, 0.82, 1.08] : null) : B === 'rime/shore' ? null : B === 'gravel' ? [0.86, 0.9, 0.96] : [0.62, 0.66, 0.74],
     fake: !snowy, glint: true, wet: type === 'coast', aur: true };
 }
+// the ground's beds at its corners (the wet sand, and the bed the deep water hides): the corner's cells' mean, as the
+// water's (cornerBeds), but thick ice, a window or the jetty count as dry land (the layout gives them the open sea's bed
+// for the water's colour under them)
+function groundBeds(L) {
+  const { w, h } = L, W = w + 1, out = new Float32Array(W * (h + 1));
+  for (let vz = 0; vz <= h; vz++) for (let vx = 0; vx <= w; vx++) {
+    let s = 0;
+    for (const [dx, dz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) { const x = vx + dx, z = vz + dz, i = z * w + x; s += x < 0 || z < 0 || x >= w || z >= h ? -0.6 : L.thick[i] || L.window[i] || L.deck[i] ? BED_DRY : L.bed[i]; }
+    out[vz * W + vx] = s / 4;
+  }
+  return out;
+}
 function buildGround(L, group) {
   const { w, h, cells, paint } = L;
   const geo = new THREE.PlaneGeometry(w, h, w, h);
@@ -1112,7 +1124,7 @@ function buildGround(L, group) {
   const D = L.dist, crypt = L.type === 'crypt', halls = L.type === 'halls', pass = L.type === 'pass';
   const heart = L.type === 'heart', act3 = heart || L.type === 'weep', LG = L.spots?.lanternglade;
   const act4 = !!L.hgt, forge = L.type === 'forge'; // Act IV: the layout carries its own heights (gen4.js terrain)
-  const act5 = ACT5.has(L.type), vbed = act5 && L.bed ? cornerBeds(L) : null, far = L.type === 'farlight';
+  const act5 = ACT5.has(L.type), vbed = act5 && L.bed ? groundBeds(L) : null, far = L.type === 'farlight';
   const sapW = act3 ? new Float32Array(n) : null;
   const cellAt = (x, z) => (x < 0 || z < 0 || x >= w || z >= h ? -1 : z * w + x);
   const roomAt = crypt ? new Uint8Array(w * h) : null;
@@ -1140,9 +1152,11 @@ function buildGround(L, group) {
       // ice showing through it in patches along the road; the bed under the thin ice and the leads, black
       const y = L.hgt[vz * (w + 1) + vx];
       pos.setY(i, y);
+      // (tidal: a bed the tide reaches and nothing over it; the thin ice's cells carry the sea's bed but are no shore)
       let walls = 0, tide = 0, thick = 0, tw = 0;
-      for (let dz = -2; dz <= 1; dz++) for (let dx = -2; dx <= 1; dx++) { const c = cellAt(vx + dx, vz + dz); if (c < 0 || (!cells[c] && !L.low[c])) walls++; if (c >= 0 && L.bed && L.bed[c] < BED_DRY && !L.thick?.[c]) tw++; }
-      for (const [dx, dz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) { const c = cellAt(vx + dx, vz + dz); if (c < 0) continue; if (L.bed && L.bed[c] < BED_DRY && !L.thick?.[c]) tide++; if (L.thick?.[c]) thick++; }
+      const tidal = (c) => L.bed && L.bed[c] < BED_DRY && !L.thick[c] && !L.ice[c] && !L.window[c] && !L.deck[c];
+      for (let dz = -2; dz <= 1; dz++) for (let dx = -2; dx <= 1; dx++) { const c = cellAt(vx + dx, vz + dz); if (c < 0 || (!cells[c] && !L.low[c])) walls++; if (c >= 0 && tidal(c)) tw++; }
+      for (const [dx, dz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) { const c = cellAt(vx + dx, vz + dz); if (c < 0) continue; if (tidal(c)) tide++; if (L.thick[c]) thick++; }
       wp = clamp(pv * 1.25, 0, 1);
       // (the shore's stone runs a little up the dry land, ragged, so the tide line is no polygon)
       if (far) wb = thick ? clamp((nz - 0.5) * 2.2 + (big - 0.5) * 1.6 + 0.25, 0, 0.9) : 0;
@@ -1224,11 +1238,19 @@ function buildGround(L, group) {
   // Act V: the floor is level wherever it is walked (the pits of the sea bed and of the ground under the thin ice beside it
   // would tilt its corners' normals, and the ice road would take the cliff layer)
   if (act5) { const nr = geo.attributes.normal; for (let i = 0; i < n; i++) if (Math.abs(pos.getY(i)) < 0.01) nr.setXYZ(i, 0, 1, 0); }
+  // (the Farthest Light: the bed under the thin ice and the leads is never seen, the opaque ice and the opaque black water
+  // lie over every such cell: its quads are left out, which spares the phone their vertices and the depth test their pixels.
+  // Both zones: an ice window's cells, whose pit is the iceWindow prop's, walls and floor, seen through the pane)
+  if (act5) {
+    const ix = geo.index.array, keep = [];
+    for (let c = 0; c < w * h; c++) if (!L.window[c] && !(far && (L.ice[c] || L.sea?.[c]))) for (let k = 0; k < 6; k++) keep.push(ix[c * 6 + k]);
+    geo.setIndex(keep);
+  }
   const cfg = GROUND[L.type] || (act5 ? ground5(L.type) : act4 ? ground4(L.type) : GROUND.forest);
   if (ENV.ready && ENV.layers[cfg.A]) {
     geo.setAttribute('aLay', new THREE.BufferAttribute(lay, 4));
     if (sapW) geo.setAttribute('aSap', new THREE.BufferAttribute(sapW, 1));
-    if (cfg.wet) geo.setAttribute('aBed', new THREE.BufferAttribute(vbed ? Float32Array.from(vbed) : new Float32Array(n).fill(BED_DRY), 1));
+    if (cfg.wet) geo.setAttribute('aBed', new THREE.BufferAttribute(vbed || new Float32Array(n).fill(BED_DRY), 1));
     const mesh = new THREE.Mesh(geo, groundMat(cfg, L.type));
     mesh.receiveShadow = true;
     group.add(mesh);
@@ -1281,7 +1303,7 @@ function groundMat(cfg, type) {
   // Act V (sea.js): the snow's glints (not on low quality), the wet sand behind the ebb, the aurora's light on the ground
   const X5 = { glint: !!cfg.glint && R.quality >= 1, wet: !!cfg.wet, aur: !!cfg.aur, fake: !!cfg.fake, hueB: !!cfg.hueB };
   X5.any = X5.glint || X5.wet || X5.aur;
-  if (X5.any) { noiseTex(); Object.assign(uni, SEA_U({ uWetLevel: SEA.uWetLevel }), SEA_LIT); }
+  if (X5.any) { noiseTex(); Object.assign(uni, SEA_U({ uWetLevel: SEA.uWetLevel, uLevel: SEA.uLevel }), SEA_LIT); }
   if (X5.hueB) uni.uHueB = { value: new THREE.Vector3(...cfg.hueB) };
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, uni);
@@ -1297,9 +1319,12 @@ uniform sampler2D tA; uniform sampler2D tB; uniform sampler2D tP; uniform sample
 uniform vec3 uS; uniform vec3 uR; uniform float uNS;
 varying vec4 vLay; varying vec2 vGP; varying vec3 vGN;
 float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\nvarying float vSap;' : '') + (X.sat ? '\nuniform float uSat;' : '') + (cfg.hueA ? '\nuniform vec3 uHueA;' : '') + (X.dry ? '\nuniform sampler2D tD; uniform vec3 uDryTint; uniform float uAut;' : '') + (X.wall ? '\nuniform sampler2D tW; uniform sampler2D tWn; uniform float uWS; varying float vGY;' : '')
-      + (X5.hueB ? '\nuniform vec3 uHueB;' : '') + (X5.wet ? '\nvarying float vBed; uniform float uWetLevel;' : '')
+      + (X5.hueB ? '\nuniform vec3 uHueB;' : '') + (X5.wet ? '\nvarying float vBed; uniform float uWetLevel; uniform float uLevel;' : '')
       + (X5.any ? SEA_GLSL() + '\nvarying vec3 vGW; uniform vec3 uMoonD; uniform vec3 uMoonC; uniform vec3 uHeroP; uniform vec3 uHeroC;\nvec3 gEm = vec3(0.0);' : ''))
-      .replace('#include <map_fragment>', `
+      .replace('#include <map_fragment>', (X5.wet ? `
+  // (under closed water deeper than 0.7 m the sea, nearly opaque there, hides the bed: it is not drawn at all, its layers
+  // and its lights spared)
+  if (uLevel - vBed > 0.7) discard;` : '') + `
   // a slow warp from the large-scale noise slides the organic layers around so their tiles never line up in rows
   vec2 gw = (vLay.zw - 0.5) * vec2(1.0, 0.6);
   vec2 uA = vGP * uS.x + gw, uA2 = mat2(0.8, -0.6, 0.6, 0.8) * vGP * (uS.x * 0.73) + vec2(0.31, 0.57);
@@ -1363,8 +1388,9 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
       gEm += vec3(0.85, 0.92, 1.0) * sp * 2.2 * (1.0 - wB) * (1.0 - wP * 0.8);
     }
   }` : '') + (X5.aur ? `
-  // the aurora's light drifting over the ground in slow green ribbons
-  if (uAur > 0.001) gEm += aurora(vGW.xz * 0.9 + vec2(13.0, -40.0), 1.0, 0.0) * 0.06;` : '') + `
+  // the aurora's light drifting over the ground in slow green ribbons (not under the black aurora: there it would be all
+  // but black, and the uniform gate spares the farlight's every ground pixel the curtain maths)
+  if (uAur * max(1.0 - uAurDark, uAurFront) > 0.02) gEm += aurora(vGW.xz * 0.9 + vec2(13.0, -40.0), 1.0, 0.0) * 0.06;` : '') + `
   diffuseColor.rgb *= gc * (0.82 + 0.36 * vLay.w);`)
       .replace('#include <roughnessmap_fragment>', `float roughnessFactor = clamp(mix(mix(uR.x, uR.y, wB), uR.z, wP) * (1.12 - 0.25 * gh), 0.3, 1.0);` + (X.sap ? '\n  roughnessFactor = mix(roughnessFactor, 0.14, wS);' : '') + (X5.wet ? '\n  roughnessFactor = mix(roughnessFactor, 0.2, gWet);' : ''))
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>' + (X5.any ? '\n  totalEmissiveRadiance += gEm;' : ''))

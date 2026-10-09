@@ -3,7 +3,8 @@
 //         monsters hunting a hero who walks the flats; once a flood she stands in a cell the next step closes (her lane:
 //         held, then walked out of or washed out along). Fails on: an actor's centre in a closed cell, the hero stuck (on
 //         fewer than 9 open cells), her centre in a closed cell after a tick (the player.js snap), a jump over 3.5 m in a
-//         tick, a wash-out leaving its lane, more than one ice-free tide bump per step.
+//         tick, a wash-out leaving its lane, more than one ice-free tide bump per step, gold left lying in closed water
+//         (each lane test drops some on a cell 4-9 m off that the same step closes: it must slide to the dry).
 //   ice   MIN (10) minutes of game time on the coast's thin ice (the Fall shelf) and on the Farthest Light's Ice Road: she
 //         walks, stands till it breaks, takes impacts, breaks and Frost Novas; monsters hunt her onto it (a troll among
 //         them). Fails on: a landing over 3 m away that is not her 2 s ring's point, a snap, life under 10% after a
@@ -43,7 +44,7 @@ const shotOf = (page) => async (name) => { await page.evaluate(() => new Promise
 // ---------- in the page: the probe (called by ice.js at the end of every tick) and the bot that walks the hero ----------
 function install(o) {
   const G = window.__G, A = window.__act5, D = window.__D, IN = D.IN;
-  const S = window.__soak = { o, ticks: 0, time: 0, maxJump: 0, jumps: [], snaps: [], closed: [], stuck: [], offLane: [], verT: [], tideBumpsPerStep: [], lanes: [], tp: false, last: null, ver: G.zone.map.ver, chk: 0, walk: null, P: {}, mode: 'walk', modeT: 0, laneTest: null, laneCycle: -1, cycle: 0, phase0: null, hpFloor: [], notes: [] };
+  const S = window.__soak = { o, wet: [], drops: 0, ticks: 0, time: 0, maxJump: 0, jumps: [], snaps: [], closed: [], stuck: [], offLane: [], verT: [], tideBumpsPerStep: [], lanes: [], tp: false, last: null, ver: G.zone.map.ver, chk: 0, walk: null, P: {}, mode: 'walk', modeT: 0, laneTest: null, laneCycle: -1, cycle: 0, phase0: null, hpFloor: [], notes: [] };
   const key = (dx, dz) => {
     IN.keys.clear();
     if (Math.hypot(dx, dz) < 0.2) return;
@@ -96,6 +97,8 @@ function install(o) {
       }
       const s = Math.floor(pl.z) * L.w + Math.floor(pl.x);
       if (m.cells[s] && comp(m, s, 9) < 9 && !T?.lane) S.stuck.push({ t: +S.time.toFixed(2), x: pl.x, z: pl.z, lane: false });
+      // gold lying in closed water for over 1.5 s (not flying, not sliding)
+      for (const p of z.pickups) { if (p.wash || p.y > 0 || p.vy > 0 || m.walkable(p.x, p.z)) { p._wet = 0; continue; } if ((p._wet = (p._wet || 0) + 0.25) > 1.5 && !p._wetLog) { p._wetLog = true; S.wet.push({ t: +S.time.toFixed(2), x: +p.x.toFixed(2), z: +p.z.toFixed(2) }); } }
     }
     S.bot?.(dt);
   };
@@ -115,6 +118,8 @@ function install(o) {
         pl.x = best % L.w + 0.5; pl.z = (best - best % L.w) / L.w + 0.5; pl.kx = pl.kz = 0; key(0, 0);
         S.laneTest = { cycle: S.cycle, cell: best, wait: S.cycle % 2 === 0, t0: S.time, lane: false, wash: false, closed: false, out: false };
         S.lanes.push(S.laneTest);
+        // and gold on another cell the same step closes, 4-9 m off (out of her pickup's reach)
+        for (let j = 0; j < C.idx.length && window.__pk; j++) { const i = C.idx[j]; if (C.thr[j] !== T.step + 1 || C.bay[i] || !m.cells[i]) continue; const x = i % L.w + 0.5, y = (i - i % L.w) / L.w + 0.5, d = Math.hypot(x - pl.x, y - pl.z); if (d > 4 && d < 9) { window.__pk.dropGold(x, y, 7); S.drops++; break; } }
       }
     }
     if (S.mode === 'lane') {
@@ -131,9 +136,9 @@ function install(o) {
     }
     if (!S.walk || Math.hypot(S.walk.x - pl.x, S.walk.z - pl.z) < 1 || (S.modeT += dt) > 12) { S.walk = pickTarget(); S.modeT = 0; }
     if (!S.walk) { key(0, 0); return; }
-    // (she keeps off the thin ice: this soak is the tide's)
+    // (she keeps off the thin ice: this soak is the tide's; a wave that leaves her on it, she walks off)
     S.dry ||= L.ice.map((v) => (v ? 0 : 1));
-    const v = m.stepToward(S.P, pl.x, pl.z, S.walk.x, S.walk.z, { x: 0, z: 0 }, 20, S.dry);
+    const v = m.stepToward(S.P, pl.x, pl.z, S.walk.x, S.walk.z, { x: 0, z: 0 }, 20, L.ice[Math.floor(pl.z) * L.w + Math.floor(pl.x)] ? null : S.dry);
     if (!v) { S.walk = null; key(0, 0); return; }
     key(v.x, v.z);
   };
@@ -179,8 +184,9 @@ async function tideSoak() {
   const CYCLES = +(process.env.CYCLES || 20), MON = +(process.env.MON || 12);
   const { page, logs } = await open(`auto=coast&lvl=30&diff=${DIFF}&q=0&sim=${SIM}&norender${SEED}`);
   const shot = shotOf(page);
-  const setup = await page.evaluate(({ install, spawn, DIFF, MON }) => {
+  const setup = await page.evaluate(async ({ install, spawn, DIFF, MON }) => {
     window.__immortal = true;
+    window.__pk = await import('/src/game/pickups.js');
     const G = window.__G, L = G.zone.L, sp = L.spots, pl = G.player;
     // start on the Shallows' dry ground by the Dalarö's bar (or the camp)
     const s = sp.dalaro || sp.camp, f = G.zone.map.nearestFloor(s.x, s.z + 6, 12);
@@ -205,13 +211,13 @@ async function tideSoak() {
   }
   const res = await page.evaluate(() => {
     const S = window.__soak, A = window.__act5, TL = A.tide.LOG;
-    return { seed: window.__G.zone.seed, time: +S.time.toFixed(1), ticks: S.ticks, cycles: S.cycle, steps: TL.steps, bells: TL.bells, turns: TL.turns, lanesLog: TL.lanes, washes: TL.washes.length, washesSample: TL.washes.slice(0, 4), evicted: TL.evicted, slid: TL.slid, maxJump: +S.maxJump.toFixed(3), jumps: S.jumps.slice(0, 10), snaps: S.snaps.length, snapsSample: S.snaps.slice(0, 5), closed: S.closed.length, closedSample: S.closed.slice(0, 8), stuck: S.stuck.length, stuckSample: S.stuck.slice(0, 5), offLane: S.offLane.length, offLaneSample: S.offLane.slice(0, 5), overdue: S.overdue || 0, maxLaneAge: +(S.maxLaneAge || 0).toFixed(1), laneTests: S.lanes, verBumps: S.verT.length, iceBumps: A.ice.LOG.bumps.length, plunges: A.ice.LOG.plunges.length };
+    return { seed: window.__G.zone.seed, time: +S.time.toFixed(1), ticks: S.ticks, cycles: S.cycle, steps: TL.steps, bells: TL.bells, turns: TL.turns, lanesLog: TL.lanes, washes: TL.washes.length, washesSample: TL.washes.slice(0, 4), evicted: TL.evicted, slid: TL.slid, maxJump: +S.maxJump.toFixed(3), jumps: S.jumps.slice(0, 10), snaps: S.snaps.length, snapsSample: S.snaps.slice(0, 5), closed: S.closed.length, closedSample: S.closed.slice(0, 8), stuck: S.stuck.length, stuckSample: S.stuck.slice(0, 5), offLane: S.offLane.length, offLaneSample: S.offLane.slice(0, 5), drops: S.drops, wet: S.wet.length, wetSample: S.wet.slice(0, 5), overdue: S.overdue || 0, maxLaneAge: +(S.maxLaneAge || 0).toFixed(1), laneTests: S.lanes, verBumps: S.verT.length, iceBumps: A.ice.LOG.bumps.length, plunges: A.ice.LOG.plunges.length };
   });
   await page.evaluate(() => { window.__shoot = true; }); await shot('tide-end');
   const lt = res.laneTests;
   // (a test whose lane never formed: she was shoved off the cell before the step, and it closed behind her)
   const washed = lt.filter((l) => l.wash).length, walked = lt.filter((l) => !l.wash && l.out).length, stillOpen = lt.filter((l) => !l.cellClosed && !l.timeout && l.cycle < CYCLES);
-  res.pass = res.cycles >= CYCLES && res.closed === 0 && res.stuck === 0 && res.snaps === 0 && res.jumps.length === 0 && res.offLane === 0 && res.overdue === 0 && res.maxLaneAge < 40 && lt.length >= CYCLES - 1 && washed >= Math.min(3, CYCLES >> 2) && walked >= Math.min(3, CYCLES >> 2) && !stillOpen.length && res.verBumps <= res.steps + res.lanesLog * 2 + res.iceBumps;
+  res.pass = res.cycles >= CYCLES && res.closed === 0 && res.stuck === 0 && res.snaps === 0 && res.jumps.length === 0 && res.offLane === 0 && res.wet === 0 && (res.slid > 0 || !res.drops) && res.overdue === 0 && res.maxLaneAge < 40 && lt.length >= CYCLES - 1 && washed >= Math.min(3, CYCLES >> 2) && walked >= Math.min(3, CYCLES >> 2) && !stillOpen.length && res.verBumps <= res.steps + res.lanesLog * 2 + res.iceBumps;
   res.laneTests = { n: lt.length, formed: lt.filter((l) => l.lane).length, washed, walkedOut: walked, cellOpen: stillOpen, sample: lt.slice(0, 6) };
   await page.close();
   return { res, logs };
@@ -285,14 +291,16 @@ async function perf() {
       let k = 0, iv = null;
       if (zone === 'coast') { T.force = { h: 1.2, rate: 0.15 }; iv = setInterval(() => { if (T.step >= 8) T.force = { h: 0, rate: 0.15 }; else if (T.step <= 0) T.force = { h: 1.2, rate: 0.15 }; }, 250); }
       else iv = setInterval(() => { const a = (k++) * 2.4; if (k % 3) I.crackAt(pl.x + Math.sin(a) * 4, pl.z + Math.cos(a) * 4, 2, 2); else I.breakAt(pl.x + Math.sin(a) * 5, pl.z + Math.cos(a) * 5, 1); }, 250);
+      const TC = A.tide.LOG.cost, IC = A.ice.LOG.cost; Object.assign(TC, { n: 0, ms: 0, max: 0 }); Object.assign(IC, { n: 0, ms: 0, max: 0 });
       window.__ft = []; window.__ftOn = true;
       await wait(20000);
       window.__ftOn = false; clearInterval(iv);
       const ft = window.__ft, all = ft.map((x) => x[0]), bump = [], calm = [];
       for (let i = 1; i < ft.length; i++) (ft[i][1] !== ft[i - 1][1] || (i > 1 && ft[i - 1][1] !== ft[i - 2][1]) ? bump : calm).push(ft[i][0]);
-      return { all, bump, calm, actors: G.actors.filter((a) => !a.dead && a.team === 'foe').length, steps: A.tide.LOG.steps, batches: A.ice.LOG.batches };
+      const cost = (c) => ({ frames: c.n, meanMs: +(c.ms / Math.max(1, c.n)).toFixed(3), maxMs: +c.max.toFixed(2) });
+      return { all, bump, calm, actors: G.actors.filter((a) => !a.dead && a.team === 'foe').length, steps: A.tide.LOG.steps, batches: A.ice.LOG.batches, tick: { tide: cost(TC), ice: cost(IC) } };
     }, { install: install.toString(), spawn: spawn.toString(), zone });
-    out[zone + (render ? '-q' + Q : '-logic')] = { all: stats(r.all), bumpFrames: stats(r.bump), calmFrames: stats(r.calm), actors: r.actors, steps: r.steps, batches: r.batches, errors: logs.slice(0, 5) };
+    out[zone + (render ? '-q' + Q : '-logic')] = { all: stats(r.all), bumpFrames: stats(r.bump), calmFrames: stats(r.calm), tick: r.tick, actors: r.actors, steps: r.steps, batches: r.batches, errors: logs.slice(0, 5) };
     await page.close();
   }
   return out;

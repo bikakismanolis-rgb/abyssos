@@ -30,7 +30,7 @@ export const SEA = {
   uGlow: { value: Array.from({ length: 8 }, V4) },
   uLights: { value: [V4(), V4()] },
   uBeam: { value: [V4(), V4()] },
-  uFreeze: { value: [V4(), V4(), V4()] }, uFreezeAll: { value: 0 }, uFrzT: { value: 0 }, uFrzOn: { value: 0 },
+  uFreeze: { value: [V4(), V4(), V4()] }, uFreezeAll: { value: 0 }, uFrzT: { value: 0 }, uFrzOn: { value: 0 }, uGlowOn: { value: 0 },
   uWake: { value: V4() },
   sky: false
 };
@@ -441,12 +441,13 @@ export function iceMat(o = {}) {
   const m = R.quality >= 2 ? new THREE.MeshPhongMaterial({ color: 0xffffff, specular: new THREE.Color(o.window ? 0x5a6876 : 0x3a4652), shininess: o.window ? 300 : 260 })
     : new THREE.MeshLambertMaterial({ color: 0xffffff });
   if (o.window) { m.transparent = true; m.depthWrite = false; }
-  const u = SEA_U({ tCrack: SEA.tCrack, uShade: SEA.uShade, uGlow: SEA.uGlow, uLights: SEA.uLights, uFreezeAll: SEA.uFreezeAll, tIceL: { value: lay?.d || null }, uSkyC: LIT.uSkyC, uHeroP: LIT.uHeroP, uHeroC: LIT.uHeroC, uHeroR: LIT.uHeroR });
+  const u = SEA_U({ tCrack: SEA.tCrack, uShade: SEA.uShade, uGlow: SEA.uGlow, uGlowOn: SEA.uGlowOn, uLights: SEA.uLights, uFreezeAll: SEA.uFreezeAll, tIceL: { value: lay?.d || null }, uSkyC: LIT.uSkyC, uHeroP: LIT.uHeroP, uHeroC: LIT.uHeroC, uHeroR: LIT.uHeroR });
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
     sh.defines = Object.assign(sh.defines || {}, hi ? { ICE_HI: '' } : {}, hi && R.quality < 2 ? { ICE_GLINT: '' } : {}, o.far ? { ICE_FAR: '' } : {}, o.window ? { ICE_WINDOW: '' } : {}, o.floe ? { ICE_FLOE: '' } : {}, lay ? { ICE_LAY: '' } : {});
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec2 aC;\nvarying vec3 vIP;\nvarying vec2 vIC;')
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec2 aC;\nattribute vec2 aE;\nvarying vec3 vIP;\nvarying vec2 vIC;\nvarying vec2 vIE;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>
+  vIE = aE;
   vec4 ipp = vec4(transformed, 1.0);
 #ifdef USE_INSTANCING
   ipp = instanceMatrix * ipp;
@@ -454,8 +455,8 @@ export function iceMat(o = {}) {
   vIP = (modelMatrix * ipp).xyz; vIC = aC;`);
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
 ${COMMON}
-uniform sampler2D tCrack; uniform vec4 uShade[4]; uniform vec4 uGlow[8]; uniform vec4 uLights[2]; uniform sampler2D tIceL; uniform vec3 uSkyC; uniform vec3 uHeroP; uniform vec3 uHeroC; uniform float uHeroR;
-varying vec3 vIP; varying vec2 vIC;
+uniform sampler2D tCrack; uniform vec4 uShade[4]; uniform vec4 uGlow[8]; uniform float uGlowOn; uniform vec4 uLights[2]; uniform sampler2D tIceL; uniform vec3 uSkyC; uniform vec3 uHeroP; uniform vec3 uHeroC; uniform float uHeroR;
+varying vec3 vIP; varying vec2 vIC; varying vec2 vIE;
 uniform float uFreezeAll;
 // the edge distance of a world-space Voronoi at p (about 0 on the cell walls): the crack lines
 float vEdge(vec2 p) {
@@ -520,8 +521,8 @@ vec3 iceEm = vec3(0.0);`)
     col *= 1.0 - s.w * 0.92 * (1.0 - smoothstep(0.45, 1.0, d));
   }
 #if defined(ICE_HI) && !defined(ICE_WINDOW)
-  // drowned lanterns glowing a few metres down, and their light caught in the ice
-  for (int i = 0; i < 8; i++) {
+  // drowned lanterns glowing a few metres down, and their light caught in the ice (only while one is near the camera)
+  if (uGlowOn > 0.5) for (int i = 0; i < 8; i++) {
     vec4 gl = uGlow[i];
     if (gl.w <= 0.0) continue;
     vec2 qq = P + par * gl.y - gl.xz; float d2 = dot(qq, qq);
@@ -554,6 +555,22 @@ vec3 iceEm = vec3(0.0);`)
       iceEm += vec3(0.1, 0.13, 0.15) * c * 0.15;
     }
   }
+#if !defined(ICE_FAR) && !defined(ICE_WINDOW) && !defined(ICE_FLOE)
+  // its edges (vIE: x the corner touches land or thick ice, y open water): snow drifted in over the black ice from the
+  // land, ragged, so the cells' squares never show; a pale broken rim where the open water begins (where it is must read
+  // at a glance), and the skirt below it (vIC set) pale too
+  {
+    // (the jag from the surface read's fine channels, streaked along the wind as the drifts lie; a touch of the bubbles'
+    // finest channel frays it)
+    float de = vIE.x * 1.5 + (nS.a - 0.5) * 0.75 + (nS.b - 0.5) * 0.35 + (nB.g - 0.5) * 0.18;
+    float dr = smoothstep(0.52, 0.64, de), dv = smoothstep(0.12, 0.52, de) * 0.45;
+    float rm = vIC.x >= 0.0 ? 0.8 : smoothstep(0.32, 0.46, vIE.y + (nS.g - 0.5) * 0.25 + (nB.a - 0.5) * 0.12) * 0.75;
+    col = mix(col, vec3(0.16, 0.19, 0.22) * (0.7 + 0.6 * nS.a), dv * (1.0 - dr));
+    col = mix(col, vec3(0.34, 0.37, 0.41) * (0.78 + 0.2 * nS.b + 0.2 * nB.g) * (0.88 + 0.12 * smoothstep(0.64, 0.9, de)), dr);
+    col = mix(col, vec3(0.3, 0.34, 0.38) * (0.8 + 0.4 * nB.r), rm * (1.0 - dr));
+    frost = max(frost, max(max(dr, dv), rm));
+  }
+#endif
 #ifdef ICE_WINDOW
   // the clear pane: frost round its edge, black glass in the middle
   vec2 ef = abs(fract(P) - 0.5);
@@ -605,13 +622,25 @@ export function buildIce(L, group, quality = R.quality) {
   const { w, h } = L, W = w + 1;
   const thin = (x, z) => x >= 0 && z >= 0 && x < w && z < h && !!L.ice[z * w + x];
   const open = (x, z) => x < 0 || z < 0 || x >= w || z >= h ? true : !!(L.sea?.[z * w + x] || (L.bed && L.bed[z * w + x] < -0.45 && !L.thick?.[z * w + x] && !L.ice[z * w + x]));
+  // (for the edges: water a corner touches, tidal or open; anything else that is no thin ice is land)
+  const wat = (i) => !!(L.sea?.[i] || L.low?.[i] || (L.bed && L.bed[i] < BED_DRY && !L.thick?.[i] && !L.window?.[i] && !L.deck?.[i]));
+  const lip = (x, z) => x >= 0 && z >= 0 && x < w && z < h && !L.ice[z * w + x] && !wat(z * w + x);
   const mat = iceMat();
   const mesh = new THREE.Group(); mesh.name = 'ice';
   const Y = ICE_Y, SK = -0.3;
   for (let cz0 = 0; cz0 < h; cz0 += CH) for (let cx0 = 0; cx0 < w; cx0 += CH) {
-    const vid = new Map(), pos = [], cc = [], idx = [];
-    const vert = (vx, vz) => { const k0 = vz * W + vx; let k = vid.get(k0); if (k != null) return k; k = pos.length / 3; vid.set(k0, k); pos.push(vx, Y, vz); cc.push(-1, -1); return k; };
-    const skirt = (ax, az, bx, bz, cx, cz) => { const k = pos.length / 3; pos.push(ax, Y, az, bx, Y, bz, ax, SK, az, bx, SK, bz); for (let j = 0; j < 4; j++) cc.push(cx, cz); idx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3); };
+    const vid = new Map(), pos = [], cc = [], ed = [], idx = [];
+    const vert = (vx, vz) => {
+      const k0 = vz * W + vx; let k = vid.get(k0); if (k != null) return k;
+      k = pos.length / 3; vid.set(k0, k); pos.push(vx, Y, vz); cc.push(-1, -1);
+      // (the share of the corner's four cells that is land, and water: 0.5 along a straight edge, 0.25 at an outer
+      // corner, 0.75 in an inner one, so the drift and the rim hug the edge instead of filling the edge's cells)
+      let la = 0, wa = 0;
+      for (const [dx, dz] of CORNER) { const x = vx + dx, z = vz + dz; if (x < 0 || z < 0 || x >= w || z >= h) continue; const i = z * w + x; if (L.ice[i]) continue; if (wat(i)) wa += 0.25; else la += 0.25; }
+      ed.push(la, wa);
+      return k;
+    };
+    const skirt = (ax, az, bx, bz, cx, cz, y1 = SK, land = 0) => { const k = pos.length / 3; pos.push(ax, Y, az, bx, Y, bz, ax, y1, az, bx, y1, bz); for (let j = 0; j < 4; j++) { cc.push(land ? -1 : cx, land ? -1 : cz); ed.push(land, 1 - land); } idx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3); };
     for (let z = cz0; z < Math.min(h, cz0 + CH); z++) for (let x = cx0; x < Math.min(w, cx0 + CH); x++) {
       if (!thin(x, z)) continue;
       const a = vert(x, z), b = vert(x + 1, z), c = vert(x, z + 1), d = vert(x + 1, z + 1);
@@ -621,11 +650,18 @@ export function buildIce(L, group, quality = R.quality) {
       if (open(x, z - 1)) skirt(x + 1, z, x, z, x + 0.5, z + 0.5);
       if (open(x - 1, z)) skirt(x, z, x, z + 1, x + 0.5, z + 0.5);
       if (open(x + 1, z)) skirt(x + 1, z + 1, x + 1, z, x + 0.5, z + 0.5);
+      // (against land and thick ice: a lip down to the floor's level, in the drift's colour: no sliver of the black water
+      // below shows between the ice and the floor beside it)
+      if (lip(x, z + 1)) skirt(x, z + 1, x + 1, z + 1, x + 0.5, z + 0.5, -0.05, 1);
+      if (lip(x, z - 1)) skirt(x + 1, z, x, z, x + 0.5, z + 0.5, -0.05, 1);
+      if (lip(x - 1, z)) skirt(x, z, x, z + 1, x + 0.5, z + 0.5, -0.05, 1);
+      if (lip(x + 1, z)) skirt(x + 1, z + 1, x + 1, z, x + 0.5, z + 0.5, -0.05, 1);
     }
     if (!idx.length) continue;
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geo.setAttribute('aC', new THREE.Float32BufferAttribute(cc, 2));
+    geo.setAttribute('aE', new THREE.Float32BufferAttribute(ed, 2));
     geo.setIndex(idx); geo.computeVertexNormals(); geo.computeBoundingSphere();
     const m = new THREE.Mesh(geo, mat);
     // (black ice shows a shadow hardly at all: the shadow map's taps are kept for high quality)
@@ -654,10 +690,18 @@ export function buildIce(L, group, quality = R.quality) {
   const floes = new THREE.InstancedMesh(fg, iceMat({ floe: true }), 32);
   floes.count = 0; floes.frustumCulled = false; floes.castShadow = false; floes.receiveShadow = quality >= 2;
   group.add(floes);
-  // this level's drowned lanterns, written to uGlow while it draws (zones are cached: each keeps its own)
-  const glow = Array.from({ length: 8 }, V4);
+  // this level's drowned lanterns, written to uGlow while it draws (zones are cached: each keeps its own); once a frame
+  // those over 40 m from the camera's target are left out, and with none left the shader skips the loop (uGlowOn)
+  const glow = Array.from({ length: 8 }, V4), near = Array.from({ length: 8 }, V4);
   (L.spots?.drowned || []).slice(0, 8).forEach((d, i) => glow[i].set(d.glow?.x ?? d.x, Math.max(0.5, -(d.glow?.y ?? -2.4)), d.glow?.z ?? d.z, 1));
-  const hook = () => { SEA.uGlow.value = glow; SEA.uMap.value.set(w, h); };
+  let gT = -1;
+  const hook = () => {
+    SEA.uMap.value.set(w, h); SEA.uGlow.value = near;
+    if (gT === R.time) return;
+    gT = R.time; let on = 0;
+    for (let i = 0; i < 8; i++) { const g = glow[i]; near[i].copy(g); if (g.w > 0 && Math.hypot(g.x - R.cam.x, g.z - R.cam.z) > 40) near[i].w = 0; if (near[i].w > 0) on = 1; }
+    SEA.uGlowOn.value = on;
+  };
   for (const m of mesh.children) m.onBeforeRender = hook;
   group.add(mesh);
   mesh.userData = { L, glow, kind: 'ice' };

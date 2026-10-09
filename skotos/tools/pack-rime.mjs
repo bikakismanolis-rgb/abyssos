@@ -93,11 +93,11 @@ const PROPS = [
     credit: ['Gislinge Viking Boat', 'Opus Poly (OpusPoly)', '', BY] },
   // a weathered rowboat, its oars lost; 4.6 m, bow +z
   { key: 'rowboat', sf: 'rowboat', pre: { drop: /^Cylinder_low/, ao: 0.8, len: 4.6 }, tris: 2000, err: 0.01, d: 512, solid: false, fit: { ground: true, centre: true },
-    look: { grade: [[/./, { gamma: 0.9, mul: [1.12, 1.12, 1.14], sat: 0.6 }]], frost: { k: 0.55 } },
+    look: { grade: [[/./, { gamma: 0.95, mul: [1.05, 1.05, 1.07], sat: 0.6 }]], frost: { k: 0.45 } },
     credit: ['Old Rowboat', 'TooManyDemons (toomanydemons)', '', BY] },
   // a broken hull lying keel up, its stern stove in; 6.4 m long, along z
   { key: 'brokenBoat', sf: 'brokenboat', pre: { rot: [0, 90, 0], len: 6.4 }, tris: 1600, err: 0.01, d: 256, solid: false, fit: { ground: true, centre: true },
-    look: { grade: [[/./, { gamma: 0.85, mul: [1.2, 1.18, 1.16], sat: 0.6, contrast: 1.1 }]], frost: { k: 0.35 } },
+    look: { grade: [[/./, { mul: [1.06, 1.05, 1.04], sat: 0.6, contrast: 1.1 }]], frost: { k: 0.18 } },
     credit: ['Broken Row Boat', 'megamaniac', '', BY] },
   // ----- the sea-lights: three ruined round towers, their three texture sets atlased into one strip (one shared set),
   // moss taken to rime, each drawn up to about 2.6 times its width from bands of the scans (windows turned from storey to
@@ -142,13 +142,13 @@ const PROPS = [
   { key: 'barnacleRock', sf: 'barnacle_rock', pre: { drop: /^Object_2$/, ao: 0.8, len: 1.4 }, tris: 1200, err: 0.01, d: 512, solid: true, fit: { ground: true, centre: true }, loose: 0.01,
     look: { metal: [[/./, 0, 0.8]] },
     credit: ['Beach Rock with Barnacles Photoscan', 'EFX (evan4129)', '', BY] },
-  // a bleached driftwood root-stump, its two texture sets atlased, cut out of its sand (a plane fitted to the sand around
-  // it); 2.6 m
-  { key: 'driftwood', sf: 'driftwood', pre: { atlas: { mats: [/^Driftwood$/, /^Driftwood1$/], cols: 2, rows: 1, cell: 1024, name: 'driftwood' }, join: true, tris: 60000, fn: (doc, P) => groundCut(doc, P, { r0: 2.6, r1: 5, keep: 3.4, lift: 0.07 }), len: 2.6 }, tris: 2000, err: 0.008, d: [512, 256], solid: false, fit: { ground: true, centre: true }, loose: 0.05,
-    look: { grade: [[/./, { sat: 0.6, contrast: 1.1, mul: [0.94, 0.94, 0.96] }]], metal: [[/./, 0, 0.9]] },
+  // a bleached driftwood root-stump, cut out of its sand (a plane fitted to the sand around it), what is left of its two
+  // texture sets repacked into one; 2.6 m
+  { key: 'driftwood', sf: 'driftwood', pre: { join: true, tris: 60000, fn: (doc, P) => groundCut(doc, P, { r0: 2.6, r1: 5, keep: 3.4, lift: 0.07 }), len: 2.6, repack: { name: 'driftwood', size: [512, 256] } }, tris: 2000, err: 0.008, d: [512, 256], solid: false, fit: { ground: true, centre: true }, loose: 0.05,
+    look: { grade: [[/./, { sat: 0.75, contrast: 1.3, mul: [0.96, 0.93, 0.9], mean: [112, 106, 98] }]], metal: [[/./, 0, 0.9]] },
     credit: ['Large Pine Driftwood (Pacific Northwest)', 'Crew Froebel (crufro)', '', BY] },
-  // a heap of kelp and wrack, cut out of its sand; 2.3 m across
-  { key: 'kelp', sf: 'kelp', pre: { join: true, tris: 40000, fn: (doc, P) => groundCut(doc, P, { r0: 1.35, r1: 1.75, keep: 1.45, lift: 0.02, sand: (r, g, b) => smooth(0.5, 0.66, luma(r, g, b)) * (1 - smooth(0.06, 0.13, Math.max(r, g, b) - Math.min(r, g, b))), sandTo: [0.44, 0.42, 0.39] }), len: 2.2 }, tris: 1500, err: 0.008, d: 512, solid: false, fit: { ground: true, centre: true }, loose: 0.02,
+  // a heap of kelp and wrack, cut out of its sand, its texture repacked; 2.3 m across
+  { key: 'kelp', sf: 'kelp', pre: { join: true, tris: 40000, fn: (doc, P) => groundCut(doc, P, { r0: 1.35, r1: 1.75, keep: 1.45, lift: 0.02, sand: (r, g, b) => smooth(0.5, 0.66, luma(r, g, b)) * (1 - smooth(0.06, 0.13, Math.max(r, g, b) - Math.min(r, g, b))), sandTo: [0.44, 0.42, 0.39] }), len: 2.2, repack: { name: 'kelp', size: [512, 512] } }, tris: 1500, err: 0.008, d: 512, solid: false, fit: { ground: true, centre: true }, loose: 0.02,
     look: { grade: [[/./, { sat: 0.9, contrast: 1.05, mul: [0.97, 0.97, 0.95] }]], metal: [[/./, 0, 0.55]] },
     credit: ['Scan of Kelp and Seaweed on sand beach', 'sterlingcrispin', '', BY], creditNote: 'credited under the CC-BY 4.0 licence its page carries, though its description says cc0' },
   // a strip of icicles, geometry only (the game's ice material): its top edge on y = 0, hanging down (extras.hang); 2.1 m
@@ -165,7 +165,9 @@ const PROPS = [
   // hides it), bow +z, the waterline on y = 0; beam 4.3 m
   { key: 'ship', ph: 'dutch_ship_medium', pre: { drop: /sails/, ao: 0.8, rot: [0, -90, 0], scale: 0.83, cut: { p: [0, -0.66, 0], n: [0, 1, 0], keep: 'above', cap: false }, thin: [/rigging/, 0.03, 0.3], budget: [[/hull/, 4000], [/rigging/, 2000]] }, tris: 6000, err: 0.006, d: { hull: 1024, rigging: 512 }, n: { hull: 512, rigging: 0 }, solid: false, fit: { centre: true },
     look: { grade: [[/hull/, { sat: 0.55, contrast: 1.05, mul: [0.95, 0.96, 1.0] }], [/rigging/, { sat: 0.5 }]], frost: { k: 0.85 }, metal: [[/./, 0, 0.88]] } },
-  // a whale-oil cask (one of Poly Haven's barrels), 0.92 m
+  // a whale-oil cask (one of Poly Haven's barrels), 0.92 m; held to a tight error rather than to its 1.2k target: its staves
+  // are separate pieces, and below about 2.3k they shrink apart into see-through slits (it is a breakable, met close, a
+  // handful a zone)
   { key: 'cask', ph: 'wooden_barrels_01', pre: { keep: /barrel01$/, ao: 0.8 }, tris: 1200, err: 0.006, d: 256, solid: true, fit: { ground: true, centre: true },
     look: { grade: WOOD(0.9, 0.6), frost: { k: 0.5 }, metal: [[/./, 0, 0.85]] } },
   // a sea-chest crate with its lid, 1.17 m long
@@ -689,6 +691,80 @@ async function atlas(doc, { mats, cols, rows, cell, name }) {
   for (const x of found) x.dispose();
 }
 
+// The texture a cut-down scan still uses, packed tight (after its decimation): a scan cut out of the ground it was made on
+// keeps a few per cent of its maps, scattered over all of them. Every UV island (triangles joined through shared vertices)
+// of every textured primitive is cut from its material's maps as its UV bounds plus pad output texels (real neighbouring
+// texels, so mipmaps bleed nothing foreign), shelf-packed into one W x H sheet at the largest common scale that fits, and
+// its UVs moved with it; the materials are replaced by one named spec.name (base colour and normal maps). Returns the
+// share of the source maps the islands held and the linear scale they gained.
+async function repackUV(doc, { name, size: [W, H], pad = 3 }) {
+  const prims = primsOf(doc).filter((p) => p.getMaterial()?.getBaseColorTexture() && p.getAttribute('TEXCOORD_0'));
+  const mats = [...new Set(prims.map((p) => p.getMaterial()))], B = 48, src = new Map();
+  // each map as raw RGB with a border of B texels copied out from its edges (so no crop leaves the image)
+  const raw = async (t, w, h) => (await sharp(Buffer.from(t.getImage())).removeAlpha().resize(w, h, { fit: 'fill' }).extend({ top: B, bottom: B, left: B, right: B, extendWith: 'copy' }).raw().toBuffer());
+  for (const m of mats) {
+    const [w, h] = m.getBaseColorTexture().getSize();
+    src.set(m, { w, h, d: await raw(m.getBaseColorTexture(), w, h), n: m.getNormalTexture() ? await raw(m.getNormalTexture(), w, h) : null });
+  }
+  const isl = [], v = [], cl = (x) => Math.min(1, Math.max(0, x));
+  for (const p of prims) {
+    const { w, h } = src.get(p.getMaterial()), uv = p.getAttribute('TEXCOORD_0'), idx = p.getIndices().getArray(), n = uv.getCount();
+    const par = Int32Array.from({ length: n }, (_, i) => i), find = (x) => { while (par[x] !== x) x = par[x] = par[par[x]]; return x; };
+    for (let t = 0; t < idx.length; t += 3) { const a = find(idx[t]); par[find(idx[t + 1])] = a; par[find(idx[t + 2])] = a; }
+    const of = new Map();
+    for (let i = 0; i < n; i++) {
+      const r = find(i); let I = of.get(r);
+      if (!I) of.set(r, (I = { p, verts: [], x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 })), isl.push(I);
+      uv.getElement(i, v); const x = cl(v[0]) * w, y = cl(v[1]) * h;
+      I.verts.push(i); I.x0 = Math.min(I.x0, x); I.y0 = Math.min(I.y0, y); I.x1 = Math.max(I.x1, x); I.y1 = Math.max(I.y1, y);
+    }
+  }
+  // shelves, tallest first; the scale found by bisection
+  const order = [...isl].sort((a, b) => b.y1 - b.y0 - (a.y1 - a.y0));
+  const pack = (s) => {
+    let x = 0, y = 0, row = 0;
+    for (const I of order) {
+      const rw = Math.max(1, Math.ceil((I.x1 - I.x0) * s)) + 2 * pad, rh = Math.max(1, Math.ceil((I.y1 - I.y0) * s)) + 2 * pad;
+      if (rw > W) return false;
+      if (x + rw > W) { y += row; x = 0; row = 0; }
+      if (y + rh > H) return false;
+      Object.assign(I, { ox: x, oy: y, rw, rh }); x += rw; row = Math.max(row, rh);
+    }
+    return true;
+  };
+  let lo = 1e-3, hi = 16;
+  for (let k = 0; k < 40; k++) { const mid = (lo + hi) / 2; if (pack(mid)) lo = mid; else hi = mid; }
+  const s = lo; pack(s);
+  // the sheets: each island's crop (its bounds, plus pad / s source texels round it) resized into its slot
+  const sheet = async (slot, fill) => {
+    const out = Buffer.alloc(W * H * 3);
+    for (let i = 0; i < W * H; i++) out.set(fill, i * 3);
+    for (const I of isl) {
+      const S = src.get(I.p.getMaterial()), img = S[slot], m = Math.min(B, pad / s);
+      const left = Math.max(0, Math.floor(I.x0 - m + B)), top = Math.max(0, Math.floor(I.y0 - m + B));
+      const cw = Math.min(S.w + 2 * B - left, Math.max(1, Math.ceil(I.x1 + m + B) - left)), ch = Math.min(S.h + 2 * B - top, Math.max(1, Math.ceil(I.y1 + m + B) - top));
+      Object.assign(I, { left, top, cw, ch });
+      if (!img) continue;
+      const part = await sharp(img, { raw: { width: S.w + 2 * B, height: S.h + 2 * B, channels: 3 } }).extract({ left, top, width: cw, height: ch }).resize(I.rw, I.rh, { fit: 'fill', kernel: 'lanczos3' }).raw().toBuffer();
+      for (let r = 0; r < I.rh; r++) part.copy(out, ((I.oy + r) * W + I.ox) * 3, r * I.rw * 3, (r + 1) * I.rw * 3);
+    }
+    return new Uint8Array(await sharp(out, { raw: { width: W, height: H, channels: 3 } }).png().toBuffer());
+  };
+  const m0 = mats[0], hasN = mats.some((m) => m.getNormalTexture());
+  const meanOf = (buf) => { const a = [0, 0, 0]; for (let i = 0; i < buf.length; i += 3) for (let q = 0; q < 3; q++) a[q] += buf[i + q]; return a.map((x) => Math.round((x * 3) / buf.length)); };
+  const out = doc.createMaterial(name).setBaseColorTexture(doc.createTexture(name).setImage(await sheet('d', meanOf(src.get(m0).d))).setMimeType('image/png'))
+    .setBaseColorFactor(m0.getBaseColorFactor()).setRoughnessFactor(m0.getRoughnessFactor()).setMetallicFactor(m0.getMetallicFactor()).setDoubleSided(m0.getDoubleSided());
+  if (hasN) out.setNormalTexture(doc.createTexture(name + 'N').setImage(await sheet('n', [128, 128, 255])).setMimeType('image/png'));
+  for (const p of prims) p.setAttribute('TEXCOORD_0', p.getAttribute('TEXCOORD_0').clone());
+  for (const I of isl) {
+    const S = src.get(I.p.getMaterial()), uv = I.p.getAttribute('TEXCOORD_0'), kx = I.rw / I.cw, ky = I.rh / I.ch;
+    for (const i of I.verts) { uv.getElement(i, v); uv.setElement(i, [(I.ox + (cl(v[0]) * S.w + B - I.left) * kx) / W, (I.oy + (cl(v[1]) * S.h + B - I.top) * ky) / H]); }
+  }
+  for (const p of prims) p.setMaterial(out);
+  const used = isl.reduce((a, I) => a + (I.x1 - I.x0) * (I.y1 - I.y0), 0) / mats.reduce((a, m) => a + src.get(m).w * src.get(m).h, 0);
+  for (const m of mats) m.dispose();
+  return { islands: isl.length, used, scale: (s * Math.sqrt(mats.reduce((a, m) => a + src.get(m).w * src.get(m).h, 0))) / Math.sqrt(W * H) };
+}
 // A tower stacked from bands of its scans (all transforms baked, one shared material): segs [[node name, y0, y1, turn?,
 // mirror?]...], bottom up, each the named scan's slab between y0 and y1 (its own units, from its foot), centred, turned
 // turn degrees about its axis (mirror: x flipped), laid on the stack so far. Each slab is scaled about the axis so its
@@ -1055,6 +1131,7 @@ async function prepare(P, file) {
   P.before = triCount(doc);
   P.modes = decimateAll(doc, P.tris, P.err || 0.03);
   await doc.transform(prune());
+  if (pre.repack) { const r = await repackUV(doc, pre.repack); await doc.transform(prune()); P.note = [P.note, `texture repacked: ${r.islands} islands (${(r.used * 100).toFixed(0)}% of the source maps' area by bounds), ${r.scale.toFixed(1)}x the texels per metre a plain resize would keep`].filter(Boolean).join('; '); }
   mkdirSync(TMP, { recursive: true });
   const out = path.join(TMP, P.key + '.glb');
   await io.write(out, doc);

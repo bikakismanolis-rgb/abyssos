@@ -8,9 +8,11 @@
 // - TIDE.force = { h, rate } (the Walking Tower): the level goes to h at rate m/s in 0.15 m steps (at most one a frame);
 //   null again: the clock resumes at low water. Skerry Bay's own water (L.boss + 4) answers to the force only; under the
 //   clock it stays as at low water (gen5 inBay, walkAt).
-// - Never under her feet: a step that would close her cell, or leave her on an island under 9 cells, defers her cells
-//   and a BFS lane at the new level to the nearest cell that stays open (on 9 cells or more): z.tide.lane. She can walk
-//   out for 6 s; then a wave washes her along the lane (pl.pull with a polyline path, never a jump), and the lane closes.
+// - Never under her feet: a step that would close her cell, or cut her off from the ground this tide never takes (safe:
+//   floor the top of the water leaves dry, in regions of 3 x 3 or more), defers her cells and a BFS lane at the new
+//   level to the nearest cell that stays open and still reaches safe ground: z.tide.lane. She can walk out for 6 s; then
+//   a wave washes her along the lane (pl.pull with a polyline path, never a jump), and the lane closes. (Cut off by more
+//   than the tide, broken ice say, the lane wades back through the water: those cells reopen in the same batch.)
 // - Pickups on a closing cell slide to the nearest dry one; monsters caught in one are put on the nearest floor.
 // - The bell (HAZ5.bell s before the flood and the ebb): sfx and bus 'tideBell' (the coming phase); bus 'tideTurn' at
 //   each phase. The flood waves' clock (floodWave: world.js updatePacks spawns the pack). The HUD's dial: tideDial().
@@ -19,6 +21,7 @@ import { HAZ5 } from './data.js';
 import { damage } from './combat.js';
 import { sapAt } from './sap.js';
 import { emit } from '../ui/bus.js';
+import { splash } from '../gfx/fx.js';
 import Audio from '../audio/audio.js';
 import { SEA } from '../world/sea.js';
 import { wetAt, BED_DRY, TIDE_STEP } from '../world/genlib.js';
@@ -32,24 +35,25 @@ export let TIDE = null;
 // water); a uniform object beside SEA's for sea.js to read over the bay (L.boss + 4)
 export const BAY = (SEA.uBayLevel ||= { value: 0 });
 // what the scenarios read (counts and the last lanes and wash-outs)
-export const TIDE_LOG = { steps: 0, lanes: 0, washes: [], bells: 0, turns: 0, waves: 0, evicted: 0, slid: 0 };
+export const TIDE_LOG = { steps: 0, lanes: 0, washes: [], bells: 0, turns: 0, waves: 0, evicted: 0, slid: 0, cost: { n: 0, ms: 0, max: 0 } };
 const haz = () => HAZ5[G.hero?.diff ?? 1] || HAZ5[1];
 const lv = (k) => Math.round(k * TIDE_STEP * 100) / 100;
 
 // ---------- the zone's tidal cells (once per zone: L.bed never changes) ----------
 // idx: every tidal cell the water can open or close; thr: the step at which it is deep (k >= thr: closed); bay: in Skerry
-// Bay. Cells deep at every level (the open sea, the Icemaw holes) and dry at every level are left out
+// Bay. Cells deep at every level (the open sea, the Icemaw holes) and dry at every level are left out. tk, per cell: 0
+// not tidal, the cell's thr, 254 deep at every level, 255 never deep. own: the grid bumps that were the tide's
 function cellsOf(z) {
   if (z.tideC) return z.tideC;
-  const L = z.L, N = L.w * L.h, idx = [], thr = [], bay = new Uint8Array(N);
+  const L = z.L, N = L.w * L.h, idx = [], thr = [], bay = new Uint8Array(N), tk = new Uint8Array(N);
   for (let i = 0; i < N; i++) {
     if (!tidal(L, i)) continue;
     let k = 0; while (k <= MAXK && wetAt(L.bed[i], lv(k)) < 2) k++;
-    if (k === 0 || k > MAXK) continue;
-    idx.push(i); thr.push(k);
+    if (k === 0 || k > MAXK) { tk[i] = k ? 255 : 254; continue; }
+    idx.push(i); thr.push(k); tk[i] = k;
     if (inBay(L, i % L.w, (i - i % L.w) / L.w)) bay[i] = 1;
   }
-  return (z.tideC = { idx: Int32Array.from(idx), thr: Uint8Array.from(thr), bay, mk: new Uint8Array(N), par: new Int32Array(N), q: new Int32Array(N), seen: new Uint8Array(N) });
+  return (z.tideC = { idx: Int32Array.from(idx), thr: Uint8Array.from(thr), bay, tk, mk: new Uint8Array(N), par: new Int32Array(N), q: new Int32Array(N), seen: new Uint8Array(N), st: new Int32Array(N), sq: new Int32Array(N), gen: 0, own: 0, safe: {} });
 }
 // the level a cell sees: the bay keeps low water under the clock
 const levelAt = (z, i) => (z.tideC?.bay[i] && !z.tide.force ? 0 : z.tide.h);
@@ -71,12 +75,18 @@ export function resetTide(z) {
     if (want && !L.cells[i]) open.push([i % w, (i - i % w) / w]);
     else if (!want && L.cells[i]) close.push([i % w, (i - i % w) / w]);
   }
-  if (z.map.change(open, close)) emit('mapChanged');
+  if (z.map.change(open, close)) { z.tideC.own++; emit('mapChanged'); }
   SEA.uLevel.value = 0; SEA.uWetLevel.value = 0; BAY.value = 0;
 }
 
 // ---------- per frame (projectiles.js updateAreas, before tickIce) ----------
+// (its cost is kept in TIDE_LOG.cost: frames, total and worst ms, for the soaks' frame-time report)
 export function tickTide(dt) {
+  const t0 = performance.now();
+  tick(dt);
+  const c = TIDE_LOG.cost, ms = performance.now() - t0; c.n++; c.ms += ms; if (ms > c.max) c.max = ms;
+}
+function tick(dt) {
   const z = G.zone;
   if (z?.act5) tickWash(z, dt);
   TIDE = z?.L?.bed && z.tide ? z.tide : null;
@@ -130,10 +140,10 @@ function stepTo(z, k) {
   }
   // her cell, and her way out, close last
   const pl = G.player;
-  if (pl && !pl.dead) shelter(z, T, pl, close);
+  if (pl && !pl.dead) shelter(z, T, pl, close, open);
   for (const i of close) mk[i] = 0;
   const xz = (i) => [i % w, (i - i % w) / w];
-  if (z.map.change(open.map(xz), close.map(xz))) { emit('mapChanged'); evict(z, close); }
+  if (z.map.change(open.map(xz), close.map(xz))) { C.own++; emit('mapChanged'); evict(z, close); }
   // a lane the ebb has left shallow has nothing to close any more
   if (T.lane && !laneDeep(z, T.lane)) T.lane = null;
 }
@@ -143,36 +153,60 @@ function laneDeep(z, ln) { for (const i of ln.def) if (wantsDeep(z, i)) return t
 
 // the cells she could stand on after this step: open now, not closing, not a deep lane cell
 function staysOpen(z, i) { const C = z.tideC, T = z.tide; return z.map.cells[i] === 1 && !C.mk[i] && !(T.lane?.def.has(i) && wantsDeep(z, i)); }
-// the open component of cell s at least ISLE cells (a refuge is 3 x 3)? A bounded flood; marks what it saw small
-function bigFrom(z, s, small) {
-  const L = z.L, w = L.w, h = L.h, q = [s], seen = new Set([s]);
+// the ground this tide never takes (2 in the mask): open floor that is not tidal, and tidal cells deep only above the top
+// the water will reach (the clock's high water; a boss's level), in 4-connected regions of ISLE cells or more (a refuge
+// is 3 x 3). Rebuilt when the top changes or when something other than the tide has changed the grid (ice, the skerry)
+function safeOf(z) {
+  const T = z.tide, C = z.tideC, L = z.L, m = z.map, w = L.w, h = L.h, f = !!T.force, S = C.safe, tk = C.tk;
+  const top = f ? Math.max(T.step, clamp(Math.round((T.force.h || 0) / TIDE_STEP), 0, MAXK)) : TOP, key = (f ? 'f' : 'c') + top, ext = m.ver - C.own;
+  if (S.key === key && S.ext === ext) return S.mask;
+  const M = S.mask ||= new Uint8Array(w * h), q = C.sq;
+  const ok = (i) => { const k = tk[i]; return k === 0 ? m.cells[i] === 1 : k === 255 || (k !== 254 && ((C.bay[i] && !f) || k > top)); };
+  M.fill(0);
+  for (let s = 0; s < M.length; s++) {
+    if (M[s] || !ok(s)) continue;
+    let tail = 1; q[0] = s; M[s] = 1;
+    for (let hd = 0; hd < tail; hd++) {
+      const i = q[hd], x = i % w, y = (i - x) / w;
+      for (let d = 0; d < 4; d++) { const nx = x + N4[d], ny = y + M4[d], n = ny * w + nx; if (nx >= 0 && ny >= 0 && nx < w && ny < h && !M[n] && ok(n)) { M[n] = 1; q[tail++] = n; } }
+    }
+    if (tail >= ISLE) for (let k = 0; k < tail; k++) M[q[k]] = 2;
+  }
+  Object.assign(S, { key, ext });
+  return M;
+}
+// does the open ground round cell s (after this step) reach safe ground? If not, every cell of it goes into small
+function safeFrom(z, s, small, M) {
+  const C = z.tideC, L = z.L, w = L.w, h = L.h, st = C.st, g = ++C.gen, q = [s];
+  st[s] = g;
   for (let hd = 0; hd < q.length; hd++) {
     const i = q[hd];
-    if (q.length >= ISLE) return true;
+    if (M[i] === 2) return true;
     const x = i % w, y = (i - x) / w;
     for (let d = 0; d < 4; d++) {
       const nx = x + N4[d], ny = y + M4[d], n = ny * w + nx;
-      if (nx < 0 || ny < 0 || nx >= w || ny >= h || seen.has(n) || !staysOpen(z, n)) continue;
-      seen.add(n); q.push(n);
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h || st[n] === g || !staysOpen(z, n)) continue;
+      st[n] = g; q.push(n);
     }
   }
   for (const i of q) small.add(i);
   return false;
 }
-// from her cell through the cells open now (wading, or closing but not yet) to the nearest cell that stays open on 9
-// cells or more: { goal, path: [cells from hers to the goal], island: Set (her own small component, if any) } or null
-function laneFrom(z, s) {
-  const C = z.tideC, L = z.L, w = L.w, h = L.h, cells = z.map.cells, par = C.par, seen = C.seen, q = C.q;
+// from her cell through the cells open now (wading, or closing but not yet; wade: closed tide water too) to the nearest
+// cell that stays open and reaches safe ground: { goal, path: [cells from hers to the goal], island: Set (the cut-off
+// ground it crossed) } or { goal: -1 }
+function laneFrom(z, s, M, wade = false) {
+  const C = z.tideC, L = z.L, w = L.w, h = L.h, cells = z.map.cells, par = C.par, seen = C.seen, q = C.q, tk = C.tk;
   const small = new Set(), touched = [];
   let head = 0, tail = 0, goal = -1;
   q[tail++] = s; seen[s] = 1; par[s] = -1; touched.push(s);
   while (head < tail) {
     const i = q[head++];
-    if (staysOpen(z, i) && !small.has(i)) { if (bigFrom(z, i, small)) { goal = i; break; } }
+    if (staysOpen(z, i) && !small.has(i)) { if (safeFrom(z, i, small, M)) { goal = i; break; } }
     const x = i % w, y = (i - x) / w;
     for (let d = 0; d < 4; d++) {
       const nx = x + N4[d], ny = y + M4[d], n = ny * w + nx;
-      if (nx < 0 || ny < 0 || nx >= w || ny >= h || seen[n] || !cells[n]) continue;
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h || seen[n] || !(cells[n] || (wade && tk[n] >= 1 && tk[n] <= MAXK))) continue;
       seen[n] = 1; par[n] = i; q[tail++] = n; touched.push(n);
     }
   }
@@ -182,15 +216,18 @@ function laneFrom(z, s) {
   path.reverse();
   return { goal, path, island: small };
 }
-// a step that would close her cell, or leave her on a scrap of ground: defer her cells and her lane out
-function shelter(z, T, pl, close) {
-  const C = z.tideC, L = z.L, w = L.w, s = Math.floor(pl.z) * w + Math.floor(pl.x);
+// a step that would close her cell, or cut her off from safe ground: defer her cells and her lane out (closed water on it
+// goes into reopen, for the caller's batch)
+function shelter(z, T, pl, close, reopen) {
+  const C = z.tideC, L = z.L, w = L.w, s = Math.floor(pl.z) * w + Math.floor(pl.x), cells = z.map.cells;
   if (s < 0 || s >= C.mk.length) return;
-  const inLane = !!T.lane?.mem.has(s);
-  if (!C.mk[s] && !inLane) { const small = new Set(); if (!staysOpen(z, s) || bigFrom(z, s, small)) return; }
-  const r = laneFrom(z, s), ln = T.lane || { def: new Set(), mem: new Set(), path: null, goal: -1 };
+  const inLane = !!T.lane?.mem.has(s), M = safeOf(z);
+  if (!C.mk[s] && !inLane && (!staysOpen(z, s) || !close.length || safeFrom(z, s, new Set(), M))) return;
+  let r = laneFrom(z, s, M);
+  if (!r.path) r = laneFrom(z, s, M, true);
+  const ln = T.lane || { def: new Set(), mem: new Set(), path: null, goal: -1 };
   if (!T.lane) { T.laneT = GRACE; TIDE_LOG.lanes++; }
-  const keep = (i) => { if (C.mk[i]) { C.mk[i] = 0; ln.def.add(i); } ln.mem.add(i); };
+  const keep = (i) => { if (C.mk[i] || !cells[i]) { if (!cells[i] && !ln.def.has(i)) reopen.push(i); C.mk[i] = 0; ln.def.add(i); } ln.mem.add(i); };
   keep(s);
   for (const i of r.island) ln.mem.add(i);
   if (r.path) { for (const i of r.path) if (i !== r.goal) keep(i); ln.path = r.path; ln.goal = r.goal; }
@@ -200,7 +237,12 @@ function shelter(z, T, pl, close) {
 // each frame while a lane is held: out of it (or the ebb has come): it closes; still in it after 6 s: the wash-out
 function tickLane(z, T, pl, dt) {
   const ln = T.lane, s = Math.floor(pl.z) * z.L.w + Math.floor(pl.x);
-  if (T.wash) { if (pl.pull !== T.wash) { T.wash = null; closeLane(z, T); } return; }
+  if (T.wash) {
+    if (pl.pull !== T.wash) { T.wash = null; closeLane(z, T); return; }
+    // the wave's spray round her as it carries her
+    if ((T.wash.fxT = (T.wash.fxT || 0) - dt) <= 0) { T.wash.fxT = 0.12; splash(pl.x, pl.z, 0.55); }
+    return;
+  }
   if (pl.dead || !ln.mem.has(s) || !laneDeep(z, ln)) { closeLane(z, T); return; }
   if ((T.laneT -= dt) > 0) return;
   washOut(z, T, pl, s);
@@ -208,17 +250,18 @@ function tickLane(z, T, pl, dt) {
 function closeLane(z, T) {
   const ln = T.lane, held = T.wash?.cells; T.lane = null; T.laneT = 0; T.wash = null;
   if (!ln) return;
-  const L = z.L, w = L.w, C = z.tideC, pl = G.player, out = [];
+  const L = z.L, w = L.w, C = z.tideC, pl = G.player, out = [], reo = [];
   for (const i of new Set([...ln.def, ...(held || ln.held || [])])) if (wantsDeep(z, i) && z.map.cells[i]) out.push(i);
   // (a step came while the wave carried her and her cell must close now: a fresh lane from where she is)
-  if (pl && !pl.dead) { for (const i of out) C.mk[i] = 1; shelter(z, T, pl, out); for (const i of out) C.mk[i] = 0; }
-  if (z.map.change(null, out.map((i) => [i % w, (i - i % w) / w]))) { emit('mapChanged'); evict(z, out); }
+  if (pl && !pl.dead) { for (const i of out) C.mk[i] = 1; shelter(z, T, pl, out, reo); for (const i of out) C.mk[i] = 0; }
+  const xz = (i) => [i % w, (i - i % w) / w];
+  if (z.map.change(reo.map(xz), out.map(xz))) { C.own++; emit('mapChanged'); evict(z, out); }
 }
 // the wave: along the lane's own cells (open while she crosses them) to its open end, never in a straight line over the
 // water (castT would stop it at once) and never faster than 9 m/s; 6% of her life on Warden (none on Wanderer), Cold +20
 function washOut(z, T, pl, s) {
   const ln = T.lane, w = z.L.w;
-  const r = laneFrom(z, s);
+  const r = laneFrom(z, s, safeOf(z));
   if (!r.path) { T.laneT = 2; return; }
   for (const i of r.path) if (i !== r.goal) ln.mem.add(i);
   const P = [{ x: pl.x, z: pl.z, d: 0 }];
@@ -231,6 +274,7 @@ function washOut(z, T, pl, s) {
   const pct = haz().wash;
   if (pct > 0) damage(null, pl, pl.hpMax * pct / 100, { pure: true, wash: true, cold: 20 });
   Audio.sfx('washOut', { x: pl.x, z: pl.z });
+  splash(pl.x, pl.z, 1.3);
   TIDE_LOG.washes.push({ from: { x: pl.x, z: pl.z }, to: { x: end.x, z: end.z }, len: +len.toFixed(2), cells: r.path.length });
   emit('washOut', T.wash);
 }
