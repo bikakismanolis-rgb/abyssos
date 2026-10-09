@@ -10,7 +10,7 @@ export const ENV = { layers: {}, props: {}, pivots: {}, sizes: {}, extras: {}, p
 // '<pack>/<name>' too; the bare name belongs to the earliest pack in PACK_ORDER that has it: a later pack never takes a
 // bare name from an earlier one, and an earlier one loaded later takes it back. So no older zone ever changes its look,
 // whatever order the packs arrive in, and two packs can be active at once (the Forge uses 'cinder' and 'deep').
-const PACK_ORDER = ['env', 'village', 'trees', 'deep', 'wood', 'cinder'];
+const PACK_ORDER = ['env', 'village', 'trees', 'deep', 'wood', 'cinder', 'rime'];
 const owners = { props: {}, layers: {} };
 const rank = (p) => { const i = PACK_ORDER.indexOf(p); return i < 0 ? PACK_ORDER.length : i; };
 function claim(kind, name, pack) {

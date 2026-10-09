@@ -50,7 +50,10 @@ function ashfield(seed) {
   for (const b of sp.braziers) { if (far(b, 1.6)) bad('ash.brazier.unreachable', seed); if (Math.hypot(b.x - L.boss.x, b.z - L.boss.z) > L.boss.r) bad('ash.brazier.outsideArena', seed); }
   if (floor(L, sp.lastLamp.x, sp.lastLamp.z)) bad('ash.lastLamp.notSolid', seed);
   if (far(L.boss, 1.6)) bad('ash.arena.unreachable', seed);
-  for (const e of L.exits) if (far(e, 1.5)) bad('ash.exit.' + e.to + '.unreachable', seed);
+  // (Act V's exit to the coast, up the Anvil's Neck, lies behind the rubble plug that opens with the new fire)
+  const c1 = L.cells.slice(); for (const [x, z] of L.neck?.plug || []) c1[z * L.w + x] = 1;
+  const R1 = reach(L, L.start.x, L.start.z, c1);
+  for (const e of L.exits) if (e.to === 'coast' ? nearReach(L, R1, e.x, e.z) > 1.5 : far(e, 1.5)) bad('ash.exit.' + e.to + '.unreachable', seed);
   if (!L.gate?.cells?.length) bad('ash.gate.noCells', seed);
   else if (L.gate.cells.some(([x, z]) => L.cells[z * L.w + x])) bad('ash.gate.open', seed);
   // lamps 4 and 5 in the Graves, 25 m or so apart; 1-3 roughly a road's walk apart

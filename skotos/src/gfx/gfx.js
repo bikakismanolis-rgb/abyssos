@@ -11,7 +11,7 @@ export const R = {
   lost: false, reload: false, // the GL context was lost: nothing is drawn any more, the page reloads (onContextLost)
   basePR: 1, prScale: 1,
   w: 1, h: 1,
-  hemi: null, moon: null, heroLight: null,
+  hemi: null, moon: null, heroLight: null, hemiBase: new THREE.Color(), drift: 0,
   pool: [], sources: new Set(),
   cam: { x: 0, z: 0, tx: 0, tz: 0, zoom: 1, zoomT: 1, trauma: 0, shakeT: 0, lookY: 0.9, pitch: 0.95, dist: 15, kick: { x: 0, z: 0 } },
   time: 0,
@@ -136,6 +136,16 @@ export function setAtmosphere(a) {
   R.heroLight.userData.base = a.heroI ?? 30;
   R.heroLight.distance = a.heroRange ?? 15;
   R.cam.zoomT = a.zoom ?? 1;
+  // Act V: the aurora's brightness and darkness (sea.js reads them), and the hemisphere light's slow green drift
+  R.drift = a.drift || 0; R.hemiBase.set(a.sky);
+  R.atmosHook?.(a);
+}
+// (the drift: the hemisphere colour wanders between its own and the aurora's green, over about a minute and a half)
+const AUR_GREEN = new THREE.Color(0x6af0b0);
+function driftHemi() {
+  if (!R.drift) return;
+  const k = R.drift * (0.5 + 0.5 * Math.sin(R.time * 0.07)) * (0.6 + 0.4 * Math.sin(R.time * 0.23 + 1.3));
+  R.hemi.color.copy(R.hemiBase).lerp(AUR_GREEN, k * 0.6);
 }
 
 // ---------- dynamic light sources ----------
@@ -221,9 +231,11 @@ export function updateCamera(dt, tx, tz, snap) {
 export function frame(dt) {
   R.time += dt;
   updateLights(dt);
+  driftHemi();
 }
 
-export function render() { if (!R.lost) R.renderer.render(R.scene, R.camera); }
+// (R.skyHook: sea.js shows the aurora dome when a cine lowers the camera, and runs its freeze waves)
+export function render() { if (R.lost) return; R.skyHook?.(); R.renderer.render(R.scene, R.camera); }
 
 // A lost GL context (a phone out of memory, a GPU reset). The decoded images were let go once uploaded (gltf.js), so it
 // cannot be drawn again as it was: the game is saved (o.lost, which also lowers the quality one step) and the page reloads,

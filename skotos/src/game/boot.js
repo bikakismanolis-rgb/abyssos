@@ -11,7 +11,7 @@ import { WIND } from '../world/build.js';
 import { initInput, pollInput, takeEvents, IN } from '../core/input.js';
 import { loadSave, writeSave } from './save.js';
 import { refreshStats } from './stats.js';
-import { enterZone, updatePacks, updateAct4, nearestInteract, updatePortalFx, ZONES, zoneReady, zoneParts } from './world.js';
+import { enterZone, updatePacks, updateAct, nearestInteract, updatePortalFx, ZONES, zoneReady, zoneParts, disposeZone } from './world.js';
 import { updatePlayer } from './player.js';
 import { damage } from './combat.js';
 import { updateActors } from './ai.js';
@@ -68,6 +68,10 @@ export async function boot(q) {
   if (q.has('auto')) { // test hook: jump straight into a zone
     const h = (await import('./state.js')).newHero(q.get('cls') || 'warden', +(q.get('diff') || 1));
     if (q.has('lvl')) { h.level = +q.get('lvl'); h.points = h.level - 1; }
+    // &quest=N, &flags=a,b,c (e.g. auto=coast&flags=frozen: the coast after the Freeze; auto=farlight starts frozen)
+    if (q.has('quest')) h.quest = +q.get('quest');
+    for (const f of (q.get('flags') || '').split(',').filter(Boolean)) h.flags[f] = true;
+    if (q.get('auto') === 'farlight') h.flags.frozen = true;
     await startHero(h, false, q.get('auto'));
   } else showTitle();
   requestAnimationFrame(loop);
@@ -97,6 +101,9 @@ async function startHero(hero, isNew, zone = 'town') {
   // and from before Act IV: an Act III hero reads as Act III's end (no fire taken, no lamps, no gifts)
   hero.act4 ??= -1;
   if (hero.act4 >= 0) hero.flags.act4 = true;
+  // and from before Act V: an Act IV hero reads as Act IV's end (quest 23, the new fire burning)
+  hero.act5 ??= -1;
+  if (hero.act5 >= 0) hero.flags.act5 = true;
   await zoneReady(zone);
   G.mode = 'play';
   showHud(true);
@@ -169,7 +176,7 @@ on('quit', () => {
   location.reload();
 });
 on('heroLook', () => refreshHeroLook());
-on('diffChanged', () => { for (const k of Object.keys(G.zones)) if (k !== 'town') delete G.zones[k]; G.portal = null; writeSave(); emit('toast', t('pick.diff') + ': ' + t('diff.' + DIFFS[G.hero.diff].id), 'quest'); });
+on('diffChanged', () => { for (const k of Object.keys(G.zones)) if (k !== 'town') { disposeZone(G.zones[k]); delete G.zones[k]; } G.portal = null; writeSave(); emit('toast', t('pick.diff') + ': ' + t('diff.' + DIFFS[G.hero.diff].id), 'quest'); });
 on('settings', () => { Audio.setVolumes({ music: G.settings.music, sfx: G.settings.sfx }); setLang(G.settings.lang); if (G.hero) setupHeroHud(); writeSave(); });
 on('cine', (c) => { G.cine = Object.assign({ t: 0, done: new Set() }, c); G.mode = 'cine'; showHud(false); document.getElementById('letterbox').classList.add('on'); });
 on('actClosed', () => { Audio.music('town'); });
@@ -266,7 +273,7 @@ function tick(dt, noDraw) {
     if (G.mode === 'play') updatePlayer(gdt);
     else { pl.avatar.update(gdt, { speed: 0 }); }
     updateActors(gdt);
-    updatePacks(); updateAct4(gdt);
+    updatePacks(); updateAct(gdt);
     updateProjs(gdt); updateAreas(gdt); updatePickups(gdt);
     for (let i = G.timers.length - 1; i >= 0; i--) { const tm = G.timers[i]; tm.t -= gdt; if (tm.t <= 0) { G.timers.splice(i, 1); try { tm.fn(); } catch (e) { fatal(e.stack || e); } } }
     comboTick(dt);

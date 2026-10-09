@@ -7,12 +7,15 @@ import { Avatar } from '../gfx/anim.js';
 import { loadPeople, loadFolk, personModel } from '../gfx/people.js';
 import { envChest, hasEnv } from '../gfx/env.js';
 
-// people: ?viewer&only=p:warden,p:ranger (realistic characters), grip tests with &grip=X,1.57,Y,0
+// people: ?viewer&only=p:warden,p:ranger (realistic characters), grip tests with &grip=X,1.57,Y,0; &ly=1.6 aims at the faces
 export async function startViewer(q) {
   if (q.get('tilt')) { const [ax, a] = q.get('tilt').split(','); window.__tilt = [ax, +a]; }
   if (q.get('grip')) { const g = q.get('grip').split(','); window.__grip = [g[0], +g[1], g[2], +g[3]]; }
   initGfx(2);
-  setAtmosphere({ fog: 0x0a0d12, density: 0.012, sky: 0x6070a0, ground: 0x2a2018, hemi: 1.2, moon: 0xb0c4ff, moonI: 1.6, exposure: 1.2, heroI: 0 });
+  // &lit=day: a grey overcast daylight with no warm lamp, to judge colours (the Frozen Coast's people); &lit=coast: its cold light
+  const lit = { day: { fog: 0x8a96a4, density: 0.004, sky: 0xd8e0ea, ground: 0x6a6660, hemi: 1.5, moon: 0xfff6ea, moonI: 2.0, exposure: 1.0, heroI: 0 },
+    coast: { fog: 0x5a6a80, density: 0.008, sky: 0xa8c0dc, ground: 0x3a4048, hemi: 1.3, moon: 0xdce8ff, moonI: 1.8, exposure: 1.05, heroI: 0 } }[q.get('lit')];
+  setAtmosphere(lit || { fog: 0x0a0d12, density: 0.012, sky: 0x6070a0, ground: 0x2a2018, hemi: 1.2, moon: 0xb0c4ff, moonI: 1.6, exposure: 1.2, heroI: 0 });
   const env = new THREE.PMREMGenerator(R.renderer);
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshLambertMaterial({ map: tex('grass') }));
   ground.material.map.repeat.set(20, 20);
@@ -70,12 +73,22 @@ export async function startViewer(q) {
     'p:arnaOld': () => { const a = new Avatar(personModel('arnaOld'), { style: 'staff', animSet: 'npc' }); a.hold('R', 'lanternStaff', {}); return a; },
     'p:isarnBoy': () => new Avatar(personModel('isarnBoy'), { animSet: 'npc' }),
     'p:hammerhorn': () => { const a = new Avatar(personModel('hammerhorn'), { style: 'heavy' }); a.hold('R', 'hammer', {}); return a; },
-    'p:karthax': () => { const a = new Avatar(personModel('karthax'), { style: 'heavy' }); a.hold('R', 'hammer', { head: 0x1a1816, glow: 0.6, rune: 0xff5a10 }); return a; }
+    'p:karthax': () => { const a = new Avatar(personModel('karthax'), { style: 'heavy' }); a.hold('R', 'hammer', { head: 0x1a1816, glow: 0.6, rune: 0xff5a10 }); return a; },
+    // Act V's people (frost.glb), bare: the boat-hook, harpoon, kelp, hoods, caps, collars, the eye band and the sea-lanterns
+    // are the game's code parts
+    'p:sunken': () => new Avatar(personModel('sunken'), { style: 'undead' }),
+    'p:icesinger': () => new Avatar(personModel('icesinger'), { animSet: 'formal', idle: 'Spell_Simple_Idle_Loop' }),
+    'p:alkyone': () => new Avatar(personModel('alkyone'), { animSet: 'npc', idle: 'lantern' }),
+    'p:selna': () => new Avatar(personModel('selna'), { animSet: 'npc', idle: 'lantern' }),
+    'p:tern': () => new Avatar(personModel('tern'), { animSet: 'npc', idle: 'lantern' }),
+    'p:tamarisk': () => new Avatar(personModel('tamarisk'), { animSet: 'npc', idle: 'fold' }),
+    'p:glaukos': () => new Avatar(personModel('glaukos'), { animSet: 'npc', idle: 'talk' })
   };
   if (list.some((n) => n.startsWith('p:'))) await loadPeople();
   if (list.some((n) => /^p:(stoneborn|runepriest|brokka|moltenKing)/.test(n))) await loadFolk();
   if (list.some((n) => /^p:(elati|linden|rootsworn|hollowed|mourner|amaranthe)/.test(n))) await loadFolk('grove');
   if (list.some((n) => /^p:(lampless|ash[A-Z]|ashsmith|ivar|arna|isarnBoy|hammerhorn|karthax)/.test(n))) await loadFolk('ash');
+  if (list.some((n) => /^p:(sunken|icesinger|alkyone|selna|tern|tamarisk|glaukos)$/.test(n))) await loadFolk('frost');
   // &sheet=slash1,slash2,...: one copy of the first model per clip, each posed at the clip's strike (or &t)
   const sheet = q.get('sheet') ? q.get('sheet').split(',') : null;
   if (sheet) { const m = list[0]; list.length = 0; for (const c of sheet) list.push(m); }
@@ -89,7 +102,8 @@ export async function startViewer(q) {
     R.scene.add(a.group); avs.push(a);
     if (a.kind === 'wraith') a.float = true;
   });
-  addLight({ x: 0, y: 3, z: 3, color: 0xffa860, intensity: 40, range: 20 });
+  // (the hero's lamp sits at the origin, among the feet, unless a lit mode puts it out)
+  if (!lit) addLight({ x: 0, y: 3, z: 3, color: 0xffa860, intensity: 40, range: 20 }); else R.heroLight.intensity = 0;
   const clip = q.get('clip'), t = +(q.get('t') || 0), speed = +(q.get('speed') || 0);
   // advance animation to a fixed time
   avs.forEach((a, i) => {
@@ -113,7 +127,7 @@ export async function startViewer(q) {
   if (camMode === 'front') R.cam.pitch = 0.25;
   if (q.get('pitch')) R.cam.pitch = +q.get('pitch');
   if (q.get('zoom')) R.cam.zoomT = R.cam.zoom = +q.get('zoom');
-  R.cam.lookY = 0.9;
+  R.cam.lookY = +(q.get('ly') || 0.9);
   updateCamera(0, 0, +(q.get('cz') || 0), true);
   let n = 0;
   function loop() {
@@ -144,20 +158,23 @@ export async function startWorld(q) {
   const { ATMOS } = await import('../world/atmos.js');
   initGfx(+(q.get('q') || 2));
   await Promise.all([loadKits(['dungeon', 'grave', 'town']), q.has('noenv') ? null : loadEnv(R.quality)]);
-  const type = q.get('world'), seed = +(q.get('seed') || 3), act3 = type === 'weep' || type === 'heart', act4 = type === 'ashfield' || type === 'forge';
+  const type = q.get('world'), seed = +(q.get('seed') || 3), act3 = type === 'weep' || type === 'heart', act4 = type === 'ashfield' || type === 'forge', act5 = type === 'coast' || type === 'farlight';
   if (type === 'pass' || type === 'halls' || type === 'forge') await loadPack('deep');
   if (act3) await Promise.all([loadPack('wood'), loadCreatures(), loadFolk('grove')]);
   // Act IV: the cinder pack (whatever of it exists), its people and those of Acts II-III who come north, every creature
   if (act4 && !q.has('nopack')) await Promise.all([loadPack('cinder'), loadCreatures(), loadFolk('ash'), loadFolk('folk'), loadFolk('grove')]);
   // &fakecinder: stand the base and deep sets' scans and layers in for the cinder pack's (tests its code paths before it exists)
   if (q.has('fakecinder')) { await loadPack('deep'); fakeCinder(); }
+  // Act V: the rime pack (whatever of it exists); &deep=1 also the deep's snow and stone (as after a trip through Act II)
+  if (act5) await Promise.all([loadPack('rime'), q.has('deep') ? loadPack('deep') : null]);
   if (R.quality >= 1) await loadPack('trees');
   if (!q.has('nohouses')) await loadPack('village');
   if (type === 'pass') WIND.uSnow.value = 1;
-  const L = type === 'crypt' ? genCrypt(seed) : type === 'town' ? genTown() : type === 'pass' ? genPass(seed) : type === 'halls' ? genHalls(seed)
+  const L = act5 ? await layout5(q, type, seed) : type === 'crypt' ? genCrypt(seed) : type === 'town' ? genTown() : type === 'pass' ? genPass(seed) : type === 'halls' ? genHalls(seed)
     : type === 'weep' ? genWeep(seed) : type === 'heart' ? genHeart(seed) : type === 'ashfield' ? genAshfield(seed) : type === 'forge' ? genForge(seed) : genForest(seed);
   const autumn = q.get('autumn') === '1', night = q.get('night') || 'ash', heat = q.get('heat') === 'cold' ? -1 : +(q.get('heat') || 0);
-  setAtmosphere(ATMOS[act3 && autumn ? type + 'Autumn' : type === 'ashfield' && night !== 'ash' ? 'ashfield' + night[0].toUpperCase() + night.slice(1) : type]);
+  setAtmosphere(ATMOS[q.get('atmos') || (act3 && autumn ? type + 'Autumn' : type === 'ashfield' && night !== 'ash' ? 'ashfield' + night[0].toUpperCase() + night.slice(1) : act5 && q.has('frozen') && type === 'coast' ? 'coastFrozen' : type)]);
+  if (act5 || q.get('atmos')?.endsWith('Aurora')) WIND.uSnow.value = act5 ? 1 : 0;
   if (act3) { WIND.uWind.value = autumn || q.has('wind') ? 1 : 0; setAutumn(autumn ? 1 : 0); }
   if (q.has('nofog')) { R.scene.fog.density = 0; R.camera.far = 600; R.camera.updateProjectionMatrix(); R.hemi.intensity *= 1.6; }
   const lvl = buildLevel(L, R.quality);
@@ -165,6 +182,7 @@ export async function startWorld(q) {
   if (type === 'forge') setHeat(heat);
   for (const l of L.lights) addLight(l);
   const act4Emit = act4 ? viewAct4(q, L, act4Prop, night) : [];
+  const v5 = act5 ? await viewAct5(q, L) : null;
   // the Act III props the story places
   if (act3) {
     const put = (o, x, z, ry = 0) => { o.position.set(x, 0, z); o.rotation.y = ry; R.scene.add(o); return o; };
@@ -182,7 +200,8 @@ export async function startWorld(q) {
   }
   const at0 = q.get('at'), n0 = +(q.get('n') || 0);
   const sp = L.spots, off = (p, dz = 0, dx = 0) => p && { x: p.x + dx, z: p.z + dz };
-  const at = act4 ? act4At(L, at0, n0) : at0 === 'boss' ? L.boss : at0 === 'gate' ? (L.gate || off(sp.rootGate, 4)) : at0 === 'bridge' ? L.bridge
+  const s5 = act5 && (Array.isArray(L.spots[at0]) ? L.spots[at0][n0] : L.spots[at0] || (at0 === 'boss' ? L.boss : null));
+  const at = act5 ? (s5 && { x: s5.x, z: s5.z + 2 }) || L.start : act4 ? act4At(L, at0, n0) : at0 === 'boss' ? L.boss : at0 === 'gate' ? (L.gate || off(sp.rootGate, 4)) : at0 === 'bridge' ? L.bridge
     : at0 === 'glade' ? off(sp.glade, 6) : at0 === 'mere' ? off(sp.mere, 2) : at0 === 'lantern' ? off(sp.lanternglade, 3) : at0 === 'deer' ? off(sp.deer, 4)
       : at0 === 'island' ? off(sp.island, 1) : at0 === 'heart' ? off(sp.heart, 9) : at0 === 'thorns' ? off(L.thorns?.[n0], 0) : at0 === 'chamber' ? L.chambers?.[n0]
         : at0 === 'tear' ? off(sp.tears?.[n0], 2.5) : at0 === 'waypoint' ? off(sp.waypoint, 2) : L.start;
@@ -202,8 +221,10 @@ export async function startWorld(q) {
   for (let i = 0; i < 80; i++) updateFX(0.05, x, z);
   WIND.uHero.value.set(x, 1, z);
   let n = 0, hx = x, hz = z;
+  v5?.place(x, z);
   const draw = () => {
     frame(0.016); hero.update(0.016, { speed: 0 }); updateCamera(0.016, hx, hz, true); updateFX(0.016, hx, hz);
+    v5?.tick(0.016);
     WIND.uTime.value += 0.016;
     R.heroLight.position.set(hx, 2.6, hz); R.heroLight.intensity = R.heroLight.userData.base;
     if (lvl.walls) lvl.walls.update(0.1, hx, hz);
@@ -213,11 +234,21 @@ export async function startWorld(q) {
   // screenshot tools move the hero (and the camera) between pictures: __view(x, z, {dist, pitch, ry}) draws one frame there
   window.__view = (vx, vz, o = {}) => {
     hx = vx; hz = vz; hero.group.position.set(hx, 0, hz); if (o.ry != null) hero.group.rotation.y = o.ry;
+    if (o.tide != null) { v5?.tide(o.tide, o.wet); }
+    v5?.place(hx, hz);
     if (o.dist) R.cam.dist = o.dist; if (o.pitch) R.cam.pitch = o.pitch;
     WIND.uHero.value.set(hx, 1, hz);
     for (let i = 0; i < 60; i++) updateFX(0.05, hx, hz);
     draw(); draw();
     return { x: hx, z: hz };
+  };
+  // __bench(n): the mean time (ms) of n frames drawn here, each waited out on the GPU (a one-pixel read)
+  window.__bench = (n = 20) => {
+    const gl = R.renderer.getContext(), px = new Uint8Array(4);
+    draw(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    const t0 = performance.now();
+    for (let i = 0; i < n; i++) { draw(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); }
+    return (performance.now() - t0) / n;
   };
   function loop() {
     draw();
@@ -264,6 +295,77 @@ function act4At(L, at, n) {
     bellows: off(sp.bellows?.[n], 2), station: off(sp.stations?.[n], 1.5), moulds: sp.hall, chest: off(sp.chests?.[n], 1.6), workshop: sp.workshop, mouth: off(sp.mouth, -6), plug: L.plug && { x: L.plug.x - Math.sin(L.plug.r) * 3, z: L.plug.z - Math.cos(L.plug.r) * 3 + 2 }, anvil: off(sp.anvil, 6)
   }[at];
   return pick || L.start;
+}
+
+// Act V: gen5's layout, or (until it is there) the viewer's stand-in (debug/fake5.js); &gen=fake forces the stand-in
+async function layout5(q, type, seed) {
+  const G5 = import.meta.glob('../world/gen5.js');
+  const frozen = q.has('frozen');
+  if (G5['../world/gen5.js'] && q.get('gen') !== 'fake') {
+    const m = await G5['../world/gen5.js'](), gen = type === 'coast' ? m.genCoast : m.genFarlight;
+    const L = gen?.(seed, { frozen });
+    if (L) return L;
+  }
+  const F = await import('./fake5.js');
+  return type === 'coast' ? F.fakeCoast(seed, { frozen, tide: +(q.get('tide') || 0) }) : F.fakeFarlight(seed);
+}
+// the sea's states: &tide=0..1.2 (&wet= the wet line), &freeze=0..1 (the Freeze), &wave=t (hole 0's wave), &ring=p (its
+// ring closing), &crack=1 (crack stages 1-5 round the hero), &shade=1 (a shape under the ice), &wake=1, &beam=1 (a lit
+// sea-light's beam and its light path, &theta=), &tele=1 (a telegraph, a light pool, the Cradle's ring, a decal and a blob
+// shadow round the hero: the draw order over the water), &sky=1 (the aurora dome; lower the camera with &pitch=0.2),
+// &aur=, &dark=, &front= (override the atmosphere's aurora)
+async function viewAct5(q, L) {
+  const S = await import('../world/sea.js'), B = await import('../world/build.js'), FXm = await import('../gfx/fx.js');
+  const num = (k, d) => (q.has(k) ? +q.get(k) : d);
+  const tide = (lv, wet) => { S.SEA.uLevel.value = lv; S.SEA.uWetLevel.value = Math.max(lv, wet ?? lv); };
+  tide(num('tide', 0), num('wet', undefined));
+  if (q.has('aur')) S.SEA.uAur.value = num('aur', 0.8);
+  if (q.has('dark')) S.SEA.uAurDark.value = num('dark', 0);
+  if (q.has('front')) S.SEA.uAurFront.value = num('front', 0);
+  if (q.has('freeze')) { S.setFreezeAll(0.001); S.SEA.uTime.value += 1; S.setFreezeAll(num('freeze', 1)); }
+  const h0 = L.spots.holes?.[0];
+  if (q.has('wave') && h0) S.SEA.uFreeze.value[0].set(h0.x, h0.z, 70, num('wave', 0.4));
+  if (q.has('ring') && h0) S.freezeRing(0, h0.x, h0.z, 4.6, num('ring', 0.5));
+  S.SEA.sky = q.has('sky');
+  const extra = [];
+  let beam = null;
+  return {
+    tide,
+    place(x, z) {
+      for (const o of extra) R.scene.remove(o);
+      extra.length = 0;
+      if (q.has('crack')) {
+        const d = new Uint8Array(L.w * L.h);
+        for (let i = 0; i < L.w * L.h; i++) {
+          if (!L.ice?.[i]) continue;
+          const cx = i % L.w, cz = (i - cx) / L.w, r = Math.hypot(cx + 0.5 - x, cz + 0.5 - (z - 4));
+          d[i] = r < 1.2 ? 4 : r < 2.3 ? 3 : r < 3.4 ? 2 : r < 4.6 ? 1 : 0;
+          if (cx + 0.5 > x + 4 && cx + 0.5 < x + 7 && cz + 0.5 > z - 6 && cz + 0.5 < z - 2) d[i] = 5;
+        }
+        const t = new THREE.DataTexture(d, L.w, L.h, THREE.RedFormat); t.needsUpdate = true;
+        S.SEA.tCrack.value = t; S.SEA.uMap.value.set(L.w, L.h);
+      }
+      if (q.has('shade')) { S.setShade(0, x + 3, z - 5, 2.2, 1); S.setShade(3, x - 6, z - 9, 7, 0.8); }
+      if (q.has('wake')) S.setWake(x + 1, z - 7, 0.6, 1);
+      if (q.has('beam')) {
+        if (!beam) { beam = S.beamMesh({ y: 9 }); R.scene.add(beam); }
+        const bx = x - 12, bz = z - 12; beam.position.set(bx, 9, bz); beam.userData.setDir(num('theta', Math.atan2(20, 14)));
+        S.SEA.uLights.value[0].set(bx, 9, bz, 1);
+        addLight({ x: bx, y: 9, z: bz, color: 0xffd8a0, intensity: 30, range: 16 });
+        const p = beam.userData.point(14); addLight({ x: p.x, y: Math.max(1.5, p.y), z: p.z, color: 0xfff0d8, intensity: 14, range: 9 });
+      }
+      if (q.has('tele')) {
+        FXm.teleCircle(x + 2.5, z - 2, 1.8, 30);
+        FXm.teleCone(x - 1, z - 3, 0.3, 4, 0.5, 30, 0x30e0b0);
+        FXm.decal(x - 2.8, z + 0.5, 'blood', 1.6, 60);
+        const ring = B.act4Prop('lightRing'); ring.scale.setScalar(4); ring.position.set(x, 0, z); B.drape(ring, L); R.scene.add(ring); extra.push(ring);
+        const pool = B.act4Prop('lightRing'); pool.userData.setColor(0xfff0d0); pool.scale.setScalar(3); pool.position.set(x + 4, 0, z + 2); B.drape(pool, L); R.scene.add(pool); extra.push(pool);
+        const blob = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.4).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: tex('blob'), transparent: true, depthWrite: false, opacity: 0.8 }));
+        blob.position.set(x, 0.04, z); blob.renderOrder = 1.5; R.scene.add(blob); extra.push(blob);
+      }
+    },
+    tick(dt) { beam?.userData.tick(dt); }
+  };
 }
 
 async function fakeCinder() {

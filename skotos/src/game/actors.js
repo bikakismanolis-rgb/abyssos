@@ -77,7 +77,7 @@ let blobs = null, rings = null;
 function shadowsInit() {
   const g = new THREE.PlaneGeometry(1, 1); g.rotateX(-Math.PI / 2);
   blobs = new THREE.InstancedMesh(g, new THREE.MeshBasicMaterial({ map: tex('blob'), transparent: true, depthWrite: false, opacity: 0.8 }), 160);
-  blobs.renderOrder = 1; blobs.frustumCulled = false; blobs.count = 0;
+  blobs.renderOrder = 1.5; blobs.frustumCulled = false; blobs.count = 0; // (after the sea, 1, before pools, rings and decals, 2)
   const rg = new THREE.RingGeometry(0.82, 1, 40); rg.rotateX(-Math.PI / 2);
   rings = new THREE.InstancedMesh(rg, new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.8 }), 40);
   rings.frustumCulled = false; rings.count = 0; rings.renderOrder = 2;

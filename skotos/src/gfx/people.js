@@ -10,9 +10,10 @@ import { R } from './gfx.js';
 const peopleUrl = () => import('../assets/people.glb?url').then((m) => m.default);
 const movesUrl = () => import('../assets/moves.bin?url').then((m) => m.default);
 // extra sets of people, each loaded with the zones that need it (tools/creatures/act2/folk.mjs builds them):
-// 'folk' = Act II's dwarves (folk.glb), 'grove' = Act III's Evergreen (grove.glb), 'ash' = Act IV's dead and bosses (ash.glb)
+// 'folk' = Act II's dwarves (folk.glb), 'grove' = Act III's Evergreen (grove.glb), 'ash' = Act IV's dead and bosses (ash.glb),
+// 'frost' = Act V's Sunken, Ice Singers and Saltborn (frost.glb)
 // (lazy: each set's URL is fetched only when a zone asks for it, which keeps inlined builds in small chunks)
-const SET_URLS = Object.fromEntries(Object.entries(import.meta.glob(['../assets/folk.glb', '../assets/grove.glb', '../assets/ash.glb'], { query: '?url', import: 'default' }))
+const SET_URLS = Object.fromEntries(Object.entries(import.meta.glob(['../assets/folk.glb', '../assets/grove.glb', '../assets/ash.glb', '../assets/frost.glb'], { query: '?url', import: 'default' }))
   .map(([path, load]) => [path.match(/(\w+)\.glb$/)[1], load]));
 
 export const PEOPLE = { scenes: {}, moves: null, ready: false };

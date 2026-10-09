@@ -9,38 +9,14 @@
 // Each generator retries until every place the story needs can be walked to (the Forge's Great Stair only through its plug).
 import { RNG, clamp, fbm, angleDiff, smooth } from '../core/util.js';
 import { base, carveCircle, carveLine, smoothCells, distField, blockCircle } from './gen.js';
+import { reach, nearReach, terrain, groundY, circleCells, mark, snap } from './genlib.js';
+// (moved to genlib.js, shared with gen5.js; still exported here for build.js and the checks)
+export { reach, nearReach, groundY };
 
 // ---------- helpers ----------
 const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const cellAt = (L, x, z) => Math.floor(z) * L.w + Math.floor(x);
 const isFloor = (L, x, z) => x >= 0 && z >= 0 && x < L.w && z < L.h && L.cells[cellAt(L, x, z)] === 1;
-// floor cells reachable on foot from (x, z), 4-neighbour (the flow field never cuts corners: same connectivity)
-export function reach(L, x, z, cells = L.cells) {
-  const { w, h } = L, seen = new Uint8Array(w * h), s = Math.floor(z) * w + Math.floor(x);
-  if (!cells[s]) return seen;
-  const q = [s]; seen[s] = 1;
-  for (let hd = 0; hd < q.length; hd++) {
-    const i = q[hd], cx = i % w, cz = (i - cx) / w;
-    for (const [dx, dz] of N4) { const nx = cx + dx, nz = cz + dz, n = nz * w + nx; if (nx >= 0 && nz >= 0 && nx < w && nz < h && cells[n] && !seen[n]) { seen[n] = 1; q.push(n); } }
-  }
-  return seen;
-}
-// how far (x, z) is from the centre of the nearest reached cell (99: none within r)
-export function nearReach(L, R, x, z, r = 4) {
-  let b = 99;
-  for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
-    const cx = Math.floor(x) + dx, cz = Math.floor(z) + dz;
-    if (cx >= 0 && cz >= 0 && cx < L.w && cz < L.h && R[cz * L.w + cx]) b = Math.min(b, Math.hypot(cx + 0.5 - x, cz + 0.5 - z));
-  }
-  return b;
-}
-function circleCells(L, cx, cz, r) {
-  const out = [];
-  for (let z = Math.floor(cz - r); z <= Math.floor(cz + r); z++) for (let x = Math.floor(cx - r); x <= Math.floor(cx + r); x++)
-    if (Math.hypot(x + 0.5 - cx, z + 0.5 - cz) <= r && x >= 0 && z >= 0 && x < L.w && z < L.h) out.push([x, z]);
-  return out;
-}
-const mark = (m, L, cx, cz, r) => { for (const [x, z] of circleCells(L, cx, cz, r)) m[z * L.w + x] = 1; };
 // a cell with a hole among its 8 neighbours: some corner of it sinks with the hole (terrain), so it is no level floor
 const nearLow = (L, i) => { const w = L.w; return [-1, 1, -w, w, -w - 1, -w + 1, w - 1, w + 1].some((o) => L.low[i + o]); };
 // a chest's spot: the nearest free floor cell to (x0, z0) where the ground (L.hgt) is level under it and round it (0.8 m;
@@ -56,7 +32,6 @@ function chestSpot(L, res, x0, z0, off) {
   if (best && res) mark(res, L, best.x, best.z, 2);
   return best;
 }
-const snap = (v) => Math.floor(v) + 0.5;
 // a trail walker steered toward (tx, tz), carving as it goes (never heading back south for long)
 function walkTo(L, st, tx, tz, rng, trail, o) {
   const { rMin, rMax, paint = 1.7, wob = 0.2, seed } = o;
@@ -97,30 +72,6 @@ function toFloor(L, D, xx, zz) {
   for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) { const c = D[clamp(zz + dz, 0, L.h - 1) * L.w + clamp(xx + dx, 0, L.w - 1)]; if (c < D[zz * L.w + xx]) { bx += dx; bz += dz; } }
   return Math.atan2(bx, bz);
 }
-// the corners' heights: floor at 0, holes sunk, solid ground rising with its distance from the floor (rise(d, x, z, i))
-function terrain(L, cells, D, rise) {
-  const { w, h, low } = L, W = w + 1, H = new Float32Array(W * (h + 1));
-  for (let vz = 0; vz <= h; vz++) for (let vx = 0; vx <= w; vx++) {
-    let fl = 0, hole = 0, dd = 0, n = 0;
-    for (const [dx, dz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) {
-      const x = vx + dx, z = vz + dz;
-      if (x < 0 || z < 0 || x >= w || z >= h) { dd += 14; n++; continue; }
-      const i = z * w + x;
-      fl += cells[i]; hole += low[i]; dd += Math.min(D[i] === 255 ? 14 : D[i], 14); n++;
-    }
-    // (a corner sinks by how many of its cells are holes: the lava's edge then runs on the diagonals, not in steps)
-    H[vz * W + vx] = hole ? -0.72 * (hole === 4 ? 1 : fl ? hole / 4 : 0.75 + hole * 0.06) : fl ? 0 : rise(dd / n, vx, vz);
-  }
-  return H;
-}
-// the ground's height under (x, z), the way build.js lays it: each cell is two triangles split from (x0, z0 + 1) to
-// (x0 + 1, z0), as the ground plane's grid is
-export function groundY(L, x, z) {
-  const H = L.hgt; if (!H) return 0;
-  const W = L.w + 1, x0 = clamp(Math.floor(x), 0, L.w - 1), z0 = clamp(Math.floor(z), 0, L.h - 1), fx = clamp(x - x0, 0, 1), fz = clamp(z - z0, 0, 1);
-  const a = H[z0 * W + x0], b = H[z0 * W + x0 + 1], c = H[(z0 + 1) * W + x0], d = H[(z0 + 1) * W + x0 + 1];
-  return fx + fz <= 1 ? a + (b - a) * fx + (c - a) * fz : d + (c - d) * (1 - fx) + (b - d) * (1 - fz);
-}
 // a Forge crane (env 'crane', the overhead_crane scan) lies on the floor: its girder and end carriages take local x -6.2..6.2,
 // z -1..1.5 (times its scale s); its two rails run at the ends (|x| 6.0..6.25) from z -0.96 to 3.05, a hand's breadth under
 // the floor (so they must be buried wherever they reach, beside the girder too).
@@ -147,9 +98,17 @@ function clearLine(L, ax, az, bx, bz) {
 // the Lantern Graves in their gorge (Elati's camp and waypoint 2 at its mouth, lamps 4 and 5, Ivar's empty hook) and the
 // Anvil Gate's round plaza against the cliff of the Black Anvil.
 export function genAshfield(seed, o = {}) {
-  for (let k = 0; k < 24; k++) { const L = tryAshfield(seed + k * 7919, o, k === 23); if (L) { L.seed = seed; return L; } }
+  for (let k = 0; k < 24; k++) { const L = tryAshfield(seed + k * 7919, o, k === 23); if (L) { L.seed = seed; neck(L, seed, seed + k * 7919); return L; } }
   return null;
 }
+// how the Field's solid ground rises with its distance d from the floor: steeper into the Graves' walls and the cliff of
+// the Black Anvil behind the gate (seed: the try's own)
+const ashRise = (GV, GP, seed) => (d, x, z) => {
+  const gk = smooth(clamp(1 - (Math.abs(x - GV.x) - 10) / 7, 0, 1)) * smooth(clamp((z - GV.z1 + 8) / 8, 0, 1)) * smooth(clamp((GV.z0 + 6 - z) / 8, 0, 1));
+  const ck = smooth(clamp((GP.z - 4 - z) / 13, 0, 1));
+  const k = 0.42 + gk * 0.7 + ck * 1.9;
+  return Math.min(d, 14) * k * (0.82 + 0.36 * fbm(x * 0.08, z * 0.08, seed + 31)) - (d < 1.4 ? 0.1 : 0);
+};
 function tryAshfield(seed, o, last) {
   const rng = RNG(seed);
   const w = o.w || 112, h = o.h || 192, N = w * h;
@@ -287,13 +246,7 @@ function tryAshfield(seed, o, last) {
   const cells0 = L.cells.slice();
   for (const [x, z] of gate.cells) cells0[z * w + x] = 1; // the gate stands on the floor of its doorway
   const D0 = distField({ ...L, cells: cells0 }, 14);
-  const rise = (d, x, z) => {
-    const gk = smooth(clamp(1 - (Math.abs(x - GV.x) - 10) / 7, 0, 1)) * smooth(clamp((z - GV.z1 + 8) / 8, 0, 1)) * smooth(clamp((GV.z0 + 6 - z) / 8, 0, 1));
-    const ck = smooth(clamp((GP.z - 4 - z) / 13, 0, 1));
-    const k = 0.42 + gk * 0.7 + ck * 1.9;
-    return Math.min(d, 14) * k * (0.82 + 0.36 * fbm(x * 0.08, z * 0.08, seed + 31)) - (d < 1.4 ? 0.1 : 0);
-  };
-  L.hgt = terrain(L, cells0, D0, rise);
+  L.hgt = terrain(L, cells0, D0, ashRise(GV, GP, seed));
   const Y = (x, z) => groundY(L, x, z);
   // ---- the Dark Beacon camp: the cold beacon on its knoll, the fire, Isarn and Brokka, waypoint 1 ----
   L.start = { x: S.x, z: h - 8 };
@@ -527,6 +480,108 @@ function tryAshfield(seed, o, last) {
   if (!last && L.packs.some((p) => far(p, 3.5)) || (!last && sp.patrols.length < 2)) return null;
   if (!last && sp.lamps.length < 5) return null;
   return L;
+}
+
+// ---- Act V: the Anvil's Neck, the way north-east to the coast ----
+// Carved after tryAshfield has settled the Field, from its own RNG, so a saved seed keeps its layout but for these cells
+// and the 2-cell band round them (tools/parity-ashfield.mjs). From the plaza's south-east rim (100-130 degrees from north)
+// a pass 4 cells wide runs east along the Black Anvil's foot, then north to the map's top edge and the exit to the coast.
+// Its mouth is plugged by four cells of rubble until the new fire burns (world.js act4Zone/act4Enter open L.neck.plug).
+// The heights are laid again only in the band (a 2-cell blend into the old walls); the dressing that touched it is dropped
+// and its own scree and dead trees (neck: true) stand in the band. Never in tryAshfield's reach list: the exit stays shut
+// behind the rubble for every check there. L.neck = { cells, plug, x, z, r } (x, z: the plug's middle, on the rim)
+const NECK_DRESS = { ashTuft: 0.4, ashStone: 0.3, debris: 1, bones: 1, ashRock: 0.6, ashTree: 1.6, ashCrag: 1.8 };
+function neck(L, seed, trySeed) {
+  const rng = RNG((seed ^ 0xC0A57) >>> 0), { w, h } = L, N = w * h, GP = L.boss, GV = { x: L.spots.graves.x, z0: 80, z1: 41 };
+  const X = Math.min(w - 8, GP.x + 26), cx0 = Math.round(X) - 2;
+  const solid = (x, z) => x >= 0 && z >= 0 && x < w && z < h && !L.cells[z * w + x];
+  const keepOut = (x, z) => Math.abs(x - GV.x) < 18 && z > GV.z1 - 4 && z < GV.z0 + 4;
+  const blocks = L.props.filter((p) => p.t === 'rimStone' || p.t === 'rimPillar');
+  // rows zc-2 .. zc+1 meet the rim at 100-130 degrees; leg 1 east, leg 2 north, each 4 cells across, a slow wobble in each
+  for (const zc of rng.shuffle([28, 29, 30, 31, 32].filter((v) => v - GP.z >= 3 && v - GP.z <= 8))) {
+    let px = Math.floor(GP.x) + 1;
+    while (px < cx0 && !([-2, -1, 0, 1].every((d) => solid(px, zc + d)) && solid(px, zc - 3) && solid(px, zc + 2))) px++;
+    if (px >= cx0 - 6) continue;
+    const plug = [-2, -1, 0, 1].map((d) => [px, zc + d]);
+    if (blocks.some((p) => plug.some(([x, z]) => Math.hypot(p.x - x - 0.5, p.z - z - 0.5) < 1.6))) continue;
+    const ph = rng.range(0, 100), ph2 = rng.range(0, 100), cells = [], seen = new Set();
+    const put = (x, z) => { const k = z * w + x; if (!seen.has(k)) { seen.add(k); cells.push([x, z]); } };
+    const wob = (t, a, s) => Math.round((fbm(t * 0.11 + s, 3.7, seed) - 0.5) * 2 * a);
+    let ok = true;
+    // the plaza side: what rock is left between the plaza's floor and the rubble, row by row (at least one row must meet it)
+    const notch = [];
+    let met = 0;
+    for (const d of [-2, -1, 0, 1]) for (let x = px - 1; x >= px - 6; x--) { if (!solid(x, zc + d)) { met++; break; } notch.push([x, zc + d]); }
+    if (!met) continue;
+    // leg 1: straight for 3 cells past the plug, then a wobble that dies out into the turn
+    for (let x = px + 1; x <= cx0 + 3; x++) {
+      const k = clamp(Math.min(x - px - 3, cx0 - 2 - x) / 4, 0, 1), dz = Math.round(wob(x, 1.6, ph) * k);
+      for (const d of [-2, -1, 0, 1]) put(x, zc + dz + d);
+    }
+    // leg 2: north from the turn to row 3, straight again for its last 6 rows (the exit stands on the axis)
+    for (let z = zc + 1; z >= 3; z--) {
+      const k = clamp(Math.min(zc - 3 - z, z - 9) / 4, 0, 1), dx = Math.round(wob(z, 2.2, ph2) * k);
+      for (const d of [0, 1, 2, 3]) put(cx0 + dx + d, z);
+    }
+    // through rock only (the plug's cells are the only ones it shares with the Field), out of the Graves, inside the edge
+    for (const [x, z] of cells) if (!solid(x, z) || keepOut(x + 0.5, z + 0.5) || x < 3 || x >= w - 3 || z < 3 || z > GP.z + 11) { ok = false; break; }
+    if (!ok) continue;
+    for (const [x, z] of cells) for (const [dx, dz] of N4) { const X2 = x + dx, Z2 = z + dz; if (!seen.has(Z2 * w + X2) && !(X2 === px && Math.abs(Z2 - zc + 0.5) < 2.5) && !solid(X2, Z2)) ok = false; }
+    if (!ok) continue;
+    for (const c of notch) put(c[0], c[1]);
+    carve(L, cells, plug, seen, ashRise(GV, GP, trySeed), rng);
+    L.neck = { cells, plug, x: px + 0.5, z: zc, r: Math.PI / 2 };
+    L.exits.push({ x: X, z: 3, to: 'coast', label: 'exit.coast', locked: 'coal' });
+    return;
+  }
+}
+function carve(L, cells, plug, seen, rise, rng) {
+  const { w, h } = L, N = w * h, W = w + 1, core = new Uint8Array(N);
+  for (const [x, z] of [...cells, ...plug]) core[z * w + x] = 1;
+  for (const [x, z] of cells) { const i = z * w + x; L.cells[i] = 1; L.paint[i] = 0; }
+  // a worn track down its middle (the plug's rubble lies on the same floor)
+  for (const [x, z] of cells) {
+    let side = 0; for (const [dx, dz] of N4) if (!core[(z + dz) * w + x + dx]) side++;
+    L.paint[z * w + x] = side ? 0.15 : 0.55 + fbm(x * 0.3, z * 0.3, 77) * 0.3;
+  }
+  // distance from the corridor (4-neighbour steps, capped) and from any floor: the old field where it is nearer
+  const dc = new Uint8Array(N).fill(255), q = [];
+  for (let i = 0; i < N; i++) if (core[i]) { dc[i] = 0; q.push(i); }
+  for (let hd = 0; hd < q.length; hd++) {
+    const i = q[hd], x = i % w, z = (i - x) / w; if (dc[i] >= 14) continue;
+    for (const [dx, dz] of N4) { const X2 = x + dx, Z2 = z + dz, n = Z2 * w + X2; if (X2 >= 0 && Z2 >= 0 && X2 < w && Z2 < h && dc[n] > dc[i] + 1) { dc[n] = dc[i] + 1; q.push(n); } }
+  }
+  const band = (i) => dc[i] <= 2;
+  // the walls: inside the band the ground is laid again from the nearer floor, blended into the old heights over 2 cells
+  for (let vz = 0; vz <= h; vz++) for (let vx = 0; vx <= w; vx++) {
+    let inBand = false, fl = 0, dd = 0, n = 0, dv = 9;
+    for (const [dx, dz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) {
+      const x = vx + dx, z = vz + dz;
+      if (x < 0 || z < 0 || x >= w || z >= h) { dd += 14; n++; continue; }
+      const i = z * w + x;
+      if (band(i)) inBand = true;
+      fl += core[i]; dv = Math.min(dv, dc[i]);
+      dd += Math.min(Math.min(L.dist[i] === 255 ? 14 : L.dist[i], dc[i]), 14); n++;
+    }
+    if (!inBand) continue;
+    const j = vz * W + vx, old = L.hgt[j], h1 = fl ? 0 : rise(dd / n, vx, vz), s = smooth(clamp((dv - 0.5) / 2, 0, 1));
+    L.hgt[j] = Math.min(old, h1 + (old - h1) * s);
+  }
+  for (let i = 0; i < N; i++) if (band(i)) L.dist[i] = Math.min(L.dist[i], dc[i]);
+  // the dressing that touched the corridor or stood on its band (its ground has moved) goes
+  const nearCore = (p, r) => { for (let z = Math.floor(p.z - r - 1); z <= p.z + r + 1; z++) for (let x = Math.floor(p.x - r - 1); x <= p.x + r + 1; x++) if (x >= 0 && z >= 0 && x < w && z < h && dc[z * w + x] <= 2 && Math.hypot(x + 0.5 - p.x, z + 0.5 - p.z) < r + 0.71) return true; return false; };
+  L.props = L.props.filter((p) => !(p.t in NECK_DRESS) || !nearCore(p, NECK_DRESS[p.t] * (p.s || 1)));
+  // and its own: scree at the foot of its walls, a few dead trees on the band, ash-grass along the track's edges
+  const Y = (x, z) => groundY(L, x, z);
+  for (const [x, z] of cells) {
+    if (rng.chance(0.06)) L.props.push({ t: 'ashTuft', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.7, 1.1), neck: true });
+  }
+  for (let z = 0; z < h; z++) for (let x = 0; x < w; x++) {
+    const i = z * w + x; if (core[i] || dc[i] > 2 || L.cells[i]) continue;
+    const px = x + rng.range(0.2, 0.8), pz = z + rng.range(0.2, 0.8), y = Y(px, pz);
+    if (dc[i] === 1 && rng.chance(0.16)) L.props.push({ t: 'ashRock', x: px, z: pz, r: rng.range(0, 6.28), s: rng.range(0.5, 0.95), y: y - 0.15, neck: true });
+    else if (dc[i] === 2 && rng.chance(0.035)) L.props.push({ t: 'ashTree', x: px, z: pz, r: rng.range(0, 6.28), s: rng.range(0.8, 1.1), y: y - 0.1, d: 2, neck: true });
+  }
 }
 
 // ======================= FORGE: the Ashen Forge =======================

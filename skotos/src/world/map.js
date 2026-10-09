@@ -36,6 +36,20 @@ export class GridMap {
     if (n) { this.flowT.x = -1; this.ver++; }
     return n;
   }
+  // close cells at runtime (Act V: the tide coming in, ice breaking, the skerry under the dead Tower): [[ix, iz], ...]
+  // become solid, and low (water: eyes and arrows pass over) unless low is false; one ver bump and a flow rebuild per batch
+  close(cells, low = true) {
+    let n = 0;
+    if (low && !this.low) this.low = new Uint8Array(this.w * this.h);
+    for (const [ix, iz] of cells || []) {
+      if (ix < 0 || iz < 0 || ix >= this.w || iz >= this.h) continue;
+      const i = iz * this.w + ix;
+      if (this.cells[i] === 1) { this.cells[i] = 0; n++; }
+      if (this.low) this.low[i] = low ? 1 : 0;
+    }
+    if (n) { this.flowT.x = -1; this.ver++; }
+    return n;
+  }
 
   // push a circle out of solid cells; returns true if it touched a wall
   collide(p, r) {
@@ -139,11 +153,12 @@ export class GridMap {
   }
   // the way to a point that is not the hero (a mould's rim, a patrol post, a lamp): a small flow field of the caller's own,
   // BFS over a (2R+1)^2 window round the target's nearest floor, kept in P (an object the caller owns) while the target
-  // cell and the map hold. A direction from (x, z), or null if (x, z) is outside the window or cut off from the target
-  stepToward(P, x, z, tx, tz, out, R = 20) {
+  // cell and the map hold. A direction from (x, z), or null if (x, z) is outside the window or cut off from the target.
+  // mask (a Uint8 w x h, or null): cells where it is 0 are walls to this window (the Walking Tower keeps to thick ice)
+  stepToward(P, x, z, tx, tz, out, R = 20, mask = null) {
     const f = this.nearestFloor(tx, tz, 3), ix = Math.floor(f.x), iz = Math.floor(f.z);
     if (this.solid(ix, iz)) return null;
-    if (P.ix !== ix || P.iz !== iz || P.ver !== this.ver || P.R !== R) this.fillWindow(P, ix, iz, R);
+    if (P.ix !== ix || P.iz !== iz || P.ver !== this.ver || P.R !== R || P.mask !== mask) this.fillWindow(P, ix, iz, R, mask);
     const W = 2 * R + 1, cx = Math.floor(x) - P.x0, cz = Math.floor(z) - P.z0;
     if (cx < 0 || cz < 0 || cx >= W || cz >= W) return null;
     let best = P.d[cz * W + cx], bx = 0, bz = 0;
@@ -163,11 +178,11 @@ export class GridMap {
     out.x = dx / l; out.z = dz / l;
     return out;
   }
-  fillWindow(P, ix, iz, R) {
+  fillWindow(P, ix, iz, R, mask = null) {
     const W = 2 * R + 1, N = W * W, { w, h, cells } = this;
     if (!P.d || P.d.length !== N) P.d = new Uint16Array(N);
     if (WQ.length < N * 4) WQ = new Int32Array(N * 4); // (a cell can be queued again when a shorter way reaches it)
-    Object.assign(P, { ix, iz, R, ver: this.ver, x0: ix - R, z0: iz - R });
+    Object.assign(P, { ix, iz, R, ver: this.ver, x0: ix - R, z0: iz - R, mask });
     const d = P.d, x0 = P.x0, z0 = P.z0;
     d.fill(65535);
     let head = 0, tail = 0;
@@ -177,8 +192,8 @@ export class GridMap {
       for (let k = 0; k < 8; k++) {
         const nx = cx + DX[k], nz = cz + DZ[k], gx = x0 + nx, gz = z0 + nz;
         if (nx < 0 || nz < 0 || nx >= W || nz >= W || gx < 0 || gz < 0 || gx >= w || gz >= h) continue;
-        if (cells[gz * w + gx] === 0) continue;
-        if (k >= 4 && (cells[(z0 + cz) * w + gx] === 0 || cells[gz * w + x0 + cx] === 0)) continue; // no corner cutting
+        if (cells[gz * w + gx] === 0 || (mask && !mask[gz * w + gx])) continue;
+        if (k >= 4 && (cells[(z0 + cz) * w + gx] === 0 || cells[gz * w + x0 + cx] === 0 || (mask && (!mask[(z0 + cz) * w + gx] || !mask[gz * w + x0 + cx])))) continue; // no corner cutting
         const n = nz * W + nx, nd = dc + (k < 4 ? 10 : 14);
         if (nd < d[n]) { d[n] = nd; WQ[tail++] = n; }
       }

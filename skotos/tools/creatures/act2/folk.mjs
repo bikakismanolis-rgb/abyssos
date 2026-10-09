@@ -5,6 +5,7 @@
 // usage: node folk.mjs [people.glb] [out.glb]                  Act II's dwarves -> src/assets/folk.glb
 //        node folk.mjs --set=grove [people.glb] [out.glb]    Act III's Evergreen (elves) -> src/assets/grove.glb
 //        node folk.mjs --set=ash [people.glb] [out.glb]      Act IV's dead, smiths, Wayfarers and bosses -> src/assets/ash.glb
+//        node folk.mjs --set=frost [people.glb] [out.glb]    Act V's Sunken, Ice Singers and Saltborn -> src/assets/frost.glb
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { mergeDocuments, prune, dedup, textureCompress, weld, unpartition, quantize, meshopt } from '@gltf-transform/functions';
@@ -114,6 +115,8 @@ function morph(doc, M) {
       for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) e.push((r === c ? g : 0) + (L - g) * a.getComponent(r) * a.getComponent(c));
       S.set(e[0], e[1], e[2], 0, e[3], e[4], e[5], 0, e[6], e[7], e[8], 0, 0, 0, 0, 1);
     }
+    // `axes`: flesh scaled about the joint along the world's axes [across, up, forward] (a narrower, longer face)
+    if (M.axes?.[nm]) { const R = new THREE.Matrix4().extractRotation(Tj); S.premultiply(R.clone().premultiply(new THREE.Matrix4().makeScale(...M.axes[nm])).premultiply(R.clone().invert())); }
     X.set(j, Tn.clone().multiply(S).multiply(Tj.clone().invert()));
   }
   // skin every vertex into its bind-world position, move it by the blended flesh transforms, rebind to the new joints
@@ -468,8 +471,12 @@ async function restyle(doc, { drop = [], hair }) {
   const [srcScene, nodeName, matName] = hair;
   const src = await isolate(srcScene), from = src.getRoot().listNodes().find((n) => n.getName() === nodeName);
   const joints = new Map(); for (const sk of root.listSkins()) for (const j of sk.listJoints()) joints.set(j.getName(), j);
-  const mat = root.listMaterials().find((m) => m.getName() === matName);
   const copy = (a) => doc.createAccessor().setType(a.getType()).setArray(a.getArray().slice()).setNormalized(a.getNormalized()).setBuffer(buf);
+  // a hair from the other skeleton's family of maps (a woman given villager2's short T_Hair_1 cut) brings its material along
+  const texOf = (t) => t && doc.createTexture(t.getName()).setImage(t.getImage().slice()).setMimeType(t.getMimeType());
+  const own = (m) => doc.createMaterial(matName).setBaseColorFactor(m.getBaseColorFactor()).setRoughnessFactor(m.getRoughnessFactor()).setMetallicFactor(m.getMetallicFactor())
+    .setDoubleSided(m.getDoubleSided()).setExtras(m.getExtras()).setBaseColorTexture(texOf(m.getBaseColorTexture())).setNormalTexture(texOf(m.getNormalTexture()));
+  const mat = root.listMaterials().find((m) => m.getName() === matName) || own(from.getMesh().listPrimitives()[0].getMaterial());
   const sk0 = from.getSkin(), skin = doc.createSkin(nodeName).setInverseBindMatrices(copy(sk0.getInverseBindMatrices()));
   for (const j of sk0.listJoints()) skin.addJoint(joints.get(j.getName()));
   const mesh = doc.createMesh(nodeName);
@@ -479,7 +486,7 @@ async function restyle(doc, { drop = [], hair }) {
     mesh.addPrimitive(p);
   }
   const node = doc.createNode(nodeName).setMesh(mesh).setSkin(skin).setTranslation(from.getTranslation()).setRotation(from.getRotation()).setScale(from.getScale());
-  const sib = root.listNodes().find((n) => n.getMesh()?.listPrimitives().some((q) => q.getMaterial() === mat));
+  const sib = root.listNodes().find((n) => n.getMesh()?.listPrimitives().some((q) => q.getMaterial() === mat)) || root.listNodes().find((n) => n.getName() === 'Eyebrows');
   (sib?.getParentNode() || root.getDefaultScene()).addChild(node);
 }
 // some pieces of an outfit given a material of their own (a copy of `from`), so a recipe can colour them apart
@@ -558,6 +565,13 @@ const CHILD = { len: { calf: 0.92, foot: 0.92, spine_01: 0.96, spine_02: 0.96, H
 const SMITH = { len: { upperarm: 1.06 }, girth: { clavicle: 1.2, upperarm: 1.25, lowerarm: 1.25, spine_02: 1.08, spine_03: 1.15, neck_01: 1.15 }, size: { hand: 1.15 } };
 // no change of shape (morph() still bakes the rest pose into the skin, so every recipe is measured and lightened alike)
 const SAME = { len: {}, girth: {}, size: {} };
+// the Ice Singers: drowned women gone to a crone's frame, wasted thin and a little short, the neck drawn long, the
+// forearms, palms and fingers long (a hand that reaches)
+const FINGERS = (f) => Object.fromEntries(['index', 'middle', 'ring', 'pinky', 'thumb'].flatMap((n) => ['_01', '_02', '_03'].map((k) => [n + k, f])));
+const CRONE = { len: { calf: 0.95, foot: 0.95, spine_01: 0.95, spine_02: 0.95, spine_03: 0.95, upperarm: 0.97, neck_01: 1.08, Head: 1.06, hand: 1.06, ...FINGERS(1.1) }, girth: { ...every(TRUNK, 0.75), pelvis: 0.8, clavicle: 0.86 }, size: { hand: 1.1, Head: 0.96 } };
+// a Saltborn keeper of forty-five (Alkyone): sturdier through the body and arms from the oars and the nets, the neck a
+// touch short, the face longer and leaner (`axes`: across, up, forward) than the healer's she shares with Elianthe
+const WEATHER = { len: { neck_01: 0.98 }, girth: every(TRUNK, 1.04), size: { hand: 1.04 }, axes: { Head: [0.94, 1.03, 0.97] } };
 
 // the whole body to f of its size, about the ground under it (after morph(): the skins hold world-space rest positions)
 function shrink(doc, f) {
@@ -728,8 +742,207 @@ const ASHSET = {
 };
 const ASH_CREDIT = { credit: 'Quaternius characters (people.glb); ember-crack grain: "Bark Brown 02" by Rob Tuytel, polyhaven.com/a/bark_brown_02', license: 'CC0' };
 for (const R of Object.values(ASHSET)) R.extras = { ...(R.body ? {} : ASH_CREDIT), ...R.extras };
-const SETS = { folk: RECIPES, grove: GROVE, ash: ASHSET };
-if (!SETS[SET]) throw new Error(`unknown set ${SET} (folk, grove, ash)`);
+
+// ---------- Act V: the Frozen Coast (--set=frost) ----------
+// Seven scenes, gated at 25 textures in the file. A grade makes a texture of its own, so the set is built to share: each
+// recipe owns one outfit map (the enemies' at 256 px); the sources' normal, ORM and hair maps are shared; every skin wears
+// one tintable map per body (`tone`) and takes its colour from the material's factor; the skins' roughness maps and the
+// eyes' normal map give way to factors (`flat`); both enemies share one cold eye map that lights itself (`self`)
+const lin = (v) => Math.pow(v, 2.2), srgb = (v) => Math.pow(Math.max(0, v), 1 / 2.2);
+// a skin map made tintable: its colour drawn most of the way to its own grey (TONE.keep of it stays, so the lips and
+// cheeks keep a little red) and its light lifted until the skin's mean reads TONE.grey; the dark texels (underwear) only
+// lose their colour. `toned()` then turns the skin a recipe wants into the factor that gives it on this map.
+const TONE = { keep: 0.3, grey: 0.8, mean: '#a97752' };
+async function toneless(img) {
+  const { data, info } = await sharp(img).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const L = (i) => 0.3 * lin(data[i] / 255) + 0.55 * lin(data[i + 1] / 255) + 0.15 * lin(data[i + 2] / 255), m = hexRGB(TONE.mean), k = lin(TONE.grey) / (0.3 * m[0] + 0.55 * m[1] + 0.15 * m[2]);
+  for (let i = 0; i < data.length; i += 3) { const l = L(i); for (let c = 0; c < 3; c++) data[i + c] = Math.round(255 * Math.min(1, srgb((l + TONE.keep * (lin(data[i + c] / 255) - l)) * k))); }
+  return sharp(data, { raw: { width: info.width, height: info.height, channels: 3 } }).png().toBuffer();
+}
+// value noise on the body (rest pose, metres) for stains and crusts that do not follow the map's islands
+const hash3 = (x, y, z) => { let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(z, 1103515245); h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+function vnoise(x, y, z) {
+  const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z), fx = smooth(x - ix), fy = smooth(y - iy), fz = smooth(z - iz);
+  const l = (a, b, t) => a + (b - a) * t, h = (i, j, k) => hash3(ix + i, iy + j, iz + k);
+  return l(l(l(h(0, 0, 0), h(1, 0, 0), fx), l(h(0, 1, 0), h(1, 1, 0), fx), fy), l(l(h(0, 0, 1), h(1, 0, 1), fx), l(h(0, 1, 1), h(1, 1, 1), fx), fy), fz);
+}
+const fbm = (p, f) => vnoise(p.x * f, p.y * f, p.z * f) * 0.5 + vnoise(p.x * f * 2.1 + 7, p.y * f * 2.1, p.z * f * 2.1) * 0.3 + vnoise(p.x * f * 4.3, p.y * f * 4.3 + 3, p.z * f * 4.3) * 0.2;
+// where each texel of a material's map lies on the body: its rest-pose position and the node it belongs to (-1 in the
+// gutter); the islands are grown four texels so the filtering never reaches an unpainted gutter
+function texels(doc, mat, S) {
+  const node = new Int16Array(S * S).fill(-1), P = new Float32Array(S * S * 3), names = [];
+  const pa = new THREE.Vector3(), pb = new THREE.Vector3(), pc = new THREE.Vector3(), p = new THREE.Vector3(), e = [];
+  for (const nd of doc.getRoot().listNodes()) for (const prim of nd.getMesh()?.listPrimitives() || []) {
+    if (prim.getMaterial() !== mat) continue;
+    const id = names.push(nd.getName()) - 1, A = prim.getAttribute('POSITION'), U = prim.getAttribute('TEXCOORD_0'), idx = prim.getIndices().getArray();
+    for (let t = 0; t < idx.length; t += 3) {
+      const ua = U.getElement(idx[t], []), ub = U.getElement(idx[t + 1], []), uc = U.getElement(idx[t + 2], []);
+      const ax = ua[0] * S - 0.5, ay = ua[1] * S - 0.5, bx = ub[0] * S - 0.5, by = ub[1] * S - 0.5, cx = uc[0] * S - 0.5, cy = uc[1] * S - 0.5;
+      const den = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy); if (Math.abs(den) < 1e-9) continue;
+      pa.fromArray(A.getElement(idx[t], e)); pb.fromArray(A.getElement(idx[t + 1], e)); pc.fromArray(A.getElement(idx[t + 2], e));
+      const x0 = Math.max(0, Math.floor(Math.min(ax, bx, cx))), x1 = Math.min(S - 1, Math.ceil(Math.max(ax, bx, cx))), y0 = Math.max(0, Math.floor(Math.min(ay, by, cy))), y1 = Math.min(S - 1, Math.ceil(Math.max(ay, by, cy)));
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+        const w0 = ((by - cy) * (x - cx) + (cx - bx) * (y - cy)) / den, w1 = ((cy - ay) * (x - cx) + (ax - cx) * (y - cy)) / den, w2 = 1 - w0 - w1;
+        if (w0 < -0.02 || w1 < -0.02 || w2 < -0.02) continue;
+        const k = y * S + x; node[k] = id;
+        p.copy(pa).multiplyScalar(w0).addScaledVector(pb, w1).addScaledVector(pc, w2).toArray(P, k * 3);
+      }
+    }
+  }
+  for (let pass = 0; pass < 4; pass++) {
+    const n2 = node.slice();
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const k = y * S + x; if (node[k] >= 0) continue;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= S || yy >= S || node[yy * S + xx] < 0) continue; const q = yy * S + xx; n2[k] = node[q]; P.copyWithin(k * 3, q * 3, q * 3 + 3); break; }
+    }
+    node.set(n2);
+  }
+  return { node, P, names };
+}
+// an outfit regraded garment by garment: `parts` grade the texels of the nodes they match ([regex, rules], the first match
+// wins), `base` the rest; then `fx(rgb, p, node)` works on each texel where it lies on the body (wet hems, tide marks, salt)
+// A rule with `val` sets its light by the texels it claims: their mean value (brightest channel) becomes `val`, whatever
+// the source's own colours were (the healer's dark trousers and the smith's darker ones dye alike).
+async function paint(doc, mat, img, { base = [], parts = [], fx }) {
+  const S = (await sharp(img).metadata()).width, T = texels(doc, mat, S), raw = async (rules) => sharp(await grade(img, rules)).raw().toBuffer();
+  const src = await sharp(img).removeAlpha().raw().toBuffer(), mine = (re) => (k) => T.node[k] >= 0 && re.test(T.names[T.node[k]]);
+  const inBand = (x, b) => !b || (x >= b[0] && x <= b[1]);
+  const lit = (rules, on) => {
+    const done = new Uint8Array(S * S);
+    return rules.map((R) => {
+      let sum = 0, n = 0;
+      for (let k = 0; k < S * S; k++) {
+        if (done[k] || !on(k)) continue;
+        const r = src[k * 3] / 255, g = src[k * 3 + 1] / 255, b = src[k * 3 + 2] / 255, mx = Math.max(r, g, b), d = mx - Math.min(r, g, b);
+        let h = d < 1e-4 ? 0 : mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h = (h * 60 + 360) % 360;
+        if (!inBand(mx ? d / mx : 0, R.s) || !inBand(mx, R.v) || !(inBand(h, R.h) || inBand(h + 360, R.h) || inBand(h - 360, R.h))) continue;
+        done[k] = 1; sum += mx; n++;
+      }
+      return R.val === undefined ? R : { ...R, bri: n ? R.val / (sum / n) : 1 };
+    });
+  };
+  const claimed = (k) => parts.some(([re]) => mine(re)(k));
+  const out = await raw(lit(base, (k) => T.node[k] >= 0 && !claimed(k))), taken = new Uint8Array(S * S);
+  for (const [re, rules] of parts) {
+    const g = await raw(lit(rules, mine(re)));
+    for (let k = 0; k < S * S; k++) if (!taken[k] && T.node[k] >= 0 && re.test(T.names[T.node[k]])) { taken[k] = 1; out[k * 3] = g[k * 3]; out[k * 3 + 1] = g[k * 3 + 1]; out[k * 3 + 2] = g[k * 3 + 2]; }
+  }
+  if (fx) {
+    const c = [0, 0, 0], p = new THREE.Vector3();
+    for (let k = 0; k < S * S; k++) {
+      if (T.node[k] < 0) continue;
+      for (let i = 0; i < 3; i++) c[i] = out[k * 3 + i] / 255;
+      fx(c, p.fromArray(T.P, k * 3), T.names[T.node[k]]);
+      for (let i = 0; i < 3; i++) out[k * 3 + i] = Math.round(255 * Math.min(1, Math.max(0, c[i])));
+    }
+  }
+  if (process.env.FROST_DEBUG) {
+    const dbg = Buffer.from(out), pal = [[255, 0, 0], [0, 255, 0], [0, 80, 255], [255, 255, 0], [255, 0, 255], [0, 255, 255], [255, 255, 255], [255, 128, 0]];
+    for (let k = 0; k < S * S; k++) { const id = T.node[k]; for (let i = 0; i < 3; i++) dbg[k * 3 + i] = id < 0 ? 0 : dbg[k * 3 + i] * 0.5 + pal[id % 8][i] * 0.5; }
+    await sharp(dbg, { raw: { width: S, height: S, channels: 3 } }).png().toFile(`${process.env.FROST_DEBUG}/${mat.getName()}_nodes.png`);
+    const src = await sharp(img).removeAlpha().raw().toBuffer(), acc = T.names.map(() => [0, 0, 0, 0]);
+    for (let k = 0; k < S * S; k++) { const id = T.node[k]; if (id < 0) continue; const mx = Math.max(src[k * 3], src[k * 3 + 1], src[k * 3 + 2]) / 255; acc[id][0] += mx; acc[id][1]++; if (mx > 0.55) { acc[id][2] += mx; acc[id][3]++; } }
+    console.log(mat.getName(), 'nodes', T.names.map((n, i) => `${i}:${n} v${(acc[i][0] / acc[i][1]).toFixed(2)} light ${(acc[i][3] / acc[i][1]).toFixed(2)}@${(acc[i][2] / (acc[i][3] || 1)).toFixed(2)}`).join(' '));
+    if (process.env.FROST_HIST) for (let id = 0; id < T.names.length; id++) {
+      const bins = Array.from({ length: 10 }, () => [0, 0, 0]);
+      for (let k = 0; k < S * S; k++) { if (T.node[k] !== id) continue; const r = src[k * 3] / 255, g = src[k * 3 + 1] / 255, b = src[k * 3 + 2] / 255, mx = Math.max(r, g, b), d = mx - Math.min(r, g, b); let h = d < 1e-4 ? 0 : mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h = (h * 60 + 360) % 360; const B = bins[Math.min(9, Math.floor(mx * 10))]; B[0]++; B[1] += h; B[2] += mx ? d / mx : 0; }
+      const tot = bins.reduce((a, b) => a + b[0], 0);
+      console.log('  ', T.names[id], bins.map((B, i) => B[0] / tot > 0.01 ? `${i / 10}:${(100 * B[0] / tot).toFixed(0)}%h${(B[1] / B[0]).toFixed(0)}s${(B[2] / B[0]).toFixed(2)}` : '').filter(Boolean).join(' '));
+    }
+  }
+  return sharp(out, { raw: { width: S, height: S, channels: 3 } }).png().toBuffer();
+}
+// a texel darkened and drawn toward a colour (wet cloth soaks dark; algae and salt stain it)
+const mixC = (c, to, k) => { for (let i = 0; i < 3; i++) c[i] += (to[i] - c[i]) * k; };
+const lum = (c) => 0.3 * c[0] + 0.55 * c[1] + 0.15 * c[2];
+
+// a dye: every texel the rule claims takes one hue and saturation and keeps its own light (scaled so the claimed texels'
+// mean value is `val`), so the weave, the seams and the shading stay; `o` narrows it (v: a band of value, s: of
+// saturation, h: of hue)
+const dye = (to, sat, val, o = {}) => ({ s: [0, 1], to, spread: 0, sat: 0, add: sat, val, ...o });
+// a skin's colour factor for the tintable map: the hex is what the skin's mean should read
+const toned = (hex) => { const m = hexRGB(TONE.mean), mL = 0.3 * m[0] + 0.55 * m[1] + 0.15 * m[2]; return '#' + hexRGB(hex).map((c, i) => Math.round(255 * srgb(Math.min(1, c / (lin(TONE.grey) * (1 - TONE.keep + TONE.keep * m[i] / mL))))).toString(16).padStart(2, '0')).join(''); };
+// the sea in the cloth: soaked dark up to a ragged line, weed stains in blotches, pale tide-lines of salt
+const sodden = ({ wet = 0.45, line = 0.95, weed = [0.2, 0.24, 0.13], weedK = 0.55, salt = [0.5, 0.52, 0.48], saltK = 0.3, lines = [0.32, 0.6, 0.98] } = {}) => (c, p) => {
+  const n = fbm(p, 5), m = fbm(p, 21);
+  const soak = 1 - smooth((p.y - line + (n - 0.5) * 0.4) / 0.3);
+  for (let i = 0; i < 3; i++) c[i] *= 1 - wet * (0.4 + 0.6 * soak);
+  const w = smooth((fbm(p, 3.2) - 0.5) / 0.14) * weedK * (0.6 + 0.4 * soak), L = lum(c) * 1.6 + 0.04;
+  mixC(c, weed.map((v) => v * L / lum(weed) * (0.7 + 0.6 * m)), w);
+  const tide = Math.max(...lines.map((h) => 1 - smooth(Math.abs(p.y - h + (n - 0.5) * 0.16) / 0.025)));
+  mixC(c, salt.map((v) => v * (0.75 + 0.25 * m)), tide * saltK * smooth((m - 0.42) / 0.2));
+};
+// a keeper's weathering: salt dried on the boots and the trouser hems (a broken pale rim and specks), wear on the knees
+const salted = ({ top = 0.42, k = 0.45, salt = [0.78, 0.77, 0.72] } = {}) => (c, p) => {
+  const n = fbm(p, 6), m = fbm(p, 31);
+  const rim = 1 - smooth(Math.abs(p.y - top * (0.55 + 0.45 * n)) / 0.04), low = 1 - smooth((p.y - top * 0.7) / 0.12);
+  mixC(c, salt, k * Math.max(rim * smooth((m - 0.35) / 0.2), low * smooth((m - 0.62) / 0.1) * 0.7));
+};
+const SKIN = { tone: true, flat: ['mr'] }, EYES = { flat: ['normal'] };
+// the Sunken's and the Ice Singers' eyes: a cold pale iris and a clouded white, the map its own faint glow
+const DROWNED_EYES = { eyes: { ...COLD_EYES(0.6).eyes, self: true, emit: [0.22, 0.3, 0.42] }, flat: ['normal'] };
+const FROST = {
+  // the Sunken: a drowned sailor (villager0) gone long and thin, grey-green and wet, the linen and leather soaked dark,
+  // weed-stained and ringed with salt; the eyes clouded and faintly cold (the hook, the kelp veil and the barnacles are code)
+  sunken: { src: 'villager0', table: GAUNT, mats: { ...each(SKIN_M, SKIN), MI_Eyes: DROWNED_EYES,
+    MI_Peasant: { px: 256, paint: { base: [dye(100, 0.15, 0.16)], parts: [
+      [/Body/, [dye(112, 0.18, 0.28, { v: [0.4, 1] }), dye(70, 0.3, 0.1)]],
+      [/Legs/, [dye(110, 0.25, 0.07)]], [/Feet/, [dye(60, 0.3, 0.07)]], [/Arms/, [dye(70, 0.3, 0.08)]]], fx: sodden({ wet: 0.4, weedK: 0.7 }) } } },
+    color: { MI_Hair_1_villager0: '#29312b', ...each(SKIN_M, toned('#6a7768')) }, rough: { MI_Peasant: 0.85, ...each(SKIN_M, 0.5), MI_Hair_1_villager0: 0.5 } },
+  // the Ice Singers: drowned women (the healer) gone to a crone's frame, skin pale blue, the dress soaked to blue-black
+  // and sea-green, the long hair white-green and wet
+  icesinger: { src: 'healer', table: CRONE, mats: { MI_Superhero_Female: SKIN, MI_Eyes: DROWNED_EYES,
+    MI_Peasant_healer: { px: 256, paint: { base: [dye(205, 0.2, 0.14)], parts: [
+      [/Arms/, [dye(205, 0.14, 0.48, { v: [0.4, 1] }), dye(200, 0.25, 0.16)]],
+      [/Body/, [dye(182, 0.38, 0.28, { v: [0.25, 1] }), dye(210, 0.3, 0.14)]],
+      [/Legs/, [dye(212, 0.4, 0.2)]], [/Feet/, [dye(205, 0.25, 0.16)]]], fx: sodden({ wet: 0.3, line: 0.7, weed: [0.12, 0.2, 0.17], weedK: 0.4, salt: [0.7, 0.76, 0.8], lines: [0.25, 0.5] }) } } },
+    color: { MI_Hair_2_healer: '#a8bab2', MI_Superhero_Female: toned('#8296a6') }, rough: { MI_Peasant_healer: 0.85, MI_Superhero_Female: 0.45, MI_Hair_2_healer: 0.45 } },
+  // Alkyone, keeper of the sea-lights, forty-five: Elianthe's body made sturdier with a longer, leaner, wind-burnt face;
+  // a waxed ochre oilskin bodice over a navy gansey, olive oilskin trousers, sealskin boots and gloves, salt on the hems;
+  // the salt-white hair under darker brows (the braid, the short hood and the lantern are code)
+  alkyone: { src: 'healer', table: WEATHER, mats: { MI_Superhero_Female: SKIN, MI_Eyes: EYES,
+    MI_Peasant_healer: { paint: { base: [dye(30, 0.3, 0.2)], parts: [
+      [/Arms/, [dye(218, 0.4, 0.26, { v: [0.4, 1] }), dye(24, 0.45, 0.14)]],
+      [/Body/, [dye(36, 0.6, 0.34, { v: [0.25, 1] }), dye(22, 0.5, 0.14)]],
+      [/Legs/, [dye(62, 0.45, 0.22)]], [/Feet/, [dye(25, 0.3, 0.13)]]], fx: salted() } } },
+    color: { MI_Hair_2_healer: '#d4d0c4', MI_Superhero_Female: toned('#a06c55') }, brows: '#6e655c', rough: { MI_Peasant_healer: 0.8 } },
+  // Selna, the eldest keeper, seventy-five: the smith's body with the old woman's table (the stoop is the game's), white
+  // hair in its buns, oatmeal wool sleeves and grey mitts, a slate-black oilskin bodice, charcoal trousers, grey sealskin
+  selna: { src: 'smith', table: ELDER, mats: { MI_Superhero_Female: SKIN, MI_Eyes: EYES,
+    MI_Peasant_smith: { paint: { base: [dye(30, 0.15, 0.18)], parts: [
+      [/Arms/, [dye(40, 0.12, 0.6, { v: [0.4, 1] }), dye(30, 0.08, 0.2)]],
+      [/Body/, [dye(25, 0.3, 0.1, { v: [0, 0.16] }), dye(214, 0.22, 0.2)]],
+      [/Legs/, [dye(215, 0.05, 0.17)]], [/Feet/, [dye(32, 0.1, 0.2)]]], fx: salted({ k: 0.35 }) } } },
+    color: { MI_Hair_2_smith: '#e2e0da', MI_Superhero_Female: toned('#b48b78') }, brows: '#a8a39b', rough: { MI_Peasant_smith: 0.8 } },
+  // Tern, ten: villager0 with the boy's table, sandy hair, a blue-grey knitted gansey, ochre oilskin trousers, sealskin
+  // boots (the wool cap and the small lantern are code; the same scene is the boy Einar and the Whitecliff child)
+  tern: { src: 'villager0', table: CHILD, shrink: 0.74, mats: { ...each(SKIN_M, SKIN), MI_Eyes: EYES,
+    MI_Peasant: { paint: { base: [dye(26, 0.45, 0.16)], parts: [
+      [/Body/, [dye(214, 0.28, 0.4, { v: [0.4, 1] }), dye(26, 0.45, 0.16)]],
+      [/Legs/, [dye(40, 0.55, 0.32)]], [/Feet/, [dye(26, 0.3, 0.16)]]], fx: salted({ top: 0.3, k: 0.35 }) } } },
+    color: { MI_Hair_1_villager0: '#8c6c48', ...each(SKIN_M, toned('#b4836a')) } },
+  // Tamarisk, a nursery child of the Evergreen grown up among the Saltborn: the ranger's body with Elati's table, hood and
+  // pauldrons off, villager2's short cut gone salt-white, the cloth a deep sea-grey, the leathers the Saltborn's
+  // ochre-brown (the fur collar is code)
+  tamarisk: { src: 'ranger', table: ELF, drop: ['Female_Ranger_Head_Hood', 'Female_Ranger_Acc_Pauldrons'], hair: ['villager2', 'Hair_BuzzedFemale', 'MI_Hair_1_villager2'],
+    mats: { ...each(SKIN_F, SKIN), MI_Eyes: EYES,
+      MI_Ranger: { paint: { base: [dye(205, 0.18, 0.3, { h: [45, 180] }), dye(32, 0.5, 0.3)], parts: [
+        [/Legs/, [dye(210, 0.12, 0.16)]], [/Feet/, [dye(28, 0.4, 0.2)]]], fx: salted({ top: 0.5, k: 0.3 }) } } },
+    color: { MI_Hair_1_villager2: '#d8d4c8', MI_Hair_2_ranger: '#9a9388', ...each(SKIN_F, toned('#b89684')) } },
+  // Old Glaukos, the Landing's blind elder: the Wayfarer bare-headed with the old man's table (old Arna's look, so he is
+  // old Arna in the last memory), white hair and beard, an oatmeal wool shirt under a sealskin jerkin, dark wool trousers,
+  // no shoulder plate (the eye band is code)
+  glaukos: { src: 'wayfarer', table: ELDER, drop: ['Male_Ranger_Head_Hood', 'Male_Ranger_Acc_Pauldron'], hair: BARE.hair,
+    mats: { ...each(SKIN_M, SKIN), MI_Eyes: EYES,
+      MI_Ranger_wayfarer: { paint: { base: [dye(26, 0.35, 0.18)], parts: [
+        [/Arms$/, [dye(38, 0.12, 0.45, { s: [0, 0.45] }), dye(26, 0.35, 0.16)]], [/Body$/, [dye(28, 0.25, 0.16)]],
+        [/Legs/, [dye(30, 0.06, 0.12)]], [/Feet/, [dye(25, 0.3, 0.12)]]], fx: salted({ top: 0.5, k: 0.3 }) } } },
+    color: { MI_Hair_1_wayfarer: '#d2d0ca', ...each(SKIN_M, toned('#a2725c')) } }
+};
+const FROST_CREDIT = { credit: 'Quaternius characters (people.glb)', license: 'CC0' };
+for (const R of Object.values(FROST)) R.extras = { ...FROST_CREDIT, ...R.extras };
+const SETS = { folk: RECIPES, grove: GROVE, ash: ASHSET, frost: FROST };
+if (!SETS[SET]) throw new Error(`unknown set ${SET} (folk, grove, ash, frost)`);
 
 let out = null;
 for (const [name, R] of Object.entries(SETS[SET])) {
@@ -749,8 +962,11 @@ for (const [name, R] of Object.entries(SETS[SET])) {
     const mn = mat.getName(), op = R.mats?.[mn], tex = mat.getBaseColorTexture();
     if (op && tex) {
       let img = Buffer.from(tex.getImage()), emit = null;
+      const orig = img;
       if (op.hsv) img = await recolor(img, op.hsv);
       if (op.grade) img = await grade(img, op.grade);
+      if (op.tone) img = await toneless(img);
+      if (op.paint) img = await paint(doc, mat, img, op.paint);
       if (op.ash) img = await ashen(img, op.ash, op.tint);
       if (op.dust) img = await dust(img, op.dust, op.tint);
       if (op.flecks) img = await flecks(img, op.flecks);
@@ -758,14 +974,27 @@ for (const [name, R] of Object.entries(SETS[SET])) {
       if (op.eyes) ({ img, emit } = await amberEyes(img, op.eyes));
       if (op.brand) ({ img, emit } = await burn(doc, mat, img, emit, brandMark(doc), 512, /^(spine_0[123]|clavicle_l)$/));
       if (op.rough && mat.getMetallicRoughnessTexture()) mat.setMetallicRoughnessTexture(doc.createTexture(`${name}_${mn}_mr`).setImage(new Uint8Array(await roughen(Buffer.from(mat.getMetallicRoughnessTexture().getImage()), op.rough))).setMimeType('image/png'));
-      mat.setBaseColorTexture(doc.createTexture(`${name}_${mn}`).setImage(new Uint8Array(img)).setMimeType('image/png'));
+      if (op.px) img = await sharp(img).resize(op.px, op.px).png().toBuffer();
+      // (a map no op touched keeps its texture: `flat` alone changes none)
+      if (img !== orig) mat.setBaseColorTexture(doc.createTexture(`${name}_${mn}`).setImage(new Uint8Array(img)).setMimeType('image/png'));
+      // eyes that light themselves: the colour map is its own glow (one map where amberEyes() makes two)
+      if (op.eyes?.self) { emit = null; mat.setEmissiveTexture(mat.getBaseColorTexture()).setEmissiveFactor(op.eyes.emit); }
       if (emit) mat.setEmissiveTexture(doc.createTexture(`${name}_${mn}_glow`).setImage(new Uint8Array(emit)).setMimeType('image/png')).setEmissiveFactor(op.eyes ? op.eyes.emit || [0.9, 0.38, 0.05] : [1, 1, 1]);
     }
+    // `flat`: a map given way to a factor (a roughness map to its mean roughness, a normal map to none)
+    for (const slot of op?.flat || []) {
+      const mr = mat.getMetallicRoughnessTexture();
+      if (slot === 'mr' && mr) { const { data } = await sharp(Buffer.from(mr.getImage())).removeAlpha().raw().toBuffer({ resolveWithObject: true }); let s = 0, n = 0; for (let i = 1; i < data.length; i += 3) if (data[i] < 250) { s += data[i]; n++; } mat.setMetallicRoughnessTexture(null).setRoughnessFactor(mat.getRoughnessFactor() * (n ? s / n / 255 : 1)); }
+      if (slot === 'normal') mat.setNormalTexture(null);
+    }
     if (R.color?.[mn]) mat.setBaseColorFactor([...hexRGB(R.color[mn]), 1]);
+    if (R.rough?.[mn]) mat.setRoughnessFactor(R.rough[mn]);
     mat.setName(`${mn}_${name}`);
   }
-  // the ash set records how tall each one stands (the game sizes bosses and stand-ins against it)
-  if (SET === 'ash') { const [lo, hi] = span(doc); R.extras = { ...R.extras, height: +(hi - lo).toFixed(2) }; console.log(name.padEnd(11), 'stands', (hi - lo).toFixed(2), 'm, lowest point', lo.toFixed(3)); }
+  // eyebrows apart from the hair they share a map with (a salt-white braid under darker brows)
+  if (R.brows) for (const n of root.listNodes()) if (n.getName() === 'Eyebrows') for (const p of n.getMesh().listPrimitives()) p.getMaterial().setBaseColorFactor([...hexRGB(R.brows), 1]);
+  // the ash and frost sets record how tall each one stands (the game sizes bosses and stand-ins against it)
+  if (SET === 'ash' || SET === 'frost') { const [lo, hi] = span(doc); R.extras = { ...R.extras, height: +(hi - lo).toFixed(2) }; console.log(name.padEnd(11), 'stands', (hi - lo).toFixed(2), 'm, lowest point', lo.toFixed(3)); }
   root.getDefaultScene().setName(name).setExtras({ folk: true, ...R.extras });
   if (!out) { out = doc; continue; }
   mergeDocuments(out, doc);
@@ -778,7 +1007,7 @@ await out.transform(
   dedup(), weld(),
   textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [512, 512], quality: SET === 'folk' ? 80 : 75 }),
   quantize(SET === 'folk' ? { quantizePosition: 14, quantizeNormal: 10, quantizeTexcoord: 12, quantizeWeight: 8 } : { quantizePosition: 12, quantizeNormal: 8, quantizeTexcoord: 12, quantizeWeight: 8 }),
-  ...(SET === 'ash' ? [dedup()] : []),
+  ...(SET === 'ash' || SET === 'frost' ? [dedup()] : []),
   prune({ keepAttributes: false, keepLeaves: false }),
   meshopt({ encoder: MeshoptEncoder, level: SET === 'folk' ? 'medium' : 'high' }),
   prune({ keepAttributes: false, keepLeaves: false }),
