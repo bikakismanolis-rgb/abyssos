@@ -52,6 +52,8 @@ const SOURCES = [
   { name: 'lurker', sf: '28b3e1a216904de7ad212368fb9d8f59', title: 'Lurker - Rigged and Animated', author: 'HighPolyDensity', lic: BY, use: 'the Skotos', fallback: 'skotos' },
   { name: 'woodlouse', sf: 'fae04aa296f844c18675f6ae50aefe77', title: 'Woodlouse', author: '.hapto GmbH', lic: BY, use: 'the Hull-louse', fallback: 'louse' },
   { name: 'seal', sf: 'fb79ae1e6021481f819f34ebc2dcaecd', title: 'Seal/Baikal/Непра', author: 'fedalina', lic: BY, use: 'the Icemaw', fallback: 'icemaw' },
+  // the Skotos look gate's scout (the Ocean Creature reads as a squid): a faceless hooded cloak, a student piece (Maya, AIE Sydney, 2015)
+  { name: 'cloak', sf: 'f4e2c262ed4e456484f232d6afa99629', title: 'Cloaked Figure', author: 'MysteryPancake (mysterypancake)', lic: BY, use: 'the Skotos (hood and robe; the arms falling over it are code-built)', fallback: 'skotos' },
   // ----- props (pack rime) -----
   { name: 'wreck', sf: '027900c8fdf840f589cadb9f4a60d78c', title: 'The Dalarö wreck / Bodekull part 2', author: 'Swedish National Maritime and Transport History Museums (maritima)', lic: BY, use: 'hero wreck' },
   { name: 'keelboat', sf: '01098ad7973647a9b558f41d2ebc5193', title: 'Gislinge Viking Boat (no sail)', author: 'Opus Poly', lic: BY, use: 'keel-boats' },

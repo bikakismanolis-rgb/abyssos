@@ -1,4 +1,6 @@
-// Per-zone lighting and fog.
+// Per-zone lighting and fog. Act V keys (missing keys read 0): aur, aurDark (the aurora's brightness, and how black it has
+// gone: gfx.js hands them to sea.js), drift (0-1: the hemisphere light wanders toward the aurora's green).
+import * as THREE from 'three';
 export const ATMOS = {
   town: { fog: 0x0e1424, density: 0.018, sky: 0x7a8cbe, ground: 0x2e2418, hemi: 1.15, moon: 0xb8c8ff, moonI: 1.5, exposure: 1.15, heroI: 18, heroRange: 13, zoom: 1.05 },
   forest: { fog: 0x0a1612, density: 0.028, sky: 0x5a7a7e, ground: 0x1a180e, hemi: 0.95, moon: 0xb0c8e8, moonI: 1.1, exposure: 1.25, heroI: 34, heroRange: 16, zoom: 1 },
@@ -20,8 +22,33 @@ export const ATMOS = {
   // inside the Black Anvil: a banked forge, warming with each breath of the Great Bellows (heatAtmos); cold after the Unmaking
   forge: { fog: 0x0e0705, density: 0.032, sky: 0x4a2014, ground: 0x160b07, hemi: 0.42, moon: 0xff7a40, moonI: 0.12, exposure: 1.32, heroI: 26, heroRange: 11, zoom: 1, heroColor: 0xffb070 },
   forgeHot: { fog: 0x2a1206, density: 0.029, sky: 0x7a3016, ground: 0x24100a, hemi: 0.55, moon: 0xff8a40, moonI: 0.28, exposure: 1.34, heroI: 26, heroRange: 11, zoom: 1, heroColor: 0xffb070 },
-  forgeCold: { fog: 0x1a1a1c, density: 0.03, sky: 0x40404a, ground: 0x121214, hemi: 0.45, moon: 0x9aa0b0, moonI: 0.15, exposure: 1.28, heroI: 26, heroRange: 11, zoom: 1, heroColor: 0xffc890 }
+  forgeCold: { fog: 0x1a1a1c, density: 0.03, sky: 0x40404a, ground: 0x121214, hemi: 0.45, moon: 0x9aa0b0, moonI: 0.15, exposure: 1.28, heroI: 26, heroRange: 11, zoom: 1, heroColor: 0xffc890 },
+  // Act V: the Frozen Coast under the green aurora (its light drifting over the snow); the arrival with the horizon open;
+  // the black aurora after the Freeze; the true aurora once the sea is lit
+  coast: { fog: 0x0b1416, density: 0.02, sky: 0x4a6a78, ground: 0x1a2024, hemi: 0.85, moon: 0xb8d8c8, moonI: 1.0, exposure: 1.2, heroI: 22, heroRange: 11, zoom: 1.05, heroColor: 0xffe8c8, aur: 0.8, aurDark: 0, drift: 0.55 },
+  coastFrozen: { fog: 0x0a0f18, density: 0.022, sky: 0x3a4866, ground: 0x1a1f28, hemi: 0.75, moon: 0x9ab0e0, moonI: 0.9, exposure: 1.2, heroI: 22, heroRange: 11, zoom: 1.05, heroColor: 0xffe8c8, aur: 0.35, aurDark: 1, drift: 0 },
+  // the Farthest Light under the black aurora; the Skotos fight (closer), its Night; the true aurora after the naming
+  farlight: { fog: 0x070a10, density: 0.026, sky: 0x2a3448, ground: 0x101418, hemi: 0.6, moon: 0x8a9ac8, moonI: 0.7, exposure: 1.3, heroI: 24, heroRange: 10, zoom: 1, heroColor: 0xffe8c8, aur: 0.3, aurDark: 1, drift: 0 },
+  farlightNight: { fog: 0x020304, density: 0.05, sky: 0x1a2030, ground: 0x08090c, hemi: 0.2, moon: 0x6a7aa8, moonI: 0.1, exposure: 1.3, heroI: 24, heroRange: 10, zoom: 1.25, heroColor: 0xffe8c8, aur: 0, aurDark: 1, drift: 0 },
+  farlightAurora: { fog: 0x0a1612, density: 0.018, sky: 0x5a8a78, ground: 0x121a18, hemi: 0.95, moon: 0xb8d8c8, moonI: 1.0, exposure: 1.25, heroI: 22, heroRange: 11, zoom: 1, heroColor: 0xffe8c8, aur: 1, aurDark: 0, drift: 0.6 }
 };
+ATMOS.coastCine = { ...ATMOS.coast, density: 0.008 };
+ATMOS.coastAurora = { ...ATMOS.coast, aur: 1, drift: 0.7 };
+ATMOS.farlightFight = { ...ATMOS.farlight, zoom: 1.25 };
+// Whitecliff once the sea is lit: the true aurora over the beacon hill (G_AUR at half), the hemisphere drifting green
+ATMOS.townAurora = { ...ATMOS.town, aur: 0.5, drift: 0.45 };
+// an atmosphere between a and b (k 0-1): colours in linear light, numbers straight (world.js eases with it)
+const _ca = new THREE.Color(), _cb = new THREE.Color();
+export function mixAtmos(a, b, k) {
+  const o = {};
+  for (const key in b) {
+    const x = a[key] ?? b[key], y = b[key];
+    if (typeof y !== 'number') o[key] = y;
+    else if (key === 'fog' || key === 'sky' || key === 'ground' || key === 'moon' || key === 'heroColor') o[key] = _ca.set(x).lerp(_cb.set(y), k).getHex();
+    else o[key] = x + (y - x) * k;
+  }
+  return o;
+}
 // the Forge at heat k (0 banked .. 3 full breath; fractions blend; below 0 the cold forge)
 const mixHex = (a, b, t) => { let o = 0; for (const sh of [16, 8, 0]) o |= Math.round(((a >> sh) & 255) + ((((b >> sh) & 255) - ((a >> sh) & 255)) * t)) << sh; return o; };
 export function heatAtmos(k) {

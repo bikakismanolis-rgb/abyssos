@@ -122,7 +122,7 @@ on('zoneEnter', (id, z) => {
   if (id === 'forest' && G.hero.quest < 1) setQuest(1, true);
   if (id === 'crypt' && G.hero.quest < 3 && G.hero.flags.weaver) setQuest(3);
   if (id === 'pass' && G.hero.quest >= 5 && G.hero.quest < 6) setQuest(6, true);
-  if (id !== 'town' && id !== 'gate' && !G.hero.wps.includes(id)) { G.hero.wps.push(id); emit('toast', t('hud.discovered')); }
+  if (id !== 'town' && id !== 'gate' && !G.hero.wps.includes(id) && (id !== 'coast' || F.hearth)) { G.hero.wps.push(id); emit('toast', t('hud.discovered')); }
   // Act III: the Lady speaks from the still trees as soon as the fire comes in; after the Autumn, only the wind
   if (id === 'weep' && q >= 10 && q < 11) setQuest(11);
   // a step whose flags were saved but whose quest change was still on a timer when the game closed: catch up quietly

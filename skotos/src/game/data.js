@@ -5,8 +5,23 @@ export const DIFFS = [
   { id: 'wanderer', hp: 0.65, dmg: 0.55, xp: 0.9, gold: 0.9, loot: 0.9, elite: 0.7, leg: 1, color: '#9ec7a0' },
   { id: 'warden', hp: 1, dmg: 1, xp: 1, gold: 1, loot: 1, elite: 1, leg: 1, color: '#d9c58a' },
   { id: 'hero', hp: 1.9, dmg: 1.55, xp: 1.6, gold: 1.6, loot: 1.5, elite: 1.25, leg: 1.4, color: '#e09a50' },
-  { id: 'nightmare', hp: 3.6, dmg: 2.4, xp: 2.6, gold: 2.4, loot: 2.2, elite: 1.5, leg: 2.2, color: '#d0503a', unlock: 'act1:hero' },
-  { id: 'ash', hp: 7, dmg: 3.8, xp: 4.2, gold: 3.6, loot: 3.2, elite: 1.8, leg: 3.2, color: '#b04aff', unlock: 'act1:nightmare' }
+  { id: 'nightmare', hp: 3.6, dmg: 2.4, xp: 2.6, gold: 2.4, loot: 2.2, elite: 1.5, leg: 2.2, color: '#d0503a', unlock: 'any:hero' },
+  { id: 'ash', hp: 7, dmg: 3.8, xp: 4.2, gold: 3.6, loot: 3.2, elite: 1.8, leg: 3.2, color: '#b04aff', unlock: 'any:nightmare' },
+  { id: 'skotos', hp: 11, dmg: 5.4, xp: 6.5, gold: 5.4, loot: 4.6, elite: 2.1, leg: 4.6, color: '#4a5aa0', unlock: 'act5:ash' }
+];
+// (unlock 'any:<diff>': any act finished on that difficulty; 'actN:<diff>': that act)
+// Act V's hazards by difficulty (indexed like DIFFS): the tide's cycle (s), its phases (low, flood, high, ebb) and the
+// steps' spacing, the bell's lead (s); the wash-out and the plunge (% of max life); the ice's load per crack stage; the
+// Cold's gains; Revealed and Exposed; a Breathing-hole's freeze ring (s) and its Black Breath's period (s); the bosses'
+// cooldowns and their extra adds per call. Telegraphs never change.
+const H5 = (o) => Object.assign({ tide: 152, phases: [40, 36, 40, 36], stepT: 4.5, bell: 6, reveal: 1.25 }, o);
+export const HAZ5 = [
+  H5({ tide: 180, phases: [50, 40, 50, 40], stepT: 5, bell: 8, wash: 0, plunge: 6, load: 1.6, cold: 0.6, reveal: 1.35, ring: 6, breath: 7, bossCd: 1, adds: 0 }),
+  H5({ wash: 6, plunge: 10, load: 1.2, cold: 1, ring: 8, breath: 6, bossCd: 1, adds: 0 }),
+  H5({ wash: 6, plunge: 10, load: 1.2, cold: 1, ring: 8, breath: 6, bossCd: 1, adds: 0 }),
+  H5({ wash: 8, plunge: 12, load: 1.1, cold: 1.15, ring: 9, breath: 5.5, bossCd: 0.9, adds: 1 }),
+  H5({ wash: 10, plunge: 14, load: 1.0, cold: 1.3, ring: 10, breath: 5, bossCd: 0.85, adds: 1 }),
+  H5({ wash: 12, plunge: 16, load: 0.9, cold: 1.45, ring: 10, breath: 5, bossCd: 0.8, adds: 2 })
 ];
 
 // ---------- classes ----------

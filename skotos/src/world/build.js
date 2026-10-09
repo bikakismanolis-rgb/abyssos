@@ -12,10 +12,14 @@ import { G } from '../gfx/rig.js';
 import { RNG, fbm, clamp, smooth, angleDiff } from '../core/util.js';
 import { KIT, KITMAT, KIT_SCALE } from '../gfx/kits.js';
 import { ENV } from '../gfx/env.js';
+import { BED_DRY } from './genlib.js';
+import { SEA, SEA_U, SEA_LIT, SEA_GLSL, buildSea, buildIce, seaBeyond, cornerBeds, noiseTex } from './sea.js';
+import { act5Level } from './build5.js';
 
 // uWind: amplitude of all tree and grass sway (Act III's Still Wood sets 0 until the First Autumn). uEdge (z0, z1): south of
 // z1 the wind blows whatever uWind says, fading out by z0 (the Edge of Tears); (0, 0) is off. uAutumn: see setAutumn().
 export const WIND = { uTime: { value: 0 }, uHero: { value: new THREE.Vector3(0, 0, -999) }, uSnow: { value: 0 }, uWind: { value: 1 }, uEdge: { value: new THREE.Vector2(0, 0) }, uAutumn: { value: 0 } };
+SEA.uTime = WIND.uTime; // (Act V's sea runs on the same clock)
 const WIND_GLSL = `uniform float uWind; uniform vec2 uEdge;
 float windK(float z) { return uEdge.y > uEdge.x ? mix(uWind, 1.0, smoothstep(uEdge.x, uEdge.y, z)) : uWind; }`;
 
@@ -1053,7 +1057,7 @@ function addProp(B, I, p, L, rng, out) {
 const GROUND = {
 // dual: read the layer twice (two scales/angles) to hide its repeat - only for organic scans; paving would ghost
   forest: { A: 'leaves', B: 'mud', P: 'trail', s: [3.4, 2.1, 2.6], r: [0.95, 0.82, 0.9], ns: 1.0, tint: 0x9a9a8e, dual: [1, 1] },
-  town: { A: 'leaves', B: 'mud', P: 'cobble', s: [3.4, 2.1, 1.9], r: [0.95, 0.82, 0.68], ns: 1.0, tint: 0xaaa8a0, dual: [1, 0] },
+  town: { A: 'leaves', B: 'mud', P: 'cobble', s: [3.4, 2.1, 1.9], r: [0.95, 0.82, 0.68], ns: 1.0, tint: 0xaaa8a0, dual: [1, 0], aur: true },
   crypt: { A: 'flags', B: 'mud', P: 'mcobble', s: [2.4, 2.1, 2.4], r: [0.72, 0.85, 0.8], ns: 1.1, tint: 0xe6e2da, dual: [0, 0] },
   pass: { A: 'snow', B: 'scree', P: 'dslab', s: [3.2, 3.6, 3.2], r: [0.55, 0.9, 0.8], ns: 1.0, tint: 0xe2e6ee, dual: [1, 0] },
   halls: { A: 'dslab', B: 'cave', P: 'herring', s: [3.6, 2.6, 2.2], r: [0.68, 0.9, 0.72], ns: 1.1, tint: 0xd6cec4, dual: [0, 0] },
@@ -1076,6 +1080,16 @@ function ground4(type) {
   return { A, B: lay4('cinder/ironPlate', 'cinder/rust', 'cave', 'mud'), P: lay4('cinder/forgeHerring', 'herring', 'mcobble'), W: lay4('cinder/cliffRock', 'cavewall', 'dwall', 'wall'),
     s: [2.6, 2.2, 2.2], r: [0.75, 0.55, 0.7], ns: 1.1, tint: own ? 0xc4bab0 : 0x9e968e, dual: [0, 0], ws: 2.6, sat: own ? 0.85 : 0.55 };
 }
+// Act V: the rime pack's layers, each a chain down to a layer that is always there (the deep's snow and stone, the base
+// set's). A fallback A that is no snow is whitened over (fake) and the farlight's blue ice tinted (hueB). G_GLINT on the
+// snow, G_WET on the coast's shore (wet sand behind the ebb, from aBed and uWetLevel), G_AUR on both (and the town's)
+function ground5(type) {
+  const A = lay4('rime/snow', 'snow', 'flags'), own = A === 'rime/snow', snowy = own || A === 'snow';
+  const B = type === 'coast' ? lay4('rime/shore', 'gravel', 'mud') : lay4('rime/ice', 'snow', 'flags');
+  return { A, B, P: lay4('rime/snowTrod', 'snow', 'trail'), W: lay4('rime/seaCliff', 'cliff', 'wall') || undefined,
+    s: [3.2, 2.4, 2.6], r: [0.6, 0.8, 0.85], ns: 1.0, tint: own ? 0xeef0f4 : 0xd8dce4, dual: [1, 0], ws: 3.2, sat: own ? 0.9 : 0.75,
+    hueB: type === 'farlight' && B !== 'rime/ice' ? [0.62, 0.82, 1.08] : null, fake: !snowy, glint: true, wet: type === 'coast', aur: true };
+}
 function buildGround(L, group) {
   const { w, h, cells, paint } = L;
   const geo = new THREE.PlaneGeometry(w, h, w, h);
@@ -1086,6 +1100,7 @@ function buildGround(L, group) {
   const D = L.dist, crypt = L.type === 'crypt', halls = L.type === 'halls', pass = L.type === 'pass';
   const heart = L.type === 'heart', act3 = heart || L.type === 'weep', LG = L.spots?.lanternglade;
   const act4 = !!L.hgt, forge = L.type === 'forge'; // Act IV: the layout carries its own heights (gen4.js terrain)
+  const act5 = ACT5.has(L.type), vbed = act5 && L.bed ? cornerBeds(L) : null, far = L.type === 'farlight';
   const sapW = act3 ? new Float32Array(n) : null;
   const cellAt = (x, z) => (x < 0 || z < 0 || x >= w || z >= h ? -1 : z * w + x);
   const roomAt = crypt ? new Uint8Array(w * h) : null;
@@ -1107,7 +1122,22 @@ function buildGround(L, group) {
     const nz = fbm(vx * 0.15, vz * 0.15, L.seed || 1);
     const big = fbm(vx * 0.045 + 31, vz * 0.045 - 17, (L.seed || 1) + 5), mac = fbm(vx * 0.09 - 7, vz * 0.09 + 11, (L.seed || 1) + 9);
     let k, wb, wp;
-    if (act4) {
+    if (act5) {
+      // the coast: snow on the land, the shore's stone and sand wherever the tide reaches (and a little above it), the sea
+      // cliffs on the steep faces; the sea's bed dark under the water. The Farthest Light: snow on the thick ice, blue
+      // ice showing through it in patches along the road; the bed under the thin ice and the leads, black
+      const y = L.hgt[vz * (w + 1) + vx];
+      pos.setY(i, y);
+      let walls = 0, tide = 0, thick = 0, tw = 0;
+      for (let dz = -2; dz <= 1; dz++) for (let dx = -2; dx <= 1; dx++) { const c = cellAt(vx + dx, vz + dz); if (c < 0 || (!cells[c] && !L.low[c])) walls++; if (c >= 0 && L.bed && L.bed[c] < BED_DRY && !L.thick?.[c]) tw++; }
+      for (const [dx, dz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) { const c = cellAt(vx + dx, vz + dz); if (c < 0) continue; if (L.bed && L.bed[c] < BED_DRY && !L.thick?.[c]) tide++; if (L.thick?.[c]) thick++; }
+      wp = clamp(pv * 1.25, 0, 1);
+      // (the shore's stone runs a little up the dry land, ragged, so the tide line is no polygon)
+      if (far) wb = thick ? clamp((nz - 0.5) * 2.2 + (big - 0.5) * 1.6 + 0.25, 0, 0.9) : 0;
+      else wb = thick && !tide ? 0 : clamp(tw / 16 * 1.7 - 0.15 + (nz - 0.5) * 0.9 + (big - 0.5) * 0.6, 0, 1);
+      k = fl > 0 || tide || thick ? 0.92 + nz * 0.16 : Math.max(0.5, 0.96 - Math.min(Math.max(y, 0), 14) * 0.025) + (nz - 0.5) * 0.12;
+      if (y < -0.3) k *= 0.45;
+    } else if (act4) {
       // the Field: ash on the floor, black scree up the slopes, the rock face where they steepen; the Forge: volcanic tiles,
       // iron plate in the galleries and bellows chambers, Karthax's herringbone on the Anvil, walls of black rock
       const y = L.hgt[vz * (w + 1) + vx];
@@ -1179,10 +1209,14 @@ function buildGround(L, group) {
   }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   geo.computeVertexNormals();
-  const cfg = GROUND[L.type] || (act4 ? ground4(L.type) : GROUND.forest);
+  // Act V: the floor is level wherever it is walked (the pits of the sea bed and of the ground under the thin ice beside it
+  // would tilt its corners' normals, and the ice road would take the cliff layer)
+  if (act5) { const nr = geo.attributes.normal; for (let i = 0; i < n; i++) if (Math.abs(pos.getY(i)) < 0.01) nr.setXYZ(i, 0, 1, 0); }
+  const cfg = GROUND[L.type] || (act5 ? ground5(L.type) : act4 ? ground4(L.type) : GROUND.forest);
   if (ENV.ready && ENV.layers[cfg.A]) {
     geo.setAttribute('aLay', new THREE.BufferAttribute(lay, 4));
     if (sapW) geo.setAttribute('aSap', new THREE.BufferAttribute(sapW, 1));
+    if (cfg.wet) geo.setAttribute('aBed', new THREE.BufferAttribute(vbed ? Float32Array.from(vbed) : new Float32Array(n).fill(BED_DRY), 1));
     const mesh = new THREE.Mesh(geo, groundMat(cfg, L.type));
     mesh.receiveShadow = true;
     group.add(mesh);
@@ -1232,19 +1266,27 @@ function groundMat(cfg, type) {
   if (cfg.hueA) uni.uHueA = { value: new THREE.Vector3(...cfg.hueA) };
   if (X.dry) { const Dr = ENV.layers.dryleaf; Object.assign(uni, { tD: { value: (Dr || A).d }, uDryTint: { value: new THREE.Color(Dr ? 0xffffff : 0xc89a70).multiplyScalar(cfg.dryK ?? 1) }, uAut: WIND.uAutumn }); }
   if (X.wall) { const W = lay(cfg.W); Object.assign(uni, { tW: { value: W.d }, tWn: { value: W.n }, uWS: { value: 1 / (cfg.ws || 2.4) } }); }
+  // Act V (sea.js): the snow's glints (not on low quality), the wet sand behind the ebb, the aurora's light on the ground
+  const X5 = { glint: !!cfg.glint && R.quality >= 1, wet: !!cfg.wet, aur: !!cfg.aur, fake: !!cfg.fake, hueB: !!cfg.hueB };
+  X5.any = X5.glint || X5.wet || X5.aur;
+  if (X5.any) { noiseTex(); Object.assign(uni, SEA_U({ uWetLevel: SEA.uWetLevel }), SEA_LIT); }
+  if (X5.hueB) uni.uHueB = { value: new THREE.Vector3(...cfg.hueB) };
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, uni);
     // the anti-repeat second reading is a desktop luxury (quality 2); phones get one reading per layer
     const dual = R.quality >= 2;
     sh.defines = Object.assign(sh.defines || {}, nrm ? { G_NRM: '' } : {}, dual && cfg.dual[0] ? { G_DA: '' } : {}, dual && cfg.dual[1] ? { G_DP: '' } : {},
-      X.sap ? { G_SAP: '' } : {}, X.dry ? { G_DRY: '' } : {}, X.wall ? { G_WALL: '' } : {}, X.wall && nrm && uni.tWn.value ? { G_WNRM: '' } : {});
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec4 aLay;\nvarying vec4 vLay;\nvarying vec2 vGP;\nvarying vec3 vGN;' + (X.sap ? '\nattribute float aSap;\nvarying float vSap;' : '') + (X.wall ? '\nvarying float vGY;' : ''))
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLay = aLay; vGP = (modelMatrix * vec4(transformed, 1.0)).xz; vGN = normal;' + (X.sap ? ' vSap = aSap;' : '') + (X.wall ? ' vGY = (modelMatrix * vec4(transformed, 1.0)).y;' : ''));
+      X.sap ? { G_SAP: '' } : {}, X.dry ? { G_DRY: '' } : {}, X.wall ? { G_WALL: '' } : {}, X.wall && nrm && uni.tWn.value ? { G_WNRM: '' } : {},
+      X5.glint ? { G_GLINT: '' } : {}, X5.wet ? { G_WET: '' } : {}, X5.aur ? { G_AUR: '' } : {});
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec4 aLay;\nvarying vec4 vLay;\nvarying vec2 vGP;\nvarying vec3 vGN;' + (X.sap ? '\nattribute float aSap;\nvarying float vSap;' : '') + (X.wall ? '\nvarying float vGY;' : '') + (X5.wet ? '\nattribute float aBed;\nvarying float vBed;' : '') + (X5.any ? '\nvarying vec3 vGW;' : ''))
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLay = aLay; vGP = (modelMatrix * vec4(transformed, 1.0)).xz; vGN = normal;' + (X.sap ? ' vSap = aSap;' : '') + (X.wall ? ' vGY = (modelMatrix * vec4(transformed, 1.0)).y;' : '') + (X5.wet ? ' vBed = aBed;' : '') + (X5.any ? ' vGW = (modelMatrix * vec4(transformed, 1.0)).xyz;' : ''));
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
 uniform sampler2D tA; uniform sampler2D tB; uniform sampler2D tP; uniform sampler2D tAn; uniform sampler2D tBn; uniform sampler2D tPn;
 uniform vec3 uS; uniform vec3 uR; uniform float uNS;
 varying vec4 vLay; varying vec2 vGP; varying vec3 vGN;
-float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\nvarying float vSap;' : '') + (X.sat ? '\nuniform float uSat;' : '') + (cfg.hueA ? '\nuniform vec3 uHueA;' : '') + (X.dry ? '\nuniform sampler2D tD; uniform vec3 uDryTint; uniform float uAut;' : '') + (X.wall ? '\nuniform sampler2D tW; uniform sampler2D tWn; uniform float uWS; varying float vGY;' : ''))
+float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\nvarying float vSap;' : '') + (X.sat ? '\nuniform float uSat;' : '') + (cfg.hueA ? '\nuniform vec3 uHueA;' : '') + (X.dry ? '\nuniform sampler2D tD; uniform vec3 uDryTint; uniform float uAut;' : '') + (X.wall ? '\nuniform sampler2D tW; uniform sampler2D tWn; uniform float uWS; varying float vGY;' : '')
+      + (X5.hueB ? '\nuniform vec3 uHueB;' : '') + (X5.wet ? '\nvarying float vBed; uniform float uWetLevel;' : '')
+      + (X5.any ? SEA_GLSL() + '\nvarying vec3 vGW; uniform vec3 uMoonD; uniform vec3 uMoonC; uniform vec3 uHeroP; uniform vec3 uHeroC;\nvec3 gEm = vec3(0.0);' : ''))
       .replace('#include <map_fragment>', `
   // a slow warp from the large-scale noise slides the organic layers around so their tiles never line up in rows
   vec2 gw = (vLay.zw - 0.5) * vec2(1.0, 0.6);
@@ -1257,7 +1299,7 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
 #else
   vec3 cA = texture2D(tA, uA).rgb;
 #endif
-  vec3 cB = texture2D(tB, uB).rgb;` + (cfg.hueA ? '\n  cA *= uHueA;' : '') + `
+  vec3 cB = texture2D(tB, uB).rgb;` + (cfg.hueA ? '\n  cA *= uHueA;' : '') + (X5.hueB ? '\n  cB *= uHueB;' : '') + `
 #ifdef G_DP
   vec3 cP = mix(texture2D(tP, uP).rgb, texture2D(tP, uP2).rgb, gm);
 #else
@@ -1289,9 +1331,31 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
   if (steep > 0.001) {
     vec3 cW = texture2D(tW, uWx).rgb * wbw.x + texture2D(tW, uWz).rgb * wbw.y;
     gc = mix(gc, cW, steep); gh = mix(gh, gH(cW), steep);
-  }` : '') + `
+  }` : '') + (X5.fake ? `
+  // (no snow layer loaded: whiten whatever stands in for it, keeping its relief)
+  gc = mix(gc, vec3(0.78, 0.81, 0.86) * (0.8 + 0.34 * gh), 0.8 * (1.0 - wB) * (1.0 - wP * 0.4));` : '') + (X5.wet ? `
+  // wet sand: dark and glossy where the tide has been within the last 20 s (and under the water now)
+  float gWet = smoothstep(-0.03, 0.06, uWetLevel - vBed) * (1.0 - wP * 0.6);
+  gc *= mix(vec3(1.0), vec3(0.46, 0.5, 0.54), gWet);` : '') + (X5.any ? `
+  vec3 gV = normalize(cameraPosition - vGW);` : '') + (X5.wet ? `
+  gEm += uMoonC * pow(max(dot(reflect(-gV, vec3(0.0, 1.0, 0.0)), uMoonD), 0.0), 18.0) * gWet * 0.05;` : '') + (X5.glint ? `
+  // the snow glitters: a few 4 cm cells, each with its own tilt, catch the moon or the lantern toward the eye
+  {
+    vec3 g3 = floor(vGW * 25.0);
+    vec2 gq = g3.xz + g3.y * vec2(0.131, 0.217);
+    float gs = sH(gq) * smoothstep(0.55, 0.85, normalize(vGN).y);
+    if (gs > 0.965) {
+      vec3 mn = normalize(vec3(sH(gq + 1.7) - 0.5, 0.75, sH(gq + 5.3) - 0.5)), rr = reflect(-gV, mn);
+      vec3 hd = uHeroP - vGW; float hl = length(hd);
+      float sp = pow(max(dot(rr, uMoonD), 0.0), 90.0) * min(dot(uMoonC, vec3(0.4)), 1.2) + pow(max(dot(rr, hd / hl), 0.0), 90.0) * min(dot(uHeroC, vec3(0.012)), 1.0) / (1.0 + hl * hl * 0.02);
+      gEm += vec3(0.85, 0.92, 1.0) * sp * 2.2 * (1.0 - wB) * (1.0 - wP * 0.8);
+    }
+  }` : '') + (X5.aur ? `
+  // the aurora's light drifting over the ground in slow green ribbons
+  if (uAur > 0.001) gEm += aurora(vGW.xz * 0.9 + vec2(13.0, -40.0), 1.0, 0.0) * 0.06;` : '') + `
   diffuseColor.rgb *= gc * (0.82 + 0.36 * vLay.w);`)
-      .replace('#include <roughnessmap_fragment>', `float roughnessFactor = clamp(mix(mix(uR.x, uR.y, wB), uR.z, wP) * (1.12 - 0.25 * gh), 0.3, 1.0);` + (X.sap ? '\n  roughnessFactor = mix(roughnessFactor, 0.14, wS);' : ''))
+      .replace('#include <roughnessmap_fragment>', `float roughnessFactor = clamp(mix(mix(uR.x, uR.y, wB), uR.z, wP) * (1.12 - 0.25 * gh), 0.3, 1.0);` + (X.sap ? '\n  roughnessFactor = mix(roughnessFactor, 0.14, wS);' : '') + (X5.wet ? '\n  roughnessFactor = mix(roughnessFactor, 0.2, gWet);' : ''))
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>' + (X5.any ? '\n  totalEmissiveRadiance += gEm;' : ''))
       .replace('#include <normal_fragment_maps>', `#ifdef G_NRM
   // the second readings are rotated: turn their tangent-space xy back into the first frame
   vec3 nA = texture2D(tAn, uA).xyz * 2.0 - 1.0, nP = texture2D(tPn, uP).xyz * 2.0 - 1.0;
@@ -1311,7 +1375,7 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
   normal = normalize((viewMatrix * vec4(normalize(gT * tn.x + gB * tn.y + gN * tn.z), 0.0)).xyz);
 #endif`);
   };
-  m.customProgramCacheKey = () => 'groundPBR|' + type + (nrm ? '|n' : '') + '|q' + R.quality;
+  m.customProgramCacheKey = () => 'groundPBR|' + type + (nrm ? '|n' : '') + '|q' + R.quality + (cfg.fake ? '|f' : '') + (cfg.hueB ? '|b' : '');
   return m;
 }
 
@@ -1955,6 +2019,7 @@ function deerProp(o) {
 export const HEAT = { k: 0, uLava: { value: 0.8 }, uGrate: { value: 0.2 }, gain: { k: 0.75 }, flue: [0, 1, 2, 3].map(() => ({ value: 0 })) };
 const NIGHT = { mode: 'ash', gain: { k: 1 }, stars: null, glow: null };
 const ACT4 = new Set(['ashfield', 'forge']);
+const ACT5 = new Set(['coast', 'farlight']);
 const cinder = (name) => ENV.props['cinder/' + name] || null;
 const DEAD = new THREE.Color(0x15130f), LIT = new THREE.Color(0xffc070);
 // the extent of a scanned prop (its parts' bounding boxes): { x, y, z, y0 }
@@ -2709,9 +2774,15 @@ export function buildLevel(L, quality) {
   out.ground = buildGround(L, group);
   if (L.lava) out.lava = buildLava(L, group);
   if (L.amberDeep) out.amber = buildAmber(L, group);
-  for (const p of L.props) addProp(B, I, p, L, rng, out);
+  // Act V (sea.js): the water over the tidal flats, the leads and the open sea; the thin ice, its windows and floes
+  if (L.bed || L.sea) out.sea = buildSea(L, group, quality);
+  if (L.ice) out.ice = buildIce(L, group, quality);
+  // (Act V's props are the rime pack's, placed by act5Level)
+  if (!ACT5.has(L.type)) for (const p of L.props) addProp(B, I, p, L, rng, out);
   if (L.type === 'weep' || L.type === 'heart') act3Level(L, I, B, out);
   if (ACT4.has(L.type)) act4Level(L, I, B, out);
+  // the sea past the north and east edges, out into the fog: pack ice after the Freeze, and round the Farthest Light
+  if (ACT5.has(L.type)) { out.beyond = seaBeyond(L, group, { ice: L.type === 'farlight' ? 'pack' : L.mode === 'frozen' }); act5Level(L, I, B, out); }
   if (L.type === 'town') townBeyond(L, I, group);
   // per-level shader globals, set whenever this level's ground is drawn (only the zone the hero is in): the Edge of Tears,
   // where the last of the wind still reaches the Weeping Woods, and the Heartwood's heart that the lights beat with

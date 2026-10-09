@@ -6,9 +6,12 @@ import { genForest, genCrypt, genTown } from '../world/gen.js';
 import { genPass, genHalls } from '../world/gen2.js';
 import { genWeep, genHeart } from '../world/gen3.js';
 import { genAshfield, genForge } from '../world/gen4.js';
+import { genCoast, genFarlight } from '../world/gen5.js';
 import { buildLevel, propMesh, runeDisc, WIND, act3Prop, setAutumn, act4Prop, setHeat, setNight, setFlueGlow } from '../world/build.js';
+import { act5Prop } from '../world/build5.js';
+import { SEA } from '../world/sea.js';
 import { GridMap } from '../world/map.js';
-import { ATMOS } from '../world/atmos.js';
+import { ATMOS, mixAtmos } from '../world/atmos.js';
 import { kitMesh } from '../gfx/kits.js';
 import { tex } from '../gfx/textures.js';
 import { envMesh, envChest, hasEnv, loadPack } from '../gfx/env.js';
@@ -19,6 +22,8 @@ import { Actor, spawnMonster, spawnNpc, createPlayer, rollAffixes, monsterLevel,
 import { PACKS, DIFFS, MONSTERS, PACK_LEAD, packKinds } from './data.js';
 import { startDrips, stopDrips } from './sap.js';
 import { addLightPool, removeLightPool, cradlePoint } from './light.js';
+import { resetTide, TIDE } from './tide.js';
+import { resetIce } from './ice.js';
 import { startFlues, stopFlues, setFlueHeat, flues, BREATH } from './forge.js';
 import { makeItem } from './items.js';
 import { dropGold, dropItem, dropGlobe, clearPickups } from './pickups.js';
@@ -39,40 +44,65 @@ export const ZONES = {
   heart: { level: 19, music: 'heart', ambient: 'heart', atmos: 'heart', act: 3, pack: 'wood' },
   // Act IV: the Wayfarers' Road north of Whitecliff to the Anvil Gate, and Karthax's forge inside the Black Anvil (each has a
   // state after the Unmaking: the Field under stars, then at dawn; the Forge cold)
-  ashfield: { level: 22, music: 'ashfield', ambient: 'ashfall', atmos: 'ashfield', act: 4, pack: 'cinder' },
-  forge: { level: 25, music: 'forge', ambient: 'forge', atmos: 'forge', act: 4, pack: 'cinder' },
+  // (light: the Cradle's kind of zone, 'ember' with the Shroud or 'sea' with the beams; ring: its light's radius, light.js)
+  ashfield: { level: 22, music: 'ashfield', ambient: 'ashfall', atmos: 'ashfield', act: 4, pack: 'cinder', light: 'ember', ring: 6 },
+  forge: { level: 25, music: 'forge', ambient: 'forge', atmos: 'forge', act: 4, pack: 'cinder', light: 'ember', ring: 6 },
+  // Act V: the Frozen Coast past the Black Anvil (its tide, then its frozen bay), and the Farthest Light out on the sea ice
+  coast: { level: 28, music: 'coast', ambient: 'coast', atmos: 'coast', act: 5, pack: 'rime', light: 'sea', ring: 4 },
+  farlight: { level: 31, music: 'farlight', ambient: 'farlight', atmos: 'farlight', act: 5, pack: 'rime', light: 'sea', ring: 4 },
   gate: { level: 1, music: 'gate', ambient: 'gate', atmos: 'gate' }
 };
 // beacons that have answered Whitecliff's: Arna's hill after Act I, Deepstone after Act II, and after Act III the
 // Evergreen's old beacon-tree far in the west, green-gold, that no hand lit (offsets from our beacon). After the Unmaking
-// they are dark until the new fire, and then a fourth burns far to the north, on the Dark Beacon (seed: no hilltop of ours)
-export const FAR_BEACONS = [{ dx: -40, dz: -60, y: 14 }, { dx: 46, dz: -58, y: 17 }, { dx: -44, dz: -32, y: 8, color: 0xb8e060 }, { dx: 0, dz: -72, y: 12, color: 0xfff0c0, seed: true }];
-// a far-off beacon: a glow seen through the fog (sprites ignore it), breathing like a fire (userData.k: a scene may shrink it)
-export function farFire(p, color = 0xffa040) {
+// they are dark until the new fire, and then a fourth burns far to the north, on the Farthest Light, out on the sea ice
+// beyond the Black Anvil (seed: no hilltop of ours). Once the sea is lit, the Saltborn's lights answer low on the north
+// horizon (sea: they flash once a sweep)
+export const FAR_BEACONS = [{ dx: -40, dz: -60, y: 14 }, { dx: 46, dz: -58, y: 17 }, { dx: -44, dz: -32, y: 8, color: 0xb8e060 }, { dx: 0, dz: -72, y: 12, color: 0xfff0c0, seed: true },
+  { dx: -18, dz: -78, y: 8, color: 0xf0f4ff, sea: true, seed: true }, { dx: 20, dz: -80, y: 7, sea: true, seed: true }, { dx: 34, dz: -76, y: 6, sea: true, seed: true }];
+// a far-off beacon: a glow seen through the fog (sprites ignore it), breathing like a fire (userData.k: a scene may shrink
+// it); o.flash: a sea-light's period (s), a brighter pulse once a turn as its beam comes round
+export function farFire(p, color = 0xffa040, o = {}) {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex('dot'), color, blending: THREE.AdditiveBlending, fog: false, depthWrite: false, transparent: true }));
   s.position.set(p.x, p.y, p.z); s.scale.setScalar(7);
-  s.onBeforeRender = () => { const k = 1 + Math.sin(performance.now() * 0.007) * 0.08 + Math.sin(performance.now() * 0.019) * 0.05; s.scale.setScalar(7 * k * (s.userData.k ?? 1)); };
+  const ph = Math.random() * (o.flash || 1);
+  s.onBeforeRender = () => {
+    const now = performance.now(), u = o.flash ? ((now / 1000 + ph) % o.flash) / o.flash : 1, f = u < 0.07 ? Math.sin((u / 0.07) * Math.PI) : 0;
+    const k = 1 + Math.sin(now * 0.007) * 0.08 + Math.sin(now * 0.019) * 0.05 + f * 0.9;
+    s.scale.setScalar(7 * k * (s.userData.k ?? 1));
+  };
   return s;
 }
 // the zone's extra assets, fetched the first time it is visited: Act II's stone, snow and lava with the dwarves and the
 // deep's beasts; Act III's wood with its Evergreen and beasts; Act IV's cinder with the ash people, the Forge's creatures,
 // and Brokka and Durgan (folk) and Elati and Amaranthe (grove) for the camps and the keepers' statues. The Forge also
 // takes the deep's lava and slabs.
-const READY = { deep: { folk: ['folk'], creatures: 'act2' }, wood: { folk: ['grove'], creatures: 'act3' }, cinder: { folk: ['ash', 'folk', 'grove'], creatures: 'act4' } };
+// Act V's rime with the Saltborn (frost) and the sea's creatures. Some people come along for a while: the frost set in
+// Whitecliff from the hook on (Alkyone, then the child) and in the Field while Alkyone waits at the Anvil Gate; and on the
+// Farthest Light, from the seals to the lit sea, Brokka (folk) and Elati (grove) who bring their fires to the keepers
+const READY = { deep: { folk: ['folk'], creatures: 'act2' }, wood: { folk: ['grove'], creatures: 'act3' }, cinder: { folk: ['ash', 'folk', 'grove'], creatures: 'act4' }, rime: { folk: ['frost'], creatures: 'act5' } };
 const zonePacks = (id) => { const p = ZONES[id]?.pack; return p ? (id === 'forge' ? [p, 'deep'] : [p]) : []; };
+function zoneFolk(id) {
+  const h = G.hero, F = h?.flags || {}, out = [...(READY[ZONES[id]?.pack]?.folk || [])];
+  if (id === 'farlight' && h.quest >= 29 && !F.seaLit) out.push('folk', 'grove');
+  if (id === 'town' && ((h.quest >= 23 && F.newFire && (h.act4 ?? -1) >= 0) || F.alkyone)) out.push('frost');
+  if (id === 'ashfield' && F.coal && !F.coastSeen) out.push('frost');
+  return [...new Set(out)];
+}
 export function zoneReady(id, onPart) {
-  const R0 = READY[ZONES[id]?.pack];
-  if (!R0) return Promise.resolve();
+  const R0 = READY[ZONES[id]?.pack], folk = zoneFolk(id);
+  if (!R0 && !folk.length) return Promise.resolve();
   const part = (pr) => pr.then((v) => { onPart?.(); return v; });
-  return Promise.all([...zonePacks(id).map((k) => part(loadPack(k))), ...R0.folk.map((f) => part(loadFolk(f))), loadCreatures(R0.creatures, onPart)]);
+  return Promise.all([...zonePacks(id).map((k) => part(loadPack(k))), ...folk.map((f) => part(loadFolk(f))), R0 ? loadCreatures(R0.creatures, onPart) : null]);
 }
 // how many parts zoneReady reports (0: nothing to fetch)
-export const zoneParts = (id) => { const R0 = READY[ZONES[id]?.pack]; return R0 ? zonePacks(id).length + R0.folk.length + creatureCount(R0.creatures) : 0; };
+export const zoneParts = (id) => { const R0 = READY[ZONES[id]?.pack]; return zonePacks(id).length + zoneFolk(id).length + (R0 ? creatureCount(R0.creatures) : 0); };
 
+// a zone's layout seed, the hero's own; Act V's two are one per difficulty (a fresh coast on each), the story the same
 function seedFor(id) {
   G.hero.seeds ||= {};
-  if (!G.hero.seeds[id]) G.hero.seeds[id] = (Math.random() * 1e9) | 0;
-  return G.hero.seeds[id];
+  const k = id === 'coast' || id === 'farlight' ? id + '@' + (G.hero.diff || 0) : id;
+  if (!G.hero.seeds[k]) G.hero.seeds[k] = (Math.random() * 1e9) | 0;
+  return G.hero.seeds[k];
 }
 
 // ---------- building ----------
@@ -93,10 +123,15 @@ function createZone(id, o = {}) {
   else if (id === 'heart') L = genHeart(seed);
   else if (id === 'ashfield') L = genAshfield(seed);
   else if (id === 'forge') L = genForge(seed);
+  else if (id === 'coast') L = genCoast(seed, { frozen: coastMode() === 'frozen' });
+  else if (id === 'farlight') L = genFarlight(seed);
   else if (id === 'gate') L = (o.tier % 2 ? genCrypt(seed, { rooms: 12, mh: 30 }) : genForest(seed, { h: 120 }));
+  // (Act V: what the story has done to the layout is laid on it before it is built: sealed leads, the skerry's state)
+  if (ZONES[id]?.act === 5) act5Layout(id, L);
   const map = new GridMap(L.w, L.h, L.cells, L.low);
   const lvl = buildLevel(L, R.quality);
   const z = { id, L, map, lvl, level: o.level ?? ZONES[id].level, actors: [], pickups: [], interact: [], packs: [], seed, tier: o.tier || 0, extra: [], emit4: [] };
+  if (id === 'coast') z.mode = coastMode(); else if (id === 'farlight') z.mode = skyMode();
   // breakables
   for (const p of lvl.breakables) {
     const mesh = p.t === 'urn' ? propMesh('urn')
@@ -149,6 +184,7 @@ function createZone(id, o = {}) {
   }
   if (id === 'weep' || id === 'heart') act3Zone(z);
   if (ZONES[id].act === 4) act4Zone(z);
+  if (ZONES[id].act === 5) act5Zone(z);
   // town people and the stash
   if (id === 'town') {
     const N = L.spots.npcs;
@@ -184,7 +220,9 @@ export function leaveZone() {
 export function enterZone(id, o = {}) {
   leaveZone();
   let z = G.zones[id];
-  if (!z || o.fresh) { if (z) disposeZone(z); z = G.zones[id] = createZone(id, o); }
+  // (Act V: a coast built before the Freeze, or a Farthest Light under another sky, is built again from its seed)
+  const stale = z && ((id === 'coast' && z.mode !== coastMode()) || (id === 'farlight' && z.mode !== skyMode()));
+  if (!z || o.fresh || stale) { if (z) disposeZone(z); z = G.zones[id] = createZone(id, o); }
   G.zone = z; G.actors = z.actors; G.pickups = z.pickups;
   R.scene.add(z.lvl.group);
   for (const m of z.extra) R.scene.add(m);
@@ -197,7 +235,8 @@ export function enterZone(id, o = {}) {
   const act3 = Z.act === 3, aut = act3 && !!G.hero.flags.autumn, v = aut ? 'Autumn' : '';
   setAmbient(Z.ambient + (act3 ? v : ''));
   setAtmosphere(ATMOS[Z.atmos + (act3 ? v : '')]);
-  WIND.uSnow.value = id === 'pass' ? 1 : 0;
+  WIND.uSnow.value = id === 'pass' || Z.act === 5 ? 1 : 0;
+  SEA.sky = Z.act === 5;
   WIND.uWind.value = act3 && !aut ? 0 : 1;
   setAutumn(aut ? 1 : 0);
   FX.beat = aut ? 0 : 1;
@@ -208,7 +247,8 @@ export function enterZone(id, o = {}) {
   if (act3) act3Presence(z);
   // Act IV: the night or the heat, the lit lamps and their light, the flues, who is where
   if (Z.act === 4) act4Enter(z);
-  else if (id === 'town') townFires(z);
+  else if (Z.act === 5) act5Enter(z);
+  else if (id === 'town') { townFires(z); if (G.hero.flags.seaLit) { setAtmosphere(ATMOS.townAurora); SEA.sky = true; } }
   // where the hero appears
   let at = o.at;
   if (!at || at === 'start') at = z.L.start;
@@ -230,13 +270,17 @@ export function enterZone(id, o = {}) {
   updateCamera(0, pl.x, pl.z, true);
   z.map.reveal(pl.x, pl.z, 12);
   if (!G.hero.wps.includes(id) && id !== 'gate' && z.L.spots.waypoint && id === 'town') G.hero.wps.push(id);
+  // (the Icebound Ship's waypoint is found on arrival; the Landing's with its hearth, story.js)
   emit('zoneEnter', id, z);
   return z;
 }
-function disposeZone(z) {
+// a zone dropped for good (built again, or its difficulty changed): its actors and its level's own geometry (Act V's water
+// and ice are large), and the crack texture
+export function disposeZone(z) {
   for (const a of z.actors) a.remove();
   for (const p of z.pickups) { if (p.mesh) R.scene.remove(p.mesh); if (p.light) removeLight(p.light); }
   z.lvl.group.traverse((o) => { if (o.isMesh || o.isInstancedMesh) { if (!o.geometry.userData?.shared) o.geometry.dispose(); } });
+  z.ice?.tex?.dispose?.();
 }
 
 // ---------- packs ----------
@@ -254,16 +298,18 @@ export function updatePacks() {
   const asleep = z.bossSpot?.kind === 'silverhorn' && G.hero.quest < 13;
   if (z.bossSpot && !z.bossSpawned && !asleep && Math.hypot(z.bossSpot.x - pl.x, z.bossSpot.z - pl.z) < 30) {
     z.bossSpawned = true;
-    const first = z.bossSpot.kind === 'weaver' || z.bossSpot.kind === 'stonewarden' || z.bossSpot.kind === 'silverhorn' || z.bossSpot.kind === 'ivar';
+    const first = z.bossSpot.kind === 'weaver' || z.bossSpot.kind === 'stonewarden' || z.bossSpot.kind === 'silverhorn' || z.bossSpot.kind === 'ivar' || z.bossSpot.kind === 'tower';
     const b = spawnMonster(z.bossSpot.kind, z.bossSpot.x, z.bossSpot.z, { level: Math.max(z.level + (first ? 2 : 3), G.hero.level + 1) });
     b.rot = Math.PI * 0.0 + angleTo(b.x, b.z, pl.x, pl.z);
     // Karthax waits under the slag until the story has brought the shards to him (story.js 'karthaxArrive')
     if (b.kind === 'karthax') { b.holdWake = true; b.hidden = true; b.y = -3.4; b.rot = angleTo(b.x, b.z, z.L.spots.anvil?.x ?? b.x, (z.L.spots.anvil?.z ?? b.z) + 9); }
+    // the Walking Tower lies as Skerry Bay's island until the story wakes it (story.js 'towerWake')
+    if (b.kind === 'tower' && !G.hero.flags.towerWake) b.holdWake = true;
     z.actors.push(b); z.boss = b;
   }
   // the voices that speak once per place: Act III's Lady in the still trees (until the First Autumn), Act IV's Voice in
   // the Cradle between the lamps (until Ivar is at rest; v.need: only after that lamp burns)
-  const F = G.hero.flags, act = ZONES[z.id]?.act, mute = act === 3 ? F.autumn || F.ladyDown : act === 4 ? F.ivar || F.crownUnmade : false;
+  const F = G.hero.flags, act = ZONES[z.id]?.act, mute = act === 3 ? F.autumn || F.ladyDown : act === 4 ? F.ivar || F.crownUnmade : act === 5 ? !!F.frozen : false;
   if (z.voices && !mute) for (const v of z.voices) if (!v.done && (!v.need || F[v.need]) && Math.hypot(v.x - pl.x, v.z - pl.z) < v.r) { v.done = true; emit('voice', v.key, v); }
 }
 function spawnPack(z, p, D) {
@@ -283,7 +329,7 @@ function spawnPack(z, p, D) {
   const nAff = G.hero.diff >= 3 ? 3 : G.hero.diff >= 2 ? 2 : 1;
   if (elite === 'champion') {
     let kind = pick() === 'spiderling' ? 'spider' : pick();
-    if (MONSTERS[kind].big) kind = z.id === 'pass' || z.id === 'halls' ? 'stoneborn' : z.id === 'weep' || z.id === 'heart' ? 'rootsworn' : z.id === 'ashfield' || z.id === 'forge' ? 'ashSpear' : 'ash';
+    if (MONSTERS[kind].big) kind = z.id === 'pass' || z.id === 'halls' ? 'stoneborn' : z.id === 'weep' || z.id === 'heart' ? 'rootsworn' : z.id === 'ashfield' || z.id === 'forge' ? 'ashSpear' : z.id === 'coast' || z.id === 'farlight' ? 'sunken' : 'ash';
     const aff = rollAffixes(nAff + 1);
     const cnt = aff.includes('horde') ? 5 : 3;
     for (let i = 0; i < cnt; i++) { const s = place(); z.actors.push(spawnMonster(kind, s.x, s.z, Object.assign({ elite: 'champion', affixes: aff }, opts))); }
@@ -352,7 +398,7 @@ function takeExit(z, e) {
   if (e.locked && !G.hero.flags[e.locked]) {
     emit('toast', t('locked')); Audio.sfx('denied');
     // (the north road: only a hero at Act III's end is sent to Isarn about it)
-    const why = { weaver: 'd.weaver', stonewarden: 'd.gateShut', act1: 'd.mountainShut', act2: 'd.woodShut', hart: 'd.rootShut', fireTaken: G.hero.flags.act3 ? 'd.roadShut' : 'd.northShut', ivar: 'd.anvilShut' }[e.locked];
+    const why = { weaver: 'd.weaver', stonewarden: 'd.gateShut', act1: 'd.mountainShut', act2: 'd.woodShut', hart: 'd.rootShut', fireTaken: G.hero.flags.act3 ? 'd.roadShut' : 'd.northShut', ivar: 'd.anvilShut', coal: 'd.coastShut', frozen: 'd.iceShut' }[e.locked];
     if (why) emit('say', why);
     return;
   }
@@ -455,7 +501,7 @@ function act3Zone(z) {
 }
 // a fallen boss's tree keeps the memory of the fight: touched, it lets an amber echo of the boss rise to be fought again
 // (story.js 'echo'); like the small Tears, once a day
-const ECHO_PROMPT = { silverhorn: 'echo.hart', amaranthe: 'echo.lady', ivar: 'echo.ivar', karthax: 'echo.karthax' };
+const ECHO_PROMPT = { silverhorn: 'echo.hart', amaranthe: 'echo.lady', ivar: 'echo.ivar', karthax: 'echo.karthax', tower: 'echo.tower', skotos: 'echo.skotos' };
 export function echoAt(z, boss, x, zz) {
   const it = { kind: 'echo', boss, x, z: zz, r: 2.8, prompt: ECHO_PROMPT[boss] };
   it.use = () => emit('echo', it, z);
@@ -524,17 +570,6 @@ export function firstAutumn(z, dur = 6) {
     if (t < 1) later(0.016, step); else act3Presence(z);
   };
   step();
-}
-const _ca = new THREE.Color(), _cb = new THREE.Color();
-function mixAtmos(a, b, k) {
-  const o = {};
-  for (const key in b) {
-    const x = a[key] ?? b[key], y = b[key];
-    if (typeof y !== 'number') o[key] = y;
-    else if (key === 'fog' || key === 'sky' || key === 'ground' || key === 'moon' || key === 'heroColor') o[key] = _ca.set(x).lerp(_cb.set(y), k).getHex();
-    else o[key] = x + (y - x) * k;
-  }
-  return o;
 }
 // the Lady calls the Mourners out of the alcoves: the amber sleepers there crack open
 on('cocoonBurst', (s) => {
@@ -611,6 +646,8 @@ function act4Zone(z) {
     const ll = S.lastLamp;
     if (ll) { A.lastLamp = put(z, act4Prop('lastLamp'), ll.x, ll.z, Math.PI / 2); A.lastLampIt = { kind: 'lastLamp', x: ll.x, z: ll.z, r: 0, lightR: 7, lit: false, used: true }; z.interact.push(A.lastLampIt); }
     if (L.gate) { A.gate = put(z, act4Prop('anvilGate'), L.gate.x, L.gate.z); A.gate.userData.setOpen(!!F.ivar); if (F.ivar) z.map.open(L.gate.cells); }
+    // Act V: the Anvil's Neck, its mouth plugged with rubble until the new fire burns (act4Enter clears it on any entry)
+    if (L.neck) { A.rubble = put(z, act5Prop('rubble', L.neck), L.neck.x, L.neck.z, L.neck.r || 0); openNeck(z); }
     if (S.hook) A.hook = put(z, act4Prop('hook'), S.hook.x, S.hook.z, S.hook.r || 0);
     // the second waypoint, at Elati's camp at the mouth of the Graves
     if (S.camp2) {
@@ -672,6 +709,7 @@ function act4Enter(z) {
     setLastLamp(z, !!F.ivar);
     // the Lampless are released after the Unmaking: none walk the Graves any more
     if (F.crownUnmade) { z.packs = z.packs.filter((p) => p.tag !== 'lamplessPatrol'); for (const a of z.actors.slice()) if (a.kind === 'lampless' && !a.dead) release(z, a, false); }
+    openNeck(z);
   } else {
     const k = forgeHeat();
     z.heatK = k; z.heatTo = null; setHeat(k);
@@ -686,6 +724,13 @@ function act4Enter(z) {
   }
   act4Presence(z);
   refreshEmit(z);
+}
+// the Anvil's Neck opens with the new fire: its four cells of rubble cleared (a Field cached before the new fire too)
+function openNeck(z) {
+  const N0 = z.L.neck; if (!N0 || z.neckOpen || !G.hero.flags.newFire) return;
+  z.neckOpen = true;
+  if (z.map.open(N0.plug)) emit('mapChanged');
+  z.act4?.rubble?.userData.clear?.();
 }
 // the Forge Mouth's red halo goes out with the forge
 function mouthHalo(m, on) { m.traverse((o) => { if (o.isSprite) o.visible = on; }); }
@@ -899,6 +944,135 @@ export function release(z, a, kneel = true) {
   vanish(z, a, kneel ? 3.5 : 0.1);
 }
 
+// ---------- Act V: the Frozen Coast and the Farthest Light ----------
+// z.act5 keeps what the story lights and moves: { lights[] (sea-lights), hearth, stones[], boats[], island, lamps[] (hole
+// lamps), markers[], cairns[], farLight, doorStone, npcs{} }. What the world is: coastMode() (the coast's reading, built
+// again when it changes) and skyMode() (the Farthest Light's sky, likewise)
+export const coastMode = () => (G.hero.flags.frozen ? 'frozen' : 'tide');
+export const skyMode = () => { const F = G.hero.flags; return F.seaLit ? 'true' : F.frozen ? 'black' : 'green'; };
+// before the build: the leads already sealed are thick ice (as the seal leaves them); the skerry is open ground while
+// the Tower walks (it lies there asleep before, and dead after)
+function act5Layout(id, L) {
+  const F = G.hero.flags, { w } = L;
+  if (id === 'farlight') for (const ho of L.spots.holes) if (F['hole' + ho.id]) for (const [x, z] of ho.lead) { const i = z * w + x; L.cells[i] = 1; L.low[i] = 0; L.sea[i] = 0; L.ice[i] = 0; L.thick[i] = 1; }
+  if (id === 'coast' && F.towerWake && !F.towerDown) for (const [x, z] of L.spots.skerry.cells) L.cells[z * w + x] = 1;
+}
+// the story's props on their spots and the interactables that light them (story.js answers each kind): on the coast the
+// three sea-lights with the ice windows at their feet, the hearth and the tide bell, the boats, the four Name-stones, the
+// dead Tower's island; on the ice the three lamps of each open hole (a marker-light where one is sealed), the four cairns,
+// the Farthest Light and its door-stone, the Drowned Lights' windows
+function act5Zone(z) {
+  const L = z.L, S = L.spots, F = G.hero.flags, A = z.act5 = { lights: [], stones: [], boats: [], lamps: [], markers: [], cairns: [], npcs: {} };
+  const inter = (it, ev) => { it.use = () => emit(ev, it, z); z.interact.push(it); return it; };
+  if (z.id === 'coast') {
+    S.sealights.forEach((s, k) => {
+      const mesh = put(z, act5Prop('sealight', { v: k, id: s.id }), s.x, s.z, s.r);
+      const it = inter({ kind: 'sealight', id: s.id, x: s.base.x, z: s.base.z, r: 2.4, lightR: 7, prompt: 'sealight.light', mesh, spot: s, lit: false }, 'sealight');
+      it.window = put(z, act5Prop('iceWindow', { id: s.id }), s.window.x, s.window.z, s.r);
+      A.lights.push(it);
+    });
+    const hm = put(z, act5Prop('hearth'), S.hearth.x, S.hearth.z);
+    A.hearth = inter({ kind: 'hearth', x: S.hearth.x, z: S.hearth.z, r: 2.6, lightR: 8, prompt: 'hearth.light', mesh: hm, lit: false }, 'hearth');
+    A.bell = put(z, act5Prop('bell'), S.bell.x, S.bell.z, Math.PI / 2);
+    for (const b of S.boats) A.boats.push(put(z, act5Prop('boat'), b.x, b.z, b.r));
+    for (const st of S.stones) {
+      const mesh = put(z, act5Prop('nameStone', { id: st.id }), st.x, st.z, st.r), r = st.r || 0;
+      A.stones.push(inter({ kind: 'nameStone', id: st.id, x: st.x + Math.sin(r) * 1.1, z: st.z + Math.cos(r) * 1.1, r: 2.2, lightR: 3, prompt: 'stone.light', mesh, spot: st, lit: false, tideLocked: !!st.tideLocked }, 'nameStone'));
+    }
+    // Skerry Bay: the Tower asleep (its spawn holds it), or dead on its island, still lit (the echo there once the sea is lit)
+    const sk = S.skerry;
+    if (F.towerDown) { A.island = put(z, act5Prop('skerryLight'), sk.x, sk.z); if (F.seaLit) echoAt(z, 'tower', sk.x, sk.z + sk.r + 1.5); }
+    else if (MONSTERS.tower) z.bossSpot = { kind: 'tower', x: sk.x, z: sk.z };
+    // the bay's north rim before the Freeze: open water, and why
+    if (!F.frozen) z.voices = [{ x: S.iceShut.x, z: S.iceShut.z, r: 4, key: 'd.iceShut' }];
+    A.wpEmit = (z.emit || []).find((e) => e.type === 'bluefire');
+  } else {
+    for (const ho of S.holes) {
+      if (F['hole' + ho.id]) { A.markers.push(put(z, act5Prop('markerLight'), ho.x, ho.z)); continue; }
+      ho.lamps.forEach((p, i) => {
+        const mesh = put(z, act5Prop('holeLamp'), p.x, p.z, Math.atan2(ho.x - p.x, ho.z - p.z));
+        const it = inter({ kind: 'holeLamp', hole: ho.id, i, x: p.x, z: p.z, r: 2.2, lightR: 4.5, prompt: 'stone.light', mesh, lit: false }, 'holeLamp');
+        it.snuff = () => light5(z, it, false); it.relight = () => light5(z, it, true);
+        A.lamps.push(it);
+      });
+    }
+    S.fires.forEach((f, i) => {
+      const mesh = put(z, act5Prop('cairn'), f.x, f.z);
+      const it = inter({ kind: 'cairn', i, x: f.x, z: f.z, r: 2.6, lightR: 5, prompt: 'cairn.light', mesh, lit: false }, 'cairn');
+      it.snuff = () => light5(z, it, false); it.relight = () => light5(z, it, true);
+      A.cairns.push(it);
+    });
+    const FL = S.farLight, d = FL.door;
+    A.farLight = put(z, act5Prop('farLight'), FL.x, FL.z, Math.PI);
+    A.doorStone = put(z, act5Prop('doorStone'), d.x, d.z, Math.PI);
+    A.farIt = inter({ kind: 'farLight', x: d.x, z: d.z - 0.4, r: 2.4, lightR: 0, prompt: 'farLight.light', mesh: A.farLight, lit: false }, 'farLight');
+    for (const dl of S.drowned) put(z, act5Prop('iceWindow', { drowned: true }), dl.window.x, dl.window.z);
+    if (F.seaLit) echoAt(z, 'skotos', S.skotos.x, L.boss.z - 14.5);
+  }
+}
+// on every entry: the sky by the world's state (the green aurora, the black one after the Freeze, the true one once the
+// sea is lit), its ambient, the music's sky; the tide back at low water and the ice healed; the lit lights; who is where.
+// (The Skotos fight's own atmospheres and the arrival's coastCine are the story's.)
+function act5Enter(z) {
+  const F = G.hero.flags, coast = z.id === 'coast';
+  const key = coast ? (F.seaLit ? 'coastAurora' : F.frozen ? 'coastFrozen' : 'coast') : F.seaLit ? 'farlightAurora' : 'farlight';
+  setAtmosphere(ATMOS[key] || ATMOS[z.id]);
+  setAmbient(coast && F.frozen && !F.seaLit ? 'coastFrozen' : z.id);
+  Audio.mood({ sky: F.seaLit ? 2 : F.frozen ? 1 : 0 });
+  if (z.gust) Object.assign(z.gust, { t: 0, on: false, warn: false });
+  resetTide(z); resetIce(z);
+  act5Presence(z);
+  refreshEmit(z);
+}
+// a light of the act, lit or dark: its look and its pool (pools are the zone's while the hero is in it; a sea-light's beam
+// and its warmth are light.js's, stage C)
+function light5(z, it, on) {
+  it.lit = on; it.mesh?.userData.setLit?.(on);
+  const tag = 'l5:' + it.kind + ':' + (it.id ?? (it.hole != null ? it.hole + '.' + it.i : it.i));
+  removeLightPool(tag);
+  if (on && it.lightR && G.zone === z) addLightPool(it.x, it.z, it.lightR, Infinity, tag, { color: it.kind === 'holeLamp' || it.kind === 'cairn' ? 0xffb060 : 0xffe8c8, intensity: 22 });
+}
+// what the story has lit, on every entry and as it moves: the sea-lights, the hearth (and with it the Landing's waypoint),
+// the Name-stones, the Farthest Light and its carved door-stone. (Who stands where, Alkyone, Tamarisk, Glaukos, the
+// shorefolk, Selna, Tern, the keepers, Brokka and Elati, is story.js's, stage C.)
+export function act5Presence(z) {
+  const A = z?.act5; if (!A) return;
+  const F = G.hero.flags, names = F.names || [];
+  if (z.id === 'coast') {
+    for (const it of A.lights) { light5(z, it, !!F['light_' + it.id]); it.used = it.lit; }
+    light5(z, A.hearth, !!F.hearth); A.hearth.used = !!F.hearth;
+    for (const it of A.stones) { light5(z, it, names.includes(it.id)); it.used = it.lit; }
+    A.island?.userData.setLit?.(true);
+    // the Landing's waypoint stays cold until the hearth is lit
+    const wp = z.interact.find((i) => i.kind === 'waypoint');
+    if (wp) wp.used = !F.hearth;
+    if (z.wpDisc) z.wpDisc.visible = !!F.hearth;
+    if (A.wpEmit) { z.emit = (z.emit || []).filter((e) => e !== A.wpEmit); if (F.hearth) z.emit.push(A.wpEmit); }
+  } else {
+    for (const m of A.markers) m.userData.setLit?.(true);
+    A.farLight.userData.setLit?.(!!F.seaLit);
+    A.doorStone.userData.setCarved?.(!!F.carved);
+    A.farIt.prompt = F.seaLit ? 'farLight.climb' : 'farLight.light';
+    A.farIt.used = !!F.carved || (F.seaLit && !!F.mem_i4);
+  }
+  refreshEmit(z);
+}
+// per frame in an Act V zone: the boats ride the water (TIDE.h, tide.js); on the Farthest Light, until the sea is lit,
+// the blizzard's gusts: 8 s every 40 s (every 20 s at the last open hole), warned 3 s ahead by the rising spindrift
+// ('gustWarn', then 'gust' on and off; cold.js reads z.gust.on)
+function act5Tick(z, dt) {
+  const A = z.act5;
+  if (A.boats.length) { const lv = TIDE?.h || 0; for (const b of A.boats) b.userData.setLevel?.(lv); }
+  if (z.id !== 'farlight') return;
+  const F = G.hero.flags, g = z.gust ||= { t: 0, on: false, warn: false };
+  if (F.seaLit) { if (g.on) { g.on = false; setAmbient(z.id); emit('gust', false, z); } return; }
+  const period = F.hole0 && F.hole1 && !F.hole2 ? 20 : 40, u = (g.t += dt) % period;
+  const warn = u >= period - 11 && u < period - 8, on = u >= period - 8;
+  if (warn && !g.warn) emit('gustWarn', z);
+  if (on !== g.on) { setAmbient(on ? 'blizzard' : 'farlight'); emit('gust', on, z); }
+  g.warn = warn; g.on = on;
+}
+
 // ---------- scripted walks and fades (npc() has no feet of its own) ----------
 const WALKS = [], FADES = [];
 // straight to (x, z) at speed m/s, facing the way, the walk (or the run) playing; done() on arrival
@@ -951,11 +1125,14 @@ function tickFades(dt) {
   }
 }
 
-// ---------- per frame (boot.js, with the packs): walks, fades, the bellows, the heat, the flues' glow, Karthax's arrival ----------
+// ---------- per frame (boot.js, with the packs): walks, fades, the bellows, the heat, the flues' glow, Karthax's arrival;
+// Act V's boats on the tide and the Farthest Light's gusts ----------
 const _fg = [0, 0, 0];
-export function updateAct4(dt) {
+export function updateAct(dt) {
   tickWalks(dt); tickFades(dt);
-  const z = G.zone, pl = G.player; if (!z?.act4 || !pl) return;
+  const z = G.zone, pl = G.player;
+  if (z?.act5 && pl) { act5Tick(z, dt); return; }
+  if (!z?.act4 || !pl) return;
   const F = G.hero.flags;
   if (z.id === 'ashfield') {
     const w = z.L.spots.camp2;
@@ -1005,7 +1182,8 @@ export function townFires(z) {
   const h = G.hero, F = h.flags;
   z.town ||= { far: [] };
   setBeacon(z, !F.fireTaken || !!F.newFire);
-  const night = F.crownUnmade && !F.newFire, lit = [h.act1 >= 0 || h.quest >= 5, (h.act2 ?? -1) >= 0 || h.quest >= 10, (h.act3 ?? -1) >= 0 || h.quest >= 16, !!F.newFire];
+  // (the fourth fire goes out when the coast calls, and is lit again with the sea; the Saltborn's lights answer then)
+  const sea = !!F.seaLit, night = F.crownUnmade && !F.newFire, lit = [h.act1 >= 0 || h.quest >= 5, (h.act2 ?? -1) >= 0 || h.quest >= 10, (h.act3 ?? -1) >= 0 || h.quest >= 16, !!F.newFire && !(F.coastCall && !sea), sea, sea, sea];
   FAR_BEACONS.forEach((_, i) => setFar(z, i, lit[i] && !night));
   townTorches(z, !!F.fireTaken && !F.newFire);
   townPresence(z);
@@ -1018,7 +1196,7 @@ export function setFar(z, i, on) {
   if (on) {
     const far = { x: b.x + F0.dx, y: F0.y, z: b.z + F0.dz }, key = 'far' + i;
     const light = { x: far.x, y: far.y, z: far.z, color: F0.color ?? 0xff8a30, intensity: 200, range: 60, flicker: 0.3, key };
-    const em = { x: far.x, y: far.y - 2, z: far.z, type: 'beacon', s: 1.2, key }, spr = farFire(far, F0.color);
+    const em = { x: far.x, y: far.y - 2, z: far.z, type: 'beacon', s: F0.sea ? 0.7 : 1.2, key }, spr = farFire(far, F0.color, { flash: F0.sea ? 12 : 0 });
     L.lights.push(light); z.extra.push(spr); z.emit4.push(em);
     if (here) { addLight(light); R.scene.add(spr); }
     T.far[i] = { light, spr, em, far };

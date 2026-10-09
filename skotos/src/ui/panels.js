@@ -159,9 +159,10 @@ const R = {
   },
   waypoints() {
     const h = G.hero, inTown = G.zone?.id === 'town';
-    // Act IV's Field has a second waypoint, at Elati's camp at the mouth of the Lantern Graves ('ashfield@2')
-    const list = ['town', 'forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'ashfield@2', 'forge'].filter((z) => h.wps.includes(z)).map((w) => {
-      const z = w.split('@')[0], sub = w.endsWith('@2') ? t('wp.graves') : t('zone.' + z + '.s');
+    // Act IV's Field has a second waypoint, at Elati's camp at the mouth of the Lantern Graves ('ashfield@2'); Act V's are
+    // named for their place (the Landing, the Icebound Ship)
+    const list = ['town', 'forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'ashfield@2', 'forge', 'coast', 'farlight'].filter((z) => h.wps.includes(z)).map((w) => {
+      const z = w.split('@')[0], sub = w.endsWith('@2') ? t('wp.graves') : z === 'coast' || z === 'farlight' ? t('wp.' + z) : t('zone.' + z + '.s');
       return `<button class="wp ${G.zone?.id === z ? 'here' : ''}" data-a="wp:${w}">${ICON.portal}<b>${t('zone.' + z)}</b><span class="muted">${sub}</span></button>`;
     }).join('');
     const gates = h.quest >= 5 ? `<button class="wp" data-a="gates">${ICON.gate}<b>${t('gate.title')}</b><span class="muted">${t('gate.best', h.gateBest)}</span></button>` : '';
@@ -242,10 +243,12 @@ const R = {
   },
   map() { return `<div class="pn" style="height:100%">${head(t('zone.' + G.zone.id), false)}<div class="pn-b" style="display:flex;align-items:center;justify-content:center"><canvas id="bigmap" width="800" height="800" style="max-width:100%;max-height:100%;aspect-ratio:1"></canvas></div></div>`; }
 };
+// a difficulty opens with an act finished on the one before it: 'any:<diff>' any act, 'actN:<diff>' that act
 export function diffUnlocked(i) {
   const d = DIFFS[i]; if (!d.unlock) return true;
-  const need = DIFFS.findIndex((x) => x.id === d.unlock.split(':')[1]);
-  return (G.hero?.act1 ?? -1) >= need;
+  const [a, id] = d.unlock.split(':'), need = DIFFS.findIndex((x) => x.id === id), h = G.hero;
+  const best = a === 'any' ? Math.max(...[1, 2, 3, 4, 5].map((n) => h?.['act' + n] ?? -1)) : h?.[a] ?? -1;
+  return best >= need;
 }
 function render() {
   if (!P.name) return;
@@ -281,7 +284,7 @@ function onClick(e) {
     case 'diff': {
       const i = +x;
       if (G.zone.id !== 'town') { emit('toast', t('wp.diffNote')); break; }
-      if (!diffUnlocked(i)) { emit('toast', t('pick.locked', t('diff.' + DIFFS[DIFFS.findIndex((d) => d.id === DIFFS[i].unlock.split(':')[1])].id))); break; }
+      if (!diffUnlocked(i)) { const [a, id] = DIFFS[i].unlock.split(':'); emit('toast', t(a === 'any' ? 'pick.locked' : 'pick.locked' + a.slice(3), t('diff.' + id))); break; }
       if (h.diff !== i) { h.diff = i; emit('diffChanged'); }
       break;
     }

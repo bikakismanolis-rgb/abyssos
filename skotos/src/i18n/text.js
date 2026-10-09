@@ -18,7 +18,8 @@ export const TEXT = {
   'pick.go': ['Ξεκίνα', 'Begin'],
   'pick.back': ['Πίσω', 'Back'],
   'pick.diff': ['Δυσκολία', 'Difficulty'],
-  'pick.locked': ['Κλειδωμένο: τελείωσε την Πράξη Ι στο «{0}»', 'Locked: finish Act I on "{0}"'],
+  'pick.locked': ['Κλειδωμένο: τελείωσε οποιαδήποτε Πράξη στο «{0}»', 'Locked: finish any Act on "{0}"'],
+  'pick.locked5': ['Κλειδωμένο: τελείωσε την Πράξη V στο «{0}»', 'Locked: finish Act V on "{0}"'],
 
   // ---------- intro ----------
   'intro.1': ['Χίλια χρόνια πριν, ο Κάρθαξ, ο Άναξ της Τέφρας, σφυρηλάτησε ένα στέμμα από κάρβουνα που δεν σβήνουν. Με αυτό έκαψε τον Βορρά.', 'A thousand years ago Karthax, the Ash King, forged a crown of embers that never die. With it he burned the North.'],
@@ -44,6 +45,7 @@ export const TEXT = {
   'diff.hero': ['Ήρωας', 'Hero'], 'diff.hero.d': ['Σκληρότεροι εχθροί, περισσότερα θρυλικά.', 'Tougher enemies, more legendaries.'],
   'diff.nightmare': ['Εφιάλτης', 'Nightmare'], 'diff.nightmare.d': ['Κάθε λάθος πληρώνεται.', 'Every mistake costs.'],
   'diff.ash': ['Τέφρα', 'Ash'], 'diff.ash.d': ['Ο Κάρθαξ σε περιμένει προσωπικά.', 'Karthax awaits you personally.'],
+  'diff.skotos': ['Σκότος', 'Skotos'], 'diff.skotos.d': ['Εδώ ξεχνιούνται και οι ήρωες.', 'Here even heroes are forgotten.'],
 
   // ---------- skills ----------
   'sk.combo': ['Συνδυασμός Λεπίδας', 'Blade Combo'], 'sk.combo.d': ['Τρία χτυπήματα στη σειρά. Το τρίτο θερίζει γύρω σου και σπρώχνει πίσω τους εχθρούς. Γεμίζει Οργή.', 'Three strikes in a row. The third sweeps around you and knocks enemies back. Builds Fury.'],
@@ -616,5 +618,16 @@ export const TEXT = {
   'd.answer.4': ['Κι εκεί, μακριά στον βορρά, μια τέταρτη. Κανείς που ξέρουμε δεν την άναψε.', 'And there, far to the north, a fourth. No one we know lit that one.'],
   'd.elati.home.r': ['Πάμε σπίτι, αδελφή. Θα γεράσουμε μαζί.', 'Let\'s go home, sister. We\'ll grow old together.'],
   'd.isarn.unbound': ['«Το κουβάλησες, και ποτέ δεν σε κράτησε.»', '"You carried it, and it never held you."'],
-  'd.staff': ['Ξεκουράσου.', 'Rest.']
+  'd.staff': ['Ξεκουράσου.', 'Rest.'],
+
+  // ---------- Act V: the Frozen Coast (the world's names, ways and prompts; the story's lines come with it) ----------
+  'zone.coast': ['Η Παγωμένη Ακτή', 'The Frozen Coast'], 'zone.coast.s': ['Εκεί που γυρίζει η παλίρροια', 'Where the tide turns'],
+  'zone.farlight': ['Ο Έσχατος Φάρος', 'The Farthest Light'], 'zone.farlight.s': ['Εκεί που τελειώνει ο Βορράς', 'Where the North ends'],
+  'exit.coast': ['Ο Λαιμός του Αμονιού', 'The Anvil\'s Neck'], 'exit.farlight': ['Ο πάγος ως τον Έσχατο Φάρο', 'The ice to the Farthest Light'], 'exit.shore': ['Στην Ακτή', 'To the Coast'],
+  'wp.coast': ['Η Σκάλα', 'The Landing'], 'wp.farlight': ['Το Παγιδευμένο Καράβι', 'The Icebound Ship'],
+  'd.coastShut': ['Πέρα απ\' το Αμόνι ο δρόμος χάνεται στο χιόνι. Δεν έχεις λόγο να πας ακόμα.', 'Past the Anvil the path is lost in snow. You\'ve no reason to go yet.'],
+  'd.iceShut': ['Ο κόλπος δεν έχει πάγο να σε κρατήσει. Ο Έσχατος Φάρος είναι πέρα από το νερό.', 'The bay has no ice to hold you. The Farthest Light is out beyond the water.'],
+  'sealight.light': ['Άναψε τον φάρο', 'Light the sea-light'], 'hearth.light': ['Άναψε το τζάκι', 'Light the hearth'], 'stone.light': ['Άναψε το λυχνάρι', 'Light the lamp'],
+  'cairn.light': ['Άναψε τη φωτιά', 'Light the fire'], 'farLight.light': ['Άναψε τον Έσχατο Φάρο', 'Light the Farthest Light'], 'farLight.climb': ['Ανέβα στον Έσχατο Φάρο', 'Climb the Farthest Light'],
+  'echo.tower': ['Θυμήσου τον Σκόπελο', 'Remember Skerry'], 'echo.skotos': ['Πες το όνομά του', 'Say its name']
 };
