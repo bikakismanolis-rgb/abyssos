@@ -17,6 +17,7 @@ import { rand, angleTo, angleDiff, dampAngle, damp, clamp } from '../core/util.j
 import { has } from '../i18n/i18n.js';
 import { sapAt, addSapPool, addSapRing, sapPools, startDrips } from './sap.js';
 import { grantBuff } from './stats.js';
+import { wadeAt } from './tide.js';
 
 const ATK_SFX = { goblin: 'goblinAttack', wolf: 'wolfAttack', spider: 'spiderHiss', orc: 'orcAttack', troll: 'trollRoar', skeleton: 'skeletonRattle', wraith: 'wraithWail', hound: 'houndGrowl', bat: 'batScreech', worm: 'wormRumble', dwarf: 'dwarfAttack', golem: 'golemStep', moth: 'batScreech', bear: 'bearRoar', hart: 'hartBellow' };
 // attack timing per animation: speed, hit time (s), total (s)
@@ -77,6 +78,8 @@ export function updateActors(dt) {
     a.flash = Math.max(0, a.flash - dt * 6);
     // amber sap slows flesh; wood, fliers and floaters never notice it (a charge handles sap itself)
     a.onSap = !a.def.float && a.def.flesh !== 'wood' && a.def.ai !== 'bat' && !a.under && !a.dash && sapAt(a.x, a.z);
+    // Act V: wading (tide.js; moveMul slows all but swimmers); never the floaters, fliers or the hidden
+    a.inWater = a.def.float || a.def.ai === 'bat' || a.under || a.airborne ? null : wadeAt(a.x, a.z);
     // stunned, frozen or terrified, a Mourner loses her song
     if (a.bond && (a.status.freeze > 0 || a.status.stun > 0 || a.status.fear > 0)) breakBond(a);
     let speed = 0;

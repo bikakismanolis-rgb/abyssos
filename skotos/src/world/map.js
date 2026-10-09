@@ -22,28 +22,33 @@ export class GridMap {
     const i = iz * this.w + ix;
     return this.cells[i] === 0 && !(this.low && this.low[i]);
   }
-  setSolid(ix, iz, v = true) { if (ix >= 0 && iz >= 0 && ix < this.w && iz < this.h) { this.cells[iz * this.w + ix] = v ? 0 : 1; this.ver++; } }
+  // one cell (Act V never calls it: open and close batch): a change bumps ver and rebuilds the flow field like a batch
+  setSolid(ix, iz, v = true) {
+    if (ix < 0 || iz < 0 || ix >= this.w || iz >= this.h) return;
+    const i = iz * this.w + ix, c = v ? 0 : 1;
+    if (this.cells[i] !== c) { this.cells[i] = c; this.flowT.x = -1; this.ver++; }
+  }
   // reopen cells at runtime (broken standing stones, withered thorns, the Root Gate): [[ix, iz], ...] become floor and
   // the flow field is rebuilt on its next update. Nothing ever turns solid around the hero this way.
-  open(cells) {
+  open(cells) { return this.change(cells, null); }
+  // close cells at runtime (Act V: the tide coming in, ice breaking, the skerry under the dead Tower): [[ix, iz], ...]
+  // become solid, and low (water: eyes and arrows pass over) unless low is false; one ver bump and a flow rebuild per batch
+  close(cells, low = true) { return this.change(null, cells, low); }
+  // both in one batch (a tide step, an ice batch): one ver bump, so every stepToward window rebuilds once. Returns the
+  // number of cells that changed
+  change(open, close, low = true) {
     let n = 0;
-    for (const [ix, iz] of cells || []) {
-      if (ix < 0 || iz < 0 || ix >= this.w || iz >= this.h) continue;
-      const i = iz * this.w + ix;
+    const { w, h } = this;
+    for (const [ix, iz] of open || []) {
+      if (ix < 0 || iz < 0 || ix >= w || iz >= h) continue;
+      const i = iz * w + ix;
       if (this.cells[i] === 0) { this.cells[i] = 1; n++; }
       if (this.low) this.low[i] = 0;
     }
-    if (n) { this.flowT.x = -1; this.ver++; }
-    return n;
-  }
-  // close cells at runtime (Act V: the tide coming in, ice breaking, the skerry under the dead Tower): [[ix, iz], ...]
-  // become solid, and low (water: eyes and arrows pass over) unless low is false; one ver bump and a flow rebuild per batch
-  close(cells, low = true) {
-    let n = 0;
-    if (low && !this.low) this.low = new Uint8Array(this.w * this.h);
-    for (const [ix, iz] of cells || []) {
-      if (ix < 0 || iz < 0 || ix >= this.w || iz >= this.h) continue;
-      const i = iz * this.w + ix;
+    if (close?.length && low && !this.low) this.low = new Uint8Array(w * h);
+    for (const [ix, iz] of close || []) {
+      if (ix < 0 || iz < 0 || ix >= w || iz >= h) continue;
+      const i = iz * w + ix;
       if (this.cells[i] === 1) { this.cells[i] = 0; n++; }
       if (this.low) this.low[i] = low ? 1 : 0;
     }

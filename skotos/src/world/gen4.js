@@ -535,6 +535,7 @@ function neck(L, seed, trySeed) {
     return;
   }
 }
+const C4 = [[-1, -1], [0, -1], [-1, 0], [0, 0]];
 function carve(L, cells, plug, seen, rise, rng) {
   const { w, h } = L, N = w * h, W = w + 1, core = new Uint8Array(N);
   for (const [x, z] of [...cells, ...plug]) core[z * w + x] = 1;
@@ -544,27 +545,31 @@ function carve(L, cells, plug, seen, rise, rng) {
     let side = 0; for (const [dx, dz] of N4) if (!core[(z + dz) * w + x + dx]) side++;
     L.paint[z * w + x] = side ? 0.15 : 0.55 + fbm(x * 0.3, z * 0.3, 77) * 0.3;
   }
-  // distance from the corridor (4-neighbour steps, capped) and from any floor: the old field where it is nearer
+  // distance from the corridor (4-neighbour steps; a band corner's cells are all within 4, so no further) and from any
+  // floor: the old field where it is nearer
   const dc = new Uint8Array(N).fill(255), q = [];
   for (let i = 0; i < N; i++) if (core[i]) { dc[i] = 0; q.push(i); }
   for (let hd = 0; hd < q.length; hd++) {
-    const i = q[hd], x = i % w, z = (i - x) / w; if (dc[i] >= 14) continue;
+    const i = q[hd], x = i % w, z = (i - x) / w; if (dc[i] >= 4) continue;
     for (const [dx, dz] of N4) { const X2 = x + dx, Z2 = z + dz, n = Z2 * w + X2; if (X2 >= 0 && Z2 >= 0 && X2 < w && Z2 < h && dc[n] > dc[i] + 1) { dc[n] = dc[i] + 1; q.push(n); } }
   }
   const band = (i) => dc[i] <= 2;
   // the walls: inside the band the ground is laid again from the nearer floor, blended into the old heights over 2 cells
-  for (let vz = 0; vz <= h; vz++) for (let vx = 0; vx <= w; vx++) {
-    let inBand = false, fl = 0, dd = 0, n = 0, dv = 9;
-    for (const [dx, dz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) {
-      const x = vx + dx, z = vz + dz;
+  // (only the band's corners: the four of each band cell, every one of them in the BFS's queue)
+  const vs = new Uint8Array(W * (h + 1));
+  for (const i of q) if (band(i)) { const x = i % w, z = (i - x) / w; vs[z * W + x] = vs[z * W + x + 1] = vs[(z + 1) * W + x] = vs[(z + 1) * W + x + 1] = 1; }
+  for (let j = 0; j < vs.length; j++) {
+    if (!vs[j]) continue;
+    const vx = j % W, vz = (j - vx) / W;
+    let fl = 0, dd = 0, n = 0, dv = 9;
+    for (let c = 0; c < 4; c++) {
+      const x = vx + C4[c][0], z = vz + C4[c][1];
       if (x < 0 || z < 0 || x >= w || z >= h) { dd += 14; n++; continue; }
       const i = z * w + x;
-      if (band(i)) inBand = true;
       fl += core[i]; dv = Math.min(dv, dc[i]);
       dd += Math.min(Math.min(L.dist[i] === 255 ? 14 : L.dist[i], dc[i]), 14); n++;
     }
-    if (!inBand) continue;
-    const j = vz * W + vx, old = L.hgt[j], h1 = fl ? 0 : rise(dd / n, vx, vz), s = smooth(clamp((dv - 0.5) / 2, 0, 1));
+    const old = L.hgt[j], h1 = fl ? 0 : rise(dd / n, vx, vz), s = smooth(clamp((dv - 0.5) / 2, 0, 1));
     L.hgt[j] = Math.min(old, h1 + (old - h1) * s);
   }
   for (let i = 0; i < N; i++) if (band(i)) L.dist[i] = Math.min(L.dist[i], dc[i]);

@@ -22,7 +22,7 @@ import { Actor, spawnMonster, spawnNpc, createPlayer, rollAffixes, monsterLevel,
 import { PACKS, DIFFS, MONSTERS, PACK_LEAD, packKinds } from './data.js';
 import { startDrips, stopDrips } from './sap.js';
 import { addLightPool, removeLightPool, cradlePoint } from './light.js';
-import { resetTide, TIDE } from './tide.js';
+import { resetTide, floodWave } from './tide.js';
 import { resetIce } from './ice.js';
 import { startFlues, stopFlues, setFlueHeat, flues, BREATH } from './forge.js';
 import { makeItem } from './items.js';
@@ -88,14 +88,16 @@ function zoneFolk(id) {
   if (id === 'ashfield' && F.coal && !F.coastSeen) out.push('frost');
   return [...new Set(out)];
 }
+// (a creature group the build does not list yet counts nothing: its stand-ins take its place)
+const crew = (set) => { try { return set ? creatureCount(set) : 0; } catch (e) { return 0; } };
 export function zoneReady(id, onPart) {
   const R0 = READY[ZONES[id]?.pack], folk = zoneFolk(id);
   if (!R0 && !folk.length) return Promise.resolve();
   const part = (pr) => pr.then((v) => { onPart?.(); return v; });
-  return Promise.all([...zonePacks(id).map((k) => part(loadPack(k))), ...folk.map((f) => part(loadFolk(f))), R0 ? loadCreatures(R0.creatures, onPart) : null]);
+  return Promise.all([...zonePacks(id).map((k) => part(loadPack(k))), ...folk.map((f) => part(loadFolk(f))), R0 && crew(R0.creatures) ? loadCreatures(R0.creatures, onPart) : null]);
 }
 // how many parts zoneReady reports (0: nothing to fetch)
-export const zoneParts = (id) => { const R0 = READY[ZONES[id]?.pack]; return zonePacks(id).length + zoneFolk(id).length + (R0 ? creatureCount(R0.creatures) : 0); };
+export const zoneParts = (id) => { const R0 = READY[ZONES[id]?.pack]; return zonePacks(id).length + zoneFolk(id).length + crew(R0?.creatures); };
 
 // a zone's layout seed, the hero's own; Act V's two are one per difficulty (a fresh coast on each), the story the same
 function seedFor(id) {
@@ -306,6 +308,13 @@ export function updatePacks() {
     // the Walking Tower lies as Skerry Bay's island until the story wakes it (story.js 'towerWake')
     if (b.kind === 'tower' && !G.hero.flags.towerWake) b.holdWake = true;
     z.actors.push(b); z.boss = b;
+  }
+  // Act V: at high water the flood waves walk in from the sea's edge (tide.js keeps their clock: one each 25 s while the
+  // water stands at 0.75 m or more, at most two alive; the pack is combat's)
+  if (z.tide && PACKS.floodWave) {
+    const alive = new Set(); for (const a of z.actors) if (!a.dead && a.packId?.startsWith?.('wave')) alive.add(a.packId);
+    const s = alive.size < 2 && floodWave(z);
+    if (s) { const p = { x: s.x, z: s.z, n: 3, tag: 'floodWave', id: 'wave' + (z.tide.waves = (z.tide.waves || 0) + 1), spawned: true, wave: true }; z.packs.push(p); spawnPack(z, p, D); }
   }
   // the voices that speak once per place: Act III's Lady in the still trees (until the First Autumn), Act IV's Voice in
   // the Cradle between the lamps (until Ivar is at rest; v.need: only after that lamp burns)
@@ -1057,12 +1066,12 @@ export function act5Presence(z) {
   }
   refreshEmit(z);
 }
-// per frame in an Act V zone: the boats ride the water (TIDE.h, tide.js); on the Farthest Light, until the sea is lit,
+// per frame in an Act V zone: the boats ride the water (the level the eye sees, tide.js); on the Farthest Light, until the sea is lit,
 // the blizzard's gusts: 8 s every 40 s (every 20 s at the last open hole), warned 3 s ahead by the rising spindrift
 // ('gustWarn', then 'gust' on and off; cold.js reads z.gust.on)
 function act5Tick(z, dt) {
   const A = z.act5;
-  if (A.boats.length) { const lv = TIDE?.h || 0; for (const b of A.boats) b.userData.setLevel?.(lv); }
+  if (A.boats.length) { const lv = z.tide ? SEA.uLevel.value : 0; for (const b of A.boats) b.userData.setLevel?.(lv); }
   if (z.id !== 'farlight') return;
   const F = G.hero.flags, g = z.gust ||= { t: 0, on: false, warn: false };
   if (F.seaLit) { if (g.on) { g.on = false; setAmbient(z.id); emit('gust', false, z); } return; }

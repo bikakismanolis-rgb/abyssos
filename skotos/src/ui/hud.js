@@ -10,6 +10,7 @@ import { t } from '../i18n/i18n.js';
 import { fmt } from '../core/util.js';
 import { npcHasNews, questText } from '../game/story.js';
 import Audio from '../audio/audio.js';
+import { mapTone } from '../game/tide.js';
 
 const $ = (id) => document.getElementById(id);
 const el = (html) => { const d = document.createElement('div'); d.innerHTML = html.trim(); return d.firstChild; };
@@ -180,11 +181,14 @@ function paintMap(z) {
   const m = z.map;
   if (!mapCanvas || mapZone !== z) { mapCanvas = document.createElement('canvas'); mapCanvas.width = m.w; mapCanvas.height = m.h; mapZone = z; }
   const g = mapCanvas.getContext('2d'), img = g.createImageData(m.w, m.h), d = img.data;
-  const town = z.id === 'town';
+  const town = z.id === 'town', tone = z.L.bed || z.L.ice ? mapTone : null;
   for (let i = 0; i < m.w * m.h; i++) {
     if (!m.explored[i] && !town) continue;
     const fl = m.cells[i];
     const k = i * 4;
+    // Act V: the water by its depth and the ice by its kind (tide.js)
+    const c = tone && tone(z, i);
+    if (c) { d[k] = c >> 16; d[k + 1] = (c >> 8) & 255; d[k + 2] = c & 255; d[k + 3] = 215; continue; }
     if (fl) { d[k] = 92; d[k + 1] = 84; d[k + 2] = 66; d[k + 3] = 200; }
     else {
       // edge cells show as walls

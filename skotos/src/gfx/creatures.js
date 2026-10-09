@@ -26,7 +26,9 @@ const CAST = {
   // Act III (tools/creatures/act3)
   silverhorn: ['elk', 1], amberBear: ['bear', 1.12], amberMoth: ['moth', 1], rootling: ['mandrake', 1], rootwarden: ['treeman', 1],
   // Act IV (tools/creatures/act4)
-  ashwing: ['ashwing', 1], smokeEater: ['smokeeater', 1], emberTick: ['embertick', 1]
+  ashwing: ['ashwing', 1], smokeEater: ['smokeeater', 1], emberTick: ['embertick', 1],
+  // Act V (tools/creatures/act5)
+  tower: ['crab', 1], reefback: ['crab', 1]
 };
 
 export const CREATURES = { tpl: {}, ready: false };
@@ -35,7 +37,8 @@ const ACT_FILES = {
   act1: ['goblin', 'skeleton', 'wolf', 'spider', 'ashspawn', 'troll', 'wight', 'barrowlord'],
   act2: ['magmahound', 'bat', 'worm', 'golem'],
   act3: ['elk', 'bear', 'moth', 'mandrake', 'treeman'],
-  act4: ['ashwing', 'smokeeater', 'embertick']
+  act4: ['ashwing', 'smokeeater', 'embertick'],
+  act5: ['crab']
 };
 const loads = {};
 function loadFile(n) {

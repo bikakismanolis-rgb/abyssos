@@ -676,6 +676,119 @@ const S = {
     await pg.click('#p-go'); await pg.waitForTimeout(3500); await shot();
     await pg.evaluate(() => document.getElementById('i-skip')?.click()); await pg.waitForTimeout(4000); await shot();
     return pg.evaluate(() => ({ mode: window.__G.mode, zone: window.__G.zone?.id, cls: window.__G.hero?.cls }));
+  } },
+  // Act V, the sea's draw order (on the world viewer: the coast's real build, the real telegraphs and light rings): a
+  // telegraph, a light pool and the Cradle's ring stay visible over shallow water, and wading and closed water differ in
+  // tone. Pixels are read in the frame they are drawn in, each with and without the decal
+  shallowtele: { q: 'world=coast&q=' + (process.env.Q || '1') + '&deep=1&seed=' + (process.env.SEED || '3'), run: async (pg, shot) => {
+    const res = await pg.evaluate(async () => {
+      const { R, toScreen, fx, B } = window.__v5;
+      const L = window.__L, w = L.w, h = 0.6;
+      // a patch of wading water (0.1-0.35 m deep at h, 5 x 3 cells round it) with closed water (0.6 m or more) 3-5 cells north
+      const sh = (x, z) => { const i = z * w + x, d = h - L.bed[i]; return L.bed[i] < 9 && !L.ice[i] && !L.thick[i] && !L.deck[i] && d >= 0.1 && d <= 0.35; };
+      let spot = null;
+      for (let z = 8; z < L.h - 8 && !spot; z++) for (let x = 8; x < w - 8 && !spot; x++) {
+        let ok = true;
+        for (let dz = -1; dz <= 1 && ok; dz++) for (let dx = -2; dx <= 2 && ok; dx++) ok = sh(x + dx, z + dz);
+        if (!ok) continue;
+        for (let k = 3; k <= 5 && !spot; k++) { const j = (z - k) * w + x; if (L.bed[j] < 9 && h - L.bed[j] >= 0.6 && !L.ice[j] && !L.thick[j]) spot = { x: x + 0.5, z: z + 0.5, deep: { x: x + 0.5, z: z - k + 0.5 } }; }
+      }
+      if (!spot) return { error: 'no wading patch beside closed water at h 0.6' };
+      window.__view(spot.x, spot.z + 2, { tide: h });
+      const gl = R.renderer.getContext(), pr = R.renderer.getPixelRatio(), px = new Uint8Array(4), s = {};
+      const read = (x, z) => { toScreen(x, 0.2, z, s); gl.readPixels(Math.round(s.x * pr), Math.round((R.h - s.y) * pr), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); return [px[0], px[1], px[2]]; };
+      const ring = (x, z, r, n = 8) => Array.from({ length: n }, (_, k) => [x + Math.sin(k * 6.283 / n) * r, z + Math.cos(k * 6.283 / n) * r]);
+      const mean = (pts) => { const c = [0, 0, 0]; for (const [x, z] of pts) { const v = read(x, z); for (let i = 0; i < 3; i++) c[i] += v[i] / pts.length; } return c; };
+      const diff = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+      const draw = () => window.__view(spot.x, spot.z + 2, { tide: h });
+      // a telegraph, a light pool and the hero's ring, each on the wading water; each read with and without itself
+      const tele = fx.teleCircle(spot.x + 1.4, spot.z, 0.7, 99);
+      const pool = B.act4Prop('lightRing'); pool.userData.setColor(0xfff0d0); pool.scale.setScalar(0.7); pool.position.set(spot.x - 1.4, 0, spot.z); B.drape(pool, L); R.scene.add(pool);
+      const cradle = B.act4Prop('lightRing'); cradle.scale.setScalar(0.6); cradle.position.set(spot.x, 0, spot.z + 0.2); B.drape(cradle, L); R.scene.add(cradle);
+      const items = { tele: [tele.m, ring(spot.x + 1.4, spot.z, 0.66)], pool: [pool, ring(spot.x - 1.4, spot.z, 0.63)], cradle: [cradle, ring(spot.x, spot.z + 0.2, 0.54)] };
+      const out = { spot };
+      for (const k in items) {
+        const [o, pts] = items[k];
+        draw(); const on = mean(pts);
+        o.visible = false; draw(); const off = mean(pts); o.visible = true;
+        out[k] = +diff(on, off).toFixed(1);
+      }
+      for (const k in items) items[k][0].visible = false;
+      draw(); out.tones = +diff(mean([[spot.x, spot.z], [spot.x + 0.3, spot.z + 0.2]]), mean([[spot.deep.x, spot.deep.z], [spot.deep.x + 0.3, spot.deep.z]])).toFixed(1);
+      for (const k in items) items[k][0].visible = true;
+      draw();
+      out.pass = out.tele > 12 && out.pool > 12 && out.cradle > 12 && out.tones > 12;
+      return out;
+    });
+    await shot();
+    return res;
+  } },
+  // Act V, the perf gate: frame time at quality 1 under phone emulation (915 x 412 at a pixel ratio of 1.5, a coarse
+  // pointer, MSAA; adaptive resolution pinned at 1.0, the scale it would have picked reported beside it) in the Shallows at
+  // high water and mid Ice Road, against the Field of Ash measured the same way: each within the Field's + 15%. Quality 0
+  // is measured too, as a floor. The three zones are open at once and measured in turn, ROUNDS times over (the other two
+  // pages draw nothing meanwhile), so a load that drifts hits them alike; the packs are kept from spawning everywhere (the
+  // gate is the world's look: terrain, water, ice, props, FX). Env: QS (default '1,0'), FRAMES (frames per sample, 16),
+  // ROUNDS (3), PACKS=1 lets the packs spawn
+  perf5: { q: 'world=town&q=0&noenv', run: async (pg, shot) => {
+    const browser = pg.context().browser(), base = process.env.BASE || 'http://localhost:5199/';
+    const QS = (process.env.QS || '1,0').split(','), N = +(process.env.FRAMES || 16), ROUNDS = +(process.env.ROUNDS || 3), out = {};
+    const spots = {
+      ashfield: (G) => { const s = G.zone.L.spots.camp; return { x: s.x, z: s.z - 8 }; },
+      coast: (G) => { const L = G.zone.L, s = L.spots.dalaro; return { x: s.x, z: s.z + 4, tide: 1.2 }; },
+      farlight: (G) => { const p = G.zone.L.spots.poles; const s = p[p.length >> 1]; return { x: s.x, z: s.z }; }
+    };
+    for (const Q of QS) {
+      const ctx = await browser.newContext({ viewport: { width: 915, height: 412 }, deviceScaleFactor: 1.5, isMobile: true, hasTouch: true });
+      const pages = {};
+      for (const zone of Object.keys(spots)) {
+        const p = await ctx.newPage();
+        p.on('pageerror', (e) => logs.push('pageerror(' + zone + '): ' + e.message));
+        p.on('console', (m) => { if (m.type() === 'error') logs.push(zone + ': ' + m.text()); });
+        await p.goto(base + '?auto=' + zone + '&q=' + Q + '&lvl=30' + (zone === 'farlight' ? '&flags=frozen' : ''));
+        try { await p.waitForFunction(() => window.__G?.player && window.__G.zone && window.__G.mode === 'play', null, { timeout: 400000 }); } catch (e) { out[zone + Q] = 'no zone'; continue; }
+        await p.evaluate(({ src, packs }) => {
+          const G = window.__G, R = window.__R, v = new Function('return ' + src)()(G), f = G.zone.map.nearestFloor(v.x, v.z);
+          window.__immortal = true;
+          if (!packs) { for (const pk of G.zone.packs) pk.spawned = true; for (const a of G.actors.slice()) if (a.team === 'foe') { a.remove?.(); G.actors.splice(G.actors.indexOf(a), 1); } G.zone.bossSpawned = true; }
+          G.player.x = f.x; G.player.z = f.z;
+          // (high water: the tide's own force where tide.js has it, the water's uniforms held there besides)
+          const T = window.__act5?.tide, S = window.__act5?.sea;
+          if (v.tide != null) { if (T?.TIDE) T.TIDE.force = { h: v.tide, rate: 10 }; window.__hold = () => { if (S) { S.uLevel.value = v.tide; S.uWetLevel.value = v.tide; } }; }
+          R.prScale = 1; R.renderer.setPixelRatio(R.basePR); R.renderer.setSize(R.w, R.h, false); R.lastResize = 1e15;
+        }, { src: spots[zone].toString(), packs: process.env.PACKS === '1' });
+        pages[zone] = p;
+      }
+      const freeze = (p, on) => p.evaluate((on) => { window.__R.lost = on; }, on);
+      const samples = {};
+      for (const p of Object.values(pages)) await freeze(p, true);
+      for (let r = 0; r < ROUNDS; r++) for (const [zone, p] of Object.entries(pages)) {
+        await freeze(p, false);
+        const ms = await p.evaluate(async (N) => {
+          const t = [];
+          await new Promise((ok) => setTimeout(ok, 1500));
+          await new Promise((ok) => { let last = -1; const step = (now) => { window.__hold?.(); if (last >= 0) t.push(now - last); last = now; if (t.length < N) requestAnimationFrame(step); else ok(); }; requestAnimationFrame(step); });
+          t.sort((a, b) => a - b);
+          return t[t.length >> 1];
+        }, N);
+        await freeze(p, true);
+        (samples[zone] ||= []).push(+ms.toFixed(1));
+        console.log('perf5 q' + Q + ' round ' + r + ' ' + zone + ' ' + ms.toFixed(1) + ' ms');
+      }
+      const med = (a) => a.slice().sort((x, y) => x - y)[a.length >> 1];
+      for (const [zone, p] of Object.entries(pages)) {
+        const ms = med(samples[zone]), pr = await p.evaluate(() => window.__R.renderer.getPixelRatio());
+        out[zone + '@q' + Q] = { ms, rounds: samples[zone], pr, wouldScale: ms > 21 ? 'down (to 0.55 at worst)' : ms < 14.5 ? 'up' : 'hold' };
+        await freeze(p, false); await p.waitForTimeout(400);
+        await p.screenshot({ path: shot.dir + '/perf5-' + zone + '-q' + Q + '.png', timeout: 240000 }).catch((e) => logs.push('perf5 shot ' + zone + ': ' + e.message.split('\n')[0]));
+        await freeze(p, true);
+      }
+      const F = out['ashfield@q' + Q]?.ms;
+      for (const z of ['coast', 'farlight']) { const o = out[z + '@q' + Q]; if (F && o?.ms) { o.vsField = +(o.ms / F).toFixed(3); o.pass = o.ms <= F * 1.15; } }
+      await ctx.close();
+    }
+    out.pass = ['coast@q1', 'farlight@q1'].every((k) => !out[k] || out[k].pass) && !!out['coast@q1']?.ms && !!out['farlight@q1']?.ms;
+    return out;
   } }
 };
 const sc = S[name];
@@ -689,6 +802,7 @@ await page.waitForFunction(() => window.__ready && (!location.search.includes('a
 let n = 0;
 // with &norender the game skips drawing; a screenshot asks for one drawn frame first
 const shot = async () => { await page.evaluate(() => new Promise((ok) => { window.__shoot = true; requestAnimationFrame(() => requestAnimationFrame(() => { window.__shoot = false; ok(); })); })); await page.screenshot({ path: `${out}/${name}-${n++}.png` }); };
+shot.dir = out;
 let res;
 try { res = await sc.run(page, shot); } catch (e) { logs.push('scenario error: ' + e.message); }
 console.log(name, JSON.stringify(res));

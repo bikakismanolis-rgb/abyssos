@@ -1,0 +1,50 @@
+Skotos Act V environment assets (the Frozen Coast and the Farthest Light).
+Packed by tools/pack-rime.mjs. Tiling layers: resized, WebP-encoded, ambient occlusion baked into the colour, colour-graded
+to the act's cold palette (snow's dark prints lifted out, snow and seaCliff flattened of their broad blotches, the ice taken
+from green toward blue). Props: cut, decimated, re-centred, re-scaled, turned to face +z, re-graded and re-encoded (WebP);
+ambient occlusion baked into the colour and the metal/roughness maps dropped; snow and frost painted onto what faces the sky
+(the ship, boats, shack, cask, crate, Name-stone). Per prop: the Dalarö wreck's seabed meshes removed, its hull cut at the
+sediment line, the spars lying beside it trimmed and its bow broken open; the Gislinge boat's sail, mast, yard and rigging
+and the rowboat's oars removed; the three ruined towers' texture sets atlased into one, their moss turned to frost, and
+each tower drawn up taller from bands of the scans (windows turned from storey to storey; the battlemented tower set on the
+intact tower's foot); the lighthouse cut down to its stone shaft (lantern room, galleries, railings, window, door and
+lights removed), the spray-painted hearts, the painted door outline, a stain and a seam painted out of its texture, the
+shaft drawn up from its own brick bands and capped; the medieval anchor's and the whale's texture sets atlased; the whale
+skeleton settled onto the ground (flippers lowered, skull tipped down, the spine lowered toward the tail) and bleached; the
+runestone's red paint taken out of its carving; the driftwood and the kelp cut out of the sand they were scanned on (the
+kelp's sand recoloured as wet shingle); the shack cut down to its gabled room; the Dutch ship's sails, ropes and nets
+removed and its hull cut below the waterline; the oil lamp's flame removed and its glass made an emissive "glow"; the
+cliffs and icicles kept as geometry only.
+
+Tiling layers (src/assets/rime/*.webp) - CC0 (public domain):
+  snow: snow_02 by Rob Tuytel - https://polyhaven.com/a/snow_02 (CC0)
+  snowTrod: snow_03 by Rob Tuytel - https://polyhaven.com/a/snow_03 (CC0)
+  shore: low_tide_rocks by Dimitrios Savva - https://polyhaven.com/a/low_tide_rocks (CC0)
+  seaCliff: seaside_rock by Dimitrios Savva - https://polyhaven.com/a/seaside_rock (CC0)
+  ice: Ice002 by ambientCG - https://ambientcg.com/a/Ice002 (CC0)
+  planks: wood_planks_grey by Rob Tuytel - https://polyhaven.com/a/wood_planks_grey (CC0)
+
+Props (src/assets/rime.glb):
+  wreck: "The Dalarö wreck/ Bodekull part 2" by Swedish National Maritime and Transport History Museums (maritima) - https://sketchfab.com/3d-models/the-dalaro-wreck-bodekull-part-2-027900c8fdf840f589cadb9f4a60d78c (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  keelboat: "Gislinge Viking Boat" by Opus Poly (OpusPoly) - https://sketchfab.com/3d-models/gislinge-viking-boat-01098ad7973647a9b558f41d2ebc5193 (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  rowboat: "Old Rowboat" by TooManyDemons (toomanydemons) - https://sketchfab.com/3d-models/old-rowboat-9922d5678af84adeb1c9b479856446ca (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  brokenBoat: "Broken Row Boat" by megamaniac - https://sketchfab.com/3d-models/broken-row-boat-41c2bcc5ca544897a132be71f3b2673a (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  towerA: "Pack of old towers in ruins" by JB3D (taz83) - https://sketchfab.com/3d-models/pack-of-old-towers-in-ruins-f213359c6cbb4c29bf8880764faa0fb8 (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  towerB: "Pack of old towers in ruins" by JB3D (taz83) - https://sketchfab.com/3d-models/pack-of-old-towers-in-ruins-f213359c6cbb4c29bf8880764faa0fb8 (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  towerC: "Pack of old towers in ruins" by JB3D (taz83) - https://sketchfab.com/3d-models/pack-of-old-towers-in-ruins-f213359c6cbb4c29bf8880764faa0fb8 (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  farLight: "Old Lighthouse" by Nirved Kamble (nirved) - https://sketchfab.com/3d-models/old-lighthouse-19e1ff049db74dc8b6173976417c1048 (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  anchor: "Medieval Anchor (Free)" by wolfgar74 - https://sketchfab.com/3d-models/medieval-anchor-free-5896ac54d63e4b84bd32e0b232619dfd (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  sunkenAnchor: "Sunken Anchor" by guillaume.biju-duval - https://sketchfab.com/3d-models/sunken-anchor-e654cb6e6e2c4217a7decb6bb9c0010d (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  whale: "Skeleton - North Atlantic Right Whale" by Ingenium Canada (technoscience3d) - https://sketchfab.com/3d-models/skeleton-north-atlantic-right-whale-5c8664c56f9a4cf3ae6d9b8ec33b8dba (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  runestone: "Monumental Runic Stone - Optimised, 20k" by Thomas Flynn (nebulousflynn) - https://sketchfab.com/3d-models/monumental-runic-stone-optimised-20k-d95a850cd9114828a18b5dd72878d9ec (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  barnacleRock: "Beach Rock with Barnacles Photoscan" by EFX (evan4129) - https://sketchfab.com/3d-models/beach-rock-with-barnacles-photoscan-21c9848ca38b4d289e2f38a98a905f86 (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  driftwood: "Large Pine Driftwood (Pacific Northwest)" by Crew Froebel (crufro) - https://sketchfab.com/3d-models/large-pine-driftwood-pacific-northwest-95d1087e513e4fb992a27b7b8a05ca9e (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  kelp: "Scan of Kelp and Seaweed on sand beach" by sterlingcrispin - https://sketchfab.com/3d-models/scan-of-kelp-and-seaweed-on-sand-beach-c9b5ef07047a4b7a90a4ffd6930ec22c (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  icicle: "Icicle 01" by Elin Hohler (ElinHohler) - https://sketchfab.com/3d-models/icicle-01-2dc75ae22f1c4d11abbfd32819312a12 (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  shack: "Wooden Shack" by Dominic Baker (Domuk) - https://sketchfab.com/3d-models/wooden-shack-b0bc474f7803488dbe0fa5aeef2e9ace (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  ship: dutch_ship_medium by James Ray Cock, Rico Cilliers, Nicolò Zubbini - https://polyhaven.com/a/dutch_ship_medium (CC0)
+  cask: wooden_barrels_01 by James Ray Cock - https://polyhaven.com/a/wooden_barrels_01 (CC0)
+  crate: wooden_crate_02 by James Ray Cock, Jurita Burger - https://polyhaven.com/a/wooden_crate_02 (CC0)
+  oilLamp: vintage_oil_lamp by Monsta3D - https://polyhaven.com/a/vintage_oil_lamp (CC0)
+  coastCliff: coastal_cliff_01 by Rob Tuytel, Rico Cilliers - https://polyhaven.com/a/coastal_cliff_01 (CC0)
+  rockFace: rock_face_01 by Dario Barresi - https://polyhaven.com/a/rock_face_01 (CC0)
