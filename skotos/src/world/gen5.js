@@ -252,7 +252,8 @@ function tryCoast(seed, last) {
       for (let z = Math.floor(z0 - 2); z < z0 + 1; z++) for (let dx = -1; dx <= 1; dx++) if (K[z * w + Math.floor(x) + dx] === FLAT) cave[z * w + Math.floor(x) + dx] = 1;
       sp.caves.push(c); reserve(c.x, c.z, 3);
       const p = { x: c.x, z: snap(c.z + 0.8), tideLocked: true };
-      if (k === 0) { const st = { id: 'carriers', ...p, r: Math.PI }; sp.stones.push(st); L.tideLocked.push(st); }
+      // (each Name-stone stands in its own cell: blocked, as the Landing's and the whale's)
+      if (k === 0) { const st = { id: 'carriers', ...p, r: Math.PI }; sp.stones.push(st); L.tideLocked.push(st); blockC(st.x, st.z, 0.45); }
       else { const ch = { ...p, hoard: true }; sp.chests.push(ch); L.tideLocked.push(ch); }
     });
   }
@@ -467,7 +468,7 @@ function tryCoast(seed, last) {
         for (let u = -len; u <= len; u += 0.5) for (const v of [-wd, wd]) blockC(x + fx * u + fz * v, z + fz * u - fx * v, 0.5);
         for (let v = -wd; v <= wd; v += 0.5) blockC(x - fx * len + fz * v, z - fz * len - fx * v, 0.5);
         if (blk[Math.floor(st.z) * w + Math.floor(st.x)]) return fail('sailor');
-        sp.stones.push(st); dry = true;
+        sp.stones.push(st); blockC(st.x, st.z, 0.45); dry = true;
         sp.wrecks.push({ x, z, r: a, kind, tilt: 0, lice: false, belly: { x, z }, hold: true });
       } else {
         blockR(x, z, wd, len, a);
@@ -587,6 +588,18 @@ function heights(L, K, frame, type, bergH) {
   const { w, h } = L, W = w + 1, H = new Float32Array(W * (h + 1)), seed = L.seed || 1;
   const dRock = bfs(L, (i) => K[i] !== ROCK, (i) => K[i] === ROCK, 14);
   const dSea = bfs(L, (i) => K[i] !== SEA && K[i] !== ROCK, (i) => K[i] === SEA, 14);
+  // (the play camera looks from the south, 8.7 m back and 13 m up: rock south of anywhere she can stand stays under its
+  // line of sight, so she is never hidden and the camera never inside the cliff. north: cells to that ground due north)
+  // (on the coast, the sea north of the bay's mouth counts as ground too: the Freeze makes it ice, freezeBay)
+  const C = type === 'coast' && L.boss, frz = (x, z) => C && z < C.z - 16 && Math.abs(x + 0.5 - C.x) < 24.5;
+  const north = new Uint8Array(w * h);
+  for (let x = 0; x < w; x++) { let k = 12; for (let z = 0; z < h; z++) { const q = K[z * w + x]; k = (q !== ROCK && q !== SEA && q !== HOLE) || (q === SEA && frz(x, z)) ? 0 : Math.min(12, k + 1); north[z * w + x] = k; } }
+  // (the columns either side count too, a little further off, so the cap runs smooth across them instead of in steps)
+  const cap = (vx, vz) => {
+    let k = 12;
+    for (let dz = -1; dz <= 0; dz++) for (let dx = -4; dx <= 3; dx++) { const x = clamp(vx + dx, 0, w - 1); k = Math.min(k, north[clamp(vz + dz, 0, h - 1) * w + x] + Math.max(0, Math.abs(x + 0.5 - vx) - 0.5) * 0.8); }
+    return k >= 10 ? 99 : 1.3 * k - 0.2;
+  };
   for (let vz = 0; vz <= h; vz++) for (let vx = 0; vx <= w; vx++) {
     let fl = 0, wat = 0, rock = 0, pit = 0, rd = 0, sd = 0, n = 0, berg = 0;
     for (const [dx, dz] of CORNER) {
@@ -606,7 +619,7 @@ function heights(L, K, frame, type, bergH) {
     } else if (berg) y = berg;
     else {
       const d = rd / Math.max(1, rock);
-      y = (8 + 10 * fbm(vx * 0.05, vz * 0.05, seed + 41)) * smooth(clamp((d - 0.2) / 3.2, 0, 1)) + 0.3;
+      y = Math.min((8 + 10 * fbm(vx * 0.05, vz * 0.05, seed + 41)) * smooth(clamp((d - 0.2) / 3.2, 0, 1)) + 0.3, Math.max(0.3, cap(vx, vz)));
     }
     H[vz * W + vx] = y;
   }
@@ -637,12 +650,22 @@ function footprints(L, K, blk) {
 export function freezeBay(L) {
   const { w } = L, C = L.boss;
   L.mode = 'frozen';
+  const fr = [];
   for (let z = 0; z < C.z - 16; z++) for (let x = Math.max(0, C.x - 24); x < Math.min(w, C.x + 24); x++) {
     const i = z * w + x;
     if (!L.low[i] || L.sea[i] || Math.hypot(x + 0.5 - C.x, z + 0.5 - C.z) < 18 || L.bed[i] > -0.5 || z < 2 || x < 2 || x >= w - 2) continue;
-    L.cells[i] = 1; L.low[i] = 0; L.ice[i] = 1;
+    L.cells[i] = 1; L.low[i] = 0; L.ice[i] = 1; fr.push(i);
   }
   for (const [x, z] of L.spots.iceRoad.cells) { const i = z * w + x; L.cells[i] = 1; L.low[i] = 0; L.ice[i] = 0; L.thick[i] = 1; }
+  // (the sea freezes as one sheet off the road: a sliver the rectangle cuts off behind a rock, against the open sea past
+  // its side, stays water, or it would be a pocket of ice no one can reach)
+  const seen = new Uint8Array(L.cells.length), q = L.spots.iceRoad.cells.map(([x, z]) => z * w + x);
+  for (const i of q) seen[i] = 1;
+  for (let hd = 0; hd < q.length; hd++) {
+    const i = q[hd], x = i % w, z = (i - x) / w;
+    for (const [dx, dz] of N4) { const X = x + dx, Z = z + dz, n = Z * w + X; if (X >= 0 && Z >= 0 && X < w && Z < L.h && !seen[n] && L.ice[n]) { seen[n] = 1; q.push(n); } }
+  }
+  for (const i of fr) if (!seen[i]) { L.cells[i] = 0; L.low[i] = 1; L.ice[i] = 0; }
   const R = L.spots.iceRoad;
   L.spines.push({ id: 'bayRoad', from: { x: R.x, z: R.z }, to: { x: R.x, z: 3 } });
   // the thin ice's bed under it, like the bay's (the water's colour); its ground sinks like any thin ice
@@ -808,6 +831,8 @@ function makeDraw(L, K, blk, res, rng) {
 // the coast's dressing, from its own draws, after everything else
 function dressCoast(L, K, blk, res, rng) {
   const { w, h } = L;
+  const WRACK = new Set(['kelp', 'driftwood', 'barnacleRock', 'anchor', 'sunkenAnchor']);
+  const wrackNear = (x, z) => L.props.some((q) => WRACK.has(q.t) && Math.hypot(q.x - x, q.z - z) < 2.2);
   const dRock = bfs(L, (i) => K[i] !== ROCK, (i) => K[i] === ROCK, 6);
   for (let z = 2; z < h - 2; z++) for (let x = 2; x < w - 2; x++) {
     const i = z * w + x, k = K[i];
@@ -828,10 +853,13 @@ function dressCoast(L, K, blk, res, rng) {
       continue;
     }
     if (k === FLAT && L.bed[i] < BED_DRY && L.cells[i]) {
+      // (the wrack's pieces never lie on one another, nor on the kelp heaps of the Sunken's packs: 2.2 m apart)
       const wrack = Math.abs(L.bed[i] - 0.6) < 0.08;
-      if (wrack && rng.chance(0.05)) L.props.push({ t: rng.pick(['kelp', 'kelp', 'driftwood', 'barnacleRock']), x: px, z: pz, r: rng.range(0, 6.28), s: rng.range(0.6, 1.2) });
-      else if (rng.chance(0.004)) L.props.push({ t: 'barnacleRock', x: px, z: pz, r: rng.range(0, 6.28), s: rng.range(0.5, 1) });
-      if (z > 84 && z < 92 && x > 64 && rng.chance(0.006)) L.props.push({ t: rng.chance(0.5) ? 'anchor' : 'sunkenAnchor', x: px, z: pz, r: rng.range(0, 6.28), s: 1, tilt: rng.range(0.2, 0.9) });
+      let p = null;
+      if (wrack && rng.chance(0.05)) p = { t: rng.pick(['kelp', 'kelp', 'driftwood', 'barnacleRock']), x: px, z: pz, r: rng.range(0, 6.28), s: rng.range(0.6, 1.2) };
+      else if (rng.chance(0.004)) p = { t: 'barnacleRock', x: px, z: pz, r: rng.range(0, 6.28), s: rng.range(0.5, 1) };
+      if (p && !wrackNear(p.x, p.z)) L.props.push(p);
+      if (z > 84 && z < 92 && x > 64 && rng.chance(0.006)) { const q = { t: rng.chance(0.5) ? 'anchor' : 'sunkenAnchor', x: px, z: pz, r: rng.range(0, 6.28), s: 1, tilt: rng.range(0.2, 0.9) }; if (!wrackNear(q.x, q.z)) L.props.push(q); }
       continue;
     }
     if (k === LAND && L.cells[i] && L.paint[i] < 0.3) {
@@ -943,6 +971,8 @@ function tryFarlight(seed, last) {
     const cells = [];
     for (let z = cz + 3; z < cz + 6; z++) for (let x = cx - 2; x < cx + 1; x++) { cells.push([x, z]); blk[z * w + x] = 1; }
     sp.farLight = { x: cx - 0.5, z: cz + 4.5, cells, door: { x: cx - 0.5, z: cz + 2.2 } };
+    // (the door-stone stands in the cell before the door: blocked too; the door is used from the cell north of it)
+    blockC(cx - 0.5, cz + 2.2, 0.45);
     sp.skotos = { x: cx, z: 6 };
     sp.npcs = { keepers: [-4.5, -3, -1.5, 1.5, 3, 4.5].map((dx) => ({ x: cx - 0.5 + dx, z: cz + 0.9 - Math.abs(dx) * 0.12 })), tern: { x: cx + 2.1, z: cz + 2.6, r: Math.PI } };
     // the skerry's rock rim between the cross and the diagonals (rocks of about 3 m, the keepers' lines kept clear)

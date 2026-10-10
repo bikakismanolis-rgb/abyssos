@@ -4,6 +4,7 @@ import { R, addLight, shake, LIGHTS } from './gfx.js';
 import { tex } from './textures.js';
 import { rand, clamp, lerp, TAU } from '../core/util.js';
 import { BED_DRY } from '../world/genlib.js';
+import { inBay } from '../world/gen5.js';
 
 // ---------- particles ----------
 const VS = `
@@ -233,13 +234,36 @@ function decalTexture() {
 }
 const decalGeo = new THREE.PlaneGeometry(1, 1); decalGeo.rotateX(-Math.PI / 2);
 export function decal(x, z, kind, s = 1, life = 14) {
+  // (Act V: a stain on the tide's flats lies on the bed, under the water; none on open water)
+  const bed = decalBed(x, z); if (bed === -9) return;
   if (FX.decals.length > 40) { const d = FX.decals.shift(); FX.group.remove(d.m); d.m.material.dispose(); }
   const color = kind === 'blood' ? 0x4a0505 : kind === 'scorch' ? 0x0a0806 : kind === 'goo' ? 0x2a4a08 : kind === 'ecto' ? 0x2a6a8a : kind === 'amber' || kind === 'sap' ? 0xb07018 : 0x202020;
-  const m = new THREE.Mesh(decalGeo, new THREE.MeshBasicMaterial({ map: decalTexture(), color, transparent: true, opacity: kind === 'ecto' ? 0.5 : 0.75, depthWrite: false, blending: kind === 'ecto' ? THREE.AdditiveBlending : THREE.NormalBlending }));
+  const a = kind === 'ecto' ? 0.5 : 0.75;
+  const m = new THREE.Mesh(decalGeo, new THREE.MeshBasicMaterial({ map: decalTexture(), color, transparent: true, opacity: a, depthWrite: false, blending: kind === 'ecto' ? THREE.AdditiveBlending : THREE.NormalBlending }));
   m.position.set(x, 0.03 + FX.decals.length * 0.0005, z); m.rotation.y = Math.random() * TAU; m.scale.setScalar(s);
   m.renderOrder = 2;
   FX.group.add(m);
-  FX.decals.push({ m, life, t: 0 });
+  const L = FX.L5, i = L ? Math.floor(z) * L.w + Math.floor(x) : -1;
+  FX.decals.push({ m, life, t: 0, a, bed, bay: bed != null && inBay(L, Math.floor(x), Math.floor(z)), ice: i >= 0 && !!L.ice?.[i] ? i : -1 });
+}
+// the bed under a stain on Act V's tidal water (from the corners' beds, as the sea works out its depth), or null where no
+// water ever covers it (dry land, ice, a window, the jetty, any other zone); -9 on open water (the sea, a hole)
+function decalBed(x, z) {
+  const L = FX.L5; if (!L) return null;
+  const ix = Math.floor(x), iz = Math.floor(z); if (ix < 0 || iz < 0 || ix >= L.w || iz >= L.h) return null;
+  const i = iz * L.w + ix;
+  if (L.ice?.[i] || L.thick?.[i] || L.window?.[i] || L.deck?.[i]) return null;
+  if (L.sea?.[i]) return -9;
+  if (!L.bed || !L.vbed || L.bed[i] >= BED_DRY) return null;
+  const W = L.w + 1, v = L.vbed, u = x - ix, w = z - iz;
+  return lerp(lerp(v[iz * W + ix], v[iz * W + ix + 1], u), lerp(v[(iz + 1) * W + ix], v[(iz + 1) * W + ix + 1], u), w);
+}
+// how much of a stain on the bed shows through dep m of water: what the sea's alpha leaves (sea.js), none once it is closed
+const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+function underWater(dep) {
+  if (dep <= 0.006) return 1;
+  if (dep >= 0.43) return 0;
+  return 1 - lerp(lerp(0.32, 0.62, sstep(0, 0.42, dep)), 0.95, sstep(0.37, 0.43, dep)) * sstep(0.006, 0.045, dep);
 }
 
 // ---------- telegraphs: what an attack will hit, filling up until it lands ----------
@@ -538,7 +562,12 @@ export function updateFX(dt, cx, cz) {
   }
   for (let i = FX.decals.length - 1; i >= 0; i--) {
     const d = FX.decals[i]; d.t += dt;
-    if (d.t > d.life) { d.m.material.opacity -= dt * 0.5; if (d.m.material.opacity <= 0) { FX.group.remove(d.m); d.m.material.dispose(); FX.decals.splice(i, 1); } }
+    // (on thin ice: gone with the ice when it breaks, FX.iceSt the crack stages, sea.js)
+    if (d.ice >= 0 && FX.iceSt?.[d.ice] === 4) d.a = 0;
+    if (d.t > d.life || d.a <= 0) { d.a -= dt * 0.5; if (d.a <= 0) { FX.group.remove(d.m); d.m.material.dispose(); FX.decals.splice(i, 1); continue; } }
+    // (on the tide's flats: the water over it as it floods and ebbs; Skerry Bay keeps its own level)
+    const k = d.bed == null ? 1 : underWater((d.bay ? FX.bayLv || 0 : FX.tideLv || 0) - d.bed);
+    d.m.material.opacity = d.a * k; d.m.visible = k > 0.01;
   }
   for (let i = FX.teles.length - 1; i >= 0; i--) {
     const t = FX.teles[i]; t.t += dt;

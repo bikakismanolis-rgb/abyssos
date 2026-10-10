@@ -15,7 +15,7 @@ import { G } from '../gfx/rig.js';
 import { RNG, clamp, fbm, lerp } from '../core/util.js';
 import { BED_DRY, groundY } from './genlib.js';
 import { SEA, SEA_U, SEA_LIT, SEA_GLSL, noiseTex, iceMat, beamMesh, swellY, TICKS } from './sea.js';
-import { MAT, mats, worldMat, bake, jitter, prism, size4, glowMat, flameMesh, lanternMesh, lay4, hash2, act4Mats, act4Prop, occlude } from './build.js';
+import { MAT, mats, worldMat, bake, jitter, prism, size4, own, glowMat, flameMesh, lanternMesh, lay4, hash2, act4Mats, act4Prop, occlude } from './build.js';
 
 const rime = (name) => packProp('rime', name);
 // relative colours (the world-projected materials multiply their layer by vertexColour / GREY; the code fallbacks show
@@ -284,9 +284,11 @@ const PLACE = {
   },
   barnacleRock(p, I) { if (!fitInst(I, 'rime:barnacleRock', p, 1.2 * p.s, 'w', -0.1)) rock5(I, 'cliff5', p, 1.2 * p.s, 0.55, -0.12, ROCKS, '~ns'); },
   rockFace(p, I) {
-    // (the rime faces are geometry only, packed untextured: drawn in the sea-cliff stone)
-    if (fitInst(I, 'cliff5:rime/rockFace', p, 5 * p.s, 'w', p.y ?? -0.3) || fitInst(I, 'cliff5:rime/coastCliff', p, 6 * p.s, 'w', p.y ?? -0.3)) return;
-    const name = ENV.props.faceA ? (hash2(p.x, p.z) > 0.5 ? 'faceA' : 'cliffB') : null;
+    // (the rime faces are geometry only, packed untextured: drawn in the sea-cliff stone. Each is a one-sided scan facing
+    // its local +z: only where that faces the camera, south-ish; seen from behind it would show a scatter of slivers)
+    const front = Math.cos(p.r || 0) > 0.35;
+    if (front && (fitInst(I, 'cliff5:rime/rockFace', p, 5 * p.s, 'w', p.y ?? -0.3) || fitInst(I, 'cliff5:rime/coastCliff', p, 6 * p.s, 'w', p.y ?? -0.3))) return;
+    const name = front && ENV.props.faceA ? (hash2(p.x, p.z) > 0.5 ? 'faceA' : 'cliffB') : null;
     if (name) { const f = fit(name, 4.4 * p.s, 'w'); I.add('cliff5:' + name, p.x, p.z, p.r, f.k, (p.y ?? -0.3) - f.y0, f.k * 1.25, f.k); }
     else rock5(I, 'cliff5', p, 3.4 * p.s, 1.4, p.y ?? -0.3);
   },
@@ -324,7 +326,7 @@ const PLACE = {
   sunkenLantern(p, I, B, out) {
     const y = p.y ?? -2;
     if (!fitInst(I, 'rime:oilLamp', { ...p, tilt: 1.1 }, 0.6, 'h', y)) { const f = fit('lantern', 0.6); if (f) I.add('env:lantern', p.x, p.z, p.r, f.k, y - f.y0, f.k, f.k, 1.1); }
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex('dot'), color: 0xffa040, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }));
+    const s = new THREE.Sprite(own(new THREE.SpriteMaterial({ map: tex('dot'), color: 0xffa040, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false })));
     s.scale.setScalar(1.6); s.position.set(p.x, (p.y ?? -2) + 0.4, p.z); out.group.add(s);
   },
   brazier(p, I, B, out) { const g = act4Prop('brazier'); g.position.set(p.x, 0, p.z); out.group.add(g); },
@@ -562,7 +564,7 @@ export function act5Level(L, I, B, out) {
 
 // ---------- act5Prop: the story's props ----------
 const solid5 = (parts, mat) => { const m = new THREE.Mesh(bake(parts), mat || MAT.lam); m.castShadow = true; m.receiveShadow = true; return m; };
-const halo = (c, s) => { const h = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex('dot'), color: c, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false })); h.scale.setScalar(s); return h; };
+const halo = (c, s) => { const h = new THREE.Sprite(own(new THREE.SpriteMaterial({ map: tex('dot'), color: c, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }))); h.scale.setScalar(s); return h; };
 // an iron fire-basket on a stone lip: bars round a bed of coals, a flame and a halo when lit. { group, y (the fire), set(b),
 // k(k) brightness 0-1+ }
 function fireCage(r = 0.5, h = 0.75, flame = 1.6, haloS = 4, color = 0xffc070) {
@@ -621,7 +623,7 @@ function lanternRoom(o = {}) {
   const g = new THREE.Group(), s = o.s ?? 1;
   g.add(solid5([{ geo: G.cyl(1.9 * s, 1.45 * s, 0.5, 14), color: STONED, o: { y: 0.0 } }, { geo: G.cyl(1.95 * s, 1.95 * s, 0.14, 14), color: STONEL, o: { y: 0.3 } },
     ...Array.from({ length: 12 }, (_, k) => { const a = (k / 12) * Math.PI * 2; return { geo: G.box(0.5 * s, 0.55, 0.22), color: GREY, o: { x: Math.sin(a) * 1.82 * s, y: 0.62, z: Math.cos(a) * 1.82 * s, ry: a } }; })], MAT.cliff5));
-  const glass = new THREE.MeshBasicMaterial({ color: 0x223040, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
+  const glass = own(new THREE.MeshBasicMaterial({ color: 0x223040, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
   const ring = new THREE.Mesh(G.cyl(1.05 * s, 1.05 * s, 1.5, 12), glass); ring.position.y = 1.15; ring.renderOrder = 3; g.add(ring);
   const iron = [{ geo: G.cone(1.35 * s, 1.1, 12), color: IRON, o: { y: 2.45 } }, { geo: G.ball(0.16, 6, 4), color: IRON, o: { y: 3.08 } }];
   for (let k = 0; k < 6; k++) { const a = (k / 6) * Math.PI * 2; iron.push({ geo: G.box(0.06, 1.55, 0.06), color: IRON, o: { x: Math.sin(a) * 1.07 * s, y: 1.15, z: Math.cos(a) * 1.07 * s } }); }
@@ -842,7 +844,7 @@ const PROP5 = {
     const g = new THREE.Group(), parts = rime('cask') || ENV.props.barrel, sz = size4(parts);
     if (sz) { const k = 0.95 / Math.max(0.01, sz.y); for (const p of parts) { const m = new THREE.Mesh(p.geo, p.mat); m.scale.setScalar(k); m.position.y = -sz.y0 * k; m.castShadow = true; g.add(m); } }
     else g.add(solid5([{ geo: G.cyl(0.36, 0.33, 0.95, 10), color: 0x3a2c1e, o: { y: 0.48 } }, ...[0.12, 0.48, 0.84].map((y) => ({ geo: G.cyl(0.38, 0.38, 0.05, 10), color: IRON, o: { y } }))]));
-    const stain = new THREE.Mesh(new THREE.CircleGeometry(0.6, 12).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x0a0806, transparent: true, opacity: 0.45, depthWrite: false }));
+    const stain = new THREE.Mesh(new THREE.CircleGeometry(0.6, 12).rotateX(-Math.PI / 2), own(new THREE.MeshBasicMaterial({ color: 0x0a0806, transparent: true, opacity: 0.45, depthWrite: false })));
     stain.position.y = 0.025; stain.renderOrder = 2; g.add(stain);
     return g;
   },

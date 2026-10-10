@@ -2,8 +2,8 @@
 // into, the aurora (in the water and the ice in play, as a sky in the cines), the sea-lights' beams and the Skotos's skin.
 // No render targets: everything is one forward pass. Every image has a quality-0 path (built first: depth colour, edge
 // line, foam, shades, cracks) and the richer paths on top (two noise reads, the aurora reflection, light paths, parallax,
-// the drowned lanterns). Draw order in Act V zones: ice -1, the leads' opaque water -0.5, the sea 1, blob shadows 1.5,
-// light pools, rings and decals 2, telegraphs 3.
+// the drowned lanterns). Draw order in Act V zones: ice -1, the leads' opaque water -0.5, the see-through sea -0.6 (before
+// every other see-through thing), the ice windows 1, blob shadows 1.5, light pools, rings and decals 2, telegraphs 3.
 import * as THREE from 'three';
 import { R } from '../gfx/gfx.js';
 import { FX } from '../gfx/fx.js';
@@ -377,6 +377,11 @@ export function shoreJit(L) {
   return (L.jit5 = out);
 }
 const CH = 32;
+// (the see-through sea draws before every other see-through thing: three sorts those by renderOrder before depth, so at
+// any order above theirs it would be laid over every halo, glow, flame, splash ring and loot beam that stands in front of
+// water, its depth test passing where it lies behind them. The opaque leads and ice sort apart, so -1 and -0.5 still
+// hold; the ice windows (1), blob shadows (1.5), pools, rings and decals (2) and telegraphs (3) draw after it)
+const SEA_RO = -0.6;
 // The sea as chunked per-cell quads (32 x 32 cells, culled): every coast cell with bed < BED_DRY that is no thick ice or
 // window, and every thin-ice and L.sea cell (the water a broken cell shows); attributes per corner, so the swell and the
 // lift never crack the surface. Returns a Group (userData.mat, userData.L).
@@ -457,7 +462,7 @@ export function buildSea(L, group, quality = R.quality) {
     geo.setIndex(idx);
     geo.computeBoundingBox(); geo.boundingBox.min.y = -0.2; geo.boundingBox.max.y = 0.6; geo.computeBoundingSphere();
     const m = new THREE.Mesh(geo, mat);
-    m.renderOrder = low ? -0.5 : 1; m.receiveShadow = false; m.castShadow = false;
+    m.renderOrder = low ? -0.5 : SEA_RO; m.receiveShadow = false; m.castShadow = false;
     m.onBeforeRender = hook;
     out.add(m);
   }
@@ -494,7 +499,7 @@ export function seaBeyond(L, group, o = {}) {
     geo.computeVertexNormals(); geo.computeBoundingSphere();
     return geo;
   };
-  if (water.length) { const m = new THREE.Mesh(make(water, 0), seaMat({ low: !L.bed, far: true })); m.renderOrder = L.bed ? 1 : -0.5; g.add(m); }
+  if (water.length) { const m = new THREE.Mesh(make(water, 0), seaMat({ low: !L.bed, far: true })); m.renderOrder = L.bed ? SEA_RO : -0.5; g.add(m); }
   if (ice.length) { const m = new THREE.Mesh(make(ice, ICE_Y - 0.01), iceMat({ far: true })); m.renderOrder = -1; m.receiveShadow = R.quality >= 2; g.add(m); }
   group.add(g);
   return g;
@@ -903,8 +908,8 @@ R.skyHook = () => {
   if (on && !dome) auroraSky();
   if (dome) { dome.visible = on; if (on && dome.parent !== R.scene) R.scene.add(dome); }
   tickTweens();
-  // (the water level for fx.js: the wrecks' drips and the sea smoke read it)
-  FX.tideLv = SEA.uLevel.value; FX.wetLv = SEA.uWetLevel.value;
+  // (the water level for fx.js: the wrecks' drips, the sea smoke and the stains read it; the stains the ice's stages too)
+  FX.tideLv = SEA.uLevel.value; FX.wetLv = SEA.uWetLevel.value; FX.bayLv = SEA.uBayLevel.value; FX.iceSt = SEA.tCrack.value?.image?.data || null;
   const dt = tickT < 0 ? 0 : clamp(R.time - tickT, 0, 0.1); tickT = R.time;
   if (dt > 0) for (const t of TICKS) if (inScene(t.obj)) t.tick(dt);
 };
@@ -949,7 +954,7 @@ varying vec3 vW; varying vec3 vN; varying float vS;
 void main() {
   vec3 V = cameraPosition - vW; float dist = length(V); V /= dist;
   float s = clamp(vS / uLen, 0.0, 1.0);
-  float a = 1.0 - pow(1.0 - abs(dot(normalize(vN), V)), 1.5);
+  float a = 1.0 - pow(max(1.0 - abs(dot(normalize(vN), V)), 0.0), 1.5);
   a *= a;
   a *= smoothstep(0.0, 0.06, s) * pow(1.0 - s, 1.6) * (0.75 + 0.25 * sin(s * 9.0 - uTime * 1.3));
   a *= smoothstep(0.1, 1.6, vW.y);
@@ -958,6 +963,7 @@ void main() {
   #include <colorspace_fragment>
 }`
     });
+    mat.userData.own = true;
     cone = new THREE.Mesh(geo, mat);
     cone.frustumCulled = false; cone.renderOrder = 3;
     cone.onBeforeRender = () => { u.uFogD.value = R.scene.fog?.density ?? 0.02; };
@@ -1011,7 +1017,7 @@ export function skotosSkin(mat) {
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
   {
     vec3 nV = normalize(normal), vV = normalize(vViewPosition);
-    float fres = pow(1.0 - abs(dot(nV, vV)), 2.6);
+    float fres = pow(max(1.0 - abs(dot(nV, vV)), 0.0), 2.6);
     totalEmissiveRadiance += uAurCol * (1.0 - uAurDark) * (0.25 + 0.75 * uAur) * fres * 0.55 + vec3(0.22, 0.16, 0.36) * fres * 0.18;
 #ifdef SKOTOS_HI
     vec3 nW = inverseTransformDirection(nV, viewMatrix);
