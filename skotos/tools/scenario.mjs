@@ -726,75 +726,89 @@ const S = {
   // Act V, the perf gate: frame time at quality 1 under phone emulation (915 x 412 at a pixel ratio of 1.5, a coarse
   // pointer, MSAA; adaptive resolution pinned at 1.0, the scale it would have picked reported beside it) in the Shallows at
   // high water and mid Ice Road, against the Field of Ash measured the same way: each within the Field's + 15%. Quality 0
-  // is measured too, as a floor. The three zones are open at once and measured in turn, ROUNDS times over (the other two
-  // pages draw nothing and run no game logic meanwhile), so a load that drifts hits them alike, and each zone's verdict is
-  // the median of its round-by-round ratios to the Field; the packs are kept from spawning everywhere (the
-  // gate is the world's look: terrain, water, ice, props, FX). Env: QS (default '1,0'), FRAMES (frames per sample, 16),
-  // ROUNDS (3), PACKS=1 lets the packs spawn
+  // is measured too, as a floor (each spot no slower than at quality 1). One page travels between the three zones (fixed
+  // seeds, the packs kept from spawning: the gate is the world's look, terrain, water, ice, props, FX), CYCLES times after
+  // a first visit that builds them. Each visit: the hero and the camera placed, a few real frames (the game's own work in
+  // each is timed: 'logic'), then the loop held, the particles run 12 s ahead, the tide's uniforms at high water, and K
+  // frames drawn and waited for (render and a 1-pixel read-back: under a software GPU shared with other processes the rAF
+  // interval swings tenfold, a drawn-and-waited frame does not). A visit's frame is its best of K plus its logic; each
+  // cycle compares the zones with the Field drawn beside them, and the verdict is the median of those ratios.
+  // Env: QS ('1,0'), CYCLES (5), K (3), SEEDS ('5,3,3': Field, coast, farlight), PACKS=1 lets the packs spawn
   perf5: { q: 'world=town&q=0&noenv', run: async (pg, shot) => {
     const browser = pg.context().browser(), base = process.env.BASE || 'http://localhost:5199/';
-    const QS = (process.env.QS || '1,0').split(','), N = +(process.env.FRAMES || 16), ROUNDS = +(process.env.ROUNDS || 3), out = {};
-    const spots = {
-      ashfield: (G) => { const s = G.zone.L.spots.camp; return { x: s.x, z: s.z - 8 }; },
-      coast: (G) => { const L = G.zone.L, s = L.spots.dalaro; return { x: s.x, z: s.z + 4, tide: 1.2 }; },
-      farlight: (G) => { const p = G.zone.L.spots.poles; const s = p[p.length >> 1]; return { x: s.x, z: s.z }; }
-    };
+    await pg.goto('about:blank');
+    const QS = (process.env.QS || '1,0').split(','), CYC = +(process.env.CYCLES || 5), K = +(process.env.K || 3), out = {};
+    const seeds = (process.env.SEEDS || '5,3,3').split(',').map(Number), zones = ['ashfield', 'coast', 'farlight'];
+    const med = (a) => a.slice().sort((x, y) => x - y)[a.length >> 1];
     for (const Q of QS) {
       const ctx = await browser.newContext({ viewport: { width: 915, height: 412 }, deviceScaleFactor: 1.5, isMobile: true, hasTouch: true });
-      const pages = {};
-      for (const zone of Object.keys(spots)) {
-        const p = await ctx.newPage();
-        p.on('pageerror', (e) => logs.push('pageerror(' + zone + '): ' + e.message));
-        p.on('console', (m) => { if (m.type() === 'error') logs.push(zone + ': ' + m.text()); });
-        await p.goto(base + '?auto=' + zone + '&q=' + Q + '&lvl=30' + (zone === 'farlight' ? '&flags=frozen' : ''));
-        try { await p.waitForFunction(() => window.__G?.player && window.__G.zone && window.__G.mode === 'play', null, { timeout: 400000 }); } catch (e) { out[zone + Q] = 'no zone'; continue; }
-        await p.evaluate(({ src, packs }) => {
-          const G = window.__G, R = window.__R, v = new Function('return ' + src)()(G), f = G.zone.map.nearestFloor(v.x, v.z);
-          window.__immortal = true;
-          if (!packs) { for (const pk of G.zone.packs) pk.spawned = true; for (const a of G.actors.slice()) if (a.team === 'foe') { a.remove?.(); G.actors.splice(G.actors.indexOf(a), 1); } G.zone.bossSpawned = true; }
-          G.player.x = f.x; G.player.z = f.z;
-          // (high water: the tide's own force where tide.js has it, the water's uniforms held there besides)
-          const T = window.__act5?.tide, S = window.__act5?.sea;
-          if (v.tide != null) { if (T?.TIDE) T.TIDE.force = { h: v.tide, rate: 10 }; window.__hold = () => { if (S) { S.uLevel.value = v.tide; S.uWetLevel.value = v.tide; } }; }
-          R.prScale = 1; R.renderer.setPixelRatio(R.basePR); R.renderer.setSize(R.w, R.h, false); R.lastResize = 1e15;
-        }, { src: spots[zone].toString(), packs: process.env.PACKS === '1' });
-        pages[zone] = p;
+      const p = await ctx.newPage();
+      p.on('pageerror', (e) => logs.push('pageerror(perf5 q' + Q + '): ' + e.message));
+      p.on('console', (m) => { if (m.type() === 'error') logs.push('perf5 q' + Q + ': ' + m.text()); });
+      // (each frame of the game's loop timed, less the part of it spent in renderer.render: the game's logic)
+      await p.addInitScript(() => {
+        const raf = window.requestAnimationFrame.bind(window);
+        window.__cb = []; window.__rn = 0;
+        window.requestAnimationFrame = (f) => raf((t) => { const t0 = performance.now(), r0 = window.__rn; f(t); if (window.__rn !== r0) window.__cb.push(performance.now() - t0 - (window.__rn - r0)); if (window.__cb.length > 60) window.__cb.shift(); });
+      });
+      await p.goto(base + '?auto=ashfield&q=' + Q + '&lvl=30&seed=' + seeds[0]);
+      try { await p.waitForFunction(() => window.__G?.player && window.__G.zone && window.__G.mode === 'play', null, { timeout: 400000 }); } catch (e) { out['q' + Q] = 'no zone'; await ctx.close(); continue; }
+      await p.evaluate((seeds) => {
+        window.__immortal = true;
+        const h = window.__G.hero, F = h.flags, R = window.__R;
+        for (const f of ['coastSeen', 'farSeen', 'hearth', 'rite', 'tamMet', 'glaukosMet', 'alkShip', 'ternSeen']) F[f] = true;
+        h.seeds = Object.assign(h.seeds || {}, { ['coast@' + h.diff]: seeds[1], ['farlight@' + h.diff]: seeds[2] });
+        const r0 = R.renderer.render.bind(R.renderer);
+        R.renderer.render = (s, c) => { const t0 = performance.now(); r0(s, c); window.__rn += performance.now() - t0; };
+      }, seeds);
+      const visit = (zone) => p.evaluate(async ({ zone, K, packs }) => {
+        const G = window.__G, R = window.__R, fx = await import('/src/gfx/fx.js'), gfx = await import('/src/gfx/gfx.js');
+        G.hero.flags.frozen = zone === 'farlight';
+        // (its packs, people and creatures loaded first, as a real journey waits for them: the rime pack's look is measured)
+        if (G.zone.id !== zone) { await (await import('/src/game/world.js')).zoneReady(zone); window.__D.enterZone(zone); }
+        const S = G.zone.L.spots;
+        const v = zone === 'ashfield' ? { x: S.camp.x, z: S.camp.z - 8 } : zone === 'coast' ? { x: S.dalaro.x, z: S.dalaro.z + 4, tide: 1.2 } : (() => { const s = S.poles[S.poles.length >> 1]; return { x: s.x, z: s.z }; })();
+        if (!packs) { for (const pk of G.zone.packs) pk.spawned = true; for (const a of G.actors.slice()) if (a.team === 'foe') { a.remove?.(); G.actors.splice(G.actors.indexOf(a), 1); } G.zone.bossSpawned = true; }
+        const f = G.zone.map.nearestFloor(v.x, v.z);
+        G.player.x = f.x; G.player.z = f.z;
+        const T = window.__act5?.tide?.TIDE, SEA = window.__act5?.sea;
+        if (T) T.force = v.tide != null ? { h: v.tide, rate: 10 } : null;
+        R.prScale = 1; R.renderer.setPixelRatio(R.basePR); R.renderer.setSize(R.w, R.h, false); R.lastResize = 1e15;
+        window.__cb.length = 0;
+        for (let i = 0; i < 6; i++) await new Promise((ok) => requestAnimationFrame(() => { gfx.updateCamera(0, G.player.x, G.player.z, true); ok(); }));
+        const lg = window.__cb.slice(2).sort((a, b) => a - b), logic = lg[lg.length >> 1] ?? 0;
+        const mode0 = G.mode; G.mode = 'hold'; R.lost = true;
+        for (let i = 0; i < 120; i++) fx.updateFX(0.1, G.player.x, G.player.z);
+        gfx.updateCamera(0, G.player.x, G.player.z, true); gfx.frame(0.016);
+        if (v.tide != null && SEA) { SEA.uLevel.value = v.tide; SEA.uWetLevel.value = v.tide; }
+        const gl = R.renderer.getContext(), px = new Uint8Array(4), r = [];
+        const draw = () => { R.lost = false; R.skyHook?.(); R.renderer.render(R.scene, R.camera); R.lost = true; gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); };
+        draw();
+        for (let i = 0; i < K; i++) { const t0 = performance.now(); draw(); r.push(performance.now() - t0); }
+        const info = R.renderer.info.render, best = Math.min(...r);
+        R.lost = false; G.mode = mode0;
+        return { ms: +(best + logic).toFixed(1), draw: +best.toFixed(1), logic: +logic.toFixed(1), calls: info.calls, tris: info.triangles, water: v.tide != null ? SEA?.uLevel.value : undefined, at: [+G.player.x.toFixed(1), +G.player.z.toFixed(1)], pr: R.renderer.getPixelRatio() };
+      }, { zone, K, packs: process.env.PACKS === '1' });
+      const S = {};
+      for (let c = -1; c < CYC; c++) for (const z of zones) {
+        const m = await visit(z);
+        if (c < 0) { await p.waitForTimeout(300); await p.screenshot({ path: shot.dir + '/perf5-' + z + '-q' + Q + '.png', timeout: 240000 }).catch((e) => logs.push('perf5 shot ' + z + ': ' + e.message.split('\n')[0])); continue; }
+        (S[z] ||= []).push(m);
+        console.log('perf5 q' + Q + ' cycle ' + c + ' ' + z + ' ' + JSON.stringify(m));
       }
-      // (a page on hold draws nothing and runs no game logic either: its loop only ticks the clock)
-      const freeze = (p, on) => p.evaluate((on) => { const G = window.__G; window.__R.lost = on; if (on && G.mode !== 'hold') { window.__mode0 = G.mode; G.mode = 'hold'; } if (!on && G.mode === 'hold') G.mode = window.__mode0; }, on);
-      const samples = {};
-      for (const p of Object.values(pages)) await freeze(p, true);
-      for (let r = 0; r < ROUNDS; r++) for (const [zone, p] of Object.entries(pages)) {
-        await freeze(p, false);
-        const ms = await p.evaluate(async (N) => {
-          const t = [];
-          await new Promise((ok) => setTimeout(ok, 1500));
-          await new Promise((ok) => { let last = -1; const step = (now) => { window.__hold?.(); if (last >= 0) t.push(now - last); last = now; if (t.length < N) requestAnimationFrame(step); else ok(); }; requestAnimationFrame(step); });
-          t.sort((a, b) => a - b);
-          return t[t.length >> 1];
-        }, N);
-        await freeze(p, true);
-        (samples[zone] ||= []).push(+ms.toFixed(1));
-        console.log('perf5 q' + Q + ' round ' + r + ' ' + zone + ' ' + ms.toFixed(1) + ' ms');
+      for (const z of zones) {
+        const ms = med(S[z].map((m) => m.ms)), last = S[z][S[z].length - 1];
+        out[z + '@q' + Q] = { ms, draw: med(S[z].map((m) => m.draw)), logic: med(S[z].map((m) => m.logic)), calls: last.calls, tris: last.tris, water: last.water, pr: last.pr, wouldScale: ms > 21 ? 'down (to 0.55 at worst)' : ms < 14.5 ? 'up' : 'hold' };
       }
-      const med = (a) => a.slice().sort((x, y) => x - y)[a.length >> 1];
-      for (const [zone, p] of Object.entries(pages)) {
-        const ms = med(samples[zone]), pr = await p.evaluate(() => window.__R.renderer.getPixelRatio());
-        out[zone + '@q' + Q] = { ms, rounds: samples[zone], pr, wouldScale: ms > 21 ? 'down (to 0.55 at worst)' : ms < 14.5 ? 'up' : 'hold' };
-        await freeze(p, false); await p.waitForTimeout(400);
-        await p.screenshot({ path: shot.dir + '/perf5-' + zone + '-q' + Q + '.png', timeout: 240000 }).catch((e) => logs.push('perf5 shot ' + zone + ': ' + e.message.split('\n')[0]));
-        await freeze(p, true);
-      }
-      // (the ratio to the Field is taken round by round, each zone against the Field measured beside it, and the median of
-      // those ratios is the verdict: a load that swells or eases between rounds cancels out)
-      const F = samples.ashfield;
       for (const z of ['coast', 'farlight']) {
-        const o = out[z + '@q' + Q], s = samples[z];
-        if (F?.length && s?.length) { o.ratios = s.map((v, i) => +(v / F[i]).toFixed(3)); o.vsField = med(o.ratios); o.pass = o.vsField <= 1.15; }
+        const o = out[z + '@q' + Q];
+        o.ratios = S[z].map((m, i) => +(m.ms / S.ashfield[i].ms).toFixed(3)); o.vsField = med(o.ratios); o.pass = o.vsField <= 1.15;
       }
       await ctx.close();
     }
-    out.pass = ['coast@q1', 'farlight@q1'].every((k) => !out[k] || out[k].pass) && !!out['coast@q1']?.ms && !!out['farlight@q1']?.ms;
+    // (the floor: at quality 0 each spot draws no slower than at quality 1)
+    for (const z of zones) if (out[z + '@q0']?.ms && out[z + '@q1']?.ms) out[z + '@q0'].floor = out[z + '@q0'].ms <= out[z + '@q1'].ms * 1.05;
+    out.pass = ['coast@q1', 'farlight@q1'].every((k) => out[k]?.pass) && zones.every((z) => out[z + '@q0']?.floor !== false);
     return out;
   } }
 };

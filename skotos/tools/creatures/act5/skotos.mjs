@@ -1,32 +1,37 @@
-// The Skotos (Το Σκότος): "Cloaked Figure" by MysteryPancake (sketchfab.com/mysterypancake), CC-BY 4.0, for the hood and
-// the robe, and "Tentacle (rigged)" by CG Daniel Glebinski (sketchfab.com/CGDanielGlebinski), CC-BY 4.0, for its arms
+// The Skotos (Το Σκότος): "Cloaked Figure" by MysteryPancake (sketchfab.com/mysterypancake), CC-BY 4.0, for its robe
 // -> src/assets/creatures/skotos.glb. A faceless hooded figure of black water whose robe is its own arms.
 // The look gate (G1b) failed the design's Ocean Creature and the Lurker (both read as squids) and picked the cloak: a
-// T-posed student model of 1.8k triangles with no rig. Here its sleeves are let down to hang from dropped shoulders, the
-// face inside the hood is pushed back into a void (vertex colour black: no skin, no rim), and it is subdivided twice (Loop,
-// the hood's rim and the cuffs kept as creases) and thinned back to about 7k triangles. Over it fall the arms: the
-// tentacle's own mesh (rig.mjs straightTentacle), flattened into broad folds that hang from the shoulders down over the
-// robe into the water (their suckers turned in against it), and two long arms that come out of the sleeves.
-// About 15k triangles in all, one material: near-black, wet (roughness 0.22) with a tileable 512 px normal map of
-// running water (rivulets and ripples, made here), vertex colour for the void and the pale suckers. The game patches the
-// material (sea.js skotosSkin: aurora fresnel, the beam's streak, pale flecks), so the scene extras carry keepMat.
-// Standing height 3.75 m at x1 with its origin at its base (the game sinks it 3 m at look.scale 3.2: about 12 m tall).
-// It never walks. Code rig: root (rise and sink move it), hips, spine, chest, neck, head (the hood); clavicle, shoulder,
-// elbow and cuff per side with an arm chain of 8; a chain of 4 down each fold.
+// T-posed student model of 1.8k triangles with no rig. Its robe is kept (subdivided twice, rippled, thinned); its sleeves
+// are dropped and its own hood (a low-poly cone with a beak at the brow) is cut away with the robe's top. In their place a
+// sculpted surface (sdf.mjs, surface nets): a deep cowl with a rolled rim and a peak, its opening a void, falling into a
+// cape over square shoulders, open down the front, hollow below so the robe hangs inside it. From under the cape's hem fall
+// the folds, the robe that is its arms: clean code tubes flattened against the robe (lifted off it by their own depth, so
+// it never shows through), and two round arms at the front sides that do its attacks. About 12k triangles in all.
+// Two materials: 'skotos', near-black and wet (roughness 0.22) with a tileable 512 px normal map of running water (made
+// here: water.mjs), vertex colour for the void's edge; and 'skotos_void', the inside of the hood, black and fully rough,
+// so no highlight finds it whichever way the hood turns (its normals are turned out of the opening so a fresnel patch
+// leaves it dark too). The game patches the skin (sea.js skotosSkin: aurora fresnel, the beam's streak, pale flecks), so
+// the scene extras carry keepMat.
+// Standing height 3.75 m at x1 with its origin at its base (the game sinks it 3 m at look.scale 3.2: about 12 m tall,
+// waist-deep: the water line is at about 0.94 m here). It never walks. Code rig: root (rise and sink move it), hips,
+// spine, chest, neck, head (the hood); clavicle and shoulder per side (the cape over each shoulder partly follows it); a
+// chain of 5 down each fold, 7 down each arm (armL, armR).
 // Clips (in place): idle (breathing, swaying, the folds stirring), rise (up out of the sea), sink (down under; held),
-// surface (bursts up from beneath), sweep (an arm swung across the front), slam (both arms over and down), drink (it
-// gathers the dark into its chest), roar (thrown back, arms and folds flung wide), wrap (arms up and round), recoil (the
-// beam: it shrinks back, shielding), hit, lash (an arm whipped out), smother (arms reach and press down), die (the naming:
-// it sinks slowly while its arms rise and close over it; held).
-// usage: node skotos.mjs [cloak.glb] [tentacle.glb] [out.glb] [--dbg=<dir>]
+// surface (bursts up from beneath, the robe flaring), sweep (an arm swung across the front), slam (both arms over and
+// down), drink (it gathers the dark into its chest), roar (thrown back, arms up and the robe flung wide), wrap (arms up
+// and round: the coil), recoil (the beam: it shrinks back, shielding), hit, lash (an arm whipped out and down to the ice,
+// the tip hooking), smother (arms reach and press down), die (the naming: it sinks slowly, the folds floating up round
+// it, the arms reaching up; held).
+// usage: node skotos.mjs [cloak.glb] [out.glb] [--dbg=<dir>] [--stage=cloak|pieces]
 import { MeshoptSimplifier } from 'meshoptimizer';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { load, finish, worlds, locals, io, sharp } from '../act2/lib.mjs';
-import { THREE, V, X, Y, Z, Qa, Qb, deg, clamp, smooth, ramp, bump, env, kf, TAU, makeRig, fk, skin, buildDoc, writeClip, smoothNormals, weldPositions, straightTentacle } from './rig.mjs';
+import { THREE, V, X, Y, Z, Qa, Qb, deg, clamp, smooth, ramp, bump, env, kf, TAU, makeRig, fk, skin, buildDoc, writeClip, smoothNormals, weldPositions } from './rig.mjs';
 import { loopSubdivide } from './subdiv.mjs';
 import { waterNormalMap } from './water.mjs';
+import { surfaceNets, fieldNormals, ellipsoid, capsule, smin, smax } from './sdf.mjs';
 const ARGS = process.argv.slice(2).filter((a) => !a.startsWith('--'));
-const [SRC = '/tmp/claude-0/sf/act5/cloak/model.glb', TENT = '/tmp/claude-0/sf/act5/tentacle/model.glb', OUT = new URL('../../../src/assets/creatures/skotos.glb', import.meta.url).pathname] = ARGS;
+const [SRC = '/tmp/claude-0/sf/act5/cloak/model.glb', OUT = new URL('../../../src/assets/creatures/skotos.glb', import.meta.url).pathname] = ARGS;
 const DBG = (process.argv.find((a) => a.startsWith('--dbg=')) || '').slice(6);
 const STAGE = (process.argv.find((a) => a.startsWith('--stage=')) || '').slice(8);
 if (DBG) mkdirSync(DBG, { recursive: true });
@@ -83,7 +88,7 @@ for (let k = 0; k < 2; k++) sub = loopSubdivide(sub.pos, sub.idx, sub.attrs, { c
 for (let i = 0; i < sub.pos.length / 3; i++) {
   const x = sub.pos[i * 3], y = sub.pos[i * 3 + 1], z = sub.pos[i * 3 + 2], r = Math.hypot(x, z), w = sub.attrs.w.data[i];
   if (r < 0.05 || w > 0.95) continue;
-  const phi = Math.atan2(x, z), A = 0.055 * smooth((2.7 - y) / 1.5) * (1 - w);
+  const phi = Math.atan2(x, z), A = 0.025 * smooth((2.7 - y) / 1.5) * (1 - w);
   const d = A * (0.6 * Math.sin(7 * phi + 0.8 * Math.sin(3 * phi + y * 0.7)) + 0.4 * Math.sin(12 * phi + 1.3 + y * 0.5));
   sub.pos[i * 3] += (x / r) * d; sub.pos[i * 3 + 2] += (z / r) * d;
 }
@@ -113,12 +118,31 @@ if (STAGE === 'cloak') {
   process.exit(0);
 }
 
-// ---------- 4. the arms: the tentacle's mesh laid along paths, as the folds of its robe ----------
-// the straight tentacle at unit length (cross-section in the same relative units), thinned once: each fold is narrow where
-// it comes out from under the hood, broadest a quarter of the way down, and tapers to the source's tip in the water
-const FOLD_TRIS = 850;
-const tipIn = (s) => 1 - 0.62 * smooth((s - 0.86) / 0.14);   // the source's spade-shaped tip drawn to a point
-const FOLD_SRC = await straightTentacle(TENT, { base: 0, top: 1, thick: (s) => (0.45 + 0.75 * smooth(s / 0.3)) * (1 + 0.3 * Math.pow(1 - s, 2)) * tipIn(s), tris: FOLD_TRIS, log: false });
+// ---------- 4. the arms: tubes laid along paths, as the folds of its robe ----------
+// A tube at unit length, its radius in units of R0 (a fold of width w is w at R0): each is narrow where it comes out from
+// under the mantle, broadest a third of the way down, and tapers to a point in the water; the robe's folds taper softly
+// (cloth), the arms more (they reach). Clean rings, so the folds flatten into smooth broad folds with clean edges.
+const FOLD_W = 0.2, FOLD_D = 0.1, ARM_W = 0.135, HOOD_TRIS = 4200;
+const R0 = 0.0335;
+const thickF = (s) => 0.65 * (0.32 + 0.88 * smooth(s / 0.3)) * (1 + 0.3 * Math.pow(1 - s, 2));
+const tipTaper = (s) => (s < 0.72 ? 1 : Math.pow(1 - smooth((s - 0.72) / 0.28), 0.8));
+const tubeSrc = (NA, NL, taper) => {
+  const radius = (s) => R0 * thickF(s) * taper(s) * tipTaper(s);
+  const pos = [], S = [], idx = [];
+  for (let k = 0; k <= NL; k++) {
+    const s = (k / NL) * 0.985, r = radius(s);
+    for (let j = 0; j < NA; j++) { const a = (j / NA) * TAU; pos.push(Math.sin(a) * r, s, Math.cos(a) * r); S.push(s); }
+  }
+  const tip = pos.length / 3; pos.push(0, 1, 0); S.push(1);
+  const root = pos.length / 3; pos.push(0, 0, 0); S.push(0);
+  for (let k = 0; k < NL; k++) for (let j = 0; j < NA; j++) {
+    const a = k * NA + j, b = k * NA + ((j + 1) % NA), c = a + NA, d = b + NA;
+    idx.push(a, c, b, b, c, d);
+  }
+  for (let j = 0; j < NA; j++) { idx.push(NL * NA + j, tip, NL * NA + ((j + 1) % NA)); idx.push(root, j, (j + 1) % NA); }
+  return { pos, idx: Uint32Array.from(idx), s: S, suck: new Array(S.length).fill(0), radius };
+};
+const SMOOTH_SRC = tubeSrc(14, 22, (s) => 1 - 0.3 * s), ARM_SRC = tubeSrc(16, 34, (s) => Math.exp(-0.9 * s));   // the arms bend most: more rings
 // a smooth path through points (centripetal-ish Catmull-Rom), resampled by arc length: at(s) -> { p, t } for s in 0..1
 function path(points, n = 64) {
   const pts = points.map((p) => p.clone()), seg = [];
@@ -147,47 +171,124 @@ function path(points, n = 64) {
 }
 // lays a straight piece (axis +Y over 0..1, suckers +Z) along a path: +Z turns toward `inward(p)`, the cross-section is
 // scaled to width (half-width along the surface) and depth (half-depth toward the body), metres at the root before thick()
-const R0 = 0.0335;   // the straight source's root radius at unit length
 function layAlong(piece, P, o) {
   const n = piece.pos.length / 3, pos = [], ang = [];
   for (let i = 0; i < n; i++) {
     const x = piece.pos[i * 3], y = piece.pos[i * 3 + 1], z = piece.pos[i * 3 + 2];
     const s = y, { p, t } = P.at(s);
     const nIn = o.inward(p, s).projectOnPlane(t).normalize(), b = t.clone().cross(nIn);
-    const q = p.clone().addScaledVector(b, (x * o.width) / R0).addScaledVector(nIn, (z * o.depth) / R0);
+    const q = p.clone().addScaledVector(b, (x * o.width) / R0).addScaledVector(nIn, (z * o.depth) / R0 - (o.lift ? o.lift(s) : 0));
     pos.push(q.x, q.y, q.z); ang.push(Math.atan2(x, -z) / TAU + 0.5);   // round the tube, the seam on the sucker side
   }
   return { pos, ang, idx: Array.from(piece.idx), s: piece.s.slice(), suck: piece.suck.slice() };
 }
-// the robe's outer surface: the farthest hit of a ray from the body's axis (sleeves left out)
-const bodyTris = [];
-for (let k = 0; k < CLOAK.idx.length; k += 3) {
-  const [a, b, c] = [CLOAK.idx[k], CLOAK.idx[k + 1], CLOAK.idx[k + 2]];
-  if (CLOAK.attrs.w[a] + CLOAK.attrs.w[b] + CLOAK.attrs.w[c] > 0.6) continue;
-  bodyTris.push([a, b, c].map((v) => V(CLOAK.pos[v * 3], CLOAK.pos[v * 3 + 1], CLOAK.pos[v * 3 + 2])));
+// the sleeves go: the mantle covers the shoulders and its arms are the folds (their roots are hidden under the mantle)
+function compact(M, keepTri) {
+  const used = new Map(), P = [], A = Object.fromEntries(Object.keys(M.attrs).map((k) => [k, []])), I = [];
+  for (let k = 0; k < M.idx.length; k += 3) {
+    if (!keepTri(M.idx[k], M.idx[k + 1], M.idx[k + 2])) continue;
+    for (let e = 0; e < 3; e++) {
+      const o = M.idx[k + e]; let j = used.get(o);
+      if (j === undefined) { j = used.size; used.set(o, j); P.push(M.pos[o * 3], M.pos[o * 3 + 1], M.pos[o * 3 + 2]); for (const nm in A) A[nm].push(M.attrs[nm][o]); }
+      I.push(j);
+    }
+  }
+  return { pos: P, idx: I, attrs: A };
 }
-function robeR(phi, y) {
+Object.assign(CLOAK, compact(CLOAK, (a, b, c) => CLOAK.attrs.w[a] + CLOAK.attrs.w[b] + CLOAK.attrs.w[c] < 0.9));
+// the robe's outer surface: the farthest hit of a ray from the body's axis
+const bodyTris = [];
+for (let k = 0; k < CLOAK.idx.length; k += 3) bodyTris.push([CLOAK.idx[k], CLOAK.idx[k + 1], CLOAK.idx[k + 2]].map((v) => V(CLOAK.pos[v * 3], CLOAK.pos[v * 3 + 1], CLOAK.pos[v * 3 + 2])));
+function robeR(phi, y, tris = bodyTris) {
   const o = V(0, y, 0), d = V(Math.sin(phi), 0, Math.cos(phi)), ray = new THREE.Ray(o, d), hit = V();
   let best = 0;
-  for (const [a, b, c] of bodyTris) if (ray.intersectTriangle(a, b, c, false, hit)) best = Math.max(best, hit.distanceTo(o));
+  for (const [a, b, c] of tris) if (ray.intersectTriangle(a, b, c, false, hit)) best = Math.max(best, hit.distanceTo(o));
   return best;
 }
-// folds: [angle round the body (deg, 0 = front), top height, width]; the two at +-44 deg are its arms (longer chains)
-const FOLDS = [[16, 2.86, 1], [-16, 2.86, 1], [44, 2.82, 1.05], [-44, 2.82, 1.05], [100, 2.76, 0.95], [-100, 2.76, 0.95], [145, 2.88, 1.05], [-145, 2.88, 1.05], [180, 2.92, 1.1]];
-const ARMS = [2, 3];
-const PIECES = [];
-FOLDS.forEach(([a, top, wk], fi) => {
-  const phi = a * deg, pts = [];
-  const rTop = robeR(phi, top);
-  pts.push(V(Math.sin(phi) * (rTop - 0.1), top + 0.1, Math.cos(phi) * (rTop - 0.1)));  // tucked in under the hood
-  for (const y of [top - 0.25, 2.2, 1.6, 1.0, 0.45, 0.0, -0.45]) {
-    const r = robeR(phi, Math.max(0.05, Math.min(top - 0.05, y))) || 0.6;
-    const out = y < 0.3 ? 0.07 + (0.3 - y) * 0.25 : 0.07;     // sits on the robe; flares a little past the hem
-    pts.push(V(Math.sin(phi) * (r + out), y, Math.cos(phi) * (r + out)));
+
+// ---------- 4. the hood and the mantle: one sculpted surface (sdf.mjs) over the robe ----------
+// The cloak's own hood is a low-poly cone with a beak at its brow and two points under its face; it is cut away and
+// replaced by a deep cowl with a rolled rim, its opening a void, falling into a mantle over the shoulders: a cape laid
+// out round the robe (it clears the robe everywhere, so nothing of it comes through), hollow below so the robe hangs inside
+// it. The folds come out from under its hem.
+// the mantle's hem: higher at the front, low at the back, a slow wave round it
+const HEM = (phi) => 2.34 + 0.12 * Math.cos(phi) + 0.025 * Math.sin(7 * phi + 0.5);
+const qTilt = (a) => Qa(X, -a);   // the inverse of a bow forward by a degrees (takes a point into the bowed frame)
+const HOOD_C = V(0, 3.29, 0.12);
+const hoodOuter = ellipsoid(HOOD_C, V(0.37, 0.43, 0.41), qTilt(12));
+const hoodPeak = capsule(V(0, 3.4, 0.04), V(0, 3.58, -0.17), 0.15);
+const CAV_C = V(0, 3.22, 0.43), CAV_R = V(0.205, 0.285, 0.43), cavity = ellipsoid(CAV_C, CAV_R, qTilt(14));
+// the mantle: an elliptic cape over the shoulders (side, front and back radii MA, MF, MB below MY0, rounding over the
+// shoulders to the neck above it), hollow below so the robe hangs inside it; pleats deepen toward its hem
+const MA = 0.7, MF = 0.55, MB = 0.54, MY0 = 2.42, MH = 0.76, MT = 0.055, MN = 2.6;
+function capeD(x, y, z, shrink) {
+  const a = MA - shrink, c = (z > 0 ? MF : MB) - shrink, h = MH - shrink;
+  // a squared ellipse round the body (square shoulders), rounding over them to the neck
+  const qx = Math.abs(x / a), qy = Math.max(0, y - MY0) / h, qz = Math.abs(z / c), qr = Math.pow(qx ** MN + qz ** MN, 1 / MN), q = Math.hypot(qr, qy);
+  const phi = Math.atan2(x, z), pleat = 0.016 * Math.sin(9 * phi + 0.6 + 2.2 * Math.sin(3 * phi)) * smooth((2.75 - y) / 0.4);
+  return (q - 1) * Math.min(a, c) - pleat;
+}
+function mantle(x, y, z) {
+  const hollow = smax(capeD(x, y, z, MT), y - (MY0 + 0.25), 0.05);
+  let d = smax(capeD(x, y, z, 0), -hollow, 0.02);
+  // open down the front like a cloak: a slit from the throat, widening to the hem
+  const phi = Math.atan2(x, z), ha = 0.2 * smooth((2.98 - y) / 0.55);
+  if (z > 0) d = smax(d, (ha - Math.abs(phi)) * Math.hypot(x, z), 0.03);
+  return smax(d, HEM(phi) - y, 0.025);
+}
+function hoodSDF(x, y, z) {
+  let d = smin(hoodOuter(x, y, z), hoodPeak(x, y, z), 0.12);
+  d = smin(d, mantle(x, y, z), 0.1);
+  return smax(d, -cavity(x, y, z), 0.05);
+}
+let HOOD;
+{
+  const H = 0.011, sn = surfaceNets(hoodSDF, V(-1.05, 2.05, -0.95), V(1.05, 3.9, 1.0), H);
+  const W = weldPositions(sn.pos, 1e-7), idx0 = new Uint32Array(sn.idx.map((i) => W.remap[i]));
+  const [simp, err] = MeshoptSimplifier.simplify(idx0, new Float32Array(W.pos), 3, HOOD_TRIS * 3, 0.002, []);
+  const used = new Map(), P = [], I = [];
+  for (const o of simp) { let j = used.get(o); if (j === undefined) { j = used.size; used.set(o, j); P.push(W.pos[o * 3], W.pos[o * 3 + 1], W.pos[o * 3 + 2]); } I.push(j); }
+  const N = fieldNormals(hoodSDF, P);
+  // the void: the cavity's walls, black from just inside the rim; their normals turned out of the opening (toward the
+  // viewer above and before it), so neither the fresnel nor a highlight finds them
+  const vd = [], vN = V(0, 0.3, 0.95).normalize();
+  for (let i = 0; i < P.length / 3; i++) {
+    const x = P[i * 3], y = P[i * 3 + 1], z = P[i * 3 + 2];
+    const onCav = 1 - smooth((cavity(x, y, z) + 0.004) / 0.03), deep = smooth((CAV_C.z + 0.3 - z) / 0.14);
+    const v = onCav * deep; vd.push(v);
+    if (v > 0) { const n = V(N[i * 3], N[i * 3 + 1], N[i * 3 + 2]).lerp(vN, smooth(v / 0.35)).normalize(); N[i * 3] = n.x; N[i * 3 + 1] = n.y; N[i * 3 + 2] = n.z; }
   }
+  console.log(`hood: grid ${sn.grid.join('x')} -> ${sn.idx.length / 3} tris (orientation ${sn.agree.toFixed(2)}) -> thinned ${I.length / 3} (error ${err.toFixed(4)})`);
+  HOOD = { pos: P, idx: I, nor: N, v: vd };
+}
+// the robe under the mantle is never seen: cut away above the hem (and the cloak's own hood with it)
+{
+  const n = CLOAK.pos.length / 3, hide = new Uint8Array(n);
+  for (let i = 0; i < n; i++) { const x = CLOAK.pos[i * 3], y = CLOAK.pos[i * 3 + 1], z = CLOAK.pos[i * 3 + 2]; hide[i] = y > HEM(Math.atan2(x, z)) + 0.16 ? 1 : 0; }
+  const before = CLOAK.idx.length / 3;
+  Object.assign(CLOAK, compact(CLOAK, (a, b, c) => !(hide[a] && hide[b] && hide[c])));
+  console.log('robe: cut', before - CLOAK.idx.length / 3, 'tris under the mantle, kept', CLOAK.idx.length / 3);
+}
+
+// folds: [angle round the body (deg, 0 = front), width]; the two at +-44 deg are its arms (longer chains). Each starts
+// tucked against the robe under the mantle and comes out at its hem.
+const FOLDS = [[0, 1.1], [38, 1.0], [-38, 1.0], [78, 0.92], [-78, 0.92], [118, 1.0], [-118, 1.0], [155, 1.05], [-155, 1.05]];
+const ARMS = [1, 2];
+const PIECES = [];
+FOLDS.forEach(([a, wk], fi) => {
+  const phi0 = a * deg, pts = [], hem = HEM(phi0);
+  // each wanders a little round the body as it falls (a few degrees), so no two hang straight and parallel
+  const at = (y, out) => { const phi = phi0 + 4 * deg * Math.sin(fi * 1.9 + y * 2.3); const r = robeR(phi, Math.max(0.05, y)) || 0.6; return V(Math.sin(phi) * (r + out), y, Math.cos(phi) * (r + out)); };
+  pts.push(at(hem + (fi === 0 ? 0.45 : 0.16), -0.04), at(hem + 0.02, 0.0));
+  for (const y of [hem - 0.3, 1.6, 1.0, 0.45, 0.0, -0.45]) pts.push(at(y, y < 0.3 ? 0.07 + (0.3 - y) * 0.25 : 0.07));
   const P = path(pts);
-  const g = layAlong(FOLD_SRC, P, { width: 0.2 * wk, depth: 0.075, inward: (p) => V(-p.x, 0, -p.z) });
-  PIECES.push({ kind: ARMS.includes(fi) ? 'arm' : 'fold', i: fi, phi, P, ...g });
+  // the arms are round; the robe's folds are broad and flat
+  const g = ARMS.includes(fi) ? layAlong(ARM_SRC, P, { width: ARM_W * wk, depth: ARM_W * wk, inward: (p) => V(-p.x, 0, -p.z),
+      lift: (s) => smooth((s - 0.08) / 0.12) * Math.max(0, 0.85 * ARM_W * wk * ARM_SRC.radius(s) / R0 - 0.03) })
+    : layAlong(SMOOTH_SRC, P, { width: FOLD_W * wk, depth: FOLD_D, inward: (p) => V(-p.x, 0, -p.z),
+      // below the hem each fold is lifted off the robe by most of its own depth, so the robe never shows through it
+      lift: (s) => smooth((s - 0.08) / 0.12) * Math.max(0, 0.8 * FOLD_D * SMOOTH_SRC.radius(s) / R0 - 0.03) });
+  PIECES.push({ kind: ARMS.includes(fi) ? 'arm' : 'fold', i: fi, phi: phi0, P, ...g });
 });
 console.log('pieces:', PIECES.map((p) => `${p.kind}${p.i} ${(p.idx.length / 3)} tris ${p.P.length.toFixed(2)} m`).join(', '));
 
@@ -196,6 +297,7 @@ if (STAGE === 'pieces') {
   const pos = [], idx = [], col = [];
   const addG = (P, I, c) => { const b = pos.length / 3; pos.push(...P); for (const i of I) idx.push(i + b); for (let i = 0; i < P.length / 3; i++) col.push(...c(i)); };
   addG(CLOAK.pos, CLOAK.idx, (i) => [0.8 - 0.75 * CLOAK.attrs.v[i], 0.8 - 0.75 * CLOAK.attrs.v[i], 0.8 - 0.75 * CLOAK.attrs.v[i]]);
+  addG(HOOD.pos, HOOD.idx, (i) => [0.75 - 0.7 * HOOD.v[i], 0.8 - 0.7 * HOOD.v[i], 0.6 - 0.55 * HOOD.v[i]]);
   for (const p of PIECES) addG(p.pos, p.idx, (i) => (p.kind === 'arm' ? [0.5, 0.7, 0.9] : [0.9, 0.6, 0.5]).map((v) => v * (1 - 0.5 * p.suck[i])));
   const n = pos.length / 3;
   const nor = []; { const N = smoothNormals(pos, idx); nor.push(...N); }
@@ -211,7 +313,6 @@ if (STAGE === 'pieces') {
 // cuff (the sleeves); per fold a chain hanging from under the hood (5 joints; the two arms 7). Names: L is +X (its left).
 const FOLD_NAME = (fi) => (ARMS.includes(fi) ? (FOLDS[fi][0] > 0 ? 'armL' : 'armR') : 'fold' + fi);
 const FOLD_S = (fi) => (ARMS.includes(fi) ? [0.06, 0.2, 0.34, 0.48, 0.62, 0.76, 0.9] : [0.06, 0.26, 0.46, 0.66, 0.86]);
-const ELB = SHm.clone().lerp(CUFFm, 0.5);
 const J0 = [
   { name: 'root', parent: null, p: V(0, 0, 0) }, { name: 'hips', parent: 'root', p: V(0, 1.2, 0) }, { name: 'spine', parent: 'hips', p: V(0, 1.85, 0) },
   { name: 'chest', parent: 'spine', p: V(0, 2.45, 0) }, { name: 'neck', parent: 'chest', p: V(0, 2.9, 0.02) }, { name: 'head', parent: 'neck', p: V(0, 3.2, 0.06) }
@@ -219,7 +320,7 @@ const J0 = [
 for (const [sd, sg] of [['L', 1], ['R', -1]]) {
   const m = (v) => v.clone().multiply(V(sg, 1, 1));
   J0.push({ name: 'clav_' + sd, parent: 'chest', p: V(sg * 0.22, 2.72, 0) }, { name: 'shoulder_' + sd, parent: 'clav_' + sd, p: m(SHm) },
-    { name: 'elbow_' + sd, parent: 'shoulder_' + sd, p: m(ELB) }, { name: 'cuff_' + sd, parent: 'elbow_' + sd, p: m(CUFFm) });
+    );
 }
 PIECES.forEach((pc) => {
   const nm = FOLD_NAME(pc.i);
@@ -231,7 +332,8 @@ const JI = (n) => { const i = rig.idx.get(n); if (i === undefined) throw new Err
 // one merged mesh: positions, per-vertex weights, colour (void, suckers), and which piece each vertex belongs to
 // colour (COLOR_0 times the base factor): the skin SKIN_C, the void 0, the suckers' rims up to 1
 const SKIN_C = 0.3, BASE = [0.036, 0.032, 0.05];
-const POS = [], IDX = [], WTS = [], COL = [], PART = [], UV = [];
+const POS = [], IDX = [], WTS = [], COL = [], PART = [], UV = [], GN = [];
+const SHOULDER_FOLLOW = 0.7;
 const UV_ROUND = 5, UV_V = 0.8;   // the water map: 5 tiles round the robe, 1 round each fold; 0.8 a metre down
 {
   const BODY = [['hips', 1.2], ['spine', 1.85], ['chest', 2.45], ['neck', 2.9], ['head', 3.2]];
@@ -243,19 +345,30 @@ const UV_ROUND = 5, UV_V = 0.8;   // the water map: 5 tiles round the robe, 1 ro
   const n = CLOAK.pos.length / 3;
   for (let i = 0; i < n; i++) {
     const x = CLOAK.pos[i * 3], y = CLOAK.pos[i * 3 + 1];
-    const w = CLOAK.attrs.w[i], t = CLOAK.attrs.t[i], sd = x >= 0 ? 'L' : 'R';
-    const W = {};
-    for (const [j, v] of Object.entries(bodyW(y))) W[j] = (W[j] || 0) + v * (1 - w);
-    if (w > 0) {
-      const sl = t < 0.5 ? [[`shoulder_${sd}`, 1 - smooth(t / 0.5)], [`elbow_${sd}`, smooth(t / 0.5)]] : [[`elbow_${sd}`, 1 - smooth((t - 0.5) / 0.5)], [`cuff_${sd}`, smooth((t - 0.5) / 0.5)]];
-      for (const [nm, v] of sl) W[JI(nm)] = (W[JI(nm)] || 0) + v * w;
-    }
-    WTS.push(W); POS.push(CLOAK.pos[i * 3], y, CLOAK.pos[i * 3 + 2]);
+    WTS.push(bodyW(y)); POS.push(CLOAK.pos[i * 3], y, CLOAK.pos[i * 3 + 2]);
     UV.push((Math.atan2(CLOAK.pos[i * 3], CLOAK.pos[i * 3 + 2]) / TAU + 0.5) * UV_ROUND, y * UV_V);
     const v = CLOAK.attrs.v[i], c = SKIN_C * (1 - v);
     COL.push(c, c, c); PART.push(-1);
   }
   for (const i of CLOAK.idx) IDX.push(i);
+  // the hood and the mantle: weighted by height like the robe (so the two move together); the mantle over each shoulder
+  // partly follows the shoulder joint (a shrug, a cape flung up). Its normals are the field's (GN), the void's turned out of the opening.
+  {
+    const base = POS.length / 3, n = HOOD.pos.length / 3;
+    for (let i = 0; i < n; i++) {
+      const x = HOOD.pos[i * 3], y = HOOD.pos[i * 3 + 1], z = HOOD.pos[i * 3 + 2], sd = x >= 0 ? 'L' : 'R', W = {};
+      const ws = SHOULDER_FOLLOW * smooth((Math.abs(x) - 0.3) / 0.3) * (1 - smooth((y - 2.7) / 0.25));
+      for (const [j, v] of Object.entries(bodyW(y))) W[j] = (W[j] || 0) + v * (1 - ws);
+      if (ws > 0) W[JI('shoulder_' + sd)] = (W[JI('shoulder_' + sd)] || 0) + ws;
+      WTS.push(W); POS.push(x, y, z);
+      const zc = -0.12 * smooth((y - 2.9) / 0.4);   // the crown's pole at the peak's tip
+      const vv = smooth(HOOD.v[i] / 0.5);   // the void takes one texel, so the water map does not whorl inside it
+      UV.push((Math.atan2(x, z - zc) / TAU + 0.5) * UV_ROUND * (1 - vv) + 2.5 * vv, y * UV_V * (1 - vv) + 2.6 * vv);
+      const c = SKIN_C * (1 - HOOD.v[i]); COL.push(c, c, c); PART.push(-2);
+      GN[POS.length / 3 - 1] = [HOOD.nor[i * 3], HOOD.nor[i * 3 + 1], HOOD.nor[i * 3 + 2]];
+    }
+    for (const i of HOOD.idx) IDX.push(i + base);
+  }
   for (const pc of PIECES) {
     const base = POS.length / 3, nv = pc.pos.length / 3, js = pc.js.map((s, k) => [JI(`${pc.name}_${k + 1}`), s]);
     for (let i = 0; i < nv; i++) {
@@ -288,7 +401,7 @@ const UV_ROUND = 5, UV_V = 0.8;   // the water map: 5 tiles round the robe, 1 ro
       if (c === undefined) {
         c = POS.length / 3; dup.set(v, c);
         POS.push(POS[v * 3], POS[v * 3 + 1], POS[v * 3 + 2]); COL.push(COL[v * 3], COL[v * 3 + 1], COL[v * 3 + 2]);
-        UV.push(UV[v * 2] + per, UV[v * 2 + 1]); WTS.push(WTS[v]); PART.push(PART[v]);
+        UV.push(UV[v * 2] + per, UV[v * 2 + 1]); WTS.push(WTS[v]); PART.push(PART[v]); if (GN[v]) GN[c] = GN[v];
       }
       IDX[t + k] = c;
     }
@@ -306,7 +419,8 @@ const NOR = new Float32Array(NVT * 3);
 {
   const shells = new Map();
   for (let t = 0; t < IDX.length; t += 3) { const p = PART[IDX[t]]; if (!shells.has(p)) shells.set(p, []); shells.get(p).push(IDX[t], IDX[t + 1], IDX[t + 2]); }
-  for (const tri of shells.values()) {
+  for (const [part, tri] of shells) {
+    if (part === -2) { for (const v of new Set(tri)) for (let k = 0; k < 3; k++) NOR[v * 3 + k] = GN[v][k]; continue; }
     const N = smoothNormals(POS, tri);
     for (const v of new Set(tri)) for (let k = 0; k < 3; k++) NOR[v * 3 + k] = N[v * 3 + k];
   }
@@ -346,6 +460,18 @@ const lerpP = (A, B, f) => {
 const WATER = await waterNormalMap(512, 1.6);
 if (DBG) writeFileSync(DBG + '/water_n.png', WATER);
 const D = buildDoc(rig, mesh, { name: 'skotos', base: [...BASE, 1], rough: 0.22, metal: 0, textures: { normal: { image: WATER, mime: 'image/png' } }, normalScale: 0.85 }, { rootName: 'skotos', meshName: 'skotos_mesh', skinName: 'skotos' });
+// the void inside the hood is its own material ('skotos_void': black, fully rough), so no highlight or reflection can
+// light it whichever way the hood turns; it shares the skin's vertices
+{
+  const mesh0 = D.doc.getRoot().listMeshes()[0], prim = mesh0.listPrimitives()[0], all = prim.getIndices().getArray(), skinI = [], voidI = [];
+  for (let t = 0; t < all.length; t += 3) (COL[all[t] * 3] + COL[all[t + 1] * 3] + COL[all[t + 2] * 3] < 0.36 ? voidI : skinI).push(all[t], all[t + 1], all[t + 2]);
+  const ix = (arr) => D.doc.createAccessor().setType('SCALAR').setArray(NVT < 65536 ? new Uint16Array(arr) : new Uint32Array(arr)).setBuffer(D.buf);
+  prim.setIndices(ix(skinI));
+  const vp = D.doc.createPrimitive().setMaterial(D.doc.createMaterial('skotos_void').setBaseColorFactor([0, 0, 0, 1]).setRoughnessFactor(1).setMetallicFactor(0)).setIndices(ix(voidI));
+  for (const sem of prim.listSemantics()) vp.setAttribute(sem, prim.getAttribute(sem));
+  mesh0.addPrimitive(vp);
+  console.log('void:', voidI.length / 3, 'tris in its own material');
+}
 const info = {}, HIT = {};
 const clip = (name, dur, fn, o = {}) => { const r = writeClip(D, rig, mesh, name, dur, fn, { minEdge: 0.03, fps: 24, ...o }); info[name] = r.info; return r; };
 
@@ -390,8 +516,9 @@ clip('surface', 2.2, (t) => {
   const P = newPose(), up = kf(t, [[0, -4.1], [0.75, 0.0], [1.0, 0.3], [1.5, -0.05], [2.2, 0]]);
   const fling = env(t, 0.55, 0.95, 1.2, 2.1), back = env(t, 0.6, 0.95, 1.1, 1.9);
   body(P, { y: up, spine: [-5 * back, 0, 0], chest: [-8 * back, 0, 0], head: [-10 * back + 6 * (1 - ramp(t, 0, 0.7)), 0, 0] });
-  allFolds(P, (u, k, i) => ({ out: 32 * fling * (0.35 + 0.65 * Math.sin(Math.PI * Math.min(1, u * 1.2))) - 10 * (1 - ramp(t, 0, 0.7)) * (1 - u), side: 6 * fling * Math.sin(i * 2.1) * u }));
-  sleeve(P, 'L', 22 * fling); sleeve(P, 'R', 22 * fling);
+  // the robe flares out round it like a skirt as it breaks the surface (the arms higher), then falls back
+  allFolds(P, (u, k, i) => ({ out: fling * (k === 0 ? (isArm(i) ? 34 : 22) : 3 * (1 - u)) - 3 * fling * u - 10 * (1 - ramp(t, 0, 0.7)) * (1 - u), side: 6 * fling * Math.sin(i * 2.1) * u }));
+  sleeve(P, 'L', 14 * fling); sleeve(P, 'R', 14 * fling);
   return stack(alive(0, ramp(t, 1.4, 2.2)), P);
 });
 
@@ -440,7 +567,7 @@ clip('roar', 2.8, (t) => {
   body(P, { spine: [-6 * f + 3 * pre, 0, 0], chest: [-12 * f + 6 * pre + shud * 1.2, 0, 0], neck: [-8 * f, 0, 0], head: [-14 * f + 8 * pre + shud * 2, 0, 0], y: 0.1 * f });
   allFolds(P, (u, k, i) => isArm(i)
     ? { out: f * (k === 0 ? 62 : k < 3 ? 18 : 5) + shud * 3 * u, side: (FOLDS[i][0] > 0 ? 1 : -1) * f * (k === 0 ? 34 : 4) }
-    : { out: f * (k === 0 ? 26 : 12 - 6 * u) + shud * 2.5 * u - 6 * pre * (1 - u), side: f * 4 * Math.sin(i * 2.3) * u });
+    : { out: f * (k === 0 ? 24 : 4 - 4 * u) + shud * 2.5 * u - 6 * pre * (1 - u), side: f * 4 * Math.sin(i * 2.3) * u });
   sleeve(P, 'L', 38 * f, 10 * f); sleeve(P, 'R', 38 * f, 10 * f);
   return stack(alive(t, 1 - 0.8 * f), P);
 });
@@ -485,8 +612,11 @@ HIT.lash = 0.9;
 clip('lash', 2.0, (t) => {
   const P = newPose(), back = env(t, 0.05, 0.6, 0.65, 0.85), out = env(t, 0.75, 0.9, 1.25, 1.9), hook = env(t, 1.0, 1.3, 1.6, 2.0);
   const wave = (u) => bump(t - 0.18 * u, 0.75, 1.15);
+  // wound up out to its side and back, the rest of it cocked; whipped forward and down to the ice (the root about 30
+  // degrees under level, its tip at the ice line about 2.6 m out at x1), the tip hooks in, and it hauls back
+  const rootOut = kf(t, [[0, 0], [0.55, 74], [0.72, 72], [0.9, 62], [1.3, 60], [1.95, 0]]), rootSide = kf(t, [[0, 0], [0.55, -30], [0.72, -26], [0.92, 20], [1.3, 16], [1.95, 0]]);
   body(P, { chest: [-4 * back + 8 * out, 0, 10 * back - 14 * out], spine: [4 * out, 0, -6 * out], head: [6 * out, 0, -8 * out] });
-  fold(P, IR, (u, k) => ({ out: -back * (k === 0 ? 14 : 4 * u) + out * (k === 0 ? 62 : k < 3 ? 14 : 3) - 8 * wave(u) * u + hook * (k > 3 ? 22 * u : 0), side: back * (k === 0 ? -10 : 0) + out * (k === 0 ? 18 : 0) }));
+  fold(P, IR, (u, k) => ({ out: k === 0 ? rootOut : -9 * back * u - 1.5 * out - 10 * wave(u) * u - hook * (k > 3 ? 26 * u : 0), side: k === 0 ? rootSide : 0 }));
   allFolds(P, (u, k, i) => (i === IR ? null : { out: 4 * out * u + 2 * back * Math.sin(i + u * 3) }));
   sleeve(P, 'R', 18 * Math.max(back, out), 14 * out - 6 * back);
   return stack(alive(t, 1 - 0.6 * Math.max(back, out)), P);
@@ -510,8 +640,11 @@ clip('smother', 3.0, (t) => {
 clip('die', 5.5, (t) => {
   const P = newPose(), d = kf(t, [[0, 0], [0.8, 0.1], [5.5, -4.2]]), r = ramp(t, 0.4, 3.6), bow = ramp(t, 0.2, 2.5), tr = env(t, 0, 0.3, 1.0, 1.8) * Math.sin(t * 22);
   body(P, { y: d, spine: [6 * bow, 0, 0], chest: [9 * bow + tr, 0, 0], neck: [8 * bow, 0, 0], head: [16 * bow + 2 * tr, 0, 0] });
-  allFolds(P, (u, k, i) => ({ out: r * (k === 0 ? (isArm(i) ? 70 : 40) : 10 + 8 * u) + 3 * Math.sin(t * 2 + i - u * 3) * r, side: 3 * r * Math.sin(i * 2.4) }));
-  sleeve(P, 'L', 30 * r, 10 * r); sleeve(P, 'R', 30 * r, 10 * r);
+  // the folds float up round it as it goes down, each at its own angle and wave; the arms reach up for the light
+  allFolds(P, (u, k, i) => isArm(i)
+    ? { out: r * (k === 0 ? 95 : k < 3 ? 6 : -10 * u) + 4 * r * Math.sin(t * 2.4 + i - u * 4), side: (FOLDS[i][0] > 0 ? -1 : 1) * r * (k === 0 ? 14 : 0) }
+    : { out: r * (k === 0 ? 24 + 12 * Math.sin(i * 2.3) : 5 + 5 * Math.sin(t * 1.6 + i * 1.7 + u * 4)), side: r * (3 * Math.sin(i * 2.4) + 4 * u * Math.sin(t * 1.3 + i)) });
+  sleeve(P, 'L', 20 * r, 6 * r); sleeve(P, 'R', 20 * r, 6 * r);
   return stack(alive(0, 1 - r), P);
 });
 
@@ -520,7 +653,7 @@ for (const [k, v] of Object.entries(info)) console.log(k.padEnd(8), JSON.stringi
 // ---------- 7. write ----------
 const size = await finish(D.doc, OUT, {
   hit: HIT, height: HEIGHT, keepMat: true, walkSpeed: 0, runSpeed: 0, legSpan: 1.9,
-  credit: '"Cloaked Figure" by MysteryPancake (sketchfab.com/mysterypancake), CC-BY 4.0 - re-posed, subdivided, re-rigged; arms from "Tentacle (rigged)" by CG Daniel Glebinski (sketchfab.com/CGDanielGlebinski), CC-BY 4.0; code material; every animation made for Skotos',
+  credit: '"Cloaked Figure" by MysteryPancake (sketchfab.com/mysterypancake), CC-BY 4.0 - its robe re-posed, subdivided, re-rigged; hood, mantle, void and arm-folds made in code; code material; every animation made for Skotos',
   license: 'CC-BY-4.0'
 });
 console.log('wrote', OUT, size, 'bytes');

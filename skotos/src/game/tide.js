@@ -76,6 +76,8 @@ export function resetTide(z) {
     else if (!want && L.cells[i]) close.push([i % w, (i - i % w) / w]);
   }
   if (z.map.change(open, close)) { z.tideC.own++; emit('mapChanged'); }
+  // (the clock's safe ground built now, behind the loading, not on the first flood step)
+  safeOf(z);
   SEA.uLevel.value = 0; SEA.uWetLevel.value = 0; BAY.value = 0;
 }
 
@@ -159,10 +161,11 @@ function staysOpen(z, i) { const C = z.tideC, T = z.tide; return z.map.cells[i] 
 function safeOf(z) {
   const T = z.tide, C = z.tideC, L = z.L, m = z.map, w = L.w, h = L.h, f = !!T.force, S = C.safe, tk = C.tk;
   const top = f ? Math.max(T.step, clamp(Math.round((T.force.h || 0) / TIDE_STEP), 0, MAXK)) : TOP, key = (f ? 'f' : 'c') + top, ext = m.ver - C.own;
-  if (S.key === key && S.ext === ext) return S.mask;
-  const M = S.mask ||= new Uint8Array(w * h), q = C.sq;
+  // (one mask per top, kept while nothing but the tide changes the grid: a boss's ebb asks for a new top each step)
+  if (S.ext !== ext) { S.ext = ext; S.m = {}; }
+  if (S.m[key]) return S.m[key];
+  const M = (S.m[key] = new Uint8Array(w * h)), q = C.sq;
   const ok = (i) => { const k = tk[i]; return k === 0 ? m.cells[i] === 1 : k === 255 || (k !== 254 && ((C.bay[i] && !f) || k > top)); };
-  M.fill(0);
   for (let s = 0; s < M.length; s++) {
     if (M[s] || !ok(s)) continue;
     let tail = 1; q[0] = s; M[s] = 1;
@@ -172,7 +175,6 @@ function safeOf(z) {
     }
     if (tail >= ISLE) for (let k = 0; k < tail; k++) M[q[k]] = 2;
   }
-  Object.assign(S, { key, ext });
   return M;
 }
 // does the open ground round cell s (after this step) reach safe ground? If not, every cell of it goes into small

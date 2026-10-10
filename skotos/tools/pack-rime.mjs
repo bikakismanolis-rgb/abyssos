@@ -142,10 +142,11 @@ const PROPS = [
   { key: 'barnacleRock', sf: 'barnacle_rock', pre: { drop: /^Object_2$/, ao: 0.8, len: 1.4 }, tris: 1200, err: 0.01, d: 512, solid: true, fit: { ground: true, centre: true }, loose: 0.01,
     look: { metal: [[/./, 0, 0.8]] },
     credit: ['Beach Rock with Barnacles Photoscan', 'EFX (evan4129)', '', BY] },
-  // a bleached driftwood root-stump, cut out of its sand (a plane fitted to the sand around it), what is left of its two
-  // texture sets repacked into one; 2.6 m
-  { key: 'driftwood', sf: 'driftwood', pre: { join: true, tris: 60000, fn: (doc, P) => groundCut(doc, P, { r0: 2.6, r1: 5, keep: 3.4, lift: 0.07 }), len: 2.6, repack: { name: 'driftwood', size: [512, 256] } }, tris: 2000, err: 0.008, d: [512, 256], solid: false, fit: { ground: true, centre: true }, loose: 0.05,
-    look: { grade: [[/./, { sat: 0.75, contrast: 1.3, mul: [0.96, 0.93, 0.9], mean: [112, 106, 98] }]], metal: [[/./, 0, 0.9]] },
+  // a bleached driftwood root-stump, cut out of its sand (a plane fitted to the sand around it) at full resolution (the
+  // stump is about 7% of the scan, 22k triangles, decimated once: a pre-pass over the whole scan left it 5k before its
+  // own), what is left of its two texture sets repacked into one, graded down from paper-white to wet grey-brown wood (the tide line); 2.6 m
+  { key: 'driftwood', sf: 'driftwood', pre: { join: true, fn: (doc, P) => groundCut(doc, P, { r0: 2.6, r1: 5, keep: 3.4, lift: 0.07 }), len: 2.6, repack: { name: 'driftwood', size: [512, 256] } }, tris: 2000, err: 0.008, d: [512, 256], solid: false, fit: { ground: true, centre: true }, loose: 0.05,
+    look: { grade: [[/./, { sat: 0.85, contrast: 0.85, mul: [0.96, 0.93, 0.9], mean: [78, 72, 64] }]], metal: [[/./, 0, 0.9]] },
     credit: ['Large Pine Driftwood (Pacific Northwest)', 'Crew Froebel (crufro)', '', BY] },
   // a heap of kelp and wrack, cut out of its sand, its texture repacked; 2.3 m across
   { key: 'kelp', sf: 'kelp', pre: { join: true, tris: 40000, fn: (doc, P) => groundCut(doc, P, { r0: 1.35, r1: 1.75, keep: 1.45, lift: 0.02, sand: (r, g, b) => smooth(0.5, 0.66, luma(r, g, b)) * (1 - smooth(0.06, 0.13, Math.max(r, g, b) - Math.min(r, g, b))), sandTo: [0.44, 0.42, 0.39] }), len: 2.2, repack: { name: 'kelp', size: [512, 512] } }, tris: 1500, err: 0.008, d: 512, solid: false, fit: { ground: true, centre: true }, loose: 0.02,
@@ -1218,7 +1219,8 @@ if (!KEYS && ONLY !== 'layers') {
     'shaft drawn up from its own brick bands and capped; the medieval anchor\'s and the whale\'s texture sets atlased; the whale',
     'skeleton settled onto the ground (flippers lowered, skull tipped down, the spine lowered toward the tail) and bleached; the',
     'runestone\'s red paint taken out of its carving; the driftwood and the kelp cut out of the sand they were scanned on (the',
-    'kelp\'s sand recoloured as wet shingle); the shack cut down to its gabled room; the Dutch ship\'s sails, ropes and nets',
+    'kelp\'s sand recoloured as wet shingle) and what is left of their textures repacked into one small sheet each; the shack',
+    'cut down to its gabled room; the Dutch ship\'s sails, ropes and nets',
     'removed and its hull cut below the waterline; the oil lamp\'s flame removed and its glass made an emissive "glow"; the',
     'cliffs and icicles kept as geometry only.',
     '', 'Tiling layers (src/assets/rime/*.webp) - CC0 (public domain):',

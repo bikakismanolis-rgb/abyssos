@@ -106,14 +106,15 @@ function helix({ lead = 0.5, ease = 0.6, r = 0.8, pitch = 15, dir = 1, lean = 0 
   return fromDirs(dirs);
 }
 const IDLE = 4.8;
-// its standing shape (local bends, degrees): leaning back a little from the surface, then over forward, the tip hooked
-const SHAPE = (u) => -2.2 * (1 - smooth(u / 0.35)) + 3.0 * smooth((u - 0.3) / 0.3) + 10 * Math.pow(u, 4);
+// its standing shape (local bends, degrees): leaning back a little from the surface, then over forward, the last
+// quarter hooked over like a question mark (about 75 degrees in all)
+const SHAPE = (u) => -4 * (1 - smooth(u / 0.35)) + 4 * smooth((u - 0.3) / 0.3) + 26 * Math.pow(u, 5);
 // the resting sway (also every clip's first and last pose): a slow wave travelling up, the tip curled forward a little
 const swayB = (u, k, t) => {
-  const w = TAU * t / IDLE, amp = 0.45 + 0.9 * u;
+  const w = TAU * t / IDLE, amp = 0.5 + 1.1 * u;
   return {
-    bx: 2.2 * amp * Math.sin(w - k * 0.42) + SHAPE(u),
-    bz: 2.0 * amp * Math.sin(w + 1.7 - k * 0.38),
+    bx: 2.8 * amp * Math.sin(w - k * 0.42) + SHAPE(u) * (1 + 0.18 * Math.sin(w * 2 - 1.1)),
+    bz: 2.4 * amp * Math.sin(w + 1.7 - k * 0.38),
     tw: 1.5 * Math.sin(w * 2 - k * 0.3)
   };
 };
@@ -121,7 +122,8 @@ const sway = (t) => fromBends((u, k) => swayB(u, k, t));
 const REST = sway(0);
 const D = buildDoc(rig, mesh, { name: 'skotosHand', base: [0.2, 0.19, 0.24, 1], rough: 0.24, metal: 0 }, { rootName: 'tentacle', meshName: 'tentacle_mesh', skinName: 'tentacle' });
 const info = {}, HIT = {};
-const clip = (name, dur, fn, o = {}) => { const r = writeClip(D, rig, mesh, name, dur, fn, { minEdge: 0.03, ...o }); info[name] = r.info; return r; };
+const CLIPS = {};
+const clip = (name, dur, fn, o = {}) => { const r = writeClip(D, rig, mesh, name, dur, fn, { minEdge: 0.03, ...o }); info[name] = r.info; CLIPS[name] = r; return r; };
 
 clip('idle', IDLE, (t) => pose(sway(t)), { loop: true });
 
@@ -155,10 +157,10 @@ clip('lash', 1.8, (t) => {
   const back = env(t, 0.0, 0.42, 0.45, 0.62), out = env(t, 0.5, 0.66, 1.0, 1.6), hook = env(t, 0.8, 1.05, 1.45, 1.8);
   const wave = (u) => bump(t - 0.14 * u, 0.5, 0.82);
   const reared = fromTilt((u) => -26 * smooth(u / 0.6) - 18 * Math.pow(u, 2));
-  const flat = fromTilt((u) => 92 * smooth(u / 0.26) - 2 * u);
+  const flat = fromTilt((u) => 90 * smooth(u / 0.22) + 24 * smooth((u - 0.25) / 0.4) - 12 * smooth((u - 0.8) / 0.2));
   let Q = mix(REST, reared, back);
   Q = mix(Q, flat, out);
-  Q = mul(Q, fromBends((u) => ({ bx: -9 * wave(u) * u + 36 * hook * Math.pow(u, 3), bz: 3 * back * Math.sin(u * 5) })));
+  Q = mul(Q, fromBends((u) => ({ bx: -4 * wave(u) * u - 3 * hook * u, bz: 3 * back * Math.sin(u * 5) + 40 * hook * Math.pow(u, 3) })));
   return pose(Q);
 });
 
@@ -168,7 +170,7 @@ clip('slam', 1.6, (t) => {
   const rear = env(t, 0.05, 0.5, 0.55, 0.72), down = env(t, 0.6, 0.74, 1.05, 1.5);
   const shiver = bump(t, 0.74, 1.05) * Math.sin((t - 0.74) * 60);
   const reared = fromTilt((u) => -14 * smooth(u / 0.5) - 55 * Math.pow(u, 2.2));
-  const flat = fromTilt((u) => 90 * smooth(u / 0.24) + 11 * smooth((u - 0.3) / 0.5));
+  const flat = fromTilt((u) => 90 * smooth(u / 0.24) + 21 * smooth((u - 0.28) / 0.4) - 11 * smooth((u - 0.8) / 0.2));
   let Q = mix(mix(REST, reared, rear), flat, down);
   Q = mul(Q, fromBends((u) => ({ bx: -2.5 * shiver * u, bz: 1.5 * shiver * u })));
   return pose(Q);
@@ -223,6 +225,17 @@ clip('die', 2.4, (t) => {
 });
 
 for (const [k, v] of Object.entries(info)) console.log(k.padEnd(8), JSON.stringify(v));
+{
+  const far = []; for (let i = 0; i < NV; i++) if (P[i * 3 + 1] > 1.2) far.push(i);
+  const sub = { pos: far.flatMap((i) => [P[i * 3], P[i * 3 + 1], P[i * 3 + 2]]), J: far.flatMap((i) => Array.from(J.slice(i * 4, i * 4 + 4))), W: far.flatMap((i) => Array.from(Wt.slice(i * 4, i * 4 + 4))) };
+  const out = [];
+  for (const nm of ['sweep', 'lash', 'slam', 'wrap', 'smother', 'recoil', 'hit']) {
+    const r = CLIPS[nm]; let lo = 1e9, at = 0;
+    r.frames.forEach((F, fi) => { if (fi % 3) return; for (const p of skin(rig, sub, F)) if (p.y < lo) { lo = p.y; at = fi / 30; } });
+    out.push(`${nm} ${lo.toFixed(2)}@${at.toFixed(2)}`);
+  }
+  console.log('lowest point past 1.2 m up the tentacle (the ice is 0):', out.join(', '));
+}
 
 // ---------- 5. write ----------
 const size = await finish(D.doc, OUT, {
