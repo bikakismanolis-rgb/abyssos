@@ -561,3 +561,18 @@ Shipped and reused: env `boulder`, `rockA`-`rockC` (bergs, ice blocks, pressure 
 | `planks` | wood_planks_grey | the jetty, stilt huts, wreck decks | `rime/planks` → `bark` |
 
 **Made in code** (no file): fire-cages and lantern rooms, beam cones, bells, the hearth, cairns, hole lamps, marker poles, the door-stone, stilt huts and the jetty (`planks`), stockfish racks, the frozen fall's ribbons, floe shards, the rubble plug, the boat-hook, the harpoon and its rope, kelp strands, barnacles, hoods, caps, collars and the eye band, the Ember Cradle (shipped).
+
+## Stage A outcome (lead decisions, 10 October)
+
+Measured numbers are in `docs/act5-briefs/assets-built.md`; the gates in `docs/act5-briefs/asset-gates.json`.
+
+- **The Skotos's source changes.** "Ocean Creature" and the Lurker both failed the design's own look gate (they read as squids at every pitch). The Skotos is now "Cloaked Figure" by MysteryPancake (CC-BY 4.0, f4e2c262ed4e456484f232d6afa99629) with a code-built hood, cape, folds and arms (`tools/creatures/act5/sdf.mjs`, `skotos.mjs`): a hooded figure of black water whose robe is its own arms, the hood opening a separate `skotos_void` material that must stay black. Accepted. The Hands are "Tentacle (rigged)" with a code rig (its GLB had only morph targets).
+- **The cameo's memory is accepted.** Brokka and Elati load folk.glb and grove.glb in farlight from q29. On a normal run both sets are already loaded by the Field, so it costs nothing; only a cold start at the farlight waypoint pays it (≈ 182 MB for the act's assets plus both sets), which is still well under what a warm run through Acts I-IV holds. If the phone shows memory trouble in Act V, the design's contingency (dispose Acts II-IV sets that Act V does not use: ash, deep, wood, cinder packs; keep folk and grove) is the fix.
+- **For stage C (combat), from the asset reports:**
+  - `prepare()` in creatures.js must honour `extras.keepMat` (the Skotos 0.22 and the Hands 0.24 roughness are reset to 0.6 today) and never patch `skotos_void`.
+  - `walkSpeed || 1.4` turns the anchored creatures' 0 into 1.4: use `?? 1.4`.
+  - HOLD and LOOP rows: crab `rock` (held), Hull-louse `curl` (HOLD) and `roll` (LOOP, played at actor speed ÷ `extras.rollSpeed`), Icemaw `stranded` (LOOP) and `dive`/`slide` (they end under the ice: hide the actor or hold the last frame), Skua `dive` (loop) and `takeoff` (lift the bird after `extras.liftAt`).
+  - The frost enemies' wet roughness is baked into their materials: do not set roughness at load. Their eye glow is in the colour map.
+  - The crab's spire top is 0.585 m at ×1 (the contract said 0.85): mount the Skerry Light on the socket the file names, not on a fixed height.
+  - The default gameplay camera never shows the Skotos's hood (it is above the top of the screen); the fight must use the `farlightFight`/`farlightNight` framing (zoom and pitch) so the figure reads, and the cines lower the camera.
+- **For stage B (world):** gen5 places a kelp heap and a driftwood on the same spot at some seeds (90.5, 96.5 at seed 3): dressing must not overlap.
