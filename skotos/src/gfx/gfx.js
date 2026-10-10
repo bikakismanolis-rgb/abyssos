@@ -2,13 +2,16 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { clamp, damp, noise2 } from '../core/util.js';
+import { lang } from '../i18n/i18n.js';
 
 export const R = {
   renderer: null, scene: null, camera: null,
   quality: 1,           // 0 low, 1 medium, 2 high
+  mobile: false,        // a phone or tablet: high quality is capped (shadow map, pixel ratio) and maps are halved (gltf.js)
+  lost: false, reload: false, // the GL context was lost: nothing is drawn any more, the page reloads (onContextLost)
   basePR: 1, prScale: 1,
   w: 1, h: 1,
-  hemi: null, moon: null, heroLight: null,
+  hemi: null, moon: null, heroLight: null, hemiBase: new THREE.Color(), drift: 0,
   pool: [], sources: new Set(),
   cam: { x: 0, z: 0, tx: 0, tz: 0, zoom: 1, zoomT: 1, trauma: 0, shakeT: 0, lookY: 0.9, pitch: 0.95, dist: 15, kick: { x: 0, z: 0 } },
   time: 0,
@@ -18,8 +21,11 @@ export const R = {
 const POOL_SIZE = [3, 6, 8];
 const SHADOW = [0, 1024, 2048];
 
-export function initGfx(quality) {
+// o.mobile: a phone (boot.js); o.lost(hidden): called when the GL context is lost, before the page reloads (boot.js saves,
+// lowers the quality unless the page was hidden: a phone may drop a backgrounded tab's context; and stops the game)
+export function initGfx(quality, o = {}) {
   R.quality = quality;
+  R.mobile = !!o.mobile;
   const renderer = new THREE.WebGLRenderer({ antialias: quality >= 1, powerPreference: 'high-performance', stencil: false });
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -28,6 +34,8 @@ export function initGfx(quality) {
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.domElement.id = 'gl';
   document.getElementById('stage').prepend(renderer.domElement);
+  renderer.domElement.addEventListener('webglcontextlost', () => onContextLost(o));
+  renderer.domElement.addEventListener('webglcontextrestored', () => { if (R.reload) location.reload(); });
   R.renderer = renderer;
 
   const scene = new THREE.Scene();
@@ -50,7 +58,9 @@ export function initGfx(quality) {
   moon.position.set(-12, 30, 8);
   moon.castShadow = quality >= 1;
   if (moon.castShadow) {
-    moon.shadow.mapSize.set(SHADOW[quality], SHADOW[quality]);
+    // (a phone's high quality keeps the medium map: 8 MB of GPU memory instead of 32)
+    const sm = R.mobile ? Math.min(SHADOW[quality], 1024) : SHADOW[quality];
+    moon.shadow.mapSize.set(sm, sm);
     const s = moon.shadow.camera; s.left = -20; s.right = 20; s.top = 20; s.bottom = -20; s.near = 1; s.far = 70;
     moon.shadow.bias = -0.0008; moon.shadow.normalBias = 0.03;
   }
@@ -77,7 +87,7 @@ export function resize(force) {
   if (!force && w === R.w && h === R.h) return;
   R.w = w; R.h = h;
   const dpr = window.devicePixelRatio || 1;
-  R.basePR = Math.min(dpr, [1, 1.5, 2][R.quality]);
+  R.basePR = Math.min(dpr, [1, 1.5, R.mobile ? 1.5 : 2][R.quality]);
   R.renderer.setPixelRatio(R.basePR * R.prScale);
   R.renderer.setSize(w, h, false);
   R.renderer.domElement.style.width = w + 'px';
@@ -117,11 +127,25 @@ export function setAtmosphere(a) {
   s.fog.density = a.density;
   R.hemi.color.set(a.sky); R.hemi.groundColor.set(a.ground); R.hemi.intensity = a.hemi;
   R.moon.color.set(a.moon); R.moon.intensity = a.moonI;
+  // no moon (the crypt, the halls, the Heartwood before the Autumn): its shadow map is not redrawn each frame (one last
+  // update on the switch; castShadow stays, so no shader recompiles)
+  const sh = a.moonI > 0;
+  if (R.moon.shadow.autoUpdate !== sh) { R.moon.shadow.autoUpdate = sh; R.moon.shadow.needsUpdate = true; }
   R.renderer.toneMappingExposure = a.exposure ?? 1.15;
   R.heroLight.color.set(a.heroColor ?? 0xffa860);
   R.heroLight.userData.base = a.heroI ?? 30;
   R.heroLight.distance = a.heroRange ?? 15;
   R.cam.zoomT = a.zoom ?? 1;
+  // Act V: the aurora's brightness and darkness (sea.js reads them), and the hemisphere light's slow green drift
+  R.drift = a.drift || 0; R.hemiBase.set(a.sky);
+  R.atmosHook?.(a);
+}
+// (the drift: the hemisphere colour wanders between its own and the aurora's green, over about a minute and a half)
+const AUR_GREEN = new THREE.Color(0x6af0b0);
+function driftHemi() {
+  if (!R.drift) return;
+  const k = R.drift * (0.5 + 0.5 * Math.sin(R.time * 0.07)) * (0.6 + 0.4 * Math.sin(R.time * 0.23 + 1.3));
+  R.hemi.color.copy(R.hemiBase).lerp(AUR_GREEN, k * 0.6);
 }
 
 // ---------- dynamic light sources ----------
@@ -135,12 +159,26 @@ export function addLight(o) {
 export function removeLight(src) { if (src) R.sources.delete(src); }
 export function clearLights() { R.sources.clear(); }
 
+// Light modes (Act III). flicker: 'beat' follows the Heartwood's heartbeat, a double thump at 0.9 Hz that quickens toward
+// 1.2 Hz near the Heart Chamber (LIGHTS.heart); LIGHTS.beat (0-1, FX.beat) fades the beat out to a steady ember glow.
+// flicker: 'seed' is a seed-lantern: it breathes gently and goes out as LIGHTS.autumn reaches 1.
+export const LIGHTS = { beat: 1, hz: 0.9, phase: 0, heart: null, autumn: 0 };
+// the heartbeat's pulse now (0 between beats, about 1 on the first thump, 0.7 on the second)
+export function beatPulse() {
+  const f = LIGHTS.phase - Math.floor(LIGHTS.phase), a = (f - 0.06) / 0.055, b = (f - 0.31) / 0.07;
+  return Math.exp(-a * a) + 0.7 * Math.exp(-b * b);
+}
 const tmpList = [];
 function updateLights(dt) {
   const cx = R.cam.x, cz = R.cam.z;
+  const H = LIGHTS.heart;
+  LIGHTS.hz = H ? 1.2 - 0.3 * clamp((Math.hypot(H.x - cx, H.z - cz) - 18) / 50, 0, 1) : 0.9;
+  LIGHTS.phase += dt * LIGHTS.hz;
+  const beatK = 0.5 + LIGHTS.beat * (0.05 + 0.8 * beatPulse());
   tmpList.length = 0;
   for (const s of R.sources) {
     if (s.life > 0) { s.life -= dt; if (s.life <= 0) { R.sources.delete(s); continue; } }
+    if (s.flicker === 'seed' && LIGHTS.autumn >= 1) continue; // a lantern gone out keeps no light
     const dx = s.x - cx, dz = s.z - cz;
     s._d = dx * dx + dz * dz - s.intensity * 2;
     if (s._d < 900) tmpList.push(s);
@@ -150,8 +188,11 @@ function updateLights(dt) {
     const l = R.pool[i], s = tmpList[i];
     if (!s) { l.intensity = 0; continue; }
     let k = 1;
-    if (s.flicker) k = 1 + s.flicker * (noise2(R.time * 9 + s.phase, s.phase) - 0.5) * 2;
+    if (s.flicker === 'beat') k = beatK;
+    else if (s.flicker === 'seed') k = (1 - LIGHTS.autumn) * (1 + 0.16 * (noise2(R.time * 1.3 + s.phase, s.phase) - 0.5));
+    else if (s.flicker) k = 1 + s.flicker * (noise2(R.time * 9 + s.phase, s.phase) - 0.5) * 2;
     if (s.fade) k *= s.life > 0 ? Math.min(1, s.life / s.fade) : 1;
+    if (s.gain) k *= s.gain.k; // a shared dimmer (an Amber Tear once its memory is spent)
     l.position.set(s.x, s.y, s.z);
     l.color.copy(s._c);
     l.intensity = s.intensity * k;
@@ -190,9 +231,34 @@ export function updateCamera(dt, tx, tz, snap) {
 export function frame(dt) {
   R.time += dt;
   updateLights(dt);
+  driftHemi();
 }
 
-export function render() { R.renderer.render(R.scene, R.camera); }
+// (R.skyHook: sea.js shows the aurora dome when a cine lowers the camera, and runs its freeze waves)
+export function render() { if (R.lost) return; R.skyHook?.(); R.renderer.render(R.scene, R.camera); }
+
+// A lost GL context (a phone out of memory, a GPU reset). The decoded images were let go once uploaded (gltf.js), so it
+// cannot be drawn again as it was: the game is saved (o.lost, which also lowers the quality one step) and the page reloads,
+// with a word on the screen. If it is lost again within a minute and a half at the lowest quality, it waits for a tap.
+function onContextLost(o) {
+  if (R.lost) return;
+  R.lost = true;
+  let again = false;
+  try { again = Date.now() - (+sessionStorage.getItem('skotos.glLost') || 0) < 90000; sessionStorage.setItem('skotos.glLost', String(Date.now())); } catch (e) { /* no storage: as if the first time */ }
+  const low = R.quality === 0, lower = !low && !document.hidden;
+  try { o.lost?.(document.hidden); } catch (e) { /* the reload matters more */ }
+  R.reload = !(again && low);
+  const el = document.createElement('div');
+  el.id = 'gl-lost';
+  el.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;background:rgba(5,7,10,0.92);color:#e8dcc8;font:16px/1.5 serif';
+  const en = lang() === 'en';
+  el.textContent = !R.reload ? (en ? 'The graphics ran out of memory again. Saved. Tap to reload.' : 'Η μνήμη γραφικών εξαντλήθηκε ξανά. Αποθηκεύτηκε. Πάτησε για επαναφόρτωση.')
+    : lower ? (en ? 'The graphics ran out of memory. Saved; reloading at a lower quality...' : 'Η μνήμη γραφικών εξαντλήθηκε. Αποθηκεύτηκε· επαναφόρτωση σε χαμηλότερη ποιότητα...')
+    : (en ? 'The graphics were lost. Saved; reloading...' : 'Τα γραφικά χάθηκαν. Αποθηκεύτηκε· επαναφόρτωση...');
+  el.onclick = () => location.reload();
+  document.body.appendChild(el);
+  if (R.reload) setTimeout(() => location.reload(), 1800);
+}
 
 // ---------- projections ----------
 const v3 = new THREE.Vector3();

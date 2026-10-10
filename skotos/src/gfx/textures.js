@@ -61,6 +61,36 @@ export function tex(name) {
   cache[name] = t;
   return t;
 }
+// Act V: rows of runes cut in a stone (the Name-stones, the door-stone), white strokes with a soft glow round them on
+// transparent, rows of n names; each seed its own lines (cached). The stone's lamp lights them from inside the strokes
+export function runeLines(seed = 1, rows = 4) {
+  const key = 'runes' + seed + '|' + rows;
+  if (cache[key]) return cache[key];
+  const c = canvas(256), g = c.getContext('2d'), r = RNG(seed * 97 + 13);
+  g.strokeStyle = 'rgba(255,255,255,0.95)'; g.lineWidth = 3.2; g.lineCap = 'round'; g.lineJoin = 'round';
+  g.shadowColor = 'rgba(255,255,255,0.9)'; g.shadowBlur = 7;
+  // (the strokes of the old futhark: a stave and its twigs, a few with a branch or a hook)
+  const glyph = (x, y, h) => {
+    const k = r.int(0, 7), w = h * 0.42;
+    g.beginPath(); g.moveTo(x, y - h / 2); g.lineTo(x, y + h / 2);
+    if (k === 0) { g.moveTo(x, y - h / 2); g.lineTo(x + w, y - h / 6); }
+    else if (k === 1) { g.moveTo(x, y - h / 2); g.lineTo(x + w, y - h / 4); g.lineTo(x, y); }
+    else if (k === 2) { g.moveTo(x - w, y - h / 4); g.lineTo(x + w, y + h / 4); }
+    else if (k === 3) { g.moveTo(x, y - h / 2); g.lineTo(x + w, y - h / 4); g.moveTo(x, y - h / 6); g.lineTo(x + w, y + h / 12); }
+    else if (k === 4) { g.moveTo(x, y); g.lineTo(x + w, y - h / 3); g.lineTo(x + w, y + h / 2); }
+    else if (k === 5) { g.moveTo(x - w * 0.8, y - h / 2); g.lineTo(x + w * 0.8, y + h / 2); g.moveTo(x + w * 0.8, y - h / 2); g.lineTo(x - w * 0.8, y + h / 2); }
+    else if (k === 6) { g.moveTo(x, y - h / 8); g.lineTo(x - w * 0.7, y - h / 2); g.moveTo(x, y - h / 8); g.lineTo(x + w * 0.7, y - h / 2); }
+    else { g.moveTo(x, y - h / 2); g.lineTo(x + w, y); g.lineTo(x, y + h / 2); }
+    g.stroke();
+  };
+  const rh = 256 / (rows + 0.6);
+  for (let j = 0; j < rows; j++) {
+    const y = rh * (j + 0.8), h = rh * 0.62;
+    let x = 22 + r.range(0, 10);
+    while (x < 230) { glyph(x, y + r.range(-2, 2), h * r.range(0.9, 1.05)); x += h * r.range(0.5, 0.62); if (r.chance(0.12)) x += h * 0.45; }
+  }
+  return (cache[key] = finish(c, { srgb: false, repeat: false }));
+}
 
 const MAKERS = {
   dot() {

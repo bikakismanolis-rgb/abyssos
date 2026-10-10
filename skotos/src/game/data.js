@@ -5,8 +5,23 @@ export const DIFFS = [
   { id: 'wanderer', hp: 0.65, dmg: 0.55, xp: 0.9, gold: 0.9, loot: 0.9, elite: 0.7, leg: 1, color: '#9ec7a0' },
   { id: 'warden', hp: 1, dmg: 1, xp: 1, gold: 1, loot: 1, elite: 1, leg: 1, color: '#d9c58a' },
   { id: 'hero', hp: 1.9, dmg: 1.55, xp: 1.6, gold: 1.6, loot: 1.5, elite: 1.25, leg: 1.4, color: '#e09a50' },
-  { id: 'nightmare', hp: 3.6, dmg: 2.4, xp: 2.6, gold: 2.4, loot: 2.2, elite: 1.5, leg: 2.2, color: '#d0503a', unlock: 'act1:hero' },
-  { id: 'ash', hp: 7, dmg: 3.8, xp: 4.2, gold: 3.6, loot: 3.2, elite: 1.8, leg: 3.2, color: '#b04aff', unlock: 'act1:nightmare' }
+  { id: 'nightmare', hp: 3.6, dmg: 2.4, xp: 2.6, gold: 2.4, loot: 2.2, elite: 1.5, leg: 2.2, color: '#d0503a', unlock: 'any:hero' },
+  { id: 'ash', hp: 7, dmg: 3.8, xp: 4.2, gold: 3.6, loot: 3.2, elite: 1.8, leg: 3.2, color: '#b04aff', unlock: 'any:nightmare' },
+  { id: 'skotos', hp: 11, dmg: 5.4, xp: 6.5, gold: 5.4, loot: 4.6, elite: 2.1, leg: 4.6, color: '#4a5aa0', unlock: 'act5:ash' }
+];
+// (unlock 'any:<diff>': any act finished on that difficulty; 'actN:<diff>': that act)
+// Act V's hazards by difficulty (indexed like DIFFS): the tide's cycle (s), its phases (low, flood, high, ebb) and the
+// steps' spacing, the bell's lead (s); the wash-out and the plunge (% of max life); the ice's load per crack stage; the
+// Cold's gains; Revealed and Exposed; a Breathing-hole's freeze ring (s) and its Black Breath's period (s); the bosses'
+// cooldowns and their extra adds per call. Telegraphs never change.
+const H5 = (o) => Object.assign({ tide: 152, phases: [40, 36, 40, 36], stepT: 4.5, bell: 6, reveal: 1.25 }, o);
+export const HAZ5 = [
+  H5({ tide: 180, phases: [50, 40, 50, 40], stepT: 5, bell: 8, wash: 0, plunge: 6, load: 1.6, cold: 0.6, reveal: 1.35, ring: 6, breath: 7, bossCd: 1, adds: 0 }),
+  H5({ wash: 6, plunge: 10, load: 1.2, cold: 1, ring: 8, breath: 6, bossCd: 1, adds: 0 }),
+  H5({ wash: 6, plunge: 10, load: 1.2, cold: 1, ring: 8, breath: 6, bossCd: 1, adds: 0 }),
+  H5({ wash: 8, plunge: 12, load: 1.1, cold: 1.15, ring: 9, breath: 5.5, bossCd: 0.9, adds: 1 }),
+  H5({ wash: 10, plunge: 14, load: 1.0, cold: 1.3, ring: 10, breath: 5, bossCd: 0.85, adds: 1 }),
+  H5({ wash: 12, plunge: 16, load: 0.9, cold: 1.45, ring: 10, breath: 5, bossCd: 0.8, adds: 2 })
 ];
 
 // ---------- classes ----------
@@ -62,6 +77,57 @@ export const MONSTERS = {
   // bosses
   weaver: { model: 'weaver', hp: 38, dmg: 1.8, speed: 5.2, radius: 2.2, ai: 'weaver', reach: 3.6, atk: 'bite', atkTime: 1.6, flesh: 'chitin', xp: 60, boss: true, sfx: 'spider' },
   barrowLord: { model: 'barrowLord', hp: 55, dmg: 2.1, speed: 4.2, radius: 1.2, ai: 'lord', reach: 3.6, atk: 'smash', atkTime: 1.5, flesh: 'spirit', xp: 90, boss: true, weapon: 'greatsword', style: 'heavy', sfx: 'wraith', float: true },
+  // Act II: the Giants' Stair and the Halls of Deepstone
+  magmaHound: { model: 'magmaHound', hp: 0.95, dmg: 1.0, speed: 6.4, radius: 0.6, ai: 'pounce', reach: 1.6, atk: 'bite', atkTime: 1.1, flesh: 'magma', xp: 1.6, sfx: 'hound', burns: true, deathFire: true, look: { rim: 0xff5a18, rimI: 0.3 } },
+  caveBat: { model: 'caveBat', hp: 0.28, dmg: 0.5, speed: 7.2, radius: 0.35, ai: 'bat', reach: 1.1, atk: 'bite', atkTime: 0.9, flesh: 'flesh', xp: 0.45, sfx: 'bat' },
+  deepworm: { model: 'deepworm', hp: 1.5, dmg: 1.35, speed: 4.4, radius: 0.85, ai: 'burrow', reach: 2.4, atk: 'bite', atkTime: 1.4, flesh: 'chitin', xp: 2.6, sfx: 'worm', proj: 'acid' },
+  stoneborn: { model: 'stoneborn', hp: 1.25, dmg: 1.1, speed: 4.0, radius: 0.5, ai: 'melee', reach: 1.7, atk: 'chop', atkTime: 1.25, flesh: 'flesh', xp: 1.6, weapon: 'axe', style: 'sword', sfx: 'dwarf', armor: true },
+  stonebornArbalest: { model: 'stonebornArb', hp: 0.9, dmg: 0.95, speed: 3.8, radius: 0.5, ai: 'ranged', reach: 12, atk: 'shoot', atkTime: 1.8, flesh: 'flesh', xp: 1.5, weapon: 'crossbow', style: 'bow', sfx: 'dwarf', proj: 'bolt' },
+  runepriest: { model: 'runepriest', hp: 1.0, dmg: 1.0, speed: 3.6, radius: 0.5, ai: 'runepriest', reach: 10, atk: 'cast', atkTime: 2.2, flesh: 'flesh', xp: 2.2, weapon: 'staff', style: 'staff', sfx: 'dwarf', proj: 'ember' },
+  caveTroll: { model: 'troll', hp: 7.5, dmg: 2.9, speed: 3.6, radius: 1.25, ai: 'brute', reach: 3.0, atk: 'smash', atkTime: 2.1, flesh: 'flesh', xp: 11, weapon: 'club', style: 'heavy', hunch: 0.25, sfx: 'troll', big: true, look: { scale: 1.18, tint: 0x8a9aa8, tintAmt: 0.35 } },
+  deadDwarf: { model: 'skeleton', hp: 0.9, dmg: 1.0, speed: 3.7, radius: 0.48, ai: 'melee', reach: 1.6, atk: 'slash1', atkTime: 1.15, flesh: 'bone', xp: 1.2, weapon: 'axe', style: 'undead', sfx: 'skeleton', rises: true, look: { scale: 0.86, tint: 0xd8b880, tintAmt: 0.2 } },
+  stonewarden: { model: 'stonewarden', hp: 46, dmg: 2.0, speed: 3.6, radius: 1.6, ai: 'stonewarden', reach: 3.8, atk: 'smash', atkTime: 1.6, flesh: 'stone', xp: 80, boss: true, sfx: 'golem' },
+  moltenKing: { model: 'moltenKing', hp: 72, dmg: 2.4, speed: 4.1, radius: 0.9, look: { scale: 1.55, rim: 0xff6a20, rimI: 0.4 }, ai: 'molten', reach: 3.9, atk: 'smash', atkTime: 1.5, flesh: 'magma', xp: 130, boss: true, weapon: 'hammer', style: 'heavy', sfx: 'golem' },
+  // Act III: the Weeping Woods and the Heartwood. 'wood' flesh shrugs off sap; flesh is slowed by it; floaters never touch it
+  hollowed: { model: 'hollowed', hp: 1.4, dmg: 1.15, speed: 3.6, radius: 0.5, ai: 'hollow', reach: 1.7, atk: 'claw', atkTime: 1.25, flesh: 'wood', xp: 1.8, style: 'undead', hunch: 0.15, deathSap: 1.5, wake: { d: 6, clip: 'riseStand', sfx: 'hollowCrack', t: 2.2 } },
+  rootling: { model: 'rootling', hp: 0.3, dmg: 0.5, speed: 6.2, radius: 0.35, ai: 'rootling', reach: 1.2, atk: 'bite', atkTime: 0.9, flesh: 'wood', xp: 0.6, burst: true },
+  amberMoth: { model: 'amberMoth', hp: 0.3, dmg: 0.5, speed: 6.8, radius: 0.4, ai: 'bat', reach: 1.1, atk: 'bite', atkTime: 0.9, flesh: 'chitin', xp: 0.5, sfx: 'moth', float: true, biteSlow: { k: 0.15, t: 1 }, deathDust: true, look: { rim: 0xffb040, rimI: 0.35 } },
+  amberBear: { model: 'amberBear', hp: 3.2, dmg: 1.8, speed: 5.6, radius: 1.0, ai: 'charger', reach: 2.2, atk: 'smash', atkTime: 1.6, flesh: 'flesh', xp: 5, sfx: 'bear', big: true },
+  rootsworn: { model: 'rootsworn', hp: 1.2, dmg: 1.15, speed: 4.4, radius: 0.5, ai: 'melee', reach: 2.3, atk: 'heavyStab', atkTime: 1.3, flesh: 'flesh', xp: 1.6, weapon: 'spear', wlook: { len: 2.0 }, style: 'heavy', spinEvery: 3 },
+  rootswornArcher: { model: 'rootswornArcher', hp: 0.85, dmg: 1.0, speed: 4.4, radius: 0.48, ai: 'skirmisher', reach: 13, atk: 'shoot', atkTime: 1.6, flesh: 'flesh', xp: 1.5, weapon: 'bow', wlook: { blade: 0x3a2a1a }, style: 'bow', proj: 'arrow' },
+  rootwarden: { model: 'rootwarden', hp: 4.5, dmg: 1.6, speed: 0, radius: 1.1, ai: 'rooted', reach: 4, atk: 'smash', atkTime: 3, flesh: 'wood', xp: 6, big: true, anchored: true },
+  mourner: { model: 'mourner', hp: 0.9, dmg: 0.8, speed: 4.2, radius: 0.45, ai: 'tether', reach: 11, atk: 'cast', atkTime: 3.2, flesh: 'spirit', xp: 2, sfx: 'wraith', float: true, look: { rim: 0xe8d8a8, rimI: 0.5 } },
+  heartroot: { model: 'heartroot', hp: 6, dmg: 1, speed: 0, radius: 0.9, ai: 'node', reach: 0, atk: 'cast', atkTime: 9, flesh: 'wood', xp: 3, big: true, anchored: true },
+  silverhorn: { model: 'silverhorn', hp: 52, dmg: 2.1, speed: 6.0, radius: 1.4, ai: 'silverhorn', reach: 4.6, atk: 'smash', atkTime: 1.6, flesh: 'flesh', xp: 110, boss: true, sfx: 'hart', look: { scale: 1.15, tint: 0xf0ece0, tintAmt: 0.15, rim: 0xffc060, rimI: 0.3 } },
+  amaranthe: { model: 'amaranthe', hp: 80, dmg: 2.5, speed: 4.4, radius: 0.9, ai: 'amaranthe', reach: 4.6, atk: 'heavyStab', atkTime: 1.5, flesh: 'wood', xp: 160, boss: true, weapon: 'spear', wlook: { len: 1.3 }, style: 'heavy', dieClip: 'kneel', look: { scale: 1.45, rim: 0xffb040, rimI: 0.5 } },
+  // Act IV: the Field of Ash and the Ashen Forge. shroud: 30% damage outside light (light.js); guard: a shield arc in
+  // front (combat.js); wake: lies in the ash until the hero is close; fireproof: the Forge's Breath passes over it
+  lampless: { model: 'lampless', hp: 1.3, dmg: 1.15, speed: 3.8, radius: 0.5, ai: 'watch', reach: 2.2, atk: 'heavyStab', atkTime: 1.3, flesh: 'spirit', xp: 2, weapon: 'lanternStaff', wlook: { glow: 0.05, lamp: 0x6a7684 }, style: 'staff', animSet: 'formal', shroud: true, dieSfx: 'wraithDie', look: { rim: 0xb0c0d8, rimI: 0.35 } },
+  ashSpear: { model: 'ashSpear', hp: 1.6, dmg: 1.2, speed: 3.2, radius: 0.5, ai: 'melee', reach: 2.0, atk: 'heavyStab', atkTime: 1.3, flesh: 'ash', xp: 2, weapon: 'spear', wlook: { len: 2.0, blade: 0x6a645c, glow: 0, wood: 0x2a2420 }, style: 'heavy', guard: { arc: 1.05, k: 0.15 }, bashEvery: 3, shield: { face: 0x3a3632, rim: 0x6a645c, emblem: 0x8a3a20, r: 0.32 }, dieSfx: 'skeletonDie', wake: { d: 6, clip: 'rise', pose: 'bonePile', sfx: 'skeletonRattle', t: 2.0, speed: 1 } },
+  ashDwarf: { model: 'ashDwarf', hp: 1.7, dmg: 1.25, speed: 3.0, radius: 0.5, ai: 'melee', reach: 1.8, atk: 'chop', atkTime: 1.35, flesh: 'ash', xp: 2, weapon: 'axe', wlook: { blade: 0x6a5a48 }, style: 'sword', guard: { arc: 1.05, k: 0.15 }, bashEvery: 3, shield: { face: 0x4a3a28, rim: 0x9a7a40, emblem: 0xb07a30, r: 0.3 }, dieSfx: 'dwarfDie', wake: { d: 6, clip: 'rise', pose: 'bonePile', sfx: 'skeletonRattle', t: 2.0, speed: 1 } },
+  ashBow: { model: 'ashBow', hp: 0.9, dmg: 1.0, speed: 3.4, radius: 0.48, ai: 'ranged', reach: 12, atk: 'shoot', atkTime: 1.9, flesh: 'ash', xp: 1.5, weapon: 'bow', wlook: { blade: 0x3a3028 }, style: 'bow', proj: 'fireArrow', dieSfx: 'skeletonDie', wake: { d: 7, clip: 'rise', pose: 'bonePile', sfx: 'skeletonRattle', t: 2.0, speed: 1 } },
+  smokeEater: { model: 'smokeEater', hp: 0.7, dmg: 0.8, speed: 5.8, radius: 0.55, ai: 'snuffer', reach: 1.5, atk: 'claw', atkTime: 1.1, flesh: 'ash', xp: 1.4, dieSfx: 'wraithDie', look: { rim: 0x8a7a6a, rimI: 0.25 } },
+  ashwing: { model: 'ashwing', hp: 2.0, dmg: 1.4, speed: 7.5, radius: 1.0, ai: 'diver', reach: 2.2, atk: 'bite', atkTime: 1.2, flesh: 'bone', xp: 3, big: true, float: true, sfx: 'bat', dieSfx: 'skeletonDie', fireproof: true, look: { rim: 0xff7a30, rimI: 0.45 } },
+  emberTick: { model: 'emberTick', hp: 0.35, dmg: 0.6, speed: 6.2, radius: 0.35, ai: 'latcher', reach: 1.0, atk: 'bite', atkTime: 0.9, flesh: 'chitin', xp: 0.6, sfx: 'spider', fireproof: true, look: { rim: 0xff6a20, rimI: 0.5 } },
+  ashsmith: { model: 'ashsmith', hp: 1.1, dmg: 1.0, speed: 3.8, radius: 0.5, ai: 'forger', reach: 9, atk: 'throw', atkTime: 1.8, flesh: 'flesh', xp: 2.4, weapon: 'hammer', style: 'none', proj: 'ember', fireproof: true, dieSfx: 'dwarfDie' },
+  hammerhorn: { model: 'hammerhorn', hp: 4.5, dmg: 2.0, speed: 3.6, radius: 1.0, ai: 'brute', reach: 2.8, atk: 'smash', atkTime: 2.0, flesh: 'flesh', xp: 6, big: true, weapon: 'hammer', wlook: { len: 1.4 }, style: 'heavy', sfx: 'troll', chain: 9, fireproof: true, look: { scale: 1.13, rim: 0xff5a18, rimI: 0.3 } },
+  // a keeper's statue in Karthax's second phase: the real model (o.model), frozen and ash-grey; only his Hammerfall breaks it
+  keeperStatue: { model: 'barrowLord', hp: 1, dmg: 0, speed: 0, radius: 1.0, ai: 'node', reach: 0, atk: 'cast', atkTime: 9, flesh: 'stone', xp: 0, big: true, anchored: true, fireproof: true },
+  ivar: { model: 'ivar', hp: 58, dmg: 2.3, speed: 4.4, radius: 0.6, ai: 'ivar', reach: 4.4, atk: 'heavyStab', atkTime: 1.5, flesh: 'spirit', xp: 130, boss: true, weapon: 'lanternStaff', wlook: { glow: 0.05, lamp: 0x6a7684 }, style: 'staff', dieClip: 'kneel', dieSfx: 'wraithDie', look: { scale: 1.25, rim: 0xb0b8c8, rimI: 0.5 } },
+  karthax: { model: 'karthax', hp: 95, dmg: 2.7, speed: 4.0, radius: 1.3, ai: 'karthax', reach: 4.8, atk: 'smash', atkTime: 1.5, flesh: 'magma', xp: 220, boss: true, weapon: 'hammer', wlook: { len: 1.6, ember: 0xff5a10 }, style: 'heavy', dieClip: 'kneel', sfx: 'golem', fireproof: true, look: { scale: 1.5, rim: 0xff5a18, rimI: 0.6 } },
+  // Act V: the Frozen Coast and the Farthest Light. The Skotos's creatures are unlit (a beam dazzles and reveals them, lamp
+  // light keeps them from waking or rising); swim: they cross deep water and are not slowed wading; tideWake: dormant under
+  // kelp until the flood reaches them (frozen crews: until the ice cracks); tideborne: stronger in the shallows; weight:
+  // their load on thin ice (ice.js); iceCharge: a charge cracks thin ice; coldBite: Cold on a bite (cold.js); turn: the
+  // most it turns, rad/s (behind a guard; 2.2 by default)
+  sunken: { model: 'sunken', hp: 1.4, dmg: 1.2, speed: 3.4, radius: 0.5, ai: 'melee', reach: 1.9, atk: 'chop', atkTime: 1.3, flesh: 'drowned', xp: 2, weapon: 'boathook', style: 'heavy', animSet: 'undead', dieClip: 'dieBones', wake: { d: 5, clip: 'rise', pose: 'kelpPile', sfx: 'splash', t: 2.0 }, tideWake: true, tideborne: true, swim: true, unlit: true, hookEvery: 3 },
+  harpooner: { model: 'sunken', hp: 1.0, dmg: 1.1, speed: 3.4, radius: 0.48, ai: 'ranged', reach: 11, atk: 'throw', atkTime: 1.8, proj: 'harpoon', flesh: 'drowned', xp: 1.8, weapon: 'harpoon', style: 'none', animSet: 'harpoon', harpoonEvery: 3, wake: { d: 5, clip: 'rise', pose: 'kelpPile', sfx: 'splash', t: 2.0 }, tideWake: true, tideborne: true, swim: true, unlit: true, look: { scale: 1.06 } },
+  iceSinger: { model: 'icesinger', hp: 0.9, dmg: 0.8, speed: 3.8, radius: 0.45, ai: 'singer', reach: 10, atk: 'cast', atkTime: 3.0, flesh: 'drowned', xp: 2.2, style: 'none', animSet: 'singer', float: true, unlit: true, dieClip: 'dieFwd', look: { rim: 0x9ad8ff, rimI: 0.45 } },
+  hullLouse: { model: 'hullLouse', hp: 0.32, dmg: 0.5, speed: 6.0, radius: 0.38, ai: 'melee', reach: 1.0, atk: 'bite', atkTime: 0.8, flesh: 'chitin', xp: 0.6, sfx: 'spider', burst: true, curl: true, swim: true, unlit: true, weight: 0.3, look: { scale: 1.25, tint: 0x7a7488, tintAmt: 0.45, rim: 0xc0d0ff, rimI: 0.2 } },
+  icemaw: { model: 'icemaw', hp: 2.2, dmg: 1.5, speed: 2.0, underSpeed: 7.0, radius: 0.6, ai: 'lurker', reach: 2.2, atk: 'bite', atkTime: 1.1, flesh: 'flesh', xp: 3, swim: true, weight: 2.0, look: { scale: 1.6 } },
+  reefback: { model: 'reefback', hp: 4.8, dmg: 1.9, speed: 3.4, radius: 0.6, ai: 'brute', reach: 2.6, atk: 'claw', atkTime: 1.6, flesh: 'chitin', xp: 6, big: true, swim: true, weight: 2.5, guard: { arc: 1.2, k: 0.2 }, turn: 1.8, wake: { d: 3, clip: 'wake', pose: 'rock', tide: true, sfx: 'splash', t: 2.0, speed: 1 }, look: { scale: 1.5, tint: 0x6a7080, tintAmt: 0.6 } },
+  rimeBear: { model: 'rimeBear', hp: 3.6, dmg: 1.9, speed: 5.6, radius: 1.1, ai: 'charger', reach: 2.3, atk: 'smash', atkTime: 1.6, flesh: 'flesh', xp: 5.5, sfx: 'bear', big: true, iceCharge: true, frostRoar: true, look: { scale: 1.3, tint: 0xf4f2ec, tintAmt: 2.15, rim: 0xd8f0ff, rimI: 0.3 } },
+  skua: { model: 'skua', hp: 0.3, dmg: 0.45, speed: 7.5, radius: 0.4, ai: 'bat', reach: 1.0, atk: 'bite', atkTime: 0.8, flesh: 'flesh', xp: 0.5, float: true, lightShy: true, coldBite: 3, feathers: true },
   // the ranger's companion
   spiritWolf: { model: 'spiritWolf', hp: 2, dmg: 1, speed: 7.5, radius: 0.55, ai: 'pet', reach: 1.7, atk: 'bite', atkTime: 0.8, flesh: 'spirit', xp: 0, pet: true }
 };
@@ -74,8 +140,110 @@ export const PACKS = {
   undead: [['skeleton', 5], ['skeletonArcher', 2], ['wraith', 0.8]],
   wraiths: [['wraith', 2], ['skeleton', 2]],
   ash: [['ash', 3], ['goblin', 2], ['goblinArcher', 1]],
-  gate: [['skeleton', 3], ['goblin', 3], ['warg', 2], ['wraith', 1.5], ['ash', 1.5], ['spider', 1.5], ['skeletonArcher', 1], ['goblinShaman', 0.6]]
+  gate: [['skeleton', 3], ['goblin', 3], ['warg', 2], ['wraith', 1.5], ['ash', 1.5], ['spider', 1.5], ['skeletonArcher', 1], ['goblinShaman', 0.6]],
+  // Act II
+  passGoblins: [['goblin', 5], ['goblinArcher', 2.5], ['goblinShaman', 1], ['warg', 1.2]],
+  bats: [['caveBat', 1]],
+  hounds: [['magmaHound', 3], ['ash', 1]],
+  ashbound: [['stoneborn', 5], ['stonebornArbalest', 2.2], ['runepriest', 1]],
+  trollCave: [['caveTroll', 1]],
+  worms: [['deepworm', 2], ['caveBat', 2]],
+  deep: [['stoneborn', 3], ['magmaHound', 2], ['ash', 2], ['caveBat', 2], ['stonebornArbalest', 1]],
+  mine: [['spider', 3], ['caveBat', 3], ['deepworm', 0.6], ['spiderling', 2]],
+  deadDwarves: [['deadDwarf', 5], ['skeletonArcher', 1.5], ['wraith', 1]],
+  // Act III
+  weepHollow: [['hollowed', 4], ['rootling', 3]],
+  weepDen: [['amberBear', 1], ['rootling', 2]],
+  weepMoths: [['amberMoth', 6]],
+  weepSentinels: [['rootsworn', 3], ['rootswornArcher', 2]],
+  weepMourners: [['mourner', 1], ['rootsworn', 2], ['hollowed', 2]],
+  weepWeepers: [['rootwarden', 1], ['hollowed', 2]],
+  weepMixed: [['hollowed', 3], ['rootswornArcher', 1.5], ['amberMoth', 2], ['rootling', 2]],
+  heartSleepers: [['hollowed', 4], ['rootling', 2]],
+  heartWarden: [['rootwarden', 1], ['hollowed', 2], ['rootling', 3]],
+  heartChoir: [['mourner', 2], ['rootsworn', 3], ['rootswornArcher', 1]],
+  heartDeep: [['hollowed', 3], ['rootsworn', 2], ['rootswornArcher', 1.5], ['amberBear', 0.4], ['mourner', 0.5]],
+  // Act IV
+  ashLine: [['ashSpear', 4], ['ashDwarf', 3], ['ashBow', 2]],
+  ashBowmen: [['ashBow', 3], ['ashSpear', 1.5], ['emberTick', 1]],
+  lamplessPatrol: [['lampless', 1]],
+  snuffers: [['smokeEater', 3], ['ashSpear', 1]],
+  ticks: [['emberTick', 1]],
+  ashwing: [['ashwing', 1]],
+  smiths: [['ashsmith', 2], ['ashSpear', 2], ['ashDwarf', 1.5], ['emberTick', 1.5]],
+  stokers: [['hammerhorn', 1]],
+  mouldHall: [['ashsmith', 2], ['ashSpear', 2], ['ashBow', 1], ['emberTick', 2], ['smokeEater', 0.6], ['hammerhorn', 0.3]],
+  bellowsWave: [['ashSpear', 2], ['ashDwarf', 1.5], ['ashsmith', 1], ['emberTick', 2]],
+  // Act V (floodWave: walked in by the tide at high water, world.js; holeRise: climbing out of a Breathing-hole, the seals)
+  sunkenCrew: [['sunken', 4], ['harpooner', 2]],
+  tideChoir: [['sunken', 3], ['harpooner', 1]],
+  floodWave: [['sunken', 3]],
+  hullSwarm: [['hullLouse', 1]],
+  reefRocks: [['reefback', 1], ['hullLouse', 2]],
+  strandBear: [['hullLouse', 2]],
+  fallHunters: [['hullLouse', 2]],
+  skuaFlock: [['skua', 1]],
+  frozenCrew: [['sunken', 3], ['harpooner', 2], ['iceSinger', 0.6]],
+  iceMixed: [['sunken', 2], ['hullLouse', 2], ['harpooner', 1], ['icemaw', 0.6], ['iceSinger', 0.6]],
+  holeRise: [['sunken', 1]]
 };
+// packs built around one creature: it comes first, exactly once (or the count given), and the rest are drawn without it
+export const PACK_LEAD = { weepDen: ['amberBear'], weepWeepers: ['rootwarden'], weepMourners: ['mourner'], heartWarden: ['rootwarden'], heartChoir: ['mourner', 'mourner'],
+  ashLine: ['ashSpear'], snuffers: ['smokeEater', 'smokeEater'], smiths: ['ashsmith'], mouldHall: ['ashsmith'], bellowsWave: ['ashsmith'],
+  tideChoir: ['iceSinger'], reefRocks: ['reefback'], strandBear: ['rimeBear'], fallHunters: ['icemaw'] };
+// packs whose dead wait in disguise (Hollowed as dead trees and amber cocoons, the Ash-Fallen under the ash, the Sunken under
+// the kelp and as ice at the rails, the Reefbacks as rocks) until the hero is close
+export const PACK_DORMANT = { weepHollow: true, heartSleepers: true, ashLine: true, sunkenCrew: true, tideChoir: true, reefRocks: true, frozenCrew: true };
+// packs that stand in a line, the shields toward the hero (the Ash-Fallen still holding the battle line where they fell)
+export const PACK_LINE = { ashLine: true };
+// the kinds to spawn for a pack of n: the leads, then weighted picks of the rest (pick = rand.weighted)
+export function packKinds(tag, n, pick) {
+  const lead = PACK_LEAD[tag] || [], w = (PACKS[tag] || PACKS.goblins).filter(([k]) => !lead.includes(k));
+  const out = lead.slice(0, n);
+  while (out.length < n) out.push(pick(w.length ? w : PACKS[tag]));
+  return out;
+}
+// beacon blessings: when a shard is laid on the beacon and another fire answers, the flame gives one of three, for good
+export const BOONS = {
+  1: [
+    { id: 'ember', icon: 'flame', stats: { dmgPct: 12, critDmg: 10 } },
+    { id: 'hearth', icon: 'shield', stats: { lifePct: 15, armorPct: 10 } },
+    { id: 'north', icon: 'roll', stats: { move: 8, atkSpd: 6 } }
+  ],
+  2: [
+    { id: 'forge', icon: 'fire', stats: { eliteDmg: 20, area: 10 } },
+    { id: 'anvil', icon: 'shield', stats: { armorPct: 20, thorns: 40 } },
+    { id: 'rune', icon: 'star', stats: { cdr: 8, resRegen: 20 } }
+  ],
+  3: [
+    { id: 'amber', icon: 'potion', stats: { lifeOnHit: 15, regen: 10 } },
+    { id: 'hart', icon: 'leap', stats: { crit: 5, move: 6 } },
+    { id: 'root', icon: 'shield', stats: { block: 10, lifePct: 8 } }
+  ],
+  // the fire lit by hand: worth half again to a hero the crown never held (h.flags.unbound, see stats.js)
+  4: [
+    { id: 'wayfarer', icon: 'roll', stats: { move: 8, cdr: 10 } },
+    { id: 'lantern', icon: 'star', stats: { crit: 6, critDmg: 25 } },
+    { id: 'rest', icon: 'shield', stats: { lifePct: 15, regen: 15 } }
+  ],
+  // the lights of the sea: worth a quarter again to a hero who lit all four Name-stones (h.flags.remembered, stats.js)
+  5: [
+    { id: 'einar', icon: 'star', stats: { eliteDmg: 15, crit: 5 } },
+    { id: 'tide', icon: 'roll', stats: { atkSpd: 8, resRegen: 15 } },
+    { id: 'name', icon: 'shield', stats: { lifePct: 12, armorPct: 12 } }
+  ]
+};
+export const UNBOUND = 1.5;
+export const REMEMBERED = 1.25;
+// the Crown's Offers (Act IV altars): what each gift gives and takes while it is held (stats.js)
+export const GIFTS = {
+  throne: { armorPct: 25, lifePct: 10, move: -12 },
+  forge: { dmgPct: 20, critDmg: 15, armorPct: -20 },
+  unfading: { lifeOnHit: 15, regen: 15, atkSpd: -15 }
+};
+// timed hero buffs granted by the world (shrines live in world.js): seconds and what they do
+export const BUFFS = { memory: { dur: 60, dmg: 0.12, move: 0.08 } };
+export const BOON = Object.fromEntries(Object.values(BOONS).flat().map((b) => [b.id, b]));
 // elite affixes
 export const AFFIXES = ['fast', 'vampiric', 'molten', 'frozen', 'shielding', 'teleporter', 'thunder', 'horde', 'armored'];
 
@@ -145,8 +313,14 @@ export const LEGENDARIES = [
   { id: 'barrowCrown', base: 'helm', cls: null, v: 0.12 },
   { id: 'vampiricMail', base: 'chest', cls: null, v: 0.02 },
   { id: 'stoneborn', base: 'chest', cls: null, v: 0.2 },
-  { id: 'swiftboots', base: 'boots', cls: null, v: 0.15 }
+  { id: 'swiftboots', base: 'boots', cls: null, v: 0.15 },
+  // Act V: the bosses' own, never a random drop (drop: false; items.js gives them only when asked, LEG_FROM): the sea takes
+  // no life from her (plunges, wash-outs); what she strikes is Revealed for 2 s
+  { id: 'skerryShell', base: 'chest', cls: null, v: 1, drop: false },
+  { id: 'einarLantern', base: 'amulet', cls: null, v: 2, drop: false }
 ];
+// a boss's first kill drops its own legendary (combat.js kill)
+export const LEG_FROM = { tower: 'skerryShell', skotos: 'einarLantern' };
 export const POTION = { cd: 18, heal: 0.6 };
 export const INV_SIZE = 32;
 export const STASH_SIZE = 48;

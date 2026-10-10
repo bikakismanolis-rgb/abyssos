@@ -1,0 +1,372 @@
+{
+ "crab": {
+  "pick": "Crab mountain (pro100voron)",
+  "uid": "ac8fa79586f84c84a8a55dd86b7a2e2f",
+  "pass": true,
+  "evidence": [
+   "API: CC-BY 4.0, downloadable, 41,993 faces, 1 clip, created 2019-11-09, published 2020-04-01; description \"created according to its own concept for a personal project\"",
+   "Author: lead artist in gamedev (Russia, C4D/3D-Coat); 2020-22 run of own creature designs with the same wording and toolchain; later Fallout/Jurassic fan art is labelled and view-only; this is his only downloadable model",
+   "File: Russian part names (krab, golova = head, us = feelers), C4D take CINEMA_4D_Main, 85-joint hand-named rig, hand-painted 3D-Coat texture sets, no watermarks or vendor names",
+   "Yandex reverse-image: only Sketchfab (page, embed, two collections) and rigmodels.com (a Sketchfab mirror by uid); look-alikes compared side by side (Protofactor Rostrokarck, Existence Royal Crab, Crab Reef, Giant Rock Crab) are different meshes",
+   "No storefront listing (Fab, CGTrader, TurboSquid, Unity Asset Store, ArtStation Marketplace) by web search; no duplicate upload on Sketchfab; a search snippet of pro100voron.artstation.com (Alexey Voronin) lists Crab mountain (page itself behind Cloudflare)",
+   "Fallback Giant Crab 6295676291c141728457ef7550b0650a not needed, not downloaded"
+  ],
+  "report": "/tmp/claude-0/sf/act5/crab/provenance.md"
+ },
+ "skotos": {
+  "pick": "Cloaked Figure (MysteryPancake) as the hood and robe, with code-built arm folds; code rig",
+  "uid": "f4e2c262ed4e456484f232d6afa99629",
+  "pass": true,
+  "evidence": [
+   "Ocean Creature 5c17cca6086e4910aa12e7d701ccd6a1: technical PASS (one skin, 139 plain joints -> THREE.Bone, clip Moving 8 s 209 tracks validates and deforms coherently; 39 unweighted helper joints; 2 morph targets up to ~1 body height keyed in the clip, to drop); look FAIL (upright squid: pointed mantle cone, two eyes, arm bundle, forked tail; 1.6 x 12 x 2.4 m spindle; squid in profile and through its swim clip; still an octopus with the eyes masked and widened 1.8x)",
+   "Lurker 28b3e1a216904de7ad212368fb9d8f59: look FAIL (horizontal floating squid at both pitches); its Eyes and Beak_Top are mis-skinned in the GLB",
+   "Scout (Sketchfab, CC-BY/CC0, downloadable; ~70 queries): Cloaked Figure by MysteryPancake, CC-BY 4.0, 1,778 faces, a faceless hooded cloak, student work (Maya, AIE Sydney 2015, published 2018); Yandex reverse-image finds only Sketchfab; no rig/clips",
+   "Look: reads as a hooded figure at the gameplay pitch and the cine pitch; with nine code-built tapered arms falling from the shoulders into the sea it reads as \"a figure whose robe is its own arms\", a shape, not an animal (cloakfolds_*); the T-posed sleeves pose down cleanly (72 deg about the shoulders)",
+   "Conditions for the build: a code rig (spine, hood, sleeves, fold chains), the arms code-built (or the Hands), void material and fresnel as the design; the lead confirms the pick (it replaces the design uid)",
+   "Rejected scout candidates: IP or fan art (Dark Wraith, the Blood cultist, Shadow Wraith), unverified AI bulk uploads (s8819296, Purple.Point, rt699448), not a figure (Swamp Witch, Banshee, jellyfish), Lovecraft (Dagon sectarian)"
+  ],
+  "images": [
+   "/tmp/claude-0/sf/act5/skotos/look/c2_orig_unmasked.png",
+   "/tmp/claude-0/sf/act5/skotos/look/c2_waist_nonrm_t0.png",
+   "/tmp/claude-0/sf/act5/skotos/look/c2_waist_wide_t0.png",
+   "/tmp/claude-0/sf/act5/skotos/look/c_waist_t0.png",
+   "/tmp/claude-0/sf/act5/skotos/look/c_waist_t4.png",
+   "/tmp/claude-0/sf/act5/skotos/look/cloak_c_sink3.png",
+   "/tmp/claude-0/sf/act5/skotos/look/cloak_c_waist.png",
+   "/tmp/claude-0/sf/act5/skotos/look/cloak_folds_sheet.png",
+   "/tmp/claude-0/sf/act5/skotos/look/cloak_g_side.png",
+   "/tmp/claude-0/sf/act5/skotos/look/cloak_g_sink3.png",
+   "/tmp/claude-0/sf/act5/skotos/look/cloak_g_waist.png",
+   "/tmp/claude-0/sf/act5/skotos/look/cloakfolds_c_sink3.png",
+   "/tmp/claude-0/sf/act5/skotos/look/cloakfolds_c_waist.png",
+   "/tmp/claude-0/sf/act5/skotos/look/cloakfolds_g_sink3.png",
+   "/tmp/claude-0/sf/act5/skotos/look/cloakfolds_g_waist.png",
+   "/tmp/claude-0/sf/act5/skotos/look/compare_three.png",
+   "/tmp/claude-0/sf/act5/skotos/look/crops_gameplay.png",
+   "/tmp/claude-0/sf/act5/skotos/look/g2_waist_nonrm_t0.png",
+   "/tmp/claude-0/sf/act5/skotos/look/g2_waist_wide_t0.png",
+   "/tmp/claude-0/sf/act5/skotos/look/g_sink3_t0.png",
+   "/tmp/claude-0/sf/act5/skotos/look/g_waist_portrait_t0.png",
+   "/tmp/claude-0/sf/act5/skotos/look/g_waist_side_t0.png",
+   "/tmp/claude-0/sf/act5/skotos/look/g_waist_t0.png",
+   "/tmp/claude-0/sf/act5/skotos/look/g_waist_t2.png",
+   "/tmp/claude-0/sf/act5/skotos/look/g_waist_t4.png",
+   "/tmp/claude-0/sf/act5/skotos/look/g_waist_t6.png",
+   "/tmp/claude-0/sf/act5/skotos/look/lurker_c_waist.png",
+   "/tmp/claude-0/sf/act5/skotos/look/lurker_g_side.png",
+   "/tmp/claude-0/sf/act5/skotos/look/lurker_g_sink3.png",
+   "/tmp/claude-0/sf/act5/skotos/look/lurker_g_waist.png",
+   "/tmp/claude-0/sf/act5/skotos/look/pair_sink3_side.png",
+   "/tmp/claude-0/sf/act5/skotos/look/sheet_gameplay.png",
+   "/tmp/claude-0/sf/act5/skotos/look/sheet_variants.png"
+  ],
+  "verdict": "/tmp/claude-0/sf/act5/skotos/look/verdict.md",
+  "tech": "/tmp/claude-0/sf/act5/skotos/tech.json",
+  "rejected": [
+   {
+    "name": "Ocean Creature",
+    "uid": "5c17cca6086e4910aa12e7d701ccd6a1",
+    "technical": true,
+    "look": false
+   },
+   {
+    "name": "Lurker - Rigged and Animated",
+    "uid": "28b3e1a216904de7ad212368fb9d8f59",
+    "technical": false,
+    "look": false
+   }
+  ]
+ },
+ "downloads": [
+  {
+   "name": "crab",
+   "uid": "ac8fa79586f84c84a8a55dd86b7a2e2f",
+   "path": "/tmp/claude-0/sf/act5/crab/model.glb",
+   "bytes": 15879240,
+   "ok": true
+  },
+  {
+   "name": "skotos",
+   "uid": "5c17cca6086e4910aa12e7d701ccd6a1",
+   "path": "/tmp/claude-0/sf/act5/skotos/model.glb",
+   "bytes": 44006004,
+   "ok": true
+  },
+  {
+   "name": "tentacle",
+   "uid": "8fcc783af94246a0b8febf424a4b96b9",
+   "path": "/tmp/claude-0/sf/act5/tentacle/model.glb",
+   "bytes": 23227612,
+   "ok": true
+  },
+  {
+   "name": "icemaw",
+   "uid": "3f4a2090598b4741ac38e0d255ece191",
+   "path": "/tmp/claude-0/sf/act5/icemaw/model.glb",
+   "bytes": 11065732,
+   "ok": true
+  },
+  {
+   "name": "louse",
+   "uid": "3979c291d1f9454c90851efe291eab60",
+   "path": "/tmp/claude-0/sf/act5/louse/model.glb",
+   "bytes": 26748472,
+   "ok": true
+  },
+  {
+   "name": "skua",
+   "uid": "dc42ffc81c86480e9e7f7752fa134174",
+   "path": "/tmp/claude-0/sf/act5/skua/model.glb",
+   "bytes": 519256,
+   "ok": true
+  },
+  {
+   "name": "bear",
+   "uid": "bffc3c87d2d148ff8533e1cc8a11c9f1",
+   "path": "src/assets/creatures/bear.glb",
+   "bytes": 0,
+   "ok": true,
+   "note": "shipped: nothing to fetch"
+  },
+  {
+   "name": "crab_giant",
+   "uid": "6295676291c141728457ef7550b0650a",
+   "path": null,
+   "bytes": null,
+   "ok": null,
+   "note": "fallback for crab: not fetched (--with=crab_giant)"
+  },
+  {
+   "name": "lurker",
+   "uid": "28b3e1a216904de7ad212368fb9d8f59",
+   "path": "/tmp/claude-0/sf/act5/lurker/model.glb",
+   "bytes": 5734324,
+   "ok": true
+  },
+  {
+   "name": "woodlouse",
+   "uid": "fae04aa296f844c18675f6ae50aefe77",
+   "path": null,
+   "bytes": null,
+   "ok": null,
+   "note": "fallback for louse: not fetched (--with=woodlouse)"
+  },
+  {
+   "name": "seal",
+   "uid": "fb79ae1e6021481f819f34ebc2dcaecd",
+   "path": null,
+   "bytes": null,
+   "ok": null,
+   "note": "fallback for icemaw: not fetched (--with=seal)"
+  },
+  {
+   "name": "cloak",
+   "uid": "f4e2c262ed4e456484f232d6afa99629",
+   "path": "/tmp/claude-0/sf/act5/cloak/model.glb",
+   "bytes": 826136,
+   "ok": true
+  },
+  {
+   "name": "wreck",
+   "uid": "027900c8fdf840f589cadb9f4a60d78c",
+   "path": "/tmp/claude-0/sf/act5/wreck/model.glb",
+   "bytes": 31309824,
+   "ok": true
+  },
+  {
+   "name": "keelboat",
+   "uid": "01098ad7973647a9b558f41d2ebc5193",
+   "path": "/tmp/claude-0/sf/act5/keelboat/model.glb",
+   "bytes": 5684504,
+   "ok": true
+  },
+  {
+   "name": "rowboat",
+   "uid": "9922d5678af84adeb1c9b479856446ca",
+   "path": "/tmp/claude-0/sf/act5/rowboat/model.glb",
+   "bytes": 3400340,
+   "ok": true
+  },
+  {
+   "name": "brokenboat",
+   "uid": "41c2bcc5ca544897a132be71f3b2673a",
+   "path": "/tmp/claude-0/sf/act5/brokenboat/model.glb",
+   "bytes": 2644464,
+   "ok": true
+  },
+  {
+   "name": "towers",
+   "uid": "f213359c6cbb4c29bf8880764faa0fb8",
+   "path": "/tmp/claude-0/sf/act5/towers/model.glb",
+   "bytes": 19836736,
+   "ok": true
+  },
+  {
+   "name": "lighthouse",
+   "uid": "19e1ff049db74dc8b6173976417c1048",
+   "path": "/tmp/claude-0/sf/act5/lighthouse/model.glb",
+   "bytes": 7417656,
+   "ok": true
+  },
+  {
+   "name": "anchor",
+   "uid": "5896ac54d63e4b84bd32e0b232619dfd",
+   "path": "/tmp/claude-0/sf/act5/anchor/model.glb",
+   "bytes": 7464148,
+   "ok": true
+  },
+  {
+   "name": "anchor_sunken",
+   "uid": "e654cb6e6e2c4217a7decb6bb9c0010d",
+   "path": "/tmp/claude-0/sf/act5/anchor_sunken/model.glb",
+   "bytes": 3743428,
+   "ok": true
+  },
+  {
+   "name": "whale",
+   "uid": "5c8664c56f9a4cf3ae6d9b8ec33b8dba",
+   "path": "/tmp/claude-0/sf/act5/whale/model.glb",
+   "bytes": 48366764,
+   "ok": true
+  },
+  {
+   "name": "runestone",
+   "uid": "d95a850cd9114828a18b5dd72878d9ec",
+   "path": "/tmp/claude-0/sf/act5/runestone/model.glb",
+   "bytes": 2863604,
+   "ok": true
+  },
+  {
+   "name": "barnacle_rock",
+   "uid": "21c9848ca38b4d289e2f38a98a905f86",
+   "path": "/tmp/claude-0/sf/act5/barnacle_rock/model.glb",
+   "bytes": 7882352,
+   "ok": true
+  },
+  {
+   "name": "driftwood",
+   "uid": "95d1087e513e4fb992a27b7b8a05ca9e",
+   "path": "/tmp/claude-0/sf/act5/driftwood/model.glb",
+   "bytes": 35506960,
+   "ok": true
+  },
+  {
+   "name": "kelp",
+   "uid": "c9b5ef07047a4b7a90a4ffd6930ec22c",
+   "path": "/tmp/claude-0/sf/act5/kelp/model.glb",
+   "bytes": 7897904,
+   "ok": true
+  },
+  {
+   "name": "icicle",
+   "uid": "2dc75ae22f1c4d11abbfd32819312a12",
+   "path": "/tmp/claude-0/sf/act5/icicle/model.glb",
+   "bytes": 4016924,
+   "ok": true
+  },
+  {
+   "name": "shack",
+   "uid": "b0bc474f7803488dbe0fa5aeef2e9ace",
+   "path": "/tmp/claude-0/sf/act5/shack/model.glb",
+   "bytes": 2214608,
+   "ok": true
+  },
+  {
+   "name": "dutch_ship_medium",
+   "uid": "dutch_ship_medium",
+   "path": "/tmp/claude-0/ph/dutch_ship_medium",
+   "bytes": 8735539,
+   "ok": true
+  },
+  {
+   "name": "wooden_barrels_01",
+   "uid": "wooden_barrels_01",
+   "path": "/tmp/claude-0/ph/wooden_barrels_01",
+   "bytes": 7490847,
+   "ok": true
+  },
+  {
+   "name": "wooden_crate_02",
+   "uid": "wooden_crate_02",
+   "path": "/tmp/claude-0/ph/wooden_crate_02",
+   "bytes": 2236220,
+   "ok": true
+  },
+  {
+   "name": "vintage_oil_lamp",
+   "uid": "vintage_oil_lamp",
+   "path": "/tmp/claude-0/ph/vintage_oil_lamp",
+   "bytes": 2070002,
+   "ok": true
+  },
+  {
+   "name": "coastal_cliff_01",
+   "uid": "coastal_cliff_01",
+   "path": "/tmp/claude-0/ph/coastal_cliff_01",
+   "bytes": 15376631,
+   "ok": true
+  },
+  {
+   "name": "rock_face_01",
+   "uid": "rock_face_01",
+   "path": "/tmp/claude-0/ph/rock_face_01",
+   "bytes": 3049988,
+   "ok": true
+  },
+  {
+   "name": "wooden_lantern_01",
+   "uid": "wooden_lantern_01",
+   "path": "src/assets/env.glb",
+   "bytes": 0,
+   "ok": true,
+   "note": "shipped: nothing to fetch"
+  },
+  {
+   "name": "snow_02",
+   "uid": "snow_02",
+   "path": "/tmp/claude-0/ph/snow_02",
+   "bytes": 1495455,
+   "ok": true
+  },
+  {
+   "name": "snow_03",
+   "uid": "snow_03",
+   "path": "/tmp/claude-0/ph/snow_03",
+   "bytes": 2256805,
+   "ok": true
+  },
+  {
+   "name": "low_tide_rocks",
+   "uid": "low_tide_rocks",
+   "path": "/tmp/claude-0/ph/low_tide_rocks",
+   "bytes": 3989535,
+   "ok": true
+  },
+  {
+   "name": "seaside_rock",
+   "uid": "seaside_rock",
+   "path": "/tmp/claude-0/ph/seaside_rock",
+   "bytes": 2753561,
+   "ok": true
+  },
+  {
+   "name": "wood_planks_grey",
+   "uid": "wood_planks_grey",
+   "path": "/tmp/claude-0/ph/wood_planks_grey",
+   "bytes": 540896,
+   "ok": true
+  },
+  {
+   "name": "Ice002",
+   "uid": "Ice002",
+   "path": "/tmp/claude-0/ph/Ice002",
+   "bytes": 6056210,
+   "ok": true
+  }
+ ],
+ "notes": [
+  "Tentacle (rigged) 8fcc783af94246a0b8febf424a4b96b9 has no skin in its GLB: its clip is 200 morph targets on a 16k-tri mesh plus path-control nodes; the Hands need a code rig",
+  "The Lurker GLB names its author Greeble3d in asset extras; the API account is HighPolyDensity (renamed)",
+  "Sketchfab rate-limits downloads (HTTP 429); fetch-act5.mjs waits and retries"
+ ]
+}

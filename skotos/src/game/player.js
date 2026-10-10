@@ -4,7 +4,11 @@ import { G } from './state.js';
 import { CLASSES, SKILLS } from './data.js';
 import { IN, takeEvents } from '../core/input.js';
 import { basicAttack, useSkill, dodge, drinkPotion, updateAction, trailOn, nearestFoe } from './skills.js';
-import { tickStatus, moveMul } from './combat.js';
+import { tickStatus, moveMul, rootHero, tickCling } from './combat.js';
+import { sapAt } from './sap.js';
+import { tickLight } from './light.js';
+import { tickCold, coldNoRegen } from './cold.js';
+import { wadeAt } from './tide.js';
 import { foes } from './actors.js';
 import { Trail, P } from '../gfx/fx.js';
 import { R } from '../gfx/gfx.js';
@@ -20,6 +24,7 @@ export function updatePlayer(dt) {
   if (!pl) return;
   const av = pl.avatar;
   if (pl.dead) { av.update(dt, { speed: 0 }); pl.trail?.push(VB, VT, false); return; }
+  const x0 = pl.x, z0 = pl.z, zone0 = G.zone;
 
   // timers
   pl.iframes = Math.max(0, (pl.iframes || 0) - dt);
@@ -28,8 +33,10 @@ export function updatePlayer(dt) {
   pl.dodgeCd = Math.max(0, pl.dodgeCd - dt); pl.potionCd = Math.max(0, pl.potionCd - dt);
   for (const k in pl.buffs) { pl.buffs[k] -= dt; if (pl.buffs[k] <= 0) delete pl.buffs[k]; }
   tickStatus(pl, dt);
-  // regeneration; fury drains only when out of combat
-  pl.hp = Math.min(pl.hpMax, pl.hp + (s.regen + pl.hpMax * 0.004) * dt);
+  // Act IV: Ember Ticks on her back burn and slow her (a dodge throws them off: skills.js)
+  tickCling(dt);
+  // regeneration (none while she is Freezing, cold.js); fury drains only when out of combat
+  if (!coldNoRegen()) pl.hp = Math.min(pl.hpMax, pl.hp + (s.regen + pl.hpMax * 0.004) * dt);
   lastHit += dt;
   if (C.resRegen > 0) pl.res = Math.min(s.resMax, pl.res + s.resRegen * dt);
   else if (lastHit > 3) pl.res = Math.max(0, pl.res + C.resRegen * dt);
@@ -55,10 +62,35 @@ export function updatePlayer(dt) {
   }
   if (pl.act) { if (pl.act.name === 'basic' || pl.act.name === 'whirl') lastHit = Math.min(lastHit, 0.5); updateAction(dt); }
 
+  // amber sap: it slows the hero (moveMul), and staying in it for 1.5 s sets her fast (rootHero); out of it the build-up drains
+  const st = pl.status, airborne = (pl.y || 0) > 0.2 || (pl.act && (pl.act.name === 'roll' || pl.act.name === 'blink'));
+  // (only amber: brine and slush are water, below)
+  pl.onSap = !airborne && sapAt(pl.x, pl.z) === 'amber';
+  if (pl.onSap && !(st.root > 0)) { st.stick += dt; if (st.stick >= 1.5) { st.stick = 0; rootHero(1.2); } }
+  else if (!pl.onSap) st.stick = Math.max(0, st.stick - dt * 3);
+  // set in amber, or (Act V's Frostbite) in ice: st.rootTint
+  if ((st.root > 0) !== !!pl.amberTint) { pl.amberTint = st.root > 0; av.setTint(st.rootTint ?? 0xffb040, pl.amberTint ? 0.55 : 0); }
+  // Act V: wading in the tide, brine or slush (moveMul; cold.js)
+  pl.inWater = airborne ? null : wadeAt(pl.x, pl.z);
+  if (st.root > 0 && Math.random() < 0.4) P({ x: pl.x + (Math.random() - 0.5) * 0.7, y: Math.random() * 0.8, z: pl.z + (Math.random() - 0.5) * 0.7, vy: 0.2, life: 0.5, size: 0.12, size1: 0.02, color: st.rootTint != null ? 0xd8f0ff : 0xffd080 });
+
   // movement
   const m = moveMul(pl);
   let mx = IN.mx, mz = IN.mz;
   if (G.panel) mx = mz = 0;
+  // dragged by Karthax's tongs: no say in where she goes until it is over (a tide's wash-out follows its lane's cells:
+  // T.path, a polyline with each point's distance d along it, T.len in all)
+  if (pl.pull) {
+    const T = pl.pull; T.t -= dt; const u = clamp(1 - T.t / T.t0, 0, 1);
+    if (T.path) {
+      const P = T.path, d = u * T.len; let k = 1; while (k < P.length - 1 && P[k].d < d) k++;
+      const a = P[k - 1], b = P[k], f = b.d > a.d ? clamp((d - a.d) / (b.d - a.d), 0, 1) : 1;
+      pl.x = a.x + (b.x - a.x) * f; pl.z = a.z + (b.z - a.z) * f;
+    } else { pl.x = T.sx + (T.x - T.sx) * u; pl.z = T.sz + (T.z - T.sz) * u; }
+    mx = mz = 0;
+    if (Math.random() < 0.6) P({ add: false, x: pl.x, y: 0.15, z: pl.z, vy: 0.3, life: 0.5, size: 0.4, size1: 0.9, color: T.wash ? 0xcfe2ee : 0x4a4038, alpha: 0.4 });
+    if (T.t <= 0) pl.pull = null;
+  }
   let speed = 0;
   if (!pl.act || pl.act.move) {
     const k = pl.act ? pl.act.move : 1;
@@ -73,9 +105,21 @@ export function updatePlayer(dt) {
   for (const f of foes(pl.x, pl.z, 1.5)) {
     if (f.prop || f.status.freeze > 0 && false) continue;
     const dx = pl.x - f.x, dz = pl.z - f.z, d = Math.hypot(dx, dz), min = pl.radius + f.radius * 0.85;
-    if (d < min && d > 0.001) { const push = (min - d) * (f.boss || f.def.big ? 1 : 0.6); pl.x += (dx / d) * push; pl.z += (dz / d) * push; }
+    if (d < min && d > 0.001) {
+      let push = (min - d) * (f.boss || f.def.big ? 1 : 0.6);
+      // a body never shoves her past a wall face (Karthax's would put her centre in the Anvil's rim)
+      push *= G.zone.map.castT(pl.x, pl.z, pl.x + (dx / d) * push, pl.z + (dz / d) * push);
+      pl.x += (dx / d) * push; pl.z += (dz / d) * push;
+    }
   }
-  G.zone.map.collide(pl, pl.radius);
+  const map = G.zone.map;
+  map.collide(pl, pl.radius);
+  // never left inside the rock, whatever put her there: back where she stood this frame, or out to the nearest floor
+  if (!map.walkable(pl.x, pl.z)) {
+    const f = G.zone === zone0 && map.walkable(x0, z0) ? { x: x0, z: z0 } : map.nearestFloor(pl.x, pl.z, 48);
+    if (map.walkable(f.x, f.z)) { pl.x = f.x; pl.z = f.z; } else { pl.x = G.zone.L.start.x; pl.z = G.zone.L.start.z; }
+    pl.kx = pl.kz = 0;
+  }
 
   // visuals
   av.group.position.set(pl.x, pl.y || 0, pl.z);
@@ -90,10 +134,17 @@ export function updatePlayer(dt) {
   if (speed > 1 && !pl.act) { stepAcc += dt * speed; if (stepAcc > 2.4) { stepAcc = 0; Audio.sfx('footstep', { vol: 0.35 }); } }
   // buffs glow
   if (pl.buffs.cry > 0 && Math.random() < 0.3) P({ x: pl.x + (Math.random() - 0.5) * 0.8, y: Math.random() * 1.8, z: pl.z + (Math.random() - 0.5) * 0.8, vy: 1.2, life: 0.6, size: 0.1, size1: 0.02, color: 0xff6030 });
+  if (pl.buffs.memory > 0 && Math.random() < 0.25) P({ x: pl.x + (Math.random() - 0.5) * 0.9, y: Math.random() * 2, z: pl.z + (Math.random() - 0.5) * 0.9, vy: 0.7, life: 0.9, size: 0.09, size1: 0.02, color: 0xffe0a0, color1: 0xffa030 });
+  // Seen: a cold eye's glint over her head
+  if (pl.buffs.seen > 0 && Math.random() < 0.2) P({ x: pl.x + (Math.random() - 0.5) * 0.4, y: 2.3, z: pl.z + (Math.random() - 0.5) * 0.4, vy: 0.3, life: 0.5, size: 0.14, size1: 0.02, color: 0xd8e8ff, color1: 0x6080c0 });
   if (pl.shield > 0 && Math.random() < 0.4) P({ x: pl.x + Math.sin(R.time * 5) * 0.7, y: 1 + Math.sin(R.time * 3) * 0.6, z: pl.z + Math.cos(R.time * 5) * 0.7, life: 0.4, size: 0.15, size1: 0.02, color: 0xffd080 });
   // hero light follows
   R.heroLight.position.set(pl.x, 2.6 + (pl.y || 0), pl.z + 0.4);
   R.heroLight.intensity = (R.heroLight.userData.base ?? 30) * (0.94 + Math.sin(R.time * 9) * 0.03 + Math.sin(R.time * 23) * 0.03);
+  // Act IV: on the Field of Ash and in the Forge her light is the Ember Cradle's (light.js: the ring, the hip, the drinking);
+  // Act V: the sea-lights' beams, and the Cold (cold.js: what she wades in, the gusts, the warmth round her)
+  tickLight(dt);
+  tickCold(dt);
   // in combat?
   G.inCombat = lastHit < 4 || foes(pl.x, pl.z, 9).some((f) => f.aggro && !f.prop);
 }

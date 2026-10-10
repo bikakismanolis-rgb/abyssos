@@ -257,7 +257,7 @@ export class Avatar {
     this.held = {};
     // realistic people wear textured materials: what they hold gets a character material sharing their uniforms
     if (model.kind === 'person' || model.kind === 'creature') { this.heldMat = makeCharMat(); this.heldMat.userData.u = model.mat.userData.u; }
-    const A = model.kind === 'person' ? PersonAnim : model.kind === 'creature' ? CreatureAnim : model.kind === 'warg' ? QuadAnim : model.kind === 'spider' ? SpiderAnim : HumanoidAnim;
+    const A = model.Anim || (model.kind === 'person' ? PersonAnim : model.kind === 'creature' ? CreatureAnim : model.kind === 'warg' ? QuadAnim : model.kind === 'spider' ? SpiderAnim : HumanoidAnim);
     this.anim = new A(this);
     this.flashV = 0; this.scale = o.scale || 1;
     this.group.scale.setScalar(this.scale);
@@ -287,8 +287,10 @@ export class Avatar {
       mesh.scale.setScalar((this.model.weaponScale || 1) * (type === 'crossbow' ? 0.85 : 1));
     } else if (person) {
       const g = (type === 'crossbow' && this.model.grip[hand + 'pistol']) || this.model.grip[hand];
-      mesh.quaternion.copy(g.q); mesh.position.copy(g.p);
-      if (type === 'crossbow') mesh.scale.setScalar(0.8);
+      // giants carry giant weapons
+      const ws = this.model.weaponScale || 1;
+      mesh.quaternion.copy(g.q); mesh.position.copy(g.p).multiplyScalar(ws);
+      mesh.scale.setScalar(ws * (type === 'crossbow' ? 0.8 : 1));
       const T = typeof window !== 'undefined' && window.__grip;
       if (T) { mesh['rotate' + T[0]](T[1]); if (T[2]) mesh['rotate' + T[2]](T[3]); }
     } else {
