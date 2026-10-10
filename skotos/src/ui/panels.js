@@ -219,7 +219,8 @@ const R = {
   act() {
     const h = G.hero;
     const mins = Math.round((Date.now() - h.created) / 60000);
-    const next = DIFFS[h.diff + 1];
+    // (the next difficulty only once this act has opened it: Skotos asks for Act V on Ash, not Act I)
+    const next = DIFFS[h.diff + 1] && diffUnlocked(h.diff + 1) ? DIFFS[h.diff + 1] : null;
     // act 1 shows what it unlocked; later acts their own title, line and what comes next
     const n = G.flags.actDone || 1, a2 = n > 1, k = n > 1 ? 'act' + n : 'act';
     return `<div class="pn narrow" style="text-align:center"><div class="pn-b" style="padding:22px"><div class="act-h">${t(k + '.done')}</div><p style="font-style:italic;color:var(--ink2)">${t(k + '.sub')}</p><div class="logo-rule"></div>

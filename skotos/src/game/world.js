@@ -9,7 +9,7 @@ import { genAshfield, genForge } from '../world/gen4.js';
 import { genCoast, genFarlight } from '../world/gen5.js';
 import { buildLevel, propMesh, runeDisc, WIND, act3Prop, setAutumn, act4Prop, setHeat, setNight, setFlueGlow } from '../world/build.js';
 import { act5Prop } from '../world/build5.js';
-import { SEA } from '../world/sea.js';
+import { SEA, TICKS } from '../world/sea.js';
 import { GridMap } from '../world/map.js';
 import { ATMOS, mixAtmos } from '../world/atmos.js';
 import { kitMesh } from '../gfx/kits.js';
@@ -215,6 +215,8 @@ export function leaveZone() {
   // pets don't follow across zones
   for (const a of z.actors) if (a.pet && !a.dead) { a.dead = true; a.remove(); }
   clearProjs(); clearFX(); clearLights(); stopFlues();
+  // (TIDE and ICE are the current zone's: none until act5Enter binds the next one's, even while a panel holds the ticks)
+  resetTide(null); resetIce(null);
   if (z.run) endBellows(z, false);
   if (G.player?.avatar) R.scene.remove(G.player.avatar.group);
   G.bossActor = null;
@@ -276,12 +278,24 @@ export function enterZone(id, o = {}) {
   emit('zoneEnter', id, z);
   return z;
 }
-// a zone dropped for good (built again, or its difficulty changed): its actors and its level's own geometry (Act V's water
-// and ice are large), and the crack texture
+// a zone dropped for good (built again, or its difficulty changed): its actors, the geometry of its level (Act V's water
+// and ice are large) and of the props put on it (z.extra: lights, stones, cairns...), but the shared code models; the
+// materials made for one prop alone (userData.own: glows, halos, glass); its props' beam ticks (sea.js TICKS would hold
+// them); the crack texture. (Never a pack's texture: a phone lets its decoded image go once uploaded, it could not be
+// uploaded again.) Undisposed, three keeps every drawn geometry's buffers alive
 export function disposeZone(z) {
   for (const a of z.actors) a.remove();
   for (const p of z.pickups) { if (p.mesh) R.scene.remove(p.mesh); if (p.light) removeLight(p.light); }
-  z.lvl.group.traverse((o) => { if (o.isMesh || o.isInstancedMesh) { if (!o.geometry.userData?.shared) o.geometry.dispose(); } });
+  const gone = new Set();
+  const drop = (o) => {
+    gone.add(o);
+    if ((o.isMesh || o.isLine || o.isPoints) && !o.geometry.userData?.shared) o.geometry.dispose();
+    if (o.isInstancedMesh) o.dispose();
+    for (const m of [].concat(o.material || [])) if (m.userData?.own) m.dispose();
+  };
+  z.lvl.group.traverse(drop);
+  for (const m of z.extra) m.traverse(drop);
+  for (const t of TICKS) if (gone.has(t.obj)) TICKS.delete(t);
   z.ice?.tex?.dispose?.();
 }
 

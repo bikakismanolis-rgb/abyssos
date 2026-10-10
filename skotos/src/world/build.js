@@ -1337,9 +1337,9 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
       + (X5.hueB ? '\nuniform vec3 uHueB;' : '') + (X5.wet ? '\nvarying float vBed; varying float vBay; uniform float uWetLevel; uniform float uLevel; uniform float uBayLevel;' : '') + (X5.edge ? '\nvarying float vWat;' : '')
       + (X5.any ? SEA_GLSL() + '\nvarying vec3 vGW; uniform vec3 uMoonD; uniform vec3 uMoonC; uniform vec3 uHeroP; uniform vec3 uHeroC;\nvec3 gEm = vec3(0.0);' : '') + (X5.aur ? '\nvarying vec3 vGAur;' : ''))
       .replace('#include <map_fragment>', (X5.wet ? `
-  // (under closed water deeper than 0.7 m the sea, nearly opaque there, hides the bed: it is not drawn at all, its layers
-  // and its lights spared. Skerry Bay keeps its own level: sea.js)
-  if (mix(uLevel, uBayLevel, vBay) - vBed > 0.7) discard;` : '') + (X5.edge ? `
+  // (under closed water the sea, 95% opaque from 0.43 m, hides the bed: past 0.5 m it is not drawn at all, its layers and
+  // its lights spared, the open sea's floor at low water too. Skerry Bay keeps its own level: sea.js)
+  if (mix(uLevel, uBayLevel, vBay) - vBed > 0.5) discard;` : '') + (X5.edge ? `
   // the Farthest Light's open water: the snow and the thick ice end on it along a frayed line a little in from the cells'
   // edge (the water runs on under that band: sea.js), never along their squares
   if (vWat > 0.001) { vec4 gE = texture2D(tNoise, vec2(vGW.x * 0.021 + vGW.z * 0.006, vGW.z * 0.07) + 0.29); if (vWat * 1.5 + (gE.a - 0.5) * 0.5 + (gE.b - 0.5) * 0.2 > 0.38) discard; }` : '') + `
@@ -2548,7 +2548,9 @@ export function act4Prop(kind, o = {}) {
   g.userData.kind = kind;
   return g;
 }
-const glowMat = (c, o = {}) => new THREE.MeshBasicMaterial({ color: c, transparent: !!o.add || o.opacity != null, opacity: o.opacity ?? 1, blending: o.add ? THREE.AdditiveBlending : THREE.NormalBlending, depthWrite: !o.add, toneMapped: false });
+// (own: a material made for one prop alone, which world.js disposeZone disposes with it)
+const own = (m) => { m.userData.own = true; return m; };
+const glowMat = (c, o = {}) => own(new THREE.MeshBasicMaterial({ color: c, transparent: !!o.add || o.opacity != null, opacity: o.opacity ?? 1, blending: o.add ? THREE.AdditiveBlending : THREE.NormalBlending, depthWrite: !o.add, toneMapped: false }));
 const iron = (parts) => solid(parts, MAT.iron);
 // a lantern: the cinder or base-set scan with its own glass (lit or dark), or the code one; userData.glass
 function lanternMesh(h = 0.55) {
@@ -2570,7 +2572,7 @@ function lanternMesh(h = 0.55) {
 function flameMesh(s = 1, color = 0xffa040) {
   const g = new THREE.Group();
   const f = new THREE.Mesh(bake([{ geo: G.cone(0.09, 0.32, 6), color: 0xffd080, o: { y: 0.16 } }, { geo: G.cone(0.06, 0.22, 5), color: 0xffffff, o: { y: 0.12 } }]), glowMat(0xffffff));
-  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex('dot'), color, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false }));
+  const halo = new THREE.Sprite(own(new THREE.SpriteMaterial({ map: tex('dot'), color, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false })));
   halo.scale.setScalar(1.4); halo.position.y = 0.18;
   g.add(f, halo); g.scale.setScalar(s);
   let t = Math.random() * 10;
@@ -2923,4 +2925,4 @@ export function runeDisc(r = 1.2, color = 0x5aa8ff) {
   return m;
 }
 // (for build5.js: Act V's props share the materials, the geometry helpers and the Act IV fire looks)
-export { MAT, mats, worldMat, bake, jitter, prism, solid, size4, glowMat, flameMesh, lanternMesh, lay4, hash2, act4Mats, Std };
+export { MAT, mats, worldMat, bake, jitter, prism, solid, size4, own, glowMat, flameMesh, lanternMesh, lay4, hash2, act4Mats, Std };

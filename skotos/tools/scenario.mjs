@@ -679,7 +679,9 @@ const S = {
   } },
   // Act V, the sea's draw order (on the world viewer: the coast's real build, the real telegraphs and light rings): a
   // telegraph, a light pool and the Cradle's ring stay visible over shallow water, and wading and closed water differ in
-  // tone. Pixels are read in the frame they are drawn in, each with and without the decal
+  // tone. Pixels are read in the frame they are drawn in, each with and without the decal. And a fire's halo (as on the
+  // sea-lights, the hearth, the cairns) standing in front of closed water adds the same light with the sea behind it as
+  // without it (halo: the ratio; the sea drawn over it would leave a twentieth)
   shallowtele: { q: 'world=coast&q=' + (process.env.Q || '1') + '&deep=1&seed=' + (process.env.SEED || '3'), run: async (pg, shot) => {
     const res = await pg.evaluate(async () => {
       const { R, toScreen, fx, B } = window.__v5;
@@ -715,9 +717,17 @@ const S = {
       }
       for (const k in items) items[k][0].visible = false;
       draw(); out.tones = +diff(mean([[spot.x, spot.z], [spot.x + 0.3, spot.z + 0.2]]), mean([[spot.deep.x, spot.deep.z], [spot.deep.x + 0.3, spot.deep.z]])).toFixed(1);
+      // the halo: 1.2 m over the closed water, read beside the flame (its own core is opaque)
+      const fl = B.flameMesh(2, 0xffc070), hp = { x: spot.deep.x, y: 1.2, z: spot.deep.z }; fl.position.set(hp.x, hp.y - 0.36, hp.z); R.scene.add(fl);
+      const hpts = [[0.45, 0], [-0.45, 0], [0, 0.45]];
+      const hmean = () => { const c = [0, 0, 0]; for (const [dx, dy] of hpts) { toScreen(hp.x + dx, hp.y + dy, hp.z, s); gl.readPixels(Math.round(s.x * pr), Math.round((R.h - s.y) * pr), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); for (let i = 0; i < 3; i++) c[i] += px[i] / hpts.length; } return c; };
+      const sea = R.scene.getObjectByName('sea'), hd = () => { draw(); const on = hmean(); fl.visible = false; draw(); const off = hmean(); fl.visible = true; return diff(on, off); };
+      const withSea = hd(); sea.visible = false; const bare = hd(); sea.visible = true;
+      out.halo = +(withSea / Math.max(bare, 1e-3)).toFixed(2); out.haloAdds = [+withSea.toFixed(1), +bare.toFixed(1)];
+      R.scene.remove(fl);
       for (const k in items) items[k][0].visible = true;
       draw();
-      out.pass = out.tele > 12 && out.pool > 12 && out.cradle > 12 && out.tones > 12;
+      out.pass = out.tele > 12 && out.pool > 12 && out.cradle > 12 && out.tones > 12 && out.halo > 0.75;
       return out;
     });
     await shot();
@@ -725,7 +735,8 @@ const S = {
   } },
   // Act V, the perf gate: frame time at quality 1 under phone emulation (915 x 412 at a pixel ratio of 1.5, a coarse
   // pointer, MSAA; adaptive resolution pinned at 1.0, the scale it would have picked reported beside it) in the Shallows at
-  // high water and mid Ice Road, against the Field of Ash measured the same way: each within the Field's + 15%. Quality 0
+  // high water and at low water (coastLow: the same spot, the open sea's floor shallowest under the water) and mid Ice
+  // Road, against the Field of Ash measured the same way: each within the Field's + 15%. Quality 0
   // is measured too, as a floor (each spot no slower than at quality 1). One page travels between the three zones (fixed
   // seeds, the packs kept from spawning: the gate is the world's look, terrain, water, ice, props, FX), CYCLES times after
   // a first visit that builds them. Each visit: the hero and the camera placed, a few real frames (the game's own work in
@@ -738,7 +749,7 @@ const S = {
     const browser = pg.context().browser(), base = process.env.BASE || 'http://localhost:5199/';
     await pg.goto('about:blank');
     const QS = (process.env.QS || '1,0').split(','), CYC = +(process.env.CYCLES || 5), K = +(process.env.K || 3), out = {};
-    const seeds = (process.env.SEEDS || '5,3,3').split(',').map(Number), zones = ['ashfield', 'coast', 'farlight'];
+    const seeds = (process.env.SEEDS || '5,3,3').split(',').map(Number), zones = ['ashfield', 'coast', 'coastLow', 'farlight'];
     const med = (a) => a.slice().sort((x, y) => x - y)[a.length >> 1];
     for (const Q of QS) {
       const ctx = await browser.newContext({ viewport: { width: 915, height: 412 }, deviceScaleFactor: 1.5, isMobile: true, hasTouch: true });
@@ -763,11 +774,12 @@ const S = {
       }, seeds);
       const visit = (zone) => p.evaluate(async ({ zone, K, packs }) => {
         const G = window.__G, R = window.__R, fx = await import('/src/gfx/fx.js'), gfx = await import('/src/gfx/gfx.js');
+        const low = zone === 'coastLow'; if (low) zone = 'coast';
         G.hero.flags.frozen = zone === 'farlight';
         // (its packs, people and creatures loaded first, as a real journey waits for them: the rime pack's look is measured)
         if (G.zone.id !== zone) { await (await import('/src/game/world.js')).zoneReady(zone); window.__D.enterZone(zone); }
         const S = G.zone.L.spots;
-        const v = zone === 'ashfield' ? { x: S.camp.x, z: S.camp.z - 8 } : zone === 'coast' ? { x: S.dalaro.x, z: S.dalaro.z + 4, tide: 1.2 } : (() => { const s = S.poles[S.poles.length >> 1]; return { x: s.x, z: s.z }; })();
+        const v = zone === 'ashfield' ? { x: S.camp.x, z: S.camp.z - 8 } : zone === 'coast' ? { x: S.dalaro.x, z: S.dalaro.z + 4, tide: low ? 0 : 1.2 } : (() => { const s = S.poles[S.poles.length >> 1]; return { x: s.x, z: s.z }; })();
         if (!packs) { for (const pk of G.zone.packs) pk.spawned = true; for (const a of G.actors.slice()) if (a.team === 'foe') { a.remove?.(); G.actors.splice(G.actors.indexOf(a), 1); } G.zone.bossSpawned = true; }
         const f = G.zone.map.nearestFloor(v.x, v.z);
         G.player.x = f.x; G.player.z = f.z;
@@ -800,7 +812,7 @@ const S = {
         const ms = med(S[z].map((m) => m.ms)), last = S[z][S[z].length - 1];
         out[z + '@q' + Q] = { ms, draw: med(S[z].map((m) => m.draw)), logic: med(S[z].map((m) => m.logic)), calls: last.calls, tris: last.tris, water: last.water, pr: last.pr, wouldScale: ms > 21 ? 'down (to 0.55 at worst)' : ms < 14.5 ? 'up' : 'hold' };
       }
-      for (const z of ['coast', 'farlight']) {
+      for (const z of ['coast', 'coastLow', 'farlight']) {
         const o = out[z + '@q' + Q];
         o.ratios = S[z].map((m, i) => +(m.ms / S.ashfield[i].ms).toFixed(3)); o.vsField = med(o.ratios); o.pass = o.vsField <= 1.15;
       }
@@ -808,7 +820,7 @@ const S = {
     }
     // (the floor: at quality 0 each spot draws no slower than at quality 1)
     for (const z of zones) if (out[z + '@q0']?.ms && out[z + '@q1']?.ms) out[z + '@q0'].floor = out[z + '@q0'].ms <= out[z + '@q1'].ms * 1.05;
-    out.pass = ['coast@q1', 'farlight@q1'].every((k) => out[k]?.pass) && zones.every((z) => out[z + '@q0']?.floor !== false);
+    out.pass = ['coast@q1', 'coastLow@q1', 'farlight@q1'].every((k) => out[k]?.pass) && zones.every((z) => out[z + '@q0']?.floor !== false);
     return out;
   } }
 };
