@@ -19,7 +19,7 @@ export const CREDITS = [
     ['lava monster (Durgan, the Molten King)', 'Satwik.Bandi', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/lava-monster-2e2a1eac6f834857af5347a0662b075d'],
     ['The dwarves of Deepstone: Quaternius characters re-proportioned for Skotos', 'Quaternius', 'CC0', 'https://quaternius.com'],
     ['Realistic Animated Elk 3D Model (Silverhorn, the White Hart, and the deer held in amber)', 'WildMesh_3D', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/realistic-animated-elk-3d-model-787834f9caa2474d9f1814b807c072d7'],
-    ['Realistic Animated Bear 3D Model (the Amberback bears)', 'WildMesh_3D', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/realistic-animated-bear-3d-model-bffc3c87d2d148ff8533e1cc8a11c9f1'],
+    ['Realistic Animated Bear 3D Model (the Amberback bears, the Rime Bears)','WildMesh_3D', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/realistic-animated-bear-3d-model-bffc3c87d2d148ff8533e1cc8a11c9f1'],
     ['Animated Peacock Moth (the amber moths)', 'OsianOHM (Osian CG)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/animated-peacock-moth-1c3db0798f1c46be9764e99631cbb0a7'],
     ['Mandrake (the rootlings)', 'timsblends', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/mandrake-31f9f793011b43e38ce9421298f90b80'],
     ['Treeman (the Rootwardens)', 'DJMaesen (sketchfab.com/bumstrum)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/treeman-e3a094316a8c4820a94d271afffe497c'],
@@ -31,7 +31,12 @@ export const CREDITS = [
     ['Overlord (Karthax, the Ash King)', 'DJMaesen (sketchfab.com/bumstrum)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/overlord-4e61da8bb7f3440db3df42ee26c4b797'],
     ['The dead of the Field of Ash (the Lampless, the Ash-Fallen, the Ashsmiths, Ivar, Arna, the boy Isarn): Quaternius characters re-proportioned for Skotos, with ember cracks from bark_brown_02 by Rob Tuytel (Poly Haven)', 'Quaternius; Rob Tuytel', 'CC0', 'https://quaternius.com'],
     ['The Sunken, the Ice Singers and the Saltborn (Alkyone, Selna, Tern, Tamarisk, Old Glaukos): Quaternius characters re-proportioned and re-dyed for Skotos', 'Quaternius', 'CC0', 'https://quaternius.com'],
-    ['Crab mountain (Skerry, the Walking Tower; the Reefbacks)', 'pro100voron', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/crab-mountain-ac8fa79586f84c84a8a55dd86b7a2e2f']
+    ['Crab mountain (Skerry, the Walking Tower; the Reefbacks)', 'pro100voron', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/crab-mountain-ac8fa79586f84c84a8a55dd86b7a2e2f'],
+    ['Cloaked Figure (the Skotos)', 'MysteryPancake', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/cloaked-figure-f4e2c262ed4e456484f232d6afa99629'],
+    ['Tentacle (rigged) (the Hands of the Skotos, the Coil)', 'CG Daniel Glebinski', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/tentacle-rigged-8fcc783af94246a0b8febf424a4b96b9'],
+    ['Leopard Seal (the Icemaws)', 'Grace Belt (neatGrace)', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/leopard-seal-3f4a2090598b4741ac38e0d255ece191'],
+    ['Seagull (the Skuas)', 'Dayvable', 'CC-BY 4.0', 'https://sketchfab.com/3d-models/seagull-dc42ffc81c86480e9e7f7752fa134174'],
+    ['CC0 Giant Isopod, B. doederleinii (the Hull-lice)', 'ffish.asia / floraZia.com', 'CC0', 'https://sketchfab.com/3d-models/cc0-giant-isopod-b-doederleinii-3979c291d1f9454c90851efe291eab60']
   ], note: 'cr.modified' },
   { h: 'cr.world', items: [
     ['Dungeon Remastered, Medieval Hexagon Pack, Halloween Bits', 'Kay Lousberg (KayKit)', 'CC0', 'https://kaylousberg.com'],

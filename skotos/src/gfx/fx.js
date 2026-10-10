@@ -405,11 +405,13 @@ function emit(e, dt, cx, cz) {
     // emitter, build5.js; e.s how much of its square is water). Not under the black aurora's frozen coast (diamond dust)
     case 'seasmoke': {
       if (FX.ambient === 'coastFrozen') { e.acc = 0; break; }
-      const iv = 0.7 / Math.max(0.25, s);
+      // (thinner on the phones' quality and below: big soft sprites are fill)
+      const iv = (0.28 / Math.max(0.25, s)) * (FX.q >= 2 ? 1 : FX.q === 1 ? 1.6 : 3);
       while (e.acc > iv) {
         e.acc -= iv;
-        const k = Math.floor(Math.random() * (e.cells.length / 2)) * 2, x = e.cells[k] + rr(-0.5, 0.5), z = e.cells[k + 1] + rr(-0.5, 0.5);
-        P({ add: false, x, y: rr(0.05, 0.3), z, vx: rr(-0.45, -0.15), vy: rr(0.12, 0.3), vz: rr(0.05, 0.3), life: rr(5, 8), size: rr(1.2, 2), size1: rr(3.5, 5), color: 0x9aa8b4, alpha: 0.13, alpha1: 0, drag: 0.08 });
+        // (low wisps crawling off the water on the wind, now and then a taller curl)
+        const k = Math.floor(Math.random() * (e.cells.length / 2)) * 2, x = e.cells[k] + rr(-0.5, 0.5), z = e.cells[k + 1] + rr(-0.5, 0.5), tall = Math.random() < 0.25;
+        P({ add: false, x, y: rr(0.05, 0.25), z, vx: rr(-0.5, -0.15), vy: tall ? rr(0.3, 0.5) : rr(0.06, 0.16), vz: rr(0.05, 0.3), life: rr(4.5, 7.5), size: rr(0.9, 1.6), size1: tall ? rr(3, 4.5) : rr(2.6, 3.6), color: 0xb4c2ce, alpha: tall ? 0.2 : 0.28, alpha1: 0, drag: 0.08 });
       }
       break;
     }

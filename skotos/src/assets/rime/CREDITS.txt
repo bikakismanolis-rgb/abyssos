@@ -12,7 +12,8 @@ lights removed), the spray-painted hearts, the painted door outline, a stain and
 shaft drawn up from its own brick bands and capped; the medieval anchor's and the whale's texture sets atlased; the whale
 skeleton settled onto the ground (flippers lowered, skull tipped down, the spine lowered toward the tail) and bleached; the
 runestone's red paint taken out of its carving; the driftwood and the kelp cut out of the sand they were scanned on (the
-kelp's sand recoloured as wet shingle); the shack cut down to its gabled room; the Dutch ship's sails, ropes and nets
+kelp's sand recoloured as wet shingle) and what is left of their textures repacked into one small sheet each; the shack
+cut down to its gabled room; the Dutch ship's sails, ropes and nets
 removed and its hull cut below the waterline; the oil lamp's flame removed and its glass made an emissive "glow"; the
 cliffs and icicles kept as geometry only.
 
