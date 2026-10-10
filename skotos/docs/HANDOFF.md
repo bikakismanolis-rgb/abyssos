@@ -7,7 +7,8 @@ Read this first when picking the project up in a new session.
 - Repo `bikakismanolis-rgb/abyssos`, game in `skotos/`, working branch `claude/sleepy-tesla-4030vd` (pull request #2 into the branch of #1). Commit only there.
 - The playable build is a private claude.ai artifact: https://claude.ai/artifact/74dKQSTSnJmPAyDHBz4BRP (version 10 at the time of writing). Update it in place (same URL), never publish a new one.
 - The owner writes in Greek; answer in Greek. The game text is Greek and English (`src/i18n/text.js`).
-- Design and contracts: `docs/act4-design.md` (the Act IV plan), `docs/act4-contract.md`, `docs/act3-contract.md`. README.md describes every act (in Greek). CREDITS.txt, `src/ui/credits.js` and `src/assets/*/CREDITS.txt` list every third-party asset.
+- **Act V is being built (paused on 10 October at the owner's request, to keep usage until the plan renews on Tuesday 13 October).** Its plan is `docs/act5-design.md`, its contract `docs/act5-contract.md` (the owner's decisions, the four stages and gates, file ownership, every shared name, and the stage-A outcome), the briefs and the measured asset report in `docs/act5-briefs/`, every stage's reports in `docs/act5-briefs/reports/`, and the workflow scripts of the running stages in `docs/act5-workflows/`. See "Act V: where it stopped" below.
+- Design and contracts of earlier acts: `docs/act4-design.md` (the Act IV plan), `docs/act4-contract.md`, `docs/act3-contract.md`. README.md describes every act (in Greek). CREDITS.txt, `src/ui/credits.js` and `src/assets/*/CREDITS.txt` list every third-party asset.
 
 ## State
 
@@ -24,9 +25,28 @@ Read this first when picking the project up in a new session.
 - Assets: CC-BY 4.0 or CC0 only, credited everywhere; no rips of commercial games or films (the owner wants a Play Store release). Builders live in `tools/creatures/**` and `tools/pack-*.mjs`; sources are downloaded to `/tmp/claude-0/sf` and `/tmp/claude-0/ph` (not in the repo).
 - Commit messages end with the session's Co-Authored-By and Claude-Session lines; never put a model name in commits or code.
 
+## Act V: where it stopped
+
+The published artifact is still Acts I-IV (version 11). Act V is on the branch, unpublished.
+
+- **Stage A, assets: done** (commit "Skotos: the Act V assets"). The frost people set, the rime pack, the creatures (crab, skotos, tentacle, icemaw, louse, skua; the Rime Bear reuses bear.glb); 7.6 MB raw, 93 MB phone GPU; credits complete. The Skotos is "Cloaked Figure" plus a code-built hood and arms (the design's squid sources failed the look gate).
+- **Stage B, foundation: done** (commit "Skotos: Act V foundation (stage B)"). Plumbing, the Anvil's Neck (parity over 2000 seeds), gen5/genlib with check-act5 clean, tide.js and ice.js (soaks pass), sea.js and build5.js, perf5 and shallowtele passing, every shipped scenario passing.
+- **Stage C, the act: about two thirds done, then stopped.** Done: C1 (Cold, beams, lamps, sap kinds, the vulnerability rule, the tide/ice gameplay hooks, creature plumbing), C2 (all eight enemy kinds), S1 (quests 24-31 and their text, tested with stand-in boss events), S2 (HUD, panels, overlay, the frost vignette, audio: themes, motif, sfx). Not done: C3 (the Walking Tower and the Skotos bosses, the cameo poses, BOONS[5], the legendaries; it had just started), then the integrator (the Act V scenarios and a full play-through), gate G4 and a review round.
+- **Look polish: round 1 of 3 nearly done.** The critic found the act below the Acts III/IV floor at the gameplay camera (39 issues, 28 major: `reports/look-critic1.json`); the fixer had worked through most of them (`reports/look-round1.md`) when it stopped. Its perf5 re-run had not been done.
+- **The working tree at the pause is committed** as "Skotos: Act V paused". The build passes; the scenarios were not re-run after the last edits.
+
+**To resume** (in this session, or in a new one after reading this file and the contract):
+1. `cd skotos && npm install`; start the shared dev server detached (the contract says how).
+2. Stage C: run `docs/act5-workflows/stage-c-act.js` with the Workflow tool (args `{ scratch: <a scratch folder>, repo: "/home/user/abyssos/skotos" }`). In the same session it can resume run `wf_b36e26fb-c11` (C1, S1, S2 and C2 replay from cache). In a new session, first edit it so the lanes skip C1, S1, S2 and C2 (their reports are in `docs/act5-briefs/reports/`; point the later steps there instead of the scratch folder) and start at C3.
+3. Look polish: `docs/act5-workflows/look-polish.js` (run `wf_abf08f0f-8bb` in the same session). In a new session, start at round 1's fixer re-check: run perf5 and shallowtele, then the critic's round 2.
+4. Stage D: a review workflow (bug finders plus verifiers), the full regression (every Act I-V scenario, soak5, check-act4/5, parity), the strict-CSP artifact check on desktop and phone, then publish to the same artifact URL, update README, HANDOFF and the contract, and ask the owner to try it on the phone.
+
+Memory: the container restarted twice during the night run (four agents with headless browsers). Since then agents keep one browser at a time and use a private no-HMR dev server (`npx vite --config tools/vite.nohmr.mjs --port <n>`) for long runs; no restart happened after that.
+
 ## Open items
 
-- None known. The owner confirmed on a real phone (version 11) that high quality no longer crashes and runs smoothly, so unloading other acts' assets is not needed for now.
+- Act V (above).
+- Acts I-IV: none known. The owner confirmed on a real phone (version 11) that high quality no longer crashes and runs smoothly.
 
 ## Done in the last session
 

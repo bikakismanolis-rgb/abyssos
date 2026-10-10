@@ -668,6 +668,52 @@ const S = {
     }
     return out;
   } },
+  // Act V (q23 -> q25): Alkyone at the beacon, the fourth fire going out while she speaks, Halda and the Cradle, the coal,
+  // Alkyone gone north with her lantern lit from it
+  hook5: { q: 'auto=town&sim=4&q=0&lvl=28&cls=' + (process.env.CLS || 'warden'), run: async (pg, shot) => {
+    await A4.listen(pg);
+    await pg.evaluate(() => { const G = window.__G, h = G.hero; window.__immortal = true; h.quest = 23; h.act1 = h.act2 = h.act3 = h.act4 = 1; h.boons = ['ember', 'forge', 'amber', 'wayfarer']; for (const f of ['act1', 'act2', 'act3', 'act4', 'fireTaken', 'ivar', 'karthax', 'crownUnmade', 'newFire']) h.flags[f] = true; window.__D.refreshStats(); window.__D.enterZone('town', { fresh: true }); });
+    await pg.waitForFunction(() => !!window.__G.zone.p5?.alkyone && !window.__G.zone.p5.alkyone.scene, null, { timeout: 120000 });
+    const arrived = await pg.evaluate(() => { const G = window.__G, n = G.zone.p5.alkyone; return { quest: G.hero.quest, at: [+n.a.x.toFixed(1), +n.a.z.toFixed(1)], model: n.a.avatar.modelName }; });
+    await shot();
+    await pg.evaluate(() => { const G = window.__G, it = G.zone.p5.alkyone.it; G.player.x = it.x; G.player.z = it.z + 1.4; it.use(); });
+    await A4.dialogs(pg, 8, () => !!window.__G.cine);
+    const at = (t) => pg.waitForFunction((t) => !window.__G.cine || window.__G.cine.t >= t, t, { timeout: 180000 });
+    await at(5); await shot();
+    await pg.waitForFunction(() => !window.__G.cine, null, { timeout: 120000 });
+    // (Alkyone's last lines, then Halda's walk up with the Cradle and her line: as long as that takes on a slow machine)
+    for (let t0 = Date.now(); Date.now() - t0 < 90000 && !(await pg.evaluate(() => window.__G.hero.flags.cradle));) await A4.dialogs(pg, 4, () => window.__G.hero.flags.cradle);
+    const coal = await pg.evaluate(() => { const G = window.__G, it = G.zone.interact.find((i) => i.kind === 'coal'); if (!it) return null; G.player.x = it.x; G.player.z = it.z + 1.2; it.use(); return it.prompt; });
+    await pg.waitForFunction(() => window.__G.hero.quest >= 25, null, { timeout: 60000 }).catch(() => {});
+    await pg.waitForTimeout(1500); await shot();
+    const end = await pg.evaluate(() => { const G = window.__G, F = G.hero.flags; return { quest: G.hero.quest, flags: ['alkyone', 'coastCall', 'cradle', 'coal'].filter((f) => F[f]), quest25: document.querySelector('#quest')?.textContent }; });
+    return { arrived, coal, end, says: await pg.evaluate(() => window.__says) };
+  } },
+  // Act V's close (q30): the black gone from the sky over Whitecliff, the child told their names, the fourth fire and the
+  // three sea-lights answering, the act panel, the blessings with the Coast's third (the Name)
+  ending5: { q: 'auto=town&sim=4&q=0&lvl=30&cls=' + (process.env.CLS || 'mage'), run: async (pg, shot) => {
+    await A4.listen(pg);
+    await pg.evaluate(() => { const G = window.__G, h = G.hero; window.__immortal = true; h.quest = 30; h.act1 = h.act2 = h.act3 = h.act4 = 1; h.boons = ['ember', 'forge', 'amber', 'wayfarer']; for (const f of ['act1', 'act2', 'act3', 'act4', 'fireTaken', 'ivar', 'karthax', 'crownUnmade', 'newFire', 'alkyone', 'coastCall', 'cradle', 'coal', 'alkField', 'coastSeen', 'hearth', 'rite', 'towerWake', 'towerDown', 'frozen', 'hole0', 'hole1', 'hole2', 'ternSeen', 'skotosWake', 'skotosDown', 'selnaBack', 'seaLit', 'mem_i4', 'carved', 'remembered']) h.flags[f] = true; h.flags.names = ['keyx', 'thaleia', 'carriers', 'sailor']; window.__D.refreshStats(); window.__D.enterZone('town', { fresh: true }); });
+    const at = (t) => pg.waitForFunction((t) => !window.__G.cine || window.__G.cine.t >= t, t, { timeout: 180000 });
+    await pg.waitForFunction(() => !!window.__G.cine, null, { timeout: 30000 }).catch(() => {});
+    await at(3); await shot();
+    await pg.waitForFunction(() => !window.__G.cine && !!window.__G.zone.p5?.child, null, { timeout: 120000 });
+    const child = await pg.evaluate(() => { const n = window.__G.zone.p5.child; return { model: n.a.avatar.modelName, news: !n.it.used }; });
+    await pg.evaluate(() => { const G = window.__G, it = G.zone.p5.child.it; G.player.x = it.x; G.player.z = it.z + 1.4; it.use(); });
+    const told = await pg.evaluate(() => [...document.querySelectorAll('#dialog .txt')].map((e) => e.textContent).join(' '));
+    await A4.dialogs(pg, 6, () => !!window.__G.cine);
+    await at(4); await shot();
+    await at(10); await shot();
+    await pg.waitForFunction(() => !window.__G.cine, null, { timeout: 120000 });
+    await A4.dialogs(pg, 6, () => !!window.__G.panel);
+    await pg.waitForFunction(() => !!window.__G.panel, null, { timeout: 60000 }).catch(() => {});
+    await pg.waitForTimeout(1500); await shot();
+    const act = await pg.evaluate(() => ({ panel: window.__G.panel, done: document.querySelector('.act-h')?.textContent, sub: document.querySelector('#panel .pn-b p')?.textContent, next: [...document.querySelectorAll('#panel .muted')].map((e) => e.textContent).pop() }));
+    await pg.click('[data-a="close"]').catch(() => {}); await pg.waitForTimeout(3000); await shot();
+    const boon = await pg.evaluate(() => ({ panel: window.__G.panel, title: document.querySelector('.act-h')?.textContent, note: document.querySelector('#panel .pn-b .muted')?.textContent, cards: [...document.querySelectorAll('[data-a^="boon:"]')].map((e) => e.dataset.a + ' ' + e.querySelector('p')?.textContent) }));
+    const end = await pg.evaluate(() => { const G = window.__G, h = G.hero; return { act5: h.act5, flag: h.flags.act5, toldChild: h.flags.toldChild, quest: h.quest }; });
+    return { child, told, act, boon, end, says: await pg.evaluate(() => window.__says) };
+  } },
   title: { q: 'sim=1&q=' + (process.env.Q || '1'), run: async (pg, shot) => {
     await pg.waitForTimeout(2500); await shot();
     await pg.mouse.click(640, 360); await pg.waitForTimeout(1500); await shot();

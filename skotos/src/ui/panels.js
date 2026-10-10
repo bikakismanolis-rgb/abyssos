@@ -7,7 +7,8 @@ import { equip, unequip, sell, sellJunk, toStash, fromStash, gamble, gambleCost,
 import { writeSave } from '../game/save.js';
 import { on, emit } from './bus.js';
 import { ICON, SLOT_ICON } from './icons.js';
-import { t, setLang, lang } from '../i18n/i18n.js';
+import { t, has, setLang, lang } from '../i18n/i18n.js';
+import { npcName } from '../game/story.js';
 import { fmt, fmtK } from '../core/util.js';
 import { drawBigMap } from './hud.js';
 import Audio from '../audio/audio.js';
@@ -18,7 +19,16 @@ const P = { name: null, sel: null, tab: 0, ctx: null, delSure: null };
 const ICON_OF = { sword: 'sword', axe: 'sword', mace: 'sword', crossbow: 'bolt', staff: 'flame', shield: 'shield', quiver: 'bolt', orb: 'orb', helm: 'skull', chest: 'shield', gloves: 'hand', boots: 'roll', amulet: 'star', ring: 'orb' };
 // the Act IV blessing reads as it counts: half again for a hero the crown never held (Unbound)
 const unboundBoon = (id) => !!G.hero?.flags?.unbound && BOONS[4].some((b) => b.id === id);
-const boonDesc = (id) => t('boon.' + id + (unboundBoon(id) ? '.du' : '.d'));
+// (and Act V's, for a hero who lit all four Name-stones: Memory of the Lost)
+const rememberedBoon = (id) => !!G.hero?.flags?.remembered && !!BOONS[5]?.some((b) => b.id === id);
+const boonDesc = (id) => t('boon.' + id + (unboundBoon(id) || (rememberedBoon(id) && has('boon.' + id + '.du')) ? '.du' : '.d'));
+// a difficulty's colour as text: a dark one (Skotos's night blue) is lifted toward white so it reads on the panels
+function diffText(d) {
+  const c = parseInt(d.color.slice(1), 16), r = c >> 16, g = (c >> 8) & 255, b = c & 255;
+  if (0.2126 * r + 0.7152 * g + 0.0722 * b > 110) return d.color;
+  const m = (x) => Math.round(x + (255 - x) * 0.45);
+  return `rgb(${m(r)},${m(g)},${m(b)})`;
+}
 // the Crown's Offers: each altar's gift and the keeper whose shard offers it
 const ALTAR_ICON = { throne: 'shield', forge: 'flame', unfading: 'potion' };
 
@@ -101,7 +111,7 @@ const R = {
       <div><span>${t('stat.life')}</span><b>${fmt(s.lifeMax)}</b></div><div><span>${t('stat.armor')}</span><b>${fmt(s.armor)}</b></div>
       <div><span>${t('main.' + C.main)}</span><b>${fmt(s.main)}</b></div><div><span>${t('stat.reduction')}</span><b>${red}%</b></div>
       <div><span>${t('stat.crit')}</span><b>${s.critC.toFixed(1)}% · ${fmt(s.critD)}%</b></div><div><span>${t('stat.speed')}</span><b>${s.aps.toFixed(2)}</b></div>
-      <div><span>${t('stat.kills')}</span><b>${fmt(h.stats.kills)}</b></div><div><span>${t('diff.' + DIFFS[h.diff].id)}</span><b style="color:${DIFFS[h.diff].color}">●</b></div>
+      <div><span>${t('stat.kills')}</span><b>${fmt(h.stats.kills)}</b></div><div><span>${t('diff.' + DIFFS[h.diff].id)}</span><b style="color:${diffText(DIFFS[h.diff])}">●</b></div>
       ${(h.boons || []).filter(Boolean).map((id) => `<div style="grid-column:1/-1"><span>${ICON.flame} ${t('boon.' + id)}</span><b style="font-size:12px;color:var(--gold2)">${boonDesc(id)}</b></div>`).join('')}</div>`;
     let tp = '';
     if (P.sel) {
@@ -138,7 +148,7 @@ const R = {
       const baseFor = (ty) => ty === 'weapon' ? CLASSES[h.cls].weapon : ty === 'offhand' ? CLASSES[h.cls].off : ty;
       body = `<p class="muted">${t('shop.gamble.d')}</p><div class="doll" style="grid-template-columns:repeat(4,1fr)">${types.map((ty) => `<button class="cell" data-a="gamble:${baseFor(ty)}">${ICON[ICON_OF[baseFor(ty)]]}<span class="lbl">${t('base.' + baseFor(ty))}</span></button>`).join('')}</div><p class="r-2" style="font-family:var(--display);text-align:center">${t('shop.cost', fmt(cost))}</p>${P.last ? tip(P.last, '') : ''}`;
     }
-    return `<div class="pn">${head(t('npc.' + (P.ctx?.npc || 'healer')) + ' · ' + t('shop.vendor'))}<div class="pn-b">${tabs}<div style="margin-top:10px">${body}</div></div></div>`;
+    return `<div class="pn">${head(npcName(P.ctx?.npc || 'healer') + ' · ' + t('shop.vendor'))}<div class="pn-b">${tabs}<div style="margin-top:10px">${body}</div></div></div>`;
   },
   smith() {
     const h = G.hero;
@@ -166,7 +176,7 @@ const R = {
       return `<button class="wp ${G.zone?.id === z ? 'here' : ''}" data-a="wp:${w}">${ICON.portal}<b>${t('zone.' + z)}</b><span class="muted">${sub}</span></button>`;
     }).join('');
     const gates = h.quest >= 5 ? `<button class="wp" data-a="gates">${ICON.gate}<b>${t('gate.title')}</b><span class="muted">${t('gate.best', h.gateBest)}</span></button>` : '';
-    const diffs = DIFFS.map((d, i) => { const lock = !diffUnlocked(i); return `<button class="chip ${h.diff === i ? 'on' : ''} ${lock ? 'lock' : ''}" data-a="diff:${i}" style="${h.diff === i ? 'color:' + d.color : ''}">${t('diff.' + d.id)}</button>`; }).join('');
+    const diffs = DIFFS.map((d, i) => { const lock = !diffUnlocked(i); return `<button class="chip ${h.diff === i ? 'on' : ''} ${lock ? 'lock' : ''}" data-a="diff:${i}" style="${h.diff === i ? 'color:' + diffText(d) : ''}">${t('diff.' + d.id)}</button>`; }).join('');
     return `<div class="pn narrow">${head(t('wp.title'), false)}<div class="pn-b"><div style="display:grid;gap:6px">${list}${gates}</div><div class="logo-rule"></div><b style="font-family:var(--display);color:var(--gold)">${t('pick.diff')}</b><div class="chips" style="justify-content:flex-start;margin-top:6px">${diffs}</div><p class="muted">${inTown ? t('diff.' + DIFFS[h.diff].id + '.d') : t('wp.diffNote')}</p></div></div>`;
   },
   gates() {
@@ -223,16 +233,19 @@ const R = {
     const next = DIFFS[h.diff + 1] && diffUnlocked(h.diff + 1) ? DIFFS[h.diff + 1] : null;
     // act 1 shows what it unlocked; later acts their own title, line and what comes next
     const n = G.flags.actDone || 1, a2 = n > 1, k = n > 1 ? 'act' + n : 'act';
+    // (a later act: the difficulty it leaves open, as act 1 shows it; the Frozen Coast also the names said into the dark)
+    const later = a2 ? `${n === 5 ? `<p class="names5">${t('q.names', (h.flags.names || []).length)}</p>` : ''}${next ? `<p style="color:${diffText(next)}">${t('act.unlocks')} · ${t('pick.diff')}: ${t('diff.' + next.id)}</p>` : ''}` : '';
     return `<div class="pn narrow" style="text-align:center"><div class="pn-b" style="padding:22px"><div class="act-h">${t(k + '.done')}</div><p style="font-style:italic;color:var(--ink2)">${t(k + '.sub')}</p><div class="logo-rule"></div>
       <div class="stats" style="text-align:left"><div><span>${t('hud.level', '')}</span><b>${h.level}</b></div><div><span>${t('stat.kills')}</span><b>${fmt(h.stats.kills)}</b></div><div><span>${t('stat.time')}</span><b>${mins}′</b></div><div><span>${t('rar.legendary')}</span><b class="r-3">${h.stats.legs}</b></div></div>
-      ${a2 ? '' : `<div class="logo-rule"></div><b style="font-family:var(--display);color:var(--gold)">${t('act.unlocks')}</b><p>${t('act.gates')}</p>${next ? `<p style="color:${next.color}">${t('pick.diff')}: ${t('diff.' + next.id)}</p>` : ''}`}
+      ${a2 ? later : `<div class="logo-rule"></div><b style="font-family:var(--display);color:var(--gold)">${t('act.unlocks')}</b><p>${t('act.gates')}</p>${next ? `<p style="color:${diffText(next)}">${t('pick.diff')}: ${t('diff.' + next.id)}</p>` : ''}`}
       <p class="muted">${t(k + '.next')}</p><button class="btn" data-a="close">${t('act.cont')}</button></div></div>`;
   },
   boon() {
     const act = P.ctx?.act || 1, ub = act === 4 && !!G.hero.flags.unbound;
     const cards = BOONS[act].map((b) => `<button class="pcard boon" data-a="boon:${b.id}"><div class="bi">${ICON[b.icon]}</div><h3>${t('boon.' + b.id)}</h3><p>${boonDesc(b.id)}</p><p class="bq">${t('boon.' + b.id + '.q')}</p></button>`).join('');
     // Unbound: Isarn's words, and what they are worth
-    const note = ub ? `<p class="unbound">${t('d.isarn.unbound')}</p><p class="unbound-k">${t(G.hero.cls === 'ranger' ? 'boon.unbound.f' : 'boon.unbound')}</p>` : '';
+    const note = ub ? `<p class="unbound">${t('d.isarn.unbound')}</p><p class="unbound-k">${t(G.hero.cls === 'ranger' ? 'boon.unbound.f' : 'boon.unbound')}</p>`
+      : act === 5 && G.hero.flags.remembered && has('boon.remembered') ? `<p class="unbound-k ice">${t('boon.remembered')}</p>` : '';
     return `<div class="pn" style="text-align:center"><div class="pn-b" style="padding:20px"><div class="act-h">${t('boon.h' + act)}</div><p style="font-style:italic;color:var(--ink2)">${t('boon.sub')}</p>${note}<div class="logo-rule"></div><div class="boons">${cards}</div></div></div>`;
   },
   // an Altar of the Wish: a shard offers its gift, with the cage that comes with it; or let it sleep

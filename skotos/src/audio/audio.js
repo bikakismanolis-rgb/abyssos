@@ -144,9 +144,12 @@ function makeGraph(ctx, opt = {}) {
   };
   const gain = (v, to) => { const n = ctx.createGain(); n.gain.value = v; if (to) n.connect(to); return n; };
 
-  // master: sum → compressor → soft limiter → speakers
+  const lowpass = (to) => { const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 20000; f.Q.value = 0.6; if (to) f.connect(to); return f; };
+  // master: sum → (Act V: the Freeze's low-pass, open until the sea freezes) → compressor → soft limiter → speakers
   g.masterIn = gain(g.vol.master);
-  let x = g.masterIn;
+  g.flp = lowpass(); g.ff = 20000;
+  g.masterIn.connect(g.flp);
+  let x = g.flp;
   if (opt.comp !== false) {
     const c = ctx.createDynamicsCompressor();
     const set = (p, v) => { try { p.value = v; } catch (e) { /* older engines */ } };
@@ -174,12 +177,16 @@ function makeGraph(ctx, opt = {}) {
   g.sfxIn.connect(gain(0.1, g.revIn));
   g.sfxWet = gain(g.vol.sfx, g.revIn);
 
-  // music bus → duck (stings) → master, with a generous reverb send
+  // music bus → duck (stings) → the music's own low-pass and level (Act V: the dark's silence near a Breathing-hole, the
+  // Tower under the water, the Night; a blizzard's howl) → master, with a generous reverb send
   g.musicIn = gain(g.vol.music);
-  g.duck = gain(1, g.masterIn);
+  g.mvol = gain(1, g.masterIn); g.mv = 1;
+  g.mlp = lowpass(g.mvol); g.mf = 20000;
+  g.duck = gain(1, g.mlp);
   g.musicIn.connect(g.duck);
-  g.duck.connect(gain(0.3, g.revIn));
-  g.musicWet = gain(g.vol.music, g.revIn);
+  g.mvol.connect(gain(0.3, g.revIn));
+  g.mlpW = lowpass(g.revIn);
+  g.musicWet = gain(g.vol.music, g.mlpW);
 
   g.noise = { w: makeNoise(ctx, 'w'), p: makeNoise(ctx, 'p'), b: makeNoise(ctx, 'b') };
   const curves = {};
@@ -581,6 +588,19 @@ const INS = {
     let x = pre;
     if (o.drive) { const w = v.W(o.drive); x.connect(w); x = w; }
     x.connect(e); e.connect(o.to || v.out);
+    if (o.wet) v.wet(o.wet);
+  },
+
+  // Act V: the ice's song. Sea ice sings in falling, electronic sweeps when it cracks in the cold: a sine falling
+  // exponentially from about 3 kHz to 400 Hz in 0.25-0.6 s, a fainter partial falling at its own rate (the dispersion), a
+  // click where it starts and, often, a short second ping; the long tail is the reverb's. o: f, f1, d, vel, ping (the
+  // chance of the second ping), wet, to
+  iceSong(v, t, o = {}) {
+    const f0 = o.f ?? rand(2500, 3400), f1 = o.f1 ?? rand(360, 460), d = o.d ?? rand(0.25, 0.6), vel = o.vel ?? 0.08, to = o.to;
+    tn(v, t, { f: f0, fe: f1, sw: d, a: 0.003, pk: vel, d: d + 0.35, to });
+    tn(v, t + 0.006, { f: f0 * 1.47, fe: f1 * 2.3, sw: d * 0.7, a: 0.003, pk: vel * 0.28, d: d * 0.75, to });
+    nb(v, t, { k: 'w', ft: 'highpass', f: 5200, q: 0.7, a: 0.001, pk: vel * 0.5, d: 0.012, to });
+    if (Math.random() < (o.ping ?? 0.7)) { const t2 = t + d * rand(0.55, 0.9); tn(v, t2, { f: f0 * rand(0.55, 0.7), fe: f1 * 1.2, sw: d * 0.45, a: 0.003, pk: vel * 0.4, d: d * 0.6, to }); }
     if (o.wet) v.wet(o.wet);
   },
 };
@@ -1330,6 +1350,386 @@ const SFX = {
     tn(v, t, { f: 60 * p, fe: 32, pk: 0.5, d: 0.6 });
     v.wet(0.45);
   },
+
+  // ── Act V: the Frozen Coast and the Farthest Light ──
+  // the tide bell on its post at the Landing: a low bell, D and A a little out of tune with each other, rung three times
+  tideBell(v, t) {
+    [[50, 0], [57.12, 0.95], [50, 1.9]].forEach(([m, dt], k) => INS.bell(v, t + dt, m, { vel: 0.13 - k * 0.025, dec: 5 }));
+    v.wet(0.7);
+  },
+  // the sea changes its mind: one long wash along the shore, foam running in it
+  tideTurn(v, t, p) {
+    const d = 3.2, s = v.N('p', t, t + d), lp = v.F('lowpass', 300, 0.8), e = v.G(0);
+    lp.frequency.setValueAtTime(260, t); lp.frequency.exponentialRampToValueAtTime(1500 * p, t + d * 0.45); lp.frequency.exponentialRampToValueAtTime(240, t + d);
+    asr(e.gain, t, d * 0.45, 0.4, t + d * 0.5, d * 0.5);
+    s.connect(lp); lp.connect(e); e.connect(v.out);
+    const s2 = v.N('w', t + 0.6, t + d), hp = v.F('highpass', 3800, 0.7), e2 = v.G(0);
+    spikes(e2.gain, t + 0.8, d - 1.2, 50, 0.06, 0.02);
+    s2.connect(hp); hp.connect(e2); e2.connect(v.out);
+    v.wet(0.5);
+  },
+  // a big swell draws back, rises and breaks (the Walking Tower wakes; a flood): the draw, the crash, the foam running out
+  surfSwell(v, t, p) {
+    const d = 3.2, s = v.N('b', t, t + d), lp = v.F('lowpass', 200, 0.9), e = v.G(0);
+    lp.frequency.setValueAtTime(180, t); lp.frequency.exponentialRampToValueAtTime(1600 * p, t + 1.3); lp.frequency.exponentialRampToValueAtTime(300, t + d);
+    e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(0.8, t + 1.25); e.gain.setTargetAtTime(0, t + 1.4, 0.55);
+    s.connect(lp); lp.connect(e); e.connect(v.out);
+    nb(v, t + 1.2, { k: 'p', ft: 'bandpass', f: 1800 * p, fe: 600, q: 0.6, a: 0.02, pk: 0.6, d: 1.4 });
+    const s2 = v.N('w', t + 1.25, t + d), hp = v.F('highpass', 3000, 0.7), e2 = v.G(0);
+    spikes(e2.gain, t + 1.25, d - 1.3, 90, 0.12, 0.015, 1.4);
+    s2.connect(hp); hp.connect(e2); e2.connect(v.out);
+    tn(v, t + 1.22, { f: 60 * p, fe: 34, pk: 0.5, d: 0.7 });
+    v.wet(0.5);
+  },
+  // the sea takes her: water rushing and dragging, gurgling, with spray at its front
+  washOut(v, t, p) {
+    const d = 1.8, s = v.N('p', t, t + d), bp = v.F('bandpass', 700 * p, 0.7), e = v.G(0);
+    bp.frequency.setValueAtTime(400 * p, t); bp.frequency.exponentialRampToValueAtTime(1400 * p, t + 0.35); bp.frequency.exponentialRampToValueAtTime(350 * p, t + d);
+    e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(0.85, t + 0.08); e.gain.setTargetAtTime(0, t + 0.6, 0.4);
+    s.connect(bp); bp.connect(e); e.connect(v.out);
+    nb(v, t + 0.1, { k: 'b', f: 380 * p, q: 3, a: 0.1, pk: 0.4, d: d - 0.3, am: [rand(9, 14), 0.8] });
+    SFX.splash(v, t, p * 0.9);
+  },
+  // something falls into the sea: a plop, the water thrown up and falling back in drops
+  splash(v, t, p) {
+    tn(v, t, { f: 520 * p, fe: 140 * p, sw: 0.09, a: 0.002, pk: 0.45, d: 0.12 });
+    nb(v, t, { k: 'p', ft: 'lowpass', f: 2400 * p, fe: 500, q: 0.7, a: 0.008, pk: 0.7, d: 0.45 });
+    nb(v, t + 0.02, { k: 'w', ft: 'highpass', f: 2600, q: 0.7, a: 0.01, pk: 0.25, d: 0.3 });
+    for (let k = 0; k < 6; k++) { const x = t + 0.15 + rand(0, 0.45), f = rand(900, 2200) * p; tn(v, x, { f, fe: f * 1.6, sw: 0.03, a: 0.002, pk: rand(0.04, 0.09), d: 0.05 }); }
+    v.wet(0.3);
+  },
+  // brash ice: a wet, grinding squelch
+  slush(v, t, p) {
+    nb(v, t, { k: 'p', f: 900 * p, q: 1.2, a: 0.02, pk: 0.5, d: 0.3, am: [rand(30, 45), 0.7] });
+    const s = v.N('w', t, t + 0.35), hp = v.F('highpass', 3000, 0.7), e = v.G(0);
+    spikes(e.gain, t, 0.3, 14, 0.25, 0.006, 1.5);
+    s.connect(hp); hp.connect(e); e.connect(v.out);
+    tn(v, t, { f: 260 * p, fe: 120 * p, sw: 0.1, pk: 0.25, d: 0.12 });
+    v.wet(0.2);
+  },
+  // through the ice: the crash, the cold water closing over her, the muffled roar under it, bubbles going up
+  plunge(v, t, p) {
+    SFX.iceBreak(v, t, p * 1.1);
+    tn(v, t + 0.05, { f: 300 * p, fe: 70 * p, sw: 0.18, a: 0.004, pk: 0.6, d: 0.3 });
+    nb(v, t + 0.06, { k: 'b', ft: 'lowpass', f: 900, fe: 220, q: 0.8, a: 0.03, pk: 0.8, d: 1.2, am: [rand(6, 9), 0.5] });
+    for (let k = 0; k < 8; k++) { const x = t + 0.3 + k * rand(0.06, 0.12), f = rand(350, 700) * p; tn(v, x, { f, fe: f * 2.2, sw: 0.05, a: 0.003, pk: 0.08, d: 0.07, lp: 1800 }); }
+  },
+  // the ice under strain, one sound to each stage: a creak (a low groan and a dull knock), a ping, a crack, and the
+  // shot of a crazed cell about to go (the 0.6 s warning)
+  iceCreak(v, t, p) {
+    nb(v, t, { k: 'b', f: rand(420, 640) * p, q: 5, a: rand(0.06, 0.12), pk: 0.35, d: rand(0.35, 0.55), am: [rand(18, 30), 0.85] });
+    tn(v, t + 0.02, { f: 900 * p, fe: 260 * p, sw: 0.22, a: 0.002, pk: 0.14, d: 0.3 });
+    v.wet(0.35);
+  },
+  iceCrack1(v, t, p) {
+    nb(v, t, { k: 'w', ft: 'highpass', f: 3600, q: 0.7, a: 0.001, pk: 0.4, d: 0.02 });
+    INS.iceSong(v, t + 0.003, { f: 2600 * p, f1: 900 * p, d: 0.16, vel: 0.22, ping: 0 });
+    v.wet(0.5);
+  },
+  iceCrack2(v, t, p) {
+    const s = v.N('w', t, t + 0.18), hp = v.F('highpass', 2400 * p, 0.8), e = v.G(0);
+    spikes(e.gain, t, 0.15, 7, 0.8, 0.004, 2);
+    s.connect(hp); hp.connect(e); e.connect(v.out);
+    INS.iceSong(v, t + 0.01, { f: 3000 * p, f1: 520 * p, d: 0.28, vel: 0.2, ping: 0.6 });
+    tn(v, t, { f: 160 * p, fe: 90, pk: 0.25, d: 0.12 });
+    v.wet(0.55);
+  },
+  iceCrack3(v, t, p) {
+    nb(v, t, { k: 'w', ft: 'bandpass', f: 2200 * p, q: 0.6, a: 0.001, pk: 1, d: 0.05 });
+    const s = v.N('w', t, t + 0.5), hp = v.F('highpass', 1800 * p, 0.8), e = v.G(0);
+    spikes(e.gain, t + 0.02, 0.45, 14, 0.6, 0.006, 1.6);
+    s.connect(hp); hp.connect(e); e.connect(v.out);
+    tn(v, t, { f: 120 * p, fe: 55, pk: 0.5, d: 0.25 });
+    INS.iceSong(v, t + 0.05, { f: 3300 * p, f1: 420 * p, d: 0.45, vel: 0.22, ping: 1 });
+    nb(v, t + 0.08, { k: 'b', f: 380 * p, q: 4, a: 0.25, pk: 0.3, d: 0.4, am: [rand(22, 30), 0.8] });
+    v.wet(0.5);
+  },
+  // the ice gives: a crash, plates and shards ringing down onto each other, the black water slapping up
+  iceBreak(v, t, p) {
+    nb(v, t, { k: 'w', ft: 'bandpass', f: 1600 * p, fe: 600, q: 0.5, a: 0.002, pk: 1, d: 0.35 });
+    const s = v.N('w', t, t + 1.1), hp = v.F('highpass', 2800 * p, 0.7), e = v.G(0);
+    spikes(e.gain, t, 1, 36, 0.5, 0.008, 1.8);
+    s.connect(hp); hp.connect(e); e.connect(v.out);
+    for (let k = 0; k < 6; k++) metal(v, t + rand(0.02, 0.6), rand(2200, 4200) * p, [1, 2.31, 3.9], rand(0.15, 0.35), 0.05);
+    tn(v, t, { f: 90 * p, fe: 38, pk: 0.7, d: 0.45 });
+    nb(v, t + 0.12, { k: 'p', ft: 'lowpass', f: 1400, fe: 300, q: 0.7, a: 0.02, pk: 0.5, d: 0.6 });
+    v.wet(0.45);
+  },
+  // the ice heals (a Frost Nova, a beam over broken ice): a crystalline shimmer climbing, glass settling
+  refreeze(v, t, p) {
+    for (let k = 0; k < 5; k++) { const x = t + k * 0.07, f = (700 + k * 260) * p; tn(v, x, { f, fe: f * 2.4, sw: 0.5, a: 0.03, pk: 0.07, d: 0.55 }); }
+    nb(v, t, { k: 'w', ft: 'highpass', f: 4000, q: 0.7, a: 0.35, pk: 0.18, d: 0.5 });
+    const s = v.N('w', t + 0.2, t + 1.1), bp = v.F('bandpass', 6000, 2), e = v.G(0);
+    spikes(e.gain, t + 0.2, 0.85, 24, 0.25, 0.01);
+    s.connect(bp); bp.connect(e); e.connect(v.out);
+    INS.bell(v, t + 0.45, 93, { vel: 0.025, dec: 1.4 });
+    v.wet(0.6);
+  },
+  // the ice sings, and when it sings it is listening (under the Skotos's lines; the ambience of both zones)
+  iceSing(v, t, p) {
+    INS.iceSong(v, t, { f: 3000 * p, f1: 420 * p, d: rand(0.4, 0.6), vel: 0.18, ping: 1 });
+    INS.iceSong(v, t + rand(0.5, 0.9), { f: 2400 * p, f1: 360 * p, d: rand(0.3, 0.5), vel: 0.1, ping: 0.5 });
+    v.wet(0.95);
+  },
+  // a Sunken's harpoon: a heave, the shaft whistling out, the rope paying out behind it; and the reel, a ratchet clicking
+  // faster and faster over wet rope; the boat-hook biting
+  harpoonThrow(v, t, p) {
+    nb(v, t, { k: 'w', f: 600 * p, fp: 2600 * p, fe: 900 * p, q: 1.6, a: 0.09, pk: 0.6, d: 0.22 });
+    tn(v, t + 0.05, { w: 'triangle', f: 1300 * p, fe: 900 * p, sw: 0.4, a: 0.02, pk: 0.05, d: 0.4 });
+    nb(v, t + 0.08, { k: 'p', f: 1500 * p, q: 2, a: 0.03, pk: 0.22, d: 0.5, am: [rand(40, 55), 0.7] });
+    v.wet(0.2);
+  },
+  harpoonReel(v, t, p) {
+    let x = t;
+    for (let k = 0; k < 11; k++) { tn(v, x, { w: 'triangle', f: 1700 * p * rand(0.95, 1.05), a: 0.001, pk: 0.14 + k * 0.01, d: 0.03 }); x += 0.09 - k * 0.0045; }
+    nb(v, t, { k: 'p', f: 900 * p, q: 1.5, a: 0.1, pk: 0.25, d: 0.7, am: [rand(26, 34), 0.6] });
+    v.wet(0.2);
+  },
+  hook(v, t, p) {
+    metal(v, t, 760 * p, [1, 2.4, 4.1], 0.35, 0.22);
+    nb(v, t + 0.02, { k: 'w', f: 1800 * p, fe: 500 * p, q: 1.2, a: 0.04, pk: 0.4, d: 0.22 });
+    tn(v, t, { w: 'triangle', f: 220 * p, fe: 120 * p, pk: 0.35, d: 0.12 });
+    v.wet(0.25);
+  },
+  // an Icemaw: a bark out of its hole, wet and heavy; its lunge; up through the ice; and down again
+  sealBark(v, t, p) {
+    for (let k = 0; k < 2; k++) vox(v, t + k * 0.28, { f: 190 * p * (k ? 0.9 : 1), d: 0.22, c: [[0, 0.85], [0.06, 1.2], [0.22, 0.75]], vow: 'a', to: 'o', mt: 0.15, growl: [26, 0.5], drive: 3, breath: 0.4, pk: 0.32, fg: 3, fs: 0.85, a: 0.015, hold: 0.4 });
+    v.wet(0.4);
+  },
+  sealLunge(v, t, p) {
+    nb(v, t, { k: 'p', ft: 'lowpass', f: 600 * p, fp: 2400 * p, fe: 400, q: 0.8, a: 0.12, pk: 0.6, d: 0.4 });
+    vox(v, t + 0.1, { f: 120 * p, d: 0.45, c: [[0, 0.9], [0.15, 1.15], [0.45, 0.8]], vow: 'o', growl: [20, 0.55], drive: 4, breath: 0.5, pk: 0.36, fg: 3, fs: 0.8, a: 0.03, hold: 0.5 });
+    tn(v, t + 0.42, { w: 'triangle', f: 320 * p, fe: 160, pk: 0.4, d: 0.08 });
+    nb(v, t + 0.42, { k: 'w', f: 2400, q: 2, a: 0.001, pk: 0.3, d: 0.04 });
+    v.wet(0.3);
+  },
+  icemawSurface(v, t, p) { SFX.iceCrack2(v, t, p * 0.8); SFX.splash(v, t + 0.06, p * 0.7); SFX.sealBark(v, t + 0.3, p); },
+  icemawDive(v, t, p) {
+    SFX.splash(v, t, p * 0.6);
+    tn(v, t + 0.1, { f: 240 * p, fe: 70 * p, sw: 0.25, pk: 0.4, d: 0.35 });
+    for (let k = 0; k < 5; k++) { const x = t + 0.3 + k * rand(0.08, 0.15), f = rand(300, 600) * p; tn(v, x, { f, fe: f * 2, sw: 0.05, a: 0.003, pk: 0.06, d: 0.06, lp: 1600 }); }
+  },
+  // a Skua: the robber gull's laughing cry
+  skuaCry(v, t, p) {
+    const n = 2 + ((Math.random() * 3) | 0);
+    for (let k = 0; k < n; k++) vox(v, t + k * 0.17, { f: (760 - k * 40) * p, d: k ? 0.13 : 0.32, c: [[0, 1.1], [0.04, 1.35], [k ? 0.13 : 0.32, 0.85]], vow: 'a', to: 'e', mt: 0.1, breath: 0.35, pk: 0.2, fg: 3, fs: 1.6, a: 0.008, hold: 0.35, n: 1 });
+    v.wet(0.45);
+  },
+  // Hull-lice: a skitter of small legs on wood and ice; the plates folding into a ball; the ball rolling at her
+  louseSkitter(v, t, p) {
+    const d = 0.5, s = v.N('w', t, t + d), bp = v.F('bandpass', 3200 * p, 2.5), e = v.G(0);
+    spikes(e.gain, t, d, 40, 0.5, 0.003);
+    s.connect(bp); bp.connect(e); e.connect(v.out);
+    v.wet(0.15);
+  },
+  louseCurl(v, t, p) {
+    for (let k = 0; k < 5; k++) { const x = t + k * 0.04; tn(v, x, { w: 'triangle', f: (2400 - k * 260) * p, a: 0.001, pk: 0.16, d: 0.025 }); nb(v, x, { k: 'w', ft: 'highpass', f: 3000, a: 0.001, pk: 0.12, d: 0.015 }); }
+    tn(v, t + 0.22, { w: 'triangle', f: 300 * p, fe: 180 * p, pk: 0.3, d: 0.08 });
+    v.wet(0.15);
+  },
+  louseRoll(v, t, p) {
+    const d = 0.9, s = v.N('b', t, t + d), lp = v.F('lowpass', 500 * p, 0.8), e = v.G(0);
+    asr(e.gain, t, 0.08, 0.5, t + d - 0.3, 0.3);
+    const am = v.G(0.5), lfo = v.O('square', rand(11, 14), t, t + d), lg = v.G(0.5);
+    lfo.connect(lg); lg.connect(am.gain);
+    s.connect(lp); lp.connect(am); am.connect(e); e.connect(v.out);
+    const s2 = v.N('w', t, t + d), hp = v.F('highpass', 2600, 0.7), e2 = v.G(0);
+    spikes(e2.gain, t, d, 18, 0.25, 0.004);
+    s2.connect(hp); hp.connect(e2); e2.connect(v.out);
+    v.wet(0.2);
+  },
+  // a whale-oil cask bursts: staves cracking, the oil gulping out, and the fire taking it all at once
+  oilCask(v, t, p) {
+    SFX.woodHit(v, t, p * 0.8);
+    nb(v, t + 0.03, { k: 'b', ft: 'lowpass', f: 700 * p, q: 1, a: 0.04, pk: 0.4, d: 0.3, am: [rand(16, 22), 0.6] });
+    nb(v, t + 0.15, { k: 'p', ft: 'lowpass', f: 250, fp: 2800 * p, fe: 600, q: 0.9, a: 0.25, pk: 0.8, d: 1.1, drive: 2 });
+    const s = v.N('w', t + 0.3, t + 1.6), hp = v.F('highpass', 2200, 0.7), e = v.G(0);
+    spikes(e.gain, t + 0.3, 1.3, 40, 0.28, 0.007, 1.3);
+    s.connect(hp); hp.connect(e); e.connect(v.out);
+    v.wet(0.4);
+  },
+  // a sea-light's beam passes over her: warmth, a hum of open fifths, a glint; its bell on each turn, far off and clear,
+  // so the sweep can be heard coming round
+  beamHum(v, t) {
+    for (const [m, g] of [[50, 1], [57, 0.7], [62, 0.5]]) tn(v, t, { f: mf(m), a: 0.25, pk: 0.09 * g, d: 1.3, lp: 1200 });
+    nb(v, t, { k: 'w', ft: 'highpass', f: 6000, q: 0.7, a: 0.3, pk: 0.05, d: 0.9 });
+    INS.bell(v, t + 0.08, 86, { vel: 0.02, dec: 1.6 });
+    v.wet(0.55);
+  },
+  beamBell(v, t, p, pp) {
+    INS.bell(v, t, 74 + 12 * Math.log2(pp), { vel: 0.07, dec: 3.5 });
+    v.wet(0.8);
+  },
+  // the light catches (a beam on one of the dark's creatures; a fire given to a light): a bright glint over a swell
+  lightCatch(v, t, p) {
+    nb(v, t, { k: 'p', ft: 'bandpass', f: 400, fe: 3600 * p, q: 0.9, a: 0.18, pk: 0.35, d: 0.3 });
+    for (const [m, dt] of [[86, 0.16], [93, 0.2]]) INS.bell(v, t + dt, m, { vel: 0.05, dec: 1.8 });
+    tn(v, t + 0.16, { f: 2200 * p, fe: 3400 * p, sw: 0.2, a: 0.005, pk: 0.08, d: 0.4 });
+    const s = v.N('w', t + 0.16, t + 0.9), hp = v.F('highpass', 7000, 0.7), e = v.G(0);
+    spikes(e.gain, t + 0.16, 0.7, 20, 0.15, 0.01);
+    s.connect(hp); hp.connect(e); e.connect(v.out);
+    v.wet(0.6);
+  },
+  // a lamp goes out: a soft puff, the glass ticking as it cools
+  lampSnuff(v, t, p) {
+    nb(v, t, { k: 'p', ft: 'lowpass', f: 1800 * p, fe: 200, q: 0.8, a: 0.01, pk: 0.4, d: 0.35 });
+    for (let k = 0; k < 3; k++) tn(v, t + 0.3 + k * rand(0.15, 0.3), { f: rand(3000, 4200), a: 0.001, pk: 0.03, d: 0.03 });
+    v.wet(0.4);
+  },
+  // a freeze wave runs over the sea: the water stiffening with a crackle that sweeps away, singing, then a deep settle
+  freezeWave(v, t, p) {
+    const d = 2.8, s = v.N('w', t, t + d), bp = v.F('bandpass', 5000 * p, 1.2), e = v.G(0);
+    bp.frequency.setValueAtTime(5000 * p, t); bp.frequency.exponentialRampToValueAtTime(900 * p, t + d);
+    spikes(e.gain, t, d, 120, 0.55, 0.006, 1.2);
+    s.connect(bp); bp.connect(e); e.connect(v.out);
+    nb(v, t, { k: 'p', ft: 'highpass', f: 2000, q: 0.7, a: 0.6, pk: 0.25, d: d - 0.6 });
+    tn(v, t, { w: 'triangle', f: 1400 * p, fe: 300 * p, sw: d, a: 0.4, pk: 0.05, d: d - 0.3 });
+    for (let k = 0; k < 4; k++) INS.iceSong(v, t + 0.3 + k * rand(0.45, 0.7), { vel: 0.08, ping: 0.4 });
+    tn(v, t + d - 0.4, { f: 55 * p, fe: 32, a: 0.05, pk: 0.5, d: 1.2 });
+    v.wet(0.75);
+  },
+  // the blizzard is coming: spindrift rising off the ice for three seconds; and it blows, eight seconds of howl
+  gustRise(v, t, p) {
+    const d = 3, s = v.N('w', t, t + d + 0.3), bp = v.F('bandpass', 1200 * p, 0.9), e = v.G(0);
+    bp.frequency.setValueAtTime(900 * p, t); bp.frequency.exponentialRampToValueAtTime(4200 * p, t + d);
+    e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(0.5, t + d); e.gain.linearRampToValueAtTime(0, t + d + 0.25);
+    s.connect(bp); bp.connect(e); e.connect(v.out);
+    const s2 = v.N('w', t + 0.5, t + d), hp = v.F('highpass', 5000, 0.7), e2 = v.G(0);
+    spikes(e2.gain, t + 0.5, d - 0.5, 50, 0.1, 0.02);
+    s2.connect(hp); hp.connect(e2); e2.connect(v.out);
+    v.wet(0.4);
+  },
+  blizzard(v, t, p) {
+    const d = 8.4, s = v.N('p', t, t + d), bp = v.F('bandpass', 500 * p, 3), bp2 = v.F('bandpass', 1300 * p, 4), e = v.G(0);
+    for (const [f, base] of [[bp, 420], [bp2, 1100]]) { f.frequency.setValueAtTime(base * p, t); for (let k = 1; k <= 6; k++) f.frequency.linearRampToValueAtTime(base * p * rand(0.75, 1.5), t + (d * k) / 6); }
+    asr(e.gain, t, 1.2, 0.7, t + d - 1.6, 1.6);
+    s.connect(bp); s.connect(bp2); bp.connect(e); bp2.connect(e); e.connect(v.out);
+    const s2 = v.N('w', t, t + d), hp = v.F('highpass', 3200, 0.7), e2 = v.G(0);
+    asr(e2.gain, t, 0.8, 0.22, t + d - 1.4, 1.4);
+    s2.connect(hp); hp.connect(e2); e2.connect(v.out);
+    v.wet(0.35);
+  },
+  // a Rime Bear's frost roar: the bear's roar with the cold in it, its breath freezing into a hiss of ice
+  frostRoar(v, t, p) {
+    SFX.bearRoar(v, t, p * 0.92);
+    nb(v, t + 0.15, { k: 'w', ft: 'highpass', f: 3500, q: 0.7, a: 0.3, pk: 0.3, d: 1.2 });
+    const s = v.N('w', t + 0.4, t + 1.6), bp = v.F('bandpass', 6000, 2), e = v.G(0);
+    spikes(e.gain, t + 0.4, 1.1, 30, 0.2, 0.01);
+    s.connect(bp); bp.connect(e); e.connect(v.out);
+  },
+  // an Ice Singer: a woman's voice keening over the ice with the ice answering under it; and her wail, a scream gone cold
+  singerSong(v, t, p) {
+    vox(v, t, { f: 520 * p, d: 1.8, c: [[0, 0.9], [0.4, 1.12], [0.9, 1.0], [1.4, 1.19], [1.8, 1.05]], vow: 'o', to: 'i', mt: 1.4, vib: [5.2, 40], breath: 0.5, pk: 0.18, fg: 3, a: 0.3, hold: 0.7, n: 2 });
+    INS.iceSong(v, t + 0.5, { vel: 0.08, ping: 1 });
+    INS.iceSong(v, t + 1.3, { vel: 0.06, ping: 0.5 });
+    v.wet(0.85);
+  },
+  singerWail(v, t, p) {
+    vox(v, t, { f: 700 * p, d: 1.1, c: [[0, 0.8], [0.12, 1.4], [0.7, 1.3], [1.1, 0.7]], vow: 'a', to: 'i', mt: 0.6, vib: [7, 60], growl: [34, 0.3], breath: 0.6, pk: 0.24, fg: 3, a: 0.04, hold: 0.55 });
+    nb(v, t + 0.1, { k: 'w', ft: 'highpass', f: 4200, q: 0.7, a: 0.2, pk: 0.18, d: 0.9 });
+    INS.iceSong(v, t + 0.3, { f: 3400, f1: 300, d: 0.6, vel: 0.12 });
+    v.wet(0.7);
+  },
+  // the Walking Tower breaks the surface (the sea pouring off its shell, stone grinding), goes under, spits brine
+  towerBreach(v, t, p) {
+    roar(v, t, 38 * p, 1.6, 0.4, 4);
+    nb(v, t, { k: 'b', ft: 'lowpass', f: 300, fp: 2200 * p, fe: 400, q: 0.8, a: 0.15, pk: 0.9, d: 1.6 });
+    const s = v.N('w', t + 0.2, t + 2.2), hp = v.F('highpass', 2500, 0.7), e = v.G(0);
+    spikes(e.gain, t + 0.2, 1.9, 120, 0.16, 0.012, 1.3);
+    s.connect(hp); hp.connect(e); e.connect(v.out);
+    tn(v, t, { f: 55 * p, fe: 30, pk: 0.7, d: 0.9 });
+    v.wet(0.45);
+  },
+  towerDive(v, t, p) {
+    nb(v, t, { k: 'b', ft: 'lowpass', f: 1600 * p, fe: 200, q: 0.8, a: 0.05, pk: 0.9, d: 1.4 });
+    tn(v, t + 0.1, { f: 160 * p, fe: 40, sw: 0.6, pk: 0.6, d: 0.8 });
+    for (let k = 0; k < 8; k++) { const x = t + 0.5 + k * rand(0.08, 0.16), f = rand(220, 480) * p; tn(v, x, { f, fe: f * 2, sw: 0.06, a: 0.003, pk: 0.08, d: 0.08, lp: 1400 }); }
+    v.wet(0.4);
+  },
+  brineSpit(v, t, p) {
+    nb(v, t, { k: 'p', ft: 'lowpass', f: 500 * p, fp: 2200 * p, fe: 700 * p, q: 1, a: 0.12, pk: 0.6, d: 0.3, am: [rand(18, 24), 0.5] });
+    tn(v, t, { f: 180 * p, fe: 90 * p, sw: 0.2, pk: 0.35, d: 0.25 });
+    v.wet(0.3);
+  },
+  // the Skotos rises: the ice breaking outward, the sea drawn down, a sound under sound, the ice singing in alarm
+  skotosRise(v, t, p) {
+    roar(v, t + 0.2, 34 * p, 3.6, 0.55, 6);
+    tn(v, t, { f: 40 * p, fe: 24, sw: 4, a: 1, pk: 0.6, d: 3.4 });
+    SFX.iceBreak(v, t + 0.1, p * 0.7);
+    nb(v, t, { k: 'p', ft: 'lowpass', f: 120, fp: 900 * p, fe: 160, q: 0.8, a: 2, pk: 0.6, d: 2 });
+    INS.choir(v, t + 0.6, [40, 41, 46], 2.4, { vel: 0.28, att: 1.2, rel: 1.6, vowel: 'u' });
+    for (let k = 0; k < 3; k++) INS.iceSong(v, t + 1 + k * 0.7, { f: rand(3000, 3600), f1: rand(260, 340), d: 0.7, vel: 0.12, ping: 1 });
+    v.wet(0.7);
+  },
+  // its breath drawn in over a lamp (the Black Breath: start it with the telegraph, 1.2 s), and let out black and freezing
+  skotosInhale(v, t, p) {
+    const d = 1.2, s = v.N('p', t, t + d + 0.1), bp = v.F('bandpass', 160 * p, 1.2), e = v.G(0);
+    bp.frequency.setValueAtTime(140 * p, t); bp.frequency.exponentialRampToValueAtTime(1300 * p, t + d);
+    e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(0.6, t + d * 0.95); e.gain.linearRampToValueAtTime(0, t + d + 0.05);
+    s.connect(bp); bp.connect(e); e.connect(v.out);
+    tn(v, t, { w: 'triangle', f: 36 * p, fe: 58 * p, sw: d, a: 0.9, pk: 0.3, d: 0.4 });
+    v.wet(0.5);
+  },
+  skotosBreath(v, t, p) {
+    roar(v, t, 40 * p, 1.4, 0.45, 5);
+    nb(v, t, { k: 'p', ft: 'lowpass', f: 3000 * p, fe: 260, q: 0.8, a: 0.03, pk: 0.6, d: 1.3 });
+    const s = v.N('w', t + 0.1, t + 1.5), hp = v.F('highpass', 4000, 0.7), e = v.G(0);
+    spikes(e.gain, t + 0.1, 1.3, 50, 0.25, 0.008, 1.3);
+    s.connect(hp); hp.connect(e); e.connect(v.out);
+    INS.iceSong(v, t + 0.2, { f: 3400, f1: 280, d: 0.7, vel: 0.1 });
+    v.wet(0.6);
+  },
+  // its blows: a sweep of its arm over the ice, a slam through it, a roar that is no animal's, the light drunk out of a fire
+  skotosSweep(v, t, p) {
+    nb(v, t, { k: 'p', f: 160 * p, fp: 900 * p, fe: 200 * p, q: 0.9, a: 0.35, pk: 1, d: 0.5 });
+    nb(v, t + 0.2, { k: 'b', ft: 'lowpass', f: 900, fe: 200, q: 0.8, a: 0.05, pk: 0.5, d: 0.8 });
+    tn(v, t + 0.3, { f: 70 * p, fe: 34, pk: 0.5, d: 0.5 });
+    v.wet(0.45);
+  },
+  skotosSlam(v, t, p) {
+    SFX.iceBreak(v, t, p * 0.75);
+    tn(v, t, { f: 64 * p, fe: 26, sw: 0.5, a: 0.004, pk: 1, d: 1.1 });
+    nb(v, t, { k: 'b', ft: 'lowpass', f: 600, fe: 120, q: 0.8, a: 0.005, pk: 0.9, d: 1 });
+    v.wet(0.5);
+  },
+  skotosRoar(v, t, p) {
+    roar(v, t, 30 * p, 2.2, 0.55, 7);
+    INS.choir(v, t + 0.1, [40, 41, 47, 52], 1.8, { vel: 0.22, att: 0.3, rel: 1.2, vowel: 'u' });
+    INS.iceSong(v, t + 0.5, { f: 3600, f1: 260, d: 0.8, vel: 0.14, ping: 1 });
+    v.wet(0.65);
+  },
+  skotosDrink(v, t, p) {
+    nb(v, t, { k: 'p', ft: 'bandpass', f: 3200 * p, fe: 160 * p, q: 1.1, a: 0.6, pk: 0.5, d: 0.9 });
+    tn(v, t + 0.2, { f: 700 * p, fe: 90 * p, sw: 1.1, a: 0.1, pk: 0.14, d: 1.2 });
+    INS.bell(v, t + 0.05, 86, { vel: 0.03, dec: 1.2 });
+    v.wet(0.55);
+  },
+  // its Hands: one coming up through the ice, wet and heavy; a lash with the ice shrieking in it; a fire smothered
+  handRise(v, t, p) {
+    SFX.iceCrack2(v, t, p * 0.7);
+    nb(v, t + 0.05, { k: 'b', f: 300 * p, q: 2, a: 0.2, pk: 0.45, d: 0.8, am: [rand(7, 10), 0.6] });
+    nb(v, t + 0.1, { k: 'p', ft: 'lowpass', f: 400, fp: 1600 * p, fe: 300, q: 0.8, a: 0.3, pk: 0.4, d: 0.6 });
+    vox(v, t + 0.2, { f: 70 * p, d: 0.9, c: [[0, 0.9], [0.9, 0.75]], vow: 'u', growl: [14, 0.5], drive: 3, breath: 0.6, pk: 0.22, fg: 3, fs: 0.7, a: 0.2, hold: 0.5 });
+  },
+  handLash(v, t, p) {
+    nb(v, t, { k: 'p', f: 300 * p, fp: 1800 * p, fe: 400 * p, q: 1.1, a: 0.14, pk: 0.8, d: 0.22 });
+    INS.iceSong(v, t + 0.1, { f: 3600 * p, f1: 500 * p, d: 0.3, vel: 0.2, ping: 0 });
+    tn(v, t + 0.18, { f: 90 * p, fe: 45, pk: 0.5, d: 0.25 });
+    v.wet(0.4);
+  },
+  smother(v, t, p) {
+    nb(v, t, { k: 'b', ft: 'lowpass', f: 400 * p, q: 1, a: 0.06, pk: 0.7, d: 0.6 });
+    nb(v, t + 0.05, { k: 'w', ft: 'highpass', f: 2500, fe: 800, q: 0.7, a: 0.05, pk: 0.3, d: 0.7 });
+    tn(v, t, { f: 70 * p, fe: 38, pk: 0.4, d: 0.5 });
+    v.wet(0.45);
+  },
+  // a sea-light's cracked bell: a bell with one partial out of true, beating against its neighbour (pitch moves it)
+  towerBell(v, t, p, pp) {
+    const f = mf(62) * pp;
+    for (const [r, a, k] of [[0.5, 0.45, 1], [1, 1, 0.8], [1.19, 0.5, 0.6], [1.5, 0.3, 0.5], [2.03, 0.4, 0.45], [2.07, 0.35, 0.45], [2.74, 0.2, 0.3], [3.8, 0.12, 0.2]]) tn(v, t, { f: f * r, det: rand(-3, 3), a: 0.002, pk: 0.13 * a, d: 4.5 * k });
+    nb(v, t, { k: 'w', ft: 'bandpass', f: f * 3.2, q: 2, a: 0.001, pk: 0.12, d: 0.06 });
+    v.wet(0.75);
+  },
 };
 
 // name → [max calls, window seconds]; extras inside the window are dropped
@@ -1340,6 +1740,13 @@ const LIMITS = {
   hartBellow: [1, 1.2], bearRoar: [2, 0.6], rootlingShriek: [2, 0.3], hollowCrack: [3, 0.15], mournerKeen: [2, 0.6],
   amaranthSong: [1, 1], sapRoot: [1, 0.5], sapCrack: [2, 0.2], thornWither: [2, 0.4], windGust: [1, 2], woodHit: [5, 0.05],
   bellowsInhale: [2, 1], bellowsRoar: [2, 1], hornCall: [1, 2.5], chainRattle: [2, 0.4], tickLatch: [2, 0.2], lanternDrink: [1, 0.5], smokeGulp: [2, 0.4], ashwingScreech: [1, 0.8], crownCrack: [2, 0.25], statueBreak: [1, 0.5], shieldBlock: [3, 0.08],
+  tideBell: [1, 2.5], tideTurn: [1, 2], surfSwell: [1, 1], washOut: [1, 0.8], splash: [4, 0.08], slush: [2, 0.15], plunge: [1, 0.5],
+  iceCreak: [2, 0.15], iceCrack1: [3, 0.08], iceCrack2: [3, 0.1], iceCrack3: [2, 0.15], iceBreak: [2, 0.2], refreeze: [1, 0.3], iceSing: [2, 0.5],
+  harpoonThrow: [2, 0.2], harpoonReel: [1, 0.4], hook: [2, 0.2], sealBark: [1, 0.6], sealLunge: [1, 0.4], icemawSurface: [1, 0.5], icemawDive: [1, 0.5],
+  skuaCry: [2, 0.4], louseSkitter: [2, 0.25], louseCurl: [3, 0.1], louseRoll: [2, 0.3], oilCask: [2, 0.15], beamHum: [1, 1], beamBell: [2, 0.6],
+  lightCatch: [2, 0.25], lampSnuff: [2, 0.3], freezeWave: [1, 1], gustRise: [1, 2], blizzard: [1, 6], frostRoar: [1, 0.8], singerSong: [2, 1],
+  singerWail: [1, 0.6], towerBreach: [1, 1], towerDive: [1, 1], brineSpit: [2, 0.3], skotosRise: [1, 2], skotosInhale: [1, 0.8], skotosBreath: [1, 0.8],
+  skotosSweep: [1, 0.4], skotosSlam: [1, 0.4], skotosRoar: [1, 1.2], skotosDrink: [1, 0.8], handRise: [2, 0.3], handLash: [3, 0.15], smother: [2, 0.3], towerBell: [3, 0.3],
 };
 const DEF_LIMIT = [5, 0.06];
 
@@ -1353,8 +1760,13 @@ const TRIM = {
   orcDie: 0.6, orcAttack: 0.8, trollRoar: 0.85, bossRoar: 0.75, playerHurt: 0.8, playerDie: 0.6, heartbeat: 0.8,
   footstep: 0.5, beaconIgnite: 0.85, fireCrackle: 1.6,
   woodHit: 1.6, hollowCrack: 1.6, sapCrack: 2.2, windGust: 1.5, mournerKeen: 0.85,
+  tideBell: 1.5, surfSwell: 0.9, washOut: 1.2, splash: 0.9, slush: 1.6, plunge: 1.1, iceCreak: 2, iceCrack1: 1.1, iceCrack2: 1.1, iceCrack3: 1.25,
+  refreeze: 1.7, iceSing: 1.4, harpoonThrow: 2.2, harpoonReel: 2.6, hook: 1.4, sealBark: 1.2, sealLunge: 1.3, skuaCry: 0.6, louseSkitter: 3,
+  louseCurl: 1.4, oilCask: 0.8, beamHum: 1.2, beamBell: 1.5, lightCatch: 1.8, lampSnuff: 1.3, freezeWave: 0.85, gustRise: 1.6, blizzard: 1.6,
+  singerSong: 0.6, singerWail: 1.1, towerBreach: 0.85, towerDive: 0.85, brineSpit: 1.3, skotosRise: 0.8, skotosInhale: 1.2, skotosBreath: 0.8,
+  skotosSlam: 0.8, skotosRoar: 0.85, skotosDrink: 1.5, handRise: 1.3, handLash: 1.2, towerBell: 1.1,
 };
-const STING_TRIM = { victory: 0.8, death: 0.55, bossIntro: 0.5, quest: 1.3, memory: 0.9, lantern: 1.1 };
+const STING_TRIM = { victory: 0.8, death: 0.55, bossIntro: 0.5, quest: 1.3, memory: 0.9, lantern: 1.1, sealight: 1.2, naming: 0.95, relight: 0.9, memoryIce: 0.75 };
 
 // ───────────────────────────── 5. stings ─────────────────────────────
 
@@ -1460,6 +1872,59 @@ const STINGS = {
     INS.bell(v, t + 1.5, 86, { vel: 0.08, dec: 4 });
     v.wet(0.6);
     return 4;
+  },
+  // Act V: a sea-light lit (a hole sealed): the sea-light motif, D A G D′ in a lighthouse's rhythm, on soft brass in open
+  // fifths and a flute an octave up, then a warm major sixth blooming under its last note
+  sealight(v, t) {
+    const b = 0.42;
+    let x = t;
+    const seq = SEA_MOTIF.map(([m, k]) => { const n = [m, x, k * b - 0.03]; x += k * b; return n; });
+    for (const [m, s, d] of seq) INS.brass(v, s, [m - 12, m - 5], d, { vel: 0.13, att: 0.12, rel: 0.5, bright: 900 });
+    INS.flute(v, seq.map(([m, s, d]) => [m + 12, s, d]), { vel: 0.09 });
+    INS.strings(v, x - b * 2.5, [50, 57, 62, 66, 71], 2.4, { vel: 0.2, att: 0.7, rel: 2, cut: 1500 });
+    INS.bell(v, t, 86, { vel: 0.04, dec: 3 });
+    v.wet(0.65);
+    return x - t + 1.4;
+  },
+  // the naming: the title theme's opening chord, D minor, low, swelling out of nothing
+  naming(v, t) {
+    INS.strings(v, t, [38, 45, 50, 53, 57], 4.2, { vel: 0.3, att: 1.8, rel: 3, cut: 900 });
+    INS.choir(v, t + 0.4, [50, 53, 57, 62], 3.6, { vel: 0.24, att: 1.6, rel: 2.8, vowel: 'o' });
+    INS.drone(v, t, 26, 4.5, { vel: 0.18, att: 1.2, rel: 3 });
+    INS.bell(v, t + 0.05, 38, { vel: 0.12, dec: 6 });
+    v.wet(0.7);
+    return 6;
+  },
+  // the relight: the lantern's motif (Arna's fire) on the flute and the sea-light's (Einar's) on the brass, together,
+  // resolving to D major with the choir
+  relight(v, t) {
+    const b = 0.38;
+    let x = t, y = t + b;
+    const lan = MOTIF.map(([m, k]) => { const n = [m, x, k * b - 0.02]; x += k * b; return n; });
+    lan.push([74, x, b * 3]);
+    const sea = SEA_MOTIF.map(([m, k]) => { const n = [m - 12, y, k * b - 0.03]; y += k * b; return n; });
+    INS.flute(v, lan, { vel: 0.12 });
+    for (const [m, s, d] of sea) INS.brass(v, s, [m, m + 7], d, { vel: 0.15, att: 0.1, rel: 0.4, bright: 1100 });
+    const end = Math.max(x, y);
+    INS.brass(v, end, [50, 57, 62, 66], 2.4, { vel: 0.2, att: 0.3, rel: 1.4, bright: 1800 });
+    INS.strings(v, end, [62, 66, 69, 74], 2.6, { vel: 0.24, att: 0.4, rel: 2, cut: 2200 });
+    INS.choir(v, end, [62, 66, 69], 2.6, { vel: 0.22, att: 0.5, rel: 2 });
+    INS.taiko(v, end, 0.6, { f: 95 });
+    INS.bell(v, end + 0.05, 86, { vel: 0.08, dec: 4 });
+    v.wet(0.6);
+    return end - t + 2.6;
+  },
+  // an Ice Memory (and a Name-stone lit): a choir held in clear ice, the ice singing once, falling, and a high bell
+  // letting fall the tear in white
+  memoryIce(v, t) {
+    INS.choir(v, t, [62, 69, 74, 76], 3.6, { vel: 0.2, att: 1.4, rel: 2.6, vowel: 'o' });
+    INS.strings(v, t, [38, 45, 52], 3.8, { vel: 0.18, att: 1.2, rel: 2.6, cut: 800 });
+    INS.iceSong(v, t + 0.5, { f: 3200, f1: 400, d: 0.6, vel: 0.12, ping: 1 });
+    INS.bell(v, t + 1, 81, { vel: 0.08, dec: 5 });
+    INS.bell(v, t + 1.9, 74, { vel: 0.07, dec: 6 });
+    nb(v, t, { k: 'w', ft: 'highpass', f: 7000, q: 0.7, a: 1.2, pk: 0.03, d: 2.4 });
+    v.wet(0.8);
+    return 4.4;
   },
 };
 
@@ -1590,6 +2055,14 @@ const DRUMS = {
     os: [0, 0, 12, 0, 0, 0, 12, 0, 0, 0, 12, 0, 0, 12, 0, 7],
     osAt: 0,
   },
+  // Act V, the Walking Tower: a heavy 6/8 on twelve cells, the weight on one and four, a rolling pick-up into each
+  tower: {
+    tk: [1, 0, 0, 0, 0.45, 0, 0.9, 0, 0, 0.5, 0, 0.6, 0, 0, 0, 0],
+    tm: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.4, 0, 0, 0, 0, 0],
+    rm: [0, 0, 0.4, 0, 0, 0, 0, 0, 0.4, 0, 0, 0, 0, 0, 0, 0],
+    os: [0, null, 0, null, 12, null, 0, null, 0, null, 1, null, null, null, null, null],
+    tf: 74, osAt: 0,
+  },
 };
 
 const nv = (th, dest) => { const v = new Voice(th.g, dest || th.out, 1, 0, th); v.wetTo = th.rev; return v; };
@@ -1626,10 +2099,18 @@ function drumStep(S, P) {
 
 // what the story tells the music: the First Autumn has come (weep, heart), how near the Heart Chamber is (0-1, the
 // heartbeat's tempo), and the Lady's phase (her waltz gains brass)
-const MOOD = { autumn: false, near: 0, phase: 0, heat: 0, night: 0, seen: false, breath: 0, roar: 0, keeper: 0, answer: 0 };
+// Act V: the tide (0-1 of high water, tide.js) and thin ice near her (0-1, ice.js); the forgetting (0-0.3: the chance a
+// note of the lost melody falls silent); the dark near (0-1, a Breathing-hole); the shadow under her (0/1); a light lit
+// in a boss fight (the Tower's, the Farthest Light's); the sky (0 green, 1 black, 2 true); a gust blowing (0/1); the
+// Tower under the water (0/1); the Freeze closing over everything (0-1)
+const MOOD = { autumn: false, near: 0, phase: 0, heat: 0, night: 0, seen: false, breath: 0, roar: 0, keeper: 0, answer: 0,
+  tide: 0, ice: 0, forget: 0, skotos: 0, under: 0, lit: false, sky: 0, gust: 0, sub: 0, freeze: 0, bloom: 0, sear: 0, hold: 0 };
 // what the story may set, and how far (Act IV: the Forge's heat runs from -1, cold, to 3; a keeper 1-3; a far fire 1-4).
-// breath, roar, keeper and answer are moments: the theme playing takes them on its next step and clears them.
-const MOOD_RANGE = { heat: [-1, 3], keeper: [0, 3], answer: [0, 4], breath: [0, 1], roar: [0, 1] };
+// breath, roar, keeper and answer are moments: the theme playing takes them on its next step and clears them (Act V's:
+// bloom, a sea-light lit; sear, the beam on the Skotos; hold, the held chord when someone answers)
+const MOOD_RANGE = { heat: [-1, 3], keeper: [0, 3], answer: [0, 4], breath: [0, 1], roar: [0, 1], tide: [0, 1], ice: [0, 1], forget: [0, 0.3], skotos: [0, 1], under: [0, 1], gust: [0, 1], sub: [0, 1], freeze: [0, 1], bloom: [0, 1], sear: [0, 1], hold: [0, 1] };
+const MOMENTS = ['breath', 'roar', 'keeper', 'answer', 'bloom', 'sear', 'hold'];
+const SEA_THEMES = new Set(['coast', 'farlight', 'tower', 'skotos', 'sealit']);
 // Act IV: the lantern's motif (A C B E, [midi, beats]); it resolves to D at the very end
 const MOTIF = [[69, 1.5], [72, 0.5], [71, 1], [76, 2.5]];
 function motif(th, t, beat, o = {}) {
@@ -1678,6 +2159,57 @@ function bird(v, t) {
   for (let k = 0; k < n; k++) tn(v, t + k * rand(0.09, 0.14), { f: f * rand(0.95, 1.1), fe: f * rand(1.2, 1.5), sw: 0.06, a: 0.004, pk: 0.035, d: 0.07 });
   v.wet(0.7);
 }
+// ── Act V ──
+// the sea-light motif: D A G D′ in a lighthouse's rhythm (long, short, short, long), all open fifths, a horn across water.
+// Einar's fire, as the lantern's motif (A C B E) is Arna's: the two brothers' fires
+const SEA_MOTIF = [[62, 1.5], [69, 0.5], [67, 0.5], [74, 2.5]];
+function seaMotif(th, t, beat, o = {}) {
+  let x = t;
+  const seq = SEA_MOTIF.map(([m, b]) => { const n = [m + (o.tr || 0), x, b * beat - 0.03]; x += b * beat; return n; });
+  if (o.brass) for (const [m, s, d] of seq) INS.brass(nv(th), s, [m - 12, m - 5], d, { vel: o.brass, att: 0.1, rel: 0.4, bright: o.bright ?? 1000, wet: 0.5 });
+  if (o.vel !== 0) INS.flute(nv(th), seq.map(([m, s, d]) => [m + (o.oct ?? 0), s, d]), { vel: o.vel ?? 0.09, wet: o.wet ?? 0.65 });
+  return x;
+}
+// the forgetting: while a name is lost the title's melody comes back on a low sine, and each note may fall silent
+// (MOOD.forget is the chance); each Remember heals a note in ten, and her name the whole line
+function forgetting(th, t, beat, pi = 0) {
+  const seq = [];
+  let x = t;
+  for (const [m, b] of MAIN[pi & 1]) { const d = b * beat; if (!chance(MOOD.forget)) seq.push([m - 12, x, d * 0.9]); x += d; }
+  sineLine(nv(th), seq, 0.065);
+}
+// the surf: one wave drawn in and let out over about 8 s, louder and brighter as the tide is higher (k 0-1); hush: the
+// frozen sea's low hiss under the ice
+function surf(v, t, d, k, hush) {
+  const s = v.N(hush ? 'b' : 'p', t, t + d), lp = v.F('lowpass', 250, 0.7), e = v.G(0);
+  const top = hush ? 380 : 600 + 1500 * k, pk = hush ? 0.05 : 0.07 + 0.11 * k;
+  lp.frequency.setValueAtTime(220, t); lp.frequency.exponentialRampToValueAtTime(top, t + d * 0.42); lp.frequency.exponentialRampToValueAtTime(200, t + d);
+  e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(pk, t + d * 0.42); e.gain.linearRampToValueAtTime(pk * 0.6, t + d * 0.55); e.gain.linearRampToValueAtTime(0, t + d);
+  s.connect(lp); lp.connect(e); e.connect(v.out);
+  if (!hush) { const s2 = v.N('w', t + d * 0.4, t + d * 0.85), hp = v.F('highpass', 3500, 0.7), e2 = v.G(0); spikes(e2.gain, t + d * 0.4, d * 0.42, 30, 0.012 + 0.03 * k, 0.03); s2.connect(hp); hp.connect(e2); e2.connect(v.out); }
+  v.wet(0.35);
+}
+// a gull far off, under the true aurora
+function gull(v, t) {
+  for (let k = 0; k < 2; k++) vox(v, t + k * 0.3, { f: rand(820, 960), d: 0.26, c: [[0, 1.15], [0.06, 1.3], [0.26, 0.8]], vow: 'e', breath: 0.3, pk: 0.035, fg: 3, fs: 1.6, a: 0.02, hold: 0.3, n: 1 });
+  v.wet(0.85);
+}
+// a cymbal swelling (the beam searing the Skotos)
+function swell(v, t, d) {
+  nb(v, t, { k: 'w', ft: 'highpass', f: 5200, q: 0.5, a: d, pk: 0.16, d: 0.9 });
+  nb(v, t + d, { k: 'w', ft: 'bandpass', f: 6500, q: 0.4, a: 0.002, pk: 0.12, d: 1.6 });
+  v.wet(0.6);
+}
+// the coast: D dorian under the green sky and the black; D major under the true aurora. The Farthest Light: E aeolian, E
+// major lit. The Skotos: E phrygian, E major at the relight (bare fifths where the two motifs sound together)
+const COAST_PROGS = [['Dm', 'C', 'Dm', 'Am'], ['Dm', 'G', 'Dm', 'C'], ['F', 'C', 'G', 'Dm'], ['Dm', 'Am', 'G', 'Dm'], ['Am', 'Dm', 'C', 'Dm']];
+const COAST_LIT = [['D', 'A', 'G', 'D'], ['Bm', 'G', 'D', 'A'], ['D', 'G', 'Em', 'D'], ['G', 'D', 'A', 'D']];
+const FAR_PROGS = [['Em', 'C', 'Em', 'D'], ['Em', 'Am', 'C', 'Bm'], ['C', 'G', 'D', 'Em'], ['Em', 'D', 'C', 'Em']];
+const FAR_LIT = [['E', 'A', 'E', 'B'], ['C#m', 'A', 'E', 'B'], ['E', 'B', 'A', 'E']];
+const SKOTOS_PROGS = [['Em', 'F', 'Em', 'Dm'], ['Em', 'C', 'F', 'Em'], ['Am', 'F', 'Em', 'Em'], ['Em', 'Dm', 'C', 'F']];
+const SKOTOS_LIT = [['E5', 'A', 'E5', 'B'], ['E5', 'C#m', 'A', 'B'], ['E5', 'A', 'B', 'E']];
+// the cracked bell of the Tower's sea-light: a bell with a metal partial out of true
+function crackedBell(v, t, m, vel) { INS.bell(v, t, m, { vel, dec: 5 }); metal(v, t, mf(m) * 1.01, [2.07, 3.41, 5.2], 2.2, vel * 0.6); v.wet(0.7); }
 
 // Theme definitions. bar(S) runs on each bar's first step, step(S) on every step.
 // S: { g, th, d, t, i (step in bar), sd (step s), bd (bar s), cd (chord s), bar, ch (chord), nc (new chord), lvl }
@@ -2097,6 +2629,208 @@ const THEMES = {
     },
   },
 
+  // ── Act V ──
+  // the Frozen Coast: about 54 bpm in 6/8, D dorian. A bowed drone on D and A, slow strings, the surf breathing with the
+  // tide (MOOD.tide), the ice singing every 6-14 s (more often near thin ice, MOOD.ice), high glass bells with a raised
+  // fourth while the green aurora is up. No drums: in a fight a low taiko on one every second bar and the strings'
+  // ostinato on the root. A sea-light lit: a warm major sixth on the next bar (MOOD.bloom). After the Freeze (MOOD.sky 1)
+  // the bells stop and the surf drops to a hiss: ice, the wind and the forgetting. Under the true aurora (2): D major, the
+  // sea-light motif on a flute every 16 bars, and gulls
+  coast: {
+    bpm: 54, beats: 3, sub: 2, bpc: 2, gain: 1.3,
+    get scale() { return MOOD.sky === 2 ? [2, 4, 6, 7, 9, 11, 1] : [2, 4, 5, 7, 9, 11, 0]; },
+    get progs() { return MOOD.sky === 2 ? COAST_LIT : COAST_PROGS; },
+    bar(S) {
+      const { th, t, bd, ch } = S, st = th.st, sky = MOOD.sky, frozen = sky === 1;
+      if (S.bar % 8 === 0) { INS.drone(nv(th), t, 26, bd * 8 + 2, { vel: frozen ? 0.09 : 0.14 }); if (!frozen) INS.drone(nv(th), t + bd, 33, bd * 6, { vel: 0.05, cut: 320 }); }
+      if (S.nc && !(frozen && chance(0.5))) {
+        st.pv = voicing(ch, 45, 62, st.pv, 3);
+        INS.strings(nv(th), t, st.pv, S.cd + 0.4, { vel: frozen ? 0.08 : 0.13, att: 2.4, rel: 3, cut: frozen ? 480 : sky === 2 ? 1100 : 700, wet: 0.5 });
+      }
+      // the surf, a wave each 8 s or so
+      if (t >= (st.surf ??= t)) { const d = rand(7, 9); surf(nv(th), t + rand(0, 0.5), d, MOOD.tide, frozen); st.surf = t + d * rand(0.85, 1); }
+      // the ice's song
+      if (t >= (st.ice ??= t + rand(3, 8))) { INS.iceSong(nv(th), t + rand(0, bd), { vel: frozen ? 0.06 : 0.045, wet: 0.95 }); st.ice = t + rand(6, 14) * (1 - 0.6 * MOOD.ice); }
+      // glass bells: G sharp, the raised fourth, under the green sky; plain under the true one
+      if (!frozen && chance(0.3)) INS.bell(nv(th), t + rand(0, bd), pick(sky === 2 ? [86, 88, 90, 93] : [86, 88, 92, 93]), { vel: 0.025, dec: 5, wet: 0.95 });
+      if (frozen) {
+        if (chance(0.35)) INS.whisper(nv(th), t + rand(0, bd * 0.5), rand(3, 5), { vel: 0.08, wet: 0.6 });
+        if (MOOD.forget > 0 && S.bar % 8 === 2) forgetting(th, t, S.sd * 2, S.bar >> 3);
+      }
+      if (sky === 2) {
+        if (S.bar % 16 === 4) seaMotif(th, t, S.sd * 2, { vel: 0.09, oct: 12 });
+        if (chance(0.25)) gull(nv(th), t + rand(0, bd));
+      }
+      if (sky === 0 && S.nc && th.ci === 0 && chance(0.3)) { const c = th.prog.map(chordOf); phrase(th, t + bd, genMelody([c[0], c[1], c[1]], 3, S.d.scale, 62, 76, 69, 0.3), S.sd * S.d.sub, { vel: 0.06, wet: 0.75 }); }
+      if (MOOD.bloom) { MOOD.bloom = 0; INS.strings(nv(th), t, [50, 57, 62, 66, 71], bd * 2, { vel: 0.16, att: 0.8, rel: 2.4, cut: 1400, wet: 0.5 }); }
+    },
+    step(S) {
+      const { th, i } = S;
+      if (S.lvl > 0.3) {
+        if (i === 0 && S.bar % 2 === 0) INS.taiko(nv(th), S.t, 0.32 * S.lvl, { f: 78, dec: 1.1 });
+        if (i % 2 === 0) INS.ost(nv(th), S.t, bassNote(S.ch, 38), S.sd * 1.7, 0.08 * S.lvl, { br: 6 });
+      }
+      if (MOOD.sky !== 1 && chance(0.05)) INS.pluck(nv(th), S.t, pick(scaleTones(S.d.scale, 69, 86)), { vel: 0.04, dec: 3, bright: 2, saw: 0.05, wet: 1 });
+    },
+  },
+
+  // the Farthest Light: 48 bpm with no beat, E aeolian. The wind, the ice's song often, a whispering bed, and while her
+  // name is lost the forgetting. Near a Breathing-hole (MOOD.skotos) a sub drone on E1 grows while the rest of the music
+  // sinks under a low-pass (the engine's): you hear the dark before you see it. After the sea is lit (MOOD.sky 2): the
+  // drone gone, E major, high bells and a slow string line, the sea-light motif now and then
+  farlight: {
+    bpm: 48, beats: 4, sub: 2, bpc: 2, gain: 1.35,
+    get scale() { return MOOD.sky === 2 ? [4, 6, 8, 9, 11, 1, 3] : [4, 6, 7, 9, 11, 0, 2]; },
+    get progs() { return MOOD.sky === 2 ? FAR_LIT : FAR_PROGS; },
+    bar(S) {
+      const { th, t, bd, ch } = S, st = th.st, lit = MOOD.sky === 2, sk = MOOD.skotos;
+      if (!lit && S.bar % 4 === 0) INS.drone(nv(th), t, 28, bd * 4 + 2, { vel: 0.07 + 0.13 * sk, att: 2, cut: 200 + 220 * sk });
+      if (S.nc) {
+        st.pv = voicing(ch, lit ? 52 : 43, lit ? 69 : 60, st.pv, 3);
+        INS.strings(nv(th), t, st.pv, S.cd + 0.6, { vel: lit ? 0.16 : 0.1, att: 3, rel: 3.5, cut: lit ? 1300 : 560, wet: 0.55 });
+        if (lit && th.ci % 2 === 0) INS.choir(nv(th), t + 0.3, voicing(ch, 64, 76, null, 3), S.cd, { vel: 0.1, att: 2.4, rel: 3, vowel: 'a', wet: 0.6 });
+      }
+      if (!lit && chance(0.5)) INS.whisper(nv(th), t + rand(0, bd * 0.5), rand(3, 6), { vel: 0.1, wet: 0.6 });
+      if (t >= (st.ice ??= t + rand(1, 4))) { INS.iceSong(nv(th), t + rand(0, bd), { vel: 0.055, wet: 0.95 }); st.ice = t + rand(3, 8) * (1 - 0.5 * MOOD.ice); }
+      if (!lit && MOOD.forget > 0 && S.bar % 6 === 1) forgetting(th, t, S.sd * 2, (S.bar / 6) | 0);
+      if (lit) {
+        if (chance(0.4)) INS.bell(nv(th), t + rand(0, bd), pick([83, 88, 90, 95]), { vel: 0.03, dec: 5, wet: 0.95 });
+        if (S.nc && th.ci === 0 && chance(0.5)) { const c = th.prog.map(chordOf); phrase(th, t + bd * 0.5, genMelody([c[0], c[1], c[1]], 4, S.d.scale, 64, 79, 71, 0.25), S.sd * S.d.sub, { vel: 0.07, wet: 0.7 }); }
+        if (S.bar % 16 === 8) seaMotif(th, t, S.sd * 2, { vel: 0.08, tr: 2, oct: 12 });
+      }
+    },
+    step(S) {
+      // in a fight the low strings pulse on the root and a heartbeat comes up under them
+      if (S.lvl > 0.3 && S.i % 4 === 0) INS.ost(nv(S.th), S.t, bassNote(S.ch, 40), S.sd * 3, 0.07 * S.lvl, { br: 5 });
+      if (S.lvl > 0.5 && S.i === 0 && S.bar % 2 === 0) thump(nv(S.th), S.t, 0.35 * S.lvl);
+    },
+  },
+
+  // Skerry, the Walking Tower: 6/8 at 112 bpm, D phrygian, heavy drums. Low brass in fifths like a ship's horn, and its
+  // cracked bell on the downbeat of every fourth bar. Phase 1: the surf swells with the arena's water, everything sinks
+  // under a low-pass while it is under (MOOD.sub, the engine's) and a taiko hits on each Breach. Phase 2: the drums stop;
+  // ice percussion, a low choir on 'u', the ice's song. Phase 3: while its light is lit (MOOD.lit) the sea-light motif
+  // blares on brass over a high choir; when the light gutters, the drums come back
+  tower: {
+    bpm: 112, beats: 3, sub: 2, gain: 0.9, int: 'always', order: [0], scale: [2, 3, 5, 7, 9, 10, 0],
+    get drums() { return MOOD.phase === 1 || (MOOD.phase >= 2 && MOOD.lit) ? null : 'tower'; },
+    progs: [['Dm', 'Eb', 'Dm', 'C'], ['Dm', 'Bb', 'Eb', 'Dm'], ['Gm', 'Eb', 'Dm', 'A'], ['Dm', 'Cm', 'Eb', 'Dm']],
+    bar(S) {
+      const { th, t, bd, ch } = S, st = th.st, ph = MOOD.phase, r = bassNote(ch, 38);
+      // a Breach: up out of the water
+      if (st.sub && !MOOD.sub) { INS.taiko(nv(th), t, 0.9, { f: 70, f1: 30, dec: 1.4 }); INS.brass(nv(th), t, [r, r + 7, r + 12], bd * 0.6, { vel: 0.3, att: 0.02, rel: 0.4, bright: 2000, drive: 1.6 }); }
+      st.sub = MOOD.sub;
+      if (S.bar % 4 === 0) crackedBell(nv(th), t, ph >= 2 && MOOD.lit ? 62 : 50, 0.1);
+      if (ph === 1) {
+        if (S.bar % 2 === 0) INS.choir(nv(th), t, voicing(ch, 45, 57, null, 3), bd * 2, { vel: 0.2, att: 0.6, rel: 1.2, vowel: 'u', wet: 0.5 });
+        if (chance(0.5)) INS.iceSong(nv(th), t + rand(0, bd), { vel: 0.07, wet: 0.9 });
+        INS.strings(nv(th), t, [r + 12, r + 13], bd, { vel: 0.07, att: 0.3, rel: 0.6, cut: 700 });
+        return;
+      }
+      if (ph >= 2 && MOOD.lit) {
+        if (S.bar % 4 === 0) seaMotif(th, t, S.sd * 2, { vel: 0.07, brass: 0.22, bright: 2400, oct: 12 });
+        if (S.bar % 2 === 0) INS.choir(nv(th), t, voicing(ch, 69, 81, null, 3), bd * 2, { vel: 0.17, att: 0.3, rel: 1, vowel: 'a', wet: 0.5 });
+        st.pv = voicing(ch, 57, 72, st.pv, 3);
+        INS.strings(nv(th), t, st.pv, bd, { vel: 0.13, att: 0.15, rel: 0.5, cut: 2400 });
+        return;
+      }
+      INS.brass(nv(th), t, [r, r + 7], bd * 0.5, { vel: 0.24, att: 0.06, rel: 0.4, bright: 1300, drive: 1.3, wet: 0.3 });
+      if (S.bar % 2 === 1) INS.brass(nv(th), t + bd / 2, [r + 1, r + 8], bd * 0.3, { vel: 0.2, att: 0.04, rel: 0.3, bright: 1200, drive: 1.3 });
+      st.pv = voicing(ch, 57, 72, st.pv, 3);
+      INS.strings(nv(th), t, st.pv, bd, { vel: 0.12, att: 0.2, rel: 0.5, cut: 1800 });
+      if (ph === 0 && t >= (st.surf ?? 0)) { surf(nv(th), t, bd * 2.6, MOOD.sub ? 1 : 0.6, false); st.surf = t + bd * 2.4; }
+    },
+    step(S) {
+      // the second phase: ice ticking at high ratios
+      if (MOOD.phase === 1 && (S.i === 0 || S.i === 3 || chance(0.2))) metal(nv(S.th), S.t, rand(2400, 3600), [1, 3.7, 6.1], 0.08, S.i % 3 ? 0.02 : 0.035);
+    },
+  },
+
+  // the Skotos: 5/4 at 92 bpm, E phrygian. Phase 1: a low brass ostinato on E and F (three and two), a choir on 'u',
+  // drums on one and four. Phase 2, the Night: down to a heartbeat and a sub drone (under the engine's low-pass), a double
+  // thump each time the shadow passes under her (MOOD.under), and the forgetting, healed a note at each Remember. Phase 3:
+  // near silence while the tower is dark; at the relight (MOOD.lit) E major, full choir and strings, the lantern's motif
+  // and the sea-light's together, a cymbal swelling each time the beam sears it (MOOD.sear)
+  skotos: {
+    bpm: 92, beats: 5, sub: 2, gain: 0.9, int: 'always', order: [0],
+    get scale() { return MOOD.phase >= 2 && MOOD.lit ? [4, 6, 8, 9, 11, 1, 3] : [4, 5, 7, 9, 11, 0, 2]; },
+    get progs() { return MOOD.phase >= 2 && MOOD.lit ? SKOTOS_LIT : SKOTOS_PROGS; },
+    bar(S) {
+      const { th, t, bd, ch, sd } = S, st = th.st, ph = MOOD.phase, lit = MOOD.lit;
+      if (MOOD.sear) { MOOD.sear = 0; swell(nv(th), t, 0.9); }
+      if (ph === 1) {
+        if (S.bar % 4 === 0) INS.drone(nv(th), t, 28, bd * 4 + 1, { vel: 0.24, cut: 170 });
+        for (const x of [0, 5]) for (const [dt, a] of [[0, 1], [0.6, 0.7]]) thump(nv(th), t + (x + dt) * sd, a * 0.8);
+        if (S.bar % 4 === 1) forgetting(th, t, sd * 2, S.bar >> 2);
+        if (chance(0.3)) INS.iceSong(nv(th), t + rand(0, bd), { vel: 0.04, wet: 0.95 });
+        return;
+      }
+      if (ph >= 2 && !lit) {
+        if (S.bar % 4 === 0) INS.drone(nv(th), t, 40, bd * 4 + 1, { vel: 0.08, cut: 300 });
+        if (chance(0.45)) INS.iceSong(nv(th), t + rand(0, bd), { vel: 0.05, wet: 0.95 });
+        if (chance(0.3)) INS.whisper(nv(th), t + rand(0, bd * 0.5), rand(2, 4), { vel: 0.07, wet: 0.6 });
+        return;
+      }
+      if (ph >= 2) {
+        // the relight: the two fires' motifs together over bare fifths, then E major in full
+        if (S.bar % 4 === 0) { motif(th, t, sd * 2, { vel: 0.12, wet: 0.6, tr: -5 }); seaMotif(th, t + sd * 2, sd * 2, { vel: 0, brass: 0.2, bright: 2000, tr: 2 }); }
+        st.cv = voicing(ch, 64, 79, st.cv, 4);
+        INS.choir(nv(th), t, st.cv, bd, { vel: 0.2, att: 0.4, rel: 1.2, vowel: 'a', wet: 0.5 });
+        st.pv = voicing(ch, 52, 71, st.pv, 4);
+        INS.strings(nv(th), t, st.pv, bd, { vel: 0.16, att: 0.3, rel: 0.8, cut: 2400, wet: 0.3 });
+        const r = bassNote(ch, 40);
+        INS.brass(nv(th), t, [r, r + 7], bd * 0.45, { vel: 0.2, att: 0.05, rel: 0.4, bright: 1800 });
+        return;
+      }
+      // the ostinato on E and F, three and two
+      INS.brass(nv(th), t, [40, 47], sd * 2.6, { vel: 0.26, att: 0.03, rel: 0.3, bright: 1400, drive: 1.5 });
+      INS.brass(nv(th), t + sd * 3, [41], sd * 1.7, { vel: 0.24, att: 0.03, rel: 0.25, bright: 1300, drive: 1.5 });
+      INS.brass(nv(th), t + sd * 6, [40, 47], sd * 1.7, { vel: 0.24, att: 0.03, rel: 0.25, bright: 1400, drive: 1.5 });
+      INS.brass(nv(th), t + sd * 8, [41, 46], sd * 1.7, { vel: 0.22, att: 0.03, rel: 0.25, bright: 1300, drive: 1.5 });
+      if (S.bar % 2 === 0) INS.choir(nv(th), t, voicing(ch, 52, 67, null, 3), bd * 2, { vel: 0.19, att: 0.4, rel: 1, vowel: 'u', wet: 0.5 });
+      st.pv = voicing(ch, 60, 74, st.pv, 3);
+      INS.strings(nv(th), t, st.pv, bd, { vel: 0.11, att: 0.3, rel: 0.6, cut: 1600 });
+    },
+    step(S) {
+      const { th, i } = S, st = th.st, ph = MOOD.phase;
+      // the shadow passing under her: a double thump
+      if (MOOD.under && !st.under) { thump(nv(th), S.t, 1); thump(nv(th), S.t + 0.24, 0.8); }
+      st.under = MOOD.under;
+      if (ph === 1 || (ph >= 2 && !MOOD.lit)) return;
+      // drums on one and four (3 + 2), toms between, a rim on the last
+      if (i === 0 || i === 6) INS.taiko(nv(th), S.t, i ? 0.42 : 0.55, { f: 72 });
+      if (i === 4 || i === 8) INS.tom(nv(th), S.t, 0.2, { f: i === 4 ? 170 : 140 });
+      if (i === 9) INS.rim(nv(th), S.t, 0.16);
+      if (ph >= 2 && i % 2 === 0) INS.ost(nv(th), S.t, bassNote(S.ch, 40), S.sd * 1.7, 0.1, { br: 7 });
+    },
+  },
+
+  // the sea lit (the answer, and the act's close in Whitecliff): 60 bpm, D major. The sea-light motif harmonised and slow,
+  // answered by the lantern's; each light answering (MOOD.answer) a bell and a phrase of the village's tune; and when
+  // someone answers, a held chord (MOOD.hold)
+  sealit: {
+    bpm: 60, beats: 4, sub: 2, gain: 1.0, order: [0], scale: [2, 4, 6, 7, 9, 11, 1],
+    progs: [['D', 'G', 'D', 'A'], ['Bm', 'G', 'D', 'A'], ['G', 'D', 'Em', 'D'], ['D', 'A', 'G', 'D']],
+    bar(S) {
+      const { th, t, bd, ch } = S, st = th.st;
+      if (S.bar % 8 === 0) INS.drone(nv(th), t, 38, bd * 8 + 2, { vel: 0.1 });
+      st.pv = voicing(ch, 55, 71, st.pv, 4);
+      INS.strings(nv(th), t, st.pv, bd + 0.3, { vel: 0.15, att: 1, rel: 2, cut: 1500, wet: 0.4 });
+      if (S.bar % 2 === 0) INS.choir(nv(th), t, voicing(ch, 62, 74, null, 3), bd * 2, { vel: 0.11, att: 1.2, rel: 2, vowel: 'a', wet: 0.55 });
+      if (S.bar % 8 === 0) seaMotif(th, t + bd * 0.25, S.sd * 2.4, { vel: 0.1, brass: 0.11, bright: 1300, oct: 12 });
+      if (S.bar % 8 === 4) motif(th, t + bd * 0.25, S.sd * 1.8, { vel: 0.1, wet: 0.6, resolve: true });
+      if (MOOD.answer) { MOOD.answer = 0; phrase(th, t + bd * 0.5, ANSWER, S.sd * 1.2, { vel: 0.09, wet: 0.6 }); INS.bell(nv(th), t, 86, { vel: 0.06, dec: 4, wet: 0.8 }); }
+      if (MOOD.hold) { MOOD.hold = 0; INS.strings(nv(th), t, [50, 57, 62, 66, 69, 74], bd * 2.5, { vel: 0.22, att: 0.8, rel: 3, cut: 1800, wet: 0.5 }); INS.choir(nv(th), t, [62, 66, 69, 74], bd * 2.5, { vel: 0.16, att: 0.9, rel: 3, vowel: 'a', wet: 0.6 }); }
+      if (chance(0.3)) INS.bell(nv(th), t + rand(0, bd), pick([86, 88, 90, 93]), { vel: 0.025, dec: 5, wet: 0.95 });
+    },
+    step(S) {
+      const { th, i } = S, st = th.st;
+      if (i === 0) { st.arp = pick(ARP8); st.at = tones(S.ch, 62, 81); }
+      const k = st.arp[i];
+      if (k != null && S.bar % 2 === 1) INS.pluck(nv(th), S.t + rand(0, 0.01), st.at[Math.min(k, st.at.length - 1)], { vel: rand(0.05, 0.08), dec: 2, bright: 4, saw: 0.15, wet: 0.5 });
+    },
+  },
+
   victory: {
     bpm: 60, beats: 4, sub: 1, gain: 0.8, once: true, fadeIn: 0.03, xfade: 1.2,
     play(S) { fanfare(() => nv(S.th), S.t, true); },
@@ -2163,7 +2897,25 @@ function setTheme(g, name, at) {
   const now = at ?? g.ctx.currentTime, def = name ? THEMES[name] : null;
   for (const th of g.themes) stopTheme(th, now, def && def.xfade ? def.xfade : 2.5);
   g.cur = name;
+  // (a moment meant for the theme that was playing is not carried into the next; outside the sea's own themes nothing of
+  // its filters stays on: a quit in the middle of the Freeze, a gust when she leaves)
+  for (const k of MOMENTS) MOOD[k] = 0;
+  if (!SEA_THEMES.has(name)) MOOD.freeze = MOOD.skotos = MOOD.sub = MOOD.gust = MOOD.under = 0;
   if (def) g.themes.push(newTheme(g, name, now + 0.06));
+}
+
+// what the moods do to the whole mix: the music sinks under a low-pass toward 500 Hz as the dark comes near (MOOD.skotos,
+// on the Farthest Light), while the Tower is under the water (MOOD.sub) and in the Skotos's Night; a blizzard's howl ducks
+// it by 30% (MOOD.gust); the Freeze closes a low-pass over everything, music and sound (MOOD.freeze)
+function applyMood(g, now) {
+  let f = 20000;
+  if (MOOD.skotos > 0 && g.cur === 'farlight') f = Math.min(f, 20000 * Math.pow(500 / 20000, MOOD.skotos));
+  if (MOOD.sub && g.cur === 'tower') f = Math.min(f, 500);
+  if (g.cur === 'skotos' && MOOD.phase === 1) f = Math.min(f, 650);
+  const ff = MOOD.freeze > 0 ? 20000 * Math.pow(300 / 20000, MOOD.freeze) : 20000, mv = MOOD.gust ? 0.7 : 1;
+  if (Math.abs(f - g.mf) > g.mf * 0.02) { g.mf = f; for (const n of [g.mlp, g.mlpW]) n.frequency.setTargetAtTime(f, now, 0.3); }
+  if (Math.abs(ff - g.ff) > g.ff * 0.02) { g.ff = ff; g.flp.frequency.setTargetAtTime(ff, now, 0.25); }
+  if (mv !== g.mv) { g.mv = mv; g.mvol.gain.setTargetAtTime(mv, now, 0.6); }
 }
 
 function applyInt(g, th, now, instant) {
@@ -2220,6 +2972,7 @@ function tick() {
     // combat intensity: quick to rise, slow to settle
     g.intC += (g.intT - g.intC) * (1 - Math.exp(-dt * (g.intT > g.intC ? 1.8 : 0.35)));
     for (const th of g.themes) applyInt(g, th, now, false);
+    applyMood(g, now);
     pump(g, now + clamp(dt * 2.5, LOOKAHEAD, 1.5));
     reap(g, now);
   } catch (e) { /* the timer must never die */ }
@@ -2334,7 +3087,9 @@ export const Audio = {
 
   /** Story state the music follows: { autumn: bool, near: 0..1 (the Heartwood's heartbeat), phase: 0..2 (a boss), heat: -1..3
    * (the Forge), night: 0 ash | 1 stars | 2 dawn (the Field), seen: bool; and moments: breath, roar (a flue), keeper 1-3 (a
-   * statue breaks), answer 1-4 (a far fire) }. */
+   * statue breaks), answer 1-4 (a far fire); Act V: tide 0..1, ice 0..1, forget 0..0.3, skotos 0..1, under 0/1, lit: bool,
+   * sky 0 green | 1 black | 2 true, gust 0/1, sub 0/1, freeze 0..1, and moments bloom (a sea-light lit), sear (the beam on
+   * the Skotos), hold (someone answered) }. */
   mood(o) {
     if (o && typeof o === 'object') for (const k in o) if (k in MOOD) { const r = MOOD_RANGE[k] || [0, 2]; MOOD[k] = typeof MOOD[k] === 'boolean' ? !!o[k] : clamp(num(o[k], MOOD[k]), r[0], r[1]); }
   },

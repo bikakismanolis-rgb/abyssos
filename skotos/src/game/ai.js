@@ -2,22 +2,27 @@
 import * as THREE from 'three';
 import { G, later } from './state.js';
 import { MONSTERS } from './data.js';
-import { rebuildHash, foes, near, spawnMonster, restoreRim, spawnNpc } from './actors.js';
-import { damage, tickStatus, moveMul, heroHit, seeHero, clingHero, shakeOff, rootHero, REMAINS, remainsNear, takeRemains } from './combat.js';
-import { LIGHT, lightOn, lightAt, lampAt, lampNear, snuffLamp, isLamp, halveCradle, heroLightR, setHeroLight, setLightDark, addLightPool, getLightPool, shrinkPool, lightPools } from './light.js';
+import { rebuildHash, foes, near, spawnMonster, restoreRim, spawnNpc, lieDown } from './actors.js';
+import { damage, kill, tickStatus, moveMul, heroHit, seeHero, clingHero, shakeOff, rootHero, REMAINS, remainsNear, takeRemains, addVuln, clearVuln, vuln, vulnOf } from './combat.js';
+import { LIGHT, lightOn, shroudOn, lightAt, lampAt, lampNear, snuffLamp, isLamp, halveCradle, heroLightR, setHeroLight, setLightDark, addLightPool, getLightPool, shrinkPool, lightPools, addBeam, removeBeam, beams, inBeam, lampLightAt, warmAt } from './light.js';
 import { setFluePumping, startFlues, flues, fluePeriod, setFlueHeat } from './forge.js';
 import { refreshStats } from './stats.js';
 import { fire, area } from './projectiles.js';
-import { teleCircle, teleCone, teleLine, killTele, sparks, glowBurst, explosion, ring, bolt, P, puff, decal, flash } from '../gfx/fx.js';
+import { teleCircle, teleCone, teleLine, killTele, sparks, glowBurst, explosion, ring, bolt, P, puff, decal, flash, splash as splashFx, iceShards, freezeCrystals, breath } from '../gfx/fx.js';
 import { shake, addLight, removeLight, R } from '../gfx/gfx.js';
 import { drape } from '../world/build.js';
-import { emit } from '../ui/bus.js';
+import { emit, on } from '../ui/bus.js';
+import { number } from '../ui/overlay.js';
 import Audio from '../audio/audio.js';
 import { rand, angleTo, angleDiff, dampAngle, damp, clamp } from '../core/util.js';
-import { has } from '../i18n/i18n.js';
-import { sapAt, addSapPool, addSapRing, sapPools, startDrips } from './sap.js';
+import { has, t } from '../i18n/i18n.js';
+import { sapAt, addSapPool, addSapRing, sapPools, startDrips, placeCasks } from './sap.js';
 import { grantBuff } from './stats.js';
-import { wadeAt } from './tide.js';
+import { wadeAt, waterAt, TIDE } from './tide.js';
+import { iceAt, stageAt, crackAt, breakAt, holeNear, FALLS, drown } from './ice.js';
+import { setShade } from '../world/sea.js';
+import { tidal } from '../world/gen5.js';
+import { COLD, coldAdd } from './cold.js';
 
 const ATK_SFX = { goblin: 'goblinAttack', wolf: 'wolfAttack', spider: 'spiderHiss', orc: 'orcAttack', troll: 'trollRoar', skeleton: 'skeletonRattle', wraith: 'wraithWail', hound: 'houndGrowl', bat: 'batScreech', worm: 'wormRumble', dwarf: 'dwarfAttack', golem: 'golemStep', moth: 'batScreech', bear: 'bearRoar', hart: 'hartBellow' };
 // attack timing per animation: speed, hit time (s), total (s)
@@ -37,6 +42,7 @@ const tally = (a, what) => { const k = a.kind + ':' + what; AI_LOG[k] = (AI_LOG[
 if (import.meta.env?.DEV && typeof window !== 'undefined') {
   window.__act3 = { AI_LOG, damage, addSapPool, sapPools, spawnNpc, moveMul, heroHit, startDrips, grantBuff };
   window.__act4 = { AI_LOG, LIGHT, lightAt, heroLightR, addLightPool, setHeroLight, getLightPool, lightPools, seeHero, clingHero, shakeOff, REMAINS, startFlues, flues, fluePeriod, setFlueHeat, setFluePumping, spawnNpc, damage, moveMul };
+  window.__act5 = Object.assign(window.__act5 || {}, { AI_LOG, LIGHT, lightAt, lampLightAt, warmAt, addBeam, removeBeam, beams, inBeam, addVuln, vuln, vulnOf, COLD, coldAdd, spawnNpc, spawnMonster, damage, moveMul, addSapPool, placeCasks });
 }
 
 export function updateActors(dt) {
@@ -53,19 +59,35 @@ export function updateActors(dt) {
     if (a.team === 'npc') { npc(a, dt); continue; }
     if (a.prop) { if (a.dead) { a.deadT += dt; if (a.deadT > 0.05) { a.remove(); G.actors.splice(i, 1); } } continue; }
     if (a.dead) { dying(a, dt); if (a.removed) G.actors.splice(i, 1); continue; }
+    // Act V: gone through the ice, coming up through another hole (ice.js FALLS)
+    if (a.sunk > 0) { sunkTick(a, dt); continue; }
     // only think when near the hero
     const dx = pl.x - a.x, dz = pl.z - a.z, d = Math.hypot(dx, dz);
     if (d > 38 && !a.boss && !a.pet) { if (a.avatar) a.avatar.group.visible = false; continue; }
     if (a.avatar) a.avatar.group.visible = !a.hidden;
+    // Act V: a frozen crew stands as ice at the rails until the ice cracks beside it
+    if (a.dormant && a.statue) { statueTick(a, dt, d, pl); continue; }
     if (a.dormant) {
       // the disguised (Hollowed passing for dead wood) wake only when the hero is close, they are struck, or a pack-mate breaks cover
       const W = a.def.wake || WAKE;
-      const wake = a.disguised ? d < W.d || a.hp < a.hpMax || (a.wakeIn != null && (a.wakeIn -= dt) <= 0) : d < W.d || a.aggro;
-      if (wake) { a.dormant = false; a.rising = W.t; a.aggro = true; a.rot = angleTo(a.x, a.z, pl.x, pl.z); a.avatar?.play(W.clip, W.speed ?? 1.1); Audio.sfx(W.sfx, { x: a.x, z: a.z }); if (a.disguised) unmask(a); }
+      const roused = a.disguised ? d < W.d || a.hp < a.hpMax : d < W.d || a.aggro;
+      const called = a.disguised && a.wakeIn != null && (a.wakeIn -= dt) <= 0;
+      // Act V: the flood wakes the Sunken and the Reefbacks it reaches (the Sunken never in lamp light); woken by the sea and
+      // not by her, they rise calm (and lie down again at the ebb if she never came)
+      const tide = !roused && !called && (a.def.tideWake || W.tide) && tideWakes(a, dt);
+      if (roused || called || tide) {
+        const calm = !roused && (tide || a.wakeCalm);
+        a.dormant = false; a.rising = W.t; a.aggro = !calm; a.wakeCalm = false; a.tideRisen = calm; a.wakeIn = null;
+        if (!calm) a.rot = angleTo(a.x, a.z, pl.x, pl.z);
+        a.avatar?.play(W.clip, W.speed ?? 1.1); Audio.sfx(W.sfx, { x: a.x, z: a.z });
+        if (a.disguised) unmask(a);
+        if (calm) { splashFx(a.x, a.z, 0.7); tally(a, 'tideWake'); for (const b of G.actors) if (b.dormant && b.wakeIn != null && b.packId === a.packId) b.wakeCalm = true; }
+      }
       else { const av = a.avatar; if (av) { av.group.position.set(a.x, 0, a.z); av.group.rotation.y = a.rot; av.update(a.disguised && !a.pose ? 0 : dt, { speed: 0 }); } continue; }
     }
     tickStatus(a, dt);
     if (a.dead) continue;
+    if (a.rope) ropeTick(a, dt);
     // Act IV: revealed by light, the shroud broken, a shield dropped, an immune line not repeated too often
     if (a.revealed > 0) a.revealed -= dt;
     if (a.unshroud > 0) a.unshroud -= dt;
@@ -77,16 +99,25 @@ export function updateActors(dt) {
     if (a.ward > 0) { a.ward -= dt; if (a.ward <= 0) restoreRim(a); else if (Math.random() < 0.3) P({ x: a.x + rand.range(-0.5, 0.5), y: rand.range(0.4, 1.8), z: a.z + rand.range(-0.5, 0.5), vy: 0.6, life: 0.5, size: 0.12, size1: 0.02, color: 0xffb050 }); }
     a.flash = Math.max(0, a.flash - dt * 6);
     // amber sap slows flesh; wood, fliers and floaters never notice it (a charge handles sap itself)
-    a.onSap = !a.def.float && a.def.flesh !== 'wood' && a.def.ai !== 'bat' && !a.under && !a.dash && sapAt(a.x, a.z);
+    a.onSap = !a.def.float && a.def.flesh !== 'wood' && a.def.ai !== 'bat' && !a.under && !a.dash && sapAt(a.x, a.z) === 'amber';
     // Act V: wading (tide.js; moveMul slows all but swimmers); never the floaters, fliers or the hidden
     a.inWater = a.def.float || a.def.ai === 'bat' || a.under || a.airborne ? null : wadeAt(a.x, a.z);
+    // ... swimmers in the deep, the Sunken stronger in the shallows (waterTick)
+    if (G.zone.act5) waterTick(a, dt);
+    // a sea-light's beam: the unlit dazzled and revealed, the light-shy scattered
+    if (a.def.unlit || a.def.lightShy) beamTick(a);
+    // floundering in a broken hole: no actions until it hauls out (ice.js)
+    if (a.flounder > 0) { a.state = 'chase'; if (a.tele) { killTele(a.tele); a.tele = null; } }
     // stunned, frozen or terrified, a Mourner loses her song
     if (a.bond && (a.status.freeze > 0 || a.status.stun > 0 || a.status.fear > 0)) breakBond(a);
     let speed = 0;
     if (a.rising > 0) a.rising -= dt;
-    else if (a.status.freeze > 0 || a.status.stun > 0) { a.state = a.state === 'attack' ? 'chase' : a.state; a.interrupted = true; if (a.tele) { killTele(a.tele); a.tele = null; } }
+    else if (a.status.freeze > 0 || a.status.stun > 0) { if (a.state === 'song') songBreak(a); a.state = HELD.has(a.state) ? 'chase' : a.state; if (a.lurk && (a.state === 'surface' || a.state === 'lunge')) { a.state = 'up'; a.lurk.upT = 3; killTele(a.lurk.arrow); } a.interrupted = true; if (a.tele) { killTele(a.tele); a.tele = null; } }
     else if (a.pet) speed = petAI(a, dt);
-    else if (a.status.fear > 0) speed = flee(a, dt, pl);
+    // (the Skuas scatter their own way: up and away, skua)
+    else if (a.status.fear > 0 && !a.def.lightShy) speed = flee(a, dt, pl);
+    // the Sunken the flood woke, back to their kelp at the ebb if she never came
+    else if (a.tideRisen && !a.aggro && ebbing()) speed = goRest(a, dt);
     else {
       speed = (AI[a.def.ai] || AI.melee)(a, dt, pl, d);
       // no affix from what cannot be struck yet: a rootling still underground, an archer in the trees, a Rootwarden asleep
@@ -99,8 +130,8 @@ export function updateActors(dt) {
       const ex = a.x - b.x, ez = a.z - b.z, l = Math.hypot(ex, ez), min = (a.radius + b.radius) * 0.9;
       if (l < min && l > 0.001) { const push = (min - l) * 0.5 * (b.boss ? 2 : 1) * (a.boss || a.def.anchored ? 0 : 1); a.x += (ex / l) * push; a.z += (ez / l) * push; }
     }
-    if (a.def.ai === 'bat') { if (map.blocks(Math.floor(a.x), Math.floor(a.z))) { a.x = a.px; a.z = a.pz; } }
-    else if (!a.under && !a.cling && !a.airborne && (!a.def.float || !a.boss)) map.collide(a, Math.min(a.radius, 0.9));
+    if (a.def.ai === 'bat') { if (map.blocks(Math.floor(a.x), Math.floor(a.z)) && !map.blocks(Math.floor(a.px), Math.floor(a.pz))) { a.x = a.px; a.z = a.pz; } }
+    else if (!a.under && !a.cling && !a.airborne && !(a.flounder > 0) && (!a.def.float || !a.boss)) { if (a.swim) swimCollide(a, Math.min(a.radius, 0.9)); else map.collide(a, Math.min(a.radius, 0.9)); }
     // visuals
     const av = a.avatar;
     if (av) {
@@ -115,12 +146,17 @@ export function updateActors(dt) {
       if (frozen) { const ash = a.statueTint && !(a.status.freeze > 0); av.setTint(ash ? a.statueTint : 0x80c8ff, ash ? a.baseTintAmt ?? 2.75 : 0.8); } else if (a.frozenTint) { av.setTint(a.baseTint ?? 0xffffff, a.baseTintAmt ?? 0); if (a.shLook) a.shLook = -1; }
       a.frozenTint = frozen;
       if (!frozen && (a.def.shroud || a.shrouded || a.shLook)) shroudLook(a, av);
+      // the Rime Bear's breath in the cold
+      if (a.def.frostRoar && Math.random() < dt * 0.7) breath(a.x + Math.sin(a.rot) * 1.25 * (a.scale || 1), 1.15 * (a.scale || 1), a.z + Math.cos(a.rot) * 1.25 * (a.scale || 1), 0.6, Math.sin(a.rot), Math.cos(a.rot));
     }
   }
+  if (G.zone.act5) shadeTick(dt);
 }
+// what a stun or a freeze cuts short (a blow's wind-up, a throw, a reel's warning, a wail, a roar)
+const HELD = new Set(['attack', 'reel', 'throw', 'wail', 'roar']);
 // the Shrouded look smoky and dim outside light, and show a pale rim while revealed
 function shroudLook(a, av) {
-  const on = (a.def.shroud || a.shrouded) && !(a.unshroud > 0) && lightOn();
+  const on = (a.def.shroud || a.shrouded) && !(a.unshroud > 0) && shroudOn();
   const st = !on ? 0 : a.revealed > 0 || lightAt(a.x, a.z) ? 1 : 2;
   if (st === 2 && Math.random() < 0.25) P({ add: false, x: a.x + rand.range(-0.4, 0.4), y: rand.range(0.3, 1.8) * (a.scale || 1), z: a.z + rand.range(-0.4, 0.4), vy: 0.4, life: 1.1, size: 0.5, size1: 1.0, color: 0x14161c, alpha: 0.35, alpha1: 0 });
   if (st === (a.shLook ?? 0)) return;
@@ -129,6 +165,7 @@ function shroudLook(a, av) {
   else { av.setTint(a.baseTint ?? 0xffffff, a.baseTintAmt ?? 0); if (st === 1) av.setRim(0xe0ecff, 0.7); else restoreRim(a); }
 }
 
+const _lq = new THREE.Quaternion(), _lr = new THREE.Quaternion(), _ly = new THREE.Vector3(0, 1, 0);
 function npc(a, dt) {
   const pl = G.player, av = a.avatar;
   const d = Math.hypot(pl.x - a.x, pl.z - a.z);
@@ -138,13 +175,30 @@ function npc(a, dt) {
   else if (a.home) a.rot = dampAngle(a.rot, a.home, 2, dt);
   av.group.position.set(a.x, 0, a.z); av.group.rotation.y = a.rot;
   av.update(dt * (a.animRate ?? 1), { speed: 0, lookAround: 1 });
+  // a sea-lantern in her hand (Act V): it hangs from its bail whatever the hand does, and its small light goes where she
+  // goes (lights are dropped on leaving a zone: lit again)
+  if (a.lampC != null) {
+    const h = av.held.R; if (h?.mesh.parent) h.mesh.quaternion.copy(h.mesh.parent.getWorldQuaternion(_lq).invert()).multiply(_lr.setFromAxisAngle(_ly, a.rot));
+    if (!a.lampSrc || !R.sources.has(a.lampSrc)) a.lampSrc = addLight({ x: a.x, y: 1.4, z: a.z, color: a.lampC, intensity: 9 * (a.lampK || 1), range: 6, flicker: 0.12 });
+    a.lampSrc.x = a.x + Math.sin(a.rot) * 0.3; a.lampSrc.z = a.z + Math.cos(a.rot) * 0.3;
+    // a keeper's lamp is lamp light (a.lampPool metres: warms, holds the ice, keeps the dark's creatures off; light.js)
+    if (a.lampPool) { if (!a.lampP || !lightPools().includes(a.lampP)) a.lampP = addLightPool(a.x, a.z, a.lampPool, Infinity, null, { lamp: true, fx: false, owner: a }); a.lampP.x = a.x; a.lampP.z = a.z; }
+  }
 }
 function dying(a, dt) {
   a.deadT += dt;
   // what it left about it: an ash mound, a stoker's chain and its pump, a Lampless's cone
-  if (!a.tidied) { a.tidied = true; if (a.mesh) { R.scene.remove(a.mesh); a.mesh = null; } if (a.post && a.pumping) setFluePumping(a.post.flue, false); a.airborne = false; }
+  if (!a.tidied) { a.tidied = true; if (a.mesh) { R.scene.remove(a.mesh); a.mesh = null; } if (a.post && a.pumping) setFluePumping(a.post.flue, false); a.airborne = false; if (a.rope) dropRope(a); if (a.lurk) killTele(a.lurk.arrow); }
   if (a.cone) { if (a.cone.userData.fade) a.cone.userData.fade(Math.max(0, 1 - a.deadT)); else a.cone.visible = false; }
   const av = a.avatar; if (!av) { a.cone?.userData.dispose?.(); a.remove(); return; }
+  // gone under the water: it sinks out of sight, no corpse left to burn away
+  if (a.drowned) {
+    a.y = Math.max(-2.6 * (a.scale || 1), (a.y || 0) - dt * (0.6 + a.deadT * 1.6));
+    av.group.position.set(a.x, a.y, a.z); av.update(dt, { speed: 0, float: false }); av.setFlash(0);
+    if (Math.random() < 0.3) P({ add: false, x: a.x + rand.range(-0.4, 0.4), y: 0.05, z: a.z + rand.range(-0.4, 0.4), vy: 0.4, life: 0.6, size: 0.12, size1: 0.3, color: 0xd8e8f0, alpha: 0.5, alpha1: 0 });
+    if (a.deadT > 1.8) a.remove();
+    return;
+  }
   if (a.y > 0) a.y = Math.max(0, a.y - dt * 7);
   else if (a.y < 0) a.y = Math.min(0, a.y + dt * 3);
   av.group.position.set(a.x, a.y || 0, a.z);
@@ -164,14 +218,17 @@ function seek(a, tx, tz, sp, dt, map = G.zone.map) {
   if (a.seekT > a.t - dt * 1.5 && a.seekStep > 1e-3 && Math.hypot(a.x - a.seekX, a.z - a.seekZ) < a.seekStep * 0.2) a.detourT = 0.8;
   a.detourT = (a.detourT || 0) - dt;
   let dx, dz;
-  if (d < 1.5 || (d < 22 && !(a.detourT > 0) && map.clear(a.x, a.z, tx, tz))) { dx = (tx - a.x) / (d || 1); dz = (tz - a.z) / (d || 1); }
+  // (a swimmer goes straight across the water: only walls are in its way)
+  if (d < 1.5 || (d < 22 && !(a.detourT > 0) && (map.clear(a.x, a.z, tx, tz) || (a.swim && map.los(a.x, a.z, tx, tz))))) { dx = (tx - a.x) / (d || 1); dz = (tz - a.z) / (d || 1); }
   else {
     // the flow field leads to the hero: a target at her side and nearer her than the actor is (a chase, a pet's place behind
     // her, a foe beside her). Anything else (a point to back off to, a mould's rim, a patrol post, a lamp) gets a small field
     // of its own, and past its reach (20 m) is felt for round what is in the way
     const pl = G.player, hd = pl ? Math.hypot(tx - pl.x, tz - pl.z) : Infinity;
     const toHero = hd <= 3 && hd < Math.hypot(a.x - pl.x, a.z - pl.z);
-    const f = toHero ? map.flowDir(a.x, a.z, dirTmp) : map.stepToward(a.path ||= {}, a.x, a.z, tx, tz, dirTmp) || skirt(a, tx, tz, map);
+    let f = toHero ? map.flowDir(a.x, a.z, dirTmp) : map.stepToward(a.path ||= {}, a.x, a.z, tx, tz, dirTmp) || skirt(a, tx, tz, map);
+    // a swimmer out in the water with no way through: to the nearest shore first
+    if (!f && a.swim && !map.walkable(a.x, a.z)) { const s = map.nearestFloor(a.x, a.z, 10), l = Math.hypot(s.x - a.x, s.z - a.z) || 1; dirTmp.x = (s.x - a.x) / l; dirTmp.z = (s.z - a.z) / l; f = dirTmp; }
     if (!f) return 0; dx = f.x; dz = f.z;
   }
   const v = sp * moveMul(a);
@@ -197,7 +254,7 @@ function skirt(a, tx, tz, map) {
 function turnTo(a, ang, k, dt) {
   const r = dampAngle(a.rot, ang, k, dt);
   if (!a.def.guard || a.guardDown > 0) { a.rot = r; return; }
-  const m = 2.2 * dt; a.rot += clamp(angleDiff(a.rot, r), -m, m);
+  const m = (a.def.turn || 2.2) * dt; a.rot += clamp(angleDiff(a.rot, r), -m, m);
 }
 function flee(a, dt, pl) {
   const ang = angleTo(pl.x, pl.z, a.x, a.z), v = a.speed * 0.8 * moveMul(a);
@@ -244,8 +301,11 @@ function meleeLands(a, pl, reach, arc = 1.8) {
 }
 function hitHero(a, pl, mult = 1, o = {}) {
   const tg = o.target || pl;
-  damage(a, tg, a.dmg * mult, Object.assign({ kx: tg.x - a.x, kz: tg.z - a.z }, o));
+  // Act V: a Sunken's blow from the water brings the sea's cold with it (cold.js)
+  if (a.def.tideborne && a.inWater && o.cold == null) o = Object.assign({ cold: 4 }, o);
+  const n = damage(a, tg, a.dmg * mult, Object.assign({ kx: tg.x - a.x, kz: tg.z - a.z }, o));
   if (a.def.drain) { a.hp = Math.min(a.hpMax, a.hp + a.dmg * mult * 0.5); glowBurst(a.x, 1.2, a.z, 0x60d0ff, 6, 1.5, 0.2, 0.4); }
+  return n;
 }
 // pets draw aggro too: pick the nearest of hero and pets
 function victim(a, pl) {
@@ -257,6 +317,8 @@ function victim(a, pl) {
 // ---------- behaviours ----------
 const AI = {
   melee(a, dt, pl, d) {
+    // a Hull-louse waiting in its hull, curled into a ball, or bowled (louse)
+    if (a.def.curl && (a.under || a.curled > 0 || a.bowling || a.bowl)) return louse(a, dt, pl, d);
     if (!aggroCheck(a, pl, d)) return idle(a, dt);
     const tg = victim(a, pl), td = Math.hypot(tg.x - a.x, tg.z - a.z);
     if (a.state === 'attack') {
@@ -264,6 +326,7 @@ const AI = {
       if (attackTick(a, dt)) {
         if (a.spin) { killTele(a.tele); a.tele = null; tally(a, 'spin'); if (td < 2.5 + tg.radius) hitHero(a, pl, 1.1, { target: tg }); }
         else if (a.bash) { killTele(a.tele); a.tele = null; Audio.sfx('shieldBlock', { x: a.x, z: a.z, pitch: 0.8 }); if (meleeLands(a, tg, 2.6, 0.95)) hitHero(a, pl, 1.0, { push: 12, target: tg }); }
+        else if (a.hook) hookStrike(a, pl, tg);
         else if (meleeLands(a, tg, a.def.reach)) hitHero(a, pl, 1, { poison: a.def.poison ? a.dmg * 0.6 : 0, burn: a.def.burns ? a.dmg * 0.5 : 0, target: tg });
       }
       return 0;
@@ -275,8 +338,11 @@ const AI = {
         a.swings = (a.swings || 0) + 1; a.spin = !!a.def.spinEvery && a.swings % a.def.spinEvery === 0;
         // the Ash-Fallen bash with the shield every third blow
         a.bash = !a.spin && !!a.def.bashEvery && !(a.guardDown > 0) && a.swings % a.def.bashEvery === 0;
+        // the Sunken hook her with the boat-hook every third blow: a sea-green cone, and a pull
+        a.hook = !a.spin && !a.bash && !!a.def.hookEvery && a.swings % a.def.hookEvery === 0;
         if (a.spin) { a.tele = teleCircle(a.x, a.z, 2.5, 0.55, 0xff9030); startAttack(a, 'spinOnce'); }
         else if (a.bash) { a.tele = teleCone(a.x, a.z, a.rot, 2.6, 0.95, 0.6, 0xffa040); startAttack(a, 'Shield_Dash', { hit: 0.6, dur: 1.0, speed: 1.3 }); tally(a, 'bash'); }
+        else if (a.hook) { a.tele = teleCone(a.x, a.z, a.rot, 2.4, 0.62, 0.6, SEA); startAttack(a, 'Melee_Hook', { hit: 0.6, dur: 1.1, speed: 0.48 }); tally(a, 'hook'); }
         else startAttack(a, a.def.atk);
       }
       return 0;
@@ -284,6 +350,7 @@ const AI = {
     return seek(a, tg.x, tg.z, a.speed, dt);
   },
   ranged(a, dt, pl, d) {
+    if (a.def.harpoonEvery) return harpooner(a, dt, pl, d);
     if (!aggroCheck(a, pl, d)) return idle(a, dt);
     const tg = victim(a, pl), td = Math.hypot(tg.x - a.x, tg.z - a.z);
     if (a.state === 'aim') {
@@ -344,6 +411,7 @@ const AI = {
   },
   brute(a, dt, pl, d) {
     if (a.def.chain) return hammerhorn(a, dt, pl, d);
+    if (a.def.guard) return reef(a, dt, pl, d);
     if (!aggroCheck(a, pl, d)) return idle(a, dt);
     if (a.state === 'wind') {
       a.atkT += dt;
@@ -357,7 +425,7 @@ const AI = {
       if (attackTick(a, dt)) {
         killTele(a.tele); a.tele = null;
         shake(0.35); Audio.sfx('slam', { x: a.x, z: a.z });
-        if (a.slam) { explosion(a.x, a.z, 4, 0xb09070, { smoke: 0x4a4038, shake: 0.4 }); if (Math.hypot(pl.x - a.x, pl.z - a.z) < 4.2) hitHero(a, pl, 1.6, { stun: 0.5 }); }
+        if (a.slam) { explosion(a.x, a.z, 4, 0xb09070, { smoke: 0x4a4038, shake: 0.4 }); if (Math.hypot(pl.x - a.x, pl.z - a.z) < 4.2) hitHero(a, pl, 1.6, { stun: 0.5 }); crackAt(a.x, a.z, a.kind === 'reefback' ? 2.4 : 2.5, a.kind === 'reefback' ? 2 : 1, { src: 'slam' }); }
         else { const fx = a.x + Math.sin(a.rot) * 2, fz = a.z + Math.cos(a.rot) * 2; puff(fx, 0.3, fz, 6, 0x4a4038, 1, 1); if (meleeLands(a, pl, a.def.reach + 0.6, 0.95)) hitHero(a, pl, 1.3); }
       }
       return 0;
@@ -388,6 +456,7 @@ const AI = {
     return AI.melee(a, dt, pl, d);
   },
   bat(a, dt, pl, d) {
+    if (a.def.lightShy) return skua(a, dt, pl, d);
     // flits at head height: circles its prey, swoops in to bite, wheels away
     const bob = Math.sin(a.t * 7 + a.id) * 0.2;
     if (!aggroCheck(a, pl, d)) {
@@ -401,7 +470,7 @@ const AI = {
       const u = Math.min(1, a.atkT / 0.55);
       a.y = 1.6 - Math.sin(u * Math.PI) * 0.75 + bob;
       const v = u < 0.5 ? fly(a, tg.x, tg.z, a.speed * 1.5, dt) : fly(a, a.x + Math.sin(a.rot) * 3, a.z + Math.cos(a.rot) * 3, a.speed * 1.2, dt);
-      if (!a.atkHit && u > 0.35 && td < a.def.reach + tg.radius) { a.atkHit = true; hitHero(a, pl, 1, { target: tg, slow: a.def.biteSlow }); }
+      if (!a.atkHit && u > 0.35 && td < a.def.reach + tg.radius) { a.atkHit = true; hitHero(a, pl, 1, { target: tg, slow: a.def.biteSlow, cold: a.def.coldBite }); }
       if (u >= 1) { a.state = 'chase'; a.cd = rand.range(1.1, 2.0); a.orbDir = rand.sign(); }
       return v;
     }
@@ -527,16 +596,26 @@ const AI = {
     return AI.melee(a, dt, pl, d);
   },
   charger(a, dt, pl, d) {
-    // the Amberback Bear: rears, charges, and if it hits a wall, a stone or sap it stands there dazed
+    // the Amberback Bear: rears, charges, and if it hits a wall, a stone or sap it stands there dazed (the Rime Bear: slush
+    // too, and its charge cracks thin ice and can go through it: ice.js has it floundering, no actions)
+    if (a.flounder > 0) return 0;
     if (a.dazed > 0) return dazedTick(a, dt);
     if (a.dash) return dashStep(a, dt, pl);
     if (!aggroCheck(a, pl, d)) return idle(a, dt);
     a.chargeCd = (a.chargeCd ?? rand.range(0.5, 2)) - dt;
+    // the Rime Bear's Frost Roar, when she is close in front of it
+    if (a.state === 'roar') return roar(a, dt, pl);
+    if (a.def.frostRoar && (a.roarCd = (a.roarCd ?? rand.range(1.5, 3)) - dt) <= 0 && a.state !== 'rear' && a.state !== 'attack' && d < 5.2 && G.zone.map.los(a.x, a.z, pl.x, pl.z)) {
+      a.roarCd = rand.range(9, 11); a.state = 'roar'; a.atkT = 0; a.atkHit = false; a.rot = angleTo(a.x, a.z, pl.x, pl.z);
+      a.tele = teleCone(a.x, a.z, a.rot, 5, 0.6, 0.8, 0xffa060);
+      a.avatar?.play('howl', 1, { hitIn: 0.8 }); Audio.sfx('bearRoar', { x: a.x, z: a.z, vol: 0.5 }); tally(a, 'roar');
+      return 0;
+    }
     if (a.state === 'rear') {
       a.atkT += dt * windMul(a);
       if (a.atkT >= 0.9) {
         a.state = 'chase'; killTele(a.tele); a.tele = null; a.chargeCd = rand.range(5, 7);
-        startDash(a, a.chargeDir, 18, a.chargeLen, { daze: 2, sapDaze: 1, dmg: 1.4, hitO: { push: 20 }, dust: 0x5a4a38 });
+        startDash(a, a.chargeDir, 18, a.chargeLen, { daze: 2, sapDaze: 1, dmg: 1.4, hitO: { push: 20 }, dust: a.def.iceCharge ? 0xd8e0e8 : 0x5a4a38, ice: !!a.def.iceCharge });
         a.avatar?.play('charge', 1.5, { loop: true }); Audio.sfx('bearCharge', { x: a.x, z: a.z }); tally(a, 'charge');
       }
       return 0;
@@ -725,8 +804,794 @@ const AI = {
   forger: (a, dt, pl, d) => forger(a, dt, pl, d),
   ivar: (a, dt, pl, d) => boss(a, dt, pl, d, IVAR),
   karthax: (a, dt, pl, d) => boss(a, dt, pl, d, KARTHAX),
+  // Act V
+  singer: (a, dt, pl, d) => singer(a, dt, pl, d),
+  lurker: (a, dt, pl, d) => lurker(a, dt, pl, d),
   pet: null
 };
+
+// ---------- Act V: light on the dark's creatures, and what goes through the ice ----------
+// a sea-light's beam passing over one of the Skotos's creatures (unlit) dazzles it for 1.5 s and leaves it Revealed for
+// 3 s (x1.25: HAZ5.reveal), once a pass; the light-shy (the Skuas) scatter from it for 3 s. Nothing while it lies dormant
+function beamTick(a) {
+  const b = beams().length ? inBeam(a.x, a.z) : null;
+  if (b === a.inBeam) return;
+  a.inBeam = b;
+  if (!b) return;
+  if (a.def.unlit) {
+    a.status.stun = Math.max(a.status.stun, 1.5);
+    addVuln(a, 'revealed', 3);
+    glowBurst(a.x, 1.2 * (a.scale || 1), a.z, 0xfff4e0, 14, 2.5, 0.25, 0.5);
+    Audio.sfx('lightCatch', { x: a.x, z: a.z, vol: 0.6 }); tally(a, 'dazzled');
+  }
+  if (a.def.lightShy) { a.status.fear = Math.max(a.status.fear, 3); tally(a, 'scattered'); }
+}
+// gone through the ice (ice.js FALLS: the Sunken, the Icemaw): under the water for a.sunk seconds, then up out of the
+// nearest open water within 10 m of where it went in (at the hole's edge), rising, back in the fight
+function sunkTick(a, dt) {
+  if (a.avatar) a.avatar.group.visible = false;
+  if ((a.sunk -= dt) > 0) return;
+  a.sunk = 0; a.under = false; a.hidden = false; a.y = 0;
+  const map = G.zone.map, h = holeNear(a.x, a.z, 10), f = map.nearestFloor(h ? h.x : a.x, h ? h.z : a.z, 6);
+  a.x = f.x; a.z = f.z; a.kx = a.kz = 0; a.aggro = true; a.state = 'chase';
+  const pl = G.player; if (pl) a.rot = angleTo(a.x, a.z, pl.x, pl.z);
+  if (a.avatar) { a.avatar.group.visible = true; a.avatar.group.position.set(a.x, 0, a.z); a.avatar.play(a.def.wake?.clip || 'rise', 1.4); }
+  a.rising = 1.2;
+  puff(a.x, 0.2, a.z, 6, 0xd8e4ec, 1, 1, 1);
+  for (let i = 0; i < 14; i++) P({ add: false, x: a.x, y: 0.2, z: a.z, vx: rand.range(-3, 3), vy: rand.range(2, 5), vz: rand.range(-3, 3), life: 0.8, size: 0.12, size1: 0.06, color: 0xd8ecf8, alpha: 1, grav: 14 });
+  Audio.sfx('splash', { x: a.x, z: a.z }); tally(a, 'resurface');
+}
+
+// ---------- Act V: the Skotos's creatures and the coast's beasts ----------
+// the telegraph palette (design, Touch and phone readability): red and orange harm; sea-green a pull or a reel; white the
+// ice about to break; the Ice Singer's song a pale cold blue
+const SEA = 0x30e0a8, SONG = 0xbfe8ff, ICE_W = 0xf0f8ff;
+const wet = () => { const L = G.zone?.L; return !!(L && (L.bed || L.sea || L.ice)); };
+// a swimmer is held off walls, never off the water (map.collide pushes everything out of a closed cell)
+function swimCollide(a, r) {
+  const map = G.zone.map;
+  for (let iz = Math.floor(a.z - r); iz <= Math.floor(a.z + r); iz++) for (let ix = Math.floor(a.x - r); ix <= Math.floor(a.x + r); ix++) {
+    if (!map.blocks(ix, iz)) continue;
+    const cx = clamp(a.x, ix, ix + 1), cz = clamp(a.z, iz, iz + 1), dx = a.x - cx, dz = a.z - cz, d2 = dx * dx + dz * dz;
+    if (d2 >= r * r) continue;
+    if (d2 < 1e-8) { a.x = a.px; a.z = a.pz; return; }
+    const dd = Math.sqrt(d2), k = (r - dd) / dd; a.x += dx * k; a.z += dz * k;
+  }
+}
+// how deep a swimmer stands in closed water (the Sunken to the chest, a Reefback to its spire, a louse under)
+const SWIM_Y = { sunken: -0.95, harpooner: -0.95, hullLouse: -0.3, reefback: -0.5 };
+// the water under an Act V creature, once a frame: swimmers cross the deep and stand in it; the Sunken are quicker and mend
+// in the shallows (2% a second) and slower on the flats the tide has left; a Reefback is quicker in any water
+function waterTick(a, dt) {
+  const L = G.zone.L;
+  a.swim = (a.def.swim || (a.def.float && !a.boss && a.def.ai !== 'bat')) && wet();
+  if (!a.swim && !a.def.tideborne) return;
+  const w = waterAt(a.x, a.z), deep = w === 'deep' && !a.under && !a.airborne;
+  a.inDeep = deep;
+  if (a.def.tideborne) {
+    const shallow = w === 'shallow' || a.inWater === 'brine';
+    const left = w === 'dry' && L.bed && tidal(L, Math.floor(a.z) * L.w + Math.floor(a.x));
+    a.waterK = shallow || deep ? 1.3 : left ? 0.85 : 1;
+    if (shallow && a.hp < a.hpMax && !a.dead) { a.hp = Math.min(a.hpMax, a.hp + a.hpMax * 0.02 * dt); if (Math.random() < dt * 3) P({ add: false, x: a.x + rand.range(-0.3, 0.3), y: 0.1, z: a.z + rand.range(-0.3, 0.3), vy: 0.5, life: 0.6, size: 0.08, size1: 0.02, color: 0xc8f0e8, alpha: 0.8 }); }
+  } else if (a.def.wake?.tide) a.waterK = w !== 'dry' ? 1.3 : 1;
+  // standing in closed water (a wave walking in, a swimmer crossing a creek): sunk to the chest, a wake behind it
+  const sy = SWIM_Y[a.kind];
+  if (sy != null && !a.under && !(a.flounder > 0) && !a.dead) {
+    a.y = damp(a.y || 0, deep ? sy * (a.scale || 1) : 0, 4, dt);
+    const mv = Math.hypot(a.x - (a.wpx ?? a.x), a.z - (a.wpz ?? a.z)); a.wpx = a.x; a.wpz = a.z;
+    if (deep && mv > dt * 0.5 && Math.random() < dt * 6) P({ add: false, x: a.x - Math.sin(a.rot) * 0.4, y: 0.06, z: a.z - Math.cos(a.rot) * 0.4, vy: 0.1, life: 0.9, size: 0.3, size1: 1.0, color: 0xdce8ee, alpha: 0.35, alpha1: 0 });
+  }
+}
+// the flood: is it at this one's feet now (every 0.25 s)? Never for the Skotos's own inside lamp light
+function tideWakes(a, dt) {
+  if ((a.tideT = (a.tideT ?? rand.range(0, 0.25)) - dt) > 0) return false;
+  a.tideT = 0.25;
+  return waterAt(a.x, a.z) !== 'dry' && !(a.def.unlit && lampLightAt(a.x, a.z));
+}
+// the ebb: what the flood woke and the hero never met walks back to where it lay and lies down again, whole
+const ebbing = () => !!TIDE && (TIDE.phase === 'ebb' || TIDE.phase === 'low');
+function goRest(a, dt) {
+  const h = a.home;
+  if (waterAt(h.x, h.z) !== 'dry') return idle(a, dt);
+  if (Math.hypot(h.x - a.x, h.z - a.z) > 0.6) return seek(a, h.x, h.z, a.speed * 0.5, dt);
+  lieDown(a); tally(a, 'restAgain');
+  return 0;
+}
+// a frozen crew: ice until the ice beside it cracks (a stage 1 in the 3 x 3 round it), the hero comes within 4 m, or it is
+// struck; then the whole rail breaks out, a moment apart
+function statueTick(a, dt, d, pl) {
+  const av = a.avatar;
+  if (av) { av.group.position.set(a.x, 0, a.z); av.group.rotation.y = a.rot; av.update(0, { speed: 0 }); }
+  let wake = (a.wakeIn != null && (a.wakeIn -= dt) <= 0) || d < 4 || a.hp < a.hpMax;
+  if (!wake && (a.iceT = (a.iceT ?? rand.range(0, 0.25)) - dt) <= 0) { a.iceT = 0.25; for (let k = 0; k < 9 && !wake; k++) wake = stageAt(a.x + (k % 3) - 1, a.z + Math.floor(k / 3) - 1) >= 1; }
+  if (!wake) return;
+  breakStatue(a, pl);
+  for (const b of G.actors) if (b !== a && b.statue && b.dormant && a.packId != null && b.packId === a.packId && b.wakeIn == null) b.wakeIn = rand.range(0.1, 0.7);
+}
+function breakStatue(a, pl) {
+  const av = a.avatar;
+  a.dormant = false; a.disguised = false; a.awake = true; a.aggro = true; a.rising = 0.7; a.wakeIn = null;
+  a.rot = angleTo(a.x, a.z, pl.x, pl.z);
+  if (av) { av.setTint(...(a.wakeTint || [0xffffff, 0])); restoreRim(a); av.anim.stop?.(0.15); av.play('hit', 1.2); }
+  for (let i = 0; i < 18; i++) P({ x: a.x + rand.range(-0.3, 0.3), y: rand.range(0.3, 1.8), z: a.z + rand.range(-0.3, 0.3), vx: rand.range(-3, 3), vy: rand.range(1, 4), vz: rand.range(-3, 3), life: rand.range(0.6, 1.1), size: rand.range(0.08, 0.16), size1: 0.05, color: 0xe8f6ff, color1: 0x7ab4e0, grav: 9.8 });
+  puff(a.x, 1, a.z, 6, 0xe4ecf2, 0.9, 1, 1);
+  Audio.sfx('iceCrack2', { x: a.x, z: a.z, vol: 0.8 }); tally(a, 'thaw');
+}
+
+// pull the hero dist metres toward (x, z) over dur seconds (the hook, the harpoon's reel, the Icemaw's drag): never past
+// the puller (stop: how near it may bring her), never into a wall or the water (every enemy pull stops at the first deep
+// cell, map.castT); key: the hit text over her
+function pullHero(x, z, dist, dur, key, stop = 1.2) {
+  const p = G.player; if (!p || p.dead || p.pull || G.mode !== 'play') return false;
+  const dx = x - p.x, dz = z - p.z, l = Math.hypot(dx, dz), k = Math.min(dist, l - stop);
+  if (k < 0.3) return false;
+  const tx = p.x + (dx / l) * k, tz = p.z + (dz / l) * k, f = G.zone.map.castT(p.x, p.z, tx, tz, 0.3);
+  if (f * k < 0.3) return false;
+  p.pull = { x: p.x + (tx - p.x) * f, z: p.z + (tz - p.z) * f, sx: p.x, sz: p.z, t: dur, t0: dur }; p.act = null;
+  if (has(key)) number(p.x, 2.5, p.z, t(key), 'text', '#7af0c8');
+  for (let i = 0; i < 8; i++) P({ x: p.x + (dx / l) * i * 0.3, y: 1.0, z: p.z + (dz / l) * i * 0.3, life: 0.3, size: 0.2, size1: 0.04, color: 0x9affd8 });
+  return true;
+}
+// the Sunken's boat-hook: every third blow, a sea-green cone, and on a hit she is pulled 1.5 m in
+function hookStrike(a, pl, tg) {
+  killTele(a.tele); a.tele = null;
+  for (let i = 1; i <= 6; i++) P({ x: a.x + Math.sin(a.rot) * i * 0.4, y: 1.1, z: a.z + Math.cos(a.rot) * i * 0.4, life: 0.25, size: 0.22, size1: 0.04, color: 0x9affd8 });
+  Audio.sfx('swingHeavy', { x: a.x, z: a.z, vol: 0.7 });
+  if (!meleeLands(a, tg, 2.4, 0.62)) { tally(a, 'hookMissed'); return; }
+  const n = hitHero(a, pl, 1.0, { target: tg });
+  if (n > 0 && tg.hero && pullHero(a.x, a.z, 1.5, 0.25, 'hud.hooked', a.radius + tg.radius + 0.5)) tally(a, 'hooked');
+}
+
+// ---------- the Harpooner: keeps 7-10 m off and throws; every third throw is the reel (0.9 s of warning, a sea-green line
+// through her): a hit drags her 4 m toward him (2 m in lamp light), a roll in the warning slips it. A miss sticks in the
+// ground for a second (and cracks thin ice); a rope runs from his hand to the harpoon while it flies ----------
+const ROPES = new Map();
+let ropeG = null, ropeM = null;
+function rope() {
+  ropeG ||= new THREE.CylinderGeometry(0.018, 0.018, 1, 4, 1, true).translate(0, 0.5, 0).rotateX(Math.PI / 2);
+  ropeM ||= new THREE.MeshBasicMaterial({ color: 0xc8b48a });
+  const m = new THREE.Mesh(ropeG, ropeM); m.frustumCulled = false; R.scene.add(m);
+  return m;
+}
+const _ra = new THREE.Vector3(), _rb = new THREE.Vector3();
+function ropeTo(m, ax, ay, az, bx, by, bz) {
+  _ra.set(ax, ay, az); _rb.set(bx, by, bz);
+  m.position.copy(_ra); m.lookAt(_rb); m.scale.set(1, 1, Math.max(0.01, _ra.distanceTo(_rb)));
+}
+function dropRope(a) { if (a.rope) { R.scene.remove(a.rope.mesh); ROPES.delete(a.rope.mesh); a.rope = null; } }
+function harpooner(a, dt, pl, d) {
+  if (!aggroCheck(a, pl, d)) return idle(a, dt);
+  const map = G.zone.map, tg = victim(a, pl), td = Math.hypot(tg.x - a.x, tg.z - a.z);
+  if (a.state === 'reel') {
+    // the warning: the coil glints, the rope creaks, the line lies through her
+    a.atkT += dt;
+    if (Math.random() < 0.5) { const h = a.coil ? a.avatar?.bonePoint('spine_03', _ra, 0, 0.1, -0.1) : null; P({ x: (h?.x ?? a.x) + rand.range(-0.2, 0.2), y: (h?.y ?? 1.3) + rand.range(-0.2, 0.2), z: (h?.z ?? a.z) + rand.range(-0.2, 0.2), life: 0.25, size: 0.16, size1: 0.02, color: 0xe8fff4 }); }
+    if (a.atkT >= 0.9) { throwHarpoon(a, tg, true); a.state = 'thrown'; a.atkT = 0; }
+    return 0;
+  }
+  if (a.state === 'throw') {
+    face(a, tg, dt, 10); a.atkT += dt;
+    if (!a.atkHit && a.atkT >= a.atkHitT) { a.atkHit = true; throwHarpoon(a, tg, false); }
+    if (a.atkT >= a.atkDur) a.state = 'chase';
+    return 0;
+  }
+  if (a.state === 'thrown') { if ((a.atkT += dt) >= 0.6) a.state = 'chase'; return 0; }
+  const los = map.los(a.x, a.z, tg.x, tg.z);
+  if (td < 4.5 && los) { const ang = angleTo(tg.x, tg.z, a.x, a.z), nx = a.x + Math.sin(ang) * 3, nz = a.z + Math.cos(ang) * 3; if (map.walkable(nx, nz) || a.swim) return seek(a, nx, nz, a.speed * 0.85, dt); }
+  if (td < a.def.reach && los) {
+    face(a, tg, dt);
+    if (a.cd <= 0 && !a.rope) {
+      a.throws = (a.throws || 0) + 1; a.cd = a.def.atkTime * rand.range(0.9, 1.2);
+      if (a.throws % a.def.harpoonEvery === 0 && tg.hero) {
+        a.state = 'reel'; a.atkT = 0; a.reelDir = a.rot = angleTo(a.x, a.z, tg.x, tg.z); a.reelStamp = pl.dodgeStamp || 0;
+        a.tele = teleLine(a.x, a.z, a.reelDir, 11, 1.0, 0.9, SEA);
+        a.avatar?.play('throw2', 0.81); Audio.sfx('harpoonReel', { x: a.x, z: a.z }); tally(a, 'reelTell');
+      } else { a.state = 'throw'; a.atkT = 0; a.atkHit = false; a.atkHitT = 0.47; a.atkDur = 1.1; a.avatar?.play('throw', 0.85); }
+      return 0;
+    }
+    return 0;
+  }
+  return seek(a, tg.x, tg.z, a.speed, dt);
+}
+function throwHarpoon(a, tg, reel) {
+  killTele(a.tele); a.tele = null;
+  const dir = reel ? a.reelDir : angleTo(a.x, a.z, tg.x, tg.z) + rand.range(-0.05, 0.05);
+  const h = a.avatar?.bonePoint('hand_r', _rb) || _rb.set(a.x, 1.5, a.z);
+  const sp = reel ? 24 : 16, pl = G.player;
+  let p = null;
+  p = fire('harpoon', a, h.x, h.z, dir, { y: Math.max(1.1, h.y), dmg: a.dmg * (reel ? 0.9 : 1), speed: sp, life: (reel ? 11.5 : 12) / sp, onHit: (who, q) => harpoonHit(a, who, q), onEnd: (x, z, wall) => harpoonEnd(a, p, x, z, wall) });
+  p.reel = reel;
+  // she rolled in the warning: it flies through where she was
+  if (reel && (pl.dodgeStamp || 0) !== a.reelStamp) { p.hit.add(pl); tally(a, 'reelSlipped'); }
+  const held = a.avatar?.held.R; if (held) held.mesh.visible = false;
+  dropRope(a); a.rope = { mesh: rope(), p, t: 0 }; ROPES.set(a.rope.mesh, a);
+  Audio.sfx('harpoonThrow', { x: a.x, z: a.z }); tally(a, reel ? 'reel' : 'throw');
+}
+function harpoonHit(a, who, p) {
+  p.struck = true;
+  const n = damage(a, who, p.dmg, { kx: p.vx, kz: p.vz });
+  if (p.reel && n > 0 && who.hero && !a.dead) {
+    const lamp = lampLightAt(who.x, who.z);
+    if (pullHero(a.x, a.z, lamp ? 2 : 4, 0.4, 'hud.hooked', a.radius + who.radius + 0.6)) { a.rope.hold = who; a.rope.t = 0.5; tally(a, 'reeled'); Audio.sfx('harpoonReel', { x: a.x, z: a.z, vol: 0.9 }); }
+  }
+}
+// a miss: it stands in the ground a second (in thin ice, a crack), or goes into the water
+function harpoonEnd(a, p, x, z, wall) {
+  if (p.struck) return;
+  const w = waterAt(x, z);
+  if (w === 'deep') { splashFx(x, z, 0.6); return; }
+  if (wall) { sparks(x, 1.2, z, 8, 0xd8dce0, 4); Audio.sfx('hitBone', { x, z, vol: 0.5 }); return; }
+  if (iceAt(x, z) === 'thin') crackAt(x, z, 1, 1, { src: 'harpoon' });
+  if (!p.mesh) return;
+  const m = new THREE.Mesh(p.mesh.geometry, p.mesh.material);
+  m.position.set(x, 0.55, z); m.rotation.set(-0.55, Math.atan2(p.vx, p.vz), 0, 'YXZ'); R.scene.add(m);
+  puff(x, 0.1, z, 4, 0xe4ecf2, 0.4, 0.5, 0.6);
+  const zn = G.zone; later(1, () => { R.scene.remove(m); if (G.zone !== zn) return; puff(x, 0.2, z, 3, 0xe4ecf2, 0.3, 0.3, 0.5); });
+}
+// the rope from his hand to the flying harpoon; to her while the reel drags her; then reeled in
+function ropeTick(a, dt) {
+  const r = a.rope, av = a.avatar, h = av?.bonePoint('hand_r', _rb);
+  if (!h || a.dead) { dropRope(a); return; }
+  const p = r.p, flying = G.projs.includes(p);
+  if (flying) { const u = Math.hypot(p.vx, p.vz) || 1; ropeTo(r.mesh, h.x, h.y, h.z, p.x - (p.vx / u) * 0.7, p.y, p.z - (p.vz / u) * 0.7); return; }
+  if (r.hold && (r.t -= dt) > 0) { ropeTo(r.mesh, h.x, h.y, h.z, r.hold.x, 1.1, r.hold.z); return; }
+  dropRope(a);
+  const held = av.held.R; if (held) held.mesh.visible = true;
+}
+
+// ---------- the Ice Singer: keeps 8-11 m off and sings (3 s, one at a time in a zone): the ice under the hero cracks two
+// stages (r 2.5), or on land the sea comes up under her as brine (r 4, 8 s); a white (or pale) circle shows where for its
+// last second. A blow of 6% of her life, a stun or a beam breaks it; in lamp light it comes to nothing. Close in, she wails ----------
+function singer(a, dt, pl, d) {
+  if (!aggroCheck(a, pl, d)) return idle(a, dt);
+  const map = G.zone.map;
+  if (a.state === 'song') return songTick(a, dt, pl);
+  if (a.state === 'wail') {
+    a.atkT += dt;
+    if (!a.atkHit && a.atkT >= 0.5) {
+      a.atkHit = true; killTele(a.tele); a.tele = null;
+      for (let i = 0; i < 18; i++) { const ang = a.rot + rand.range(-0.7, 0.7), sp = rand.range(4, 8); P({ add: false, x: a.x, y: 1.3, z: a.z, vx: Math.sin(ang) * sp, vy: rand.range(-0.3, 0.6), vz: Math.cos(ang) * sp, life: 0.5, size: 0.3, size1: 0.8, color: 0xd8f0ff, alpha: 0.5, alpha1: 0, drag: 3 }); }
+      if (inCone(a.x, a.z, a.rot, 4, 0.75, pl)) hitHero(a, pl, 0.6, { slow: { k: 0.3, t: 2 }, cold: 10 });
+    }
+    if (a.atkT >= 1.0) a.state = 'chase';
+    return 0;
+  }
+  a.wailCd = (a.wailCd ?? 1) - dt;
+  if (d < 3.2 && a.wailCd <= 0) {
+    a.wailCd = 4.5; a.state = 'wail'; a.atkT = 0; a.atkHit = false; a.rot = angleTo(a.x, a.z, pl.x, pl.z);
+    a.tele = teleCone(a.x, a.z, a.rot, 4, 0.75, 0.5, 0xff8040);
+    a.avatar?.play('wail', 1.1); Audio.sfx('wraithWail', { x: a.x, z: a.z, vol: 0.6 }); tally(a, 'wail');
+    return 0;
+  }
+  const los = map.los(a.x, a.z, pl.x, pl.z);
+  if (a.cd <= 0 && d < 13 && los && songToken(a)) {
+    a.state = 'song'; a.atkT = 0; a.songHp = a.hp; a.interrupted = false; a.songAt = null;
+    a.avatar?.play('song', 1, { loop: true }); Audio.sfx('iceSing', { x: a.x, z: a.z }); tally(a, 'song');
+    return 0;
+  }
+  // keep 8-11 m off, and run from anything closer than 5
+  if (d < 8 && los) { const ang = angleTo(pl.x, pl.z, a.x, a.z), nx = a.x + Math.sin(ang) * 3, nz = a.z + Math.cos(ang) * 3; if (map.walkable(nx, nz) || a.swim) return seek(a, nx, nz, a.speed * (d < 5 ? 1 : 0.6), dt); }
+  if (d > 11 || !los) return seek(a, pl.x, pl.z, a.speed, dt);
+  face(a, pl, dt);
+  return 0;
+}
+// one song at a time in a zone (the sea's own telegraphs are enough on a phone's screen)
+function songToken(a) {
+  const z = G.zone, h = z.songBy;
+  if (h && h !== a && !h.dead && !h.removed && h.state === 'song') return false;
+  z.songBy = a; return true;
+}
+// a blow, a stun or a beam breaks her song (a ring of it scattering)
+function songBreak(a) {
+  a.state = 'chase'; a.cd = 4; killTele(a.tele); a.tele = null; a.avatar?.anim.stop?.(0.15);
+  ring(a.x, a.z, 1.6, SONG, 0.4); glowBurst(a.x, 1.4, a.z, SONG, 14, 2.5, 0.2, 0.5); Audio.sfx('hitSpirit', { x: a.x, z: a.z, vol: 0.6 });
+  tally(a, 'songBroken');
+}
+function songTick(a, dt, pl) {
+  a.atkT += dt;
+  const broke = interrupted(a) || a.songHp - a.hp >= a.hpMax * 0.06;
+  a.songHp = a.hp;
+  if (broke) { songBreak(a); return 0; }
+  face(a, pl, dt, 4);
+  // the ring about her and the song's wavering line to the hero
+  if ((a.ringT = (a.ringT ?? 0) - dt) <= 0) { a.ringT = 0.45; ring(a.x, a.z, 1.3 + Math.sin(a.atkT * 4) * 0.2, SONG, 0.5); }
+  if ((a.beamT = (a.beamT ?? 0) - dt) <= 0) { a.beamT = 0.16; const T = a.songAt || pl; bolt(a.x, 1.7, a.z, T.x, a.songAt ? 0.2 : 1.1, T.z, SONG, 0.45); }
+  if (Math.random() < 0.4) P({ x: a.x + rand.range(-0.6, 0.6), y: rand.range(0.4, 2), z: a.z + rand.range(-0.6, 0.6), vy: 0.6, life: 0.7, size: 0.1, size1: 0.02, color: 0xe0f4ff });
+  // its last second: where it will land is shown
+  if (!a.songAt && a.atkT >= 2.0) {
+    const thin = iceAt(pl.x, pl.z), ice = thin === 'thin' || thin === 'slush';
+    a.songAt = { x: pl.x, z: pl.z, ice };
+    a.tele = teleCircle(pl.x, pl.z, ice ? 2.5 : 4, 1.0, ice ? ICE_W : SONG);
+  }
+  if (a.atkT < 3.0) return 0;
+  const T = a.songAt; a.state = 'chase'; a.cd = 7; a.tele = null; a.avatar?.anim.stop?.(0.2);
+  if (lampLightAt(T.x, T.z)) {
+    // in lamp light the song comes to nothing
+    puff(T.x, 0.4, T.z, 10, 0xe8f0f4, 1, T.ice ? 2 : 3, 0.9); Audio.sfx('refreeze', { x: T.x, z: T.z, vol: 0.5 }); tally(a, 'songFizzled');
+  } else if (T.ice) {
+    crackAt(T.x, T.z, 2.5, 2, { src: 'song' }); freezeCrystals(T.x, T.z, 2.5, 22); tally(a, 'songCracked');
+  } else {
+    addSapPool(T.x, T.z, 4, 8, a, 'brine'); splashFx(T.x, T.z, 1.4); ring(T.x, T.z, 4, 0x9ad8e8, 0.7); tally(a, 'songBrine');
+  }
+  emit('iceSong', a, T);
+  return 0;
+}
+
+// ---------- the Hull-lice: they wait inside something (a hull, a crack in thin ice, a den, a Reefback's rock) and boil out
+// together when the hero is near, a pack-mate wakes, or (a hull's) the flood starts; a curled louse is a ball the hero
+// rolls through, or knocks hard, to bowl it through its pack ----------
+function louse(a, dt, pl, d) {
+  if (a.under) return louseUnder(a, dt, pl, d);
+  if (a.bowling) return bowlStep(a, dt);
+  if (a.bowl) { const b = a.bowl; a.bowl = null; startBowl(a, b.ux, b.uz); return 0; }
+  // curled: a ball the hero can roll into
+  if (pl.act?.name === 'roll' && Math.hypot(pl.x - a.x, pl.z - a.z) < a.radius + pl.radius + 0.35) { startBowl(a, Math.sin(pl.rot), Math.cos(pl.rot)); return 0; }
+  if ((a.curled -= dt) <= 0) { a.curled = 0; a.dmgTaken = null; a.state = 'chase'; a.rising = 0.7; a.avatar?.play('uncurl', 1.3); }
+  return 0;
+}
+function louseUnder(a, dt, pl, d) {
+  if (a.avatar) a.avatar.group.visible = false;
+  const pk = a.burstPack;
+  // what it waits in, decided the first time: the pack's (gen5: a hull), else a crack if it lies on thin ice, else a den
+  if (!a.burst) {
+    a.burst = pk?.burst || (iceAt(pk?.x ?? a.x, pk?.z ?? a.z) === 'thin' ? 'ice' : 'den');
+    if (a.burst === 'ice' && pk && !pk.cracked) { pk.cracked = true; crackAt(pk.x, pk.z, 1.5, 1, { src: 'lice' }); }
+  }
+  if (a.emergeIn == null && (a.lookT = (a.lookT ?? 0) - dt) <= 0) {
+    a.lookT = 0.25;
+    const at = pk || a, near6 = Math.hypot(pl.x - at.x, pl.z - at.z) < 6;
+    const mate = a.packId != null && G.actors.some((b) => b !== a && b.packId === a.packId && !b.dead && !b.under && b.aggro);
+    // (in lamp light only her own coming brings them out: the Skotos's creatures never stir in it)
+    const lit = !!lampLightAt(at.x, at.z), flood = !lit && a.burst === 'hull' && pk?.release > (a.seenRelease ?? 0);
+    if (near6 || (mate && !lit) || flood || a.hp < a.hpMax || a.aggro) boilOut(a, pk, flood);
+  }
+  if (a.emergeIn != null && (a.emergeIn -= dt) <= 0) louseOut(a);
+  return 0;
+}
+function boilOut(a, pk, flood) {
+  for (const b of G.actors) if (b.under && b.def.curl && !b.dead && b.emergeIn == null && (b === a || (a.packId != null && b.packId === a.packId))) { b.emergeIn = b === a ? 0 : rand.range(0.1, 0.6); b.seenRelease = pk?.release || 0; if (flood) b.aggro = true; }
+  if (!pk) return;
+  // the hull rattles, the crack opens wider (the 3 x 3 round it to stage 2), the den spills
+  if (a.burst === 'ice') crackAt(pk.x, pk.z, 1.5, 1, { src: 'lice' });
+  Audio.sfx('louseSkitter', { x: pk.x, z: pk.z }); tally(a, 'boil:' + a.burst);
+}
+function louseOut(a) {
+  a.under = false; a.hidden = false; a.emergeIn = null; a.y = 0; a.aggro = true; a.rising = 0.9;
+  if (a.avatar) { a.avatar.group.visible = true; a.avatar.play('spawn', 1.2); }
+  if (a.burst === 'ice') { iceShards(a.x, a.z, 8); splashFx(a.x, a.z, 0.5); }
+  else if (a.burst === 'hull') { puff(a.x, 0.4, a.z, 5, 0x5a4a38, 0.6, 0.8, 0.9); for (let i = 0; i < 6; i++) P({ add: false, x: a.x, y: 0.4, z: a.z, vx: rand.range(-2, 2), vy: rand.range(1, 3), vz: rand.range(-2, 2), life: 0.7, size: 0.08, size1: 0.05, color: 0x3a3024, alpha: 1, grav: 12 }); }
+  else puff(a.x, 0.2, a.z, 5, 0x8a8478, 0.6, 0.7, 0.8);
+  tally(a, 'out');
+}
+// a ball sent rolling at 9 m/s for up to 7 m: through every foe in its path (heroHit 1, knock 4: the lice it strikes curl
+// too), cracking thin ice a stage a cell; it drowns in deep water and bursts against a wall or a big body (0.5x round it)
+function startBowl(a, ux, uz) {
+  a.curled = 0; a.bowling = { ux, uz, run: 0, hit: new Set([a]), cell: -1 }; a.dmgTaken = 0.25; a.state = 'bowl'; a.kx = a.kz = 0;
+  a.rot = Math.atan2(ux, uz);
+  a.avatar?.play('roll', 1, { loop: true }); Audio.sfx('louseRoll', { x: a.x, z: a.z }); tally(a, 'bowled');
+}
+function bowlStep(a, dt) {
+  const B = a.bowling, map = G.zone.map, st = 9 * dt, pl = G.player;
+  const nx = a.x + B.ux * st, nz = a.z + B.uz * st;
+  if (map.blocks(Math.floor(nx), Math.floor(nz))) { louseBurst(a); return 0; }
+  a.x = nx; a.z = nz; B.run += st;
+  if (Math.random() < 0.5) puff(a.x, 0.1, a.z, 1, 0xd8dee4, 0.4, 0.3, 0.5);
+  if (waterAt(a.x, a.z) === 'deep') { a.bowling = null; tally(a, 'bowlDrowned'); drown(G.zone, a); return 0; }
+  const c = Math.floor(a.z) * 4096 + Math.floor(a.x);
+  if (c !== B.cell) { B.cell = c; if (iceAt(a.x, a.z) === 'thin') crackAt(Math.floor(a.x) + 0.5, Math.floor(a.z) + 0.5, 0.5, 1, { src: 'louse' }); }
+  for (const f of near(a.x, a.z, 0.8)) {
+    if (B.hit.has(f) || f.dead || f.prop || f.team !== 'foe' || f.under || f.hidden || f.airborne || f.dormant) continue;
+    B.hit.add(f);
+    if (f.def.big || f.boss) { louseBurst(a); return 0; }
+    damage(pl, f, heroHit(1.0, { area: true }), { knock: 4, kx: B.ux, kz: B.uz, area: true, noLoh: true });
+    tally(a, 'bowlHit');
+  }
+  if (B.run >= 7) { a.bowling = null; a.curled = 1.2; a.avatar?.play('curl', 1); }
+  return 9;
+}
+function louseBurst(a) {
+  a.bowling = null;
+  const pl = G.player;
+  explosion(a.x, a.z, 1.5, 0xb8c0d0, { smoke: 0x5a5a68, shake: 0.15 });
+  for (const f of foes(a.x, a.z, 1.5)) if (f !== a && !f.prop) damage(pl, f, heroHit(0.5, { area: true }), { knock: 3, kx: f.x - a.x, kz: f.z - a.z, area: true, quiet: true, noLoh: true });
+  tally(a, 'bowlBurst');
+  kill(a, pl, { burst: true });
+}
+// a wreck's hull gives up a swarm again at the start of a flood (twice a visit at most): its lice all gone, a new one
+on('tideTurn', (ph, z) => {
+  if (ph !== 'flood' || !z || z !== G.zone || !G.player) return;
+  for (const p of z.packs) {
+    if (p.tag !== 'hullSwarm' || !p.spawned || (p.visitRel || 0) >= 2 || Math.hypot(p.x - G.player.x, p.z - G.player.z) > 34) continue;
+    p.visitRel = (p.visitRel || 0) + 1; p.release = (p.release || 0) + 1;
+    const alive = z.actors.filter((a) => a.packId === p.id && !a.dead).length;
+    for (let i = alive; i < Math.min(p.n, 6); i++) {
+      const ang = rand.range(0, 6.28), f = z.map.nearestFloor(p.x + Math.sin(ang) * rand.range(0.4, 1.8), p.z + Math.cos(ang) * rand.range(0.4, 1.8), 3);
+      z.actors.push(spawnMonster('hullLouse', f.x, f.z, { packId: p.id }));
+    }
+  }
+});
+on('zoneEnter', (id, z) => { for (const p of z?.packs || []) p.visitRel = 0; for (const m of ROPES.keys()) R.scene.remove(m); ROPES.clear(); });
+
+// ---------- the Icemaw: a shape under the ice that hunts from its holes (open water within 14 m of its home). By a hole near
+// the hero: 0.6 s of bubbles and a bark, then up with a red line and a sea-green arrow back (0.7 s), the lunge; a hit drags
+// her 2.5 m toward the hole. Up (Exposed) it bites what is near, then slides back in. With no hole near her it breaches a
+// webbed cell. Never through thick ice, land or lamp light; a hole frozen while it is up strands it ----------
+const lurkOK = (x, z) => { const i = iceAt(x, z); return i === 'water' || i === 'thin' || i === 'slush'; };
+// is (x, z) open water it can come up through: a hole, broken ice, the sea, closed tide water; not in lamp light
+function holeAt(x, z) { return waterAt(x, z) === 'deep' && !lampLightAt(x, z); }
+function lurker(a, dt, pl, d) {
+  if (a.lurk == null) lurkInit(a);
+  if (!a.lurk) return AI.pounce(a, dt, pl, d);
+  const L = a.lurk;
+  if (a.under) return lurkUnder(a, dt, pl, d, L);
+  if (a.state === 'surface') {
+    a.atkT += dt;
+    if (Math.random() < 0.6) splashFx(L.hole.x + rand.range(-0.6, 0.6), L.hole.z + rand.range(-0.6, 0.6), 0.3);
+    if (a.atkT < 0.7) return 0;
+    a.state = 'lunge'; a.atkT = 0; L.run = 0; L.hit = false;
+    a.avatar?.play('lunge', 1.6); Audio.sfx('sealLunge', { x: a.x, z: a.z }); tally(a, 'lunge');
+    return 0;
+  }
+  if (a.state === 'lunge') {
+    // 5 m of body out of the water in a third of a second; its head reaches 7
+    const st = Math.min(16 * dt, 5 - L.run), nx = a.x + Math.sin(L.dir) * st, nz = a.z + Math.cos(L.dir) * st;
+    if (!G.zone.map.blocks(Math.floor(nx), Math.floor(nz)) && (G.zone.map.walkable(nx, nz) || waterAt(nx, nz) === 'deep')) { a.x = nx; a.z = nz; L.run += st; } else L.run = 5;
+    if (!L.hit && !pl.dead && inLine(L.hole.x, L.hole.z, L.dir, Math.min(7, L.run + 2.2), 1.6, pl)) {
+      L.hit = true;
+      // a bite: it stops on her and hauls back toward its hole with her
+      if (hitHero(a, pl, 1.4) > 0) { a.avatar?.play('drag', 1); if (pullHero(L.hole.x, L.hole.z, 2.5, 0.45, 'hud.dragged', 0.6)) tally(a, 'dragged'); L.recoil = 0.45; L.run = 5; }
+    }
+    if (L.run < 5) return 16;
+    killTele(a.tele); a.tele = null; killTele(L.arrow); L.arrow = null;
+    a.state = 'up'; L.upT = 3; a.cd = 0.6;
+    addVuln(a, 'exposed', 6); puff(a.x, 0.2, a.z, 6, 0xe4ecf2, 0.9, 1, 0.8);
+    return 0;
+  }
+  if (a.state === 'stranded') {
+    a.atkT += dt;
+    if (Math.random() < 0.3) puff(a.x, 0.15, a.z, 1, 0xe4ecf2, 0.5, 0.6, 0.6);
+    if (a.atkT < 4) return 0;
+    // then it wriggles for the nearest water it can go down into, at 1.2 m/s
+    const h = L.back ||= lurkHole(a, a.x, a.z, 14);
+    if (!h || !holeAt(h.x, h.z)) { L.back = null; return 0; }
+    if (Math.hypot(h.x - a.x, h.z - a.z) < 1.2 + a.radius * 0.5) { L.hole = h; L.back = null; slideIn(a, L); return 0; }
+    return crawl(a, h.x, h.z, 1.2, dt, true);
+  }
+  if (a.state === 'slide') {
+    // (the clip takes it back and down into the hole behind it; a stand-in sinks)
+    a.atkT += dt;
+    if (a.avatar?.standIn) a.y = -Math.max(0, a.atkT - 0.3) * 2;
+    if (a.atkT >= 1.15 || a.avatar?.anim.under) { a.x = L.hole.x; a.z = L.hole.z; goUnder(a, L); }
+    return 0;
+  }
+  if (a.state === 'bite') {
+    a.atkT += dt;
+    if (!a.atkHit && a.atkT >= 0.5) { a.atkHit = true; killTele(a.tele); a.tele = null; Audio.sfx('wolfAttack', { x: a.x, z: a.z, vol: 0.8 }); if (meleeLands(a, pl, 2.2 + a.radius, 0.85)) hitHero(a, pl, 1.1); }
+    if (a.atkT >= 0.9) a.state = 'up';
+    return 0;
+  }
+  // up on the ice: its hole frozen under it strands it
+  if (!holeAt(L.hole.x, L.hole.z) || seaSkinned(L.hole)) { strand(a, L); return 0; }
+  if (L.recoil > 0) { L.recoil -= dt; const v = crawl(a, L.hole.x, L.hole.z, 5, dt, true); if (Math.hypot(L.hole.x - a.x, L.hole.z - a.z) < 1.4 + a.radius * 0.6) L.recoil = 0; return v; }
+  L.upT -= dt;
+  if (L.upT > 0 && d < 2.2 + a.radius + pl.radius && a.cd <= 0) {
+    a.state = 'bite'; a.atkT = 0; a.atkHit = false; a.rot = angleTo(a.x, a.z, pl.x, pl.z); a.cd = a.def.atkTime;
+    a.tele = teleCone(a.x, a.z, a.rot, 2.2 + a.radius, 0.85, 0.5, 0xff6a30);
+    a.avatar?.play('bite', 1, { hitIn: 0.5 }); tally(a, 'bite');
+    return 0;
+  }
+  // back to the hole, facing the hero, and down tail first
+  const back = Math.hypot(L.hole.x - a.x, L.hole.z - a.z);
+  if (L.upT <= 0) {
+    if (back < 1.4 + a.radius * 0.6) { slideIn(a, L); return 0; }
+    return crawl(a, L.hole.x, L.hole.z, a.speed * 1.4, dt, true);
+  }
+  face(a, pl, dt, 4);
+  return 0;
+}
+// the hole nearest (x, z) within r that it can use: open water, not lamp-lit, within 14 m of its home
+function lurkHole(a, x, z, r) {
+  const L = a.lurk, h = holeNear(x, z, r);
+  if (!h || !holeAt(h.x, h.z) || Math.hypot(h.x - L.home.x, h.z - L.home.z) > 14) return null;
+  return h;
+}
+// the sea's own water (L.sea: the Fall's holes, a Breathing-hole) does not freeze; a beam on it or a Frost Nova by it (the
+// last 1.5 s) skins it over long enough to strand what is up
+function seaSkinned(h) {
+  const L = G.zone.L, i = Math.floor(h.z) * L.w + Math.floor(h.x);
+  if (!L.sea?.[i]) return false;
+  return !!inBeam(h.x, h.z) || clock - (NOVA.t ?? -99) < 1.5 && Math.hypot(NOVA.x - h.x, NOVA.z - h.z) < NOVA.r + 1;
+}
+function lurkInit(a) {
+  // its home: the open water nearest where it was put, else the thin ice (it comes up only where the ice gives, then)
+  let h = holeNear(a.x, a.z, 14);
+  if (!h) for (let r = 0; r <= 8 && !h; r++) for (let k = 0; k < 8 && !h; k++) { const x = a.x + Math.sin(k * 0.785) * r, z = a.z + Math.cos(k * 0.785) * r; if (iceAt(x, z) === 'thin') h = { x: Math.floor(x) + 0.5, z: Math.floor(z) + 0.5 }; }
+  if (!h) { a.lurk = false; return; }
+  a.lurk = { home: { x: h.x, z: h.z }, hole: h, aim: null, trapT: 0 };
+  a.x = h.x; a.z = h.z; a.home = { x: h.x, z: h.z };
+  goUnder(a, a.lurk, true);
+}
+function goUnder(a, L, quiet) {
+  a.under = true; a.hidden = true; a.state = 'chase'; a.y = -1.5; a.dmgTaken = null; a.kx = a.kz = 0;
+  if (a.avatar) { a.avatar.group.visible = false; a.avatar.anim.stop?.(0); }
+  clearVuln(a, 'exposed'); clearVuln(a, 'stranded');
+  L.aim = null; L.tellT = 0; L.back = null;
+  a.cd = quiet ? rand.range(0.5, 2) : rand.range(2.5, 4);
+  if (!quiet) { splashFx(a.x, a.z, 1); tally(a, 'under'); }
+}
+function slideIn(a, L) {
+  a.state = 'slide'; a.atkT = 0; a.rot = angleTo(L.hole.x, L.hole.z, a.x, a.z);
+  a.avatar?.play('slide', 1); splashFx(L.hole.x, L.hole.z, 0.8);
+}
+function strand(a, L) {
+  a.state = 'stranded'; a.atkT = 0; killTele(a.tele); a.tele = null; L.back = null;
+  addVuln(a, 'stranded', 4); a.avatar?.play('stranded', 1, { loop: true });
+  Audio.sfx('sealBark', { x: a.x, z: a.z, pitch: 1.3 }); tally(a, 'stranded');
+}
+// a wriggle over the ice toward (x, z), backwards if it keeps its face to the hero
+function crawl(a, x, z, sp, dt, backward) {
+  const dx = x - a.x, dz = z - a.z, l = Math.hypot(dx, dz) || 1, v = sp * moveMul(a);
+  const nx = a.x + (dx / l) * v * dt, nz = a.z + (dz / l) * v * dt;
+  if (!G.zone.map.blocks(Math.floor(nx), Math.floor(nz))) { a.x = nx; a.z = nz; }
+  turnTo(a, backward ? Math.atan2(-dx, -dz) : Math.atan2(dx, dz), 6, dt);
+  return v;
+}
+// under the ice: hunting at 7 m/s through water and thin ice only (its shape shows through the ice, sea.js uShade; over
+// open water a dark shape and a trail of bubbles)
+function lurkUnder(a, dt, pl, d, L) {
+  if (a.avatar) a.avatar.group.visible = false;
+  if (L.trapT > 0) { L.trapT -= dt; if (Math.random() < 0.2) P({ x: a.x, y: 0.05, z: a.z, vy: 0.3, life: 0.5, size: 0.1, size1: 0.02, color: 0xd8f0ff }); return 0; }
+  bubbles(a, dt);
+  // it feels her on the ice above it (16 m, no sight needed)
+  if (!a.aggro && d < 16 && !pl.dead) { a.aggro = true; tally(a, 'senses'); }
+  if (!aggroCheck(a, pl, d)) {
+    // patrolling under, round its home
+    if (!L.aim || Math.hypot(L.aim.x - a.x, L.aim.z - a.z) < 1) { const ang = rand.range(0, 6.28), r = rand.range(2, 7); L.aim = { x: L.home.x + Math.sin(ang) * r, z: L.home.z + Math.cos(ang) * r, idle: true }; }
+    return swimUnder(a, L.aim.x, L.aim.z, a.def.underSpeed * 0.3, dt) || ((L.aim = null), 0);
+  }
+  // a breach or a hole by her, chosen twice a second; else it stalks under her
+  if ((L.pickT = (L.pickT ?? 0) - dt) <= 0) {
+    L.pickT = 0.5;
+    const h = lurkHole(a, pl.x, pl.z, 6), b = h ? null : breachCell(a, pl);
+    L.target = h ? { x: h.x, z: h.z } : b ? { x: b.x, z: b.z, breach: true } : null;
+  }
+  const T = L.target;
+  if (L.tellT > 0) {
+    // the warning at the hole: bubbles boiling up, a bulge of water, a bark
+    L.tellT -= dt;
+    if (Math.random() < 0.8) P({ x: a.x + rand.range(-0.8, 0.8), y: 0.05, z: a.z + rand.range(-0.8, 0.8), vy: rand.range(0.4, 1.2), life: 0.5, size: rand.range(0.08, 0.2), size1: 0.02, color: 0xe8f6ff });
+    if (L.tellT <= 0) mawUp(a, L, pl);
+    return 0;
+  }
+  if (T && Math.hypot(T.x - pl.x, T.z - pl.z) < 7 && a.cd <= 0) {
+    if (Math.hypot(T.x - a.x, T.z - a.z) < 0.9) {
+      L.hole = { x: T.x, z: T.z };
+      if (T.breach) { breach(a, L, pl); return 0; }
+      L.tellT = 0.6; a.x = T.x; a.z = T.z;
+      ring(a.x, a.z, 1.4, 0xd8ecf4, 0.6); puff(a.x, 0.1, a.z, 5, 0xd8e8f0, 0.8, 0.9, 0.7);
+      Audio.sfx('sealBark', { x: a.x, z: a.z }); tally(a, 'tell');
+      return 0;
+    }
+    return swimUnder(a, T.x, T.z, a.def.underSpeed, dt);
+  }
+  // no way up near her: under her, if the ice lets it
+  return lurkOK(pl.x, pl.z) && Math.hypot(pl.x - L.home.x, pl.z - L.home.z) < 16 ? swimUnder(a, pl.x, pl.z, a.def.underSpeed * 0.6, dt) : swimUnder(a, L.home.x, L.home.z, a.def.underSpeed * 0.4, dt);
+}
+// straight on under the ice and through the water; land and thick ice turn it aside
+function swimUnder(a, x, z, sp, dt) {
+  const dx = x - a.x, dz = z - a.z, l = Math.hypot(dx, dz); if (l < 0.05) return 0;
+  const base = Math.atan2(dx, dz), st = Math.min(sp * dt, l);
+  for (const o of [0, 0.5, -0.5, 1, -1, 1.6, -1.6]) {
+    const ang = base + o, nx = a.x + Math.sin(ang) * st, nz = a.z + Math.cos(ang) * st;
+    if (!lurkOK(nx, nz) || (L5home(a, nx, nz))) continue;
+    a.x = nx; a.z = nz; a.rot = dampAngle(a.rot, ang, 8, dt);
+    return sp;
+  }
+  return 0;
+}
+const L5home = (a, x, z) => Math.hypot(x - a.lurk.home.x, z - a.lurk.home.z) > 15;
+function bubbles(a, dt) {
+  if (iceAt(a.x, a.z) !== 'water') return;
+  // over open water: a dark shape and its bubbles
+  if (Math.random() < dt * 14) P({ add: false, x: a.x + rand.range(-0.3, 0.3), y: 0.03, z: a.z + rand.range(-0.3, 0.3), life: 0.35, size: 1.6, size1: 1.9, color: 0x06121a, alpha: 0.32, alpha1: 0 });
+  if (Math.random() < dt * 8) P({ x: a.x + rand.range(-0.5, 0.5), y: 0.04, z: a.z + rand.range(-0.5, 0.5), vy: 0.6, life: 0.5, size: 0.1, size1: 0.02, color: 0xe8f6ff });
+}
+// a webbed cell (stage 2 or worse) within 4 m of her that it can reach under the ice, not in lamp light
+function breachCell(a, pl) {
+  let best = null, bd = 17;
+  for (let k = 0; k < 81; k++) {
+    const x = Math.floor(pl.x) + (k % 9) - 4 + 0.5, z = Math.floor(pl.z) + Math.floor(k / 9) - 4 + 0.5, d2 = (x - pl.x) ** 2 + (z - pl.z) ** 2;
+    if (d2 >= bd || stageAt(x, z) < 2 || iceAt(x, z) !== 'thin' || lampLightAt(x, z) || L5home(a, x, z)) continue;
+    bd = d2; best = { x, z };
+  }
+  return best;
+}
+// it bursts up through the webbed ice: the cell goes, the ice round it takes two stages; up at once, Exposed
+function breach(a, L, pl) {
+  breakAt(L.hole.x, L.hole.z, 0.6); crackAt(L.hole.x, L.hole.z, 1.5, 2, { src: 'breach' });
+  a.x = L.hole.x; a.z = L.hole.z;
+  iceShards(a.x, a.z, 16); splashFx(a.x, a.z, 1.2); shake(0.3);
+  Audio.sfx('iceBreak', { x: a.x, z: a.z }); tally(a, 'breach');
+  mawUp(a, L, pl);
+}
+function mawUp(a, L, pl) {
+  a.under = false; a.hidden = false; a.state = 'surface'; a.atkT = 0; a.y = 0;
+  L.dir = a.rot = angleTo(L.hole.x, L.hole.z, pl.x, pl.z);
+  if (a.avatar) { a.avatar.group.visible = true; a.avatar.group.position.set(a.x, a.y, a.z); a.avatar.play('surface', 2.2); }
+  a.tele = teleLine(L.hole.x, L.hole.z, L.dir, 7, 1.6, 0.7, 0xff4020);
+  // the drag's way, back toward the hole
+  L.arrow = teleLine(L.hole.x + Math.sin(L.dir) * 6.5, L.hole.z + Math.cos(L.dir) * 6.5, L.dir + Math.PI, 4.5, 0.5, 0.7, SEA);
+  splashFx(L.hole.x, L.hole.z, 1.1); Audio.sfx('splash', { x: a.x, z: a.z });
+}
+// what a Frost Nova does to the Icemaws: one under a hole it covers is held below 6 s (and a sea hole skins over a moment)
+const NOVA = { t: -99, x: 0, z: 0, r: 0 };
+on('frostNova', (x, z, r) => {
+  Object.assign(NOVA, { t: clock, x, z, r });
+  for (const a of G.actors) if (a.lurk && a.under && !a.dead && Math.hypot(a.x - x, a.z - z) < r + 1) { a.lurk.trapT = 6; a.lurk.tellT = 0; tally(a, 'trapped'); freezeCrystals(a.x, a.z, 1.2, 10); }
+});
+// through the ice under it: it goes down there (the hole is its now)
+FALLS.icemaw = (a) => { if (!a.lurk) return false; a.lurk.hole = { x: Math.floor(a.x) + 0.5, z: Math.floor(a.z) + 0.5 }; killTele(a.tele); a.tele = null; goUnder(a, a.lurk); return true; };
+// the shapes under the ice: the three Icemaws under it nearest the hero (sea.js uShade slots 0-2), faded in and out
+const SHADE = [0, 0, 0];
+function shadeTick(dt) {
+  // (a rope whose thrower is gone, however it went)
+  for (const [m, a] of ROPES) if (a.removed || a.dead || a.rope?.mesh !== m) { R.scene.remove(m); ROPES.delete(m); if (a.rope?.mesh === m) a.rope = null; }
+  const pl = G.player; if (!pl) return;
+  const under = G.actors.filter((a) => a.lurk && a.under && !a.dead && Math.abs(a.x - pl.x) < 30 && Math.abs(a.z - pl.z) < 30).sort((a, b) => Math.hypot(a.x - pl.x, a.z - pl.z) - Math.hypot(b.x - pl.x, b.z - pl.z));
+  for (let i = 0; i < 3; i++) {
+    const a = under[i], on = a && iceAt(a.x, a.z) !== 'water' && !(a.lurk.trapT > 0);
+    SHADE[i] = damp(SHADE[i], on ? 1 : 0, 6, dt);
+    if (a) setShade(i, a.x, a.z, 1.25 * (a.scale || 1), SHADE[i]); else setShade(i, 0, 0, 1, SHADE[i]);
+  }
+}
+
+// ---------- the Reefback: the brute's slow claws behind a guard (it turns 1.8 rad/s: roll past it and its back is open);
+// claw a 3.2 m cone (0.8 s), every third a slam (2.4 m, 1.0 s) that cracks thin ice two stages ----------
+function reef(a, dt, pl, d) {
+  if (!aggroCheck(a, pl, d)) return idle(a, dt);
+  if (a.state === 'attack') {
+    if (attackTick(a, dt)) {
+      killTele(a.tele); a.tele = null;
+      if (a.slam) {
+        explosion(a.x, a.z, 2.4, 0xb0a890, { smoke: 0x5a5a60, shake: 0.4 }); Audio.sfx('slam', { x: a.x, z: a.z });
+        if (Math.hypot(pl.x - a.x, pl.z - a.z) < 2.4 + pl.radius * 0.5 + a.radius * 0.3) hitHero(a, pl, 1.3, { stun: 0.4 });
+        crackAt(a.x, a.z, 2.4, 2, { src: 'slam' }); tally(a, 'slam');
+      } else {
+        const fx = a.x + Math.sin(a.rot) * 2, fz = a.z + Math.cos(a.rot) * 2; puff(fx, 0.3, fz, 5, 0x6a6a70, 0.9, 0.9);
+        Audio.sfx('swingHeavy', { x: a.x, z: a.z, vol: 0.7 });
+        if (inCone(a.x, a.z, a.rot, 3.2 + a.radius * 0.3, 0.75, pl)) hitHero(a, pl, 1.1);
+      }
+    }
+    return 0;
+  }
+  if (d < a.def.reach + pl.radius + 0.2) {
+    face(a, pl, dt, 5);
+    if (a.cd <= 0) {
+      a.slams = (a.slams || 0) + 1; a.slam = a.slams % 3 === 0;
+      a.tele = a.slam ? teleCircle(a.x, a.z, 2.4 + a.radius * 0.3, 1.0, 0xff7020) : teleCone(a.x, a.z, a.rot, 3.2 + a.radius * 0.3, 0.75, 0.8, 0xff8030);
+      startAttack(a, a.slam ? 'slam' : 'attack', { hit: a.slam ? 1.0 : 0.8, dur: a.slam ? 1.7 : 1.3, speed: 1 });
+      a.cd = a.def.atkTime;
+    }
+    return 0;
+  }
+  return seek(a, pl.x, pl.z, a.speed, dt);
+}
+
+// ---------- the Rime Bear's Frost Roar: a 5 m cone (0.8 s): Cold +15, a 20% slow for 2 s, every thin cell within 4 m a stage ----------
+function roar(a, dt, pl) {
+  a.atkT += dt;
+  if (!a.atkHit && a.atkT >= 0.8) {
+    a.atkHit = true; killTele(a.tele); a.tele = null;
+    const hx = a.x + Math.sin(a.rot) * 1.3 * (a.scale || 1), hz = a.z + Math.cos(a.rot) * 1.3 * (a.scale || 1);
+    for (let i = 0; i < 30; i++) { const ang = a.rot + rand.range(-0.55, 0.55), sp = rand.range(3, 7); P({ add: false, x: hx, y: 1.2, z: hz, vx: Math.sin(ang) * sp, vy: rand.range(-0.2, 0.5), vz: Math.cos(ang) * sp, life: rand.range(0.6, 1.0), size: 0.4, size1: 1.5, color: 0xa8d0ec, alpha: 0.6, alpha1: 0, drag: 2 }); }
+    for (let i = 0; i < 16; i++) { const ang = a.rot + rand.range(-0.6, 0.6), sp = rand.range(4, 9); P({ x: hx, y: 1.1, z: hz, vx: Math.sin(ang) * sp, vy: rand.range(0, 0.6), vz: Math.cos(ang) * sp, life: 0.5, size: 0.14, size1: 0.03, color: 0xe8f8ff, color1: 0x6ab0e8, drag: 2 }); }
+    ring(a.x, a.z, 4, 0x9ad0f0, 0.6); freezeCrystals(a.x, a.z, 4, 24); shake(0.4);
+    Audio.sfx('bearRoar', { x: a.x, z: a.z }); Audio.sfx('frost', { x: a.x, z: a.z, vol: 0.6 });
+    if (inCone(a.x, a.z, a.rot, 5, 0.6, pl) && !(pl.iframes > 0) && !pl.dead) { coldAdd(15); pl.status.slow = Math.max(pl.status.slow, 2); pl.status.slowK = Math.max(pl.status.slowK, 0.2); tally(a, 'roarHit'); }
+    crackAt(a.x, a.z, 4, 1, { src: 'roar' });
+  }
+  if (a.atkT >= 1.5) a.state = 'chase';
+  return 0;
+}
+
+// ---------- the Skuas: a flock on its roost (the whale's skull, a mast) that takes off when the hero comes within 10 m and
+// circles her high (out of reach); they come down only at a hero out in the dark (beyond every pool and beam: the Cradle's
+// own ring does not count), two at a time; a beam or burning oil within 6 m scatters them ----------
+let castRay = null;
+function perchY(p) {
+  if (!p.top) return 0;
+  if (p.y != null) return p.y;
+  const g = G.zone?.lvl?.group; p.y = 0;
+  if (!g) return 0;
+  castRay ||= new THREE.Raycaster();
+  castRay.set(_ra.set(p.x, 14, p.z), _rb.set(0, -1, 0)); castRay.far = 14;
+  const hit = castRay.intersectObject(g, true).find((h) => h.object.visible && h.point.y > 0.3);
+  p.y = hit ? Math.min(6, hit.point.y) : 0;
+  return p.y;
+}
+function skua(a, dt, pl, d) {
+  if (a.fly == null) {
+    a.fly = a.perch ? 'roost' : 'sky'; a.hy = rand.range(4.2, 5.4); a.orbR = rand.range(5.5, 7.5); a.orbDir = rand.sign();
+    a.y = a.perch ? perchY(a.perch) : a.hy; a.airborne = !a.perch;
+  }
+  // scattered: a beam over it, burning oil near (up and away from the light, crying)
+  if ((a.oilT = (a.oilT ?? 0) - dt) <= 0) { a.oilT = 0.5; if (G.areas.some((f) => f.kind === 'fire' && f.floats && f.t < f.dur && Math.hypot(f.x - a.x, f.z - a.z) < 6)) a.status.fear = Math.max(a.status.fear, 3); }
+  if (a.status.fear > 0 && a.fly !== 'roost') {
+    if (a.fly === 'dive') { a.fly = 'climb'; tally(a, 'diveScattered'); }
+    a.y = damp(a.y, a.hy + 2, 2, dt); a.airborne = a.y > 2.2;
+    if (Math.random() < dt * 0.8) Audio.sfx('skuaCry', { x: a.x, z: a.z, vol: 0.5 });
+    const away = angleTo(pl.x, pl.z, a.x, a.z) + (a.orbDir * 0.6);
+    return fly(a, a.x + Math.sin(away) * 4, a.z + Math.cos(away) * 4, a.speed * 1.1, dt);
+  }
+  if (a.fly === 'roost') {
+    if (!a.perched && !a.avatar?.anim.busy) { a.perched = true; a.avatar?.play('perch', 1, { loop: true }); }
+    if (d < 10 || a.hp < a.hpMax || a.aggro || a.status.fear > 0) {
+      // the flock goes up together, a beat apart
+      for (const b of G.actors) if (b.fly === 'roost' && (b === a || (a.packId != null && b.packId === a.packId))) { b.fly = 'rise'; b.liftT = b === a ? 0 : rand.range(0.05, 0.6); b.aggro = true; }
+    }
+    return 0;
+  }
+  if (a.fly === 'rise') {
+    if ((a.liftT -= dt) > 0) return 0;
+    if (!a.lifting) { a.lifting = true; a.y0 = a.y; a.avatar?.play('takeoff', 1); if (Math.random() < 0.4) Audio.sfx('skuaCry', { x: a.x, z: a.z, vol: 0.6 }); puff(a.x, a.y + 0.1, a.z, 3, 0xd8d4cc, 0.5, 0.5, 0.6); }
+    const k = a.avatar?.anim.liftK ?? 1;
+    a.y = Math.max(a.y, a.y0 + k * 1.2);
+    if (k >= 1 || !a.avatar?.anim.busy) a.y = Math.min(a.hy, a.y + dt * 3.5);
+    a.airborne = a.y > 2.2;
+    const v = fly(a, a.x + Math.sin(a.rot) * 2, a.z + Math.cos(a.rot) * 2, a.speed * 0.35 * k, dt);
+    if (a.y >= a.hy) { a.fly = 'sky'; a.lifting = false; a.avatar?.play('glide', 1, { loop: true }); }
+    return v;
+  }
+  if (a.fly === 'dive') {
+    // down in a stoop, through her, and up again; out of the stoop if she gets into light
+    a.atkT += dt;
+    const lit = lightAt(pl.x, pl.z, { ring: false }), td = Math.hypot(pl.x - a.x, pl.z - a.z);
+    if (lit && !a.atkHit) { a.fly = 'climb'; tally(a, 'diveBroken'); return 0; }
+    a.y = Math.max(0.9, damp(a.y, td < 3 ? 0.9 : 1.6, 5, dt)); a.airborne = a.y > 2.2;
+    if (!a.atkHit && td < a.def.reach + pl.radius + 0.2 && a.y < 1.6) {
+      a.atkHit = true; a.avatar?.play('bite', 1.4);
+      hitHero(a, pl, 1, { cold: a.def.coldBite }); tally(a, 'bite');
+    }
+    if (a.atkHit || a.atkT > 2.2) { a.fly = 'climb'; a.climbDir = a.rot; }
+    return fly(a, pl.x + Math.sin(a.rot) * 0.6, pl.z + Math.cos(a.rot) * 0.6, a.speed * 1.45, dt);
+  }
+  if (a.fly === 'climb') {
+    a.y = Math.min(a.hy, a.y + dt * 3); a.airborne = a.y > 2.2;
+    if (a.y >= a.hy) { a.fly = 'sky'; a.cd = rand.range(1.5, 3); a.avatar?.play('glide', 1, { loop: true }); releaseDive(a); }
+    const dir = a.climbDir ?? a.rot;
+    return fly(a, a.x + Math.sin(dir) * 3, a.z + Math.cos(dir) * 3, a.speed, dt);
+  }
+  if (a.fly === 'home') {
+    const p = a.perch, py = perchY(p), dh = Math.hypot(p.x - a.x, p.z - a.z);
+    if (d < 12) { a.fly = 'sky'; return 0; }
+    if (dh > 0.4) { a.y = damp(a.y, dh < 3 ? py + 0.6 : a.hy, 2, dt); return fly(a, p.x, p.z, a.speed * 0.6, dt); }
+    a.x = p.x; a.z = p.z; a.y = py; a.airborne = false; a.fly = 'roost'; a.perched = false; a.aggro = false; a.avatar?.play('land', 1);
+    return 0;
+  }
+  // circling her high, out of reach, crying; wider while she stands in light
+  a.airborne = a.y > 2.2;
+  const lit = lightAt(pl.x, pl.z, { ring: false });
+  a.y = damp(a.y, a.hy + Math.sin(a.t * 1.7 + a.id) * 0.3, 2, dt);
+  a.orb = (a.orb ?? angleTo(pl.x, pl.z, a.x, a.z)) + dt * (a.speed / (lit ? 10 : a.orbR)) * a.orbDir;
+  const r = lit ? 9.5 : a.orbR;
+  if (Math.random() < dt * 0.25) Audio.sfx('skuaCry', { x: a.x, z: a.z, vol: 0.45 });
+  // a flock with no hero near goes home to its roost
+  if (a.perch && d > 26 && Math.hypot(pl.x - a.home.x, pl.z - a.home.z) > 26) { a.fly = 'home'; return 0; }
+  if (!lit && a.cd <= 0 && d < 12 && !pl.dead && diveToken(a)) {
+    a.fly = 'dive'; a.atkT = 0; a.atkHit = false; a.rot = angleTo(a.x, a.z, pl.x, pl.z);
+    a.avatar?.play('dive', 1, { loop: true }); Audio.sfx('skuaCry', { x: a.x, z: a.z, vol: 0.8 }); tally(a, 'dive');
+    return 0;
+  }
+  return fly(a, pl.x + Math.sin(a.orb) * r, pl.z + Math.cos(a.orb) * r, a.speed, dt);
+}
+// two stoops at a time in a zone
+function diveToken(a) {
+  const z = G.zone, n = (z.skuaDives ||= new Set());
+  for (const b of n) if (b.dead || b.removed || b.fly !== 'dive') n.delete(b);
+  if (n.size >= 2) return false;
+  n.add(a); return true;
+}
+function releaseDive(a) { G.zone.skuaDives?.delete(a); }
 
 // fliers go straight over anything that is not a wall
 function fly(a, tx, tz, sp, dt) {
@@ -782,9 +1647,10 @@ function dazedTick(a, dt) {
   return 0;
 }
 // A charge in progress: straight on, trampling whatever is in the way, until something stops it. Shared by the
-// bosses and the Amberback Bear. D = { vx, vz, t, hit, probe (how far ahead the front is), daze (seconds dazed on
-// hitting something solid), sapDaze (seconds dazed on running into fresh sap), trail (sap left behind), crack (stones
-// crack), dmg / hitO (what trampling the hero does), dust, end(a, D) }. Returns the speed, for the gait.
+// bosses, the Amberback and the Rime Bear. D = { vx, vz, t, hit, probe (how far ahead the front is), daze (seconds dazed on
+// hitting something solid), sapDaze (seconds dazed on running into fresh sap or slush), trail (sap left behind), crack
+// (stones crack), ice (Act V: each thin cell it runs onto cracks a stage, and one already webbed gives way under it: it
+// flounders, ice.js), dmg / hitO (what trampling the hero does), dust, end(a, D) }. Returns the speed, for the gait.
 export function dashStep(a, dt, pl = G.player) {
   const D = a.dash, map = G.zone.map, st = Math.min(dt, D.t);
   D.t -= dt;
@@ -792,8 +1658,9 @@ export function dashStep(a, dt, pl = G.player) {
   const nx = a.x + D.vx * st, nz = a.z + D.vz * st;
   if (map.walkable(nx, nz) && (!pr || map.walkable(nx + ux * pr, nz + uz * pr))) { a.x = nx; a.z = nz; D.run = (D.run || 0) + sp * st; }
   else { D.t = 0; D.wall = { x: nx + ux * pr, z: nz + uz * pr }; }
-  // fresh sap ahead stops it dead (not its own trail, nor sap it started in)
-  if (D.sapDaze && !D.wall && D.t > 0) { const s = sapAt(a.x + ux * pr * 0.5, a.z + uz * pr * 0.5, D); if (s && !D.inSap) { D.t = 0; D.sap = true; } D.inSap = s; }
+  // fresh sap ahead stops it dead (not its own trail, nor sap it started in); so does slush
+  if (D.sapDaze && !D.wall && D.t > 0) { const s = stops(a.x + ux * pr * 0.5, a.z + uz * pr * 0.5, D); if (s && !D.inSap) { D.t = 0; D.sap = s; } D.inSap = s; }
+  if (D.ice && !D.wall && D.t > 0) iceStep(a, D);
   if (D.trail && (D.run || 0) - (D.lastPool ?? -9) > 3.2) { D.lastPool = D.run; addSapPool(a.x - ux, a.z - uz, 1.5, 5, D); }
   if (Math.random() < 0.7) puff(a.x, 0.3, a.z, 2, D.dust ?? 0x8a8680, 0.8, 0.8, 0.8);
   if (D.drop && (D.run || 0) - (D.lastDrop ?? -9) > D.drop.every) { D.lastDrop = D.run; D.drop.fn(a.x - ux, a.z - uz); }
@@ -809,12 +1676,31 @@ function startDash(a, dir, sp, len, o = {}) {
   const ux = Math.sin(dir), uz = Math.cos(dir);
   a.rot = dir;
   a.dash = Object.assign({ vx: ux * sp, vz: uz * sp, t: len / sp, hit: false, probe: a.radius * 0.8, end: chargeEnd }, o);
-  if (a.dash.sapDaze) a.dash.inSap = sapAt(a.x + ux * a.dash.probe * 0.5, a.z + uz * a.dash.probe * 0.5);
+  if (a.dash.sapDaze) a.dash.inSap = stops(a.x + ux * a.dash.probe * 0.5, a.z + uz * a.dash.probe * 0.5);
   return a.dash;
 }
+// what stops a charge dead: amber sap and slush (a pool of it, or refrozen ice), never brine (ignore: its own trail)
+function stops(x, z, ignore) {
+  const s = sapAt(x, z, ignore);
+  if (s === 'amber' || s === 'slush') return s;
+  return iceAt(x, z) === 'slush' ? 'slush' : null;
+}
+// a charge on thin ice: each thin cell it runs onto takes a stage; one at 2 or more breaks at once under it, and the charge
+// ends there (it flounders when the break's batch closes the cell, ice.js)
+function iceStep(a, D) {
+  const ix = Math.floor(a.x), iz = Math.floor(a.z), c = iz * 4096 + ix;
+  if (c === D.iceCell) return;
+  D.iceCell = c;
+  if (iceAt(a.x, a.z) !== 'thin') return;
+  if (stageAt(a.x, a.z) >= 2) { breakAt(ix + 0.5, iz + 0.5, 0.5); D.t = 0; D.broke = true; tally(a, 'iceBreak'); return; }
+  crackAt(ix + 0.5, iz + 0.5, 0.5, 1, { src: 'charge' });
+}
 function chargeEnd(a, D) {
-  if (D.wall && D.daze) { daze(a, D.daze); tally(a, 'hitWall'); if (D.crack) crackStone(a, D.wall); }
-  else if (D.sap && D.sapDaze) { daze(a, D.sapDaze); tally(a, 'hitSap'); for (let i = 0; i < 16; i++) P({ add: false, x: a.x, y: 0.3, z: a.z, vx: rand.range(-3, 3), vy: rand.range(2, 4), vz: rand.range(-3, 3), life: 0.7, size: 0.16, size1: 0.08, color: 0xe0a030, alpha: 1, grav: 14 }); Audio.sfx('sapCrack', { x: a.x, z: a.z }); }
+  // (on thin ice its weight comes down at the end: +1 stage round it; through a webbed cell it is already going under)
+  if (D.ice && !D.broke) crackAt(a.x, a.z, 2.5, 1, { src: 'charge' });
+  if (D.broke) { a.avatar?.anim.stop?.(0.1); puff(a.x, 0.2, a.z, 8, 0xd8e4ec, 1, 1.2, 1); }
+  else if (D.wall && D.daze) { daze(a, D.daze); tally(a, 'hitWall'); if (D.crack) crackStone(a, D.wall); }
+  else if (D.sap && D.sapDaze) { daze(a, D.sap === 'slush' ? 2 : D.sapDaze); tally(a, D.sap === 'slush' ? 'hitSlush' : 'hitSap'); const c = D.sap === 'slush' ? 0xc8d4dc : 0xe0a030; for (let i = 0; i < 16; i++) P({ add: false, x: a.x, y: 0.3, z: a.z, vx: rand.range(-3, 3), vy: rand.range(2, 4), vz: rand.range(-3, 3), life: 0.7, size: 0.16, size1: 0.08, color: c, alpha: 1, grav: 14 }); Audio.sfx(D.sap === 'slush' ? 'splash' : 'sapCrack', { x: a.x, z: a.z }); }
   else { a.avatar?.anim.stop?.(0.2); puff(a.x, 0.3, a.z, 6, D.dust ?? 0x8a8680, 1, 1, 1); }
 }
 // the Glade's standing stones: in the Hart's last run each charge cracks the stone it hits, and a second breaks it

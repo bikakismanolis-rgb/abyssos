@@ -65,7 +65,8 @@ export function makeItem(ilvl, o = {}) {
   let base = o.base || pickBase(cls);
   let leg = null;
   if (rar === 3) {
-    let choices = LEGENDARIES.filter((l) => (!l.cls || l.cls === cls || Math.random() < 0.15));
+    // (a boss's own, drop: false, only when asked for by name: o.leg)
+    let choices = LEGENDARIES.filter((l) => l.drop !== false && (!l.cls || l.cls === cls || Math.random() < 0.15));
     if (o.base) choices = choices.filter((l) => l.base === o.base);
     if (o.leg) choices = LEGENDARIES.filter((l) => l.id === o.leg);
     if (choices.length) { leg = rand.pick(choices); base = leg.base; } else rar = 2;

@@ -115,6 +115,19 @@ export const MONSTERS = {
   keeperStatue: { model: 'barrowLord', hp: 1, dmg: 0, speed: 0, radius: 1.0, ai: 'node', reach: 0, atk: 'cast', atkTime: 9, flesh: 'stone', xp: 0, big: true, anchored: true, fireproof: true },
   ivar: { model: 'ivar', hp: 58, dmg: 2.3, speed: 4.4, radius: 0.6, ai: 'ivar', reach: 4.4, atk: 'heavyStab', atkTime: 1.5, flesh: 'spirit', xp: 130, boss: true, weapon: 'lanternStaff', wlook: { glow: 0.05, lamp: 0x6a7684 }, style: 'staff', dieClip: 'kneel', dieSfx: 'wraithDie', look: { scale: 1.25, rim: 0xb0b8c8, rimI: 0.5 } },
   karthax: { model: 'karthax', hp: 95, dmg: 2.7, speed: 4.0, radius: 1.3, ai: 'karthax', reach: 4.8, atk: 'smash', atkTime: 1.5, flesh: 'magma', xp: 220, boss: true, weapon: 'hammer', wlook: { len: 1.6, ember: 0xff5a10 }, style: 'heavy', dieClip: 'kneel', sfx: 'golem', fireproof: true, look: { scale: 1.5, rim: 0xff5a18, rimI: 0.6 } },
+  // Act V: the Frozen Coast and the Farthest Light. The Skotos's creatures are unlit (a beam dazzles and reveals them, lamp
+  // light keeps them from waking or rising); swim: they cross deep water and are not slowed wading; tideWake: dormant under
+  // kelp until the flood reaches them (frozen crews: until the ice cracks); tideborne: stronger in the shallows; weight:
+  // their load on thin ice (ice.js); iceCharge: a charge cracks thin ice; coldBite: Cold on a bite (cold.js); turn: the
+  // most it turns, rad/s (behind a guard; 2.2 by default)
+  sunken: { model: 'sunken', hp: 1.4, dmg: 1.2, speed: 3.4, radius: 0.5, ai: 'melee', reach: 1.9, atk: 'chop', atkTime: 1.3, flesh: 'drowned', xp: 2, weapon: 'boathook', style: 'heavy', animSet: 'undead', dieClip: 'dieBones', wake: { d: 5, clip: 'rise', pose: 'kelpPile', sfx: 'splash', t: 2.0 }, tideWake: true, tideborne: true, swim: true, unlit: true, hookEvery: 3 },
+  harpooner: { model: 'sunken', hp: 1.0, dmg: 1.1, speed: 3.4, radius: 0.48, ai: 'ranged', reach: 11, atk: 'throw', atkTime: 1.8, proj: 'harpoon', flesh: 'drowned', xp: 1.8, weapon: 'harpoon', style: 'none', animSet: 'harpoon', harpoonEvery: 3, wake: { d: 5, clip: 'rise', pose: 'kelpPile', sfx: 'splash', t: 2.0 }, tideWake: true, tideborne: true, swim: true, unlit: true, look: { scale: 1.06 } },
+  iceSinger: { model: 'icesinger', hp: 0.9, dmg: 0.8, speed: 3.8, radius: 0.45, ai: 'singer', reach: 10, atk: 'cast', atkTime: 3.0, flesh: 'drowned', xp: 2.2, style: 'none', animSet: 'singer', float: true, unlit: true, dieClip: 'dieFwd', look: { rim: 0x9ad8ff, rimI: 0.45 } },
+  hullLouse: { model: 'hullLouse', hp: 0.32, dmg: 0.5, speed: 6.0, radius: 0.38, ai: 'melee', reach: 1.0, atk: 'bite', atkTime: 0.8, flesh: 'chitin', xp: 0.6, sfx: 'spider', burst: true, curl: true, swim: true, unlit: true, weight: 0.3, look: { scale: 1.25, tint: 0x7a7488, tintAmt: 0.45, rim: 0xc0d0ff, rimI: 0.2 } },
+  icemaw: { model: 'icemaw', hp: 2.2, dmg: 1.5, speed: 2.0, underSpeed: 7.0, radius: 0.6, ai: 'lurker', reach: 2.2, atk: 'bite', atkTime: 1.1, flesh: 'flesh', xp: 3, swim: true, weight: 2.0, look: { scale: 1.6 } },
+  reefback: { model: 'reefback', hp: 4.8, dmg: 1.9, speed: 3.4, radius: 0.6, ai: 'brute', reach: 2.6, atk: 'claw', atkTime: 1.6, flesh: 'chitin', xp: 6, big: true, swim: true, weight: 2.5, guard: { arc: 1.2, k: 0.2 }, turn: 1.8, wake: { d: 3, clip: 'wake', pose: 'rock', tide: true, sfx: 'splash', t: 2.0, speed: 1 }, look: { scale: 1.5, tint: 0x6a7080, tintAmt: 0.6 } },
+  rimeBear: { model: 'rimeBear', hp: 3.6, dmg: 1.9, speed: 5.6, radius: 1.1, ai: 'charger', reach: 2.3, atk: 'smash', atkTime: 1.6, flesh: 'flesh', xp: 5.5, sfx: 'bear', big: true, iceCharge: true, frostRoar: true, look: { scale: 1.3, tint: 0xf4f2ec, tintAmt: 2.15, rim: 0xd8f0ff, rimI: 0.3 } },
+  skua: { model: 'skua', hp: 0.3, dmg: 0.45, speed: 7.5, radius: 0.4, ai: 'bat', reach: 1.0, atk: 'bite', atkTime: 0.8, flesh: 'flesh', xp: 0.5, float: true, lightShy: true, coldBite: 3, feathers: true },
   // the ranger's companion
   spiritWolf: { model: 'spiritWolf', hp: 2, dmg: 1, speed: 7.5, radius: 0.55, ai: 'pet', reach: 1.7, atk: 'bite', atkTime: 0.8, flesh: 'spirit', xp: 0, pet: true }
 };
@@ -160,13 +173,27 @@ export const PACKS = {
   smiths: [['ashsmith', 2], ['ashSpear', 2], ['ashDwarf', 1.5], ['emberTick', 1.5]],
   stokers: [['hammerhorn', 1]],
   mouldHall: [['ashsmith', 2], ['ashSpear', 2], ['ashBow', 1], ['emberTick', 2], ['smokeEater', 0.6], ['hammerhorn', 0.3]],
-  bellowsWave: [['ashSpear', 2], ['ashDwarf', 1.5], ['ashsmith', 1], ['emberTick', 2]]
+  bellowsWave: [['ashSpear', 2], ['ashDwarf', 1.5], ['ashsmith', 1], ['emberTick', 2]],
+  // Act V (floodWave: walked in by the tide at high water, world.js; holeRise: climbing out of a Breathing-hole, the seals)
+  sunkenCrew: [['sunken', 4], ['harpooner', 2]],
+  tideChoir: [['sunken', 3], ['harpooner', 1]],
+  floodWave: [['sunken', 3]],
+  hullSwarm: [['hullLouse', 1]],
+  reefRocks: [['reefback', 1], ['hullLouse', 2]],
+  strandBear: [['hullLouse', 2]],
+  fallHunters: [['hullLouse', 2]],
+  skuaFlock: [['skua', 1]],
+  frozenCrew: [['sunken', 3], ['harpooner', 2], ['iceSinger', 0.6]],
+  iceMixed: [['sunken', 2], ['hullLouse', 2], ['harpooner', 1], ['icemaw', 0.6], ['iceSinger', 0.6]],
+  holeRise: [['sunken', 1]]
 };
 // packs built around one creature: it comes first, exactly once (or the count given), and the rest are drawn without it
 export const PACK_LEAD = { weepDen: ['amberBear'], weepWeepers: ['rootwarden'], weepMourners: ['mourner'], heartWarden: ['rootwarden'], heartChoir: ['mourner', 'mourner'],
-  ashLine: ['ashSpear'], snuffers: ['smokeEater', 'smokeEater'], smiths: ['ashsmith'], mouldHall: ['ashsmith'], bellowsWave: ['ashsmith'] };
-// packs whose dead wait in disguise (Hollowed as dead trees and amber cocoons, the Ash-Fallen under the ash) until the hero is close
-export const PACK_DORMANT = { weepHollow: true, heartSleepers: true, ashLine: true };
+  ashLine: ['ashSpear'], snuffers: ['smokeEater', 'smokeEater'], smiths: ['ashsmith'], mouldHall: ['ashsmith'], bellowsWave: ['ashsmith'],
+  tideChoir: ['iceSinger'], reefRocks: ['reefback'], strandBear: ['rimeBear'], fallHunters: ['icemaw'] };
+// packs whose dead wait in disguise (Hollowed as dead trees and amber cocoons, the Ash-Fallen under the ash, the Sunken under
+// the kelp and as ice at the rails, the Reefbacks as rocks) until the hero is close
+export const PACK_DORMANT = { weepHollow: true, heartSleepers: true, ashLine: true, sunkenCrew: true, tideChoir: true, reefRocks: true, frozenCrew: true };
 // packs that stand in a line, the shields toward the hero (the Ash-Fallen still holding the battle line where they fell)
 export const PACK_LINE = { ashLine: true };
 // the kinds to spawn for a pack of n: the leads, then weighted picks of the rest (pick = rand.weighted)
@@ -198,9 +225,16 @@ export const BOONS = {
     { id: 'wayfarer', icon: 'roll', stats: { move: 8, cdr: 10 } },
     { id: 'lantern', icon: 'star', stats: { crit: 6, critDmg: 25 } },
     { id: 'rest', icon: 'shield', stats: { lifePct: 15, regen: 15 } }
+  ],
+  // the lights of the sea: worth a quarter again to a hero who lit all four Name-stones (h.flags.remembered, stats.js)
+  5: [
+    { id: 'einar', icon: 'star', stats: { eliteDmg: 15, crit: 5 } },
+    { id: 'tide', icon: 'roll', stats: { atkSpd: 8, resRegen: 15 } },
+    { id: 'name', icon: 'shield', stats: { lifePct: 12, armorPct: 12 } }
   ]
 };
 export const UNBOUND = 1.5;
+export const REMEMBERED = 1.25;
 // the Crown's Offers (Act IV altars): what each gift gives and takes while it is held (stats.js)
 export const GIFTS = {
   throne: { armorPct: 25, lifePct: 10, move: -12 },
@@ -279,8 +313,14 @@ export const LEGENDARIES = [
   { id: 'barrowCrown', base: 'helm', cls: null, v: 0.12 },
   { id: 'vampiricMail', base: 'chest', cls: null, v: 0.02 },
   { id: 'stoneborn', base: 'chest', cls: null, v: 0.2 },
-  { id: 'swiftboots', base: 'boots', cls: null, v: 0.15 }
+  { id: 'swiftboots', base: 'boots', cls: null, v: 0.15 },
+  // Act V: the bosses' own, never a random drop (drop: false; items.js gives them only when asked, LEG_FROM): the sea takes
+  // no life from her (plunges, wash-outs); what she strikes is Revealed for 2 s
+  { id: 'skerryShell', base: 'chest', cls: null, v: 1, drop: false },
+  { id: 'einarLantern', base: 'amulet', cls: null, v: 2, drop: false }
 ];
+// a boss's first kill drops its own legendary (combat.js kill)
+export const LEG_FROM = { tower: 'skerryShell', skotos: 'einarLantern' };
 export const POTION = { cd: 18, heal: 0.6 };
 export const INV_SIZE = 32;
 export const STASH_SIZE = 48;

@@ -66,6 +66,9 @@ function prepare(gltf) {
     if (!o.isMesh) return;
     // packs are many: real shadows only on high quality, blob shadows always
     o.castShadow = R.quality >= 2; o.receiveShadow = false;
+    // (extras.keepMat: the file's own sheen is meant, the Skotos's wet black and its Hands'; the frost enemies' wet roughness
+    // is baked in their materials too, and creatures.js never sets roughness on those)
+    if (ex.keepMat) return;
     const m = o.material;
     m.envMapIntensity = 0.4;
     if (m.roughness < 0.45 && !m.metalnessMap) m.roughness = 0.6;
@@ -73,7 +76,9 @@ function prepare(gltf) {
   const box = new THREE.Box3().setFromObject(scene);
   // spiders and wolves are wider or longer than they are tall
   const size = box.getSize(new THREE.Vector3()), extent = Math.max(size.x, size.z, ex.legSpan || 0, ex.length || 0);
-  return { scene, clips, hit: ex.hit || {}, height: ex.height || size.y, extent, walkSpeed: ex.walkSpeed || 1.4, runSpeed: ex.runSpeed || 4, credit: ex.credit };
+  // (?? : the anchored Skotos and its Hands say 0, and mean it). ex: the file's other extras (rollSpeed, liftAt, touchAt,
+  // the crab's socket and spireTop, overturned's times), for the AIs and actors.js
+  return { scene, clips, hit: ex.hit || {}, height: ex.height || size.y, extent, walkSpeed: ex.walkSpeed ?? 1.4, runSpeed: ex.runSpeed ?? 4, credit: ex.credit, ex };
 }
 
 export function creatureModel(model, o = {}) {
@@ -82,11 +87,13 @@ export function creatureModel(model, o = {}) {
   const root = cloneSkinned(T.scene);
   const inner = new THREE.Group(); inner.add(root); inner.scale.setScalar(base);
   const u = personUniforms(o);
+  // the Skotos's hood opens on a void that must stay black: no rim, flash or tint reach it (it still dissolves with the rest)
+  const uVoid = Object.assign({}, personUniforms({ rim: 0, rimI: 0 }), { uDissolve: u.uDissolve, uBurn: u.uBurn });
   const mats = [];
   root.traverse((m) => {
     if (!m.isMesh) return;
     const mat = m.material.clone();
-    mat.userData.u = u;
+    mat.userData.u = /void/i.test(m.material.name) ? uVoid : u;
     mat.onBeforeCompile = patchPerson;
     mat.customProgramCacheKey = () => 'person1';
     m.material = mat; mats.push(mat);
@@ -120,18 +127,27 @@ const MAP = {
   // Act IV: the Ashwing's flight, the Smoke-eater's meal and grab, the Ember Tick's hold
   glide: ['glide', 'walk'], dive: ['dive', 'glide', 'attack'], land: ['land', 'hit'], takeoff: ['takeoff', 'glide'], consume: ['consume', 'cast', 'attack'],
   cling: ['cling', 'idle'], perch: ['perch'], Shield_Dash: ['charge', 'attack2', 'attack'], Hit_Knockback: ['hit'], Idle_Shield_Break: ['hit'],
-  Idle_Rail_Call: ['howl', 'warcry', 'cast'], Melee_Hook: ['attack2', 'attack'], KK_Spellcast_Shoot: ['cast', 'attack']
+  Idle_Rail_Call: ['howl', 'warcry', 'cast'], Melee_Hook: ['attack2', 'attack'], KK_Spellcast_Shoot: ['cast', 'attack'],
+  // Act V: the crabs (the Walking Tower, the Reefback), the Hull-louse, the Icemaw, the Skua, the Skotos and its Hands
+  rock: ['rock', 'idle'], wake: ['wake', 'rise'], settle: ['settle', 'rock'], overturned: ['overturned', 'daze'], shake: ['shake', 'hit'], side: ['side', 'walk'], crawl: ['crawl', 'walk'],
+  flounder: ['flounder', 'daze', 'hit'], breach: ['breach', 'rise'], daze: ['daze', 'hit'],
+  curl: ['curl'], uncurl: ['uncurl', 'spawn'], roll: ['roll', 'curl'],
+  lunge: ['lunge', 'attack'], drag: ['attack2', 'attack'], surface: ['surface', 'rise'], slide: ['slide', 'dive'], stranded: ['stranded', 'hit'],
+  sweep: ['sweep', 'attack'], lash: ['lash', 'sweep'], wrap: ['wrap', 'cast'], smother: ['smother', 'slam'], recoil: ['recoil', 'hit'], sink: ['sink', 'die'], drink: ['drink', 'roar'], roar: ['roar', 'howl']
 };
-const HOLD = new Set(['die', 'dieFwd', 'dieBones', 'bonePile', 'aim']);
-const LOOP = new Set(['channel', 'bonePile', 'spin', 'glide', 'consume', 'cling', 'perch']);
+// held at their last frame: deaths, the dormant poses (a crab's rock, a louse's ball), what ends under the water or the ice
+// (an Icemaw's dive and slide, the crab's dive, the Skotos's sink), the Tower's settle into its island and its overturn
+const HOLD = new Set(['die', 'dieFwd', 'dieBones', 'bonePile', 'aim', 'rock', 'curl', 'overturned', 'settle', 'sink', 'dive', 'slide']);
+const LOOP = new Set(['channel', 'bonePile', 'spin', 'glide', 'consume', 'cling', 'perch', 'stranded', 'side', 'crawl', 'flounder', 'roll']);
 
 export class CreatureAnim {
   constructor(av) {
     this.av = av; this.T = av.model.tpl; this.b = av.bones;
     this.mixer = new THREE.AnimationMixer(av.model.mesh);
     this.loco = {};
+    // (a creature without a walk or a run, the anchored Skotos and its Hands, keeps its idle: those weights go to the idle)
     for (const k of ['idle', 'walk', 'run']) {
-      const clip = this.T.clips[k] || this.T.clips.idle; if (!clip) continue;
+      const clip = this.T.clips[k] || (k === 'idle' ? this.T.clips.walk : null); if (!clip) continue;
       const a = this.mixer.clipAction(clip, undefined, undefined);
       a.play(); a.setEffectiveWeight(k === 'idle' ? 1 : 0);
       a.time = Math.random() * clip.duration;
@@ -184,15 +200,25 @@ export class CreatureAnim {
     const actOn = !!this.act;
     this.locoW = damp(this.locoW, actOn ? 0 : 1, actOn ? 30 : 9, dt);
     const T = this.T, walkS = T.walkSpeed, runS = Math.max(T.runSpeed, walkS * 1.6);
+    // (the dive and the slide end under the ice: under is true once they are done, for the AI to take it under)
+    this.under = !!this.act && (this.actName === 'dive' || this.actName === 'slide') && !this.act.isRunning();
     let wi = 1, ww = 0, wr = 0;
     if (speed > 0.12) {
       if (speed < walkS * 1.2) { const k = clamp(speed / walkS, 0, 1); wi = 1 - k; ww = k; }
       else { const k = clamp((speed - walkS * 1.2) / (runS - walkS * 1.2), 0, 1); wi = 0; ww = 1 - k; wr = k; }
     }
     const L = this.loco;
+    if (!L.run) { ww += wr; wr = 0; }
+    if (!L.walk) { wi += ww; ww = 0; }
     L.idle?.setEffectiveWeight(wi * this.locoW); L.walk?.setEffectiveWeight(ww * this.locoW); L.run?.setEffectiveWeight(wr * this.locoW);
-    if (L.walk) L.walk.timeScale = clamp(speed / walkS, 0.5, 2.2);
-    if (L.run) L.run.timeScale = clamp(speed / runS, 0.7, 1.8);
+    if (L.walk && walkS > 0) L.walk.timeScale = clamp(speed / walkS, 0.5, 2.2);
+    if (L.run && runS > 0) L.run.timeScale = clamp(speed / runS, 0.7, 1.8);
+    // a Hull-louse's ball rolls at the speed it travels (extras.rollSpeed: metres a second at 1x); a Skua lifts off its roost
+    // only after the first beat of its takeoff (extras.liftAt): liftK 0-1 for the AI's height
+    const ex = T.ex || {};
+    if (this.actName === 'roll' && ex.rollSpeed && this.act) this.act.timeScale = clamp(speed / ex.rollSpeed, 0.2, 4);
+    if (this.actName === 'takeoff' && this.act) { const d = this.act.getClip().duration, l = ex.liftAt ?? 0; this.liftK = clamp((this.act.time - l) / Math.max(0.05, d - l), 0, 1); }
+    else this.liftK = this.actName === 'land' && this.act ? 1 - clamp(this.act.time / Math.max(0.05, ex.touchAt ?? this.act.getClip().duration), 0, 1) : 0;
     this.mixer.update(dt);
     if (this.hit > 0 && this.flinchBone) {
       this.hit = Math.max(0, this.hit - dt * 5);

@@ -305,7 +305,10 @@ const SETS = {
   none: { idle: 'Idle_Loop', walk: 'Walk_Loop', run: 'Jog_Fwd_Loop' },
   npc: { idle: 'Idle_Loop', walk: 'Walk_Loop', run: 'Jog_Fwd_Loop' },
   // the Lampless: an upright formal walk, the dead lantern held out when they stand
-  formal: { idle: 'Idle_Lantern_Loop', walk: 'Walk_Formal_Loop', run: 'Jog_Fwd_Loop' }
+  formal: { idle: 'Idle_Lantern_Loop', walk: 'Walk_Formal_Loop', run: 'Jog_Fwd_Loop' },
+  // Act V: an Ice Singer hums as she glides; a Harpooner stands with his throw ready
+  singer: { idle: 'Spell_Simple_Idle_Loop', walk: 'Walk_Formal_Loop', run: 'Walk_Formal_Loop' },
+  harpoon: { idle: 'Pistol_Idle_Loop', walk: 'Walk_Loop', run: 'Jog_Fwd_Loop' }
 };
 // logical action -> clip (same names the KayKit humanoids use)
 export const PERSON_ACTIONS = {
@@ -318,16 +321,18 @@ export const PERSON_ACTIONS = {
   roll: 'Roll', dodgeBack: 'KK_Dodge_Backward', blink: 'Spell_Simple_Shoot', drink: 'Consume', interact: 'Interact', pickup: 'PickUp_Table', throw: 'OverhandThrow', cheer: 'KK_Cheer',
   hit: 'Hit_Chest', hit2: 'Hit_Head', die: 'Death01', dieFwd: 'KK_Death_B', dieBones: 'KK_Death_C_Skeletons', rise: 'KK_Skeletons_Awaken_Floor', riseStand: 'KK_Skeletons_Awaken_Standing', spawn: 'KK_Spawn_Ground',
   jump: 'Jump_Start', emote: 'Yes', hammer: 'TreeChopping_Loop', sit: 'Sitting_Idle_Loop', lie: 'KK_Lie_Idle', bonePile: 'KK_Skeletons_Inactive_Floor_Pose',
-  talk: 'Idle_Talking_Loop', fold: 'Idle_FoldArms_Loop', lantern: 'Idle_Lantern_Loop', torch: 'Idle_Torch_Loop', kneel: 'Fixing_Kneeling', harvest: 'Farm_Harvest', no: 'Idle_No_Loop'
+  talk: 'Idle_Talking_Loop', fold: 'Idle_FoldArms_Loop', lantern: 'Idle_Lantern_Loop', torch: 'Idle_Torch_Loop', kneel: 'Fixing_Kneeling', harvest: 'Farm_Harvest', no: 'Idle_No_Loop',
+  // Act V: the Sunken lie in the wrack as the Ash-Fallen lie in the ash; the Harpooner's throws; the Ice Singer's song and wail
+  kelpPile: 'KK_Skeletons_Inactive_Floor_Pose', throw2: 'KK_Throw', song: 'KK_Spellcasting', wail: 'KK_Spellcast_Shoot'
 };
 // a crossbow is held like a pistol: realistic one-handed aiming instead of KayKit's chibi poses
 const STYLE_ACTIONS = {
   bow: { shoot: 'Pistol_Shoot', shootFast: 'Pistol_Shoot', aim: 'Pistol_Aim_Neutral', reload: 'Pistol_Reload', volley: 'Pistol_Shoot' }
 };
-const HOLD = new Set(['die', 'dieFwd', 'dieBones', 'lie', 'sit', 'bonePile']);
+const HOLD = new Set(['die', 'dieFwd', 'dieBones', 'lie', 'sit', 'bonePile', 'kelpPile']);
 // a locomotion clip played as an action gets a copy of its own (PersonAnim.play), one per clip for every avatar
 const ACT_COPY = new WeakMap();
-const LOOP = new Set(['spin', 'channel', 'sit', 'lie', 'aim', 'bonePile', 'talk', 'fold', 'lantern', 'torch', 'kneel', 'harvest', 'hammer']);
+const LOOP = new Set(['spin', 'channel', 'sit', 'lie', 'aim', 'bonePile', 'kelpPile', 'talk', 'fold', 'lantern', 'torch', 'kneel', 'harvest', 'hammer', 'song']);
 
 export class PersonAnim {
   constructor(av) {
@@ -403,6 +408,11 @@ export class PersonAnim {
       this.b.spine_03.quaternion.multiply(this.flinchQ);
     }
     if (st.float) this.b.pelvis.position.y += Math.sin(this.t * 2.2) * 0.08 + 0.15;
+    // an old back bent over (Selna, av.stoop radians), shared between the two upper spine bones
+    if (this.av.stoop) {
+      this.flinchQ.setFromAxisAngle(this.flinchAxis, this.av.stoop * 0.5);
+      this.b.spine_02?.quaternion.multiply(this.flinchQ); this.b.spine_03.quaternion.multiply(this.flinchQ);
+    }
   }
 }
 

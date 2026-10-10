@@ -1,5 +1,6 @@
 // Per-zone lighting and fog. Act V keys (missing keys read 0): aur, aurDark (the aurora's brightness, and how black it has
-// gone: gfx.js hands them to sea.js), drift (0-1: the hemisphere light wanders toward the aurora's green).
+// gone: gfx.js hands them to sea.js), drift (0-1: the hemisphere light wanders toward the aurora's green), aurCol (the
+// aurora's colour, [r, g, b] linear: the coast's green when missing; the true aurora greener and whiter).
 import * as THREE from 'three';
 export const ATMOS = {
   town: { fog: 0x0e1424, density: 0.018, sky: 0x7a8cbe, ground: 0x2e2418, hemi: 1.15, moon: 0xb8c8ff, moonI: 1.5, exposure: 1.15, heroI: 18, heroRange: 13, zoom: 1.05 },
@@ -26,17 +27,20 @@ export const ATMOS = {
   // Act V: the Frozen Coast under the green aurora (its light drifting over the snow); the arrival with the horizon open;
   // the black aurora after the Freeze; the true aurora once the sea is lit
   coast: { fog: 0x0b1416, density: 0.02, sky: 0x4a6a78, ground: 0x1a2024, hemi: 0.85, moon: 0xb8d8c8, moonI: 1.0, exposure: 1.2, heroI: 22, heroRange: 11, zoom: 1.05, heroColor: 0xffe8c8, aur: 0.8, aurDark: 0, drift: 0.55 },
-  coastFrozen: { fog: 0x0a0f18, density: 0.022, sky: 0x3a4866, ground: 0x1a1f28, hemi: 0.75, moon: 0x9ab0e0, moonI: 0.9, exposure: 1.2, heroI: 22, heroRange: 11, zoom: 1.05, heroColor: 0xffe8c8, aur: 0.35, aurDark: 1, drift: 0 },
+  // (after the Freeze the night itself is another: the sky gone violet-black, the moon cold and weak, the fog closing in
+  // toward black; the hero's warm light, the lit hearth and the sea-lights are all the warmth there is)
+  coastFrozen: { fog: 0x06070e, density: 0.027, sky: 0x2c2e4c, ground: 0x0e0e18, hemi: 0.5, moon: 0x8c96d8, moonI: 0.6, exposure: 1.08, heroI: 26, heroRange: 11.5, zoom: 1.05, heroColor: 0xffe0b8, aur: 0.35, aurDark: 1, drift: 0 },
   // the Farthest Light under the black aurora; the Skotos fight (closer), its Night; the true aurora after the naming
   farlight: { fog: 0x070a10, density: 0.026, sky: 0x2a3448, ground: 0x101418, hemi: 0.6, moon: 0x8a9ac8, moonI: 0.7, exposure: 1.3, heroI: 24, heroRange: 10, zoom: 1, heroColor: 0xffe8c8, aur: 0.3, aurDark: 1, drift: 0 },
   farlightNight: { fog: 0x020304, density: 0.05, sky: 0x1a2030, ground: 0x08090c, hemi: 0.2, moon: 0x6a7aa8, moonI: 0.1, exposure: 1.3, heroI: 24, heroRange: 10, zoom: 1.25, heroColor: 0xffe8c8, aur: 0, aurDark: 1, drift: 0 },
-  farlightAurora: { fog: 0x0a1612, density: 0.018, sky: 0x5a8a78, ground: 0x121a18, hemi: 0.95, moon: 0xb8d8c8, moonI: 1.0, exposure: 1.25, heroI: 22, heroRange: 11, zoom: 1, heroColor: 0xffe8c8, aur: 1, aurDark: 0, drift: 0.6 }
+  farlightAurora: { fog: 0x0a1612, density: 0.018, sky: 0x5a8a78, ground: 0x121a18, hemi: 0.95, moon: 0xb8d8c8, moonI: 1.0, exposure: 1.25, heroI: 22, heroRange: 11, zoom: 1, heroColor: 0xffe8c8, aur: 1, aurDark: 0, drift: 0.6, aurCol: [0.32, 1.0, 0.62] }
 };
 ATMOS.coastCine = { ...ATMOS.coast, density: 0.008 };
-ATMOS.coastAurora = { ...ATMOS.coast, aur: 1, drift: 0.7 };
+// once the sea is lit: the true aurora, greener and whiter, its light on the snow (the hemisphere green)
+ATMOS.coastAurora = { ...ATMOS.coast, sky: 0x5a9682, ground: 0x142420, fog: 0x0c1c18, hemi: 1.05, moon: 0xc4ecd6, moonI: 1.1, aur: 1, drift: 0.7, aurCol: [0.32, 1.0, 0.62] };
 ATMOS.farlightFight = { ...ATMOS.farlight, zoom: 1.25 };
 // Whitecliff once the sea is lit: the true aurora over the beacon hill (G_AUR at half), the hemisphere drifting green
-ATMOS.townAurora = { ...ATMOS.town, aur: 0.5, drift: 0.45 };
+ATMOS.townAurora = { ...ATMOS.town, aur: 0.5, drift: 0.45, aurCol: [0.32, 1.0, 0.62] };
 // an atmosphere between a and b (k 0-1): colours in linear light, numbers straight (world.js eases with it)
 const _ca = new THREE.Color(), _cb = new THREE.Color();
 export function mixAtmos(a, b, k) {

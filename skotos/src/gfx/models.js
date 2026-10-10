@@ -170,6 +170,42 @@ export function weaponGeo(type, look = {}) {
       for (const sg of [-1, 1]) p.push({ geo: G.box(0.05, 0.13, 0.006), color: 0x5a7a2a, o: { y: s1 - 0.1, x: sg * 0.04, rz: sg * 0.55 } });
       return { parts: p, tip: s1 + bl, base: s1 - 0.15 };
     }
+    // ---------- Act V ----------
+    case 'boathook': {
+      // a Sunken's boat-hook: a long ash pole, its iron hook and spike gone black with the sea, held in both hands
+      const L = look.len ?? 2.1, b0 = -0.55, top = b0 + L, iron = 0x3a3c3e;
+      p.push({ geo: G.cyl(0.022, 0.026, L, 6), color: look.wood ?? 0x5a5040, o: { y: b0 + L / 2 } });
+      p.push({ geo: G.cyl(0.03, 0.03, 0.12, 6), color: iron, o: { y: top - 0.05, metal: 0.7 } });
+      p.push({ geo: G.cone(0.025, 0.22, 5), color: iron, o: { y: top + 0.1, metal: 0.7 } });
+      const hook = G.torus(0.09, 0.016, 4, 9, Math.PI * 1.1); hook.rotateY(Math.PI / 2); hook.translate(0, 0, -0.09);
+      p.push({ geo: hook, color: iron, o: { y: top - 0.02, metal: 0.7 } });
+      p.push({ geo: G.cone(0.016, 0.06, 4), color: iron, o: { y: top - 0.06, z: -0.18, rx: Math.PI, metal: 0.7 } });
+      // weed hanging off the hook
+      for (let i = 0; i < 3; i++) p.push({ geo: G.box(0.03, 0.18 + i * 0.05, 0.006), color: [0x3a4020, 0x4a4a24, 0x2e3418][i], o: { y: top - 0.14 - i * 0.03, z: -0.08 - i * 0.04, x: (i - 1) * 0.02, rz: (i - 1) * 0.2 } });
+      return { parts: p, tip: top + 0.2, base: top - 0.3 };
+    }
+    case 'harpoon': {
+      // a Harpooner's harpoon: a whale-iron head with two barbs on an ash shaft, a turn of rope behind the head
+      const L = look.len ?? 1.7, b0 = -0.45, top = b0 + L, iron = 0x4a4c50;
+      p.push({ geo: G.cyl(0.02, 0.024, L, 6), color: 0x6a5a44, o: { y: b0 + L / 2 } });
+      p.push({ geo: G.cone(0.04, 0.24, 4), color: iron, o: { y: top + 0.12, metal: 0.8 } });
+      for (const sg of [-1, 1]) p.push({ geo: G.segTo(sg * 0.07, -0.1, 0, 0.012, 0.004, 3), color: iron, o: { y: top + 0.06, metal: 0.8 } });
+      p.push({ geo: G.torus(0.035, 0.012, 4, 8), color: 0x9a8a62, o: { y: top - 0.12, rx: Math.PI / 2 } });
+      p.push({ geo: G.torus(0.035, 0.012, 4, 8), color: 0x8a7a52, o: { y: top - 0.16, rx: Math.PI / 2 } });
+      return { parts: p, tip: top + 0.24, base: top - 0.2 };
+    }
+    case 'seaLantern': {
+      // a sea-lantern carried by its bail: hanging under the hand, an iron cap and base, the glass alight (look.lamp, look.glow;
+      // look.k its size: a child's is small)
+      const k = look.k ?? 1, iron = 0x2a2826, gl = look.glow ?? 2.4, lamp = look.lamp ?? 0xfff0d0;
+      const bail = G.torus(0.05 * k, 0.006 * k, 3, 8, Math.PI); bail.rotateY(Math.PI / 2);
+      p.push({ geo: bail, color: iron, o: { y: -0.05 * k, metal: 0.8, rz: Math.PI } });
+      p.push({ geo: G.cone(0.075 * k, 0.07 * k, 6), color: iron, o: { y: -0.1 * k, metal: 0.8 } });
+      p.push({ geo: G.cyl(0.055 * k, 0.06 * k, 0.15 * k, 6), color: lamp, o: { y: -0.21 * k, glow: gl } });
+      for (let i = 0; i < 4; i++) { const a = i * 1.571 + 0.785; p.push({ geo: G.box(0.008 * k, 0.16 * k, 0.008 * k), color: iron, o: { x: Math.sin(a) * 0.062 * k, z: Math.cos(a) * 0.062 * k, y: -0.21 * k, metal: 0.8 } }); }
+      p.push({ geo: G.cyl(0.07 * k, 0.065 * k, 0.03 * k, 6), color: iron, o: { y: -0.3 * k, metal: 0.8 } });
+      return { parts: p, tip: -0.21 * k, base: 0, gem: -0.21 * k, lamp: true };
+    }
   }
   return { parts: [{ geo: G.box(0.05, 0.6, 0.05), color: steel }], tip: 0.6, base: 0.1 };
 }
@@ -250,6 +286,76 @@ export function slagParts() {
 }
 // one iron link of a stoker's chain (axis along z)
 export function linkGeo() { const g = G.torus(0.07, 0.02, 4, 8); g.scale(1, 1.6, 1); g.rotateX(Math.PI / 2); return staticGeo([{ geo: g, color: iron, o: { metal: 0.9 } }]); }
+// ---------- Act V worn and ground pieces (see game/actors.js) ----------
+const KELP = [0x262c16, 0x343a1a, 0x1e2412, 0x3e3e1e];
+// kelp hanging from the head (head space, y = 0 at the crown, +z the face): a wet tangle on the crown and strands clumped
+// down the back and over the shoulders, the face left clear; len the longest (0.55 to the shoulders, 1.0 the Ice Singer's)
+export function kelpParts(len = 0.55, n = 16, cols = KELP) {
+  const p = [{ geo: G.dome(0.108, 0.42, 9), color: cols[2], o: { y: -0.075, z: -0.03, sy: 0.55 } }, { geo: G.dome(0.06, 0.5, 7), color: cols[0], o: { x: 0.05, y: -0.045, z: -0.06, sy: 0.45, rz: 0.4 } }];
+  for (let i = 0; i < n; i++) {
+    // clumps behind and over the shoulders (about the back two thirds of the head), each its own length and lean
+    const j = ((i * 53) % 17) / 17, a = Math.PI + (i / (n - 1) - 0.5) * 3.6 + (j - 0.5) * 0.25, side = Math.abs(Math.sin(a)) > 0.7;
+    const r = 0.095 + j * 0.03, l = len * (side ? 0.45 + j * 0.35 : 0.6 + j * 0.5), w = 0.028 + ((i * 7) % 3) * 0.009;
+    p.push({ geo: G.box(w, l, 0.006), color: cols[i % cols.length], o: { x: Math.sin(a) * r, y: -0.07 - l / 2, z: Math.cos(a) * r - 0.015, ry: a, rx: -0.18 * Math.cos(a) + (j - 0.5) * 0.12, rz: 0.15 * Math.sin(a) + (j - 0.5) * 0.2 } });
+  }
+  return p;
+}
+// barnacles crusted on a forearm (bone space: the bone runs along its x), small pale cones
+export function barnacleParts(n = 7) {
+  const p = [];
+  for (let i = 0; i < n; i++) { const a = i * 2.4, u = (i / n) * 0.16 - 0.02; p.push({ geo: G.cone(0.014 + (i % 3) * 0.004, 0.022, 5), color: i % 3 ? 0xb8b2a4 : 0x9a968a, o: { x: u, y: Math.cos(a) * 0.04, z: Math.sin(a) * 0.04, rx: a } }); }
+  return p;
+}
+// a hood (head space, y = 0 at the crown): open at the face, close over the skull and down to the neck (len); sealskin,
+// oilskin
+export function hoodParts(color = 0x3a2c22, len = 0.3, open = 1.5) {
+  const prof = [[0.0, 0.035], [0.07, 0.025], [0.112, -0.03], [0.124, -0.11], [0.128, -len * 0.7], [0.15, -len]];
+  const g = new THREE.LatheGeometry(prof.map(([x, y]) => new THREE.Vector2(x, y)), 14, open / 2, Math.PI * 2 - open); g.translate(0, 0, -0.012);
+  return [{ geo: g, color }];
+}
+// a hood pushed back off the head: the cowl lying in folds round the back of the neck (head space, y = 0 at the crown)
+export function cowlParts(color = 0x2a3448) {
+  const prof = [[0.1, -0.2], [0.15, -0.23], [0.17, -0.28], [0.16, -0.33], [0.12, -0.35]];
+  const g = new THREE.LatheGeometry(prof.map(([x, y]) => new THREE.Vector2(x, y)), 12, 1.3, Math.PI * 2 - 2.6); g.translate(0, 0, -0.035);
+  return [{ geo: g, color }];
+}
+// a fur collar round the neck (neck space, +y up): a thick soft ruff of grey-brown fur in tufts
+export function collarFurParts(color = 0x6a5a48, r = 0.14) {
+  const p = [];
+  const ring = G.torus(r, 0.05, 6, 16); ring.rotateX(Math.PI / 2);
+  p.push({ geo: ring, color, o: { y: -0.07, sy: 1.15 } });
+  for (let i = 0; i < 14; i++) { const a = (i / 14) * Math.PI * 2; p.push({ geo: G.ball(0.05, 6, 4), color: i % 3 ? color : 0x857360, o: { x: Math.sin(a) * (r + 0.015), y: -0.05 + (i % 2) * 0.015, z: Math.cos(a) * (r + 0.015), sy: 0.6, ry: a } }); }
+  return p;
+}
+// a knitted wool cap pulled down over the skull (head space, y = 0 at the crown), a ribbed band at its edge
+export function capParts(color = 0x34465e) {
+  return [{ geo: G.dome(0.104, 0.5, 12), color, o: { y: -0.095, sy: 1.08 } }, { geo: G.torus(0.1, 0.012, 4, 16), color: 0x2a3a50, o: { y: -0.092, rx: Math.PI / 2 } }, { geo: G.ball(0.022, 5, 4), color: 0x5a6a80, o: { y: 0.018 } }];
+}
+// a cloth band over the eyes (head space, y = 0 at the crown: the band 0.11 below it), knotted behind, its ends hanging
+export function bandParts(color = 0xc8c0a8, y = -0.115) {
+  const band = new THREE.CylinderGeometry(0.112, 0.112, 0.055, 16, 1, true);
+  return [{ geo: band, color, o: { y, z: -0.005, sz: 1.08 } }, { geo: G.ball(0.025, 5, 4), color: 0x6a6252, o: { y, z: -0.115 } }, { geo: G.box(0.03, 0.16, 0.006), color, o: { x: 0.015, y: y - 0.08, z: -0.12, rz: 0.15 } }, { geo: G.box(0.03, 0.13, 0.006), color, o: { x: -0.02, y: y - 0.07, z: -0.118, rz: -0.2 } }];
+}
+// a salt-white braid down the back (head space, y = 0 at the crown): a chain of plaits, tied with a cord
+export function braidParts(color = 0xe8e2d6, n = 7) {
+  const p = [];
+  for (let i = 0; i < n; i++) p.push({ geo: G.ball(0.032 - i * 0.002, 6, 5), color: i % 2 ? color : 0xd8d2c4, o: { x: (i % 2 ? 0.008 : -0.008), y: -0.12 - i * 0.055, z: -0.12 - Math.min(i, 3) * 0.012, sy: 1.5 } });
+  p.push({ geo: G.cyl(0.014, 0.014, 0.025, 6), color: 0x3a2a20, o: { y: -0.12 - n * 0.055, z: -0.15 } });
+  return p;
+}
+// a coil of rope worn over the shoulder (chest space: +y up, +z the front), the Harpooner's reel
+export function ropeCoilParts() {
+  const g = G.torus(0.15, 0.022, 4, 16); g.rotateY(0.5); g.rotateZ(0.9);
+  const g2 = G.torus(0.14, 0.02, 4, 16); g2.rotateY(0.45); g2.rotateZ(0.95);
+  return [{ geo: g, color: 0x9a8a62, o: { x: 0.05, z: -0.04 } }, { geo: g2, color: 0x8a7a52, o: { x: 0.06, z: -0.05 } }];
+}
+// a heap of wet kelp over one of the Sunken lying in the wrack, a hand or a boat-hook showing
+export function kelpMoundParts() {
+  const p = [{ geo: G.dome(0.75, 0.5, 10), color: 0x2a2c18, o: { sy: 0.28 } }, { geo: G.dome(0.45, 0.5, 8), color: 0x3a3a1e, o: { sy: 0.4, x: 0.3, z: -0.15 } }, { geo: G.dome(0.35, 0.5, 8), color: 0x34301a, o: { sy: 0.35, x: -0.35, z: 0.2 } }];
+  for (let i = 0; i < 12; i++) { const a = i * 0.52, r = 0.35 + (i % 4) * 0.12; p.push({ geo: G.box(0.07, 0.008, 0.45 + (i % 3) * 0.12), color: KELP[i % 4], o: { x: Math.sin(a) * r, y: 0.12 + (i % 2) * 0.04, z: Math.cos(a) * r, ry: a + 0.6, rx: 0.15 } }); }
+  p.push({ geo: G.cyl(0.02, 0.02, 0.9, 5), color: 0x5a5040, o: { x: -0.2, y: 0.18, z: 0.3, rz: 1.3, ry: 0.4 } });
+  return p;
+}
 
 // a rootling's hiding place: a heap of turned soil with a tuft of gold leaves
 let mound = null;

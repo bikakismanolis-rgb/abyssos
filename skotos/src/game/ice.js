@@ -18,7 +18,8 @@
 import * as THREE from 'three';
 import { G, vibrate } from './state.js';
 import { HAZ5 } from './data.js';
-import { damage, kill } from './combat.js';
+import { damage, kill, addVuln } from './combat.js';
+import { coldAdd } from './cold.js';
 import * as LT from './light.js';
 import * as FXM from '../gfx/fx.js';
 import { number } from '../ui/overlay.js';
@@ -38,8 +39,23 @@ const N4 = [1, -1, 0, 0], M4 = [0, 0, 1, -1];
 export let ICE = null;
 // what the scenarios read
 export const ICE_LOG = { breaks: 0, refreezes: 0, slushed: 0, batches: 0, plunges: [], drowned: 0, floundered: 0, warns: 0, bumps: [], cost: { n: 0, ms: 0, max: 0 } };
-// a kind's own rule when its cell breaks under it (a, cell, zone) -> true when handled (combat's, stage C)
-export const FALLS = {};
+// a kind's own rule when its cell breaks under it (a, cell, zone) -> true when handled: the Sunken do not drown, they sink
+// and climb out of another hole within 10 m 3 s later at half life (an ambush; ai.js sunkTick); the Icemaw dives home
+export const FALLS = {
+  sunken: (a) => sink(a, 3, 0.5),
+  harpooner: (a) => sink(a, 3, 0.5),
+  icemaw: (a) => sink(a, 2, 1)
+};
+function sink(a, t, life) {
+  if (a.sunk > 0) return true;
+  splash(a.x, a.z, 1.2);
+  a.sunk = t; a.under = true; a.hidden = true; a.y = -1.5; a.dash = null; a.kx = a.kz = 0;
+  a.hp = Math.max(1, Math.min(a.hp, a.hpMax * life));
+  if (a.tele) { FXM.killTele?.(a.tele); a.tele = null; }
+  if (a.avatar) a.avatar.group.visible = false;
+  emit('sunk', a);
+  return true;
+}
 const haz = () => HAZ5[G.hero?.diff ?? 1] || HAZ5[1];
 const fx = (k, ...a) => typeof FXM[k] === 'function' && (FXM[k](...a), true);
 
@@ -86,6 +102,7 @@ function tick(dt) {
     decay(z, I, dt);
     timers(z, I, dt);
     melt(z, I, dt);
+    beamIce(z, I, dt);
     if ((I.batchT -= dt) <= 0) { I.batchT = BATCH; batch(z, I); }
     ringTick(z, I, dt);
     floeTick(z, I);
@@ -204,16 +221,59 @@ function timers(z, I, dt) {
     // (three open cells or more round it: it goes under; else it hauls out and breaks the edge it climbs)
     let open = 0; for (const i of cellsIn(z.L, a.x, a.z, 1.5)) if (z.L.ice[i] && I.stage[i] === 4) open++;
     if (open >= 3) drown(z, a);
-    else { let n = 0; for (const i of cellsIn(z.L, a.x, a.z, 1.8)) if (n < 2 && z.L.ice[i] && I.stage[i] < 4 && !(I.fl[i] & PEND)) { pend(I, i); n++; } }
+    else {
+      // it hauls itself out onto the nearest firm cell within 3 m, breaking the edge it climbs over
+      let n = 0; for (const i of cellsIn(z.L, a.x, a.z, 1.8)) if (n < 2 && z.L.ice[i] && I.stage[i] < 4 && !(I.fl[i] & PEND)) { pend(I, i); n++; }
+      const f = firmNear(z, I, a.x, a.z, 3);
+      if (f) { a.x = f.x; a.z = f.z; }
+      a.avatar?.anim.stop?.(0.2); a.avatar?.play('shake', 1);
+      splash(a.x, a.z, 0.9); emit('hauledOut', a);
+    }
   }
 }
 function pend(I, i) { if (!(I.fl[i] & PEND)) { I.fl[i] |= PEND; I.pend.push(i); } }
+// the nearest firm cell centre within r (land, thick ice, thin ice at stage 0-1 not about to go), or null
+function firmNear(z, I, x, zz, r) {
+  let best = null, bd = r * r;
+  for (const i of cellsIn(z.L, x, zz, r)) {
+    if (!safeCell(z, I, i)) continue;
+    const cx = i % z.L.w + 0.5, cz = (i - i % z.L.w) / z.L.w + 0.5, d2 = (cx - x) ** 2 + (cz - zz) ** 2;
+    if (d2 < bd) { bd = d2; best = { x: cx, z: cz }; }
+  }
+  return best;
+}
 // burning ground melts what it burns on: +1 stage every 2 s under a fire area
 function melt(z, I, dt) {
   for (const a of G.areas) {
     if (a.kind !== 'fire' || a.t > a.dur) continue;
     if ((a.iceT = (a.iceT ?? 2) - dt) > 0) continue;
     a.iceT += 2; crackAt(a.x, a.z, a.r, 1, { src: 'fire' });
+  }
+}
+
+// a sea-light's beam passing over the ice, ten times a second: stages 1-3 back to 0, broken cells to slush in the next batch
+// (never a Breathing-hole's water, which is the sea, not ice; I.held: a hole something keeps open, the Skotos's Hands).
+// Only beams within 40 m of her
+function beamIce(z, I, dt) {
+  if ((I.beamT = (I.beamT ?? 0) - dt) > 0) return;
+  I.beamT = 0.1;
+  const pl = G.player; if (!pl) return;
+  for (const b of LT.beams?.() || []) {
+    if (b.k <= 0 || Math.hypot(b.x - pl.x, b.z - pl.z) > 40 + b.len) continue;
+    const L = z.L, w = L.w, s = Math.sin(b.theta), c = Math.cos(b.theta);
+    let n = 0;
+    for (let d = 3; d <= b.len; d += 0.7) {
+      const half = b.half + 0.6 / d, wd = Math.tan(half) * d, px = b.x + s * d, pz = b.z + c * d;
+      for (let o = -wd; o <= wd; o += 0.7) {
+        const cx = Math.floor(px + c * o), cz = Math.floor(pz - s * o);
+        if (cx < 0 || cz < 0 || cx >= w || cz >= L.h) continue;
+        const i = cz * w + cx, st = I.stage[i];
+        if (!L.ice[i] || !st || I.held?.has(i)) continue;
+        if (st === 4) { if (!(I.fl[i] & REO)) { I.fl[i] |= REO; I.reo.push(i); n++; } }
+        else if (st <= 3) { I.stage[i] = 0; I.load[i] = 0; I.fl[i] &= ~(WARNF | PEND); I.dirty = true; n++; }
+      }
+    }
+    if (n) { ICE_LOG.beamed = (ICE_LOG.beamed || 0) + n; if (Math.random() < 0.3) fx('freezeCrystals', b.x + s * b.len * 0.5, b.z + c * b.len * 0.5, 2); }
   }
 }
 
@@ -322,6 +382,7 @@ function plunge(z, I, pl) {
   I.lastPlunge = I.clock;
   const amt = Math.floor(Math.min(pl.hpMax * haz().plunge / 100 * (half ? 0.5 : 1), hp0 - pl.hpMax * 0.1));
   if (amt >= 1 && G.mode === 'play') damage(null, pl, amt, { pure: true, plunge: true, cold: 35 });
+  else coldAdd(35);
   // (never under 10%, whatever else her armour or her buffs do to the blow)
   if (pl.hp < lim) pl.hp = lim;
   pl.iframes = Math.max(pl.iframes || 0, 1);
@@ -338,7 +399,12 @@ function fall(z, I, a) {
   if (a.prop || a.pet || a.team === 'npc' || a.under || a.airborne || a.cling || d.float || d.ai === 'bat') return;
   const f = FALLS[a.kind]; if (f && f(a, Math.floor(a.z) * z.L.w + Math.floor(a.x), z)) return;
   if (a.boss) return;
-  if (d.big) { a.flounder = 3; a.status.stun = Math.max(a.status.stun || 0, 3); a.y = -0.6; I.flounder.push(a); ICE_LOG.floundered++; splash(a.x, a.z, 1.4); emit('flounder', a); return; }
+  if (d.big) {
+    a.flounder = 3; a.status.stun = Math.max(a.status.stun || 0, 3); a.y = -0.6; a.dash = null; a.kx = a.kz = 0; I.flounder.push(a); ICE_LOG.floundered++;
+    // Floundering: no actions for 3 s, and every blow lands double (the vulnerability rule)
+    addVuln(a, 'floundering', 3); a.avatar?.play('flounder', 1, { loop: true });
+    splash(a.x, a.z, 1.4); emit('flounder', a); return;
+  }
   drown(z, a);
 }
 // a monster under the water: full xp, its loot washed to the nearest floor (tide.js), no corpse on the ice

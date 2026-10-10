@@ -64,6 +64,33 @@ button { font: inherit; color: inherit; }
 #cling .ic svg { width: 16px; height: 16px; }
 @keyframes clingPulse { to { color: #ffe0b0; } }
 #flue { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at center, transparent 50%, rgba(255, 80, 10, .35) 82%, rgba(200, 30, 0, .7) 100%); }
+/* Act V: the Cold in the amber meter's place: a snowflake, a blue fill marked at Chilled (50) and Freezing (75), the state
+   and an arrow while it moves; Freezing glows white, Frostbite pulses; a warm edge while she is Warmed */
+#cold { display: flex; align-items: center; gap: 5px; height: 18px; font: 700 10px var(--display); color: #bfe0f6; letter-spacing: .5px; text-shadow: 0 1px 2px #000; }
+#cold .ic { width: 18px; height: 18px; display: grid; place-items: center; color: #a8d8ff; filter: drop-shadow(0 0 4px rgba(120, 190, 255, .55)); transition: color .4s, filter .4s; }
+#cold .ic svg { width: 16px; height: 16px; }
+#cold .cb { position: relative; width: 74px; height: 7px; border-radius: 4px; background: #0a0d12; border: 1px solid rgba(150, 200, 240, .5); overflow: hidden; }
+#cold .cb i { position: absolute; inset: 0; display: block; background: linear-gradient(90deg, #2a5a8a, #7ab8e8 60%, #e8f6ff); transform-origin: left; transition: transform .15s linear; }
+#cold .cb u { position: absolute; inset: 0; background: linear-gradient(90deg, transparent calc(50% - 1px), rgba(0, 0, 0, .75) calc(50% - 1px), rgba(0, 0, 0, .75) 50%, transparent 50%, transparent calc(75% - 1px), rgba(0, 0, 0, .75) calc(75% - 1px), rgba(0, 0, 0, .75) 75%, transparent 75%); }
+#cold b::after { display: inline-block; width: 1em; text-align: center; opacity: .85; }
+#cold.up b::after { content: "▴"; color: #9ad0ff; }
+#cold.down b::after { content: "▾"; color: #ffd8a0; }
+#cold.chilled { color: #d6ecff; }
+#cold.freezing { color: #f2faff; }
+#cold.freezing .ic { color: #fff; filter: drop-shadow(0 0 7px rgba(190, 230, 255, .95)); }
+#cold.freezing .cb { border-color: rgba(220, 240, 255, .85); box-shadow: 0 0 8px rgba(150, 210, 255, .55); }
+#cold.frostbite { color: #fff; animation: frostPulse .4s ease-in-out infinite alternate; }
+#cold.frostbite .ic { color: #fff; }
+#cold.frostbite .cb i { background: linear-gradient(90deg, #bfe4ff, #fff); }
+#cold.warm .ic { color: #ffd8a0; filter: drop-shadow(0 0 6px rgba(255, 170, 70, .8)); }
+#cold.warm .cb { border-color: rgba(255, 190, 110, .7); }
+@keyframes frostPulse { to { filter: drop-shadow(0 0 7px rgba(200, 235, 255, .95)); } }
+#buffs .bf.warm { border-color: rgba(255, 180, 90, .75); color: #ffc070; box-shadow: 0 0 9px rgba(255, 150, 50, .5); }
+/* the frost at the screen's edges (overlay.js draws it, hoarfrost on a canvas) under a mask whose clear middle shrinks as
+   the Cold climbs; a flash of it when she goes into the water or the frost bites */
+#frost { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none !important; opacity: 0; --fi: 78%; --fo: 118%;
+  -webkit-mask-image: radial-gradient(ellipse farthest-corner at 50% 50%, transparent var(--fi), #000 var(--fo)); mask-image: radial-gradient(ellipse farthest-corner at 50% 50%, transparent var(--fi), #000 var(--fo)); }
+body.memory-ice #frost { opacity: .75 !important; --fi: 46% !important; --fo: 104% !important; transition: opacity 1s ease; }
 /* a Great Bellows being woken: a ring that fills over 20 s, dim while it waits */
 #ring { position: absolute; top: calc(54px + var(--st)); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; pointer-events: none; }
 #ring svg { width: 56px; height: 56px; transform: rotate(-90deg); filter: drop-shadow(0 0 8px rgba(255, 110, 30, .55)); }
@@ -77,6 +104,31 @@ button { font: inherit; color: inherit; }
 
 #hud-tr { position: absolute; right: calc(10px + var(--sr)); top: calc(8px + var(--st)); display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 #minimap { width: clamp(92px, 15vw, 132px); height: clamp(92px, 15vw, 132px); border-radius: 50%; border: 2px solid var(--gold); box-shadow: 0 0 0 2px #0a0b0e, 0 2px 12px rgba(0, 0, 0, .7); background: rgba(5, 6, 9, .78); display: block; }
+/* Act V: the tide's dial at the minimap's lower left: the ring counts down to the turn (gold while the bell rings, red when
+   the water is closing round her), the water's level inside, the arrow rising or falling */
+#mmw { position: relative; }
+#tide { position: absolute; left: -18px; bottom: -8px; width: 48px; height: 48px; pointer-events: none; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .8)); }
+#tide svg { width: 100%; height: 100%; display: block; overflow: visible; }
+#tide .tb { fill: rgba(6, 9, 14, .92); stroke: #0a0b0e; stroke-width: 2; }
+#tide .tt { fill: none; stroke: rgba(190, 220, 245, .16); stroke-width: 2.6; }
+#tide .tz { fill: #0c1828; }
+#tide .tr { fill: none; stroke: #bcdcf2; stroke-width: 2.6; stroke-linecap: round; stroke-dasharray: 106.8; }
+#tide .tw { fill: #3d7ab8; }
+#tide .tc { fill: none; stroke: #bfe2ff; stroke-width: 1.4; opacity: .9; }
+#tide .ti { fill: none; stroke: rgba(214, 178, 94, .75); stroke-width: 1.2; }
+#tide .ta { fill: #f4f8fc; stroke: #0a0b0e; stroke-width: .8; transition: transform .3s; transform-origin: 20px 20px; }
+#tide.down .ta { transform: rotate(180deg); }
+#tide .tl { fill: #f4f8fc; stroke: #0a0b0e; stroke-width: .8; display: none; }
+#tide.slack .ta { display: none; }
+#tide.slack .tl { display: inline; }
+#tide.bell .tr { stroke: #ffd070; animation: tideBell .5s ease-in-out infinite alternate; }
+#tide.lane .tr { stroke: #ff5a40; }
+#tide.lane { animation: tideLane .35s ease-in-out infinite alternate; }
+#tide.lane .tw { fill: #4a8ad0; }
+#tide.forced .tr { stroke: #6a5a9a; }
+#tide.forced .tw { fill: #4a4a8a; }
+@keyframes tideBell { to { stroke: #fff4c8; } }
+@keyframes tideLane { to { filter: drop-shadow(0 0 7px rgba(255, 80, 50, .95)); } }
 #hud-btns { display: flex; gap: 6px; }
 .hbtn { width: 38px; height: 38px; border-radius: 9px; background: linear-gradient(180deg, #23262e, #121419); border: 1px solid var(--line); display: grid; place-items: center; color: var(--gold2); position: relative; cursor: pointer; padding: 0; }
 .hbtn svg { width: 21px; height: 21px; }
@@ -89,6 +141,10 @@ button { font: inherit; color: inherit; }
 #bossbar .ti { font: italic 400 12px var(--body); color: var(--ink2); text-shadow: 0 1px 3px #000; margin-top: -2px; }
 #bossbar .bar { height: 12px; margin-top: 4px; border-color: rgba(255, 120, 80, .6); }
 #bossbar .bar i.fill { background: linear-gradient(180deg, #ff7040, #a8180c); }
+/* Act V: the boss's open window (Revealed, Beached, Overturned...) under its bar, with its factor */
+#bossbar .vu { margin-top: 4px; font: 800 13px var(--display); color: #fff0c8; letter-spacing: .8px; text-shadow: 0 0 10px rgba(255, 210, 120, .75), 0 1px 3px #000; animation: vuPulse .5s ease-in-out infinite alternate; }
+#bossbar .vu.big { color: #ffd890; font-size: 15px; text-shadow: 0 0 14px rgba(255, 150, 60, .95), 0 1px 3px #000; }
+@keyframes vuPulse { to { opacity: .72; } }
 #gatebar { position: absolute; top: calc(10px + var(--st)); left: 50%; transform: translateX(-50%); width: min(40vw, 380px); text-align: center; pointer-events: none; }
 #gatebar .nm { font: 700 13px var(--display); color: #d8b8ff; text-shadow: 0 1px 3px #000; }
 #gatebar .bar i.fill { background: linear-gradient(90deg, #5a2ab8, #c080ff); }
@@ -104,6 +160,12 @@ button { font: inherit; color: inherit; }
 /* Act IV: the Voice in the Flame (warm, smouldering), and the dead keepers' cold, pale speech */
 .toast.flame { color: #ffb070; font: italic 500 16px var(--body); text-shadow: 0 0 12px rgba(255, 110, 30, .7); }
 .toast.pale { color: #dfe6f2; font: italic 500 16px var(--body); text-shadow: 0 0 10px rgba(170, 190, 230, .6); }
+/* Act V: the Skotos's voice, pale as ice (lowercase, over the ice's song); the names said into the dark */
+.toast.ice { color: #d4e6f4; font: italic 400 16px var(--body); letter-spacing: .4px; text-shadow: 0 0 12px rgba(120, 90, 200, .65), 0 1px 2px #000; }
+.toast.names { color: #f2f6fb; font: 500 17px var(--display); letter-spacing: 1.2px; text-shadow: 0 0 12px rgba(220, 236, 255, .55), 0 1px 2px #000; }
+/* a first-time hint: quieter and longer; a warning (the water closing round her) loud and red */
+.toast.hint { color: #e8e2d0; font: italic 500 14px var(--body); animation-duration: 5.9s; border-top: 1px solid rgba(214, 178, 94, .25); border-bottom: 1px solid rgba(214, 178, 94, .25); }
+.toast.warn { color: #ffd0c0; font: 700 16px var(--display); letter-spacing: .5px; text-shadow: 0 0 10px rgba(255, 70, 40, .7), 0 1px 2px #000; }
 @keyframes toast { 0% { opacity: 0; transform: translateY(8px); } 10% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; } }
 #zonename { position: absolute; top: 30%; left: 0; right: 0; text-align: center; pointer-events: none; opacity: 0; }
 #zonename.on { animation: zone 4.2s ease forwards; }
@@ -240,6 +302,18 @@ body.memory-ash #stage::after { opacity: 1; background: radial-gradient(ellipse 
 #dialog[data-who="voice"] .face { border-color: #ff7a30; color: #ffd080; background: radial-gradient(circle at 50% 70%, #ffb050 0%, #c8400a 38%, #2a0c04 75%); box-shadow: 0 0 16px rgba(255, 110, 30, .6); }
 #dialog[data-who="ivar"] .face, #dialog[data-who="arna"] .face, #dialog[data-who="arnaOld"] .face, #dialog[data-who="isarnBoy"] .face { border-color: #b8c4d8; color: #e8eef8; background: radial-gradient(circle at 50% 35%, #4a5260, #0e1014); }
 #dialog[data-who="karthax"] .face { border-color: #ff5a18; color: #ffb070; background: radial-gradient(circle at 50% 35%, #3a1408, #0a0504); box-shadow: 0 0 14px rgba(255, 80, 20, .5); }
+/* Act V: an Ice Memory, held in clear ice: the colour goes cold, white and blue, and the edges frost over */
+body.memory-ice #stage > canvas:first-child { filter: saturate(.35) hue-rotate(-12deg) brightness(1.1) contrast(.95); }
+body.memory-ice #stage::after { opacity: 1; background: radial-gradient(ellipse at center, transparent 38%, rgba(170, 205, 235, .3) 78%, rgba(14, 26, 40, .74) 100%); }
+#dialog[data-who="iceMemory"] .txt { font-style: italic; color: #e4f0fa; }
+#dialog[data-who="iceMemory"] .face { border-color: #bfe0f8; color: #f2f8ff; background: radial-gradient(circle at 50% 35%, #4e6a84, #0a121a); }
+#dialog[data-who="first"] .face, #dialog[data-who="einarBoy"] .face, #dialog[data-who="einar"] .face, #dialog[data-who="arnaLast"] .face, #dialog[data-who="keeperYoung"] .face { border-color: #bcd8f0; color: #eef6ff; background: radial-gradient(circle at 50% 35%, #46586c, #0c1218); }
+/* the Saltborn: a white whale-oil flame; the forgotten keeper's portrait is blank while her name is «…» */
+#dialog[data-who="alkyone"] .face, #dialog[data-who="selna"] .face, #dialog[data-who="tern"] .face, #dialog[data-who="glaukos"] .face, #dialog[data-who="shorefolk"] .face { border-color: #d8e4ee; color: #f4f8ff; background: radial-gradient(circle at 50% 30%, #56606a, #101418); box-shadow: 0 0 12px rgba(220, 236, 255, .25); }
+/* the dark that was there before the first fire: a black disc, a violet rim, no letter */
+#dialog[data-who="skotos"] .face { border-color: #2a2238; background: radial-gradient(circle at 50% 50%, #000 58%, #120c1c 80%, #3a2a5a 100%); box-shadow: 0 0 18px rgba(110, 80, 170, .45); }
+#dialog[data-who="skotos"] .who { color: #b8a8d8; }
+#dialog[data-who="skotos"] .txt { font-style: italic; color: #d8e4f0; text-transform: lowercase; }
 
 /* screens */
 #screen { position: fixed; inset: 0; z-index: 8; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: calc(16px + var(--st)) calc(16px + var(--sr)) calc(16px + var(--sb)) calc(16px + var(--sl)); pointer-events: auto; }
@@ -278,6 +352,9 @@ body.memory-ash #stage::after { opacity: 1; background: radial-gradient(ellipse 
 @media (max-height: 500px) { .pcard.boon p:not(.bq) { display: block; font-size: 12px; } }
 .unbound { margin: 10px 0 0; font: italic 500 15px var(--body); color: #f4ead0; }
 .unbound-k { margin: 2px 0 0; font: 700 13px var(--display); color: var(--gold2); letter-spacing: .5px; }
+/* Act V's close: the names said into the dark, in the ice's white */
+.unbound-k.ice { color: #dcecf8; text-shadow: 0 0 10px rgba(180, 215, 245, .4); }
+.names5 { margin: 10px 0 0; font: 600 15px var(--display); color: #e4f0fa; letter-spacing: 1px; text-shadow: 0 0 10px rgba(180, 215, 245, .45); }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
 .chip { padding: 6px 12px; border-radius: 16px; border: 1px solid var(--line); background: rgba(10, 11, 15, .86); font: 700 13px var(--display); cursor: pointer; color: var(--ink2); }
 .chip.on { border-color: var(--gold2); color: var(--gold2); background: linear-gradient(180deg, #3a2e1c, #20180e); }
@@ -292,6 +369,14 @@ body.memory-ash #stage::after { opacity: 1; background: radial-gradient(ellipse 
 #letterbox.on::before, #letterbox.on::after { height: 11vh; }
 #fade { position: fixed; inset: 0; background: #000; z-index: 20; pointer-events: none; opacity: 0; transition: opacity .5s ease; }
 #fade.on { opacity: 1; }
+/* the Freeze ends in a white morning */
+#fade.white { background: #eef4fa; transition: opacity 1.2s ease; }
+/* the naming: black, and the game's own title in white */
+#titlecard { position: fixed; inset: 0; z-index: 19; background: #000; display: grid; place-items: center; pointer-events: none; opacity: 0; transition: opacity .7s ease; }
+#titlecard.on { opacity: 1; }
+#titlecard.out { opacity: 0; transition: opacity 1.2s ease; }
+#titlecard .logo { background: none; color: #fff; filter: drop-shadow(0 0 22px rgba(255, 255, 255, .25)); opacity: 0; letter-spacing: clamp(18px, 5.4vw, 54px); margin-right: calc(-1 * clamp(18px, 5.4vw, 54px)); transition: opacity 1.4s ease, letter-spacing 4s cubic-bezier(.2, .7, .2, 1), margin 4s cubic-bezier(.2, .7, .2, 1); }
+#titlecard.lit .logo { opacity: 1; letter-spacing: clamp(8px, 2.6vw, 26px); margin-right: calc(-1 * clamp(8px, 2.6vw, 26px)); }
 #fade .load { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); width: 200px; max-width: 60vw; text-align: center; color: #8a7a5a; font: 400 13px/1.5 Alegreya, Georgia, serif; letter-spacing: 1px; opacity: 0; transition: opacity .3s; }
 #fade .load.on { opacity: 1; }
 #fade .load .bar { margin-top: 8px; height: 3px; background: #221c12; border-radius: 2px; overflow: hidden; }
@@ -312,6 +397,7 @@ input[type=range] { width: 100%; accent-color: var(--gold); }
 body:not(.desk) .sk .key { display: none; }
 @media (max-height: 460px) {
   #minimap { width: 84px; height: 84px; }
+  #tide { width: 38px; height: 38px; left: -15px; bottom: -7px; }
   .hbtn { width: 34px; height: 34px; }
   #quest { max-width: 30vw; font-size: 11.5px; }
   #quest b { display: none; }

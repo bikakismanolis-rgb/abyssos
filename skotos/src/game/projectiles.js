@@ -3,10 +3,10 @@ import * as THREE from 'three';
 import { G } from './state.js';
 import { R, addLight, removeLight } from '../gfx/gfx.js';
 import { G as GEO, staticGeo } from '../gfx/rig.js';
-import { P, sparks, glowBurst, explosion, hitFx, puff, ring, decal } from '../gfx/fx.js';
+import { P, sparks, glowBurst, explosion, hitFx, puff, ring, decal, splash } from '../gfx/fx.js';
 import { damage } from './combat.js';
 import { foes, near, makeAvatar } from './actors.js';
-import { updateSap, clearSap } from './sap.js';
+import { updateSap, clearSap, addSapPool } from './sap.js';
 import { updateRemains, clearRemains } from './combat.js';
 import { clearLight } from './light.js';
 import { tickFlues } from './forge.js';
@@ -15,10 +15,12 @@ import { tickIce } from './ice.js';
 import Audio from '../audio/audio.js';
 import { rand } from '../core/util.js';
 
-let boltGeo = null, arrowGeo = null, pinGeo = null, pmat = null;
+let boltGeo = null, arrowGeo = null, pinGeo = null, harpoonGeo = null, pmat = null;
 function meshFor(kind) {
   pmat ||= new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x111111 });
   if (kind === 'fireArrow') kind = 'arrow';
+  // a Sunken Harpooner's harpoon: an ash shaft, a barbed iron head, a twist of rope at the butt
+  if (kind === 'harpoon') return new THREE.Mesh(harpoonGeo ||= staticGeo([{ geo: GEO.cyl(0.024, 0.026, 1.5, 5), color: 0x6a5a44, o: { rx: Math.PI / 2 } }, { geo: GEO.cone(0.05, 0.22, 4), color: 0x5a5e62, o: { rx: Math.PI / 2, z: 0.84 } }, { geo: GEO.box(0.16, 0.012, 0.05), color: 0x5a5e62, o: { z: 0.7 } }, { geo: GEO.cyl(0.04, 0.04, 0.12, 6), color: 0x8a7a5a, o: { rx: Math.PI / 2, z: -0.68 } }]), pmat);
   if (kind === 'bolt' || kind === 'arrow' || kind === 'pin') {
     const g = kind === 'bolt' ? (boltGeo ||= staticGeo([{ geo: GEO.cyl(0.02, 0.02, 0.7, 4), color: 0x6a5038, o: { rx: Math.PI / 2 } }, { geo: GEO.cone(0.045, 0.14, 4), color: 0xc0c8d0, o: { rx: Math.PI / 2, z: 0.4 } }, { geo: GEO.box(0.12, 0.01, 0.12), color: 0xe0e0d8, o: { z: -0.3 } }]))
       : kind === 'pin' ? (pinGeo ||= staticGeo([{ geo: GEO.cyl(0.018, 0.018, 0.7, 4), color: 0x4a3a20, o: { rx: Math.PI / 2 } }, { geo: GEO.cone(0.045, 0.14, 4), color: 0xc09030, o: { rx: Math.PI / 2, z: 0.4 } }, { geo: GEO.box(0.14, 0.01, 0.16), color: 0x6ad040, o: { z: -0.28 } }, { geo: GEO.box(0.01, 0.14, 0.16), color: 0x6ad040, o: { z: -0.28 } }]))
@@ -56,7 +58,11 @@ const KIND = {
   pin: { speed: 18, r: 0.45, life: 1.4, color: 0x9aff70 },
   phantomHart: { speed: 20, r: 1.4, life: 1.4, color: 0xfff0d0, light: 0xffe0a0 },
   // Act IV: the Ash-Fallen bowmen's fire arrows leave a patch of fire where they land (the Cradle can drink it)
-  fireArrow: { speed: 16, r: 0.45, life: 1.4, color: 0xffa040, light: 0xff6a10, patch: { r: 1.5, dur: 3 } }
+  fireArrow: { speed: 16, r: 0.45, life: 1.4, color: 0xffa040, light: 0xff6a10, patch: { r: 1.5, dur: 3 } },
+  // Act V: the Sunken Harpooner's harpoon (walls stop it); the Walking Tower's Brine Spit, a glob of sea and slush that
+  // lands a pool of slush (sap.js)
+  harpoon: { speed: 16, r: 0.45, life: 0.8, color: 0xd0d8d8 },
+  brineGlob: { speed: 12, r: 0.7, life: 1.4, color: 0xb8d8dc, pool: { r: 2.2, dur: 8, kind: 'slush' } }
 };
 const PASS_WALLS = new Set(['spectral', 'firewave', 'phantomHart']);
 
@@ -84,6 +90,8 @@ function endProj(p, i, hitWall) {
   p.onEnd?.(p.x, p.z, hitWall);
   const pa = KIND[p.kind].patch;
   if (pa && G.zone) { const f = G.zone.map.walkable(p.x, p.z) ? p : G.zone.map.nearestFloor(p.x, p.z, 2); area('fire', f.x, f.z, pa.r, pa.dur, { team: p.team, src: p.src, dmg: p.dmg * 0.22, tick: 0.5 }); }
+  const po = KIND[p.kind].pool;
+  if (po && G.zone) { addSapPool(p.x, p.z, p.poolR ?? po.r, p.poolDur ?? po.dur, p.src, po.kind); splash(p.x, p.z, 1); }
 }
 
 export function updateProjs(dt) {
@@ -139,6 +147,9 @@ export function updateProjs(dt) {
     } else if (p.kind === 'spectral') {
       const px = Math.cos(Math.atan2(p.vx, p.vz)), pz = -Math.sin(Math.atan2(p.vx, p.vz));
       for (let k = -2; k <= 2; k++) P({ x: p.x + px * k * 0.45, y: 0.6 + Math.random() * 0.8, z: p.z + pz * k * 0.45, vy: 0.5, life: 0.4, size: 0.45, size1: 0.05, color: 0xb0e8ff, color1: 0x3070ff });
+    } else if (p.kind === 'brineGlob') {
+      P({ add: false, x: p.x, y: p.y, z: p.z, life: 0.25, size: 0.75, size1: 0.35, color: 0xa8c8cc, alpha: 0.85 });
+      if (Math.random() < 0.6) P({ add: false, x: p.x, y: p.y, z: p.z, vx: rand.range(-0.5, 0.5), vy: -1.5, vz: rand.range(-0.5, 0.5), life: 0.5, size: 0.12, size1: 0.06, color: 0xd8ecf0, alpha: 0.9, grav: 9 });
     } else if (p.kind === 'bolt' && Math.random() < 0.5) P({ x: p.x, y: p.y, z: p.z, life: 0.15, size: 0.12, size1: 0.02, color: 0xffe8c0 });
     // hits
     let done = false;
@@ -167,8 +178,10 @@ export function updateProjs(dt) {
 
 // ---------- areas: burning ground, arrow rain, webs, poison ----------
 export function area(kind, x, z, r, dur, o = {}) {
-  const a = { kind, x, z, r, dur, t: 0, tick: o.tick ?? 0.5, tickT: o.delay ?? 0, dmg: o.dmg || 0, team: o.team || 'hero', src: o.src, opts: o.opts || {}, vx: o.vx || 0, vz: o.vz || 0, hit: new Set() };
-  if (kind === 'fire') a.light = addLight({ x, y: 0.6, z, color: 0xff6a10, intensity: 16, range: r * 3, flicker: 0.4 });
+  const a = { kind, x, z, r, dur, t: 0, tick: o.tick ?? 0.5, tickT: o.delay ?? 0, dmg: o.dmg || 0, team: o.team || 'hero', src: o.src, opts: o.opts || {}, vx: o.vx || 0, vz: o.vz || 0, hit: new Set(), floats: !!o.floats };
+  if (kind === 'fire') a.light = addLight({ x, y: 0.6, z, color: 0xff6a10, intensity: o.floats ? 22 : 16, range: r * 3, flicker: 0.4 });
+  // burning whale oil (Act V): a dark slick under the flames (it burns on water too: the decal fades under the sea, fx.js)
+  if (kind === 'fire' && o.floats) decal(x, z, 'scorch', r * 2.1, dur);
   if (kind === 'tornado') a.light = addLight({ x, y: 1.2, z, color: 0xff7a20, intensity: 14, range: 6, flicker: 0.4 });
   if (kind === 'poison') decal(x, z, 'goo', r * 2, dur);
   if (kind === 'web') decal(x, z, 'ecto', r * 2, dur);
@@ -207,7 +220,11 @@ export function updateAreas(dt) {
     if (a.kind === 'amberDust' || a.kind === 'wave') { if (a.t > a.dur) { if (a.light) removeLight(a.light); G.areas.splice(i, 1); } continue; }
     if (a.vx || a.vz) { a.x += a.vx * dt; a.z += a.vz * dt; if (a.light) { a.light.x = a.x; a.light.z = a.z; } }
     // looks
-    if (a.kind === 'fire') { if (Math.random() < 0.7) P({ x: a.x + rand.range(-a.r, a.r) * 0.8, y: 0.1, z: a.z + rand.range(-a.r, a.r) * 0.8, vy: rand.range(1, 2.5), life: rand.range(0.3, 0.6), size: 0.5, size1: 0.1, color: 0xffb040, color1: 0xff2a00 }); }
+    if (a.kind === 'fire') {
+      if (Math.random() < 0.7) P({ x: a.x + rand.range(-a.r, a.r) * 0.8, y: 0.1, z: a.z + rand.range(-a.r, a.r) * 0.8, vy: rand.range(1, 2.5), life: rand.range(0.3, 0.6), size: 0.5, size1: 0.1, color: 0xffb040, color1: 0xff2a00 });
+      // whale oil burns tall and sooty
+      if (a.floats && a.t < a.dur) { P({ x: a.x + rand.range(-a.r, a.r) * 0.7, y: 0.15, z: a.z + rand.range(-a.r, a.r) * 0.7, vy: rand.range(1.5, 3.2), life: rand.range(0.4, 0.8), size: 0.75, size1: 0.15, color: 0xffc050, color1: 0xff3a00 }); if (Math.random() < 0.35) P({ add: false, x: a.x + rand.range(-a.r, a.r) * 0.5, y: 1.2, z: a.z + rand.range(-a.r, a.r) * 0.5, vy: rand.range(1, 2), life: 1.6, size: 0.6, size1: 1.8, color: 0x1a1612, alpha: 0.35, alpha1: 0 }); }
+    }
     else if (a.kind === 'rain') {
       for (let k = 0; k < 2; k++) { const rx = a.x + rand.range(-a.r, a.r) * 0.85, rz = a.z + rand.range(-a.r, a.r) * 0.85; P({ x: rx, y: 6, z: rz - 1, vy: -26, vz: 4, life: 0.22, size: 0.18, size1: 0.12, color: 0xfff0d0, color1: 0xd0c0a0 }); if (Math.random() < 0.3) sparks(rx, 0.1, rz, 2, 0xe0d0b0, 2); }
     } else if (a.kind === 'poison') { if (Math.random() < 0.3) P({ add: false, x: a.x + rand.range(-a.r, a.r) * 0.7, y: 0.1, z: a.z + rand.range(-a.r, a.r) * 0.7, vy: 0.6, life: 1, size: 0.5, size1: 1.2, color: 0x6a9a20, alpha: 0.4 }); }

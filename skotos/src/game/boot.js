@@ -288,7 +288,10 @@ function tick(dt, noDraw) {
   if (G.zone.lvl.walls) G.zone.lvl.walls.update(dt, pl.x, pl.z);
   G.zone.lvl.village?.update(dt, pl.x, pl.z);
   if (G.mode === 'play') updateCamera(dt, pl.x, pl.z);
-  WIND.uHero.value.set(pl.x, 0, pl.z);
+  // (what stands south of the hero dissolves so she stays in sight; a scene about something else may move that point:
+  // c.occ, or { z: -999 } for nothing)
+  const occ = G.cine?.occ;
+  WIND.uHero.value.set(occ ? occ.x ?? 0 : pl.x, 0, occ ? occ.z : pl.z);
   updateFX(gdt, pl.x, pl.z);
   // music follows the fight
   let n = 0; for (const a of G.actors) if (a.aggro && !a.dead && a.team === 'foe' && !a.prop && Math.abs(a.x - pl.x) + Math.abs(a.z - pl.z) < 22) n++;
@@ -313,7 +316,8 @@ function cineTick(dt) {
   const k = clamp(c.t / 1.6, 0, 1), back = clamp((c.dur - c.t) / 1.2, 0, 1);
   const pl = G.player, w = Math.min(k, back);
   R.cam.zoomT = 1 + (c.zoom - 1) * w;
-  R.cam.lookY = 0.9 + 5 * w;
+  // (the aim's height: 5.9 m, or c.lookY for a scene about something tall)
+  R.cam.lookY = 0.9 + ((c.lookY ?? 5.9) - 0.9) * w;
   // a scene may lower the camera toward the horizon (c.pitch, eased; set or changed at any step)
   const P0 = (c.p0 ??= R.cam.pitch);
   if (c.pitch != null) R.cam.pitch += (P0 + (c.pitch - P0) * w - R.cam.pitch) * Math.min(1, dt * 2.2);

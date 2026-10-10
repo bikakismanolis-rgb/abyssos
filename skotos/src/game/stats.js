@@ -1,5 +1,5 @@
 // Hero stats from level, items and buffs.
-import { CLASSES, SKILLS, SKILL_MAX_RANK, BOON, BOONS, BUFFS, UNBOUND, GIFTS } from './data.js';
+import { CLASSES, SKILLS, SKILL_MAX_RANK, BOON, BOONS, BUFFS, UNBOUND, REMEMBERED, GIFTS } from './data.js';
 import { G } from './state.js';
 
 export function computeStats(hero, equip = hero.equip) {
@@ -19,9 +19,10 @@ export function computeStats(hero, equip = hero.equip) {
     }
   }
   if (s.legs.has('swiftboots')) s.move += 15;
-  // the beacons' blessings; the fire lit by hand is worth half again to a hero the crown never held (Unbound)
+  // the beacons' blessings; the fire lit by hand is worth half again to a hero the crown never held (Unbound), the lights of
+  // the sea a quarter again to one who lit the four Name-stones (Remembered)
   const F = hero.flags || {};
-  for (const id of hero.boons || []) { const b = BOON[id]; if (!b) continue; const m = F.unbound && BOONS[4].includes(b) ? UNBOUND : 1; for (const k in b.stats) s[k] += Math.floor(b.stats[k] * m); }
+  for (const id of hero.boons || []) { const b = BOON[id]; if (!b) continue; const m = F.unbound && BOONS[4].includes(b) ? UNBOUND : F.remembered && BOONS[5].includes(b) ? REMEMBERED : 1; for (const k in b.stats) s[k] += Math.floor(b.stats[k] * m); }
   // the Crown's Offers: a gift and its cage, held until Karthax takes them back (never in a Shadow Gate)
   if (F.gifts && !(F.giftsTaken || F.crownUnmade || hero.quest >= 22) && G.zone?.id !== 'gate') for (const id in GIFTS) if (F.gifts[id] === 'taken') for (const k in GIFTS[id]) s[k] += GIFTS[id][k];
   const lifeMax = Math.round((40 + L * 12 + s.vit * 5 + s.life) * C.life * (1 + s.lifePct / 100));
