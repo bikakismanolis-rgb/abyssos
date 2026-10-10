@@ -366,6 +366,8 @@ export function bolt(x0, y0, z0, x1, y1, z1, color = 0x9ad8ff, width = 1) {
 // ---------- persistent emitters (fires, smoke) and ambient life ----------
 export function setEmitters(list) { FX.emitters = list || []; }
 export function setAmbient(kind) { FX.ambient = kind; }
+// one emitter run for a frame outside the zone's list (a prop's own fire while it is lit: build5.js), near the camera
+export function emitAt(e, dt) { emit(e, dt, R.cam.x, R.cam.z); }
 function emit(e, dt, cx, cz) {
   const dx = e.x - cx, dz = e.z - cz;
   if (dx * dx + dz * dz > 30 * 30) return;
@@ -430,12 +432,16 @@ function emit(e, dt, cx, cz) {
     case 'seasmoke': {
       if (FX.ambient === 'coastFrozen') { e.acc = 0; break; }
       // (thinner on the phones' quality and below: big soft sprites are fill)
-      const iv = (0.28 / Math.max(0.25, s)) * (FX.q >= 2 ? 1 : FX.q === 1 ? 1.6 : 3);
+      const iv = (0.2 / Math.max(0.25, s)) * (FX.q >= 2 ? 1 : FX.q === 1 ? 1.5 : 3), nw = FX.q >= 2 ? 4 : FX.q === 1 ? 3 : 2;
       while (e.acc > iv) {
         e.acc -= iv;
-        // (low wisps crawling off the water on the wind, now and then a taller curl)
-        const k = Math.floor(Math.random() * (e.cells.length / 2)) * 2, x = e.cells[k] + rr(-0.5, 0.5), z = e.cells[k + 1] + rr(-0.5, 0.5), tall = Math.random() < 0.25;
-        P({ add: false, x, y: rr(0.05, 0.25), z, vx: rr(-0.5, -0.15), vy: tall ? rr(0.3, 0.5) : rr(0.06, 0.16), vz: rr(0.05, 0.3), life: rr(4.5, 7.5), size: rr(0.9, 1.6), size1: tall ? rr(3, 4.5) : rr(2.6, 3.6), color: 0xb4c2ce, alpha: tall ? 0.2 : 0.28, alpha1: 0, drag: 0.08 });
+        // a wisp: soft puffs one over another, rising together two to four metres and leaning on the wind, thinning to
+        // nothing at the top (e.cells lists the lip of the ice twice: the water breathes most along its edge); now and
+        // then a low skein crawling off the water instead
+        const k = Math.floor(Math.random() * (e.cells.length / 2)) * 2, x = e.cells[k] + rr(-0.5, 0.5), z = e.cells[k + 1] + rr(-0.5, 0.5);
+        const vx = rr(-0.4, -0.1), vz = rr(0.02, 0.22), up = rr(0.3, 0.6), life = rr(5, 8);
+        if (Math.random() < 0.3) { P({ add: false, x, y: rr(0.05, 0.2), z, vx: vx * 1.4, vy: rr(0.04, 0.1), vz, life, size: rr(0.9, 1.4), size1: rr(2.4, 3.2), color: 0xb4c2ce, alpha: 0.2, alpha1: 0, drag: 0.08 }); continue; }
+        for (let j = 0; j < nw; j++) P({ add: false, x: x + vx * j * 0.3 + rr(-0.08, 0.08), y: 0.05 + j * 0.32, z: z + rr(-0.08, 0.08), vx: vx * (1 + j * 0.2), vy: up * (1 + j * 0.12), vz, life: life * (1 - j * 0.12), size: 0.45 + j * 0.12, size1: 1.1 + j * 0.45, color: 0xb8c6d2, alpha: 0.17 - j * 0.025, alpha1: 0, drag: 0.04 });
       }
       break;
     }

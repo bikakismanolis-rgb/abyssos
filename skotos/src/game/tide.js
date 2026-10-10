@@ -19,6 +19,7 @@
 import { G } from './state.js';
 import { HAZ5 } from './data.js';
 import { damage } from './combat.js';
+import { coldAdd } from './cold.js';
 import { sapAt } from './sap.js';
 import { emit } from '../ui/bus.js';
 import { splash } from '../gfx/fx.js';
@@ -275,6 +276,7 @@ function washOut(z, T, pl, s) {
   pl.kx = pl.kz = 0;
   const pct = haz().wash;
   if (pct > 0) damage(null, pl, pl.hpMax * pct / 100, { pure: true, wash: true, cold: 20 });
+  else coldAdd(20);
   Audio.sfx('washOut', { x: pl.x, z: pl.z });
   splash(pl.x, pl.z, 1.3);
   TIDE_LOG.washes.push({ from: { x: pl.x, z: pl.z }, to: { x: end.x, z: end.z }, len: +len.toFixed(2), cells: r.path.length });

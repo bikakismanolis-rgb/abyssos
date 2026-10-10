@@ -1,7 +1,7 @@
 // Actors (hero, monsters, NPCs, pets) and the models they wear.
 import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { R, addLight } from '../gfx/gfx.js';
+import { R, addLight, removeLight } from '../gfx/gfx.js';
 import { makeCharMat, staticGeo } from '../gfx/rig.js';
 import * as M from '../gfx/models.js';
 import { Avatar } from '../gfx/anim.js';
@@ -51,10 +51,16 @@ const STAND_IN = {
   // Act IV: the creatures (tools/creatures/act4) and the ash people (ash.glb); a list is tried in order
   ashwing: ['caveBat', 'warg'], smokeEater: 'spider', emberTick: 'spiderling', hammerhorn: 'troll', karthax: ['moltenKing', 'troll'],
   lampless: 'wayfarer', ivar: 'wayfarer', arna: 'wayfarer', arnaOld: 'wayfarer', isarnBoy: 'wayfarer',
-  ashSpear: 'warden', ashDwarf: 'stoneborn', ashBow: 'ranger', ashsmith: 'villager1'
+  ashSpear: 'warden', ashDwarf: 'stoneborn', ashBow: 'ranger', ashsmith: 'villager1',
+  // Act V: the creatures (tools/creatures/act5, the bear Act III's) and the frost set (frost.glb); every chain ends in a
+  // boot-loaded or code-built model
+  tower: ['spider'], reefback: ['spider'], skotos: ['troll'], skotosHand: 'heartroot', icemaw: ['warg'], hullLouse: 'spiderling',
+  skua: ['caveBat', 'spiderling'], rimeBear: ['amberBear', 'troll'],
+  sunken: 'villager0', icesinger: 'healer', alkyone: 'healer', selna: 'smith', tern: 'villager0', tamarisk: 'ranger', glaukos: 'wayfarer'
 };
 // a stand-in drawn at another size than the model it stands for (model>stand-in)
-const STAND_SCALE = { 'ashwing>caveBat': 2.6, 'smokeEater>spider': 0.75, 'isarnBoy>wayfarer': 0.62 };
+const STAND_SCALE = { 'ashwing>caveBat': 2.6, 'smokeEater>spider': 0.75, 'isarnBoy>wayfarer': 0.62,
+  'tower>spider': 0.8, 'reefback>spider': 0.8, 'skotos>troll': 0.75, 'icemaw>warg': 0.75, 'tern>villager0': 0.62 };
 const ready = (m) => hasPerson(m) || hasCreature(m) || !!BUILD[m];
 export function standIn(model) {
   for (let i = 0; i < 4 && !ready(model) && STAND_IN[model]; i++) { const s = STAND_IN[model]; model = Array.isArray(s) ? s.find(ready) || s[s.length - 1] : s; }
@@ -129,6 +135,8 @@ export class Actor {
     // what it kept on the ground: a rootling's mound, an Ash-Fallen's heap, a stoker's chain
     if (this.mesh) { this.mesh.parent?.remove(this.mesh); this.mesh = null; }
     if (this.light) { this.light = null; }
+    // an NPC's lantern light (ai.js npc)
+    if (this.lampSrc) { removeLight(this.lampSrc); this.lampSrc = null; }
   }
 }
 
@@ -184,28 +192,47 @@ export function spawnMonster(id, x, z, o = {}) {
 
 // ---------- Act III: what the Evergreen and the woods' creatures wear and how they wait ----------
 function actSpawn(id, def, a, av, o) {
-  // Rootlings wait underground under a leaf-tuft mound and burst out together (ai.js rootling)
-  if (def.burst && !o.rising && !o.surface) {
+  // Rootlings wait underground under a leaf-tuft mound and burst out together (ai.js rootling); (Act V's Hull-lice burst from
+  // a wreck or a crack their own way)
+  if (def.burst && def.ai === 'rootling' && !o.rising && !o.surface) {
     a.under = true; a.y = -1; av.group.visible = false;
     a.mesh = M.moundMesh(); a.mesh.position.set(a.x, 0, a.z); a.mesh.rotation.y = Math.random() * 6.28; R.scene.add(a.mesh);
   }
-  // the dead that wait: the Hollowed pass for dead wood (a dark tint), the Ash-Fallen lie under the ash (a pose and a mound)
-  const tag = o.packId != null && G.zone?.packs?.find((p) => p.id === o.packId)?.tag;
-  if (def.wake && (o.dormant ?? (tag && PACK_DORMANT[tag]))) {
+  // the dead that wait: the Hollowed pass for dead wood (a dark tint), the Ash-Fallen lie under the ash (a pose and a mound).
+  // (An Act V pack says for itself whether it lies in wait, gen5's p.dormant: the Sunken on the coast's dry road stand; a
+  // frozen crew waits as ice instead, act5Spawn)
+  const pk = o.packId != null ? G.zone?.packs?.find((p) => p.id === o.packId) || null : null, tag = pk?.tag;
+  const dorm = o.dormant ?? (G.zone?.act5 && pk && 'dormant' in pk ? !!pk.dormant : tag && PACK_DORMANT[tag]);
+  if (def.wake && dorm && tag !== 'frozenCrew') {
     a.dormant = true; a.disguised = true;
-    if (def.wake.pose) {
-      a.pose = def.wake.pose; av.play(a.pose, 1);
-      a.mesh = new THREE.Mesh(staticGeo(M.ashMoundParts()), moundMat()); a.mesh.position.set(a.x, 0, a.z); a.mesh.rotation.y = Math.random() * 6.28; R.scene.add(a.mesh);
-    } else av.setTint(0x2a2016, 0.85);
+    if (def.wake.pose) { a.pose = def.wake.pose; av.play(a.pose, 1); heapOver(a); }
+    else av.setTint(0x2a2016, 0.85);
   }
   if (tag && PACK_LINE[tag]) battleLine(a, o.packId);
   if (id === 'amaranthe') { amberCrown(av); shardGlow(a, av); a.hpFloor = a.hpMax * 0.649; a.dazeClip = 'kneel'; }
   if (id === 'mourner') veil(av);
   act4Spawn(id, def, a, av, o);
+  act5Spawn(id, def, a, av, o, pk);
+}
+// a heap over a body lying in wait (ash, or the Sunken's kelp); a crab's 'rock' is its own pose and needs none
+function heapOver(a) {
+  const heap = a.pose === 'kelpPile' ? (kelpGeo ||= staticGeo(M.kelpMoundParts())) : a.pose === 'bonePile' ? (ashGeo ||= staticGeo(M.ashMoundParts())) : null;
+  if (!heap) return;
+  a.mesh = new THREE.Mesh(heap, a.pose === 'kelpPile' ? kelpMat() : moundMat()); a.mesh.position.set(a.x, 0, a.z); a.mesh.rotation.y = Math.random() * 6.28;
+  R.scene.add(a.mesh);
+}
+// Act V: back to its rest at the ebb, whole again (ai.js: the Sunken to their kelp, a Reefback to its rock)
+export function lieDown(a) {
+  const av = a.avatar, W = a.def.wake; if (!av || !W?.pose) return;
+  a.dormant = true; a.disguised = true; a.pose = W.pose; a.state = 'idle'; a.aggro = false; a.tideRisen = false; a.wakeIn = null; a.wakeCalm = false;
+  a.hp = a.hpMax; a.vulns = null; a.status.slow = 0; a.kx = a.kz = 0; a.y = 0; restoreRim(a);
+  av.anim.stop?.(0.2); av.play(a.pose, 1);
+  if (!a.mesh) heapOver(a);
 }
 // ---------- Act IV: what the ash people and the Forge's creatures wear ----------
 // (a tint above 1 drains the colour first: people.js)
-const TINT_IN = { lampless: [0x8a96a8, 1.6], ivar: [0x9aa0aa, 1.55], ashSpear: [0x8a8680, 1.7], ashDwarf: [0x9a8a70, 1.6], ashBow: [0x8a9078, 1.6], ashsmith: [0x6a5444, 1.4], smokeEater: [0x4a4440, 1.6], emberTick: [0xff6a20, 0.3], hammerhorn: [0x4a4440, 1.6], karthax: [0x4a4a52, 2.0], ashwing: [0xd8d0c0, 1.5] };
+const TINT_IN = { lampless: [0x8a96a8, 1.6], ivar: [0x9aa0aa, 1.55], ashSpear: [0x8a8680, 1.7], ashDwarf: [0x9a8a70, 1.6], ashBow: [0x8a9078, 1.6], ashsmith: [0x6a5444, 1.4], smokeEater: [0x4a4440, 1.6], emberTick: [0xff6a20, 0.3], hammerhorn: [0x4a4440, 1.6], karthax: [0x4a4a52, 2.0], ashwing: [0xd8d0c0, 1.5],
+  sunken: [0x8c9e99, 1.6], harpooner: [0x8c9e99, 1.6], iceSinger: [0xa8c8e0, 1.5], tower: [0x5a6478, 1.4], skotos: [0x0c0a14, 2.0], icemaw: [0x8a9098, 1.5] };
 function act4Spawn(id, def, a, av, o) {
   const tint = (c, k) => { av.setTint(c, k); a.baseTint = c; a.baseTintAmt = k; };
   // stand-ins wear the act's colours (ash-grey dead, a soot-black thrall, Karthax in black iron)
@@ -233,8 +260,9 @@ function wear(av, bone, parts, k, z = 0, y = 0) {
   av.held[bone + 'Worn'] = { mesh };
   return mesh;
 }
-let moundM = null;
+let moundM = null, kelpM = null, kelpGeo = null, ashGeo = null;
 const moundMat = () => (moundM ||= makeCharMat({ rim: 0x6a6460, rimI: 0.15 }));
+const kelpMat = () => (kelpM ||= makeCharMat({ rim: 0x5a6a50, rimI: 0.18 }));
 // a Lampless's lantern throws a pale cone of detection: the world's (act4Prop 'cone') or a fan of light on the ground
 const CONE_VS = 'varying vec2 vUv; varying vec3 vP; void main(){ vUv = uv; vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }';
 const CONE_FS = `varying vec2 vUv; varying vec3 vP; uniform float uF; uniform float uA; uniform float uArc;
@@ -311,6 +339,102 @@ function battleLine(a, packId) {
   a.rot = lead.rot;
   if (G.zone?.map?.walkable(x, z)) { a.x = x; a.z = z; a.home = { x, z }; if (a.mesh) a.mesh.position.set(x, 0, z); }
 }
+// ---------- Act V: what the Sunken, the Ice Singers and the Saltborn wear (code parts on the frost set) ----------
+function act5Spawn(id, def, a, av, o, pk) {
+  const tag = pk?.tag;
+  // the Sunken: kelp over the head and shoulders, barnacles on the forearms; the Harpooner a sealskin hood and his rope
+  if (id === 'sunken' || id === 'harpooner') {
+    if (id === 'harpooner') { onHead(av, M.hoodParts(0x3a2c22, 0.34, 1.6), 0.005); a.coil = wear(av, 'spine_03', M.ropeCoilParts(), 0, 0.02, 0.1); }
+    else onHead(av, M.kelpParts(0.55, 16), 0.01);
+    for (const [b, sg] of [['lowerarm_l', 1], ['lowerarm_r', -1]]) { const m = wear(av, b, M.barnacleParts(), 0, 0, 0); if (m) m.scale.x *= sg; }
+  }
+  // an Ice Singer: a long kelp veil, see-through, wet
+  if (id === 'iceSinger') veil(av, { parts: M.kelpParts(1.0, 22, [0x2a3a2a, 0x3a4a34, 0x24302a, 0x4a5a44]), rim: 0x9ad8ff, rimI: 0.9, opacity: 0.88, dy: 0.0 });
+  // a frozen crew stands at the rails as ice, caught in what it was doing (ai.js statueTick: the ice cracking beside it or
+  // the hero 4 m off wakes the rail)
+  if (tag === 'frozenCrew') statue(a, av, id);
+  // Hull-lice wait inside something until they boil out together (ai.js louse: a hull, a cracked patch of thin ice, a den,
+  // the rock a Reefback sleeps as); the ones a seal calls up come out of the crack at once
+  else if (def.curl && pk && !o.rising && !o.out) { a.under = true; a.hidden = true; a.burstPack = pk; a.y = -0.3; av.group.visible = false; }
+  else if (def.curl) { a.rising = 1.0; av.play('spawn', 1.1); }
+  // a flood wave walks in hunting her out of the sea beyond the edge it came over (world.js spawns it at high water)
+  if (tag === 'floodWave') { a.aggro = true; outToSea(a); }
+  // the Skuas on their roost: the whale's skull, a mast, the beach under them (ai.js skua lifts them off)
+  if (def.lightShy && pk) roost(a, pk);
+}
+// an ice statue of itself, in a pose (the statue tint: ai.js), waking with the colour it had
+function statue(a, av, id) {
+  a.dormant = true; a.disguised = true; a.statue = true; a.pose = null;
+  a.wakeTint = [a.baseTint ?? 0xffffff, a.baseTintAmt ?? 0];
+  frozenLook(av);
+  const pose = id === 'harpooner' ? ['throw', 0.42] : id === 'iceSinger' ? ['song', 0.3] : ['chop', 0.55];
+  av.play(pose[0], 1); for (let k = 0; k < 4; k++) av.update(pose[1] / 4, { speed: 0 });
+}
+// out to the deep water beyond where it was put, away from the hero: the wave comes in out of the sea
+function outToSea(a) {
+  const map = G.zone?.map, pl = G.player; if (!map || !pl) return;
+  const away = Math.atan2(a.x - pl.x, a.z - pl.z);
+  for (const r of [2.2, 3.2, 1.5]) for (const o of [0, 0.5, -0.5, 1.1, -1.1]) {
+    const x = a.x + Math.sin(away + o) * r, z = a.z + Math.cos(away + o) * r, ix = Math.floor(x), iz = Math.floor(z);
+    if (map.solid(ix, iz) && !map.blocks(ix, iz)) { a.x = ix + 0.5; a.z = iz + 0.5; a.home = { x: a.x, z: a.z }; a.y = -0.95; a.rot = away + Math.PI; return; }
+  }
+}
+// a perch near its flock's spot: three to a roost (the whale's skull, a wreck's mast), the rest on the shingle under them
+function roost(a, pk) {
+  const R0 = (G.zone?.L?.spots?.roosts || []).filter((r) => Math.hypot(r.x - pk.x, r.z - pk.z) < 12);
+  const i = G.actors.filter((b) => b.packId === a.packId && b.perch).length;
+  const r = R0.length && i < R0.length * 3 ? R0[i % R0.length] : null;
+  a.perch = r ? { x: r.x + rand.range(-0.6, 0.6), z: r.z + rand.range(-0.6, 0.6), top: true } : { x: a.x, z: a.z, top: false };
+  a.x = a.perch.x; a.z = a.perch.z; a.home = { x: pk.x, z: pk.z };
+}
+// a piece worn on the head, y = 0 at the crown (+dy), sharing the wearer's flash, tint and dissolve
+function onHead(av, parts, dy = 0) {
+  if (!av.bones.head || !av.heldMat) return null;
+  const mesh = new THREE.Mesh(staticGeo(parts), av.heldMat), at = attachUpright(av, 'head', mesh, 0, 0, 0);
+  if (!at) return null;
+  attachUpright(av, 'head', mesh, 0, headTop(av, at.y) + dy, 0);
+  // (av.held keeps it, so it goes with the avatar: one key a piece)
+  av.held['head' + Object.keys(av.held).length] = { mesh };
+  return mesh;
+}
+// an NPC's sea-lantern: held in the right hand, alight (color, k its size, glow); a small light that follows it (ai.js npc)
+function lantern(a, av, color = 0xfff0d0, k = 1, glow = 2.4) {
+  av.hold('R', 'seaLantern', { lamp: color, k, glow });
+  a.lampC = color; a.lampK = k * (glow / 2.4);
+}
+// the look of Act V's people, by kind (spawnNpc): o.lamp a colour gives anyone a sea-lantern (Brokka and Elati carrying
+// their fires to the Farthest Light, Tamarisk in the fight), o.lamp === false none
+function act5Npc(kind, a, av, o) {
+  const lamp = (c, k, g) => { if (o.lamp !== false) lantern(a, av, typeof o.lamp === 'number' ? o.lamp : c, k, g); };
+  if (kind === 'alkyone') { onHead(av, M.cowlParts(), 0.0); onHead(av, M.braidParts(), 0.0); lamp(0xfff4e0, 1, 2.6); }
+  else if (kind === 'selna' || kind === 'first') { wear(av, 'neck_01', M.collarFurParts(0x7a6a58), 0, 0, 0); if (kind === 'selna') lamp(0xffd8a0, 1, 1.3); av.stoop = 0.32; }
+  else if (kind === 'tern') { onHead(av, M.capParts(), 0.0); lamp(0xfff0d0, 0.6, 2.2); }
+  else if (kind === 'einarBoy' || kind === 'child') { if (kind === 'child' && av.standIn) av.setTint(0xc8b8a0, 0.25); }
+  else if (kind === 'tamarisk') { wear(av, 'neck_01', M.collarFurParts(0x5a4a3a, 0.14), 0, 0, 0); if (typeof o.lamp === 'number') lamp(o.lamp); }
+  else if (kind === 'glaukos') onHead(av, M.bandParts(), 0);
+  else if (kind === 'shorefolk' || kind === 'keeperYoung') {
+    // the Saltborn: weathered oilskins, ochre or sea-blue (a light tint: one above 1 would drain their skin to the dead's
+    // grey too), a hood or a fur collar
+    const odd = a.spotK % 2;
+    av.setTint(odd ? 0x6a7a90 : 0xb09a60, 0.42);
+    if (odd) wear(av, 'neck_01', M.collarFurParts(0x5a4c3e), 0, 0, 0); else onHead(av, M.hoodParts(0x4a3e22, 0.26, 1.8), 0.01);
+    if (o.idle === 'lantern' || (!o.idle && a.spotK % 3 === 2)) lamp(0xffe0b0, 0.9, 2.2);
+  }
+  else if ((kind === 'brokka' || kind === 'elati') && typeof o.lamp === 'number') lantern(a, av, o.lamp, 1, 2.6);
+  // the dead seen again in a memory: pale, see-through, cold (story.js plays them)
+  if (MEMORY.has(kind)) memoryLook(av);
+  // the frozen in the ice windows: as statues of ice until their memory plays
+  if (o.frozen) { frozenLook(av); a.still = true; a.animRate = 0; }
+}
+const MEMORY = new Set(['first', 'einarBoy', 'einar', 'arnaLast', 'keeperYoung']);
+// a creature file's named socket, an empty node that moves with its bone (the crab's socket_light, where the Walking
+// Tower's ruin stands: extras.socket); null on a stand-in
+export function socketOf(av, name = av?.model?.tpl?.ex?.socket) { return name && av?.model?.kind === 'creature' ? av.model.mesh.getObjectByName(name) || null : null; }
+// a figure in an Ice Memory: pale and cold, a little see-through
+export function memoryLook(av) { ghostly(av, 0.6); av.setTint(0xe6f2ff, 0.7); av.setRim(0xbfe8ff, 1.6); }
+// a figure frozen in the ice: an ice statue of itself (the statue tint, ai.js)
+export function frozenLook(av) { av.setTint(0x9ac8e8, 1.75); av.setRim(0xd8f0ff, 0.7); }
+
 // attach obj to a bone so that it stands upright in the rest pose, offset (in metres, character space) from the bone
 const _ma = new THREE.Matrix4(), _pa = new THREE.Vector3(), _qa = new THREE.Quaternion(), _sa = new THREE.Vector3();
 export function attachUpright(av, boneName, obj, ox, oy, oz) {
@@ -346,15 +470,15 @@ function shardGlow(a, av) {
   a.shardGlow = spr; a.shardBase = spr.scale.x;
   a.shardLight = addLight({ x: a.x, y: 2.4, z: a.z, color: 0xffa030, intensity: 22, range: 9, flicker: 0.15 });
 }
-// a Mourner's veil: a translucent black cone hung from the head
-function veil(av) {
+// a Mourner's veil: a translucent black cone hung from the head (o: an Ice Singer's of kelp: parts, opacity, dy)
+function veil(av, o = {}) {
   if (!av.bones.head || av.model.kind !== 'person') return;
-  const mat = makeCharMat({ rim: 0xe8d8a8, rimI: 0.8 });
+  const mat = makeCharMat({ rim: o.rim ?? 0xe8d8a8, rimI: o.rimI ?? 0.8 });
   mat.userData.u = av.mat.userData.u;
-  mat.transparent = true; mat.opacity = 0.86; mat.depthWrite = false; mat.side = THREE.DoubleSide;
-  const mesh = new THREE.Mesh(staticGeo(M.veilParts()), mat);
+  mat.transparent = true; mat.opacity = o.opacity ?? 0.86; mat.depthWrite = false; mat.side = THREE.DoubleSide;
+  const mesh = new THREE.Mesh(staticGeo(o.parts || M.veilParts()), mat);
   const at = attachUpright(av, 'head', mesh, 0, 0, 0);
-  attachUpright(av, 'head', mesh, 0, headTop(av, at.y) + 0.04, 0.0);
+  attachUpright(av, 'head', mesh, 0, headTop(av, at.y) + (o.dy ?? 0.04), 0.0);
   av.model.mats?.push(mat);
   av.held.veil = { mesh };
 }
@@ -369,27 +493,39 @@ export function restoreRim(a) {
 export function rollAffixes(n) { const pool = AFFIXES.slice(); rand.shuffle(pool); return pool.slice(0, n); }
 
 // ---------- NPCs ----------
-export function spawnNpc(kind, x, z, rot) {
-  const model = kind === 'villager' ? 'villager' + (Math.floor(x + z) % 3) : kind === 'ivarGhost' ? 'ivar' : kind === 'wayfarerGhost' ? 'lampless' : kind;
+// o (Act V): { idle, lamp (a colour: a sea-lantern alight in her hand; false: none), lampPool (metres: her lamp is lamp
+// light, the keepers' in the Skotos's last phase), frozen (an ice statue in a window) }
+// Act V's people wear the frost set: the kind is the scene, but for the Whitecliff child and the memories (NPC_MODEL)
+const NPC_MODEL = { child: 'tern', first: 'selna', einarBoy: 'tern', einar: 'villager1', arnaLast: 'glaukos', keeperYoung: 'villager2' };
+const NPC5 = { alkyone: 'lantern', selna: 'kneel', tern: 'Idle_Lantern_Loop', tamarisk: 'fold', glaukos: 'talk', child: 'Idle_Loop', first: 'lantern', einarBoy: 'Idle_Loop', einar: 'Idle_Loop', arnaLast: 'lantern', keeperYoung: 'lantern' };
+export function spawnNpc(kind, x, z, rot, o = {}) {
   const vi = Math.floor(x + z) % 3;
-  const o = kind === 'wayfarer' ? { style: 'staff', weapon: 'lanternStaff', animSet: 'npc' } : kind === 'smith' ? { style: 'none', weapon: 'hammer', animSet: 'npc', idle: 'hammer' }
-    : kind === 'brokka' ? { style: 'none', weapon: 'hammer', animSet: 'npc', idle: 'fold' }
+  const model = kind === 'villager' ? 'villager' + vi : kind === 'ivarGhost' ? 'ivar' : kind === 'wayfarerGhost' ? 'lampless' : kind === 'shorefolk' ? 'villager' + (1 + (Math.floor(x + z) % 2)) : NPC_MODEL[kind] || kind;
+  const lampIdle = typeof o.lamp === 'number';
+  const opt = kind === 'wayfarer' ? { style: 'staff', weapon: 'lanternStaff', animSet: 'npc' } : kind === 'smith' ? { style: 'none', weapon: 'hammer', animSet: 'npc', idle: 'hammer' }
+    : kind === 'brokka' ? (lampIdle ? { style: 'none', animSet: 'npc', idle: 'lantern' } : { style: 'none', weapon: 'hammer', animSet: 'npc', idle: 'fold' })
     // Act III: Elati, the last Evergreen scout, bow in hand; Old Linden, half rooted, kneeling in her own roots
-    : kind === 'elati' ? { style: 'none', weapon: 'bow', look: { blade: 0x4a3a24 }, animSet: 'npc', idle: 'fold' }
+    : kind === 'elati' ? (lampIdle ? { style: 'none', animSet: 'npc', idle: 'lantern' } : { style: 'none', weapon: 'bow', look: { blade: 0x4a3a24 }, animSet: 'npc', idle: 'fold' })
     : kind === 'linden' ? { style: 'none', animSet: 'npc', idle: 'kneel' }
     : kind === 'healer' ? { style: 'none', animSet: 'npc', idle: 'talk' }
     // Act IV: Arna with the first lantern (young, then old), Isarn as a boy, and the dead who walk with the fire
     : kind === 'arna' ? { style: 'staff', weapon: 'lanternStaff', animSet: 'npc' } : kind === 'arnaOld' ? { style: 'staff', weapon: 'lanternStaff', animSet: 'npc', idle: 'lantern' }
     : kind === 'isarnBoy' ? { style: 'none', animSet: 'npc', idle: 'Idle_Loop' }
     : kind === 'ivarGhost' || kind === 'wayfarerGhost' ? { style: 'staff', weapon: 'lanternStaff', look: { glow: kind === 'ivarGhost' ? 2.2 : 0.4, lamp: kind === 'ivarGhost' ? 0xffc070 : 0xc8d8f0 }, animSet: 'npc', idle: 'lantern' }
+    // Act V: the Saltborn at their work (a rope, the bell, a lamp), the others in their own ways (NPC5)
+    : kind === 'shorefolk' ? { style: 'none', animSet: 'npc', idle: o.idle || ['hammer', 'Idle_Rail_Call', 'lantern'][vi] }
+    : NPC5[kind] ? { style: 'none', animSet: 'npc', idle: o.idle || NPC5[kind] }
     : { style: 'none', animSet: 'npc', idle: ['fold', 'talk', 'Idle_Loop'][vi] };
-  const av = makeAvatar(model, o);
+  if (o.idle && !opt.idle) opt.idle = o.idle;
+  const av = makeAvatar(model, opt);
   const a = new Actor({ x, z, team: 'npc', kind, radius: 0.5, speed: 0, hp: 1e9, avatar: av, rot });
-  a.npc = kind;
+  a.npc = kind; a.spotK = vi;
   // a rooted elder does not turn to watch you, and barely stirs
   if (kind === 'linden') { a.still = true; a.animRate = 0.25; }
   if (kind === 'ivarGhost' || kind === 'wayfarerGhost') ghostly(av);
   else if (av.standIn && kind === 'isarnBoy') av.setTint(0xd8c8b0, 0.2);
+  act5Npc(kind, a, av, Object.assign({}, o, { idle: opt.idle }));
+  if (o.lampPool && a.lampC != null) a.lampPool = o.lampPool;
   return a;
 }
 // the dead of the Wayfarers, seen for a moment: pale, see-through, a cold rim

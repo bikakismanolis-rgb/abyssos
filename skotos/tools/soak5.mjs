@@ -92,7 +92,8 @@ function install(o) {
       S.chk = 0.25;
       for (const a of z.actors) {
         if (a.team === 'foe' && a.dmg > 0.01) a.dmg = 0.01;
-        if (a.dead || a.removed || a.prop || a.under || a.airborne || a.cling || a.def?.float || a.def?.swim || a.def?.ai === 'bat') continue;
+        // (floundering in a broken hole is being in the water: combat's ice rule holds them there 3 s)
+        if (a.dead || a.removed || a.prop || a.under || a.airborne || a.cling || a.flounder > 0 || a.def?.float || a.def?.swim || a.def?.ai === 'bat') continue;
         if (!m.walkable(a.x, a.z)) { const ix = Math.floor(a.x), iz = Math.floor(a.z), nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dz]) => m.cells[(iz + dz) * L.w + ix + dx]).join(''); S.closed.push({ t: +S.time.toFixed(2), kind: a.kind, x: +a.x.toFixed(2), z: +a.z.toFixed(2), d: +Math.hypot(a.x - pl.x, a.z - pl.z).toFixed(1), fl: a.flounder || 0, st: a.state, dorm: !!a.dormant, vis: a.avatar?.group.visible, nb, lane: !!T?.lane?.def.has(iz * L.w + ix), bed: L.bed?.[iz * L.w + ix], T: T && [T.phase, T.h] }); }
       }
       const s = Math.floor(pl.z) * L.w + Math.floor(pl.x);

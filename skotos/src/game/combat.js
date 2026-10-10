@@ -1,28 +1,29 @@
 // Damage, status effects, deaths, experience and drops.
 import { G, later, vibrate } from './state.js';
-import { DIFFS, monsterXP, xpToNext, MAX_LEVEL, SKILLS, CLASSES, BUFFS } from './data.js';
+import { DIFFS, monsterXP, xpToNext, MAX_LEVEL, SKILLS, CLASSES, BUFFS, HAZ5, LEG_FROM } from './data.js';
 import { makeItem } from './items.js';
 import { refreshStats } from './stats.js';
 import { number } from '../ui/overlay.js';
 import { emit, on } from '../ui/bus.js';
-import { hitFx, sparks, glowBurst, explosion, decal, puff, flash, ring, bolt, P } from '../gfx/fx.js';
+import { hitFx, sparks, glowBurst, explosion, decal, puff, flash, ring, bolt, P, splash } from '../gfx/fx.js';
 import { shake, addLight, removeLight } from '../gfx/gfx.js';
 import Audio from '../audio/audio.js';
 import * as THREE from 'three';
 import { rand, clamp, angleDiff } from '../core/util.js';
 import { t, has, lang } from '../i18n/i18n.js';
-import { foes, spawnMonster } from './actors.js';
+import { foes, spawnMonster, restoreRim } from './actors.js';
 import { dropGold, dropItem, dropGlobe } from './pickups.js';
 import { area } from './projectiles.js';
-import { addSapPool } from './sap.js';
-import { lightAt, lightOn, addLightPool, relightNear } from './light.js';
+import { addSapPool, oilBurst } from './sap.js';
+import { lightAt, shroudOn, addLightPool, relightNear } from './light.js';
+import { coldAdd, coldMul } from './cold.js';
 import { staticGeo, makeCharMat } from '../gfx/rig.js';
 import { slagParts } from '../gfx/models.js';
 import { R as RR } from '../gfx/gfx.js';
 
-const HIT_SFX = { flesh: 'hitFlesh', bone: 'hitBone', spirit: 'hitSpirit', chitin: 'hitChitin', ash: 'hitFlesh', stone: 'hitBone', magma: 'hitFlesh', wood: 'woodHit' };
+const HIT_SFX = { flesh: 'hitFlesh', bone: 'hitBone', spirit: 'hitSpirit', chitin: 'hitChitin', ash: 'hitFlesh', stone: 'hitBone', magma: 'hitFlesh', wood: 'woodHit', drowned: 'hitFlesh', skotos: 'hitSpirit' };
 const DIE_SFX = { goblin: 'goblinDie', wolf: 'wolfDie', spider: 'spiderDie', orc: 'orcDie', troll: 'trollRoar', skeleton: 'skeletonDie', wraith: 'wraithDie', hound: 'wolfDie', bat: 'batDie', worm: 'wormDie', dwarf: 'dwarfDie', golem: 'golemDie', moth: 'mothDie', bear: 'bearRoar', hart: 'hartBellow' };
-const FLESH_DIE = { wood: 'woodDie' };
+const FLESH_DIE = { wood: 'woodDie', drowned: 'splash' };
 // a line of the game's text, or the words given if the text has none yet
 const tx = (key, el, en) => (has(key) ? t(key) : lang() === 'en' ? en : el);
 
@@ -53,15 +54,18 @@ export function damage(src, target, amount, o = {}) {
     const s = G.stats;
     if (o.crit ?? (!o.dot && heroCrit())) { crit = true; amount *= 1 + s.critD / 100; }
     if (target.elite || target.boss) { amount *= 1 + s.eliteDmg / 100; if (s.legs.has('kingslayer')) amount *= 1.3; }
+    // Einar's Lantern: the Skotos's creatures it strikes stand in the light for 2 s (Revealed: nothing more on what is worse off)
+    if (s.legs.has('einarLantern') && !o.dot && target.def.unlit) addVuln(target, 'revealed', 2, { quiet: true });
   }
   // invulnerable, or held by a Mourner's lament-bond
   if (target.invuln > 0 || target.bondT > 0) { if (!o.dot) number(target.x, 2.2, target.z, t('hud.immune'), 'text', target.bondT > 0 ? '#ffe8a0' : '#9ab8ff'); return 0; }
   if (target.armored) amount *= 0.72;
   if (target.ward > 0) amount *= 0.5;
-  const blocked = act4Hit(src, target, o, fromHero);
+  const blocked = actHit(src, target, o, fromHero);
   amount *= blocked;
-  // dazed, rooted in bark, torn free: some states take more or less
-  if (target.dmgTaken != null) amount *= target.dmgTaken;
+  // rooted in bark, a resistance: some states take less (more is the vulnerability rule's, actHit)
+  if (target.dmgTaken != null && target.dmgTaken < 1) amount *= target.dmgTaken;
+  if (target.resist != null) amount *= target.resist;
   if (target.prop) amount = target.hp;
   amount = Math.max(1, Math.round(amount));
   target.hp -= amount;
@@ -79,10 +83,12 @@ export function damage(src, target, amount, o = {}) {
       if (!o.quiet) Audio.sfx(target.prop ? 'break' : (HIT_SFX[def.flesh] || 'hitFlesh'), { x: target.x, z: target.z, vol: crit ? 1 : 0.8 });
       if (crit && !o.quiet) Audio.sfx('crit', { x: target.x, z: target.z, vol: 0.6 });
     }
-    if (o.knock && !target.boss && !target.prop && !def.anchored && blocked > 0.5) {
+    if (o.knock && !target.boss && !target.prop && !def.anchored && blocked > 0.5 && !(target.curled > 0)) {
       const k = o.knock / (def.big ? 3 : 1);
       target.kx += (dx / l) * k; target.kz += (dz / l) * k;
     }
+    // Act V: a Hull-louse curls into a ball at half its life or under any area blow; a hard knock bowls the ball (ai.js)
+    if (def.curl && target.hp > 0) curlHit(target, o, dx / l, dz / l, fromHero);
     if (o.stun && !target.boss) target.status.stun = Math.max(target.status.stun, o.stun);
     if (o.freeze) { target.status.freeze = Math.max(target.status.freeze, target.boss ? o.freeze * 0.3 : o.freeze); }
     if (o.chill) { target.status.slow = Math.max(target.status.slow, o.chill); target.status.slowK = 0.4; }
@@ -115,6 +121,10 @@ function hurtHero(src, amount, o) {
   if (p.dead || G.mode !== 'play') return 0;
   if (p.iframes > 0) return 0;
   const s = G.stats;
+  // Act V: the Cold the blow carries (a wash-out, a plunge, a Skua's bite, a wail...: cold.js)
+  if (o.cold) coldAdd(o.cold);
+  // the Skerry's Shell: the sea takes no life from her (a plunge, a wash-out)
+  if ((o.plunge || o.wash) && s.legs.has('skerryShell')) { number(p.x, 2.3, p.z, tx('leg.skerryShell', 'Καβούκι του Σκόπελου', 'Skerry\'s Shell'), 'text', '#9ad8ff'); return 0; }
   // o.pure: a share of her life whatever she wears (the Forge's Breath)
   if (o.dot !== true && !o.pure && s.block > 0 && Math.random() * 100 < s.block) { amount *= 0.45; number(p.x, 2.3, p.z, t('hud.block'), 'text', '#c8d0e0'); Audio.sfx('block'); }
   const L = src?.level || p.level || G.hero.level;
@@ -153,16 +163,18 @@ function hurtHero(src, amount, o) {
 
 // Rooted: the hero's one Act III status. Only amber roots (sap amber-lock, the Song of Sorrow); at most 1.2 s,
 // it cannot be refreshed while it holds, and when it ends the hero is immune for 1.8 s. A dodge always breaks it.
-export function rootHero(t) {
+// Act V's Frostbite roots her the same way under ice (o.tint: her colour while it holds, cold.js)
+export function rootHero(t, o = {}) {
   const p = G.player; if (!p || p.dead) return false;
   const s = p.status;
   if (s.rootImm > 0 || s.root > 0) return false;
   s.root = Math.min(1.2, t);
-  s.stick = 0;
-  for (let i = 0; i < 18; i++) { const a = Math.random() * 6.28, r = rand.range(0.2, 0.55); P({ add: false, x: p.x + Math.sin(a) * r, y: rand.range(0, 0.9), z: p.z + Math.cos(a) * r, vy: 0.2, life: 1.1, size: 0.22, size1: 0.18, color: 0xe0a030, alpha: 0.9, alpha1: 0 }); }
-  glowBurst(p.x, 0.5, p.z, 0xffc050, 12, 1.5, 0.25, 0.5);
-  Audio.sfx('sapRoot', { vol: 0.9 });
-  emit('rooted', s.root);
+  s.stick = 0; s.rootTint = o.tint ?? null;
+  const ice = s.rootTint != null, c0 = ice ? 0xc8ecff : 0xe0a030;
+  for (let i = 0; i < 18; i++) { const a = Math.random() * 6.28, r = rand.range(0.2, 0.55); P({ add: false, x: p.x + Math.sin(a) * r, y: rand.range(0, 0.9), z: p.z + Math.cos(a) * r, vy: 0.2, life: 1.1, size: 0.22, size1: 0.18, color: c0, alpha: 0.9, alpha1: 0 }); }
+  glowBurst(p.x, 0.5, p.z, ice ? 0x9ad8ff : 0xffc050, 12, 1.5, 0.25, 0.5);
+  Audio.sfx(ice ? 'frost' : 'sapRoot', { vol: 0.9 });
+  emit('rooted', s.root, ice ? 'ice' : 'amber');
   return true;
 }
 export function freeHero(crack = true) {
@@ -171,14 +183,21 @@ export function freeHero(crack = true) {
   s.stick = 0;
   if (!was) return;
   s.root = 0; s.rootImm = 1.8;
-  if (crack) { sparks(p.x, 0.5, p.z, 12, 0xffd080, 4, { color1: 0xa05010 }); Audio.sfx('sapCrack', { vol: 0.8 }); }
+  if (crack) rootCrack(p, s);
+}
+// the amber (or the ice) cracking off her
+function rootCrack(p, s) {
+  const ice = s.rootTint != null;
+  sparks(p.x, 0.5, p.z, 12, ice ? 0xe0f4ff : 0xffd080, 4, { color1: ice ? 0x6a9ac0 : 0xa05010 });
+  Audio.sfx(ice ? 'iceCrack1' : 'sapCrack', { vol: 0.8 });
 }
 
-// ---------- Act IV: the dead in the dark, the shield line, the Seen and the Clinging ----------
-// what a blow is worth against an Act IV rule (1 = full): a Lampless struck unaware from outside its cone takes double;
-// a guarding Ash-Fallen takes 15% from the front unless the blow is an area one, and a breaking blow (a stun, a freeze, a
-// hard knock, o.breakGuard) drops its shield for 3 s; the Shrouded take 30% outside light, and a blow in light reveals them
-function act4Hit(src, a, o, fromHero) {
+// ---------- Act IV: the dead in the dark, the shield line, the Seen and the Clinging; Act V: the vulnerability rule ----------
+// what a blow is worth against a rule (1 = full): a Lampless struck unaware from outside its cone takes double; a guarding
+// Ash-Fallen (a Reefback) takes its guard's share from the front unless the blow is an area one, and a breaking blow (a
+// stun, a freeze, a hard knock, o.breakGuard) drops its shield for 3 s; the Shrouded take 30% outside light (in the
+// ember zones), and a blow in light reveals them; and every target's one vulnerability (vuln) multiplies the rest
+function actHit(src, a, o, fromHero) {
   let k = 1;
   const def = a.def, pl = G.player;
   if (fromHero && def.ai === 'watch' && !a.aggro && !a.sneaked && pl) {
@@ -202,14 +221,65 @@ function act4Hit(src, a, o, fromHero) {
       }
     }
   }
-  if ((def.shroud || a.shrouded) && !(a.unshroud > 0) && lightOn()) {
+  if ((def.shroud || a.shrouded) && !(a.unshroud > 0) && shroudOn()) {
     if (lightAt(a.x, a.z)) a.revealed = 3;
     else if (!(a.revealed > 0)) {
       k *= 0.3;
       if (!o.dot && !(a.shroudTxt > 0)) { a.shroudTxt = 0.8; number(a.x, 2.7 * (a.scale || 1), a.z, tx('hud.shrouded', 'Σκιασμένος', 'Shrouded'), 'text', '#9aa8c0'); }
     }
   }
-  return k;
+  return k * vuln(a);
+}
+
+// The vulnerability rule: a target has one multiplier, the largest of its active statuses, never two multiplied together.
+// a.vulns maps a status to its seconds left (addVuln); a daze's dmgTaken above 1 counts as one. A boss is capped at 1.6
+// outside its one scripted window (a.vulnWindow: the Tower's Overturned). Resistance (a.resist) and ward multiply apart.
+// Revealed (a beam, Einar's Lantern) and Exposed (up after a breach) are HAZ5.reveal (1.25, 1.35 on Wanderer)
+export const VULN = {
+  revealed: { k: 0, key: 'hud.inLight', rim: 0xf0f4ff },
+  exposed: { k: 0, key: 'hud.exposed', rim: 0xd8f0ff },
+  dazed: { k: 1.5, key: null, rim: null },
+  beached: { k: 1.5, key: 'hud.beached', rim: 0xffd890 },
+  stranded: { k: 1.5, key: 'hud.stranded', rim: 0xffd890 },
+  seared: { k: 1.5, key: 'hud.seared', rim: 0xffb070 },
+  blinded: { k: 1.6, key: 'hud.blinded', rim: 0xffffff },
+  floundering: { k: 2, key: 'hud.floundering', rim: 0xffa060 },
+  overturned: { k: 2, key: 'hud.overturned', rim: 0xffa060 }
+};
+const VULN_TX = { revealed: ['Στο φως!', 'In the light!'], exposed: ['Εκτεθειμένο!', 'Exposed!'], beached: ['Στην ξέρα!', 'Beached!'], stranded: ['Εγκλωβισμένο!', 'Stranded!'], seared: ['Πυρωμένο!', 'Seared!'], blinded: ['Τυφλωμένο!', 'Blinded!'], floundering: ['Βουλιάζει!', 'Floundering!'], overturned: ['Αναποδογύρισε!', 'Overturned!'] };
+const vulnK = (kind) => VULN[kind]?.k || (HAZ5[G.hero?.diff ?? 1] || HAZ5[1]).reveal;
+export function vuln(a) {
+  let v = a.dmgTaken > 1 ? a.dmgTaken : 1;
+  if (a.vulns) for (const kind in a.vulns) v = Math.max(v, vulnK(kind));
+  return a.boss && !a.vulnWindow ? Math.min(v, 1.6) : v;
+}
+// the status a target is most open to now, for the HUD's boss bar: { kind, k, t } or null
+export function vulnOf(a) {
+  let best = null;
+  if (a?.vulns) for (const kind in a.vulns) { const k = vulnK(kind); if (!best || k > best.k) best = { kind, k: a.boss && !a.vulnWindow ? Math.min(k, 1.6) : k, t: a.vulns[kind] }; }
+  return best;
+}
+// a status for t seconds (never shortened by a shorter one): its hit text the first time, and a rim while it lasts.
+// Floundering is not a boss's (the Tower is Overturned instead)
+export function addVuln(a, kind, t, o = {}) {
+  if (!a || a.dead || !VULN[kind] || (kind === 'floundering' && a.boss)) return false;
+  const vs = (a.vulns ||= {}), fresh = !(vs[kind] > 0), top = vuln(a);
+  vs[kind] = Math.max(vs[kind] || 0, t);
+  const V = VULN[kind];
+  if (fresh && vulnK(kind) >= top && V.rim != null) a.avatar?.setRim(V.rim, 1.1);
+  if (fresh && V.key && !o.quiet && !(a.vulnTxt > 0)) {
+    a.vulnTxt = 0.8;
+    const T = VULN_TX[kind] || [kind, kind];
+    number(a.x, (a.boss ? 3.4 : a.def.big ? 3.0 : 2.6) * (a.scale || 1), a.z, tx(V.key, T[0], T[1]), 'text', '#' + V.rim.toString(16).padStart(6, '0'));
+  }
+  return fresh;
+}
+export function clearVuln(a, kind) { if (a?.vulns?.[kind] != null) { delete a.vulns[kind]; if (!Object.keys(a.vulns).length) restoreRim(a); } }
+function tickVulns(a, dt) {
+  if (a.vulnTxt > 0) a.vulnTxt -= dt;
+  let gone = false;
+  for (const kind in a.vulns) if ((a.vulns[kind] -= dt) <= 0) { delete a.vulns[kind]; gone = true; }
+  if (gone && !a.dead) { const v = vulnOf(a); if (v && VULN[v.kind].rim != null) a.avatar?.setRim(VULN[v.kind].rim, 1.1); else restoreRim(a); }
 }
 export function breakGuard(a, t = 3) {
   if (!a.def.guard) return;
@@ -220,6 +290,22 @@ export function breakGuard(a, t = 3) {
   sparks(a.x, 1.2, a.z, 14, 0xffc080, 6, { color1: 0xa04010 });
   Audio.sfx('shieldBlock', { x: a.x, z: a.z, pitch: 0.7 });
   a.guardBreaks = (a.guardBreaks || 0) + 1;
+}
+// a Hull-louse: half its life gone, or an area blow, and it curls into a ball for 3 s (immobile, it takes a quarter); a
+// blow with knock 6 or more sends the ball rolling (a.bowl, ai.js louse: the hero's dodge-roll through it does too)
+function curlHit(a, o, ux, uz, fromHero) {
+  if (a.under || a.bowling || o.dot) return;
+  if (!(a.curled > 0) && (o.area || (!a.halfCurl && a.hp <= a.hpMax * 0.5))) curl(a);
+  if (a.curled > 0 && fromHero && (o.knock || 0) >= 6) a.bowl = { ux, uz };
+}
+export function curl(a, t = 3) {
+  if (a.halfCurl == null && a.hp <= a.hpMax * 0.5) a.halfCurl = true;
+  a.curled = t; a.dmgTaken = 0.25; a.state = 'curl'; a.kx = a.kz = 0; a.dash = null;
+  if (a.tele) { a.tele.alive = false; a.tele = null; }
+  a.avatar?.play('curl', 1.4);
+  Audio.sfx('louseCurl', { x: a.x, z: a.z, vol: 0.7 });
+  // the first time: how to use it
+  if (!G.hero.flags.louseHint) { G.hero.flags.louseHint = true; emit('toast', tx('hud.bowl', 'Κύλησε πάνω τους όταν κουλουριαστούν', 'Roll into them when they curl up')); }
 }
 // Seen: the dead know where she is (+15% damage taken), from a Lampless alarm or Ivar's lantern; an eye on the HUD (buffs.seen)
 export function seeHero(t = 6) {
@@ -322,12 +408,13 @@ export function clearRemains() { while (REMAINS.length) dropRemains(REMAINS.leng
 // ---------- status effects, once per frame per actor ----------
 export function tickStatus(a, dt) {
   const s = a.status;
-  if (s.root > 0) { s.root -= dt; if (s.root <= 0) { s.root = 0; s.rootImm = 1.8; if (a.hero) { sparks(a.x, 0.5, a.z, 12, 0xffd080, 4, { color1: 0xa05010 }); Audio.sfx('sapCrack', { vol: 0.8 }); } } }
+  if (s.root > 0) { s.root -= dt; if (s.root <= 0) { s.root = 0; s.rootImm = 1.8; if (a.hero) rootCrack(a, s); } }
   if (s.rootImm > 0) s.rootImm -= dt;
   if (s.stun > 0) s.stun -= dt;
   if (s.freeze > 0) s.freeze -= dt;
   if (s.fear > 0) s.fear -= dt;
   if (s.slow > 0) { s.slow -= dt; if (s.slow <= 0) s.slowK = 0; }
+  if (a.vulns) tickVulns(a, dt);
   s.dotT = (s.dotT || 0) + dt;
   if (s.dotT >= 0.5) {
     s.dotT -= 0.5;
@@ -345,6 +432,10 @@ export function moveMul(a) {
   if (a.onSap) m *= a.hero ? 0.55 : 0.65;
   // Act V: wading (the tide, brine, slush; tide.js wadeAt): the hero at 70%, monsters at 75%, swimmers as on land
   if (a.inWater && !a.def?.swim) m *= a.hero ? 0.7 : 0.75;
+  // ... and the sea's own stronger in it: the Sunken in the shallows (slower on the flats the tide has left), the Reefbacks
+  if (a.waterK) m *= a.waterK;
+  // the Cold: Chilled -8%, Freezing -15% (cold.js)
+  if (a.hero) m *= coldMul();
   if (a.hero && a.buffs?.shrineSpeed > 0) m *= 1.4;
   if (a.hero && a.buffs?.evergreen > 0) m *= 1.3;
   if (a.hero && a.buffs?.memory > 0) m *= 1 + BUFFS.memory.move;
@@ -357,10 +448,13 @@ export function kill(a, src, o = {}) {
   if (a.dead) return;
   a.dead = true; a.deadT = 0; a.hp = 0;
   const def = a.def;
-  if (a.prop) { emit('propBroken', a); return; }
+  // a whale-oil cask spills its burning oil (sap.js)
+  if (a.prop) { if (a.propType === 'oilCask') oilBurst(a); emit('propBroken', a); return; }
   if (a.pet) { a.avatar?.play(a.kind === 'spiritWolf' ? 'die' : 'die'); return; }
   // whatever trick it was in the middle of ends with it
-  a.hidden = false; a.dash = null; a.dazed = 0; a.dmgTaken = null;
+  a.hidden = false; a.dash = null; a.dazed = 0; a.dmgTaken = null; a.vulns = null;
+  // gone under the water (the ice broke, the tide took it): no corpse to dissolve, it sinks (ai.js dying)
+  if (o.drown) { a.drowned = true; splash(a.x, a.z, 1.1 + a.radius * 0.6); }
   const av = a.avatar;
   if (av) {
     av.anim.stop?.(0.1);
@@ -371,7 +465,13 @@ export function kill(a, src, o = {}) {
   Audio.sfx(def.dieSfx || DIE_SFX[def.sfx] || FLESH_DIE[def.flesh] || 'hitFlesh', { x: a.x, z: a.z });
   actDeath(a, def);
   act4Death(a, def);
-  if (def.flesh === 'flesh' || def.flesh === 'ash' || def.flesh === 'magma') decal(a.x, a.z, 'blood', 1.2 + a.radius);
+  if (o.drown) { /* under the water: nothing left on top */ }
+  // a Skua: a burst of feathers drifting down, dark brown and its white wing-flash
+  else if (def.feathers) for (let i = 0; i < 16; i++) P({ add: false, x: a.x + rand.range(-0.3, 0.3), y: Math.max(0.6, a.y || 0) + rand.range(-0.2, 0.3), z: a.z + rand.range(-0.3, 0.3), vx: rand.range(-1.6, 1.6), vy: rand.range(0.2, 1.6), vz: rand.range(-1.6, 1.6), life: rand.range(1.2, 2.2), size: rand.range(0.07, 0.12), size1: 0.06, color: i % 4 ? 0x4a3a2c : 0xe8e4dc, alpha: 1, alpha1: 0.6, grav: 1.2, drag: 2.2 });
+  else if (def.flesh === 'flesh' || def.flesh === 'ash' || def.flesh === 'magma') decal(a.x, a.z, 'blood', 1.2 + a.radius);
+  // Act V: the Sunken fall back into the water they came from (wet kelp and spray, no blood); the Skotos's own go to black mist
+  else if (def.flesh === 'drowned') { splash(a.x, a.z, 0.8); for (let i = 0; i < 10; i++) P({ add: false, x: a.x + rand.range(-0.3, 0.3), y: rand.range(0.4, 1.4), z: a.z + rand.range(-0.3, 0.3), vx: rand.range(-1.5, 1.5), vy: rand.range(0.5, 2.5), vz: rand.range(-1.5, 1.5), life: 1, size: rand.range(0.08, 0.16), size1: 0.06, color: i % 2 ? 0x3a4a2a : 0x5a6a3a, alpha: 1, grav: 12 }); }
+  else if (def.flesh === 'skotos') { for (let i = 0; i < 14; i++) P({ add: false, x: a.x + rand.range(-0.6, 0.6) * (a.scale || 1), y: rand.range(0.4, 2.2) * (a.scale || 1), z: a.z + rand.range(-0.6, 0.6) * (a.scale || 1), vy: rand.range(0.4, 1.2), life: rand.range(1.2, 2), size: 0.8, size1: 2.2, color: 0x0a0a12, alpha: 0.55, alpha1: 0 }); }
   else if (def.flesh === 'wood') { puff(a.x, 0.6, a.z, 6, 0x4a3a28, 1, 1.2, 1.2); glowBurst(a.x, 1, a.z, 0xffb040, 10, 2, 0.2, 0.6); }
   else if (def.flesh === 'stone') puff(a.x, 0.8, a.z, 10, 0x8a8680, 1.4, 1.6, 1.6);
   else if (def.flesh === 'chitin') decal(a.x, a.z, 'goo', 1.2 + a.radius);
@@ -399,7 +499,7 @@ export function kill(a, src, o = {}) {
   else if (Math.random() < 0.085 * D.loot) items = 1;
   for (let i = 0; i < items; i++) {
     const firstBoss = a.boss && i === 0 && !hero.flags['legFrom_' + a.kind];
-    const it = makeItem(L, { elite: !!a.elite, boss: a.boss, mf, legMul: D.leg, rar: firstBoss ? 3 : (a.boss && i === 1 ? 2 : undefined) });
+    const it = makeItem(L, { elite: !!a.elite, boss: a.boss, mf, legMul: D.leg, rar: firstBoss ? 3 : (a.boss && i === 1 ? 2 : undefined), leg: firstBoss ? LEG_FROM[a.kind] : undefined });
     if (firstBoss) hero.flags['legFrom_' + a.kind] = true;
     later(i * 0.12, () => dropItem(a.x, a.z, it));
   }

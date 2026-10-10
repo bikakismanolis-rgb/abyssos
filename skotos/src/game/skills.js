@@ -12,6 +12,8 @@ import { emit } from '../ui/bus.js';
 import Audio from '../audio/audio.js';
 import { rand, angleTo, angleDiff, clamp } from '../core/util.js';
 import { t } from '../i18n/i18n.js';
+import { crackAt, crackLine, refreezeAt, iceAt } from './ice.js';
+import { coldMul } from './cold.js';
 
 const V = new THREE.Vector3(), V2 = new THREE.Vector3();
 const p = () => G.player;
@@ -72,7 +74,8 @@ export function updateAction(dt) {
   }
 }
 export function trailOn(a) { return a && a.trail && a.t >= a.trail[0] * a.clip && a.t <= a.trail[1] * a.clip; }
-const attackSpeed = (base = 1) => clamp(G.stats.aps / 1.15, 0.6, 2.6) * base;
+// (the Cold slows her blows as it slows her feet: Chilled -8%, Freezing -15%, cold.js)
+const attackSpeed = (base = 1) => clamp(G.stats.aps / 1.15, 0.6, 2.6) * base * coldMul();
 
 // hit everything in an arc in front of the hero
 function arcHit(range, arc, fn) {
@@ -218,6 +221,8 @@ const SKILL_FN = {
         const n = circleHit(tx, tz, sk.radius, (f) => damage(pl, f, heroHit(mult, { area: true }), { knock: 5, kx: f.x - tx, kz: f.z - tz, stun: 1.2, area: true, breakGuard: true }));
         explosion(tx, tz, sk.radius * 0.8, 0xffc080, { smoke: 0x5a4a3a, shake: 0.55 });
         for (let i = 0; i < 16; i++) { const a = Math.random() * 6.28; P({ add: false, x: tx, y: 0.2, z: tz, vx: Math.cos(a) * 6, vy: rand.range(2, 5), vz: Math.sin(a) * 6, life: 0.8, size: 0.18, size1: 0.12, color: 0x5a4a3a, alpha: 1, grav: 14 }); }
+        // Act V: the Warden is the ice-breaker: her landing cracks thin ice round it (+1 stage, r 3)
+        crackAt(tx, tz, 3, 1, { src: 'leap' });
         Audio.sfx('slam'); kick(0, 0.4, 1);
         G.hitstop = n ? 0.09 : 0.03;
       }]]
@@ -246,6 +251,8 @@ const SKILL_FN = {
       name: 'quake', anim: 'slam', speed: 1.45, face: dir, cut: 0.7, trail: [0.3, 0.5],
       events: [[0.45, () => {
         Audio.sfx('slam'); shake(0.5); G.hitstop = 0.06;
+        // Act V: the Earthsplitter's line cracks thin ice along it (+1 stage)
+        crackLine(pl.x + Math.sin(dir) * 1.2, pl.z + Math.cos(dir) * 1.2, pl.x + Math.sin(dir) * 11.2, pl.z + Math.cos(dir) * 11.2, 2, 1, { src: 'quake' });
         for (let i = 0; i < 11; i++) later(i * 0.035, () => {
           const x = pl.x + Math.sin(dir) * (1.2 + i), z = pl.z + Math.cos(dir) * (1.2 + i);
           if (!G.zone.map.walkable(x, z)) return;
@@ -277,6 +284,8 @@ const SKILL_FN = {
         Audio.sfx('arrowShoot'); for (let i = 0; i < 8; i++) P({ x: pl.x, y: 1.6, z: pl.z, vx: rand.range(-1, 1), vy: 14, vz: rand.range(-1, 1), life: 0.4, size: 0.15, size1: 0.05, color: 0xfff0d0 });
         teleCircle(x, z, sk.radius, 0.35, 0xffe0a0);
         area('rain', x, z, sk.radius, sk.dur + 0.2 * (rank - 1), { tick: 0.25, delay: 0.35, dmg: heroHit(mult * 0.42, { area: true }), opts: { slow: { k: 0.45, t: 0.6 }, quiet: true } });
+        // Act V: the Ranger cracks from range: +1 stage under the rain, once a cast
+        later(0.4, () => crackAt(x, z, 3.5, 1, { src: 'rain' }));
       }]]
     });
   },
@@ -315,6 +324,8 @@ const SKILL_FN = {
     const pl = p();
     const boom = (x, z, r, m, small) => {
       explosion(x, z, r, 0xff7a20, { shake: small ? 0.12 : 0.3 });
+      // Act V: the Mage breaks ice with fire (+1 stage, r 1.5)
+      if (!small) crackAt(x, z, 1.5, 1, { src: 'fireball' });
       Audio.sfx('explosion', { x, z, vol: small ? 0.6 : 1 });
       circleHit(x, z, r, (f) => damage(pl, f, heroHit(m, { area: true }), { knock: small ? 2 : 4, kx: f.x - x, kz: f.z - z, burn: heroHit(m * 0.3), area: true }));
     };
@@ -345,6 +356,10 @@ const SKILL_FN = {
         addLight({ x: pl.x, y: 1.5, z: pl.z, color: 0x80c8ff, intensity: 45, range: r * 2.5, life: 0.5, fade: 0.5 });
         Audio.sfx('frost'); shake(0.2);
         circleHit(pl.x, pl.z, r, (f) => { damage(pl, f, heroHit(mult, { area: true }), { freeze: sk.freeze + 0.2 * rank, area: true }); glowBurst(f.x, 1, f.z, 0xb0e8ff, 6, 2, 0.25, 0.5); });
+        // Act V: and builds with frost: cracks in its radius heal, holes freeze to slush (the act's bridge-builder)
+        if (refreezeAt(pl.x, pl.z, r)) Audio.sfx('refreeze', { x: pl.x, z: pl.z, vol: 0.7 });
+        // (an Icemaw under a hole it covers is held below; one up by a sea hole is stranded: ai.js)
+        emit('frostNova', pl.x, pl.z, r);
       }]]
     });
   },
@@ -385,6 +400,8 @@ const SKILL_FN = {
           G.hitstop = 0.08;
           circleHit(x, z, r, (f) => damage(pl, f, heroHit(mult, { area: true }), { knock: 6, kx: f.x - x, kz: f.z - z, burn: heroHit(mult * 0.2), area: true }));
           area('fire', x, z, r * 0.8, 3 + rank * 0.3, { tick: 0.5, dmg: heroHit(mult * 0.12, { area: true }) });
+          // Act V: a Meteor breaks thin ice wide open (+2 stages, r 3.5)
+          crackAt(x, z, 3.5, 2, { src: 'meteor' });
         });
       }]]
     });
@@ -416,7 +433,8 @@ export function dodge(ev) {
     act({ name: 'blink', anim: 'blink', speed: 2.5, cut: 0.3 });
     return;
   }
-  const sp = D.dist / 0.42;
+  // (on ice a roll skids on: x1.2 its distance)
+  const ice = iceAt(pl.x, pl.z), sp = D.dist / 0.42 * (ice === 'thin' || ice === 'thick' || ice === 'slush' ? 1.2 : 1);
   pl.rot = mv;
   Audio.sfx('roll');
   act({

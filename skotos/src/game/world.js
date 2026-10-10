@@ -9,28 +9,30 @@ import { genAshfield, genForge } from '../world/gen4.js';
 import { genCoast, genFarlight } from '../world/gen5.js';
 import { buildLevel, propMesh, runeDisc, WIND, act3Prop, setAutumn, act4Prop, setHeat, setNight, setFlueGlow } from '../world/build.js';
 import { act5Prop } from '../world/build5.js';
-import { SEA, TICKS } from '../world/sea.js';
+import { SEA, TICKS, clearFreeze, freezeWave, freezeRing, setShade } from '../world/sea.js';
 import { GridMap } from '../world/map.js';
 import { ATMOS, mixAtmos } from '../world/atmos.js';
 import { kitMesh } from '../gfx/kits.js';
 import { tex } from '../gfx/textures.js';
 import { envMesh, envChest, hasEnv, loadPack } from '../gfx/env.js';
-import { loadFolk } from '../gfx/people.js';
+import { loadFolk, hasPerson } from '../gfx/people.js';
 import { loadCreatures, creatureCount } from '../gfx/creatures.js';
-import { setEmitters, setAmbient, clearFX, glowBurst, puff, sparks, ring, P, explosion, FX, sapBurst, fireStream } from '../gfx/fx.js';
+import { setEmitters, setAmbient, clearFX, glowBurst, puff, sparks, ring, P, explosion, FX, sapBurst, fireStream, splash, teleCone, killTele } from '../gfx/fx.js';
 import { Actor, spawnMonster, spawnNpc, createPlayer, rollAffixes, monsterLevel, ghostly } from './actors.js';
-import { PACKS, DIFFS, MONSTERS, PACK_LEAD, packKinds } from './data.js';
+import { PACKS, DIFFS, MONSTERS, PACK_LEAD, packKinds, HAZ5, monsterDmg } from './data.js';
 import { startDrips, stopDrips } from './sap.js';
-import { addLightPool, removeLightPool, cradlePoint } from './light.js';
+import { addLightPool, removeLightPool, cradlePoint, addBeam, removeBeam, getLightPool, getBeam, snuffLamp } from './light.js';
 import { resetTide, floodWave } from './tide.js';
-import { resetIce } from './ice.js';
+import { resetIce, freezeCells, crackCone } from './ice.js';
 import { startFlues, stopFlues, setFlueHeat, flues, BREATH } from './forge.js';
 import { makeItem } from './items.js';
 import { dropGold, dropItem, dropGlobe, clearPickups } from './pickups.js';
 import { clearProjs } from './projectiles.js';
+import { damage } from './combat.js';
+import { writeSave } from './save.js';
 import { emit, on } from '../ui/bus.js';
 import Audio from '../audio/audio.js';
-import { RNG, rand, angleTo, clamp } from '../core/util.js';
+import { RNG, rand, angleTo, clamp, angleDiff } from '../core/util.js';
 import { t } from '../i18n/i18n.js';
 
 export const ZONES = {
@@ -312,17 +314,7 @@ export function updatePacks() {
   }
   // Silverhorn rises only once the Long Sorrow is known (the bellow after the third Tear sets quest 13)
   const asleep = z.bossSpot?.kind === 'silverhorn' && G.hero.quest < 13;
-  if (z.bossSpot && !z.bossSpawned && !asleep && Math.hypot(z.bossSpot.x - pl.x, z.bossSpot.z - pl.z) < 30) {
-    z.bossSpawned = true;
-    const first = z.bossSpot.kind === 'weaver' || z.bossSpot.kind === 'stonewarden' || z.bossSpot.kind === 'silverhorn' || z.bossSpot.kind === 'ivar' || z.bossSpot.kind === 'tower';
-    const b = spawnMonster(z.bossSpot.kind, z.bossSpot.x, z.bossSpot.z, { level: Math.max(z.level + (first ? 2 : 3), G.hero.level + 1) });
-    b.rot = Math.PI * 0.0 + angleTo(b.x, b.z, pl.x, pl.z);
-    // Karthax waits under the slag until the story has brought the shards to him (story.js 'karthaxArrive')
-    if (b.kind === 'karthax') { b.holdWake = true; b.hidden = true; b.y = -3.4; b.rot = angleTo(b.x, b.z, z.L.spots.anvil?.x ?? b.x, (z.L.spots.anvil?.z ?? b.z) + 9); }
-    // the Walking Tower lies as Skerry Bay's island until the story wakes it (story.js 'towerWake')
-    if (b.kind === 'tower' && !G.hero.flags.towerWake) b.holdWake = true;
-    z.actors.push(b); z.boss = b;
-  }
+  if (z.bossSpot && !z.bossSpawned && !asleep && Math.hypot(z.bossSpot.x - pl.x, z.bossSpot.z - pl.z) < 30) spawnBoss(z);
   // Act V: at high water the flood waves walk in from the sea's edge (tide.js keeps their clock: one each 25 s while the
   // water stands at 0.75 m or more, at most two alive; the pack is combat's)
   if (z.tide && PACKS.floodWave) {
@@ -336,8 +328,26 @@ export function updatePacks() {
   }
   // the voices that speak once per place: Act III's Lady in the still trees (until the First Autumn), Act IV's Voice in
   // the Cradle between the lamps (until Ivar is at rest; v.need: only after that lamp burns)
-  const F = G.hero.flags, act = ZONES[z.id]?.act, mute = act === 3 ? F.autumn || F.ladyDown : act === 4 ? F.ivar || F.crownUnmade : act === 5 ? !!F.frozen : false;
+  const F = G.hero.flags, act = ZONES[z.id]?.act, mute = act === 3 ? F.autumn || F.ladyDown : act === 4 ? F.ivar || F.crownUnmade : act === 5 ? (z.id === 'coast' ? !!F.frozen : !!F.seaLit) : false;
   if (z.voices && !mute) for (const v of z.voices) if (!v.done && (!v.need || F[v.need]) && Math.hypot(v.x - pl.x, v.z - pl.z) < v.r) { v.done = true; emit('voice', v.key, v); }
+}
+// the zone's boss, where it waits (when the hero comes near, or now: a story scene that needs it in the frame)
+export function spawnBoss(z) {
+  if (!z?.bossSpot || z.bossSpawned) return z?.boss || null;
+  z.bossSpawned = true;
+  const pl = G.player, F = G.hero.flags;
+  const first = z.bossSpot.kind === 'weaver' || z.bossSpot.kind === 'stonewarden' || z.bossSpot.kind === 'silverhorn' || z.bossSpot.kind === 'ivar' || z.bossSpot.kind === 'tower';
+  const b = spawnMonster(z.bossSpot.kind, z.bossSpot.x, z.bossSpot.z, { level: Math.max(z.level + (first ? 2 : 3), G.hero.level + 1) });
+  b.rot = Math.PI * 0.0 + angleTo(b.x, b.z, pl.x, pl.z);
+  // Karthax waits under the slag until the story has brought the shards to him (story.js 'karthaxArrive')
+  if (b.kind === 'karthax') { b.holdWake = true; b.hidden = true; b.y = -3.4; b.rot = angleTo(b.x, b.z, z.L.spots.anvil?.x ?? b.x, (z.L.spots.anvil?.z ?? b.z) + 9); }
+  // the Walking Tower lies as Skerry Bay's island until the story wakes it (story.js 'towerWake')
+  if (b.kind === 'tower' && !F.towerWake) b.holdWake = true;
+  // the Skotos lies under the ice edge until the Farthest Light is touched (story.js skotosRises), facing the tower
+  if (b.kind === 'skotos') { b.holdWake = true; b.hidden = true; b.rot = angleTo(b.x, b.z, z.L.boss.x, z.L.boss.z); }
+  z.actors.push(b); z.boss = b;
+  if (G.zone === z && b.avatar) R.scene.add(b.avatar.group);
+  return b;
 }
 function spawnPack(z, p, D) {
   const tag = z.id === 'gate' ? 'gate' : p.tag;
@@ -778,6 +788,8 @@ export function act4Presence(z) {
   }
   // the lantern is gold until the brow-stone tears out of it at the Anvil
   for (const k of ['isarn', 'isarnHook']) if (A.npcs[k]) isarnLantern(A.npcs[k].a, F.browstone ? 'white' : 'gold');
+  // Act V: Alkyone by the Last Lamp, from the coal until the coast is seen
+  if (z.id === 'ashfield') people5(z);
 }
 // a waylamp: lit from the Cradle (a short touch), a permanent pool of light, a place to wake, and five of them remember
 function setLamp(z, it, on) {
@@ -831,15 +843,16 @@ function setPit(z, it, on, quiet) {
   setEmit(z, tag, on ? { x: p.x, y: 0.4, z: p.z, type: 'fire', s: 1 } : null, quiet);
 }
 // a touch that takes a moment (a waylamp, a brazier, a fire-pit): the Cradle's fire streams across; a blow breaks it
-function touch(dur, it, y, done) {
+// (o.at: the point the fire streams to, if not over it; o.take: the fire streams the other way, into the Cradle)
+export function touch(dur, it, y, done, o = {}) {
   const pl = G.player; if (!pl || pl.dead || pl.act) return;
   pl.rot = angleTo(pl.x, pl.z, it.x, it.z);
-  const c = new THREE.Vector3();
+  const c = new THREE.Vector3(), to = o.at || { x: it.x, y, z: it.z };
   pl.act = { name: 'touch', t: 0, dur, ev: [], clip: dur, move: 0, blows: pl.blows || 0, st: 0,
     update(dt, a) {
       // a blow that reaches her life breaks it (combat.js hurtHero counts them); a burn or a poison tick does not
       if ((pl.blows || 0) !== a.blows) { a.dur = Infinity; pl.act = null; pl.avatar.anim.stop?.(0.15); return; }
-      if ((a.st -= dt) <= 0) { a.st = 0.08; cradlePoint(c); fireStream({ x: c.x, y: c.y, z: c.z }, { x: it.x, y, z: it.z }, 3); }
+      if ((a.st -= dt) <= 0) { a.st = 0.08; cradlePoint(c); const C = { x: c.x, y: c.y, z: c.z }; if (o.take) fireStream(to, C, 3); else fireStream(C, to, 3); }
     },
     end() { done(); } };
   pl.avatar.play('interact', 1);
@@ -972,9 +985,10 @@ export function release(z, a, kneel = true) {
 }
 
 // ---------- Act V: the Frozen Coast and the Farthest Light ----------
-// z.act5 keeps what the story lights and moves: { lights[] (sea-lights), hearth, stones[], boats[], island, lamps[] (hole
-// lamps), markers[], cairns[], farLight, doorStone, npcs{} }. What the world is: coastMode() (the coast's reading, built
-// again when it changes) and skyMode() (the Farthest Light's sky, likewise)
+// z.act5 keeps what the story lights and moves: { lights[] (sea-lights, each with its ice window it.win), hearth, bell,
+// stones[], boats[], island, lamps[] (hole lamps), markers[], cairns[], farLight, farIt, doorStone, doorIt, figs{} }; z.p5
+// the act's people (people5) and z.seal the seal run at a Breathing-hole. What the world is: coastMode() (the coast's
+// reading, built again when it changes) and skyMode() (the Farthest Light's sky, likewise)
 export const coastMode = () => (G.hero.flags.frozen ? 'frozen' : 'tide');
 export const skyMode = () => { const F = G.hero.flags; return F.seaLit ? 'true' : F.frozen ? 'black' : 'green'; };
 // before the build: the leads already sealed are thick ice (as the seal leaves them); the skerry is open ground while
@@ -984,18 +998,30 @@ function act5Layout(id, L) {
   if (id === 'farlight') for (const ho of L.spots.holes) if (F['hole' + ho.id]) for (const [x, z] of ho.lead) { const i = z * w + x; L.cells[i] = 1; L.low[i] = 0; L.sea[i] = 0; L.ice[i] = 0; L.thick[i] = 1; }
   if (id === 'coast' && F.towerWake && !F.towerDown) for (const [x, z] of L.spots.skerry.cells) L.cells[z * w + x] = 1;
 }
+// which memory a sea-light's ice window keeps: they play in the order the lights were lit, so the reveal is always last
+export const LIGHTS5 = ['grey', 'wreck', 'fall'];
+export function iceMemOf(id) {
+  const F = G.hero.flags, order = (F.lights5 || []).filter((k) => F['light_' + k]);
+  for (const k of LIGHTS5) if (F['light_' + k] && !order.includes(k)) order.push(k);
+  const i = order.indexOf(id);
+  return i < 0 ? null : 'i' + (i + 1);
+}
+// who lies in the ice under a window, by its memory (and who stands up out of it while the memory plays: story.js)
+export const ICE_WHO = { i1: ['first'], i2: ['einarBoy'], i3: ['einar'], i4: ['arnaLast', 'keeperYoung'] };
 // the story's props on their spots and the interactables that light them (story.js answers each kind): on the coast the
 // three sea-lights with the ice windows at their feet, the hearth and the tide bell, the boats, the four Name-stones, the
 // dead Tower's island; on the ice the three lamps of each open hole (a marker-light where one is sealed), the four cairns,
 // the Farthest Light and its door-stone, the Drowned Lights' windows
 function act5Zone(z) {
-  const L = z.L, S = L.spots, F = G.hero.flags, A = z.act5 = { lights: [], stones: [], boats: [], lamps: [], markers: [], cairns: [], npcs: {} };
+  const L = z.L, S = L.spots, F = G.hero.flags, A = z.act5 = { lights: [], stones: [], boats: [], lamps: [], markers: [], cairns: [], figs: {} };
   const inter = (it, ev) => { it.use = () => emit(ev, it, z); z.interact.push(it); return it; };
   if (z.id === 'coast') {
     S.sealights.forEach((s, k) => {
       const mesh = put(z, act5Prop('sealight', { v: k, id: s.id }), s.x, s.z, s.r);
       const it = inter({ kind: 'sealight', id: s.id, x: s.base.x, z: s.base.z, r: 2.4, lightR: 7, prompt: 'sealight.light', mesh, spot: s, lit: false }, 'sealight');
       it.window = put(z, act5Prop('iceWindow', { id: s.id }), s.window.x, s.window.z, s.r);
+      // the window offers its memory while the light burns and the memory is unseen ("Remember": story.js 'iceWindow')
+      it.win = inter({ kind: 'window', id: s.id, light: it, x: s.window.x, z: s.window.z, r: 2.2, prompt: 'lamp.remember', used: true }, 'iceWindow');
       A.lights.push(it);
     });
     const hm = put(z, act5Prop('hearth'), S.hearth.x, S.hearth.z);
@@ -1008,21 +1034,28 @@ function act5Zone(z) {
     }
     // Skerry Bay: the Tower asleep (its spawn holds it), or dead on its island, still lit (the echo there once the sea is lit)
     const sk = S.skerry;
-    if (F.towerDown) { A.island = put(z, act5Prop('skerryLight'), sk.x, sk.z); if (F.seaLit) echoAt(z, 'tower', sk.x, sk.z + sk.r + 1.5); }
+    if (F.towerDown) { A.island = put(z, act5Prop('skerryLight'), sk.x, sk.z); A.islandIt = { kind: 'island', x: sk.x, z: sk.z, r: 0, lightR: 5.5, lit: true, used: true }; z.interact.push(A.islandIt); if (F.seaLit) echoAt(z, 'tower', sk.x, sk.z + sk.r + 1.5); }
     else if (MONSTERS.tower) z.bossSpot = { kind: 'tower', x: sk.x, z: sk.z };
     // the bay's north rim before the Freeze: open water, and why
     if (!F.frozen) z.voices = [{ x: S.iceShut.x, z: S.iceShut.z, r: 4, key: 'd.iceShut' }];
     A.wpEmit = (z.emit || []).find((e) => e.type === 'bluefire');
   } else {
     for (const ho of S.holes) {
-      if (F['hole' + ho.id]) { A.markers.push(put(z, act5Prop('markerLight'), ho.x, ho.z)); continue; }
+      // (how far the hole's lead runs: the freeze wave's reach)
+      ho.leadR = Math.max(8, ...ho.lead.map(([x, zz]) => Math.hypot(x + 0.5 - ho.x, zz + 0.5 - ho.z) + 1.5));
+      if (F['hole' + ho.id]) { A.markers.push(marker5(z, ho)); continue; }
       ho.lamps.forEach((p, i) => {
         const mesh = put(z, act5Prop('holeLamp'), p.x, p.z, Math.atan2(ho.x - p.x, ho.z - p.z));
-        const it = inter({ kind: 'holeLamp', hole: ho.id, i, x: p.x, z: p.z, r: 2.2, lightR: 4.5, prompt: 'stone.light', mesh, lit: false }, 'holeLamp');
-        it.snuff = () => light5(z, it, false); it.relight = () => light5(z, it, true);
+        const it = inter({ kind: 'holeLamp', hole: ho.id, ho, i, x: p.x, z: p.z, r: 2.2, lightR: 4.5, prompt: 'stone.light', mesh, lit: false }, 'holeLamp');
+        it.snuff = () => { if (!it.held) light5(z, it, false); }; it.relight = () => light5(z, it, true);
         A.lamps.push(it);
       });
     }
+    // the Skotos between the holes, once a place, until the sea is lit (story.js 'voice'): on the road from the camp to each
+    // hole's south rim in turn, then at the skerry
+    const B0 = L.boss, pts = [S.camp, ...S.holes.slice().sort((a, b) => b.z - a.z).map((ho) => ho.alk), { x: B0.x, z: B0.z + 18 }];
+    z.voices = pts.slice(0, -1).map((p, i) => ({ x: (p.x + pts[i + 1].x) / 2, z: (p.z + pts[i + 1].z) / 2, r: 7, key: 'd.skotos.w' + (i + 1) }));
+    z.voices.push({ x: B0.x, z: B0.z + 18, r: 6, key: 'd.skotos.w5' });
     S.fires.forEach((f, i) => {
       const mesh = put(z, act5Prop('cairn'), f.x, f.z);
       const it = inter({ kind: 'cairn', i, x: f.x, z: f.z, r: 2.6, lightR: 5, prompt: 'cairn.light', mesh, lit: false }, 'cairn');
@@ -1033,65 +1066,355 @@ function act5Zone(z) {
     A.farLight = put(z, act5Prop('farLight'), FL.x, FL.z, Math.PI);
     A.doorStone = put(z, act5Prop('doorStone'), d.x, d.z, Math.PI);
     A.farIt = inter({ kind: 'farLight', x: d.x, z: d.z - 0.4, r: 2.4, lightR: 0, prompt: 'farLight.light', mesh: A.farLight, lit: false }, 'farLight');
+    // the door-stone: two names to carve under Einar's and Arna's, once the lantern room has been climbed
+    A.doorIt = inter({ kind: 'doorStone', x: d.x + 1.2, z: d.z - 0.6, r: 2.0, prompt: 'stone.carve', mesh: A.doorStone, used: true }, 'doorStone');
     for (const dl of S.drowned) put(z, act5Prop('iceWindow', { drowned: true }), dl.window.x, dl.window.z);
+    // the Skotos waits under the ice edge for the Farthest Light to be touched (story.js: it rises then); never again once named
+    if (!F.skotosDown && MONSTERS.skotos) z.bossSpot = { kind: 'skotos', x: S.skotos.x, z: S.skotos.z };
     if (F.seaLit) echoAt(z, 'skotos', S.skotos.x, L.boss.z - 14.5);
   }
 }
+// a sealed Breathing-hole's marker-light: a small light and a short beam over the new ice
+function marker5(z, ho) {
+  const m = put(z, act5Prop('markerLight'), ho.x, ho.z);
+  m.userData.ho = ho;
+  m.userData.it = { kind: 'marker', x: ho.x, z: ho.z, r: 0, lightR: 5, lit: true, used: true, mesh: m, hole: ho.id };
+  z.interact.push(m.userData.it);
+  return m;
+}
 // on every entry: the sky by the world's state (the green aurora, the black one after the Freeze, the true one once the
-// sea is lit), its ambient, the music's sky; the tide back at low water and the ice healed; the lit lights; who is where.
-// (The Skotos fight's own atmospheres and the arrival's coastCine are the story's.)
+// sea is lit), its ambient, the music's sky; the tide back at low water and the ice healed; the freezes the seals made;
+// the lit lights, their pools and beams; who is where
 function act5Enter(z) {
   const F = G.hero.flags, coast = z.id === 'coast';
   const key = coast ? (F.seaLit ? 'coastAurora' : F.frozen ? 'coastFrozen' : 'coast') : F.seaLit ? 'farlightAurora' : 'farlight';
   setAtmosphere(ATMOS[key] || ATMOS[z.id]);
   setAmbient(coast && F.frozen && !F.seaLit ? 'coastFrozen' : z.id);
-  Audio.mood({ sky: F.seaLit ? 2 : F.frozen ? 1 : 0 });
+  Audio.mood({ sky: F.seaLit ? 2 : F.frozen ? 1 : 0, forget: F.frozen && !F.selnaBack ? 0.3 : 0 });
   if (z.gust) Object.assign(z.gust, { t: 0, on: false, warn: false });
   resetTide(z); resetIce(z);
+  clearFreeze(); setShade(3, 0, 0, 0, 0);
+  SEA.uAurFront.value = F.seaLit ? 1 : 0;
+  if (!coast) {
+    // a seal is not kept half-done: an open hole's lamps are dark again (and nobody holds one)
+    if (z.seal) endSeal(z, false);
+    for (const it of z.act5.lamps) { it.held = false; it.mesh.userData.setHeld?.(false); light5(z, it, false); }
+    for (const ho of z.L.spots.holes) if (F['hole' + ho.id]) freezeWave(ho.id, ho.x, ho.z, ho.leadR, 0);
+    // the cairns burn once the sea is lit (in the fight the Skotos puts them out, and the keepers light them again)
+    for (const it of z.act5.cairns) light5(z, it, !!F.seaLit || (!!z.boss && !z.boss.dead && !z.boss.holdWake && !!it.lit));
+  }
   act5Presence(z);
   refreshEmit(z);
 }
-// a light of the act, lit or dark: its look and its pool (pools are the zone's while the hero is in it; a sea-light's beam
-// and its warmth are light.js's, stage C)
-function light5(z, it, on) {
+// a light of the act, lit or dark: its look, its pool (lamp light: lampLightAt reads the lit interactable) and, for a
+// sea-light, its turning beam (light.js addBeam; pools and beams are the zone's while the hero is in it)
+export function light5(z, it, on) {
   it.lit = on; it.mesh?.userData.setLit?.(on);
-  const tag = 'l5:' + it.kind + ':' + (it.id ?? (it.hole != null ? it.hole + '.' + it.i : it.i));
-  removeLightPool(tag);
-  if (on && it.lightR && G.zone === z) addLightPool(it.x, it.z, it.lightR, Infinity, tag, { color: it.kind === 'holeLamp' || it.kind === 'cairn' ? 0xffb060 : 0xffe8c8, intensity: 22 });
+  if (it.kind === 'holeLamp' || it.kind === 'cairn') it.used = on;
+  const tag = 'l5:' + it.kind + ':' + (it.id ?? (it.hole != null ? it.hole + '.' + (it.i ?? 'm') : it.i));
+  if (!on || G.zone !== z) { removeLightPool(tag); removeBeam(tag); return; }
+  // (kept as they are when already lit: a beam goes on turning where it was)
+  if (it.lightR && !getLightPool(tag)) addLightPool(it.x, it.z, it.lightR, Infinity, tag, { color: it.kind === 'holeLamp' || it.kind === 'cairn' ? 0xffb060 : 0xffe8c8, intensity: 22 });
+  const beam = { sealight: { s: it.spot }, island: { period: 16 }, marker: { len: 12, period: 8 }, farLight: { period: 12, s: z.L.spots.farLight } }[it.kind];
+  if (beam && it.mesh && !getBeam(tag)) {
+    const c = beam.s || it;
+    addBeam(c.x, c.z, { prop: it.mesh, tag, y: it.mesh.userData.fireY, len: beam.len, period: beam.period, theta: it.theta });
+  }
 }
-// what the story has lit, on every entry and as it moves: the sea-lights, the hearth (and with it the Landing's waypoint),
-// the Name-stones, the Farthest Light and its carved door-stone. (Who stands where, Alkyone, Tamarisk, Glaukos, the
-// shorefolk, Selna, Tern, the keepers, Brokka and Elati, is story.js's, stage C.)
+// what the story has lit, on every entry and as it moves: the sea-lights (and the memories under their windows), the hearth
+// (and with it the Landing's waypoint), the Name-stones, the dead Tower's light; on the ice the marker-lights, the Farthest
+// Light and its carved door-stone; then the people
 export function act5Presence(z) {
   const A = z?.act5; if (!A) return;
   const F = G.hero.flags, names = F.names || [];
   if (z.id === 'coast') {
-    for (const it of A.lights) { light5(z, it, !!F['light_' + it.id]); it.used = it.lit; }
+    for (const it of A.lights) {
+      const lit = !!F['light_' + it.id], mem = lit && iceMemOf(it.id);
+      if (it.lit !== lit || G.zone === z) light5(z, it, lit);
+      it.used = it.lit;
+      it.win.used = !mem || !!F['mem_' + mem] || !!z.memory;
+      iceFigure(z, it, mem);
+    }
     light5(z, A.hearth, !!F.hearth); A.hearth.used = !!F.hearth;
     for (const it of A.stones) { light5(z, it, names.includes(it.id)); it.used = it.lit; }
-    A.island?.userData.setLit?.(true);
+    if (A.island) { A.island.userData.setLit?.(true); A.islandIt.mesh = A.island; light5(z, A.islandIt, true); }
     // the Landing's waypoint stays cold until the hearth is lit
     const wp = z.interact.find((i) => i.kind === 'waypoint');
     if (wp) wp.used = !F.hearth;
     if (z.wpDisc) z.wpDisc.visible = !!F.hearth;
     if (A.wpEmit) { z.emit = (z.emit || []).filter((e) => e !== A.wpEmit); if (F.hearth) z.emit.push(A.wpEmit); }
   } else {
-    for (const m of A.markers) m.userData.setLit?.(true);
-    A.farLight.userData.setLit?.(!!F.seaLit);
+    for (const m of A.markers) light5(z, m.userData.it, true);
+    A.farIt.mesh = A.farLight; A.farIt.theta = 0;
+    if (F.seaLit) light5(z, A.farIt, true); else { A.farIt.lit = false; A.farLight.userData.setLit?.(!!z.relit); }
     A.doorStone.userData.setCarved?.(!!F.carved);
-    A.farIt.prompt = F.seaLit ? 'farLight.climb' : 'farLight.light';
-    A.farIt.used = !!F.carved || (F.seaLit && !!F.mem_i4);
+    A.farIt.prompt = F.seaLit ? 'farLight.climb' : z.giving ? 'farLight.give' : 'farLight.light';
+    // the stair: touched to light it (the Skotos rises), to give it Whitecliff's fire in the fight, climbed once the sea is lit
+    A.farIt.used = F.seaLit ? !!F.mem_i4 : !(F.hole0 && F.hole1 && F.hole2) || !!z.relit || (!!z.boss && !z.boss.dead && !z.boss.holdWake && !z.giving);
+    A.doorIt.used = !F.mem_i4 || !!F.carved;
   }
+  people5(z);
   refreshEmit(z);
 }
-// per frame in an Act V zone: the boats ride the water (the level the eye sees, tide.js); on the Farthest Light, until the sea is lit,
-// the blizzard's gusts: 8 s every 40 s (every 20 s at the last open hole), warned 3 s ahead by the rising spindrift
-// ('gustWarn', then 'gust' on and off; cold.js reads z.gust.on)
+// the figure frozen in a lit sea-light's window: whoever its memory keeps, lying in the clear ice, tinted like a statue.
+// Not an actor: a posed avatar, shown with the zone (hidden while its memory stands up out of it: story.js)
+function iceFigure(z, it, mem) {
+  const A = z.act5, cur = A.figs[it.id];
+  if (cur && cur.userData.mem === mem) return;
+  if (cur) { showExtra(z, cur, false); A.figs[it.id] = null; }
+  if (!mem) return;
+  const k = ICE_WHO[mem][0], w = it.spot.window;
+  let av;
+  try { av = spawnNpc5(k, w.x, w.z, 0, { idle: 'lie', lamp: false, frozen: true }).avatar; } catch (e) { return; }
+  av.update(0.6, { speed: 0 });
+  const g = av.group;
+  g.position.set(w.x + 0.15, (it.window.userData.figureY ?? -2.2) + 0.25, w.z + 0.2); g.rotation.y = (it.spot.r || 0) + 0.6;
+  g.userData.mem = mem; g.userData.av = av;
+  A.figs[it.id] = g; z.extra.push(g); if (G.zone === z) R.scene.add(g);
+}
+
+// ---------- Act V's people: who stands where, by the story so far ----------
+// The frost set comes with the act's zones, and with Whitecliff and the Field while Alkyone is there (zoneFolk); actors.js
+// spawnNpc dresses them (the frost set or a boot-loaded stand-in, never a monster; their sea-lanterns; the memories' frost).
+// The story asks for their poses, and for the fires Brokka and Elati bring to the keepers
+const POSE5 = { brokka: { lamp: 0xff8a30 }, elati: { lamp: 0xb8e060 }, first: { idle: 'talk' }, einarBoy: { idle: 'kneel' }, einar: { idle: 'lantern' } };
+export function spawnNpc5(kind, x, z, rot = 0, o = {}) {
+  const D = POSE5[kind] || {}, idle = o.idle || D.idle;
+  const a = spawnNpc(kind, x, z, rot, { idle, lamp: o.lamp ?? D.lamp, frozen: o.frozen });
+  a.home = rot;
+  if (idle === 'kneel' || (kind === 'selna' && !idle)) a.still = true;
+  return a;
+}
+// where each of them stands now (key -> { kind, x, z, r, talk, still }), by zone
+function want5(z) {
+  const F = G.hero.flags, S = z.L.spots, N = S.npcs || {}, out = {};
+  const at = (key, kind, s, o = {}) => { if (s) out[key] = Object.assign({ kind, x: s.x, z: s.z, r: s.r ?? 0, talk: true }, o); };
+  const holes = [0, 1, 2].filter((k) => F['hole' + k]).length, fight = !!z.boss && !z.boss.dead && !z.boss.holdWake && z.boss.kind === 'skotos';
+  if (z.id === 'town') {
+    const s = N.wayfarer;
+    if (F.alkyone && !F.coal) at('alkyone', 'alkyone', { x: s.x + 1.9, z: s.z - 0.7, r: Math.PI * 0.85 });
+    if (F.seaLit) at('child', 'child', { x: s.x - 1.5, z: s.z + 0.9, r: Math.PI * 0.6 });
+  } else if (z.id === 'ashfield') {
+    const ll = S.lastLamp;
+    if (ll && F.coal && !F.coastSeen && hasPerson('alkyone')) at('alkyone', 'alkyone', { ...z.map.nearestFloor(ll.x - 1.6, ll.z + 1.4, 2), r: Math.PI * 0.6 });
+  } else if (z.id === 'coast') {
+    if (F.coastSeen && (!F.towerWake || F.carved)) at('alkyone', 'alkyone', N.alkyone);
+    else if (F.towerWake && !F.frozen) at('alkyone', 'alkyone', N.rock);
+    if (F.hearth) {
+      if (!F.frozen || F.carved) at('tamarisk', 'tamarisk', N.tamarisk);
+      at('glaukos', 'glaukos', N.glaukos);
+      (N.shore || []).forEach((s, i) => at('shore' + i, 'shorefolk', s, { idle: ['hammer', 'Idle_Rail_Call', 'lantern'][i % 3], lamp: i % 3 === 2 ? 0xf4f8ff : null }));
+    }
+  } else if (z.id === 'farlight' && F.frozen) {
+    const K = N.keepers || [], open = S.holes.find((ho) => !F['hole' + ho.id]);
+    if (!F.carved) {
+      if (!F.alkShip) at('alkyone', 'alkyone', N.alkyone);
+      else if (open) at('alkyone', 'alkyone', { ...open.alk, r: Math.PI });
+      else at('alkyone', 'alkyone', { ...K[1], r: Math.PI }, { talk: !fight });
+    }
+    if (!F.carved) {
+      if (holes < 3) at('tamarisk', 'tamarisk', N.tamarisk);
+      else at('tamarisk', 'tamarisk', { ...K[4], r: Math.PI }, { talk: !fight });
+    }
+    at('tern', 'tern', N.tern, { talk: !fight || !!F.seaLit });
+    // (kneeling on her pad, saying names and losing them; standing once she is remembered)
+    if (F.skotosWake && !F.skotosDown) at('selna', 'selna', { ...S.selnaPad, r: 0 }, G.selnaBack ? { talk: false, idle: 'lantern' } : { talk: false, still: true });
+    else if (F.skotosDown) at('selna', 'selna', { ...K[3], r: Math.PI }, { idle: 'lantern', talk: !!F.seaLit });
+  }
+  return out;
+}
+export function npc5(z, key) { return z?.p5?.[key] || null; }
+// bring the act's people in line with the story (a scene that moves one sets n.scene, and gives it back after)
+export function people5(z) {
+  if (!z) return;
+  const want = want5(z), P = z.p5 ||= {}, here = G.zone === z;
+  for (const k in P) {
+    const n = P[k], w = want[k];
+    if (n.scene && !n.a.removed) continue;
+    if (!w || w.kind !== n.kind || n.a.removed || (w.idle || null) !== n.idle) { drop5(z, n); delete P[k]; continue; }
+    if (Math.hypot(n.a.x - w.x, n.a.z - w.z) > 0.6 && !n.a.walking) { n.a.x = w.x; n.a.z = w.z; n.a.home = n.a.rot = w.r; n.it.x = w.x; n.it.z = w.z; }
+    n.it.used = !w.talk;
+  }
+  for (const k in want) {
+    if (P[k]) continue;
+    const w = want[k], s = z.map.nearestFloor(w.x, w.z, 2);
+    let a;
+    try { a = spawnNpc5(w.kind, s.x, s.z, w.r, { idle: w.idle, lamp: w.lamp }); } catch (e) { console.warn('npc5', w.kind, e); continue; }
+    if (w.still) a.still = true;
+    const it = { kind: 'npc', npc: w.kind, actor: a, x: a.x, z: a.z, r: 2.4, prompt: 'talk', used: !w.talk, use: () => emit('talk', w.kind, a) };
+    a.it = it; a.key = k;
+    z.actors.push(a); z.interact.push(it); if (here && a.avatar) R.scene.add(a.avatar.group);
+    P[k] = { a, it, kind: w.kind, idle: w.idle || null, key: k };
+  }
+}
+function drop5(z, n) {
+  const i = z.actors.indexOf(n.a); if (i >= 0) z.actors.splice(i, 1);
+  const j = z.interact.indexOf(n.it); if (j >= 0) z.interact.splice(j, 1);
+  stopWalk(n.a); n.a.remove?.();
+}
+// one of them, for a scene: taken out of the presence's hands until it gives it back (scene5(z, key, false))
+export function scene5(z, key, on = true) {
+  const n = z?.p5?.[key]; if (!n) return null;
+  n.scene = on;
+  if (!on) people5(z);
+  return n.a;
+}
+
+// ---------- the seals (q28): three lamps on a Breathing-hole's rim, burning together, close it ----------
+// z.seal = { ho, t (s at the hole), ring (0-1), lost (lamps the Breath put out), breathT, tele, addT, adds[], held }.
+// The Black Breath every HAZ5.breath s at one lit lamp: a dark cone from the hole, 1.2 s of warning; standing in it between
+// the hole and the lamp shields the lamp (0.8x and Cold +20), else the lamp goes out. The ring loses 2 s for every lamp
+// lost (1 s after the first minute). After a minute, or four lamps lost, Alkyone walks out onto the tongue and holds its
+// lamp (story.js 'sealHold' says why). Each hole has its own trouble: the Sunken climbing out of the first, the cracks of
+// the second (an Icemaw under them, lice out of them), the gusts, the Ice Singer and the Skuas at the third
+const holeLamps = (z, ho) => z.act5.lamps.filter((it) => it.hole === ho.id);
+function sealStart(z, ho) {
+  if (z.seal?.ho === ho || G.hero.flags['hole' + ho.id]) return;
+  if (z.seal) endSeal(z, false);
+  const H = HAZ5[G.hero.diff] || HAZ5[1];
+  z.seal = { ho, t: 0, ring: 0, dur: H.ring, breath: H.breath, lost: 0, breathT: H.breath * 0.6, tele: null, addT: 2, adds: [], held: null };
+  // the third hole's choir and the Skuas: once, as the run begins
+  const S = z.seal, around = (r) => { const a = rand.range(0, 6.28); return z.map.nearestFloor(ho.x + Math.sin(a) * r, ho.z + Math.cos(a) * r, 4); };
+  if (ho.id === 2) {
+    if (MONSTERS.iceSinger) { const p = around(9); const m = spawnMonster('iceSinger', p.x, p.z, { packId: 'seal' }); m.aggro = true; z.actors.push(m); S.adds.push(m); }
+    if (MONSTERS.skua) for (let i = 0; i < 4; i++) { const p = around(12); const m = spawnMonster('skua', p.x, p.z, { packId: 'seal' }); z.actors.push(m); S.adds.push(m); }
+  }
+  if (ho.id === 1 && MONSTERS.icemaw) { const p = around(6); const m = spawnMonster('icemaw', p.x, p.z, { packId: 'seal' }); z.actors.push(m); S.adds.push(m); }
+  emit('sealStart', ho, z);
+}
+export function endSeal(z, done) {
+  const S = z.seal; if (!S) return;
+  z.seal = null;
+  killTele(S.tele);
+  freezeRing(S.ho.id, S.ho.x, S.ho.z, S.ho.r, 0);
+  // (the dark's silence lifts from the music as the hole is left or sealed)
+  Audio.mood({ skotos: 0 });
+  if (!done && S.held) { S.held.held = false; S.held.mesh.userData.setHeld?.(false); }
+}
+function sealTick(z, dt) {
+  const S = z.seal, ho = S.ho, pl = G.player;
+  if (pl.dead || Math.hypot(pl.x - ho.x, pl.z - ho.z) > 24) { endSeal(z, false); return; }
+  S.t += dt;
+  const L3 = holeLamps(z, ho), lit = L3.filter((it) => it.lit).length;
+  if (lit >= 3) S.ring = Math.min(1, S.ring + dt / S.dur);
+  freezeRing(ho.id, ho.x, ho.z, ho.r, S.ring);
+  Audio.mood({ skotos: clamp(1 - Math.hypot(pl.x - ho.x, pl.z - ho.z) / 24, 0, 1) });
+  if (S.ring >= 1) { sealDone(z, S); return; }
+  // the Black Breath
+  if (S.tele) {
+    if ((S.teleT -= dt) <= 0) { const it = S.target; S.tele = null; breathe(z, S, it); }
+  } else if ((S.breathT -= dt) <= 0) {
+    S.breathT = S.breath;
+    const pick = L3.filter((it) => it.lit && !it.held);
+    if (pick.length) {
+      const it = rand.pick(pick), rot = Math.atan2(it.x - ho.x, it.z - ho.z);
+      S.target = it; S.rot = rot; S.teleT = 1.2;
+      S.tele = teleCone(ho.x, ho.z, rot, 7, 0.6, 1.2, 0x3a2a5a);
+      Audio.sfx('iceCreak', { x: ho.x, z: ho.z, vol: 0.8 });
+    }
+  }
+  // what comes out of the hole: the Sunken (the first), lice out of the cracks (the second)
+  if ((S.addT -= dt) <= 0) {
+    S.adds = S.adds.filter((m) => !m.dead && !m.removed);
+    const D = DIFFS[G.hero.diff], extra = HAZ5[G.hero.diff]?.adds || 0;
+    if (ho.id === 0 && MONSTERS.sunken) {
+      S.addT = 6;
+      for (let i = 0; i < 2 + (extra > 1 ? 1 : 0) && S.adds.length < 5 + extra; i++) {
+        const a = rand.range(0, 6.28), p = z.map.nearestFloor(ho.x + Math.sin(a) * (ho.r + 0.8), ho.z + Math.cos(a) * (ho.r + 0.8), 3);
+        const m = spawnMonster('sunken', p.x, p.z, { packId: 'seal' }); m.aggro = true; m.alarmed = true; z.actors.push(m); S.adds.push(m);
+        splashAt(p.x, p.z);
+      }
+    } else if (ho.id === 1 && MONSTERS.hullLouse) {
+      S.addT = 12;
+      for (let i = 0; i < 2 + extra; i++) { const a = rand.range(0, 6.28), p = z.map.nearestFloor(ho.x + Math.sin(a) * 6.5, ho.z + Math.cos(a) * 6.5, 3); const m = spawnMonster('hullLouse', p.x, p.z, { packId: 'seal' }); m.aggro = true; z.actors.push(m); S.adds.push(m); puff(p.x, 0.3, p.z, 6, 0xd8e4ee, 0.6, 0.8, 0.8); }
+    } else S.addT = 6;
+    void D;
+  }
+  // the fail-safe: Alkyone holds the tongue's lamp
+  if (!S.held && (S.t > 60 || S.lost >= 4)) sealHold(z, S);
+}
+function splashAt(x, z) { splash(x, z, 1); puff(x, 0.3, z, 6, 0x8aa8c0, 0.8, 1.2, 0.8); }
+// the Breath lands: on her (the lamp holds), or on the lamp (out it goes); the thin ice along the cone cracks a stage
+function breathe(z, S, it) {
+  const ho = S.ho, pl = G.player, rot = S.rot;
+  crackCone(ho.x, ho.z, rot, 7, 0.6, 1);
+  puff(ho.x + Math.sin(rot) * 3, 0.6, ho.z + Math.cos(rot) * 3, 14, 0x141018, 1.6, 1.2, 1.2);
+  const dx = pl.x - ho.x, dz = pl.z - ho.z, d = Math.hypot(dx, dz), dl = Math.hypot(it.x - ho.x, it.z - ho.z);
+  const shield = d <= Math.min(7, dl + 0.8) && Math.abs(angleDiff(rot, Math.atan2(dx, dz))) < 0.3 + 0.6 / Math.max(1, d);
+  if (shield) {
+    const D = DIFFS[G.hero.diff];
+    damage(null, pl, monsterDmg(Math.max(z.level, G.hero.level)) * (D?.dmg ?? 1) * 0.8, { cold: 20 });
+    return;
+  }
+  if (!it.lit || it.held) return;
+  light5(z, it, false);
+  puff(it.x, 1.3, it.z, 10, 0x1a1620, 1, 0.8, 1.2);
+  Audio.sfx('iceSing', { x: it.x, z: it.z, vol: 0.6 });
+  S.lost++;
+  S.ring = Math.max(0, S.ring - (S.t > 60 ? 1 : 2) / S.dur);
+  emit('lampSnuffed', it, null);
+}
+// a lamp out for any other reason (the Ice Singer's song, a blow of the Skotos's creatures): the ring loses its time too
+on('lampSnuffed', (it, by) => {
+  const S = G.zone?.seal;
+  if (by && S && it.kind === 'holeLamp' && it.hole === S.ho.id) { S.lost++; S.ring = Math.max(0, S.ring - (S.t > 60 ? 1 : 2) / S.dur); }
+});
+// the third hole's Ice Singer: a finished song puts out the nearest lit lamp (one Alkyone holds stays lit)
+on('singerSong', (a) => {
+  const z = G.zone, S = z?.seal; if (!S) return;
+  let best = null, bd = 1e9;
+  for (const it of holeLamps(z, S.ho)) if (it.lit && !it.held) { const d = Math.hypot(it.x - a.x, it.z - a.z); if (d < bd) { bd = d; best = it; } }
+  if (best) snuffLamp(best, a);
+});
+function sealHold(z, S) {
+  const ho = S.ho, it = holeLamps(z, ho).find((l) => l.i === 2) || holeLamps(z, ho)[0]; if (!it) return;
+  S.held = it;
+  const n = npc5(z, 'alkyone'), a = n?.a;
+  const hold = () => { it.held = true; it.mesh.userData.setHeld?.(true); if (!it.lit) light5(z, it, true); S.ring = Math.max(S.ring, 0); };
+  emit('sealHold', ho, z);
+  if (!a) { hold(); return; }
+  scene5(z, 'alkyone');
+  // round the rim to the tongue, over its thick ice (B, the tongue's bends, its pad)
+  const B = ho.lamps[1], t = Math.sign(B.x - ho.x) || 1, path = [{ x: B.x, z: B.z + 0.8 }, { x: ho.x + t * 6.6, z: ho.z - 1 }, { x: ho.x + t * 4.2, z: ho.z - 5.6 }, { x: it.x + 0.9, z: it.z + 0.3 }];
+  const go = (pts) => { const [p, ...rest] = pts; if (!p) { a.home = a.rot = angleTo(a.x, a.z, it.x, it.z); hold(); return; } walkTo(a, p.x, p.z, 3.2, () => go(rest)); };
+  go(path);
+}
+function sealDone(z, S) {
+  const ho = S.ho, F = G.hero.flags, k = ho.id;
+  endSeal(z, true);
+  F['hole' + k] = true;
+  writeSave();
+  freezeCells(ho.lead);
+  freezeWave(k, ho.x, ho.z, ho.leadR, 3);
+  // the three lamps become one marker-light over the new ice
+  for (const it of holeLamps(z, ho)) { light5(z, it, false); const i = z.interact.indexOf(it); if (i >= 0) z.interact.splice(i, 1); showExtra(z, it.mesh, false); }
+  z.act5.lamps = z.act5.lamps.filter((it) => it.hole !== k);
+  const m = marker5(z, ho); z.act5.markers.push(m); if (G.zone === z) R.scene.add(m);
+  light5(z, m.userData.it, true);
+  z.checkpoint = z.map.nearestFloor(ho.alk.x, ho.alk.z, 3);
+  glowBurst(ho.x, 1, ho.z, 0xf0f8ff, 60, 6, 0.4, 1.2); ring(ho.x, ho.z, ho.r + 1, 0xe8f4ff, 1); shake(0.35);
+  Audio.sfx('freezeWave', { vol: 1 }); Audio.sfx('iceSing', { vol: 1, pitch: 0.7 }); Audio.sting('sealight');
+  emit('sealDone', k, z);
+}
+
+// per frame in an Act V zone: the boats ride the water (the level the eye sees, tide.js); on the Farthest Light, until the sea
+// is lit, the blizzard's gusts: 8 s every 40 s (every 20 s at the last open hole), warned 3 s ahead by the rising spindrift
+// ('gustWarn', then 'gust' on and off; cold.js reads z.gust.on); the seal run; after the act, Selna's rite at nightfall
 function act5Tick(z, dt) {
-  const A = z.act5;
+  const A = z.act5, F = G.hero.flags, pl = G.player;
   if (A.boats.length) { const lv = z.tide ? SEA.uLevel.value : 0; for (const b of A.boats) b.userData.setLevel?.(lv); }
   if (z.id !== 'farlight') return;
-  const F = G.hero.flags, g = z.gust ||= { t: 0, on: false, warn: false };
+  if (z.seal) sealTick(z, dt);
+  // the keepers' lamps go where they go (story.js: a pool following a walker); Tern at the tower's foot, once the road is
+  // sealed (story.js 'ternSeen')
+  for (const f of z.follow || []) if (!f.a.removed) { f.p.x = f.a.x; f.p.z = f.a.z; }
+  if (F.hole0 && F.hole1 && F.hole2 && !F.ternSeen && !z.ternT && Math.hypot(pl.x - z.L.boss.x, pl.z - z.L.boss.z) < 15) { z.ternT = 1; emit('ternSeen', z); }
+  if (F.carved) {
+    // the names said into the dark every evening: within 12 m of the tower, once every 90 s (story.js 'nightRite')
+    const FL = z.L.spots.farLight;
+    if ((z.riteT = (z.riteT ?? 12) - dt) <= 0 && Math.hypot(pl.x - FL.x, pl.z - FL.z) < 12) { z.riteT = 90; emit('nightRite', z); }
+  }
+  const g = z.gust ||= { t: 0, on: false, warn: false };
   if (F.seaLit) { if (g.on) { g.on = false; setAmbient(z.id); emit('gust', false, z); } return; }
   const period = F.hole0 && F.hole1 && !F.hole2 ? 20 : 40, u = (g.t += dt) % period;
   const warn = u >= period - 11 && u < period - 8, on = u >= period - 8;
@@ -1099,6 +1422,19 @@ function act5Tick(z, dt) {
   if (on !== g.on) { setAmbient(on ? 'blizzard' : 'farlight'); emit('gust', on, z); }
   g.warn = warn; g.on = on;
 }
+// the act's lamps that light with a touch: a hole lamp (and with the first of a hole's, the seal run begins), a cairn
+on('holeLamp', (it, z) => {
+  if (it.lit || G.mode !== 'play' || G.zone !== z) return;
+  touch(1, it, it.mesh.userData.flameAt?.y ?? 1.3, () => {
+    light5(z, it, true); it.used = false;
+    Audio.sfx('lampLight', { x: it.x, z: it.z }); glowBurst(it.x, 1.3, it.z, 0xffd080, 18, 2, 0.25, 0.6);
+    sealStart(z, it.ho);
+  });
+});
+on('cairn', (it, z) => {
+  if (it.lit || G.mode !== 'play' || G.zone !== z) return;
+  touch(1, it, it.mesh.userData.fireY ?? 1, () => { light5(z, it, true); Audio.sfx('lampLight', { x: it.x, z: it.z }); glowBurst(it.x, 1.2, it.z, 0xffb050, 24, 2.5, 0.3, 0.7); ring(it.x, it.z, it.lightR, 0xffb060, 0.8); });
+});
 
 // ---------- scripted walks and fades (npc() has no feet of its own) ----------
 const WALKS = [], FADES = [];
@@ -1287,6 +1623,11 @@ export function townPresence(z) {
   const want = G.hero.quest === 22 && !!F.crownUnmade && !F.newFire, cur = z.interact.find((i) => i.kind === 'beacon');
   if (want && !cur) z.interact.push({ kind: 'beacon', x: s.x + 1.2, z: s.z - 0.8, r: 3, prompt: 'beacon.light', use: () => emit('lightBeacon', z) });
   if (!want && cur) z.interact.splice(z.interact.indexOf(cur), 1);
+  // Act V: Alkyone at the beacon (q24), a coal to take from it once the fourth fire has gone out, the child after the sea is lit
+  const cw = !!F.coastCall && !!F.cradle && !F.coal, coal = z.interact.find((i) => i.kind === 'coal');
+  if (cw && !coal) { const p = z.map.nearestFloor(b.x - 1.2, b.z + 4.4, 2); z.interact.push({ kind: 'coal', x: p.x, z: p.z, r: 2.2, prompt: 'coal.take', use: () => emit('coal', z) }); }
+  if (!cw && coal) z.interact.splice(z.interact.indexOf(coal), 1);
+  people5(z);
 }
 
 // ---------- town portal ----------

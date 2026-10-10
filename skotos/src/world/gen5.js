@@ -300,8 +300,10 @@ function tryCoast(seed, last) {
     L.spines.push({ id: 'fall', from: P0, to: rock });
     sp.fall = { x: FA.x - 0.2, z: FA.z, r: Math.PI / 2 };
     sp.fallRock = rock;
-    L.props.push({ t: 'frozenFall', x: FA.x - 0.2, z: FA.z, r: Math.PI / 2, hgt: 11 + rng.range(0, 4) });
-    for (let k = 0; k < 9; k++) L.props.push({ t: 'icicle', x: FA.x - 0.6, z: FA.z + rng.range(-5, 5), r: Math.PI / 2 + rng.range(-0.3, 0.3), s: rng.range(0.6, 1.4), y: rng.range(2, 9) });
+    const fh = 11 + rng.range(0, 4);
+    L.props.push({ t: 'frozenFall', x: FA.x - 0.2, z: FA.z, r: Math.PI / 2, hgt: fh });
+    // (the icicles hang from the cliff's lip over the columns, not on the fall's face)
+    for (let k = 0; k < 9; k++) L.props.push({ t: 'icicle', x: FA.x - 0.6, z: FA.z + rng.range(-5, 5), r: Math.PI / 2 + rng.range(-0.3, 0.3), s: rng.range(0.6, 1.4), y: fh * rng.range(0.84, 0.98) });
   }
   // the borders: nothing to stand on at the map's edge (the sea runs out to it)
   for (let z = 0; z < h; z++) for (let x = 0; x < w; x++) if ((x < 2 || z < 2 || x >= w - 2 || z >= h - 2) && K[z * w + x] !== SEA) K[z * w + x] = ROCK;
@@ -553,6 +555,7 @@ function tryCoast(seed, last) {
   // ---- dressing: rock faces at the cliffs' feet, sea stacks off the shore, the wrack line's kelp, driftwood and barnacles,
   // anchors on the Graveyard's shingle, stones on the dry ground ----
   dressCoast(L, K, blk, res, rng);
+  dress5Coast(L, K, blk, res, seed);
   // ---- does it hold? ----
   if (!last) { const f = coastFaults(L, R0, R1); if (f.length) return fail(f[0].replace(/[@.].*/, '')); }
   return L;
@@ -600,30 +603,50 @@ function heights(L, K, frame, type, bergH) {
     for (let dz = -1; dz <= 0; dz++) for (let dx = -4; dx <= 3; dx++) { const x = clamp(vx + dx, 0, w - 1); k = Math.min(k, north[clamp(vz + dz, 0, h - 1) * w + x] + Math.max(0, Math.abs(x + 0.5 - vx) - 0.5) * 0.8); }
     return k >= 10 ? 99 : 1.3 * k - 0.2;
   };
+  // (rock standing apart, a stack or a knoll among the flats and the sea, stays low and rounded: never a tower)
+  const area = rockAreas(L, K);
   for (let vz = 0; vz <= h; vz++) for (let vx = 0; vx <= w; vx++) {
-    let fl = 0, wat = 0, rock = 0, pit = 0, rd = 0, sd = 0, n = 0, berg = 0;
+    let fl = 0, wat = 0, rock = 0, pit = 0, rd = 0, sd = 0, n = 0, berg = 0, ra = 0;
     for (const [dx, dz] of CORNER) {
       const x = clamp(vx + dx, 0, w - 1), z = clamp(vz + dz, 0, h - 1), i = z * w + x, k = K[i];
       n++;
       if (frame[i]) pit++;
       if (k === LAND || k === FLAT || k === THICK || k === DECK) fl++;
       else if (k === SEA || k === THIN || k === HOLE || k === WIN) { wat++; sd = Math.max(sd, dSea[i] === 255 ? 14 : dSea[i]); }
-      else { rock++; rd += Math.min(dRock[i] === 255 ? 14 : dRock[i], 14); if (bergH?.[i]) berg = Math.max(berg, bergH[i]); }
+      else { rock++; rd += Math.min(dRock[i] === 255 ? 14 : dRock[i], 14); ra = Math.max(ra, area[i]); if (bergH?.[i]) berg = Math.max(berg, bergH[i]); }
     }
     let y;
     if (pit === 4) y = -2.2;
     else if (fl) y = 0;
     else if (wat) {
-      const sea = [[-1, -1], [0, -1], [-1, 0], [0, 0]].some(([dx, dz]) => K[clamp(vz + dz, 0, h - 1) * w + clamp(vx + dx, 0, w - 1)] === SEA);
-      y = sea ? (type === 'coast' ? -1.5 - 3 * clamp((sd - 1) / 8, 0, 1) : -2.5) : -2;
-    } else if (berg) y = berg;
+      const sea = [[-1, -1], [0, -1], [-1, 0], [0, 0]].some(([dx, dz]) => { const k = K[clamp(vz + dz, 0, h - 1) * w + clamp(vx + dx, 0, w - 1)]; return k === SEA || k === HOLE; });
+      // (thin ice against the rock: the rock meets it at the ice's own level, no gap down to the bed under it)
+      y = sea ? (type === 'coast' ? -1.5 - 3 * clamp((sd - 1) / 8, 0, 1) : -2.5) : rock ? 0 : -2;
+    // (a berg's rise stays well under its slabs, build5.js: through the dither round the hero no rock shows inside it)
+    } else if (berg) y = berg * 0.6;
     else {
-      const d = rd / Math.max(1, rock);
-      y = Math.min((8 + 10 * fbm(vx * 0.05, vz * 0.05, seed + 41)) * smooth(clamp((d - 0.2) / 3.2, 0, 1)) + 0.3, Math.max(0.3, cap(vx, vz)));
+      // the cliffs: rising over three or four cells off the floor, their crest wandering a few
+      // metres up and down, the faces broken by a coarser noise so they never read as one smooth sheet
+      const d = rd / Math.max(1, rock), t = smooth(clamp((d - 0.2) / 3.4, 0, 1));
+      let top = 8 + 10 * fbm(vx * 0.05, vz * 0.05, seed + 41) + (fbm(vx * 0.15, vz * 0.15, seed + 43) - 0.5) * 7;
+      if (ra < 90) top = Math.min(top, 3.4 + 2.8 * fbm(vx * 0.2, vz * 0.2, seed + 45));
+      y = top * t + (fbm(vx * 0.42, vz * 0.42, seed + 47) - 0.5) * 2.6 * Math.min(1, t * 2.5);
+      // (and a narrow rib of rock between two floors stays a ridge, never a spire: no steeper than its thickness allows)
+      y = Math.min(Math.max(y, 0) + 0.3, Math.max(0.3, cap(vx, vz)), 1.0 + 1.3 * d);
     }
     H[vz * W + vx] = y;
   }
   return H;
+}
+// each rock cell's region size (4-neighbour, cells; 0 elsewhere)
+function rockAreas(L, K) {
+  const { w, h } = L, N = w * h, out = new Int32Array(N), seen = new Uint8Array(N);
+  for (let s = 0; s < N; s++) if (K[s] === ROCK && !seen[s]) {
+    const q = [s]; seen[s] = 1;
+    for (let hd = 0; hd < q.length; hd++) { const i = q[hd], x = i % w, z = (i - x) / w; for (const [dx, dz] of N4) { const X = x + dx, Z = z + dz, n = Z * w + X; if (X >= 0 && Z >= 0 && X < w && Z < h && !seen[n] && K[n] === ROCK) { seen[n] = 1; q.push(n); } } }
+    for (const i of q) out[i] = q.length;
+  }
+  return out;
 }
 // floor shut in by footprints (a cell between two huts, inside a hull's stern): small pockets the hero can never reach at
 // low water are closed with them
@@ -671,9 +694,10 @@ export function freezeBay(L) {
   // the thin ice's bed under it, like the bay's (the water's colour); its ground sinks like any thin ice
   const W = w + 1;
   for (let vz = 1; vz < C.z - 16; vz++) for (let vx = Math.max(1, C.x - 24); vx < Math.min(w, C.x + 24); vx++) {
-    let ice = 0, any = 0;
-    for (const [dx, dz] of CORNER) { const i = (vz + dz) * w + vx + dx; if (L.ice[i]) ice++; if (L.cells[i] && !L.ice[i]) any++; }
-    if (ice === 4) L.hgt[vz * W + vx] = -2; else if (any) L.hgt[vz * W + vx] = Math.max(L.hgt[vz * W + vx], 0);
+    let ice = 0, any = 0, rock = 0, wat = 0;
+    for (const [dx, dz] of CORNER) { const i = (vz + dz) * w + vx + dx; if (L.ice[i]) ice++; if (L.cells[i] && !L.ice[i]) any++; if (!L.cells[i] && !L.low[i] && !L.thick[i]) rock++; if (L.low[i]) wat++; }
+    // (the rock meets the new ice at its own level, as the ground meets thin ice everywhere: gen5 heights)
+    if (ice === 4) L.hgt[vz * W + vx] = -2; else if (any) L.hgt[vz * W + vx] = Math.max(L.hgt[vz * W + vx], 0); else if (ice && rock && !wat) L.hgt[vz * W + vx] = Math.max(L.hgt[vz * W + vx], 0);
   }
   return L;
 }
@@ -869,6 +893,59 @@ function dressCoast(L, K, blk, res, rng) {
   }
 }
 
+// The rest of the coast's dressing, from its own draws (seed ^ a constant: the layout, the packs and the earlier props are
+// the same as without it), all of it decoration that blocks nothing: stones, tufts and buried timber on the snow, scree at
+// the cliffs' feet, shingle on the flats; at the Landing each hut's gear and the boats' sledges; a ring of low rocks round
+// every islet; floes round the Icemaw holes; an overhang over each ebb cave
+function dress5Coast(L, K, blk, res, seed) {
+  const { w, h } = L, rng = RNG((seed ^ 0x5d2e5) >>> 0), sp = L.spots, P = (o) => L.props.push(o);
+  const keep = [sp.hearth, sp.waypoint, sp.bell, L.start, ...L.exits, sp.overlook, ...Object.values(sp.npcs).flat()].filter((p) => p && p.x != null);
+  const clear = (x, z, r) => keep.every((p) => Math.hypot(p.x - x, p.z - z) > r);
+  const at = (x, z) => { const cx = Math.floor(x), cz = Math.floor(z); return cx >= 0 && cz >= 0 && cx < w && cz < h ? cz * w + cx : -1; };
+  for (let z = 2; z < h - 2; z++) for (let x = 2; x < w - 2; x++) {
+    const i = z * w + x, q = rng.next(), px = x + rng.range(0.15, 0.85), pz = z + rng.range(0.15, 0.85), r = rng.range(0, 6.28), s = rng.next();
+    if (blk[i] || res[i] || !L.cells[i] || L.paint[i] > 0.45) continue;
+    // (nothing on the camp's south side, where the camp's cines look in from: a stone or drift a few metres from their
+    // camera would fill the frame)
+    if (sp.hearth && pz > sp.hearth.z + 1 && pz < sp.hearth.z + 13 && Math.abs(px - sp.hearth.x) < 6.5) continue;
+    if (K[i] === LAND) {
+      let edge = false; for (const [dx, dz] of N4) if (K[(z + dz) * w + x + dx] === ROCK) edge = true;
+      if (edge && q < 0.2) P({ t: 'stone', x: px, z: pz, r, s: 0.7 + s * 0.8 });
+      else if (q < 0.04) P({ t: 'stone', x: px, z: pz, r, s: 0.35 + s * 0.5 });
+      else if (q < 0.075) P({ t: 'tuft', x: px, z: pz, r, s: 0.55 + s * 0.5 });
+      else if (q < 0.082) P({ t: 'log', x: px, z: pz, r, s: 0.45 + s * 0.45 });
+      else if (q < 0.09) P({ t: 'drift', x: px, z: pz, r, s: 0.8 + s * 0.8 });
+    } else if (K[i] === FLAT && L.bed[i] < BED_DRY && q < 0.022) P({ t: 'stone', x: px, z: pz, r, s: 0.25 + s * 0.3, wet: true });
+  }
+  // the Landing: by each hut its gear (firewood stacked at a side wall, a crate and a cask at the back, a bucket)
+  for (const hu of sp.huts) {
+    const c = Math.cos(hu.r), sn = Math.sin(hu.r), hw = hu.kind === 'shack' ? 1.9 : 1.75, hd = hu.kind === 'shack' ? 2.3 : 1.75;
+    const put = (lx, lz, o) => { const x = hu.x + lx * c + lz * sn, z = hu.z - lx * sn + lz * c, i = at(x, z); if (i >= 0 && K[i] === LAND && !blk[i] && L.cells[i] && clear(x, z, 1.4)) P({ x, z, r: hu.r + (o.rr || 0), ...o }); };
+    const side = rng.next() < 0.5 ? -1 : 1;
+    put(side * (hw + 0.45), rng.range(-0.8, 0.6), { t: 'firewood', s: rng.range(0.9, 1.15), rr: Math.PI / 2 });
+    put(-side * (hw + 0.5), -hd + rng.range(0.2, 0.9), { t: 'crate', s: rng.range(0.85, 1.1), rr: rng.range(-0.3, 0.3) });
+    put(rng.range(-0.8, 0.8), -(hd + 0.55), { t: 'cask5', s: rng.range(0.85, 1.05), rr: rng.range(0, 6) });
+    if (rng.next() < 0.6) put(side * (hw + 0.5), hd - 0.2, { t: 'bucket', s: rng.range(0.9, 1.1), rr: rng.range(0, 6) });
+  }
+  // the boats drawn up: a sledge beside each, its load lashed on
+  for (const b of sp.boats) if (!b.moored) {
+    const a = b.r + Math.PI / 2, d = rng.range(1.7, 2.2), x = b.x + Math.sin(a) * d, z = b.z + Math.cos(a) * d, i = at(x, z);
+    if (i >= 0 && L.cells[i] && !blk[i] && clear(x, z, 1.4)) P({ t: 'sledge', x, z, r: b.r + rng.range(-0.3, 0.3), s: 1 });
+  }
+  // every islet ringed with low rocks at its edge (they block nothing: the refuge stays a refuge)
+  for (const isl of L.refuges) {
+    const n = Math.round(isl.r * 2.2);
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2 + rng.range(-0.25, 0.25), d = isl.r - rng.range(0.2, 0.6), x = isl.x + Math.sin(a) * d, z = isl.z + Math.cos(a) * d, i = at(x, z), s = rng.range(0.45, 0.85);
+      if (i >= 0 && L.cells[i] && !blk[i] && clear(x, z, 1.2) && !sp.chests.some((c) => Math.hypot(c.x - x, c.z - z) < 1.3)) P({ t: 'shoreRock', x, z, r: rng.range(0, 6.28), s });
+    }
+  }
+  // the Icemaw holes: broken plates of the shelf round their rims
+  for (const m of sp.mawHoles) for (let k = 0; k < 7; k++) { const a = rng.range(0, 6.28), d = rng.range(1.1, 1.8); P({ t: 'floe', x: m.x + Math.sin(a) * d, z: m.z + Math.cos(a) * d, r: rng.range(0, 6.28), s: rng.range(0.45, 0.85) }); }
+  // the ebb caves: an overhang of the cliff over the pool's back half, icicles on its lip
+  for (const c of sp.caves) P({ t: 'caveArch', x: c.x, z: c.z, r: 0, s: 1 });
+}
+
 // ======================= FARLIGHT: the Farthest Light =======================
 // South to north: the coast's headlands as cliff along the south edge, the way down onto the ice, the Icebound Ship
 // frozen in at a list with the camp in its lee; the Ice Road (a thick spine 4-6 wide winding north, marker poles every 8 m,
@@ -1038,7 +1115,8 @@ function tryFarlight(seed, last) {
     if (!fieldOK(x, z, 5, 8) || sp.drowned.some((d) => Math.hypot(d.x - x, d.z - z) < 20)) continue;
     const a = rng.range(0, 6.28), win = { x: Math.round(x + Math.sin(a) * 2.2), z: Math.round(z + Math.cos(a) * 2.2) };
     for (let cz = win.z - 2; cz < win.z + 2; cz++) for (let cx = win.x - 2; cx < win.x + 2; cx++) { const i = cz * w + cx; frame[i] = 1; K[i] = cz >= win.z - 1 && cz < win.z + 1 && cx >= win.x - 1 && cx < win.x + 1 ? WIN : THICK; }
-    const glow = { x: x - Math.sin(a) * 2.6, y: -2.3 - rng.range(0, 0.6), z: z - Math.cos(a) * 2.6 };
+    // (the lantern lies under its window, its glow with it: seen through the pane, its light caught in the ice round it)
+    const glow = { x: win.x + 0.1, y: -2.3 - rng.range(0, 0.6), z: win.z - 0.2 };
     const ca = a + rng.sign() * rng.range(1.2, 1.9), chest = { x: snap(x + Math.sin(ca) * 4.6), z: snap(z + Math.cos(ca) * 4.6), islet: true };
     disc(chest.x, chest.z, 1.6, THICK);
     sp.drowned.push({ x, z, glow, window: win, chest });
@@ -1102,8 +1180,60 @@ function tryFarlight(seed, last) {
     for (const z of [leads[0].Z - 20, leads[1].Z + 18]) { const p = nearFloor(L, roadX(z), z, 3); if (p) L.packs.push({ ...p, n: rng.int(6, 8), tag: 'skuaFlock', elite: null }); }
   }
   L.spines.push({ id: 'road', from: { x: camp.x, z: camp.z }, to: { x: AR.x, z: AR.z + 15.25 } });
+  dress5Far(L, K, blk, res, seed, { camp, S, side, roadX, roadHW, zEnd });
   if (!last) { const f = farlightFaults(L); if (f.length) return fail('far.' + f[0].replace(/[@.].*/, '')); }
   return L;
+}
+// The Farthest Light's dressing, from its own draws (as the coast's): the fields' rubble, slabs shoved up, the keepers' old
+// cairn-poles, gear frozen in; along the road a sledge left behind, a barrel in the ice; the camp's tents, furs, sledges,
+// crates and casks and a rope line to the ship; broken plates round every hole
+function dress5Far(L, K, blk, res, seed, o) {
+  const { w, h } = L, rng = RNG((seed ^ 0x5d2e5) >>> 0), sp = L.spots, P = (q) => L.props.push(q);
+  const keep = [sp.waypoint, sp.brazier, sp.npcs.alkyone, sp.npcs.tamarisk, sp.npcs.tern, ...sp.npcs.keepers, L.start, ...L.exits, ...sp.chests, ...sp.holes.flatMap((ho) => [...ho.lamps, ho.alk])].filter(Boolean);
+  const clear = (x, z, r) => keep.every((p) => Math.hypot(p.x - x, p.z - z) > r);
+  for (let z = 4; z < h - 4; z++) for (let x = 4; x < w - 4; x++) {
+    const i = z * w + x, q = rng.next(), px = x + rng.range(0.15, 0.85), pz = z + rng.range(0.15, 0.85), r = rng.range(0, 6.28), s = rng.next();
+    if (blk[i] || res[i] || !L.cells[i]) continue;
+    if (L.ice[i]) {
+      if (q < 0.016) P({ t: 'iceRubble', x: px, z: pz, r, s: 0.6 + s * 0.6 });
+      else if (q < 0.019 && clear(px, pz, 3)) P({ t: 'cairnPole', x: px, z: pz, r, s: 0.9 + s * 0.3 });
+      else if (q < 0.021 && clear(px, pz, 3)) P({ t: 'gear', x: px, z: pz, r, s: 0.8 + s * 0.3, k: s < 0.5 ? 'cask' : 'crate' });
+    } else if (L.thick[i]) {
+      // (the thick ice: rubble, and the snow drifted into low mounds across the road and the pads)
+      if (q < 0.02) P({ t: 'iceRubble', x: px, z: pz, r, s: 0.4 + s * 0.4 });
+      else if (q < 0.045) P({ t: 'drift', x: px, z: pz, r, s: 0.7 + s * 0.9 });
+    }
+  }
+  // along the road: now and then a sledge left behind or a barrel held in the ice at its edge
+  for (let z = o.camp.z - 12; z > o.zEnd + 6; z -= rng.range(18, 30)) {
+    const sg = rng.next() < 0.5 ? -1 : 1, x = o.roadX(z) + sg * (o.roadHW(z) - 0.6), i = Math.floor(z) * w + Math.floor(x);
+    if (i >= 0 && L.cells[i] && !blk[i] && clear(x, z, 2.5)) P(rng.next() < 0.5 ? { t: 'sledge', x, z, r: rng.range(-0.5, 0.5), s: 1, wreck: true } : { t: 'gear', x, z, r: rng.range(0, 6.28), s: 1, k: 'cask' });
+  }
+  // the camp: two tents and their furs on the side away from the ship, sledges and gear, a rope line out to the ship
+  const C = o.camp;
+  for (const [da, d, t] of [[-0.5, 5.2, 'tent'], [0.55, 5.4, 'tent'], [-0.05, 6.1, 'sledge'], [-0.95, 4.6, 'fur'], [1.0, 4.4, 'fur'], [0.25, 4.0, 'cask5'], [-0.3, 3.9, 'crate'], [1.35, 5.6, 'crate']]) {
+    const a = (o.side > 0 ? -Math.PI / 2 : Math.PI / 2) + da + rng.range(-0.08, 0.08), x = C.x + Math.sin(a) * d, z = C.z + Math.cos(a) * d, i = Math.floor(z) * w + Math.floor(x);
+    if (L.cells[i] && !blk[i] && clear(x, z, 1.6)) P({ t, x, z, r: a + Math.PI + rng.range(-0.2, 0.2), s: 1 });
+  }
+  {
+    const a = Math.atan2(o.S.x - C.x, o.S.z - C.z), x0 = C.x + Math.sin(a) * 4.2, z0 = C.z + Math.cos(a) * 4.2, x1 = o.S.x - Math.sin(a) * 2.4, z1 = o.S.z - Math.cos(a) * 2.4;
+    if (clear(x0, z0, 1.2)) P({ t: 'ropeLine', x: x0, z: z0, x1, z1, r: 0, s: 1 });
+  }
+  // the Light's Skerry: rock ledges round the core's rim and the keepers' old offerings (stones heaped, cairn-poles), clear
+  // of the cross's four ways in, the keepers' line and the door
+  {
+    const B = L.boss;
+    for (let k = 0; k < 26; k++) {
+      const a = (k / 26) * Math.PI * 2 + rng.range(-0.08, 0.08), d = rng.range(5.3, 6.4), x = B.x + Math.sin(a) * d, z = B.z + Math.cos(a) * d, s = rng.range(0.7, 1.5);
+      if (Math.abs(Math.sin(a)) < 0.3 || Math.abs(Math.cos(a)) < 0.3 || (Math.abs(z - B.z - 0.6) < 1.6 && Math.abs(x - B.x) < 6) || z > B.z + 1.8 && Math.abs(x - B.x + 0.5) < 3) continue;
+      P({ t: 'stone', x, z, r: rng.range(0, 6.28), s });
+      if (k % 5 === 2) P({ t: 'cairnPole', x: x - Math.sin(a) * 0.9, z: z - Math.cos(a) * 0.9, r: rng.range(0, 6.28), s: 0.8 });
+    }
+  }
+  // the holes: broken plates crowding their rims (and the Icemaws' holes)
+  // (floes adrift anywhere over the hole, not a ring at even steps round its rim: that read as a clock face)
+  for (const ho of sp.holes) for (let k = 0; k < 14; k++) { const a = rng.range(0, Math.PI * 2), d = ho.r * rng.range(0.35, 0.92); P({ t: 'floe', x: ho.x + Math.sin(a) * d, z: ho.z + Math.cos(a) * d, r: rng.range(0, 6.28), s: rng.range(0.55, 1.1) }); }
+  for (const m of sp.mawHoles) for (let k = 0; k < 6; k++) { const a = rng.range(0, 6.28), d = rng.range(1.0, 1.6); P({ t: 'floe', x: m.x + Math.sin(a) * d, z: m.z + Math.cos(a) * d, r: rng.range(0, 6.28), s: rng.range(0.4, 0.8) }); }
 }
 // a cell within a lead's band (the hole's own water is drawn round it)
 const leadBand = (leads, x, z) => leads.some((l) => Math.abs(z + 0.5 - l.zc(x + 0.5)) <= l.hw(x + 0.5));
