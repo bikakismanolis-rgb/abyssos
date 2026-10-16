@@ -218,8 +218,10 @@ export function updateCamera(dt, tx, tz, snap) {
   const oy = sh * (noise2(c.shakeT * 22, 7.1) - 0.5) * 2;
   const d = c.dist * c.zoom * (c.aspectZoom || 1);
   const cam = R.camera;
-  cam.position.set(c.x + ox + c.kick.x, c.lookY + Math.sin(c.pitch) * d + oy, c.z + Math.cos(c.pitch) * d + c.kick.z);
-  lookAt.set(c.x + ox * 0.5 + c.kick.x, c.lookY, c.z + c.kick.z);
+  // (a boss fight may aim a little ahead of the hero, toward what she fights: c.aimX, c.aimZ, eased by ai.js)
+  const ax = c.aimX || 0, az = c.aimZ || 0;
+  cam.position.set(c.x + ox + c.kick.x + ax, c.lookY + Math.sin(c.pitch) * d + oy, c.z + Math.cos(c.pitch) * d + c.kick.z + az);
+  lookAt.set(c.x + ox * 0.5 + c.kick.x + ax, c.lookY, c.z + c.kick.z + az);
   cam.lookAt(lookAt);
   // shadow box follows the hero
   if (R.moon.castShadow) {

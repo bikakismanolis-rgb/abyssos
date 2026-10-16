@@ -1,15 +1,15 @@
 // Monster, pet and boss behaviour.
 import * as THREE from 'three';
 import { G, later } from './state.js';
-import { MONSTERS } from './data.js';
+import { MONSTERS, HAZ5 } from './data.js';
 import { rebuildHash, foes, near, spawnMonster, restoreRim, spawnNpc, lieDown } from './actors.js';
 import { damage, kill, tickStatus, moveMul, heroHit, seeHero, clingHero, shakeOff, rootHero, REMAINS, remainsNear, takeRemains, addVuln, clearVuln, vuln, vulnOf } from './combat.js';
-import { LIGHT, lightOn, shroudOn, lightAt, lampAt, lampNear, snuffLamp, isLamp, halveCradle, heroLightR, setHeroLight, setLightDark, addLightPool, getLightPool, shrinkPool, lightPools, addBeam, removeBeam, beams, inBeam, lampLightAt, warmAt } from './light.js';
+import { LIGHT, lightOn, shroudOn, lightAt, lampAt, lampNear, snuffLamp, isLamp, halveCradle, heroLightR, setHeroLight, setLightDark, addLightPool, getLightPool, shrinkPool, lightPools, addBeam, removeBeam, beams, inBeam, beamHas, lampLightAt, warmAt, cradlePoint } from './light.js';
 import { setFluePumping, startFlues, flues, fluePeriod, setFlueHeat } from './forge.js';
 import { refreshStats } from './stats.js';
 import { fire, area } from './projectiles.js';
-import { teleCircle, teleCone, teleLine, killTele, sparks, glowBurst, explosion, ring, bolt, P, puff, decal, flash, splash as splashFx, iceShards, freezeCrystals, breath } from '../gfx/fx.js';
-import { shake, addLight, removeLight, R } from '../gfx/gfx.js';
+import { teleCircle, teleCone, teleLine, killTele, sparks, glowBurst, explosion, ring, bolt, P, puff, decal, flash, splash as splashFx, iceShards, freezeCrystals, breath, fireStream } from '../gfx/fx.js';
+import { shake, addLight, removeLight, R, setAtmosphere } from '../gfx/gfx.js';
 import { drape } from '../world/build.js';
 import { emit, on } from '../ui/bus.js';
 import { number } from '../ui/overlay.js';
@@ -19,8 +19,10 @@ import { has, t } from '../i18n/i18n.js';
 import { sapAt, addSapPool, addSapRing, sapPools, startDrips, placeCasks } from './sap.js';
 import { grantBuff } from './stats.js';
 import { wadeAt, waterAt, TIDE } from './tide.js';
-import { iceAt, stageAt, crackAt, breakAt, holeNear, FALLS, drown } from './ice.js';
-import { setShade } from '../world/sea.js';
+import { ICE, iceAt, stageAt, crackAt, crackLine, crackCone, breakAt, holeNear, FALLS, drown } from './ice.js';
+import { setShade, setWake } from '../world/sea.js';
+import { ATMOS, mixAtmos } from '../world/atmos.js';
+import { ZONES } from './world.js';
 import { tidal } from '../world/gen5.js';
 import { COLD, coldAdd } from './cold.js';
 
@@ -190,6 +192,10 @@ function dying(a, dt) {
   // what it left about it: an ash mound, a stoker's chain and its pump, a Lampless's cone
   if (!a.tidied) { a.tidied = true; if (a.mesh) { R.scene.remove(a.mesh); a.mesh = null; } if (a.post && a.pumping) setFluePumping(a.post.flue, false); a.airborne = false; if (a.rope) dropRope(a); if (a.lurk) killTele(a.lurk.arrow); }
   if (a.cone) { if (a.cone.userData.fade) a.cone.userData.fade(Math.max(0, 1 - a.deadT)); else a.cone.visible = false; }
+  // Act V: the fight's camera given back; the Walking Tower crawls home to its skerry, the Skotos waits for its name to sink
+  if (a.boss) fightCam(dt, null);
+  if (a.kind === 'tower' && towerHome(a, dt)) return;
+  if (a.kind === 'skotos') { skotosDying(a, dt); return; }
   const av = a.avatar; if (!av) { a.cone?.userData.dispose?.(); a.remove(); return; }
   // gone under the water: it sinks out of sight, no corpse left to burn away
   if (a.drowned) {
@@ -767,8 +773,9 @@ const AI = {
   },
   node(a, dt, pl, d) {
     // a Heartroot: wakes (with its guards), feeds the Lady through a tendril, or sprouts rootlings by a thorn wall
-    // (a keeper's statue in Karthax's cage stands still: his tick and his Hammerfall decide what happens to it)
-    if (a.keeper) return 0;
+    // (a keeper's statue in Karthax's cage stands still: his tick and his Hammerfall decide what happens to it; the Skotos
+    // moves its Hands and its Coil)
+    if (a.keeper || a.hand) return 0;
     const B = a.bossNode;
     if (!a.awake) {
       const due = a.wakeIn != null ? (a.wakeIn -= dt) <= 0 : d < 11;
@@ -807,6 +814,9 @@ const AI = {
   // Act V
   singer: (a, dt, pl, d) => singer(a, dt, pl, d),
   lurker: (a, dt, pl, d) => lurker(a, dt, pl, d),
+  // the bosses: what runs whatever they do (the water, the Hands, the Night, the camera), then their moves
+  tower: (a, dt, pl, d) => { const v = towerPre(a, dt, pl, d); const r = boss(a, dt, pl, d, TOWER); return v || r; },
+  skotos: (a, dt, pl, d) => { skotosPre(a, dt, pl, d); return boss(a, dt, pl, d, SKOTOS); },
   pet: null
 };
 
@@ -1661,6 +1671,7 @@ export function dashStep(a, dt, pl = G.player) {
   // fresh sap ahead stops it dead (not its own trail, nor sap it started in); so does slush
   if (D.sapDaze && !D.wall && D.t > 0) { const s = stops(a.x + ux * pr * 0.5, a.z + uz * pr * 0.5, D); if (s && !D.inSap) { D.t = 0; D.sap = s; } D.inSap = s; }
   if (D.ice && !D.wall && D.t > 0) iceStep(a, D);
+  if (D.ice5 && !D.wall && D.t > 0) rushIce(a, D);
   if (D.trail && (D.run || 0) - (D.lastPool ?? -9) > 3.2) { D.lastPool = D.run; addSapPool(a.x - ux, a.z - uz, 1.5, 5, D); }
   if (Math.random() < 0.7) puff(a.x, 0.3, a.z, 2, D.dust ?? 0x8a8680, 0.8, 0.8, 0.8);
   if (D.drop && (D.run || 0) - (D.lastDrop ?? -9) > D.drop.every) { D.lastDrop = D.run; D.drop.fn(a.x - ux, a.z - uz); }
@@ -3314,6 +3325,1118 @@ function ashBreath(a, pl) {
     if (!p.dead && inCone(a.x, a.z, rot, 8, 0.8, p)) { hitHero(a, p, 1.2, { burn: a.dmg * 0.3 }); tally(a, 'breathTaken'); }
     else if (Math.hypot(I.x - a.x, I.z - a.z) < 8 + I.r * 0.5) { shrinkPool(I, 3, 6); emit('isarnDimmed', a); tally(a, 'breathDimmed'); }
   }, after: 0.5 };
+}
+
+
+// =====================================================================================================================
+// ---------- Act V: Skerry, the Walking Tower, and the Skotos ----------
+// The act's phone rules: at most two big telegraphs up at once, the environment's own warning (the tide coming, the Deep
+// Cold) counted as one (bigs, bigTele); telegraphs never change with the difficulty, cooldowns and adds do (HAZ5: bcd, adds)
+const H5 = () => HAZ5[G.hero?.diff ?? 1] || HAZ5[1];
+const bcd = (s) => s * H5().bossCd;
+const cdm = (base) => (a, ph) => bcd(Array.isArray(base) ? base[ph] : base);
+function bigs(a) { const t = a.t; a.bigs = (a.bigs || []).filter((e) => e > t); return a.bigs.length; }
+function bigTele(a, dur) { (a.bigs ||= []).push(a.t + dur); }
+const roomFor = (a) => bigs(a) < 2;
+
+// the fight's camera: pitch, zoom and the aim's height eased in while she fights it (and, near the Skotos, a little ahead
+// toward it, so its hood stays in the frame: the contract's Stage A outcome); given back when the fight ends
+const CAM = { on: false };
+function fightCam(dt, w) {
+  const c = R.cam, k = Math.min(1, dt * 1.6);
+  if (G.mode !== 'play') { c.aimX = c.aimZ = 0; return; }
+  if (w) {
+    CAM.on = true;
+    c.pitch += (w.p - c.pitch) * k; c.lookY += (w.y - c.lookY) * k; c.zoomT = w.z;
+    c.aimX = (c.aimX || 0) + ((w.ax || 0) - (c.aimX || 0)) * k; c.aimZ = (c.aimZ || 0) + ((w.az || 0) - (c.aimZ || 0)) * k;
+    return;
+  }
+  if (!CAM.on) return;
+  c.pitch += (0.95 - c.pitch) * k; c.lookY += (0.9 - c.lookY) * k; c.aimX *= 1 - k; c.aimZ *= 1 - k;
+  if (Math.abs(c.pitch - 0.95) < 0.004 && Math.abs(c.lookY - 0.9) < 0.01 && Math.abs(c.aimX) + Math.abs(c.aimZ) < 0.02) {
+    c.pitch = 0.95; c.lookY = 0.9; c.aimX = c.aimZ = 0; c.zoomT = ATMOS[ZONES[G.zone?.id]?.atmos]?.zoom ?? 1; CAM.on = false;
+  }
+}
+on('zoneEnter', () => { if (CAM.on) { const c = R.cam; c.pitch = 0.95; c.lookY = 0.9; c.aimX = c.aimZ = 0; CAM.on = false; } });
+
+// the Skerry Light rides the shell's socket (where the walk, the rear and the dive carry it), upright, turning with the crab
+const _sp = new THREE.Vector3();
+function skerryRide(a) {
+  const m = a.skerry, s = a.skerrySock, g = a.avatar?.group; if (!m || !s || !g) return;
+  g.updateWorldMatrix(true, false); s.updateWorldMatrix(true, false);
+  s.getWorldPosition(_sp); g.worldToLocal(_sp); m.position.copy(_sp);
+}
+// the Skerry Light's world point (its fire), for the beam on the Tower's back and the Cradle's fire streaming to it
+const _sk = new THREE.Vector3();
+function skerryFire(a) {
+  const m = a.skerry; if (!m) return { x: a.x, y: 9, z: a.z };
+  m.updateWorldMatrix(true, false);
+  _sk.set(0, m.userData.fireY ?? 8, 0).applyMatrix4(m.matrixWorld);
+  return { x: _sk.x, y: _sk.y, z: _sk.z };
+}
+
+// ---------- Skerry, the Walking Tower: an island that stands up ----------
+// Phase 1, the Tide: on the sand it sweeps, rushes sideways, hammers and spits brine; every so often the tide comes (its own
+// flood, TIDE.force) and it hunts from the water as a wake, breaching through her: a Breach that ends on dry ground beaches
+// it (x1.5), and still under when the bay drains it is Stranded. At 65% it turns onto the ice and keeps to the thick
+// (stepToward's mask): only the Shell Rush crosses thin ice, and across a webbed patch it goes through and lies Overturned
+// (x2, its one window). At 30% it hauls itself back onto the sand, an Island now and then (x0.3): light its light on its
+// flank and it is Blinded by it (x1.6). Dead, it crawls home to its skerry and is an island again, its light burning
+const TOWER = {
+  name: 'tower', phases: [0.65, 0.3], wake: 24,
+  intro(a) {
+    emit('bossIntro', a); tally(a, 'intro');
+    Audio.sfx('towerBell', { vol: 1 }); Audio.sfx('bossRoar', { vol: 0.5 });
+    a.avatar?.play('rear', 1); a.skerry?.userData.ring?.(1.2); shake(0.5);
+    a.st = 'fight'; a.tide = { st: 'low', t: bcd(a.echo ? 8 : 10) }; a.rushes = 0; a.unlitT = 0;
+    // (and the turn waits for the tide: phase 1 holds at 65% until it has been Beached or Stranded once, or a flood has
+    // come and gone; struck to 65% at low water, it calls the flood at once)
+    a.lockPhase = 0;
+    a.mcd.rush = bcd(5); a.mcd.hammer = bcd(3); a.mcd.spit = bcd(7); a.mcd.brood = bcd(10); a.mcd.drowned = bcd(4);
+    towerWater(a, 0, 0.3);
+  },
+  onPhase(a, ph) { if (ph === 1) towerTurn(a); if (ph === 2) towerBack(a); },
+  tick(a, dt, pl, d) {
+    if (a.st === 'under') return wakeTick(a, dt, pl);
+    if (a.st !== 'fight') return 0;
+    return null;
+  },
+  moves: [
+    // phase 1 at low water and phase 3: sideways at her; in phase 2 the Shell Rush across the ice (the bait)
+    { id: 'rush', when: (a, d) => a.phase !== 1 && d > 3 && d < 15 && roomFor(a), cdOf: cdm(9), run: (a, pl) => { a.rushN = 0; return sideRush(a, pl); } },
+    { id: 'shellRush', when: (a, d) => a.phase === 1 && d > 3.5 && d < 16 && roomFor(a), cdOf: cdm(9), run: (a, pl) => sideRush(a, pl, true) },
+    { id: 'bell', when: (a, d) => a.phase === 1 && d < 9.5 && roomFor(a), cdOf: cdm(12), run: (a) => towerBellMove(a) },
+    { id: 'hammer', when: (a, d) => a.phase !== 2 && d < 9 && roomFor(a), cdOf: cdm(10), run: (a, pl) => hammerClaw(a, pl) },
+    { id: 'spit', when: (a, d) => a.phase !== 1 && d > 4 && d < 16 && roomFor(a), cdOf: cdm(10), run: (a, pl) => brineSpit(a, pl) },
+    { id: 'brood', when: (a) => a.phase === 0 && alive(a.lice).length < 3, cdOf: cdm(18), run: (a) => brood(a) },
+    { id: 'shake', when: (a, d) => a.phase === 2 && d < 6 && !(a.blindT > 3) && roomFor(a), cdOf: cdm(9), run: (a) => towerShake(a) },
+    { id: 'drowned', when: (a) => a.phase === 2 && alive(a.drowned).length < 4 + H5().adds, cdOf: cdm(15), run: (a) => callDrowned(a) },
+    { id: 'sweep', basic: true, when: (a, d) => d < 7.2, cdOf: cdm(2.4), run: (a, pl) => clawSweep(a, pl) }
+  ]
+};
+// what runs every frame whatever it is doing (a daze included): the bay's water, the tide's clock, the wake, the light on its
+// back and its beam, the Island's interact, the turn and the hauls, the walk on the thick; the speed it moved, for its gait
+function towerPre(a, dt, pl, d) {
+  const av = a.avatar;
+  // asleep as the skerry (the story wakes it): a rock, its light dark
+  if (!a.awake) {
+    if (a.holdWake && !a.posed && av) { a.posed = true; av.play('rock', 1); a.skerry?.userData.setLit?.(false); }
+    skerryRide(a);
+    return 0;
+  }
+  if (a.posed) { a.posed = false; }
+  // (the turn's 3 s that nothing hurts: a white rim while they last)
+  if (a.invuln > 0 && (a.invuln -= dt) <= 0) { a.invuln = 0; restoreRim(a); }
+  // (a little lower and further back while she fights it, and aimed between her and it while it is near: the crab's whole
+  // bulk, the light on its back and its telegraphs on a phone screen)
+  if (heroNear(a, 26) && !pl.dead) {
+    const D = Math.hypot(a.x - pl.x, a.z - pl.z), k = clamp((18 - D) / 10, 0, 1), g = angleTo(pl.x, pl.z, a.x, a.z), ah = Math.min(4, D * 0.4) * k;
+    fightCam(dt, { p: 0.86 - 0.1 * k, y: 1.2 + 1.4 * k, z: 1.15 + 0.08 * k, ax: Math.sin(g) * ah, az: Math.cos(g) * ah });
+  } else fightCam(dt, null);
+  // the bay's water is the Tower's while it is awake (and back at low water on every entry: act5Enter, then here)
+  if (TIDE && !TIDE.force) towerWater(a, 0, 0.3);
+  if (a.phase === 0 && a.tide) {
+    if (a.lockPhase === 0 && a.tide.st === 'low' && a.hp <= (a.hpFloor || 0) + 1) a.tide.t = Math.min(a.tide.t, 0);
+    tideClock(a, dt, pl);
+  }
+  skerryRide(a);
+  // the light on its back hides while it lies on its back (the socket goes under the ground in that clip)
+  if (a.skerry && av) { const act = av.anim.act, ov = av.anim.actName === 'overturned' && act, ex = av.model.tpl?.ex?.overturned; a.skerry.visible = !(ov && ex && act.time > ex.down && act.time < ex.up); }
+  // its beam goes where it goes
+  const b = a.beam; if (b) { const f = skerryFire(a); b.x = f.x; b.z = f.z; b.y = f.y; if (b.mesh) b.mesh.position.set(f.x, f.y, f.z); }
+  if (a.blindT > 0 && (a.blindT -= dt) <= 0) towerDark(a, true);
+  if (a.lightIt) { const ang = angleTo(a.x, a.z, pl.x, pl.z), r = a.radius + 0.7; a.lightIt.x = a.x + Math.sin(ang) * r; a.lightIt.z = a.z + Math.cos(ang) * r; }
+  if (a.phase === 1 && a.lockPhase === 1 && (a.lockT -= dt) <= 0) a.lockPhase = null;
+  if (a.phase === 2) {
+    // unlit too long: Alkyone's flask (in an echo, the shore rock's brazier throws one) at the next Island
+    if (!a.lit) a.unlitT += dt;
+    if (a.unlitT > 60) a.hpFloor = 0;
+    if (a.st === 'island' && a.unlitT > 45 && !a.flask) towerFlask(a);
+  }
+  if (a.st === 'island') { a.resist = 0.3; if ((a.islandT -= dt) <= 0) islandEnd(a); return 0; }
+  if (a.st === 'over') { if ((a.overT -= dt) <= 0) overEnd(a); return 0; }
+  if (a.st === 'turn') { if ((a.turnT -= dt) <= 0) { a.st = 'haul'; a.haul = thickNear(a, a.x, a.z - 4, true) || { x: a.x, z: a.z - 6 }; } return 0; }
+  if (a.st === 'haul' || a.st === 'back') return towerHaul(a, dt);
+  if (a.st === 'rear' || a.st === 'dive' || a.st === 'surface') return 0;
+  // beached and the water still up: back down into the deep, and under again
+  if (a.phase === 0 && a.st === 'fight' && (a.tide?.st === 'flood' || a.tide?.st === 'high') && !a.move && !a.dash && !(a.dazed > 0)) return toWater(a, dt);
+  // phase 2: it keeps to the thick ice (a wall to it is any thin cell), as near her as the thick goes
+  if (a.phase === 1 && a.st === 'fight' && !a.move && !a.dash && !(a.dazed > 0) && d > 4.5) return thickSeek(a, pl, dt);
+  if (a.phase === 1 && a.st === 'fight' && !a.move && !a.dash && !(a.dazed > 0)) face(a, pl, dt, 3);
+  return 0;
+}
+// the bay's water at h (m), rising or falling at rate m/s (0.15: one step a second); null: back to the zone's clock
+function towerWater(a, h, rate = 0.15) {
+  if (!TIDE) return;
+  if (h == null) { TIDE.force = null; return; }
+  if (!TIDE.force || TIDE.force.h !== h || TIDE.force.rate !== rate) TIDE.force = { h, rate };
+}
+// the tide's clock in the first phase: low water (its moves on the sand), then the tide comes (it rears, the bell rings, the
+// water draws back for a breath, the bay floods to 0.9 m in six steps over 6 s while it dives), 16 s of high water (the
+// wake, the Breaches, the Drowned called), then 6 s draining; still under when the sand comes up: Stranded
+function tideClock(a, dt, pl) {
+  const T = a.tide;
+  T.t -= dt;
+  if (T.st === 'low') {
+    if (T.t > 0 || a.st !== 'fight' || a.move || a.dash || a.dazed > 0 || !roomFor(a)) return;
+    T.st = 'rear'; T.t = 1.6; a.st = 'rear'; bigTele(a, 7.6); tally(a, 'tide');
+    a.avatar?.play('rear', 1); Audio.sfx('towerBell', { vol: 1 }); Audio.sfx('tideBell'); a.skerry?.userData.ring?.(1.4);
+    emit('towerTide', a, 'flood');
+    // (the water draws back from the bay's edge for a breath before it comes)
+    const c = arena(a); ring(c.x, c.z, 15, 0xd8ecff, 1.2); for (let k = 0; k < 12; k++) { const g = k * 0.52; splashFx(c.x + Math.sin(g) * 14, c.z + Math.cos(g) * 14, 0.8); }
+    return;
+  }
+  if (T.st === 'rear' && T.t <= 0) {
+    T.st = 'flood'; T.t = 6.5; towerWater(a, 0.9, 0.15); Audio.sfx('surfSwell', { vol: 1 });
+    if (a.st === 'rear') submerge(a);
+    return;
+  }
+  if (T.st === 'flood' && T.t <= 0) { T.st = 'high'; T.t = 16; a.breachT = 1.5; a.mcd.drowned = Math.min(a.mcd.drowned || 0, 2); return; }
+  if (T.st === 'high') {
+    // the Drowned walk in out of the bay while the water is up
+    if ((a.mcd.drowned || 0) <= 0 && alive(a.drowned).length < 4 + H5().adds && !(a.dazed > 0)) { a.mcd.drowned = bcd(15); callDrowned(a, true); }
+    if (T.t <= 0) { T.st = 'drain'; T.t = 6.5; towerWater(a, 0, 0.15); emit('towerTide', a, 'ebb'); }
+    return;
+  }
+  if (T.st === 'drain' && T.t <= 0) {
+    T.st = 'low'; T.t = bcd(24); Audio.mood({ sub: 0 }); a.lockPhase = null;
+    // the sand came up round it: Stranded where it lies
+    if (a.st === 'under' || a.st === 'breach') { a.br = null; towerUp(a); daze(a, 3); addVuln(a, 'stranded', 3); a.lockPhase = null; tally(a, 'stranded'); }
+  }
+}
+// under the water: hidden from blows, the light on its back riding out of the water like a mast, a foam V behind it
+function submerge(a) {
+  a.st = 'dive'; a.avatar?.play('dive', 1); Audio.sfx('towerDive', { x: a.x, z: a.z });
+  Audio.mood({ sub: 1 });
+  later(0.7, inZone(a, () => { if (a.st !== 'dive') return; a.st = 'under'; a.under = true; a.hidden = false; for (const k in a.status) if (k === 'burn' || k === 'poison') a.status[k] = 0; tally(a, 'under'); }));
+}
+function towerUp(a) {
+  a.under = false; a.st = 'fight'; a.y = 0; setWake(a.x, a.z, a.rot, 0);
+  a.avatar?.play('rise', 1); splashFx(a.x, a.z, 2.6); Audio.sfx('splash', { x: a.x, z: a.z, vol: 1 });
+}
+const deepAt = (x, z) => waterAt(x, z) === 'deep';
+function toWater(a, dt) {
+  if (deepAt(a.x, a.z)) { submerge(a); return 0; }
+  if (!a.deepTo || (a.deepT = (a.deepT || 0) - dt) <= 0) {
+    a.deepT = 1; a.deepTo = null;
+    for (let r = 1.5; r <= 10 && !a.deepTo; r += 1) for (let k = 0; k < 16; k++) { const g = (k / 16) * Math.PI * 2, x = a.x + Math.sin(g) * r, z = a.z + Math.cos(g) * r; if (deepAt(x, z)) { a.deepTo = { x, z }; break; } }
+  }
+  const p = a.deepTo; if (!p) return 0;
+  const dx = p.x - a.x, dz = p.z - a.z, l = Math.hypot(dx, dz) || 1, sp = 3.2;
+  a.x += (dx / l) * sp * dt; a.z += (dz / l) * sp * dt; a.rot = dampAngle(a.rot, Math.atan2(dx, dz) + Math.PI / 2, 5, dt);
+  return sp;
+}
+// the wake: it keeps about 9 m off her in deep water, out of reach, and every 6 s breaches through her
+function wakeTick(a, dt, pl) {
+  a.y = damp(a.y || 0, -1.6, 3, dt);
+  let v = 0;
+  if (!a.br) {
+    const c = arena(a), away = angleTo(pl.x, pl.z, a.x, a.z);
+    let tx = a.x, tz = a.z;
+    for (const o of [0, 0.4, -0.4, 0.8, -0.8, 1.3, -1.3, 2, -2, 3.1]) { const x = pl.x + Math.sin(away + o) * 9, z = pl.z + Math.cos(away + o) * 9; if (deepAt(x, z) && Math.hypot(x - c.x, z - c.z) < arenaR(18) + 2) { tx = x; tz = z; break; } }
+    const dx = tx - a.x, dz = tz - a.z, l = Math.hypot(dx, dz);
+    if (l > 0.6) {
+      const base = Math.atan2(dx, dz), sp = (a.def.wakeSpeed || 6.5) * Math.min(1, l / 2);
+      for (const o of [0, 0.5, -0.5, 1, -1, 1.6, -1.6]) {
+        const ang = base + o, nx = a.x + Math.sin(ang) * sp * dt, nz = a.z + Math.cos(ang) * sp * dt;
+        if (!deepAt(nx + Math.sin(ang) * 1.5, nz + Math.cos(ang) * 1.5)) continue;
+        a.x = nx; a.z = nz; a.rot = dampAngle(a.rot, ang + Math.PI / 2, 4, dt); v = sp; break;
+      }
+    }
+    setWake(a.x, a.z, a.rot - Math.PI / 2, v > 0.5 ? 1 : 0.4);
+    if (Math.random() < dt * 8) splashFx(a.x + rand.range(-1.5, 1.5), a.z + rand.range(-1.5, 1.5), 0.5);
+    if (a.tide?.st === 'high' && (a.breachT -= dt) <= 0 && roomFor(a) && !pl.dead) breachTele(a, pl);
+    return 0;
+  }
+  return breachStep(a, dt, pl);
+}
+// Breach: the water humps along a 16 x 5 m line through her for 1.2 s; then it bursts out along it (1.6x, thrown 14 m):
+// stopped by dry ground it is Beached (dazed 3.5 s, x1.5); run out in the water, it goes under again
+function breachTele(a, pl) {
+  const dir = angleTo(a.x, a.z, pl.x, pl.z), d = Math.hypot(pl.x - a.x, pl.z - a.z), len = clamp(d + 6, 10, 20);
+  a.br = { dir, len, t: 1.2, run: 0, hit: false, go: false };
+  a.tele = teleLine(a.x, a.z, dir, len, 5, 1.2, 0xff4a20); bigTele(a, 1.2);
+  Audio.sfx('towerBreach', { x: a.x, z: a.z, vol: 0.6, pitch: 0.8 });
+  for (let k = 1; k < 8; k++) later(k * 0.15, inZone(a, () => { const u = (k / 8) * len; splashFx(a.x + Math.sin(dir) * u, a.z + Math.cos(dir) * u, 0.9); }));
+  tally(a, 'breach');
+}
+function breachStep(a, dt, pl) {
+  const D = a.br, map = G.zone.map;
+  if (!D.go) { D.t -= dt; a.rot = dampAngle(a.rot, D.dir, 6, dt); if (D.t > 0) return 0; D.go = true; a.under = false; a.avatar?.play('breach', 1); Audio.sfx('towerBreach', { x: a.x, z: a.z }); splashFx(a.x, a.z, 2.4); shake(0.3); }
+  const sp = 18, ux = Math.sin(D.dir), uz = Math.cos(D.dir), st = sp * dt;
+  const nx = a.x + ux * st, nz = a.z + uz * st;
+  a.y = damp(a.y || 0, 0, 10, dt);
+  const wall = map.blocks(Math.floor(nx + ux * a.radius * 0.6), Math.floor(nz + uz * a.radius * 0.6));
+  if (!wall) { a.x = nx; a.z = nz; D.run += st; }
+  if (!D.hit && Math.hypot(pl.x - a.x, pl.z - a.z) < a.radius + pl.radius + 0.5) { D.hit = true; hitHero(a, pl, 1.6, { push: 14, kx: ux, kz: uz }); shake(0.4); }
+  if (Math.random() < 0.8) splashFx(a.x, a.z, 1.4);
+  const dry = map.walkable(a.x, a.z) && waterAt(a.x, a.z) === 'dry';
+  if (dry || wall) { a.br = null; a.st = 'fight'; a.y = 0; setWake(a.x, a.z, a.rot, 0); daze(a, 3.5); addVuln(a, 'beached', 3.5); a.lockPhase = null; tally(a, 'beached'); explosion(a.x, a.z, 3, 0xd8e4ec, { smoke: 0x8a9aa8, shake: 0.5 }); Audio.sfx('slam', { x: a.x, z: a.z }); return 0; }
+  if (D.run >= D.len) { a.br = null; a.breachT = bcd(6); a.st = 'dive'; a.avatar?.play('dive', 1); later(0.6, inZone(a, () => { if (a.st === 'dive') { a.st = 'under'; a.under = true; } })); }
+  return sp;
+}
+// the turn at 65%: it rears and holds there 3 s (nothing hurts it), the bay drains, and it drags itself onto the ice
+function towerTurn(a) {
+  a.br = null; a.dash = null; a.move = null; killTele(a.tele); a.tele = null;
+  if (a.under || a.st === 'under' || a.st === 'dive') towerUp(a);
+  a.dazed = 0; a.dmgTaken = null; clearVuln(a, 'beached'); clearVuln(a, 'stranded');
+  a.st = 'turn'; a.turnT = 3; a.invuln = 3; a.rooted = true; a.rushes = 0; a.avatar?.setRim(0xf0f8ff, 2);
+  // (and no burst skips the ice: held at 30% until it has been Overturned once, or for 30 s)
+  a.hpFloor = a.hpMax * 0.299; a.lockPhase = 1; a.lockT = 30;
+  if (a.tide) a.tide.st = 'done';
+  towerWater(a, 0, 0.3); Audio.mood({ sub: 0 });
+  a.avatar?.play('rear', 1); a.skerry?.userData.ring?.(1.3); Audio.sfx('towerBell', { vol: 1, pitch: 0.9 });
+  a.mcd.shellRush = bcd(3); a.mcd.bell = bcd(5); a.mcd.hammer = bcd(4);
+  tally(a, 'turn');
+}
+// at 30%: back south onto the sand, and the first Island there
+function towerBack(a) {
+  a.dash = null; a.move = null; killTele(a.tele); a.tele = null;
+  // (and it does not die before its light has been lit once: 10% until then; the flask lights it at 45 s anyway)
+  a.rooted = false; a.st = 'back'; a.unlitT = 0; a.hpFloor = a.hpMax * 0.1;
+  const c = arena(a); a.haul = G.zone.map.nearestFloor(c.x, c.z + 7, 4);
+  a.avatar?.play('rear', 1); Audio.sfx('towerBell', { vol: 1, pitch: 0.8 });
+  a.mcd.drowned = bcd(8); a.mcd.spit = bcd(5);
+  tally(a, 'back');
+}
+// a walk it owns (the turn onto the thick, a haul out of a hole, back to the sand): crawling, straight there, over thin ice
+// or round what is solid
+function towerHaul(a, dt) {
+  const h = a.haul; if (!h) { a.st = 'fight'; return 0; }
+  const d = Math.hypot(h.x - a.x, h.z - a.z);
+  if (d < 0.7) {
+    a.haul = null;
+    if (a.st === 'back') { islandStart(a); return 0; }
+    a.st = 'fight'; a.cd = Math.max(a.cd, 0.6); return 0;
+  }
+  return seek(a, h.x, h.z, a.speed * 1.1, dt);
+}
+// the thick cell nearest (x, z) within 14 m (north of the bowl's middle if north: the turn)
+function thickNear(a, x, z, north) {
+  const L = G.zone.L, map = G.zone.map, c = arena(a);
+  let best = null, bd = 1e9;
+  for (let dz = -14; dz <= 14; dz++) for (let dx = -14; dx <= 14; dx++) {
+    const ix = Math.floor(x) + dx, iz = Math.floor(z) + dz; if (ix < 0 || iz < 0 || ix >= L.w || iz >= L.h) continue;
+    const i = iz * L.w + ix; if (!L.thick?.[i] || map.solid(ix, iz) || (north && iz + 0.5 > c.z)) continue;
+    const d2 = (ix + 0.5 - x) ** 2 + (iz + 0.5 - z) ** 2; if (d2 < bd) { bd = d2; best = { x: ix + 0.5, z: iz + 0.5 }; }
+  }
+  return best;
+}
+// on the thick toward her: the thick cell nearest her as the goal, a window that sees only thick ice (map.js mask)
+function thickSeek(a, pl, dt) {
+  const L = G.zone.L, map = G.zone.map;
+  if ((a.goalT = (a.goalT || 0) - dt) <= 0 || !a.goal) { a.goalT = 0.5; a.goal = thickNear(a, pl.x, pl.z) || a.goal; }
+  const g = a.goal; if (!g || Math.hypot(g.x - a.x, g.z - a.z) < 0.8) { face(a, pl, dt, 3); return 0; }
+  let f = map.stepToward(a.pathT ||= {}, a.x, a.z, g.x, g.z, dirTmp, 24, L.thick);
+  // (off the thick, a haul out of a hole say: straight to the nearest thick cell first)
+  if (!f) { const n = thickNear(a, a.x, a.z); if (!n) return 0; const l = Math.hypot(n.x - a.x, n.z - a.z) || 1; dirTmp.x = (n.x - a.x) / l; dirTmp.z = (n.z - a.z) / l; f = dirTmp; }
+  const v = a.speed * moveMul(a);
+  a.x += f.x * v * dt; a.z += f.z * v * dt;
+  turnTo(a, Math.atan2(f.x, f.z), 6, dt);
+  return v;
+}
+// Claw Sweep: a 7 m cone (1.0 s), 1.2x and thrown 10 m; on ice the cone cracks a stage
+function clawSweep(a, pl) {
+  const rot = angleTo(a.x, a.z, pl.x, pl.z) + (a.blindT > 0 ? rand.sign() * 0.7 : 0);
+  a.rot = rot;
+  a.tele = teleCone(a.x, a.z, rot, 7, 1.0, 1.0, 0xff6a20);
+  a.avatar?.play('attack', 1, { hitIn: 1.0 });
+  return { t: 1.0, noFace: true, fn() {
+    Audio.sfx('swingHeavy', { x: a.x, z: a.z }); shake(0.25);
+    if (!pl.dead && inCone(a.x, a.z, rot, 7, 1.0, pl)) hitHero(a, pl, 1.2, { push: 10 });
+    if (a.phase === 1) crackCone(a.x, a.z, rot, 7, 1.0, 1, { src: 'tower' });
+  }, after: 0.5 };
+}
+// Sidelong Rush (phases 1 and 3; in phase 2 the Shell Rush): it turns broadside and scuttles sideways along a 14 x 4 m line
+// (1.1 s) at 16 m/s, 1.4x and thrown 14 m. Into an islet's boulder or the wreck's ribs: dazed 3 s. The Shell Rush over
+// thin ice webbed to stage 2 goes through (Overturned 5 s, x2); each thin cell it runs over cracks a stage. In phase 3
+// twice in a row, the second back the other way
+function sideRush(a, pl, shell) {
+  const aim = angleTo(a.x, a.z, pl.x, pl.z) + (a.blindT > 0 ? rand.sign() * 0.7 : 0), dist = Math.hypot(pl.x - a.x, pl.z - a.z);
+  const len = shell ? clamp(dist + 3, 6, 16) : 14, wide = a.radius * 2 + 0.2;
+  a.rot = aim + Math.PI / 2;
+  a.tele = teleLine(a.x, a.z, aim, len, Math.max(4, wide), 1.1, 0xff4a20); bigTele(a, 1.1);
+  a.avatar?.play('side', 1.6); Audio.sfx('louseSkitter', { x: a.x, z: a.z, vol: 1, pitch: 0.5 });
+  if (shell) { a.rushes = (a.rushes || 0) + 1; tally(a, 'shellRush'); }
+  return { t: 1.1, noFace: true, fn() {
+    const D = startDash(a, aim, 16, len, { probe: a.radius * 0.7, dmg: 1.4, hitO: { push: 14 }, end: rushEnd5, dust: 0xa8b4bc, dir: aim });
+    D.shell = !!shell; D.ice5 = true;
+    a.rot = aim + Math.PI / 2;
+    Audio.sfx('swingHeavy', { x: a.x, z: a.z });
+  }, after: 0.4, chain: a.phase === 2 && !shell && (a.rushN = (a.rushN || 0) + 1) < 2, chainFn: (b, p) => sideRush(b, p) };
+}
+// each step of a rush on thin ice: the cells under it crack a stage; one webbed (2+) under its body breaks: the Shell Rush
+// goes through
+function rushIce(a, D) {
+  const ix = Math.floor(a.x), iz = Math.floor(a.z), c = iz * 4096 + ix;
+  if (c === D.iceCell) return;
+  D.iceCell = c;
+  const px = Math.cos(D.dir ?? 0), pz = -Math.sin(D.dir ?? 0);
+  for (const o of [0, 1.2, -1.2]) {
+    const x = a.x + px * o, z = a.z + pz * o;
+    if (iceAt(x, z) !== 'thin') continue;
+    if (D.shell && stageAt(x, z) >= 2) { D.t = 0; D.broke = { x, z }; return; }
+    crackAt(Math.floor(x) + 0.5, Math.floor(z) + 0.5, 0.5, 1, { src: 'tower' });
+  }
+}
+function rushEnd5(a, D) {
+  a.avatar?.anim.stop?.(0.2);
+  if (D.broke) { overturn(a, D.broke); return; }
+  // (a Shell Rush run up against an open hole in the thin ice goes into it all the same)
+  const L = G.zone.L, w = D.wall;
+  if (D.shell && w && iceAt(w.x, w.z) === 'water' && L.ice?.[Math.floor(w.z) * L.w + Math.floor(w.x)]) { a.x += (w.x - a.x) * 0.6; a.z += (w.z - a.z) * 0.6; overturn(a, w); return; }
+  // (in the ice phase, off the thick after a rush that held: it hauls itself back onto it before anything else)
+  if (a.phase === 1 && iceAt(a.x, a.z) !== 'thick') { const n = thickNear(a, a.x, a.z); if (n) { a.st = 'haul'; a.haul = n; a.move = null; } }
+  if (!w) { puff(a.x, 0.3, a.z, 8, 0xa8b4bc, 1.2, 1.4, 1); return; }
+  // into an islet's boulder or the wreck's ribs: dazed (the Silverhorn and the standing stone)
+  const S = G.zone.L.spots || {}, near = (p, r) => p && Math.hypot(p.x - w.x, p.z - w.z) < r;
+  const hard = (S.bayIslets || []).some((i) => near(i.boulder, 2.6)) || (S.ribs?.cells || []).some(([x, z]) => Math.hypot(x + 0.5 - w.x, z + 0.5 - w.z) < 1.6);
+  explosion(a.x, a.z, 2.6, 0xc8d0d8, { smoke: 0x8a9098, shake: 0.5 }); Audio.sfx('slam', { x: a.x, z: a.z });
+  if (hard) { daze(a, 3); tally(a, 'rushDazed'); }
+}
+// through the ice: on its back in the hole, its underside glowing, 5 s (x2, its one window); the hole refreezes in time
+function overturn(a, p) {
+  a.dash = null; a.move = null; killTele(a.tele); a.tele = null;
+  breakAt(p.x, p.z, 2.6);
+  a.st = 'over'; a.overT = 5; a.rushes = 0; a.vulnWindow = true; a.y = -0.9; if (a.lockPhase === 1) a.lockPhase = null;
+  addVuln(a, 'overturned', 5);
+  a.avatar?.play('overturned', 1); a.avatar?.setRim(0xffb070, 1.6);
+  splashFx(a.x, a.z, 2.6); iceShards(a.x, a.z, 24); Audio.sfx('iceBreak', { x: a.x, z: a.z, vol: 1 }); Audio.sfx('splash', { x: a.x, z: a.z, vol: 1 }); shake(0.6);
+  emit('towerOverturned', a); tally(a, 'overturned');
+}
+function overEnd(a) {
+  a.vulnWindow = false; clearVuln(a, 'overturned'); a.y = 0;
+  a.avatar?.play('shake', 1); splashFx(a.x, a.z, 2);
+  a.st = 'haul'; a.haul = thickNear(a, a.x, a.z) || { x: a.x, z: a.z };
+}
+// Hammer Claw: a 3 m circle on her (1.2 s), 1.5x and a 0.4 s stun; on ice +2 stages in it (+3 after three Shell Rushes
+// that never broke through: Alkyone calls the rule again)
+function hammerClaw(a, pl) {
+  const aim = angleTo(a.x, a.z, pl.x, pl.z) + (a.blindT > 0 ? rand.sign() * 0.7 : 0), d = Math.min(Math.hypot(pl.x - a.x, pl.z - a.z), a.def.reach + 2.5);
+  const tx = a.x + Math.sin(aim) * d, tz = a.z + Math.cos(aim) * d, extra = a.phase === 1 && (a.rushes || 0) >= 3;
+  if (extra && !a.hinted) { a.hinted = true; emit('towerHint', a); tally(a, 'hint'); }
+  a.rot = aim;
+  a.tele = teleCircle(tx, tz, 3, 1.2, 0xff5010); bigTele(a, 1.2);
+  a.avatar?.play('attack2', 1, { hitIn: 1.2 });
+  return { t: 1.2, noFace: true, fn() {
+    explosion(tx, tz, 3, 0xd8e0e8, { smoke: 0x8a98a8, shake: 0.6 }); ring(tx, tz, 3.2, 0xe8f4ff, 0.6); Audio.sfx('slam', { x: tx, z: tz });
+    if (!pl.dead && Math.hypot(pl.x - tx, pl.z - tz) < 3 + pl.radius * 0.5) hitHero(a, pl, 1.5, { stun: 0.4 });
+    if (crackAt(tx, tz, 3, extra ? 3 : 2, { src: 'tower' }) && extra) { a.rushes = 0; a.hinted = false; }
+  }, after: 0.7 };
+}
+// the Tower Bell (phase 2): the cracked bell on its back tolls; a red 9 m ring round it with a blue calm of 4.5 m at its
+// body (1.3 s): step in close. 1.3x between; thin ice in the ring cracks a stage
+function towerBellMove(a) {
+  a.tele = teleCircle(a.x, a.z, 9, 1.3, 0xff3020); bigTele(a, 1.3);
+  const safe = teleCircle(a.x, a.z, 4.5, 1.3, 0x60c0ff);
+  a.skerry?.userData.ring?.(1.5); Audio.sfx('towerBell', { x: a.x, z: a.z, vol: 1 });
+  a.avatar?.play('rear', 1.4);
+  const x = a.x, z = a.z;
+  return { t: 1.3, noFace: true, fn() {
+    killTele(safe); Audio.sfx('towerBell', { x, z, vol: 1, pitch: 0.85 }); ring(x, z, 9, 0xd8e8ff, 0.8); ring(x, z, 4.5, 0x9ad8ff, 0.6); shake(0.4);
+    const p = G.player, dd = Math.hypot(p.x - x, p.z - z);
+    if (!p.dead && dd > 4.5 && dd < 9 + p.radius * 0.5) hitHero(a, p, 1.3, { push: 6 });
+    // (the ring's thin ice, not the calm's)
+    for (let k = 0; k < 28; k++) { const g = (k / 28) * Math.PI * 2; for (const r of [5.5, 7, 8.5]) { const cx = x + Math.sin(g) * r, cz = z + Math.cos(g) * r; if (iceAt(cx, cz) === 'thin') crackAt(Math.floor(cx) + 0.5, Math.floor(cz) + 0.5, 0.5, 1, { src: 'tower' }); } }
+    tally(a, 'bellRung');
+  }, after: 0.8 };
+}
+// Brine Spit: three globs lobbed at her, landing at 1.0, 1.2 and 1.4 s in 2 m circles: 0.9x each, slush pools for 6 s
+function brineSpit(a, pl) {
+  a.avatar?.play('attack2', 1); Audio.sfx('brineSpit', { x: a.x, z: a.z });
+  for (let i = 0; i < 3; i++) {
+    const x0 = pl.x + (i ? rand.range(-3, 3) : 0), z0 = pl.z + (i ? rand.range(-3, 3) : 0), f = G.zone.map.walkable(x0, z0) ? { x: x0, z: z0 } : G.zone.map.nearestFloor(x0, z0, 3);
+    const dl = 1.0 + i * 0.2;
+    teleCircle(f.x, f.z, 2, dl, 0xff6a30);
+    later(dl - 0.7, inZone(a, () => lob(a.x, a.z, f.x, f.z, 0.7, 4, 0x6a8a90, (x, z) => {
+      splashFx(x, z, 1.3); Audio.sfx('slush', { x, z, vol: 0.7 });
+      const p = G.player; if (!p.dead && Math.hypot(p.x - x, p.z - z) < 2 + p.radius * 0.5) hitHero(a, p, 0.9, { cold: 6 });
+      addSapPool(x, z, 2, 6, a, 'slush');
+    })));
+  }
+  bigTele(a, 1.4);
+  return { t: 0.5, fn() {}, after: 0.5 };
+}
+// Brood: a clatter from its shell, and four Hull-lice skitter out (six at most)
+function brood(a) {
+  a.avatar?.play('shake', 1); Audio.sfx('louseSkitter', { x: a.x, z: a.z, vol: 1 });
+  return { t: 1.0, fn() {
+    a.lice = alive(a.lice);
+    for (let i = 0; i < 4 && a.lice.length < 6; i++) {
+      const g = rand.range(0, 6.28), f = G.zone.map.nearestFloor(a.x + Math.sin(g) * (a.radius + 1), a.z + Math.cos(g) * (a.radius + 1), 3);
+      const m = spawnMonster('hullLouse', f.x, f.z, { level: Math.max(1, a.level - 3), out: true });
+      m.aggro = true; G.actors.push(m); a.lice.push(m);
+    }
+    tally(a, 'broodOut');
+  }, after: 0.4 };
+}
+// Shake (phase 3): a 5 m ring round it (1.0 s), 1.0x and thrown; it shakes out the light on its back if it burns
+function towerShake(a) {
+  a.tele = teleCircle(a.x, a.z, 5, 1.0, 0xff5020); bigTele(a, 1.0);
+  a.avatar?.play('shake', 1, { hitIn: 1.0 });
+  return { t: 1.0, noFace: true, fn() {
+    splashFx(a.x, a.z, 2.4); ring(a.x, a.z, 5, 0xd8e8ff, 0.5); Audio.sfx('splash', { x: a.x, z: a.z, vol: 1 }); shake(0.3);
+    const p = G.player; if (!p.dead && Math.hypot(p.x - a.x, p.z - a.z) < 5 + p.radius * 0.5) hitHero(a, p, 1.0, { push: 10 });
+    if (a.lit) towerDark(a, true);
+  }, after: 0.5 };
+}
+// Call the Drowned: the bay boils at two points of its edge (1.0 s) and two Sunken walk in (four at most; one more a call
+// from Nightmare on)
+function callDrowned(a, quiet) {
+  const c = arena(a), n = 2 + H5().adds, pts = [];
+  for (let k = 0; k < 24 && pts.length < n; k++) { const g = rand.range(-1.4, 1.4) + (pts.length % 2 ? Math.PI * 0.35 : -Math.PI * 0.35), x = c.x + Math.sin(g) * rand.range(13, 16), z = c.z + Math.cos(g) * rand.range(13, 16); if (G.zone.map.walkable(x, z) || deepAt(x, z)) pts.push({ x, z }); }
+  for (const p of pts) { ring(p.x, p.z, 1.8, 0xd8ecff, 1); for (let k = 0; k < 5; k++) later(k * 0.2, inZone(a, () => splashFx(p.x, p.z, 1))); }
+  const go = () => {
+    a.drowned = alive(a.drowned);
+    for (const p of pts) {
+      if (a.drowned.length >= 4 + H5().adds) break;
+      const m = spawnMonster('sunken', p.x, p.z, { rising: true, level: Math.max(1, a.level - 2) });
+      m.aggro = true; G.actors.push(m); a.drowned.push(m);
+    }
+    tally(a, 'drownedIn');
+  };
+  if (quiet) { later(1.0, inZone(a, go)); return null; }
+  Audio.sfx('surfSwell', { vol: 0.7 });
+  return { t: 1.0, fn: go, after: 0.3 };
+}
+// the Island (phase 3): it settles, shell up, water running off its back: 8 s, x0.3, and on its flank its light to be lit
+// from the Cradle (1.5 s, broken by a blow)
+function islandStart(a) {
+  a.st = 'island'; a.islandT = 8; a.resist = 0.3; a.move = null; a.dash = null;
+  a.avatar?.play('settle', 1); Audio.sfx('towerBell', { x: a.x, z: a.z, vol: 0.6, pitch: 0.7 });
+  for (let k = 0; k < 10; k++) later(k * 0.3, inZone(a, () => splashFx(a.x + rand.range(-2, 2), a.z + rand.range(-2, 2), 0.7)));
+  if (!a.lit && !a.lightIt) {
+    const it = a.lightIt = { kind: 'towerLight', x: a.x, z: a.z, r: 3.6, prompt: 'tower.light', tower: a };
+    it.use = () => { if (a.st !== 'island' || a.lit) return; lightChannel(it, 1.5, () => skerryFire(a), () => towerLit(a)); };
+    G.zone.interact.push(it);
+  }
+  if (a.unlitT > 45 && !a.flask) towerFlask(a);
+  tally(a, 'island');
+}
+function islandEnd(a) {
+  a.resist = null; dropLightIt(a);
+  a.st = 'fight'; a.avatar?.play('rise', 1); a.cd = Math.max(a.cd, 0.8);
+  // the next Island: after 12 s of fighting (it is long enough to light it, the fight round it short enough to come again)
+  later(bcd(12), inZone(a, () => { if (a.phase === 2 && a.st === 'fight' && !a.dash) { a.move = null; killTele(a.tele); a.tele = null; islandStart(a); } else if (a.phase === 2) a.islandDue = true; }));
+}
+// the Cradle's fire given across (the Island's light): dur s with the fire streaming to it; a blow worth a tenth of her life
+// (one or several) breaks it, a lesser one does not
+const CH = { hurt: 0 };
+on('hurt', (f) => { CH.hurt += f; });
+function lightChannel(it, dur, to, done) {
+  const pl = G.player; if (!pl || pl.dead || pl.act || G.mode !== 'play') return;
+  pl.rot = angleTo(pl.x, pl.z, it.x, it.z); CH.hurt = 0;
+  const c = new THREE.Vector3();
+  pl.act = { name: 'touch', t: 0, dur, ev: [], clip: dur, move: 0, st: 0,
+    update(dt, a) {
+      if (CH.hurt >= 0.1) { a.dur = Infinity; pl.act = null; pl.avatar.anim.stop?.(0.15); return; }
+      if ((a.st -= dt) <= 0) { a.st = 0.08; cradlePoint(c); fireStream({ x: c.x, y: c.y, z: c.z }, to(), 3); }
+    },
+    end() { done(); } };
+  pl.avatar.play('interact', 1);
+  Audio.sfx('lanternDrink', { x: it.x, z: it.z, vol: 0.5 });
+}
+function dropLightIt(a) { const it = a.lightIt; if (!it) return; it.used = true; const i = G.zone.interact.indexOf(it); if (i >= 0) G.zone.interact.splice(i, 1); a.lightIt = null; }
+// lit: its light blazes and its beam spins (a 3 s turn): Blinded 8 s (x1.6, every blow of its aimed 40 degrees wide, its
+// beam dazzling the Sunken round it); then the spray puts it out, until the next Island
+function towerLit(a, flask) {
+  if (a.dead || a.lit) return;
+  a.lit = true; a.unlitT = 0; a.flask = false; a.hpFloor = 0;
+  dropLightIt(a);
+  a.skerry?.userData.setLit?.(true);
+  const f = skerryFire(a);
+  glowBurst(f.x, f.y, f.z, 0xfff0c8, 50, 5, 0.45, 1.1); shake(0.4);
+  a.beam = addBeam(f.x, f.z, { y: f.y, period: 3, len: 20, tag: 'towerBeam', owner: a, intensity: 22 });
+  Audio.sfx('lightCatch', { vol: 1 }); Audio.sfx('towerBell', { vol: 1, pitch: 1.2 }); Audio.mood({ lit: true });
+  // (up off its Island as it ends by itself, and the next one 12 s on: the light goes dark in 8)
+  if (a.st === 'island') islandEnd(a);
+  a.blindT = 8; addVuln(a, 'blinded', 8);
+  emit('towerLit', a, !!flask); tally(a, flask ? 'litFlask' : 'lit');
+}
+function towerDark(a, spray) {
+  if (!a.lit) return;
+  a.lit = false; a.blindT = 0; clearVuln(a, 'blinded');
+  a.skerry?.userData.setLit?.(false);
+  if (a.beam) { removeBeam(a.beam); a.beam = null; }
+  if (spray) { const f = skerryFire(a); for (let k = 0; k < 16; k++) P({ add: false, x: f.x, y: f.y, z: f.z, vx: rand.range(-3, 3), vy: rand.range(1, 4), vz: rand.range(-3, 3), life: 0.9, size: 0.4, size1: 1.2, color: 0xd8e4ec, alpha: 0.6, alpha1: 0, grav: 4 }); Audio.sfx('splash', { x: a.x, z: a.z, vol: 0.8 }); }
+  Audio.mood({ lit: false });
+  tally(a, 'dark');
+  if (a.islandDue && a.phase === 2 && a.st === 'fight') { a.islandDue = false; later(1.5, inZone(a, () => { if (a.st === 'fight' && !a.dash) { a.move = null; islandStart(a); } })); }
+}
+// unlit 45 s: Alkyone throws a flask of whale oil at its back (story.js plays her throw); in an echo, the shore rock's
+// brazier throws it. The light catches 1.2 s later
+function towerFlask(a) {
+  a.flask = true; tally(a, 'flask');
+  if (!a.echo) emit('towerFlask', a);
+  else { const r = G.zone.L.spots?.npcs?.rock; if (r) { const f = skerryFire(a); lob(r.x, r.z, f.x, f.z, 1.0, 6, 0xffa040, () => {}); } }
+  later(1.2, inZone(a, () => towerLit(a, true)));
+}
+// dead: it crawls home to the skerry it slept on for a thousand years (about 3 s), settles there as an island, its light
+// lit and turning slowly. She (and anything else) is set clear of the disc first, then those cells close for good
+function towerHome(a, dt) {
+  const z = G.zone, sk = z.L.spots?.skerry, av = a.avatar;
+  if (TIDE?.force) TIDE.force = null;
+  if (!sk || a.echo) return false;
+  const H = a.homeD ||= { t: 0, l0: Math.hypot(sk.x - a.x, sk.z - a.z), crawl: false };
+  H.t += dt;
+  if (TIDE?.force) TIDE.force = null;
+  if (a.beam && !H.lit) { removeBeam(a.beam); a.beam = null; }
+  if (!H.home) {
+    const dx = sk.x - a.x, dz = sk.z - a.z, l = Math.hypot(dx, dz);
+    if (H.t > 1.4 && l > 0.2 && H.t < 8) {
+      if (!H.crawl) { H.crawl = true; av?.play('crawl', 1); }
+      const sp = Math.max(1.2, H.l0 / 3) * dt; a.x += (dx / l) * Math.min(sp, l); a.z += (dz / l) * Math.min(sp, l);
+      a.rot = dampAngle(a.rot, Math.atan2(dx, dz) + Math.PI / 2, 2, dt); a.y = damp(a.y || 0, 0, 4, dt);
+    } else if (H.t > 1.4) {
+      H.home = true; a.x = sk.x; a.z = sk.z; a.y = 0;
+      av?.play('settle', 1);
+      skerryClose(z, sk);
+      a.skerry?.userData.setLit?.(true); H.lit = true;
+      const f = skerryFire(a);
+      addBeam(f.x, f.z, { y: f.y, period: 16, tag: 'islandBeam', intensity: 22 });
+      addLightPool(sk.x, sk.z, 5.5, Infinity, 'island', { lamp: true, color: 0xffe8c8, intensity: 18 });
+      z.checkpoint = z.map.nearestFloor(sk.x, sk.z + sk.r + 2.5, 4);
+      tally(a, 'home');
+    }
+  }
+  if (av) { av.group.position.set(a.x, a.y || 0, a.z); av.group.rotation.y = a.rot; av.update(dt, { speed: H.crawl && !H.home ? 1 : 0, float: false }); av.setFlash(0); }
+  skerryRide(a);
+  return true;
+}
+function skerryClose(z, sk) {
+  const pl = G.player, R0 = sk.r + 0.75;
+  const clear = (p) => {
+    const dx = p.x - sk.x, dz = p.z - sk.z, l = Math.hypot(dx, dz);
+    if (l > R0 + (p.radius || 0.45)) return;
+    const g = l > 0.01 ? Math.atan2(dx, dz) : Math.PI;
+    for (const o of [0, 0.4, -0.4, 0.9, -0.9, 1.6, -1.6, 3.1]) { const x = sk.x + Math.sin(g + o) * (R0 + 1.2), zz = sk.z + Math.cos(g + o) * (R0 + 1.2); if (z.map.walkable(x, zz)) { p.x = x; p.z = zz; p.kx = p.kz = 0; return; } }
+    const f = z.map.nearestFloor(sk.x, sk.z + R0 + 1.5, 8); p.x = f.x; p.z = f.z;
+  };
+  if (pl && !pl.dead) { pl.pull = null; clear(pl); }
+  for (const b of z.actors) if (b.team === 'foe' && !b.dead && !b.boss) clear(b);
+  if (z.map.close(sk.cells, false)) emit('mapChanged');
+}
+// a death or a walk away from the bay: the water is at low again when she is back (tide.js), and the Tower up out of it
+on('zoneEnter', (id, z) => { const b = z?.boss; if (b && b.kind === 'tower' && b.awake && !b.dead) towerReset(b); });
+function towerReset(a) {
+  a.br = null; killTele(a.tele); a.tele = null; a.dash = null; a.move = null; a.bigs = [];
+  if (a.st === 'under' || a.st === 'dive' || a.st === 'rear') { a.under = false; a.y = 0; a.st = 'fight'; }
+  if (a.phase === 0) a.tide = { st: 'low', t: bcd(16) };
+  setWake(0, 0, 0, 0); Audio.mood({ sub: 0 });
+}
+
+// ---------- the Skotos: the dark that was there before the first fire ----------
+// Phase 1, It Rises: Hands break up through the ice ring (three at most; two or more ward the body, -50%) and Sweep and
+// Lash; the body sends the Black Wave and Drinks the Light. Phase 2, the Night: the sky goes black, the Cradle shrinks to
+// 2.5 m, the cairns go out; it sinks and its shadow circles under the ring, and every 9 s it Breaches where she chooses (a
+// hole near her, the ice under her, the thin ice nearest), up for 4.5 s, Exposed, or Seared beside a lit cairn. Selna
+// falters at 55, 45 and 35%; each Remember (story.js) tears it up; the 30% floor holds until the third (lockPhase).
+// Phase 3, the Farthest Light: it wraps the tower in two Hands (the keepers come: story.js); once Whitecliff's fire is
+// given to the Light ('farLightGiven') the beam sweeps the arena and each pass Sears it, while it Smothers the light with
+// the Coil and calls the Deep Cold over everything not in the light. At 0% it is named (story.js), and sinks
+const SKOTOS = {
+  name: 'skotos', phases: [0.65, 0.3], wake: 60,
+  intro(a) {
+    emit('bossIntro', a); tally(a, 'intro');
+    Audio.sfx('skotosRoar', { vol: 0.8 }); shake(0.4);
+    a.remembers = a.remembers || 0; a.hq = [a.t + 1.2, a.t + 2.8, a.t + 4.4];
+    a.mcd.wave = bcd(7); a.mcd.drink = bcd(15); a.mcd.slam = 3;
+    a.atmK = 0;
+    // (the Night waits for the Black Wave: phase 1 holds at 65% until one has come, 25 s at most)
+    a.lockPhase = 0; a.lock0T = 25;
+  },
+  onPhase(a, ph) { if (ph === 1) skotosNight(a); if (ph === 2) wrapLight(a); },
+  tick(a, dt, pl, d) {
+    // beneath the ice (the Night), or a beat it owns: no blow of the body's own
+    if (a.under || a.hidden || a.nb) return 0;
+    // Drink the Light is broken by a blow worth 4% of its life
+    const m = a.move; if (m?.drink && !m.fired && m.hp0 - a.hp > a.hpMax * 0.04) { a.move = null; killTele(a.tele); a.tele = null; a.avatar?.play('recoil', 1); puff(a.x, 6, a.z, 16, 0x0e0c14, 2, 2, 1.2); a.cd = 1; tally(a, 'drinkBroken'); return 0; }
+    return null;
+  },
+  moves: [
+    { id: 'cold', when: (a) => a.phase === 2 && heroNear(a, 26) && roomFor(a), cdOf: cdm(18.75), run: (a) => deepCold(a) },
+    { id: 'smother', when: (a) => a.phase === 2 && a.relit && !a.coil && !(a.beamOffT > 0), cdOf: cdm(25), run: (a) => smother(a) },
+    { id: 'wave', when: (a) => a.phase !== 1 && heroNear(a, 20) && roomFor(a), cdOf: cdm([14, 16, 22.5]), run: (a, pl) => { a.waveN = 0; return blackWave(a, pl); } },
+    { id: 'drink', when: (a) => a.phase === 0 && heroNear(a, 20) && roomFor(a), cdOf: cdm(20), run: (a, pl) => drinkLight(a, pl) },
+    { id: 'slam', basic: true, when: (a, d) => a.phase !== 1 && d < 8.5 && roomFor(a), cdOf: cdm(5), run: (a, pl) => bodySlam(a, pl) }
+  ]
+};
+// every frame, a daze or a move included: where it stands, its Hands, the Night under the ice, the beam on it, the fight's
+// light and sky and camera, Selna's falters (story.js), the Icemaws, the 30% floor and the Remembers
+function skotosPre(a, dt, pl, d) {
+  const base = a.wrapped ? -2.6 : -4.2;
+  if (!a.awake) { a.y = a.hidden ? -9 : damp(a.y ?? base, base, 1.2, dt); return 0; }
+  const z = G.zone, near = heroNear(a, 30);
+  if (a.invuln > 0 && (a.invuln -= dt) <= 0) a.invuln = 0;
+  // a fight left behind past the third Remember (a death, a walk away: her name is hidden again, story.js): the Night
+  // again, from its start, and the Remembers to play again
+  if (!a.echo && a.phase >= 1 && (a.remembers || 0) >= 3 && !G.selnaBack && !a.dead) skotosNight(a, true);
+  if (!a.nb) { a.x = a.home.x; a.z = a.home.z; a.y = damp(a.y ?? base, base, 1.2, dt); }
+  handsTick(a, dt, pl);
+  // (struck to 65% before its first Black Wave: the Wave comes next)
+  if (a.lockPhase === 0 && (a.waved || (a.lock0T -= dt) <= 0)) a.lockPhase = null;
+  else if (a.lockPhase === 0 && a.hp <= (a.hpFloor || 0) + 1) a.mcd.wave = Math.min(a.mcd.wave || 0, 0);
+  // the sky and the Cradle: the fight's framing, the Night's black and its 2.5 m of light, the Drink's dark
+  const atm = a.phase === 1 ? ATMOS.farlightNight : ATMOS.farlightFight;
+  if (a.atmK < 1 && near) { a.atmK = Math.min(1, (a.atmK || 0) + dt / 2); setAtmosphere(a.atmK >= 1 ? atm : mixAtmos(a.atmFrom || ATMOS.farlight, atm, a.atmK)); }
+  if (a.drinkT > 0) a.drinkT -= dt;
+  setHeroLight(!near ? null : a.drinkT > 0 ? 0 : a.phase === 1 ? 2.5 : null, a);
+  // the Night: the shadow, the Breaches, the falters, the Icemaws, the floor and the third Remember
+  if (a.phase === 1) {
+    if (a.nb) nightTick(a, dt, pl);
+    if (!a.echo && a.remembers < 3 && !z.remember && (a.falterT = (a.falterT ?? 0) - dt) <= 0 && a.hp < a.hpMax * [0.55, 0.45, 0.35][a.remembers]) { a.falterT = 15; emit('skotosFalter', a, a.remembers); tally(a, 'falter'); }
+    if (a.echo) echoCairns(a);
+    if ((a.maws || 0) < 2 && a.hp < a.hpMax * [0.55, 0.4][a.maws || 0]) { a.maws = (a.maws || 0) + 1; callIcemaw(a); }
+    if (!a.floorSaid && a.hp <= a.hpFloor + 1) { a.floorSaid = true; emit('skotosFloor', a); tally(a, 'floor'); }
+    if (a.lockPhase === 1 && (a.remembers || 0) >= 3) { a.lockPhase = null; a.hp = Math.min(a.hp, a.hpMax * 0.299); a.hpFloor = a.hpMax * 0.299; tally(a, 'remembered'); }
+  }
+  if (a.phase === 2) {
+    // the beam: each pass over it Sears it (dazed 2.5 s, x1.5 for 4 s) and sends every Hand under for 5 s
+    const b = a.beam, inB = !!b && !a.under && beamHas(b, a.x, a.z);
+    if (inB && !a.beamIn && !a.dead) sear(a);
+    a.beamIn = inB;
+    if (a.coil) coilTick(a, dt);
+    if (a.beamOffT > 0 && (a.beamOffT -= dt) <= 0) skotosBeam(a);
+    if (!a.rolled && a.hp < a.hpMax * 0.15) { a.rolled = true; emit('skotosRoll', a); tally(a, 'roll'); }
+  }
+  // the camera, lowered and drawn back so the hood stays in the frame when she is near it (a little ahead, toward it)
+  if (near && !pl.dead) {
+    const D = Math.hypot(a.x - pl.x, a.z - pl.z), k = a.under || a.hidden ? 0 : clamp((18 - D) / 11, 0, 1), g = angleTo(pl.x, pl.z, a.x, a.z);
+    fightCam(dt, clearFarLight({ p: 0.72 - 0.15 * k, y: 2.4 + 1.4 * k, z: 1.25 + 0.17 * k, ax: Math.sin(g) * 2.2 * k, az: Math.cos(g) * 2.2 * k }, g, k));
+  } else fightCam(dt, null);
+  return 0;
+}
+// The Farthest Light stands on the core's south side, some 19 m tall: a camera this low and this far back would stand in
+// its shaft while she fights north of it. There the camera first leans further toward the Skotos (the aim carries it
+// north, and keeps the hood in the frame), then steepens (and comes in) until it is clear of the tower's north face.
+// Within some 9 m of the tower it takes the play camera's framing back: the tower is then near enough to her for the
+// occluder's hole round her (build.js) to show her through it.
+function clearFarLight(w, g, k) {
+  const FL = G.zone.L.spots.farLight, pl = G.player, c = R.cam; if (!FL) return w;
+  const dl = FL.z - pl.z;
+  if (Math.abs(pl.x - FL.x) > 4.5 || dl < 0) return w;
+  let room = FL.z - 4.2 - (pl.z + w.az);
+  const over = Math.cos(w.p) * c.dist * w.z * (c.aspectZoom || 1) - room, n = -Math.cos(g);
+  if (over > 0 && n > 0.3) { const e = Math.min(2.6 * k, over / n); w.ax += Math.sin(g) * e; w.az += Math.cos(g) * e; room += e * n; }
+  const p = Math.acos(clamp(room / (c.dist * w.z * (c.aspectZoom || 1)), 0, 1));
+  if (p > w.p) w.p = Math.min(1.3, p);
+  const near = clamp((11.5 - dl) / 2.5, 0, 1);
+  if (near > 0) { w.p += (0.95 - w.p) * near; w.y += (0.9 - w.y) * near; w.z += (1.05 - w.z) * near; w.ax *= 1 - near; w.az *= 1 - near; }
+  return w;
+}
+on('zoneEnter', (id, z) => { const b = z?.boss; if (b && b.kind === 'skotos' && b.awake && !b.dead) { b.atmK = 0; b.atmFrom = ATMOS.farlight; b.bigs = []; } });
+
+// ---------- the Hands: up out of the ice ring; one cut sinks and another comes up at another spot 12 s later ----------
+// (they stand in the water of their own holes: never drowned or floundering there, ice.js FALLS)
+FALLS.skotosHand = FALLS.skotosCoil = () => true;
+// she is remembering Selna (a touch at her pad, story.js): the dark holds its blows for that breath
+const remembering = () => { const it = G.zone?.remember, p = G.player; return !!it && p?.act?.name === 'touch' && Math.hypot(p.x - it.x, p.z - it.z) < 3; };
+const handsUp = (a) => (a.handList || []).filter((h) => !h.dead && !h.removed && !h.sinking);
+function handsTick(a, dt, pl) {
+  const want = a.phase === 0 ? 3 : 2, list = a.handList ||= [], q = a.hq ||= [];
+  // a Hand gone (cut, or sent under): its hole lets go, and its slot comes round again
+  for (let i = list.length - 1; i >= 0; i--) {
+    const h = list[i];
+    if (!h.dead && !h.removed) continue;
+    list.splice(i, 1); handHole(h, false);
+    if (h.dead && !h.sinking) { q.push(a.t + 12); tally(a, 'handCut'); }
+  }
+  const up = handsUp(a);
+  // too many for this phase: the newest sink, and no slot comes back for them
+  while (up.length > want) { const h = up.pop(); handSink(a, h, -1); }
+  q.sort((x, y) => x - y);
+  while (up.length + (a.rising || 0) + q.length < want) q.push(a.t + 3);
+  while (up.length + (a.rising || 0) + q.length > want && q.length) q.pop();
+  if (q.length && q[0] <= a.t && roomFor(a) && !pl.dead && heroNear(a, 30)) { q.shift(); riseHand(a, pl); }
+  // each Hand turns to her and, every 6 s (staggered), Sweeps her if she is in reach or Lashes at her from further off
+  for (const h of up) {
+    h.rot = dampAngle(h.rot, angleTo(h.x, h.z, pl.x, pl.z), 2.2, dt);
+    if ((h.holdT = (h.holdT ?? 8) - dt) <= 0) { h.holdT = 8; if (stageAt(h.x, h.z) !== 4) breakAt(h.x, h.z, 1.0); }
+    if (h.busy || (h.mvT = (h.mvT ?? 1.5) - dt) > 0 || pl.dead || !roomFor(a) || remembering()) continue;
+    const dd = Math.hypot(pl.x - h.x, pl.z - h.z);
+    if (dd < 6.6) { handSweep(a, h, pl); h.mvT = bcd(6) + rand.range(0, 1); }
+    else if (dd < 9.5) { handLash(a, h, pl); h.mvT = bcd(6) + rand.range(0, 1); }
+  }
+  // a grip broken: the Hand cut, or struck for a tenth of its life
+  const g = a.grip;
+  if (g && (pl.pull !== g.pull || g.h.dead || g.h.removed || g.h.sinking || g.hp0 - g.h.hp > g.h.hpMax * g.free)) {
+    if (pl.pull === g.pull) { pl.pull = null; for (let i = 0; i < 10; i++) P({ x: pl.x, y: 1.0, z: pl.z, vx: rand.range(-3, 3), vy: rand.range(1, 3), vz: rand.range(-3, 3), life: 0.4, size: 0.2, size1: 0.04, color: 0x9affd8 }); }
+    a.grip = null;
+  }
+  // two Hands up or more: the body is warded (-50%)
+  if (up.length >= 2 && !a.under) { a.ward = Math.max(a.ward || 0, 0.3); if (!a.wardLook) { a.wardLook = true; a.avatar?.setRim(0xb090ff, 1.3); } }
+  else if (a.wardLook) { a.wardLook = false; restoreRim(a); }
+}
+// Hand Rise: a ring of cracks at a Hand spot (2.5 m, 1.6 s, the ice groaning), 1.2x to whoever is in it; the Hand bursts up
+// and its hole stays open while it stands. Never in lamp light, never where the last one was cut
+function riseHand(a, pl) {
+  const S = G.zone.L.spots, used = handsUp(a).map((h) => h.spot);
+  const free = (S.hands || []).filter((s) => !used.includes(s) && s !== a.lastSpot && !lampLightAt(s.x, s.z));
+  if (!free.length) { (a.hq ||= []).push(a.t + 2); return; }
+  free.sort((p, q) => Math.hypot(p.x - pl.x, p.z - pl.z) - Math.hypot(q.x - pl.x, q.z - pl.z));
+  const s = free[Math.min(free.length - 1, rand.int(0, 2))];
+  a.rising = (a.rising || 0) + 1; a.lastSpot = s;
+  teleCircle(s.x, s.z, 2.5, 1.6, 0xff6a30); bigTele(a, 1.6);
+  crackAt(s.x, s.z, 2.5, 1, { src: 'hand' }); iceShards(s.x, s.z, 10);
+  Audio.sfx('handRise', { x: s.x, z: s.z }); Audio.sfx('iceCreak', { x: s.x, z: s.z, vol: 0.8 });
+  later(1.6, inZone(a, () => {
+    a.rising = Math.max(0, (a.rising || 1) - 1);
+    breakAt(s.x, s.z, 1.2); iceShards(s.x, s.z, 18); splashFx(s.x, s.z, 1.6); shake(0.3);
+    const p = G.player; if (!p.dead && Math.hypot(p.x - s.x, p.z - s.z) < 2.5 + p.radius * 0.5) hitHero(a, p, 1.2, { push: 7, kx: p.x - s.x, kz: p.z - s.z });
+    const h = spawnMonster('skotosHand', s.x, s.z, { level: a.level });
+    h.hand = a; h.awake = true; h.aggro = true; h.spot = s; h.rot = angleTo(s.x, s.z, p.x, p.z); h.mvT = 1.4 + rand.range(0, 1.5);
+    h.avatar?.play('rise', 1); G.actors.push(h); (a.handList ||= []).push(h);
+    handHole(h, true); tally(a, 'handRise');
+  }));
+}
+// the cells under a Hand are held open (ice.js I.held: no beam or Frost Nova closes them while it stands)
+function handHole(h, on) {
+  const I = ICE, L = G.zone.L; if (!I || !L?.ice) return;
+  I.held ||= new Set();
+  for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) { const ix = Math.floor(h.x) + dx, iz = Math.floor(h.z) + dz; if (ix < 0 || iz < 0 || ix >= L.w || iz >= L.h) continue; if (on) I.held.add(iz * L.w + ix); else I.held.delete(iz * L.w + ix); }
+}
+// a Hand sent under (the beam, a phase): it sinks, and comes up again (at another spot) after wait seconds (-1: never)
+function handSink(a, h, wait) {
+  if (h.sinking || h.dead) return;
+  h.sinking = true; h.under = true; killTele(h.tele); h.tele = null;
+  h.avatar?.play('sink', 1); splashFx(h.x, h.z, 1.2);
+  later(0.9, () => { if (!h.removed) h.remove(); });
+  if (wait >= 0) (a.hq ||= []).push(a.t + wait);
+}
+// Sweep: a 6 m cone (1.2 s), 1.1x and thrown; the thin ice in it cracks a stage
+function handSweep(a, h, pl) {
+  const rot = angleTo(h.x, h.z, pl.x, pl.z);
+  h.busy = true; h.rot = rot;
+  h.tele = teleCone(h.x, h.z, rot, 6, 1.2, 1.2, 0xff5a20); bigTele(a, 1.2);
+  h.avatar?.play('sweep', 1, { hitIn: 1.2 }); Audio.sfx('skotosSweep', { x: h.x, z: h.z, vol: 0.6 });
+  later(1.2, inZone(a, () => {
+    h.busy = false; h.tele = null; if (h.dead || h.sinking) return;
+    const p = G.player; if (!p.dead && inCone(h.x, h.z, rot, 6, 1.2, p)) hitHero(a, p, 1.1, { push: 8, kx: p.x - h.x, kz: p.z - h.z });
+    crackCone(h.x, h.z, rot, 6, 1.2, 1, { src: 'hand' }); tally(a, 'sweep');
+  }));
+}
+// Lash: a sea-green 9 x 1.6 m line (1.0 s), 1.0x and Grabbed: pulled 4 m toward the Hand (never past the first deep cell or
+// a wall) and held 1 s. A roll in the warning slips it; a blow worth a tenth of the Hand's life frees her
+function handLash(a, h, pl) {
+  const rot = angleTo(h.x, h.z, pl.x, pl.z), stamp = pl.dodgeStamp || 0;
+  h.busy = true; h.rot = rot;
+  h.tele = teleLine(h.x, h.z, rot, 9, 1.6, 1.0, SEA); bigTele(a, 1.0);
+  h.avatar?.play('lash', 1, { hitIn: 1.0 }); Audio.sfx('handLash', { x: h.x, z: h.z, vol: 0.8 });
+  later(1.0, inZone(a, () => {
+    h.busy = false; h.tele = null; if (h.dead || h.sinking) return;
+    lashLands(a, h, rot, stamp, 0.1);
+  }));
+}
+function lashLands(a, h, rot, stamp, free) {
+  const p = G.player, ux = Math.sin(rot), uz = Math.cos(rot);
+  for (let d = 1; d < 9; d += 0.7) P({ x: h.x + ux * d, y: 1.0, z: h.z + uz * d, life: 0.3, size: 0.28, size1: 0.05, color: 0x9affd8 });
+  if (p.dead || (p.dodgeStamp || 0) !== stamp || p.iframes > 0 || !inLine(h.x, h.z, rot, 9, 1.6, p)) { tally(a, 'lashMissed'); return; }
+  if (hitHero(a, p, 1.0, { kx: h.x - p.x, kz: h.z - p.z }) > 0) grip(a, h, p, free);
+}
+// pulled toward what grabbed her (0.35 s) and held there for a second (a path that stops: player.js follows it)
+function grip(a, h, p, free) {
+  if (p.pull || G.mode !== 'play') return;
+  const dx = h.x - p.x, dz = h.z - p.z, l = Math.hypot(dx, dz), k = Math.min(4, l - (h.radius + p.radius + 0.5));
+  let tx = p.x, tz = p.z;
+  if (k > 0.3) { const f = G.zone.map.castT(p.x, p.z, p.x + (dx / l) * k, p.z + (dz / l) * k, 0.3); tx = p.x + (dx / l) * k * f; tz = p.z + (dz / l) * k * f; }
+  const L0 = Math.max(0.01, Math.hypot(tx - p.x, tz - p.z)), len = L0 * (1.35 / 0.35);
+  p.pull = { t: 1.35, t0: 1.35, sx: p.x, sz: p.z, x: tx, z: tz, path: [{ x: p.x, z: p.z, d: 0 }, { x: tx, z: tz, d: L0 }, { x: tx, z: tz, d: len }], len }; p.act = null;
+  a.grip = { h, pull: p.pull, hp0: h.hp, free };
+  number(p.x, 2.5, p.z, t('hud.grabbed'), 'text', '#7af0c8');
+  tally(a, 'grabbed');
+}
+
+// ---------- the body's own blows ----------
+// the Black Wave: a 18 x 5 m line from it across the arena (1.4 s), the ice along it darkening: 1.2x and Cold +20, every
+// thin cell on it a stage. Twice running in the last phase
+function blackWave(a, pl) {
+  const rot = angleTo(a.x, a.z, pl.x, pl.z), x0 = a.x, z0 = a.z, n = a.waveN++;
+  a.rot = rot;
+  a.tele = teleLine(x0, z0, rot, 18, 5, 1.4, 0xd02a6a); bigTele(a, 1.4);
+  for (let k = 0; k < 14; k++) later(k * 0.09, inZone(a, () => { const u = 2 + (k / 14) * 16; P({ add: false, x: x0 + Math.sin(rot) * u + rand.range(-2, 2), y: 0.15, z: z0 + Math.cos(rot) * u + rand.range(-2, 2), vy: 0.2, life: 1.4, size: 1.2, size1: 2.2, color: 0x06060c, alpha: 0.55, alpha1: 0 }); }));
+  a.avatar?.play('sweep', 1, { hitIn: 1.4 }); Audio.sfx('skotosInhale', { vol: 0.8 });
+  return { t: 1.4, noFace: true, fn() {
+    Audio.sfx('skotosBreath', { vol: 1 }); shake(0.35); a.waved = true;
+    const ux = Math.sin(rot), uz = Math.cos(rot);
+    for (let d = 2; d < 18; d += 0.8) P({ add: false, x: x0 + ux * d, y: 0.6, z: z0 + uz * d, vx: ux * 6, vy: rand.range(0.5, 2), vz: uz * 6, life: 0.7, size: 1.0, size1: 2.4, color: 0x0a0812, alpha: 0.6, alpha1: 0 });
+    crackLine(x0, z0, x0 + ux * 18, z0 + uz * 18, 5, 1, { src: 'skotos' });
+    const p = G.player; if (!p.dead && inLine(x0, z0, rot, 18, 5, p)) { hitHero(a, p, 1.2, { cold: 20, push: 6, kx: ux, kz: uz }); tally(a, 'waveHit'); }
+  }, after: 0.4, chain: a.phase === 2 && n < 1, chainFn: blackWave };
+}
+// Drink the Light (phase 1): a 2 s channel, the light streaming into its chest; every light within 12 m of her goes out for
+// 6 s (the cairns, the Cradle's ring). A blow worth 4% of its life breaks it (SKOTOS.tick)
+function drinkLight(a, pl) {
+  a.avatar?.play('drink', 1, { hitIn: 2.0 }); Audio.sfx('skotosDrink', { vol: 0.9 });
+  a.tele = teleCircle(pl.x, pl.z, 12, 2.0, 0x6a4aa0); bigTele(a, 2.0);
+  for (let k = 0; k < 20; k++) later(k * 0.1, inZone(a, () => { const p = G.player, g = rand.range(0, 6.28), r = rand.range(2, 10); P({ x: p.x + Math.sin(g) * r, y: 1.2, z: p.z + Math.cos(g) * r, vx: (a.x - p.x) * 0.5, vy: 2.2, vz: (a.z - p.z) * 0.5, life: 1.2, size: 0.3, size1: 0.05, color: 0xffd8a0, drag: 0.3 }); }));
+  return { t: 2.0, drink: true, hp0: a.hp, noFace: true, fn() {
+    const p = G.player;
+    for (const it of G.zone.act5?.cairns || []) if (it.lit && Math.hypot(it.x - p.x, it.z - p.z) < 12) { it.mesh?.userData.setLit?.(false); const r0 = it.lightR; it.lightR = 0; shrinkPool(getLightPool('l5:cairn:' + it.i), 0, 6); later(6, () => { it.lightR = r0; if (it.lit) it.mesh?.userData.setLit?.(true); }); }
+    a.drinkT = 6; glowBurst(a.x, 5, a.z, 0x2a1a40, 40, 4, 0.5, 1); tally(a, 'drunk');
+  }, after: 0.6 };
+}
+// a slam of the body's own arm on her (3.2 m, 1.2 s, 1.4x): the robe's reach is 7 m, and she can stand at the ice edge
+function bodySlam(a, pl) {
+  const tx = pl.x, tz = pl.z;
+  a.rot = angleTo(a.x, a.z, tx, tz);
+  a.tele = teleCircle(tx, tz, 3.2, 1.2, 0xff4020); bigTele(a, 1.2);
+  a.avatar?.play('slam', 1, { hitIn: 1.2 }); Audio.sfx('skotosSlam', { x: a.x, z: a.z, vol: 0.6, pitch: 1.2 });
+  return { t: 1.2, noFace: true, fn() {
+    explosion(tx, tz, 3, 0x2a2440, { smoke: 0x0e0c14, shake: 0.5 }); iceShards(tx, tz, 14); Audio.sfx('skotosSlam', { x: tx, z: tz });
+    const p = G.player; if (!p.dead && Math.hypot(p.x - tx, p.z - tz) < 3.2 + p.radius * 0.5) hitHero(a, p, 1.4, { push: 8, kx: p.x - tx, kz: p.z - tz });
+    crackAt(tx, tz, 3, 1, { src: 'skotos' });
+  }, after: 0.6 };
+}
+
+// ---------- phase 2: the Night ----------
+// (again: a fight left behind past the third Remember starts its Night over at 65%: story.js hid her name again)
+function skotosNight(a, again) {
+  const z = G.zone, c = arena(a);
+  a.lockPhase = 1; a.hpFloor = a.hpMax * 0.3; a.floorSaid = false; a.falterT = 2;
+  if (again) {
+    a.hp = Math.max(a.hp, a.hpMax * 0.649); a.remembers = 0; a.phase = 1; a.wrapped = false; a.relit = false; a.rolled = false;
+    removeBeam('skotosBeam'); a.beam = null; a.beamOffT = 0; dropCoil(a); dropWrap(a); a.move = null; a.dash = null;
+    tally(a, 'nightAgain');
+  }
+  a.atmK = 0; a.atmFrom = ATMOS.farlightFight; a.cairnSeen = new Set();
+  for (const it of z.act5?.cairns || []) if (it.lit) it.snuff?.();
+  a.move = null; killTele(a.tele); a.tele = null; a.mcd.slam = 4;
+  a.avatar?.play('roar', 1); Audio.sfx('skotosRoar', { vol: 1 }); glowBurst(a.x, 6, a.z, 0x1a1428, 60, 6, 0.6, 1.4);
+  // it goes under
+  a.nb = { st: 'sinking', t: 1.4, ang: angleTo(c.x, c.z, a.x, a.z), R: 12, x: a.x, z: a.z };
+  later(0.3, inZone(a, () => a.avatar?.play('sink', 1)));
+  if (!again) tally(a, 'night');
+}
+// the shadow under the ring, the Breach where she chooses, up for 4.5 s (one Lash), and under again
+function nightTick(a, dt, pl) {
+  const N = a.nb, c = arena(a);
+  if (N.st === 'sinking') {
+    a.y = (a.y ?? -4.2) - dt * 5;
+    if ((N.t -= dt) <= 0) { N.st = 'down'; N.t = bcd(N.first ? 9 : 4) - (a.early ? 4 : 0); N.first = true; a.early = false; a.under = true; a.hidden = true; for (const k of ['burn', 'poison']) a.status[k] = 0; }
+    return;
+  }
+  if (N.st === 'down') {
+    const want = angleTo(c.x, c.z, pl.x, pl.z), diff = angleDiff(N.ang, want);
+    N.R = damp(N.R, clamp(Math.hypot(pl.x - c.x, pl.z - c.z), 8, 12.5), 0.6, dt);
+    N.ang += clamp(diff * 3, -1, 1) * ((a.def.underSpeed || 4) / N.R) * dt + Math.sin(a.t * 0.7) * 0.05 * dt;
+    N.x = c.x + Math.sin(N.ang) * N.R; N.z = c.z + Math.cos(N.ang) * N.R;
+    setShade(3, N.x, N.z, 5, 1);
+    if (Math.random() < dt * 10) { const g = N.ang + Math.sign(diff || 1) * 6 / N.R; P({ add: false, x: c.x + Math.sin(g) * N.R + rand.range(-0.8, 0.8), y: 0.1, z: c.z + Math.cos(g) * N.R + rand.range(-0.8, 0.8), vy: 0.6, life: 0.7, size: 0.18, size1: 0.3, color: 0xd8e8f0, alpha: 0.6, alpha1: 0 }); }
+    const under = Math.hypot(pl.x - N.x, pl.z - N.z) < 5 ? 1 : 0;
+    if (under !== N.under) { N.under = under; Audio.mood({ under }); }
+    if ((N.t -= dt) <= 0 && roomFor(a) && !pl.dead && heroInArena(a, 4) && !(a.dazed > 0) && !remembering()) breachAt(a, pl);
+    return;
+  }
+  if (N.st === 'tele') {
+    N.x = damp(N.x, N.p.x, 4, dt); N.z = damp(N.z, N.p.z, 4, dt); setShade(3, N.x, N.z, 5, 1);
+    if (N.ram && Math.random() < dt * 14) iceShards(N.p.x + rand.range(-2, 2), N.p.z + rand.range(-2, 2), 3);
+    if (!N.ram && Math.random() < dt * 10) splashFx(N.p.x + rand.range(-1.5, 1.5), N.p.z + rand.range(-1.5, 1.5), 0.8);
+    if ((N.t -= dt) <= 0) breachUp(a, pl);
+    return;
+  }
+  if (N.st === 'up') {
+    a.y = damp(a.y, -5.2, 3, dt);
+    N.t -= dt;
+    if (N.lashAt != null && N.t <= N.lashAt && !(a.dazed > 0) && roomFor(a) && !remembering()) { N.lashAt = null; bodyLash(a, pl); }
+    if (N.t <= 0 && !(a.dazed > 0) && !a.lashing) { N.st = 'sinking'; N.t = 1.0; a.avatar?.play('sink', 1); splashFx(a.x, a.z, 2); Audio.sfx('splash', { x: a.x, z: a.z, vol: 0.8 }); N.ang = angleTo(c.x, c.z, a.x, a.z); N.R = clamp(Math.hypot(a.x - c.x, a.z - c.z), 8, 12.5); }
+  }
+}
+// where it comes up: an open hole within 7 m of her if there is one (1.2 s of boiling water, 1.6x); else up under her if
+// she stands on thin ice (1.5 s, the ice bulging white, 1.8x, a ram that breaks 3 m); else the thin ice nearest her
+function breachAt(a, pl) {
+  const N = a.nb, L = G.zone.L;
+  let p = holeNear(pl.x, pl.z, 7), ram = false;
+  if (!p) {
+    ram = true;
+    if (iceAt(pl.x, pl.z) === 'thin') p = { x: pl.x, z: pl.z };
+    else {
+      let bd = 1e9;
+      for (let dz = -12; dz <= 12; dz++) for (let dx = -12; dx <= 12; dx++) { const ix = Math.floor(pl.x) + dx, iz = Math.floor(pl.z) + dz; if (ix < 0 || iz < 0 || ix >= L.w || iz >= L.h || !L.ice?.[iz * L.w + ix]) continue; const d2 = dx * dx + dz * dz; if (d2 < bd && G.zone.map.walkable(ix + 0.5, iz + 0.5)) { bd = d2; p = { x: ix + 0.5, z: iz + 0.5 }; } }
+    }
+  }
+  if (!p) p = { x: N.x, z: N.z };
+  N.st = 'tele'; N.t = ram ? 1.5 : 1.2; N.p = p; N.ram = ram;
+  a.tele = teleCircle(p.x, p.z, 3.5, N.t, 0xff4020); bigTele(a, N.t);
+  if (ram) { ring(p.x, p.z, 3, ICE_W, N.t); Audio.sfx('iceCreak', { x: p.x, z: p.z, vol: 1 }); Audio.sfx('iceCrack2', { x: p.x, z: p.z, vol: 0.7 }); }
+  else Audio.sfx('splash', { x: p.x, z: p.z, vol: 0.8 });
+  Audio.sfx('skotosInhale', { vol: 0.6 });
+  tally(a, ram ? 'ramTele' : 'holeTele');
+}
+function breachUp(a, pl) {
+  const N = a.nb, p = N.p;
+  if (N.ram) breakAt(p.x, p.z, 3);
+  surfaceAt(a, p);
+  const dd = Math.hypot(pl.x - p.x, pl.z - p.z);
+  if (!pl.dead && dd < 3.5 + pl.radius * 0.5) hitHero(a, pl, N.ram ? 1.8 : 1.6, { push: 10, kx: pl.x - p.x, kz: pl.z - p.z });
+  // Seared if it came up within 2 m of a lit cairn's light; else Exposed
+  const seared = (G.zone.act5?.cairns || []).some((it) => it.lit && it.lightR > 0 && Math.hypot(it.x - p.x, it.z - p.z) < it.lightR + 2);
+  addVuln(a, seared ? 'seared' : 'exposed', 4.5);
+  N.st = 'up'; N.t = 4.5; N.lashAt = 3.2;
+  tally(a, seared ? 'breachSeared' : 'breach');
+}
+function surfaceAt(a, p) {
+  a.x = p.x; a.z = p.z; a.under = false; a.hidden = false; a.y = -8;
+  if (a.avatar) { a.avatar.group.visible = true; a.avatar.play('surface', 1); }
+  a.rot = angleTo(a.x, a.z, G.player.x, G.player.z);
+  setShade(3, 0, 0, 0, 0); Audio.mood({ under: 0 });
+  splashFx(p.x, p.z, 3); iceShards(p.x, p.z, 26); shake(0.6);
+  Audio.sfx('skotosRise', { x: p.x, z: p.z, vol: 0.8 }); Audio.sfx('iceBreak', { x: p.x, z: p.z });
+}
+// up out of the ice, it reaches for her once: a Lash of its own arm (as a Hand's; a blow on it for 2% of its life frees her)
+function bodyLash(a, pl) {
+  const rot = angleTo(a.x, a.z, pl.x, pl.z), stamp = pl.dodgeStamp || 0;
+  a.lashing = true; a.rot = rot;
+  a.tele = teleLine(a.x, a.z, rot, 9, 1.6, 1.0, SEA); bigTele(a, 1.0);
+  a.avatar?.play('lash', 1, { hitIn: 1.0 }); Audio.sfx('handLash', { x: a.x, z: a.z });
+  later(1.0, inZone(a, () => { a.lashing = false; a.tele = null; if (a.under) return; lashLands(a, a, rot, stamp, 0.02); }));
+}
+// Selna remembered (story.js): it is torn up wherever its shadow is, dazed 3 s and Exposed
+on('selnaRemembered', (b) => { if (b?.kind === 'skotos' && !b.dead) tornUp(b); });
+function tornUp(a) {
+  const N = a.nb; if (!N || a.phase !== 1) return;
+  if (N.st !== 'up') { killTele(a.tele); a.tele = null; surfaceAt(a, N.st === 'tele' ? N.p : { x: N.x, z: N.z }); }
+  N.st = 'up'; N.t = 4.5; N.lashAt = null;
+  daze(a, 3); addVuln(a, 'exposed', 4.5);
+  tally(a, 'tornUp');
+}
+// forgotten (12 s with no one to remember her): it mends 4% (never above 65%) and its next Breach comes 4 s early
+on('selnaForgotten', (b) => {
+  if (b?.kind !== 'skotos' || b.dead) return;
+  b.hp = Math.max(b.hp, Math.min(b.hpMax * 0.65, b.hp + b.hpMax * 0.04));
+  b.hpShow = 3; glowBurst(b.x, 3, b.z, 0x2a1a40, 24, 3, 0.4, 0.8);
+  if (b.nb?.st === 'down') b.nb.t -= 4; else b.early = true;
+  tally(b, 'forgotten');
+});
+// an echo has no Selna: each cairn she lights again in the Night tears it up once and counts as a Remember
+function echoCairns(a) {
+  for (const it of G.zone.act5?.cairns || []) if (it.lit && !a.cairnSeen.has(it)) { a.cairnSeen.add(it); a.remembers = (a.remembers || 0) + 1; tornUp(a); }
+}
+// an Icemaw leaves the ice edge (at 55% and at 40%)
+function callIcemaw(a) {
+  const L = G.zone.L, side = rand.sign();
+  let p = null;
+  for (let k = 0; k < 30 && !p; k++) { const x = a.home.x + side * rand.range(6, 13), z = a.home.z + rand.range(-2, 3), i = Math.floor(z) * L.w + Math.floor(x); if (L.sea?.[i]) p = { x, z }; }
+  if (!p) return;
+  setShade(2, p.x, p.z, 2.2, 1); later(1.2, inZone(a, () => setShade(2, 0, 0, 0, 0)));
+  const m = spawnMonster('icemaw', p.x, p.z, { level: Math.max(1, a.level - 2) });
+  m.aggro = true; G.actors.push(m); tally(a, 'icemaw');
+}
+
+// ---------- phase 3: the Farthest Light ----------
+// Wrap the Light: it rises to its full height at the ice edge and wraps two Hands round the dark tower (3 s, she cannot be
+// hurt); the cairns go out, the thin ring cracks to stage 2; the keepers come (story.js 'skotosWrap'). Held at 30% until
+// Whitecliff's fire is given to the Light (story.js 'farLightGiven'; an echo's light comes back by itself after 6 s)
+function wrapLight(a) {
+  const z = G.zone, S = z.L.spots, FL = S.farLight, pl = G.player, c = arena(a);
+  a.nb = null; a.wrapped = true; a.lockPhase = null; a.hpFloor = a.hpMax * 0.299;
+  setShade(3, 0, 0, 0, 0); Audio.mood({ under: 0 });
+  if (a.under || a.hidden) { a.under = false; a.hidden = false; if (a.avatar) a.avatar.group.visible = true; a.y = -9; }
+  a.x = a.home.x; a.z = a.home.z; a.dazed = 0; a.dmgTaken = null; a.move = null; killTele(a.tele); a.tele = null;
+  a.avatar?.play('wrap', 1); Audio.sfx('skotosRoar', { vol: 1 }); shake(0.7);
+  a.invuln = 3; pl.iframes = Math.max(pl.iframes || 0, 3);
+  a.atmK = 0; a.atmFrom = ATMOS.farlightNight;
+  for (const it of z.act5?.cairns || []) if (it.lit) it.snuff?.();
+  // the whole thin ring to a web
+  const L = z.L;
+  for (let dz = -15; dz <= 15; dz++) for (let dx = -15; dx <= 15; dx++) {
+    const ix = Math.floor(c.x) + dx, iz = Math.floor(c.z) + dz; if (ix < 0 || iz < 0 || ix >= L.w || iz >= L.h || !L.ice?.[iz * L.w + ix] || dx * dx + dz * dz > 225) continue;
+    const st = stageAt(ix + 0.5, iz + 0.5); if (st < 2) crackAt(ix + 0.5, iz + 0.5, 0.45, 2 - st, { src: 'wrap' });
+  }
+  // two Hands round the tower (not to be cut: they are the dark's grip on it)
+  if (FL) a.wrapHands = [-1, 1].map((sx) => {
+    const h = spawnMonster('skotosHand', FL.x + sx * 1.5, FL.z - 1.2, { level: a.level });
+    h.hand = a; h.wrap = true; h.under = true; h.awake = true; h.rot = angleTo(h.x, h.z, FL.x, FL.z);
+    h.avatar?.play('smother', 0.6, { loop: true }); G.actors.push(h); splashFx(h.x, h.z, 1.4);
+    return h;
+  });
+  a.mcd.cold = 6; a.mcd.wave = 8; a.mcd.slam = 5; a.mcd.smother = 8;
+  emit('skotosWrap', a); tally(a, 'wrap');
+  if (a.echo) later(6, inZone(a, () => skotosRelit(a)));
+}
+function dropWrap(a) { for (const h of a.wrapHands || []) if (!h.removed) { h.avatar?.play('recoil', 1); later(0.5, () => { if (!h.removed) h.remove(); }); } a.wrapHands = null; }
+on('farLightGiven', (b) => skotosRelit(b));
+// the Light lit: its Hands let go of the tower, the beam sweeps the arena (8 s a turn, 26 m); those who brought the fire lift
+// their lamps to it
+function skotosRelit(a) {
+  if (!a || a.dead || a.kind !== 'skotos' || a.relit) return;
+  a.relit = true; a.hpFloor = 0;
+  dropWrap(a);
+  skotosBeam(a);
+  for (const f of G.zone.follow || []) if (!f.a.removed) { f.a.avatar?.play('castUp', 0.8); later(2.4, () => f.a.avatar?.anim.stop?.(0.4)); }
+  tally(a, 'relit');
+}
+function skotosBeam(a) {
+  const z = G.zone, FL = z.L.spots.farLight; if (!FL || a.dead) return;
+  removeBeam('skotosBeam');
+  a.beam = addBeam(FL.x, FL.z, { prop: z.act5?.farLight, tag: 'skotosBeam', period: 8, len: 26, owner: a, intensity: 30, theta: angleTo(FL.x, FL.z, a.x, a.z) + 1.2 });
+}
+// a pass of the beam: dazed 2.5 s, Seared (x1.5) 4 s, and every Hand under for 5 s
+function sear(a) {
+  daze(a, 2.5); addVuln(a, 'seared', 4);
+  for (const h of handsUp(a)) handSink(a, h, 5);
+  glowBurst(a.x, 6, a.z, 0xfff0c8, 50, 6, 0.5, 1); a.avatar?.play('recoil', 1); shake(0.4);
+  Audio.sfx('lightCatch', { vol: 1 }); Audio.mood({ sear: 1 });
+  tally(a, 'seared');
+}
+// Smother: a Hand climbs the tower and the Coil grips its foot, a 4 s ring over it; if the Coil still lives then, the beam is
+// dark 8 s, and it lets go. The Coil is always Revealed
+function smother(a) {
+  const FL = G.zone.L.spots.farLight, x = FL.x + 2.3, z = FL.z - 1.6;
+  const c = spawnMonster('skotosCoil', x, z, { level: a.level });
+  c.hand = a; c.awake = true; c.aggro = true; c.rot = angleTo(x, z, FL.x, FL.z);
+  addVuln(c, 'revealed', 999, { quiet: true }); c.avatar?.play('smother', 1);
+  G.actors.push(c);
+  a.coil = { c, t: 4, tele: teleCircle(x, z, 2.4, 4, 0xa070ff) };
+  ring(x, z, 2.4, 0xa070ff, 1); iceShards(x, z, 12); Audio.sfx('smother', { x, z });
+  a.avatar?.play('wrap', 1);
+  tally(a, 'coil');
+  return { t: 0.6, fn() {}, after: 0.4 };
+}
+function coilTick(a, dt) {
+  const C = a.coil;
+  if (C.c.dead || C.c.removed) { killTele(C.tele); a.coil = null; tally(a, 'coilCut'); return; }
+  if ((C.t -= dt) > 0) return;
+  removeBeam('skotosBeam'); a.beam = null; a.beamOffT = 8;
+  G.zone.act5?.farLight?.userData.flash?.(0);
+  dropCoil(a); tally(a, 'smothered');
+}
+function dropCoil(a) { const C = a.coil; if (!C) return; killTele(C.tele); if (!C.c.dead && !C.c.removed) { C.c.avatar?.play('sink', 1); later(0.8, () => { if (!C.c.removed) C.c.remove(); }); } a.coil = null; }
+// The Deep Cold: every 15 s a red ring over the whole arena (2.0 s) with blue calms in the light: each lit cairn's 5 m, the
+// keepers' lamps, the skerry's core (6 m). Outside them: 2.0x and Cold +30 (even through Warmed)
+function deepCold(a) {
+  const z = G.zone, c = arena(a), R0 = arenaR(16) + 3, S = z.L.spots, safes = [];
+  for (const it of z.act5?.cairns || []) if (it.lit && it.lightR > 0) safes.push({ x: it.x, z: it.z, r: it.lightR });
+  for (const p of lightPools()) if (p.lamp && p.r > 0 && Math.hypot(p.x - c.x, p.z - c.z) < R0 + 4) safes.push({ x: p.x, z: p.z, r: p.r });
+  if (S.core) safes.push({ x: S.core.x, z: S.core.z, r: 6 });
+  a.tele = teleCircle(c.x, c.z, R0, 2.0, 0xff2a20); bigTele(a, 2.0);
+  const marks = safes.map((s) => teleCircle(s.x, s.z, s.r, 2.0, 0x60c0ff));
+  a.avatar?.play('roar', 1); Audio.sfx('skotosInhale', { vol: 1 }); shake(0.3);
+  return { t: 2.0, noFace: true, fn() {
+    for (const m of marks) killTele(m);
+    for (let i = 0; i < 70; i++) { const g = Math.random() * 6.28, r = Math.random() * R0; P({ add: false, x: c.x + Math.sin(g) * r, y: 0.2, z: c.z + Math.cos(g) * r, vy: rand.range(1, 3), life: 0.9, size: 0.7, size1: 1.6, color: 0xc8e0ff, alpha: 0.5, alpha1: 0 }); }
+    Audio.sfx('skotosBreath', { vol: 1 }); Audio.sfx('freezeWave', { vol: 0.6 }); shake(0.5);
+    const p = G.player, safe = safes.some((s) => Math.hypot(p.x - s.x, p.z - s.z) < s.r);
+    if (!p.dead && Math.hypot(p.x - c.x, p.z - c.z) < R0 && !safe) { hitHero(a, p, 2.0); coldAdd(30, { pierce: true }); tally(a, 'coldHit'); } else tally(a, 'coldSafe');
+  }, after: 0.6 };
+}
+
+// ---------- named: it stands while the names are said, and sinks as the ice closes (story.js 'naming') ----------
+on('say', (k) => { if (typeof k === 'string' && k.startsWith('d.skotos.die2')) for (const a of G.actors) if (a.kind === 'skotos' && a.dead) a.sinkNow = true; });
+on('skotosSink', () => { for (const a of G.actors) if (a.kind === 'skotos' && a.dead) a.sinkNow = true; });
+function skotosDying(a, dt) {
+  const av = a.avatar; if (!av) { a.remove(); return; }
+  if (!a.endDone) {
+    a.endDone = true;
+    for (const h of [...(a.handList || []), ...(a.wrapHands || [])]) if (!h.removed && !h.dead) { h.avatar?.play('sink', 1); later(0.8, () => { if (!h.removed) h.remove(); }); handHole(h, false); }
+    dropCoil(a); setShade(3, 0, 0, 0, 0); setHeroLight(null); Audio.mood({ under: 0 });
+    a.nb = null; a.under = false; a.hidden = false; av.group.visible = true;
+    av.play('recoil', 0.6); later(1.2, () => { if (!a.sinking) av.play('idle', 0.5); });
+  }
+  // (an echo, or no naming to wait for: it goes down at once)
+  if (a.sinking == null && (a.sinkNow || a.echo || a.deadT > 45)) { a.sinking = 0; av.play('sink', 0.7); }
+  if (a.sinking != null) { a.sinking += dt; a.y = (a.y ?? -4.2) - dt * (0.4 + a.sinking * 0.5); if (Math.random() < 0.3) splashFx(a.x + rand.range(-2, 2), a.z + rand.range(-2, 2), 1); }
+  av.group.position.set(a.x, a.y || 0, a.z); av.update(dt, { speed: 0, float: false }); av.setFlash(0);
+  if (a.sinking > 7) a.remove();
 }
 
 export { AI };

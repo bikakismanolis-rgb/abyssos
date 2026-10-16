@@ -128,6 +128,15 @@ export const MONSTERS = {
   reefback: { model: 'reefback', hp: 4.8, dmg: 1.9, speed: 3.4, radius: 0.6, ai: 'brute', reach: 2.6, atk: 'claw', atkTime: 1.6, flesh: 'chitin', xp: 6, big: true, swim: true, weight: 2.5, guard: { arc: 1.2, k: 0.2 }, turn: 1.8, wake: { d: 3, clip: 'wake', pose: 'rock', tide: true, sfx: 'splash', t: 2.0, speed: 1 }, look: { scale: 1.5, tint: 0x6a7080, tintAmt: 0.6 } },
   rimeBear: { model: 'rimeBear', hp: 3.6, dmg: 1.9, speed: 5.6, radius: 1.1, ai: 'charger', reach: 2.3, atk: 'smash', atkTime: 1.6, flesh: 'flesh', xp: 5.5, sfx: 'bear', big: true, iceCharge: true, frostRoar: true, look: { scale: 1.3, tint: 0xf4f2ec, tintAmt: 2.15, rim: 0xd8f0ff, rimI: 0.3 } },
   skua: { model: 'skua', hp: 0.3, dmg: 0.45, speed: 7.5, radius: 0.4, ai: 'bat', reach: 1.0, atk: 'bite', atkTime: 0.8, flesh: 'flesh', xp: 0.5, float: true, lightShy: true, coldBite: 3, feathers: true },
+  // the act's bosses (radius before look.scale: the Tower's 0.7 is 2.8 m at x4, the Skotos's 0.8 is 2.56 m at x3.2).
+  // Skerry, the Walking Tower: the crab with the Skerry Light on its back, a wake through its own flood (wakeSpeed); the
+  // Skotos: anchored waist-deep at the ice edge (float: nothing pushes it), its shadow under the ice in the Night
+  // (underSpeed); its Hands and the Coil are nodes it moves (ai.js), none of them a boss. (Their life and blows are held to
+  // Karthax's against a hero of their level: no step up in hardness from the Ashen Forge)
+  tower: { model: 'tower', hp: 68, dmg: 2.3, speed: 2.4, wakeSpeed: 6.5, radius: 0.7, ai: 'tower', reach: 5.5, atk: 'smash', atkTime: 1.6, flesh: 'chitin', xp: 150, boss: true, big: true, swim: true, sfx: 'spider', dieSfx: 'towerBell', dieClip: 'settle', look: { scale: 4.0, rim: 0x9ad8ff, rimI: 0.35 } },
+  skotos: { model: 'skotos', hp: 100, dmg: 2.6, speed: 0, underSpeed: 4.0, radius: 0.8, ai: 'skotos', reach: 7, atk: 'smash', atkTime: 1.8, flesh: 'skotos', xp: 260, boss: true, anchored: true, float: true, dieSfx: 'skotosRoar', dieClip: 'sink', look: { scale: 3.2, rim: 0x6a4a9a, rimI: 0.6 } },
+  skotosHand: { model: 'skotosHand', hp: 5, dmg: 0, speed: 0, radius: 0.8, ai: 'node', reach: 0, atk: 'cast', atkTime: 9, flesh: 'skotos', xp: 0, big: true, anchored: true, weight: 0, dieClip: 'sink', look: { rim: 0x8a6ac0, rimI: 0.5 } },
+  skotosCoil: { model: 'skotosHand', hp: 4, dmg: 0, speed: 0, radius: 0.8, ai: 'node', reach: 0, atk: 'cast', atkTime: 9, flesh: 'skotos', xp: 0, big: true, anchored: true, weight: 0, dieClip: 'sink', look: { scale: 0.85, rim: 0xc0a0ff, rimI: 0.8 } },
   // the ranger's companion
   spiritWolf: { model: 'spiritWolf', hp: 2, dmg: 1, speed: 7.5, radius: 0.55, ai: 'pet', reach: 1.7, atk: 'bite', atkTime: 0.8, flesh: 'spirit', xp: 0, pet: true }
 };

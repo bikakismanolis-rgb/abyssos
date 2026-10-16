@@ -210,7 +210,8 @@ function worldMat(layer, o = {}) {
   vec3 snc = texture2D(tSnow, vWP.xz * 0.33).rgb;
   float snf = texture2D(tSnow, vWP.xz * 1.9 + vWP.y * 0.7).g;
   float sny = wN.y + (snc.r - 0.5) * 0.3 + (snf - 0.5) * 0.35 + clamp(vWP.y, 0.0, 6.0) * 0.02;
-  float snw = smoothstep(0.5, 0.95, sny) * 0.68 + smoothstep(0.86, 1.0, sny) * 0.3;
+  // (only what truly faces the sky: on a scan's many tilted facets a lower ramp whitened most of a rock face)
+  float snw = smoothstep(0.6, 0.97, sny) * 0.62 + smoothstep(0.88, 1.0, sny) * 0.32;
   wc = mix(wc, snc * 1.08 * mix(vec3(0.72, 0.8, 0.94), vec3(1.0), smoothstep(0.55, 0.95, wN.y)), snw);` : SN ? `
   // snow settles on whatever faces the sky, thicker higher up the slope
   vec3 snc = texture2D(tSnow, vWP.xz * 0.33).rgb;
@@ -1118,10 +1119,11 @@ function ground4(type) {
 function ground5(type) {
   const A = lay4('rime/snow', 'snow', 'flags'), own = A === 'rime/snow', snowy = own || A === 'snow';
   const B = type === 'coast' ? lay4('rime/shore', 'gravel', 'mud') : lay4('rime/ice', 'snow', 'flags');
-  // (the shore's stone and the ice read at two to three times their scans' size: at the scans' own they turned to a grit
-  // like asphalt from the play camera; the trodden snow larger and softer than its scan too)
-  return { A, B, P: lay4('rime/snowTrod', 'snow', 'trail'), W: lay4('rime/seaCliff', 'cliff', 'wall') || undefined,
-    s: [3.2, type === 'coast' ? 6.2 : 7.5, 4.6], r: [0.6, 0.8, 0.85], ns: 1.6, tint: own ? 0xd4dae4 : 0xbcc4d0, dual: [1, 0], ws: 5.6, sat: own ? 0.9 : snowy ? 0.75 : 0.35,
+  // (the shore's wet sand and the ice read at two to three times their scans' size: at the scans' own the ice turned to
+  // crazy paving from the play camera; the trodden snow near its scan's own, so its boot prints are a walker's)
+  const trod = lay4('rime/snowTrod', 'snow', 'trail');
+  return { A, B, P: trod, W: lay4('rime/seaCliff', 'cliff', 'wall') || undefined,
+    s: [3.2, type === 'coast' ? 5.0 : 7.5, trod === 'rime/snowTrod' ? 2.6 : 4.6], r: [0.6, 0.8, 0.85], ns: 1.6, tint: own ? 0xd4dae4 : 0xbcc4d0, dual: [1, 0], ws: 5.6, sat: own ? 0.9 : snowy ? 0.75 : 0.35,
     // (a stand-in shore is drawn cold and grey: the base set's mud would read as a meadow)
     hueB: type === 'farlight' ? (B !== 'rime/ice' ? [0.62, 0.82, 1.08] : null) : B === 'rime/shore' ? null : B === 'gravel' ? [0.86, 0.9, 0.96] : [0.62, 0.66, 0.74],
     fake: !snowy, glint: true, wet: type === 'coast', aur: true, edge: type === 'farlight', act5: true };
@@ -1192,7 +1194,9 @@ function buildGround(L, group) {
       if (jit) { const j = (vz * (w + 1) + vx) * 2; pos.setX(i, vx + jit[j]); pos.setZ(i, vz + jit[j + 1]); }
       // (tidal: a bed the tide reaches and nothing over it; the thin ice's cells carry the sea's bed but are no shore)
       let walls = 0, tide = 0, thick = 0, tw = 0;
-      const tidal = (c) => L.bed && L.bed[c] < BED_DRY && !L.thick[c] && !L.ice[c] && !L.window[c] && !L.deck[c];
+      // (a footprint standing on the flats, a hull or a boulder, keeps the shore under it: its corners keep the flats' beds,
+      // gen5 vbed. Drawn as land, each hull stood on a staircase of snow)
+      const tidal = (c) => L.bed && ((L.bed[c] < BED_DRY && !L.thick[c] && !L.ice[c] && !L.window[c] && !L.deck[c]) || (L.vbed && !cells[c] && !L.low[c] && [0, 1, w + 1, w + 2].every((d) => L.vbed[c + Math.floor(c / w) + d] < BED_DRY - 1 && Math.abs(L.hgt[c + Math.floor(c / w) + d]) < 0.3)));
       for (let dz = -2; dz <= 1; dz++) for (let dx = -2; dx <= 1; dx++) { const c = cellAt(vx + dx, vz + dz); if (c < 0 || (!cells[c] && !L.low[c])) walls++; if (c >= 0 && tidal(c)) tw++; }
       for (const [dx, dz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) { const c = cellAt(vx + dx, vz + dz); if (c < 0) continue; if (tidal(c)) tide++; if (L.thick[c]) thick++; if (watW && (L.sea[c] || sealedF(c))) watW[i] += 0.25; }
       wp = clamp(pv * 1.25, 0, 1);
@@ -1365,7 +1369,8 @@ function groundMat(cfg, type) {
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLay = aLay; vGP = (modelMatrix * vec4(transformed, 1.0)).xz; vGN = normal;' + (X.sap ? ' vSap = aSap;' : '') + (X.wall ? ' vGY = (modelMatrix * vec4(transformed, 1.0)).y;' : '') + (X5.wet ? ' vBed = aBed; vBay = aBay;' : '') + (X5.edge ? ' vWat = aWat;' : '') + (X5.any ? ' vGW = (modelMatrix * vec4(transformed, 1.0)).xyz;' : '')
       // (the aurora's light on the ground: slow ribbons of green drifting over it, worked out at the vertices, a metre apart;
       // under the black aurora its dark curtains crossing it as slow bands)
-      + (X5.aur ? '\n  vGAur = uAur * max(1.0 - uAurDark, uAurFront) > 0.02 ? aurora(vGW.xz * 0.9 + vec2(13.0, -40.0), 0.7, 0.0) * ' + (X5.v5 ? '0.2 + uAurCol * uAur * max(1.0 - uAurDark, uAurFront) * 0.016' : '0.06') + ' : vec3(0.0);\n  vGAurK = uAurDark > 0.02 ? auroraDark(vGW.xz * 0.9 + vec2(13.0, -40.0)) : 0.0;' : ''));
+      // (only on what faces the sky: worked out over x/z, the ribbons ran down a cliff's face as green stripes)
+      + (X5.aur ? '\n  vGAur = uAur * max(1.0 - uAurDark, uAurFront) > 0.02 ? (aurora(vGW.xz * 0.9 + vec2(13.0, -40.0), 0.7, 0.0) * ' + (X5.v5 ? '0.2 + uAurCol * uAur * max(1.0 - uAurDark, uAurFront) * 0.016' : '0.06') + ') * smoothstep(0.55, 0.9, normal.y) : vec3(0.0);\n  vGAurK = uAurDark > 0.02 ? auroraDark(vGW.xz * 0.9 + vec2(13.0, -40.0)) : 0.0;' : ''));
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
 uniform sampler2D tA; uniform sampler2D tB; uniform sampler2D tP; uniform sampler2D tAn; uniform sampler2D tBn; uniform sampler2D tPn;
 uniform vec3 uS; uniform vec3 uR; uniform float uNS;
@@ -1398,8 +1403,8 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
   vec3 cP = texture2D(tP, uP).rgb;
 #endif
  ` + (X5.v5 ? `
-  // (the trodden snow: softer and nearer the snow's own white than its scan, so a path reads as walked, not as grit)
-  cP = mix(cP, cA * vec3(0.84, 0.87, 0.92), 0.62);` : '') + `
+  // (the trodden snow: a little greyer than the snow round it, its boot prints and scuffs kept, so a path reads as walked)
+  cP = mix(cP, cA * vec3(0.84, 0.87, 0.92), 0.25);` : '') + `
   float hA = gH(cA), hB = gH(cB), hP = gH(cP);
   float wB = smoothstep(-0.15, 0.15, vLay.x * 2.0 - 1.1 + (hB - hA) * 1.3);
   vec3 gc = mix(cA, cB, wB); float gh = mix(hA, hB, wB);
@@ -1474,7 +1479,8 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
   }` : '') + (X5.aur ? `
   // the aurora's light drifting over the ground in slow green ribbons (from the vertices); under the black aurora its dark
   // curtains pass over the land as slow bands
-  gEm += vGAur;
+  // (light: the coast's ground gives it back by its whiteness, so on the dark flats it is no green spotlight)
+  gEm += vGAur` + (X5.v5 ? ` * clamp(dot(gc, vec3(0.3, 0.59, 0.11)) * 1.6, 0.12, 1.0)` : '') + `;
   gc *= 1.0 - 0.16 * vGAurK;` : '') + `
   diffuseColor.rgb *= gc * (0.82 + 0.36 * vLay.w);`)
       .replace('#include <roughnessmap_fragment>', `float roughnessFactor = clamp(mix(mix(uR.x, uR.y, wB), uR.z, wP) * (1.12 - 0.25 * gh), 0.3, 1.0);` + (X.sap ? '\n  roughnessFactor = mix(roughnessFactor, 0.14, wS);' : '') + (X5.wet ? '\n  roughnessFactor = mix(roughnessFactor, 0.2, gWet);' : ''))
@@ -1498,7 +1504,12 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
 #endif
   vec3 gN = normalize(vGN), gT = normalize(abs(gN.x) < 0.9 ? vec3(1.0, 0.0, 0.0) - gN * gN.x : vec3(0.0, 0.0, 1.0) - gN * gN.z), gB = cross(gN, gT);` : `
   vec3 gN = normalize(vGN), gT = normalize(vec3(1.0, 0.0, 0.0) - gN * gN.x), gB = cross(gN, gT);`) + `
-  normal = normalize((viewMatrix * vec4(normalize(gT * tn.x + gB * tn.y + gN * tn.z), 0.0)).xyz);
+  normal = normalize((viewMatrix * vec4(normalize(gT * tn.x + gB * tn.y + gN * tn.z), 0.0)).xyz);` + (X5.v5 && X5.glint ? `
+  // the snow's relief raked by a low light from the moon's side: the scene's moon stands high over the hero, so its own
+  // shading all but lost the crust and the drifts, and the snow read as a flat white sheet (the wind's ripples and the
+  // scan's crust shaded as a grazing moon would show them)
+  { vec3 nR = normalize(gT * tn.x + gB * tn.y + gN * tn.z), Lr = vec3(-0.81, 0.4, 0.43);
+    diffuseColor.rgb *= clamp(1.0 + (dot(nR, Lr) - dot(gN, Lr)) * 1.7 * gsk, 0.6, 1.4); }` : '') + `
 #endif`);
   };
   m.customProgramCacheKey = () => 'groundPBR|' + type + (nrm ? '|n' : '') + '|q' + R.quality + (cfg.fake ? '|f' : '') + (cfg.hueB ? '|b' : '') + (cfg.edge ? '|e' : '');

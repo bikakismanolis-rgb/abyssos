@@ -28,7 +28,7 @@ export const SEA = {
   uTime: { value: 0 },
   uLevel: { value: 0 }, uWetLevel: { value: 0 }, uBayLevel: { value: 0 },
   uAur: { value: 0 }, uAurDark: { value: 0 }, uAurFront: { value: 0 }, uAurCol: { value: new THREE.Color(0.1, 1.0, 0.46) },
-  tNoise: { value: null }, tCrack: { value: null }, uMap: { value: new THREE.Vector2(1, 1) },
+  tNoise: { value: null }, tVor: { value: null }, tCrack: { value: null }, uMap: { value: new THREE.Vector2(1, 1) },
   uShade: { value: [V4(), V4(), V4(), V4()] },
   uGlow: { value: Array.from({ length: 8 }, V4) },
   uLights: { value: [V4(), V4()] },
@@ -79,7 +79,32 @@ export function noiseTex() {
   const t = new THREE.DataTexture(d, N, N, THREE.RGBAFormat);
   t.wrapS = t.wrapT = THREE.RepeatWrapping; t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter;
   t.generateMipmaps = true; t.needsUpdate = true;
+  vorTex();
   return (SEA.tNoise.value = t);
+}
+// a Voronoi of 16 x 16 jittered cells on a 256 texel tile, worked out once (vorT in the shaders reads it): r the distance
+// between the nearest two points (0 on a cell's wall, 0.7 cells full scale), g a hash per cell. Read per pixel, the 3 x 3
+// search cost every pixel of ice and of the leads a dozen hashes on the phones
+function vorTex() {
+  if (SEA.tVor.value) return SEA.tVor.value;
+  const N = 256, C = 16, S = N / C, d = new Uint8Array(N * N * 4), pt = new Float32Array(C * C * 2);
+  for (let i = 0; i < C * C; i++) { pt[i * 2] = 0.075 + hashP(i % C, Math.floor(i / C), C, 31) * 0.85; pt[i * 2 + 1] = 0.075 + hashP(i % C, Math.floor(i / C), C, 37) * 0.85; }
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const u = (x + 0.5) / S, v = (y + 0.5) / S, cx = Math.floor(u), cy = Math.floor(v);
+    let d1 = 9, d2 = 9, id = 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const gx = cx + dx, gy = cy + dy, k = (((gy % C) + C) % C) * C + (((gx % C) + C) % C);
+      const qx = gx + pt[k * 2] - u, qy = gy + pt[k * 2 + 1] - v, dd = qx * qx + qy * qy;
+      if (dd < d1) { d2 = d1; d1 = dd; id = k; } else if (dd < d2) d2 = dd;
+    }
+    const o = (y * N + x) * 4;
+    d[o] = Math.round(clamp((Math.sqrt(d2) - Math.sqrt(d1)) / 0.7, 0, 1) * 255);
+    d[o + 1] = Math.round(hashP(id % C, Math.floor(id / C), C, 41) * 255); d[o + 2] = Math.round(clamp(Math.sqrt(d1) / 0.8, 0, 1) * 255); d[o + 3] = 255;
+  }
+  const t = new THREE.DataTexture(d, N, N, THREE.RGBAFormat);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.generateMipmaps = true; t.needsUpdate = true;
+  return (SEA.tVor.value = t);
 }
 // until ice.js hands its crack texture over: every cell intact
 function crackTex() {
@@ -89,10 +114,12 @@ function crackTex() {
 
 // ---------- shared GLSL ----------
 const COMMON = `
-uniform sampler2D tNoise; uniform float uTime;
+uniform sampler2D tNoise; uniform sampler2D tVor; uniform float uTime;
 uniform float uAur; uniform float uAurDark; uniform float uAurFront; uniform vec3 uAurCol; uniform vec2 uMap;
 float sH(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 vec2 sH2(vec2 p) { float n = sH(p); return vec2(n, sH(p + n * 17.3)); }
+// the Voronoi read off its texture (p in cells): x the wall distance (0 on a wall), y the cell's hash
+vec2 vorT(vec2 p) { vec4 v = texture2D(tVor, p * 0.0625); return vec2(v.r * 0.7, v.g); }
 // the aurora's curtains on a sheet of sky (p: metres on it, in world x/z): long east-west arcs some 70 m apart, folded
 // every few tens of metres along their length (so a mirror a few metres wide sees a curtain's folds, not a band) and
 // combed into rays a few metres wide; green at the core, violet at the fringes. soft (0-1): a mirrored aurora is seen
@@ -139,7 +166,7 @@ float shoreN(vec2 P) { vec4 n = texture2D(tNoise, P * 0.11 + vec2(0.37, 0.61)); 
 export const SEA_GLSL = () => COMMON;
 export const SEA_LIT = LIT;
 export const SEA_U = (extra = {}) => Object.assign({
-  tNoise: SEA.tNoise, uTime: SEA.uTime, uAur: SEA.uAur, uAurDark: SEA.uAurDark, uAurFront: SEA.uAurFront, uAurCol: SEA.uAurCol, uMap: SEA.uMap
+  tNoise: SEA.tNoise, tVor: SEA.tVor, uTime: SEA.uTime, uAur: SEA.uAur, uAurDark: SEA.uAurDark, uAurFront: SEA.uAurFront, uAurCol: SEA.uAurCol, uMap: SEA.uMap
 }, extra);
 // the swell, the same in JS (floes, ice.js) as in the water's vertex shader
 export function swellY(x, z, t = SEA.uTime.value) { return (Math.sin(x * 0.21 + z * 0.13 + t * 1.1) + Math.sin(-x * 0.09 + z * 0.27 + t * 0.83)) * 0.5; }
@@ -268,6 +295,12 @@ ${FREEZE}`)
   vec4 n2 = n1.gbar;
   vec2 g = (n1.rg - 0.5) * 1.6 + (n1.ab - 0.5) * 0.3;
 #endif
+  // the waterline drawn in from the cells' bands by the slow ripple read, metres at a time and creeping as it drifts
+  // (where the flats shelve gently, as the Landing's do in straight bands, it ran ruled along a band's edge): what it
+  // uncovers is the wet sand under a hand of water, still walkable; the closed step is left where it is
+#ifndef SEA_LOW
+  dw -= smoothstep(0.32, 0.72, n1.b * 0.7 + n2.r * 0.3) * 0.2 * (1.0 - deep);
+#endif
   // two normals: the ripple's for the glints, a calmer one for what the water mirrors (the sky is far: a fine ripple
   // would scatter it into noise)
   vec3 N = normalize(vec3(g.x * mix(0.12, 0.3, deep), 1.0, g.y * mix(0.12, 0.3, deep)));
@@ -298,9 +331,8 @@ ${FREEZE}`)
   col += uSkyC * (0.25 + 0.5 * smoothstep(0.4, 0.8, n1.r)) * 0.3;
   {
     vec2 bp = P * 2.3 + (n1.ba - 0.5) * 0.7 + vec2(sin(t * 0.4 + P.y * 0.3), cos(t * 0.33 + P.x * 0.3)) * 0.06;
-    vec2 bi = floor(bp), bf = fract(bp); float d1 = 8.0, d2 = 8.0; vec2 bc = vec2(0.0);
-    for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) { vec2 gg = vec2(float(x), float(y)), r = gg + sH2(bi + gg) * 0.9 + 0.05 - bf; float d = dot(r, r); if (d < d1) { d2 = d1; d1 = d; bc = bi + gg; } else if (d < d2) d2 = d; }
-    float edge = sqrt(d2) - sqrt(d1), cellK = sH(bc + 3.7);
+    vec2 bv = vorT(bp);
+    float edge = bv.x, cellK = bv.y;
     float near = smoothstep(0.75, 1.0, vHold + (n1.a - 0.5) * 0.4 + (cellK - 0.5) * 0.25);
     float plate = near * smoothstep(0.08, 0.16, edge - 0.2 * (1.0 - near)) * step(0.62, cellK);
     vec3 pc = vec3(0.07, 0.085, 0.1) * (0.7 + 0.6 * cellK) * amb + skyG * (0.12 + 0.12 * cellK);
@@ -346,6 +378,27 @@ ${FREEZE}`)
     col += vec3(1.0, 0.82, 0.55) * s * Lp.w * deep / (1.0 + dl * 0.04);
   }
 #endif
+  float plateK = 0.0;
+#ifndef SEA_LOW
+  // shore ice: brash plates crowding the water's edge wherever it meets the land, at any tide (their outer edge ragged,
+  // plate by plate, so a shore that runs straight along the cells reads as a frayed band of floating ice, not a rule);
+  // the distance to the waterline taken from the depth's slope, near it
+  {
+    // (only off a steep shore, rock, an islet, a drop: on the flats' gentle shelving the plates strewed the whole wading
+    // water like confetti)
+    float sl0 = fwidth(dep) / max(length(fwidth(P)), 1e-4), sd0 = dw / max(sl0, 0.12);
+    if (sd0 < 1.6 && dw > 0.0 && sl0 > 0.4) {
+      vec2 bp = P * 2.6 + (n1.ba - 0.5) * 0.6 + vec2(sin(t * 0.35 + P.y * 0.3), cos(t * 0.29 + P.x * 0.3)) * 0.04 + 5.3;
+      vec2 bv = vorT(bp);
+      float cellK = bv.y, bedge = bv.x;
+      float near = (1.0 - smoothstep(0.25, 1.0, sd0 + (cellK - 0.5) * 0.9 + (n1.a - 0.5) * 0.5)) * smoothstep(0.4, 0.8, sl0);
+      plateK = near * smoothstep(0.05, 0.12, bedge) * step(0.45, cellK) * (0.55 + 0.45 * cellK);
+      // (grey slush plates, half sunk: white, they read as broken tiles)
+      vec3 pc = vec3(0.1, 0.115, 0.13) * (0.75 + 0.45 * cellK) * amb + uSkyC * (0.25 + 0.2 * cellK);
+      col = mix(col, pc, plateK * 0.85);
+    }
+  }
+#endif
   // foam: where it meets the shore, lapping in moving lines; churned in the Walking Tower's wake
   float shore = 1.0 - smoothstep(0.01, 0.05, dw);
   float lap = smoothstep(0.7, 0.92, sin(dw * 90.0 - t * 2.2 + n1.r * 5.0) * 0.5 + 0.5) * (1.0 - smoothstep(0.03, 0.14, dw)) * smoothstep(0.35, 0.6, n1.a + n1.r * 0.3);
@@ -376,7 +429,7 @@ ${FREEZE}`)
   // no see-through strip over the drop's dark face to trace the cells' steps)
   a = max(a, smoothstep(1.0, 2.2, slope) * 0.95);
   a = max(a, edge * 0.5) * smoothstep(0.006, 0.045, dw);
-  a = max(a, foam * 0.7);
+  a = max(a, max(foam * 0.7, plateK * 0.95));
 #ifndef SEA_FAR
   // frozen: white rime in a frost-crystal pattern; the front glitters as it races out
   vec3 frz = freezeIf(P, vLead, vShore);
@@ -460,8 +513,11 @@ export function shoreJit(L) {
   }
   const C = (x, z) => cls[clamp(z, 0, h - 1) * w + clamp(x, 0, w - 1)];
   const preds = [(c) => c === 2, (c) => c === 3, (c) => c === 1 || c === 5, (c) => c === 5];
+  const edgeC = new Uint8Array(W * (h + 1)), runs = [];
   for (let vz = 2; vz < h - 1; vz++) for (let vx = 2; vx < w - 1; vx++) {
     const c = CORNER.map(([dx, dz]) => C(vx + dx, vz + dz));
+    const k0 = vz * W + vx;
+    if (c.some((q) => q !== c[0])) edgeC[k0] = 1;
     if (c.includes(4)) continue;
     const f = preds.find((g) => { const n = c.filter(g).length; return n && n < 4; });
     if (!f) continue;
@@ -473,8 +529,24 @@ export function shoreJit(L) {
     if (n === 1 || n === 3) { const j = t.indexOf(n === 1); ox = CC[j][0] * 0.7 + nx * 0.2; oz = CC[j][1] * 0.7 + nz * 0.2; }
     else if (t[0] === t[1]) oz = nz * 0.75;          // (a run along x: the edge's normal is z)
     else if (t[0] === t[2]) ox = nx * 0.75;          // (a run along z)
-    const k0 = vz * W + vx;
     out[k0 * 2] = clamp(ox, -0.4, 0.4); out[k0 * 2 + 1] = clamp(oz, -0.4, 0.4);
+    // (a straight run of the tide's own shore, flats against the land or low flats against high, both walkable: listed to
+    // wander further, below)
+    if (n === 2 && (f === preds[2] || f === preds[3]) && (t[0] === t[1] || t[0] === t[2])) {
+      const ax = t[0] === t[1] ? 1 : 0, sl = fbm(vx * 0.09 + 3, vz * 0.09 - 5, seed + 79, 2) - 0.5, qk = ax ? nz : nx;
+      runs.push([k0, ax, sl * 3.4 + qk * 1.1, f === preds[2] ? 0.8 : 0.55]);
+    }
+  }
+  // the tide's long straight shores (the Landing's bands, the flats against the strand) wander up to 0.8 m off the cells'
+  // line (0.55 where the low flats meet the high: the step to closed water at high tide), the corners a cell either side
+  // moving half as far with them so nothing folds: within the 0.4 m a lone corner can take, a 20 m run still read as
+  // ruled. (Not where the strip is narrow, nor at the pits' and the rock's edges: there the cells' line is where she can
+  // stand)
+  for (const [k0, ax, a, cap] of runs) {
+    const st = ax ? W : 1;
+    if (edgeC[k0 - st] || edgeC[k0 + st]) continue;
+    const A = cap * Math.tanh(a / cap);
+    out[k0 * 2 + ax] = A; out[(k0 - st) * 2 + ax] += A * 0.5; out[(k0 + st) * 2 + ax] += A * 0.5;
   }
   return (L.jit5 = out);
 }
@@ -527,6 +599,15 @@ export function buildSea(L, group, quality = R.quality) {
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = cx + dx, nz = cz + dz, n = nz * w + nx; if (nx >= 0 && nz >= 0 && nx < w && nz < h && D[n] > D[i] + 1) { D[n] = D[i] + 1; q.push(n); } }
   }
   const mat = seaMat({ low }), J = shoreJit(L), BY = bayCorners(L);
+  // (the water's bed at a corner of level land: a hand over its wettest cell's, not the land's own averaged in. With the
+  // land's (BED_DRY) in the mean the surface sank under the ground most of a cell out from the shore, so the water's edge
+  // ran along the next row of corners, the cells' line a metre off the land, a pale strip of nothing between)
+  const shoreBed = (vx, vz, key) => {
+    if (!L.bed || vb[key] < 2 || Math.abs(L.hgt?.[key] ?? 0) > 0.3) return vb[key];
+    let m = -99;
+    for (const [dx, dz] of CORNER) { const x = vx + dx, z = vz + dz; if (x >= 0 && z >= 0 && x < w && z < h && L.cells[z * w + x] && L.bed[z * w + x] < BED_DRY && !iceLike(z * w + x)) m = Math.max(m, L.bed[z * w + x]); }
+    return m > -99 ? m + 0.3 : vb[key];
+  };
   const out = new THREE.Group(); out.name = 'sea';
   // (the open water's cells, for the Freeze's spray: sprayTick)
   const open = [];
@@ -549,7 +630,7 @@ export function buildSea(L, group, quality = R.quality) {
       }
       // (held: under and beside the ice with no tidal flat, and always under the jetty, whose deck lies flush with the floor:
       // the flood would cover its planks)
-      pos.push(vx + (J ? J[key * 2] : 0), 0, vz + (J ? J[key * 2 + 1] : 0)); bed.push(vb[key]); hold.push((ice && !fl) || dk ? 1 : 0); ld.push(le); sh.push(sd === 99 ? 0 : sd); fr.push(sl ? 1 : 0); by.push(BY ? BY[key] : 0); lnd.push(la);
+      pos.push(vx + (J ? J[key * 2] : 0), 0, vz + (J ? J[key * 2 + 1] : 0)); bed.push(shoreBed(vx, vz, key)); hold.push((ice && !fl) || dk ? 1 : 0); ld.push(le); sh.push(sd === 99 ? 0 : sd); fr.push(sl ? 1 : 0); by.push(BY ? BY[key] : 0); lnd.push(la);
       return k;
     };
     for (let z = cz0; z < Math.min(h, cz0 + CH); z++) for (let x = cx0; x < Math.min(w, cx0 + CH); x++) {
@@ -683,15 +764,8 @@ varying vec3 vIAur;
 #endif
 varying float vIAurK;
 uniform float uFreezeAll;
-// the edge distance of a world-space Voronoi at p (about 0 on the cell walls): the crack lines
-float vEdge(vec2 p) {
-  vec2 i = floor(p), f = fract(p); float d1 = 8.0, d2 = 8.0;
-  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
-    vec2 gg = vec2(float(x), float(y)), r = gg + sH2(i + gg) * 0.85 + 0.075 - f; float d = dot(r, r);
-    if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
-  }
-  return sqrt(d2) - sqrt(d1);
-}
+// the edge distance of a world-space Voronoi at p (about 0 on the cell walls): the crack lines (off the baked texture)
+float vEdge(vec2 p) { return vorT(p).x; }
 vec3 iceEm = vec3(0.0);`)
       .replace('#include <map_fragment>', `
   vec2 P = vIP.xz; float t = uTime, st = 0.0;
@@ -1015,11 +1089,15 @@ void main() {
   vec3 D = normalize(vD);
   float e = clamp(D.y, 0.0, 1.0), hz = smoothstep(0.0, 0.32, e), t = uTime;
   vec3 col = mix(uHor, uTop, hz);
-  // far headlands and islands standing dim over the horizon (no brighter haze band: the fog's own colour is the horizon's,
-  // and anything drawn far off in the fog stood out against a brighter band as a dark block)
+  // far headlands and islands low over the horizon, in the fog's own colour (as far land drawn in the fog is), the
+  // curtains' glow standing behind them: long gentle rises with ragged crests. (Darker than the fog, steep-sided and
+  // smooth-topped, they stood on the horizon as a row of dark blocks)
   float azh = atan(D.x, -D.z);
-  float isl = max(texture2D(tNoise, vec2(azh * 0.42 + 0.13, 0.71)).r - 0.56, 0.0) * 0.16 + max(texture2D(tNoise, vec2(azh * 1.1 + 0.4, 0.29)).g - 0.6, 0.0) * 0.05;
-  col = mix(col, uHor * 0.82, smoothstep(0.0, 0.004, isl * 0.6 - e) * 0.6);
+  float isl = smoothstep(0.42, 0.8, texture2D(tNoise, vec2(azh * 0.3 + 0.13, 0.71)).r) * (0.012 + 0.014 * texture2D(tNoise, vec2(azh * 1.3 + 0.4, 0.29)).g)
+    + (texture2D(tNoise, vec2(azh * 6.0 + 0.2, 0.47)).b - 0.5) * 0.004 + (texture2D(tNoise, vec2(azh * 19.0, 0.13)).a - 0.5) * 0.0015;
+  // (D.y itself, not e, which stops at 0; and only over the horizontal: under it lies the far sea)
+  float islM = smoothstep(-0.0016, 0.0016, isl - D.y) * smoothstep(-0.003, 0.0, D.y);
+  col = mix(col, uHor, islM);
   // stars: one in a few hundred cells of a grid on the sky
   vec2 sp = D.xz / (D.y + 0.2) * 70.0, c = floor(sp);
   float hs = sH(c), star = step(0.982, hs) * (1.0 - smoothstep(0.05, 0.22, length(fract(sp) - 0.5 - (sH2(c + 3.1) - 0.5) * 0.6))) * smoothstep(0.02, 0.2, e);
@@ -1035,14 +1113,23 @@ void main() {
     float fk = float(k);
     vec4 n = texture2D(tNoise, vec2(az * (0.16 + fk * 0.05) + fk * 0.31 + t * 0.0018, fk * 0.37 + t * 0.0009));
     float fold = sin(az * (1.7 + fk * 1.3) + t * 0.045 + fk * 1.7 + n.g * 3.0);
-    float hem = 0.014 + fk * 0.035 + max(fold, 0.0) * (0.07 + fk * 0.06) + (n.r - 0.5) * 0.05 + sin(az * (9.0 + fk * 4.0) - t * 0.11 + n.b * 4.0) * 0.008;
+    // (a soft max: max() put a corner in the hem where a fold began, and the folds read as the pleats of a tent)
+    float hem = 0.014 + fk * 0.035 + (fold + sqrt(fold * fold + 0.09)) * 0.5 * (0.07 + fk * 0.06) + (n.r - 0.5) * 0.05 + sin(az * (9.0 + fk * 4.0) - t * 0.11 + n.b * 4.0) * 0.008;
     float up = el - hem;
     float sheet = smoothstep(-0.006, 0.002, up) * exp(-max(up, 0.0) * (3.6 + fk * 1.6));
-    float rays = 0.3 + 1.15 * smoothstep(0.25, 0.8, texture2D(tNoise, vec2(az * 3.1 + fk * 1.7 + t * 0.004, up * 0.45 + fk)).a);
+    // (the rays: a fine comb over a coarse one, and how combed a length of curtain is wanders along it, so some lengths hang
+    // in smooth folds and others are drawn into rays; softening as they rise. One even comb read as a barcode)
+    float r1 = texture2D(tNoise, vec2(az * 3.1 + fk * 1.7 + t * 0.004, up * 0.45 + fk)).a;
+    float r2 = texture2D(tNoise, vec2(az * 0.83 + fk * 0.61 - t * 0.0025, up * 0.25 + fk * 0.5)).b;
+    float comb = smoothstep(0.3, 0.75, texture2D(tNoise, vec2(az * 0.37 + fk * 0.9, fk * 0.23 + t * 0.0012)).g) * (1.0 - 0.5 * smoothstep(0.04, 0.3, up));
+    float rays = mix(0.6 + 0.7 * smoothstep(0.2, 0.8, r2), 0.25 + 1.2 * smoothstep(0.25, 0.8, r1 * 0.65 + r2 * 0.35), comb);
     float lit = smoothstep(0.2, 0.62, n.g + 0.28 * sin(az * 1.9 + t * 0.03 + fk * 2.3)) * (1.0 - fk * 0.24) * (0.45 + 0.55 * smoothstep(-0.5, 0.4, cos(az)));
     vec3 cc = mix(uAurCol, vec3(0.42, 0.12, 0.62), smoothstep(0.0, 0.24, up));
     cc = mix(cc, vec3(0.8, 1.0, 0.9), exp(-max(up, 0.0) * 110.0) * 0.55);
     acc += cc * sheet * rays * lit * (1.0 + 1.5 * exp(-max(up, 0.0) * 40.0));
+    // (under the hem the curtain's light scatters down toward the horizon: a faint glow the far headlands stand against,
+    // where the sky under the curtains was a black band)
+    acc += uAurCol * lit * exp(min(up, 0.0) * 16.0) * (1.0 - step(0.0, up) * (1.0 - exp(-up * 30.0))) * (0.14 - fk * 0.03);
     // (the black curtains combed into rays as the green ones are: plain, their blots stood in the haze like doorways)
     blk = max(blk, sheet * lit * smoothstep(0.3, 1.25, rays));
   }
@@ -1060,9 +1147,11 @@ void main() {
   // the black aurora: the curtains turn black and blot what is behind them, their edges violet
   vec3 edgeV = vec3(0.16, 0.06, 0.28) * blk * (1.0 - blk) * 2.0;
   acc = mix(acc, edgeV * (0.6 + 0.4 * bands), dk * 0.92) * (1.0 - dk * bands * 0.5);
-  acc *= uAur * 0.5 * smoothstep(0.0, 0.03, e);
+  // (the glow down to the horizon itself, where the land in the fog cuts it; under the horizontal the far sea mirrors it,
+  // dimmer and fading down toward the fog: a black band lay there between the lit sea's far edge and the sky)
+  acc *= uAur * 0.5 * (D.y >= 0.0 ? mix(0.3, 1.0, smoothstep(0.0, 0.012, D.y)) : 0.3 * smoothstep(-0.07, 0.0, D.y)) * (1.0 - islM);
   float blot = clamp(dk * blk * 1.3 * smoothstep(0.004, 0.04, e) + thr * rib, 0.0, 0.92);
-  col = col * (1.0 - blot * 0.7) + acc + vec3(0.75, 0.8, 0.9) * star * (1.0 - clamp(dot(acc, vec3(1.5)), 0.0, 1.0)) * (1.0 - blot);
+  col = col * (1.0 - blot * 0.7) + acc + vec3(0.75, 0.8, 0.9) * star * (1.0 - clamp(dot(acc, vec3(1.5)), 0.0, 1.0)) * (1.0 - blot) * (1.0 - islM);
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
