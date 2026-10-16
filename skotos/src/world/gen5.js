@@ -910,12 +910,14 @@ function dress5Coast(L, K, blk, res, seed) {
     if (sp.hearth && pz > sp.hearth.z + 1 && pz < sp.hearth.z + 13 && Math.abs(px - sp.hearth.x) < 6.5) continue;
     if (K[i] === LAND) {
       let edge = false; for (const [dx, dz] of N4) if (K[(z + dz) * w + x + dx] === ROCK) edge = true;
+      // (stones and dry stalks through the snow a little more often than one cell in twenty: the snow between the huts and
+      // along the strand read as an empty sheet)
       if (edge && q < 0.2) P({ t: 'stone', x: px, z: pz, r, s: 0.7 + s * 0.8 });
-      else if (q < 0.04) P({ t: 'stone', x: px, z: pz, r, s: 0.35 + s * 0.5 });
-      else if (q < 0.075) P({ t: 'tuft', x: px, z: pz, r, s: 0.55 + s * 0.5 });
-      else if (q < 0.082) P({ t: 'log', x: px, z: pz, r, s: 0.45 + s * 0.45 });
-      else if (q < 0.09) P({ t: 'drift', x: px, z: pz, r, s: 0.8 + s * 0.8 });
-    } else if (K[i] === FLAT && L.bed[i] < BED_DRY && q < 0.022) P({ t: 'stone', x: px, z: pz, r, s: 0.25 + s * 0.3, wet: true });
+      else if (q < 0.06) P({ t: 'stone', x: px, z: pz, r, s: 0.3 + s * 0.5 });
+      else if (q < 0.115) P({ t: 'tuft', x: px, z: pz, r, s: 0.5 + s * 0.55 });
+      else if (q < 0.122) P({ t: 'log', x: px, z: pz, r, s: 0.45 + s * 0.45 });
+      else if (q < 0.132) P({ t: 'drift', x: px, z: pz, r, s: 0.8 + s * 0.8 });
+    } else if (K[i] === FLAT && L.bed[i] < BED_DRY && q < 0.04) P({ t: 'stone', x: px, z: pz, r, s: 0.22 + s * 0.32, wet: true });
   }
   // the Landing: by each hut its gear (firewood stacked at a side wall, a crate and a cask at the back, a bucket)
   for (const hu of sp.huts) {
@@ -930,7 +932,8 @@ function dress5Coast(L, K, blk, res, seed) {
   // the boats drawn up: a sledge beside each, its load lashed on
   for (const b of sp.boats) if (!b.moored) {
     const a = b.r + Math.PI / 2, d = rng.range(1.7, 2.2), x = b.x + Math.sin(a) * d, z = b.z + Math.cos(a) * d, i = at(x, z);
-    if (i >= 0 && L.cells[i] && !blk[i] && clear(x, z, 1.4)) P({ t: 'sledge', x, z, r: b.r + rng.range(-0.3, 0.3), s: 1 });
+    // (on dry ground only: one left on the flats stood in the sea at high water, its load a white box afloat)
+    if (i >= 0 && L.cells[i] && !blk[i] && L.bed[i] >= BED_DRY && clear(x, z, 1.4)) P({ t: 'sledge', x, z, r: b.r + rng.range(-0.3, 0.3), s: 1 });
   }
   // every islet ringed with low rocks at its edge (they block nothing: the refuge stays a refuge)
   for (const isl of L.refuges) {
@@ -1195,13 +1198,15 @@ function dress5Far(L, K, blk, res, seed, o) {
     const i = z * w + x, q = rng.next(), px = x + rng.range(0.15, 0.85), pz = z + rng.range(0.15, 0.85), r = rng.range(0, 6.28), s = rng.next();
     if (blk[i] || res[i] || !L.cells[i]) continue;
     if (L.ice[i]) {
-      if (q < 0.016) P({ t: 'iceRubble', x: px, z: pz, r, s: 0.6 + s * 0.6 });
-      else if (q < 0.019 && clear(px, pz, 3)) P({ t: 'cairnPole', x: px, z: pz, r, s: 0.9 + s * 0.3 });
-      else if (q < 0.021 && clear(px, pz, 3)) P({ t: 'gear', x: px, z: pz, r, s: 0.8 + s * 0.3, k: s < 0.5 ? 'cask' : 'crate' });
+      if (q < 0.022) P({ t: 'iceRubble', x: px, z: pz, r, s: 0.5 + s * 0.6 });
+      else if (q < 0.025 && clear(px, pz, 3)) P({ t: 'cairnPole', x: px, z: pz, r, s: 0.9 + s * 0.3 });
+      else if (q < 0.027 && clear(px, pz, 3)) P({ t: 'gear', x: px, z: pz, r, s: 0.8 + s * 0.3, k: s < 0.5 ? 'cask' : 'crate' });
+      // (a little snow blown onto the black ice in low wisps)
+      else if (q < 0.04) P({ t: 'drift', x: px, z: pz, r, s: 0.4 + s * 0.45 });
     } else if (L.thick[i]) {
       // (the thick ice: rubble, and the snow drifted into low mounds across the road and the pads)
-      if (q < 0.02) P({ t: 'iceRubble', x: px, z: pz, r, s: 0.4 + s * 0.4 });
-      else if (q < 0.045) P({ t: 'drift', x: px, z: pz, r, s: 0.7 + s * 0.9 });
+      if (q < 0.03) P({ t: 'iceRubble', x: px, z: pz, r, s: 0.4 + s * 0.4 });
+      else if (q < 0.075) P({ t: 'drift', x: px, z: pz, r, s: 0.7 + s * 0.9 });
     }
   }
   // along the road: now and then a sledge left behind or a barrel held in the ice at its edge

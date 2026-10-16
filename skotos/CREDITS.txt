@@ -100,8 +100,9 @@ WORLD
   "PBR Anvil" by NOT_Lonely (the Anvil of the Crown and the shard-anvils), https://sketchfab.com/3d-models/pbr-anvil-3529b9ef4e2c4a32add55948b5361609
   "Asset Pack - Blacksmith Equipment" by Mike Farrant (tongs, quench trough, tool racks, stumps), https://sketchfab.com/3d-models/asset-pack-blacksmith-equipment-0f358eaab21d4e70836ad855de34c423
 - Act V ground, ice, cliffs and props (the Frozen Coast and the Farthest Light; src/assets/rime/ and src/assets/rime.glb), CC0 1.0, modified (resized, re-graded to snow, sea-rock and ice, props cut and decimated; per-asset details in src/assets/rime/CREDITS.txt):
-  snow_02, snow_03 by Rob Tuytel (snow, trodden snow), https://polyhaven.com/a/snow_02, https://polyhaven.com/a/snow_03
-  low_tide_rocks, seaside_rock by Dimitrios Savva (the shore, the sea-cliffs), https://polyhaven.com/a/low_tide_rocks, https://polyhaven.com/a/seaside_rock
+  snow_02, snow_01 by Rob Tuytel (snow, trodden snow), https://polyhaven.com/a/snow_02, https://polyhaven.com/a/snow_01
+  damp_beach_sand_02 by Dimitrios Savva (the shore), https://polyhaven.com/a/damp_beach_sand_02
+  dark_rock_02 by Amal Kumar (the sea-cliffs), https://polyhaven.com/a/dark_rock_02
   wood_planks_grey by Rob Tuytel (the jetty, huts and decks), https://polyhaven.com/a/wood_planks_grey
   Ice002 by ambientCG (Lennart Demes) (the sea ice), https://ambientcg.com/a/Ice002
   dutch_ship_medium by James Ray Cock, Rico Cilliers, Nicolò Zubbini (the Icebound Ship), https://polyhaven.com/a/dutch_ship_medium

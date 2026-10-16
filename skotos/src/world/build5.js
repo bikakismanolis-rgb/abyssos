@@ -16,7 +16,7 @@ import { G } from '../gfx/rig.js';
 import { RNG, clamp, fbm, lerp } from '../core/util.js';
 import { BED_DRY, groundY } from './genlib.js';
 import { SEA, SEA_U, SEA_LIT, SEA_GLSL, noiseTex, iceMat, beamMesh, swellY, TICKS } from './sea.js';
-import { MAT, mats, worldMat, bake, jitter, prism, size4, own, glowMat, flameMesh, lanternMesh, lay4, hash2, act4Mats, act4Prop, occlude } from './build.js';
+import { MAT, mats, worldMat, bake, jitter, prism, size4, own, glowMat, flameMesh, lanternMesh, lay4, hash2, act4Mats, occlude } from './build.js';
 
 const rime = (name) => packProp('rime', name);
 // relative colours (the world-projected materials multiply their layer by vertexColour / GREY; the code fallbacks show
@@ -88,7 +88,8 @@ vec3 icyEm = vec3(0.0);`)
   // old ice is white and opaque at its core: pale blue-white faces, blue-green only in the hollows, the cracks and
   // underneath; laid in strata that run level across it; snow on whatever faces the sky
   float yao = clamp(0.3 + 0.55 * (yN.y * 0.5 + 0.5) + (yn.r - 0.5) * 0.7, 0.0, 1.0);
-  vec3 ycol = mix(vec3(0.03, 0.1, 0.13), vec3(0.26, 0.36, 0.44), smoothstep(0.15, 0.7, yao)) * (0.75 + 0.45 * ylk);
+  // (the sheer faces a deeper blue than the tops: lit alike, a pile of slabs read as sugar cubes)
+  vec3 ycol = mix(vec3(0.03, 0.1, 0.13), vec3(0.25, 0.35, 0.43), smoothstep(0.3, 0.95, yao)) * (0.7 + 0.45 * ylk);
   float ystr = sin(vYW.y * 3.3 + yn.g * 2.2 + yn.r * 1.3);
   ycol *= 0.9 + 0.12 * ystr;
   // (cracks run up and down its sheer faces, deep blue in them)
@@ -97,6 +98,8 @@ vec3 icyEm = vec3(0.0);`)
   ycol = mix(ycol, vec3(0.04, 0.13, 0.18), ycr * 0.4 * (1.0 - smoothstep(0.55, 0.85, abs(yN.y))));
   // (a dusting, broken: a block snowed white all over its top read as a sugar cube)
   float ysn = smoothstep(0.62, 0.9, yN.y + (yn.a - 0.5) * 0.5) * (0.45 + 0.4 * smoothstep(0.35, 0.65, yn.g));
+  // (none on what rides at the water: a floe snowed over read as a white paper cut-out on the black water)
+  ysn *= smoothstep(0.0, 0.3, vYW.y);
 #ifdef ICY_GLOW
   ysn *= 0.25 * smoothstep(0.5, 0.75, yn.a);
 #endif
@@ -187,7 +190,8 @@ const CODE5 = new Proxy({
     const parts = [];
     for (const s of [-1, 1]) { parts.push({ geo: G.box(0.07, 0.07, 2.0), color: WOODD, o: { x: s * 0.36, y: 0.04 } }, { geo: G.segTo(0, 0.32, 0.3, 0.035, 0.03, 4), color: WOODD, o: { x: s * 0.36, y: 0.06, z: 1.0 } }); for (const z of [-0.7, 0, 0.7]) parts.push({ geo: G.box(0.05, 0.22, 0.05), color: WOODD, o: { x: s * 0.36, y: 0.17, z } }); }
     for (const z of [-0.7, -0.35, 0, 0.35, 0.7]) parts.push({ geo: G.box(0.86, 0.04, 0.16), color: WOODG, o: { y: 0.3, z } });
-    parts.push({ geo: jitter(G.box(0.7, 0.32, 1.1, 2, 1, 2), 0.05, 643), color: 0x4a3a2c, o: { y: 0.48, z: -0.15 }, snow: 1.2 });
+    // (the hide over the load only dusted: snowed over it read as a white box)
+    parts.push({ geo: jitter(G.box(0.7, 0.32, 1.1, 2, 1, 2), 0.05, 643), color: 0x4a3a2c, o: { y: 0.48, z: -0.15 }, snow: 0.45 });
     return { mat: 'lam', geo: bake(parts) };
   },
   // a tent of hides on a ridge pole, its door to local +z, snow on its roof
@@ -215,9 +219,10 @@ const CODE5 = new Proxy({
   cairnPole: () => ({ mat: 'lam', geo: bake([...[0, 1, 2, 3, 4].map((i) => ({ geo: jitter(G.dodeca(0.3 - i * 0.04), 0.07, 650 + i), color: i % 2 ? 0x5a5a5e : 0x48484c, o: { x: Math.sin(i * 2.4) * (i < 3 ? 0.26 : 0.1), z: Math.cos(i * 2.4) * (i < 3 ? 0.26 : 0.1), y: 0.15 + (i < 3 ? 0 : (i - 2) * 0.26) }, snow: 1.3 })), { geo: G.cyl(0.04, 0.05, 2.2, 5), color: 0x4a3a2a, o: { y: 1.1, rz: 0.06 } }, { geo: G.box(0.05, 0.4, 0.02), color: 0x6a2a18, o: { y: 1.9, x: 0.08, rz: 0.2 } }]) }),
   // a floe: a broken plate of the sea ice, its outline ragged, riding low in the water
   floe: () => {
-    // (fourteen sides, broken at two scales: with seven a floe read as a paper hexagon)
+    // (fourteen sides, broken at two scales: with seven a floe read as a paper hexagon; its outline lumpy, never cusped: a
+    // folded sine gave every floe the points of a star)
     const g = new THREE.CylinderGeometry(0.5, 0.55, 0.14, 14, 1), pp = g.attributes.position;
-    for (let i = 0; i < pp.count; i++) { const a = Math.atan2(pp.getZ(i), pp.getX(i)), k = 0.7 + 0.36 * Math.abs(Math.sin(a * 2.3 + 0.7)) + 0.12 * Math.sin(a * 5.1) + 0.09 * Math.sin(a * 11.3 + 1.1); pp.setX(i, pp.getX(i) * k); pp.setZ(i, pp.getZ(i) * k * 0.8); }
+    for (let i = 0; i < pp.count; i++) { const a = Math.atan2(pp.getZ(i), pp.getX(i)), k = 0.86 + 0.13 * Math.sin(a * 2 + 0.7) + 0.08 * Math.sin(a * 3 + 2.1) + 0.04 * Math.sin(a * 7 + 1.1); pp.setX(i, pp.getX(i) * k); pp.setZ(i, pp.getZ(i) * k * 0.8); }
     return { geo: bake([{ geo: g, color: 0xffffff, o: { y: 0.0 } }]), shadow: false };
   },
   // a slab of sea ice (pressure ridges, a berg's rubble): a thick plate, its edges broken
@@ -416,7 +421,18 @@ const PLACE = {
     const s = new THREE.Sprite(own(new THREE.SpriteMaterial({ map: tex('dot'), color: 0xffa040, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false })));
     s.scale.setScalar(1.6); s.position.set(p.x, (p.y ?? -2) + 0.4, p.z); out.group.add(s);
   },
-  brazier(p, I, B, out) { const g = act4Prop('brazier'); g.position.set(p.x, 0, p.z); out.group.add(g); },
+  // the camp's fire on the ice: an iron basket on three splayed legs, stones round its feet, a real fire in it (its flames,
+  // embers, smoke and light: fireLife). (The Field's brazier without its scan, the cinder pack being away, was a glowing
+  // ball on a black tripod)
+  brazier(p, I, B, out) {
+    const g = new THREE.Group();
+    g.add(solid5([0, 1, 2].map((i) => ({ geo: G.segTo(Math.sin(i * 2.09) * 0.42, -0.95, Math.cos(i * 2.09) * 0.42, 0.045, 0.035, 5), color: IRON, o: { y: 0.95 } })), MAT.iron));
+    g.add(rockPile(63, 6, 0.55, 0.7, 0.18, 0.26, 0.9, -0.05));
+    const fire = fireCage(0.42, 0.42, 1.3, 3.4, 0xffb060, { life: { s: 0.8, i: 12, range: 9, smoke: true }, ember: true });
+    fire.group.position.y = 0.92; g.add(fire.group); fire.set(true);
+    g.userData.fireY = 0.92 + fire.y; g.userData.setLit = (b) => fire.set(b);
+    g.position.set(p.x, 0, p.z); out.group.add(g);
+  },
   // ---- the dressing (gen5 dress5Coast, dress5Far): decoration that blocks nothing ----
   // a stone of the base set half sunk in the snow (scree at a cliff's foot, shingle on the flats)
   stone(p, I) { rock5(I, 'cliff5', p, 0.6 * p.s, 0.6, -0.08 - 0.06 * p.s, STONES, p.s < 0.9 ? '~ns' : ''); },
@@ -731,7 +747,7 @@ const halo = (c, s) => { const h = new THREE.Sprite(own(new THREE.SpriteMaterial
 function flame5(s, color) {
   const g = new THREE.Group();
   const f = new THREE.Mesh(bake([{ geo: G.cone(0.1, 0.34, 6), color: 0xff8a30, o: { y: 0.17 } }, { geo: G.cone(0.065, 0.24, 5), color: 0xffc860, o: { y: 0.13 } }, { geo: G.cone(0.035, 0.13, 5), color: 0xfff0c8, o: { y: 0.08 } }]), glowMat(0xffffff));
-  const halo = new THREE.Sprite(own(new THREE.SpriteMaterial({ map: tex('dot'), color, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false })));
+  const halo = new THREE.Sprite(own(new THREE.SpriteMaterial({ map: tex('dot'), color, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false })));
   halo.scale.setScalar(1.4); halo.position.y = 0.18;
   g.add(f, halo); g.scale.setScalar(s);
   let t = Math.random() * 10;
@@ -971,9 +987,11 @@ const PROP5 = {
     iron.push({ geo: G.cyl(0.018, 0.018, 0.42, 4), color: 0x1e1c1a, o: { y: 1.38 } }, { geo: G.lathe([[0, 0], [0.24, 0.03], [0.3, 0.17], [0.29, 0.32], [0.24, 0.38]], 10), color: 0x262220, o: { y: 0.84 } }, { geo: G.torus(0.25, 0.022, 4, 10), color: 0x1e1c1a, o: { y: 1.2, rx: Math.PI / 2 } });
     g.add(solid5(iron, MAT.iron));
     const coal = glowMat(0x2a1a10), bed = new THREE.Mesh(jitter(G.dome(0.5, 0.2, 9), 0.05, 742), coal); bed.position.y = 0.02; g.add(bed);
-    const fl = flames(2.8, 0xffb060); fl.position.y = 0.1; g.add(fl);
-    const ha = halo(0xffa050, 5.5); ha.position.y = 0.8; g.add(ha);
-    const life = fireLife(g, { y: 0.3 }, { s: 1.2, i: 30, range: 12.5, smoke: true });
+    // (its light and glow kept to a fire's orange: on the snow, at the Field brazier's strength, the hearth and the snow
+    // round it burnt to one white disc)
+    const fl = flames(2.8, 0xff9a48); fl.position.y = 0.1; g.add(fl);
+    const ha = halo(0xff7a30, 4.2); ha.position.y = 0.8; ha.material.opacity = 0.45; g.add(ha);
+    const life = fireLife(g, { y: 0.3 }, { s: 1.2, i: 15, range: 12.5, smoke: true, color: 0xff8a40 });
     g.userData.fireY = 0.4;
     g.userData.setLit = (b) => { coal.color.set(b ? 0xff7a28 : 0x2a1a10); fl.visible = ha.visible = !!b; g.userData.lit = !!b; life(b); };
     g.userData.setLit(false);

@@ -14,6 +14,8 @@ import { G, uid } from './state.js';
 import { rand, clamp } from '../core/util.js';
 import { list, t } from '../i18n/i18n.js';
 import { weaponLook } from './items.js';
+import { act5Prop } from '../world/build5.js';
+import { skotosSkin, TICKS } from '../world/sea.js';
 
 // ---------- model cache ----------
 const BUILD = {
@@ -137,6 +139,8 @@ export class Actor {
     if (this.light) { this.light = null; }
     // an NPC's lantern light (ai.js npc)
     if (this.lampSrc) { removeLight(this.lampSrc); this.lampSrc = null; }
+    // what else it set going (the Walking Tower's light on its back)
+    if (this.tidy) { this.tidy(); this.tidy = null; }
   }
 }
 
@@ -361,6 +365,37 @@ function act5Spawn(id, def, a, av, o, pk) {
   if (tag === 'floodWave') { a.aggro = true; outToSea(a); }
   // the Skuas on their roost: the whale's skull, a mast, the beach under them (ai.js skua lifts them off)
   if (def.lightShy && pk) roost(a, pk);
+  // the Walking Tower carries the Skerry Light (ai.js lights it, turns its beam, hides it while it lies on its back)
+  if (id === 'tower') skerryOn(a, av);
+  // (a boss phase no single burst may skip: the Tower's turn onto the ice, the Skotos's Night)
+  if (id === 'tower' || id === 'skotos') a.hpFloor = a.hpMax * 0.649;
+  // the Skotos and its Hands: black water (sea.js skin: the aurora's rim, the beam's streak, pale flecks; the hood's void
+  // stays black); the Skotos stands waist-deep where the ice ends, north of the skerry
+  if (id === 'skotos' || id === 'skotosHand' || id === 'skotosCoil') skotosLook(a, av, id);
+}
+// the Skerry Light on the shell's socket (the file names it: socket_light), its own size whatever the crab's and always
+// upright: it rides the socket where the body carries it (ai.js towerPre, skerryRide), turning with the crab; on a stand-in,
+// on its back. a.skerry: the ruin (setLit, ring, fireY); a.skerrySock: the socket
+function skerryOn(a, av) {
+  let m = null;
+  try { m = act5Prop('skerryLight', { back: true }); } catch (e) { m = null; }
+  if (!m) return;
+  m.scale.setScalar(1 / (av.scale || 1)); m.position.y = 0.6; av.group.add(m);
+  a.skerry = m; a.skerrySock = socketOf(av);
+  // (its fire's light and flames tick through sea.js while it is in the scene: let go with the actor)
+  a.tidy = () => { const objs = new Set(); m.traverse((o) => objs.add(o)); for (const t of TICKS) if (objs.has(t.obj)) TICKS.delete(t); };
+}
+// where the Skotos stands: the water just past the ice edge due north of the skerry (so a blade on the rim can reach the
+// robe), at its spot if the edge is not found; half its height under the water
+function skotosLook(a, av, id) {
+  for (const m of av.model.mats || []) if (!/void/i.test(m.name || '')) skotosSkin(m);
+  if (id !== 'skotos') return;
+  a.y = -4.2;
+  const z = G.zone, B = z?.L?.boss, map = z?.map;
+  if (!B || !map || z.L.type !== 'farlight') return;
+  let e = null;
+  for (let d = 10; d < 22; d += 0.5) if (!map.walkable(B.x, B.z - d)) { e = B.z - d; break; }
+  if (e != null) { a.x = B.x; a.z = Math.floor(e) + 1 - 1.6; a.home = { x: a.x, z: a.z }; }
 }
 // an ice statue of itself, in a pose (the statue tint: ai.js), waking with the colour it had
 function statue(a, av, id) {

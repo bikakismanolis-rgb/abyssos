@@ -37,12 +37,14 @@ const LAYERS = [
   // powder snow, its dark prints and scratches lifted out (they would march in rows across the ground tile after tile),
   // cooled a little: the coast's and the frozen sea's base
   { id: 'snow', src: 'snow_02', d: 1024, n: 512, ao: 0.7, clean: { r: 24, t: 0.025, grow: 3 }, despeckle: { r: 4, t: 0.025, k: 1 }, flat: { k: 0.5, r: 0.12 }, grade: { sat: 0.6, contrast: 1.1, mean: [182, 188, 198] }, nboost: 1.2 },
-  // snow trodden thin over dark ground: the roads, the Landing, the paths along the shore
-  { id: 'snowTrod', src: 'snow_03', d: 1024, n: 512, ao: 0.8, grade: { sat: 0.55, contrast: 0.72, mean: [140, 140, 142] } },
-  // wet shingle and sand: the flats the tide uncovers, the beaches
-  { id: 'shore', src: 'low_tide_rocks', d: 1024, n: 512, ao: 0.9, grade: { sat: 0.55, contrast: 1.15, mean: [92, 88, 80] }, nboost: 1.1 },
-  // dark sea-worn rock: the cliffs, and the rock props stoned in world space
-  { id: 'seaCliff', src: 'seaside_rock', d: 1024, n: 512, ao: 0.9, flat: { k: 0.6, r: 0.12 }, grade: { sat: 0.35, contrast: 1.6, mean: [66, 66, 68] }, nboost: 1.4 },
+  // snow trodden and walked: the roads, the Landing, the paths along the shore (its boot prints and scuffs read as a path
+  // that people use; a grit of dark ground under thin snow read as salt and pepper from the play camera)
+  { id: 'snowTrod', src: 'snow_01', d: 1024, n: 512, ao: 0.8, grade: { sat: 0.5, contrast: 1.05, mean: [176, 182, 192] }, nboost: 1.1 },
+  // wet sand with dark patches of weed and grit: the flats the tide uncovers, the beaches (a pebble scan read as asphalt)
+  { id: 'shore', src: 'damp_beach_sand_02', d: 1024, n: 512, ao: 0.9, grade: { sat: 0.42, contrast: 1.15, mean: [108, 102, 92] }, nboost: 1.2 },
+  // dark layered rock, its ledges and cracks: the sea-cliffs, and the rock props stoned in world space (a fine sea-worn grit
+  // gave the cliffs no structure: smooth dark sheets)
+  { id: 'seaCliff', src: 'dark_rock_02', d: 1024, n: 512, ao: 0.9, grade: { mul: [0.92, 1, 1.1], sat: 0.3, contrast: 1.5, mean: [80, 82, 88] }, nboost: 1.3 },
   // cracked lake ice taken from green toward the black-green of sea ice: the frozen sea, thick ice, the ice shader's albedo
   { id: 'ice', src: 'Ice002', acg: true, d: 1024, n: 512, ao: 0, grade: { mul: [0.9, 1, 1.12], sat: 0.8, contrast: 1.05, mean: [92, 116, 128] } },
   // weathered grey boards: the jetty, the stilt huts, the wreck decks
@@ -1207,7 +1209,7 @@ if (!KEYS && ONLY !== 'layers') {
   writeFileSync(path.join(OUT_TEX, 'CREDITS.txt'), [
     'Skotos Act V environment assets (the Frozen Coast and the Farthest Light).',
     'Packed by tools/pack-rime.mjs. Tiling layers: resized, WebP-encoded, ambient occlusion baked into the colour, colour-graded',
-    'to the act\'s cold palette (snow\'s dark prints lifted out, snow and seaCliff flattened of their broad blotches, the ice taken',
+    'to the act\'s cold palette (snow\'s dark prints lifted out, snow flattened of its broad blotches, the ice taken',
     'from green toward blue). Props: cut, decimated, re-centred, re-scaled, turned to face +z, re-graded and re-encoded (WebP);',
     'ambient occlusion baked into the colour and the metal/roughness maps dropped; snow and frost painted onto what faces the sky',
     '(the ship, boats, shack, cask, crate, Name-stone). Per prop: the Dalarö wreck\'s seabed meshes removed, its hull cut at the',
