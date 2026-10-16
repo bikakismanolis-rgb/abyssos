@@ -304,8 +304,8 @@ export function curl(a, t = 3) {
   if (a.tele) { a.tele.alive = false; a.tele = null; }
   a.avatar?.play('curl', 1.4);
   Audio.sfx('louseCurl', { x: a.x, z: a.z, vol: 0.7 });
-  // the first time: how to use it
-  if (!G.hero.flags.louseHint) { G.hero.flags.louseHint = true; emit('toast', tx('hud.bowl', 'Κύλησε πάνω τους όταν κουλουριαστούν', 'Roll into them when they curl up')); }
+  // (the first time, how to use it: hud.js hint.louse)
+  emit('louseCurl', a);
 }
 // Seen: the dead know where she is (+15% damage taken), from a Lampless alarm or Ivar's lantern; an eye on the HUD (buffs.seen)
 export function seeHero(t = 6) {
@@ -487,10 +487,10 @@ export function kill(a, src, o = {}) {
   // massacre counter
   const c = G.combo; c.n = c.t > 0 ? c.n + 1 : 1; c.t = 1.4;
   // drops
-  const L = a.level;
+  const L = a.level, dx = a.dropAt?.x ?? a.x, dz = a.dropAt?.z ?? a.z;
   const goldChance = a.boss ? 1 : a.elite ? 1 : 0.32;
   const piles = a.boss ? 6 : a.elite ? 2 : 1;
-  for (let i = 0; i < piles; i++) if (Math.random() < goldChance) dropGold(a.x, a.z, Math.round((3 + L * 1.6) * rand.range(0.6, 1.4) * D.gold * (1 + (s.gold + (G.player.buffs.shrineFortune > 0 ? 100 : 0)) / 100) * (a.boss ? 3 : 1)));
+  for (let i = 0; i < piles; i++) if (Math.random() < goldChance) dropGold(dx, dz, Math.round((3 + L * 1.6) * rand.range(0.6, 1.4) * D.gold * (1 + (s.gold + (G.player.buffs.shrineFortune > 0 ? 100 : 0)) / 100) * (a.boss ? 3 : 1)));
   const mf = s.mf + (G.player.buffs.shrineFortune > 0 ? 100 : 0);
   let items = 0;
   if (a.boss) items = 4 + Math.floor(D.loot);
@@ -501,9 +501,9 @@ export function kill(a, src, o = {}) {
     const firstBoss = a.boss && i === 0 && !hero.flags['legFrom_' + a.kind];
     const it = makeItem(L, { elite: !!a.elite, boss: a.boss, mf, legMul: D.leg, rar: firstBoss ? 3 : (a.boss && i === 1 ? 2 : undefined), leg: firstBoss ? LEG_FROM[a.kind] : undefined });
     if (firstBoss) hero.flags['legFrom_' + a.kind] = true;
-    later(i * 0.12, () => dropItem(a.x, a.z, it));
+    later(i * 0.12, () => dropItem(dx, dz, it));
   }
-  if (Math.random() < (a.elite || a.boss ? 1 : 0.07)) dropGlobe(a.x + rand.range(-0.5, 0.5), a.z + rand.range(-0.5, 0.5));
+  if (Math.random() < (a.elite || a.boss ? 1 : 0.07)) dropGlobe(dx + rand.range(-0.5, 0.5), dz + rand.range(-0.5, 0.5));
   // legendary powers that trigger on kills
   if (s.legs.has('beaconAmulet')) healHero(G.player.hpMax * 0.05, true);
   if (s.legs.has('winterOrb') && a.status.freeze > 0) {
