@@ -436,7 +436,7 @@ export const TEXT = {
   'npc.ivar': ['Ίβαρ', 'Ivar'], 'npc.ivarGhost': ['Ίβαρ', 'Ivar'], 'npc.wayfarerGhost': ['Οδοιπόρος', 'Wayfarer'],
   'npc.barrowLord': ['Ο Άρχων του Τύμβου', 'The Barrow Lord'], 'npc.moltenKing': ['Δούργκαν', 'Durgan'], 'npc.karthax': ['Κάρθαξ', 'Karthax'],
   // what the hero touches
-  'lamp.light': ['Άναψε το φανάρι', 'Light the lamp'], 'lamp.relight': ['Ξανάναψε το φανάρι', 'Relight the lamp'], 'lamp.remember': ['Θυμήσου', 'Remember'],
+  'lamp.light': ['Άναψε το φανάρι', 'Light the lamp'], 'lamp.relight': ['Ξανάναψε το φανάρι', 'Relight the lamp'], 'lamp.remember': ['Θυμήσου', 'Remember'], 'lamp.wake': ['Ξύπνα εδώ', 'Wake here'],
   'lamp.lit': ['Το φανάρι καίει. Αν πέσεις, εδώ θα ξυπνήσεις.', 'The lamp burns. If you fall, you will wake here.'],
   'lamp.buff': ['Μνήμη των Οδοιπόρων: +12% ζημιά, +8% ταχύτητα για 60 δευτ.', 'Memory of the Wayfarers: +12% damage, +8% speed for 60s'],
   'brazier.light': ['Άναψε το μαγκάλι', 'Light the brazier'], 'bellows.use': ['Ξύπνα το Φυσερό', 'Wake the Bellows'], 'bellows.relight': ['Ξανάναψε τη φωτιά', 'Relight the fire'],

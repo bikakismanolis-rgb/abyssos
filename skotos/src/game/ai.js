@@ -25,6 +25,7 @@ import { ATMOS, mixAtmos } from '../world/atmos.js';
 import { ZONES } from './world.js';
 import { tidal } from '../world/gen5.js';
 import { COLD, coldAdd } from './cold.js';
+import { dropGlobe } from './pickups.js';
 
 const ATK_SFX = { goblin: 'goblinAttack', wolf: 'wolfAttack', spider: 'spiderHiss', orc: 'orcAttack', troll: 'trollRoar', skeleton: 'skeletonRattle', wraith: 'wraithWail', hound: 'houndGrowl', bat: 'batScreech', worm: 'wormRumble', dwarf: 'dwarfAttack', golem: 'golemStep', moth: 'batScreech', bear: 'bearRoar', hart: 'hartBellow' };
 // attack timing per animation: speed, hit time (s), total (s)
@@ -94,6 +95,7 @@ export function updateActors(dt) {
     if (a.revealed > 0) a.revealed -= dt;
     if (a.unshroud > 0) a.unshroud -= dt;
     if (a.shroudTxt > 0) a.shroudTxt -= dt;
+    if (a.blockTxt > 0) a.blockTxt -= dt;
     if (a.immT > 0) a.immT -= dt;
     if (a.guardDown > 0 && (a.guardDown -= dt) <= 0) restoreRim(a);
     a.t += dt; a.cd -= dt;
@@ -122,8 +124,9 @@ export function updateActors(dt) {
     else if (a.tideRisen && !a.aggro && ebbing()) speed = goRest(a, dt);
     else {
       speed = (AI[a.def.ai] || AI.melee)(a, dt, pl, d);
-      // no affix from what cannot be struck yet: a rootling still underground, an archer in the trees, a Rootwarden asleep
-      if (a.affixes.length && !(a.under && a.def.burst) && !a.hidden && !(a.def.ai === 'rooted' && !a.awake)) elite(a, dt, pl, d);
+      // no affix from what cannot be struck yet: a rootling still underground, an archer in the trees, a Rootwarden asleep,
+      // an Ember Tick on her back, an Ashwing on the wing
+      if (a.affixes.length && !(a.under && a.def.burst) && !a.hidden && !a.cling && !a.airborne && !(a.def.ai === 'rooted' && !a.awake)) elite(a, dt, pl, d);
     }
     // knockback, separation, walls
     if (a.kx || a.kz) { a.x += a.kx * dt; a.z += a.kz * dt; const k = Math.exp(-dt * 7); a.kx *= k; a.kz *= k; if (Math.abs(a.kx) + Math.abs(a.kz) < 0.05) a.kx = a.kz = 0; }
@@ -159,7 +162,7 @@ const HELD = new Set(['attack', 'reel', 'throw', 'wail', 'roar']);
 // the Shrouded look smoky and dim outside light, and show a pale rim while revealed
 function shroudLook(a, av) {
   const on = (a.def.shroud || a.shrouded) && !(a.unshroud > 0) && shroudOn();
-  const st = !on ? 0 : a.revealed > 0 || lightAt(a.x, a.z) ? 1 : 2;
+  const st = !on ? 0 : a.revealed > 0 || lightAt(a.x, a.z, { pad: a.radius * 0.5 }) ? 1 : 2;
   if (st === 2 && Math.random() < 0.25) P({ add: false, x: a.x + rand.range(-0.4, 0.4), y: rand.range(0.3, 1.8) * (a.scale || 1), z: a.z + rand.range(-0.4, 0.4), vy: 0.4, life: 1.1, size: 0.5, size1: 1.0, color: 0x14161c, alpha: 0.35, alpha1: 0 });
   if (st === (a.shLook ?? 0)) return;
   a.shLook = st;
@@ -632,7 +635,7 @@ const AI = {
     }
     if (d > 5 && d < 14 && a.chargeCd <= 0 && G.zone.map.clear(a.x, a.z, pl.x, pl.z)) {
       a.state = 'rear'; a.atkT = 0; a.rot = a.chargeDir = angleTo(a.x, a.z, pl.x, pl.z); a.chargeLen = Math.min(18, d + 4);
-      a.tele = teleLine(a.x, a.z, a.rot, a.chargeLen, 2.4, 0.9, 0xff9020);
+      a.tele = teleLine(a.x, a.z, a.rot, a.chargeLen, Math.max(2.4, 2 * (a.radius + 1.05)), 0.9, 0xff9020);
       a.avatar?.play('rear', 1, { hitIn: 0.9 }); Audio.sfx('bearRoar', { x: a.x, z: a.z }); tally(a, 'rear');
       return 0;
     }
@@ -1660,7 +1663,8 @@ function dazedTick(a, dt) {
 // bosses, the Amberback and the Rime Bear. D = { vx, vz, t, hit, probe (how far ahead the front is), daze (seconds dazed on
 // hitting something solid), sapDaze (seconds dazed on running into fresh sap or slush), trail (sap left behind), crack
 // (stones crack), ice (Act V: each thin cell it runs onto cracks a stage, and one already webbed gives way under it: it
-// flounders, ice.js), dmg / hitO (what trampling the hero does), dust, end(a, D) }. Returns the speed, for the gait.
+// flounders, ice.js), dmg / hitO (what trampling the hero does), w (the drawn line's width: no hit wider than it), dust,
+// end(a, D) }. Returns the speed, for the gait.
 export function dashStep(a, dt, pl = G.player) {
   const D = a.dash, map = G.zone.map, st = Math.min(dt, D.t);
   D.t -= dt;
@@ -1675,7 +1679,8 @@ export function dashStep(a, dt, pl = G.player) {
   if (D.trail && (D.run || 0) - (D.lastPool ?? -9) > 3.2) { D.lastPool = D.run; addSapPool(a.x - ux, a.z - uz, 1.5, 5, D); }
   if (Math.random() < 0.7) puff(a.x, 0.3, a.z, 2, D.dust ?? 0x8a8680, 0.8, 0.8, 0.8);
   if (D.drop && (D.run || 0) - (D.lastDrop ?? -9) > D.drop.every) { D.lastDrop = D.run; D.drop.fn(a.x - ux, a.z - uz); }
-  if (!D.hit && Math.hypot(pl.x - a.x, pl.z - a.z) < a.radius + pl.radius + 0.6) { D.hit = true; hitHero(a, pl, D.dmg ?? 1.5, D.hitO ?? { stun: 0.5 }); D.onHit?.(a, pl); shake(0.4); }
+  const hitR = D.w != null ? Math.min(a.radius + pl.radius + 0.6, D.w / 2 + pl.radius * 0.5) : a.radius + pl.radius + 0.6;
+  if (!D.hit && Math.hypot(pl.x - a.x, pl.z - a.z) < hitR) { D.hit = true; hitHero(a, pl, D.dmg ?? 1.5, D.hitO ?? { stun: 0.5 }); D.onHit?.(a, pl); shake(0.4); }
   if (D.t <= 0) {
     a.dash = null;
     if (D.end) D.end(a, D);
@@ -1911,7 +1916,7 @@ const STONEWARDEN = {
     { id: 'charge', when: (a, d) => d > 5 && d < 18, cd: 9, phaseCd: [10, 8, 6.5], run(a, pl) {
       a.rot = angleTo(a.x, a.z, pl.x, pl.z);
       const len = Math.min(18, Math.hypot(pl.x - a.x, pl.z - a.z) + 3);
-      a.tele = teleLine(a.x, a.z, a.rot, len, 3.2, 0.9, 0xffa040);
+      a.tele = teleLine(a.x, a.z, a.rot, len, Math.max(3.2, 2 * (a.radius + 1.05)), 0.9, 0xffa040);
       a.avatar?.play('warcry', 1.4); Audio.sfx('stoneCrack', { x: a.x, z: a.z });
       return { t: 0.9, fn() { a.dash = { vx: Math.sin(a.rot) * 20, vz: Math.cos(a.rot) * 20, t: len / 20, hit: false }; a.avatar?.play('slash1', 1.3); }, after: len / 20 + 0.4 };
     } },
@@ -2045,7 +2050,7 @@ const HART = {
 function hartCharge(a, pl, wind, sp, last) {
   const dir = angleTo(a.x, a.z, pl.x, pl.z), len = Math.min(26, Math.hypot(pl.x - a.x, pl.z - a.z) + 4);
   a.rot = dir;
-  a.tele = teleLine(a.x, a.z, dir, len, 3, wind, last ? 0xffd040 : 0xffc040);
+  a.tele = teleLine(a.x, a.z, dir, len, Math.max(3, 2 * (a.radius + 1.05)), wind, last ? 0xffd040 : 0xffc040);
   a.avatar?.play('paw', 1.2, { loop: true }); Audio.sfx('golemStep', { x: a.x, z: a.z, vol: 0.5 });
   return { t: wind, noFace: true, stall: true, fn() {
     a.avatar?.anim.stop?.(0.1);
@@ -2175,8 +2180,8 @@ function thornspear(a, pl) {
     return { t: 0.5, fn() { Audio.sfx('swingHeavy', { x: a.x, z: a.z }); if (meleeLands(a, G.player, 4.6, 1.0)) hitHero(a, G.player, 1.0); a.combo++; }, after: 0.2, chain: Math.hypot(G.player.x - a.x, G.player.z - a.z) < 7, chainFn: thornspear };
   }
   const len = a.phase >= 2 ? 8 : 6, dir = a.rot;
-  // drawn as wide as it strikes (dashStep: her body and 0.6 m either side)
-  a.tele = teleLine(a.x, a.z, dir, len, 2 * (a.radius + 0.6), 0.5, 0xffa020);
+  // drawn as wide as it strikes (dashStep: her body, 0.6 m and the hero's own 0.45 m either side)
+  a.tele = teleLine(a.x, a.z, dir, len, 2 * (a.radius + 1.05), 0.5, 0xffa020);
   a.avatar?.play('heavyStab', 1.1);
   return { t: 0.5, noFace: true, fn() { startDash(a, dir, 26, len - 1, { probe: 0.6, dmg: 1.5, hitO: { push: 12 }, end() {} }); Audio.sfx('swingHeavy', { x: a.x, z: a.z }); a.combo++; }, after: 0.5 };
 }
@@ -2457,7 +2462,7 @@ function snuffer(a, dt, pl, d) {
     a.atkT += dt;
     if (a.atkT >= 0.7) {
       a.state = 'chase'; killTele(a.tele); a.tele = null;
-      startDash(a, a.grabDir, 13, 4, { probe: 0.4, dmg: 0.9, hitO: { burn: a.gorged > 0 ? a.dmg * 0.6 : 0 }, onHit: () => { halveCradle(4); tally(a, 'grabbed'); Audio.sfx('smokeGulp', { x: a.x, z: a.z }); }, end: () => { a.avatar?.anim.stop?.(0.2); } });
+      startDash(a, a.grabDir, 13, 4, { probe: 0.4, w: 1.4, dmg: 0.9, hitO: { burn: a.gorged > 0 ? a.dmg * 0.6 : 0 }, onHit: () => { halveCradle(4); tally(a, 'grabbed'); Audio.sfx('smokeGulp', { x: a.x, z: a.z }); }, end: () => { a.avatar?.anim.stop?.(0.2); } });
     }
     return 0;
   }
@@ -2569,7 +2574,7 @@ function diver(a, dt, pl, d) {
     if (a.atkT < 1.0) return a.speed * 0.5;
     killTele(a.tele); a.tele = null;
     a.x = T.x; a.z = T.z; a.rot = T.dir; a.airborne = false; a.fly = 'dive'; a.dives = (a.dives || 0) + 1;
-    const D = startDash(a, T.dir, 22, 14, { probe: 0.6, dmg: 1.3, hitO: { push: 22 }, end: land });
+    const D = startDash(a, T.dir, 22, 14, { probe: 0.6, w: 2.4, dmg: 1.3, hitO: { push: 22 }, end: land });
     D.t0 = D.t; D.y0 = a.y; D.low = clamp(T.reach / 14, 0.3, 0.9);
     a.avatar?.play('dive', 1, { loop: true }); Audio.sfx('ashwingScreech', { x: a.x, z: a.z, vol: 0.8 }); tally(a, 'dive');
     return 22;
@@ -2814,7 +2819,7 @@ function hammerhorn(a, dt, pl, d) {
     a.atkT += dt;
     if (a.atkT >= 0.9) {
       killTele(a.tele); a.tele = null; a.state = 'chase';
-      startDash(a, a.rushDir, 15, a.rushLen, { dmg: 1.3, hitO: { push: 20 }, dust: 0x4a4038, daze: 2, yank: a.rushYank, end: rushEnd });
+      startDash(a, a.rushDir, 15, a.rushLen, { w: 2.6, dmg: 1.3, hitO: { push: 20 }, dust: 0x4a4038, daze: 2, yank: a.rushYank, end: rushEnd });
       a.avatar?.play('Shield_Dash', 1.3); Audio.sfx('bearCharge', { x: a.x, z: a.z }); if (P0) Audio.sfx('chainRattle', { x: a.x, z: a.z }); tally(a, 'rush');
     }
     return 0;
@@ -2911,7 +2916,7 @@ const IVAR = {
   tick(a, dt) {
     // his dark and his son's light hold for as long as he does (a hero back from the waypoint finds them again); the dark
     // is the fight's, not the whole field's
-    if (a.dark) setHeroLight(heroNear(a) ? 2.5 : null, a);
+    if (a.dark) setHeroLight(heroNear(a) ? 3.5 : null, a);
     else if (a.phase === 2 && !getLightPool('ivarGold')) { a.dark = true; ivarEndDark(a); }
     // the dark: three braziers lit at once blind him (dazed 4 s), and his shroud stays broken (8 s at least) while all three burn
     if (a.dark) {
@@ -2939,10 +2944,10 @@ const IVAR = {
     { id: 'staff', basic: true, when: (a, d) => d < 4.6, cd: 1.6, run(a, pl) { a.combo = 0; return staffCombo(a, pl); } }
   ]
 };
-// phase 2, The Dark: the braziers go out, the Cradle shrinks to 2.5 m, and he is Shrouded
+// phase 2, The Dark: the braziers go out, the Cradle shrinks to 3.5 m, and he is Shrouded
 function ivarDark(a) {
   a.dark = true; a.shrouded = true; a.hpFloor = a.hpMax * 0.299;
-  setHeroLight(2.5, a);
+  setHeroLight(3.5, a);
   for (const b of braziers(a)) snuffLamp(b, a);
   glowBurst(a.x, 2, a.z, 0x8a98b0, 40, 4, 0.35, 0.8); Audio.sfx('wraithWail', { vol: 0.8 });
   say('d.ivar.dark'); emit('ivarDark', a); tally(a, 'dark');
@@ -2975,15 +2980,16 @@ function staffCombo(a, pl) {
   return { t: 0.6, fn() { Audio.sfx('swingHeavy', { x: a.x, z: a.z }); if (meleeLands(a, G.player, 4.5, 1.0)) hitHero(a, G.player, 1.0, step ? { push: 16 } : {}); a.combo++; }, after: 0.2, chain: step === 0 && Math.hypot(G.player.x - a.x, G.player.z - a.z) < 7, chainFn: staffCombo };
 }
 // Lantern Sweep: the dead lantern raised, a pale 10 m cone; she is Seen, and in the dark it puts out the braziers it finds
+// (not the one she stands by)
 function lanternSweep(a, pl) {
   const rot = angleTo(a.x, a.z, pl.x, pl.z);
   a.rot = rot;
-  a.tele = teleCone(a.x, a.z, rot, 10, 1.1, 1.0, 0xb8d0ff);
+  a.tele = teleCone(a.x, a.z, rot, 10, 0.8, 1.0, 0xb8d0ff);
   a.avatar?.play('castUp', 1, { hitIn: 1.0 }); Audio.sfx('wraithWail', { x: a.x, z: a.z, vol: 0.4 });
   return { t: 1.0, noFace: true, fn() {
-    for (let i = 0; i < 30; i++) { const ang = rot + rand.range(-1.1, 1.1), sp = rand.range(6, 12); P({ x: a.x, y: 1.8, z: a.z, vx: Math.sin(ang) * sp, vy: rand.range(-0.5, 0.5), vz: Math.cos(ang) * sp, life: 0.7, size: 0.4, size1: 0.05, color: 0xe0ecff, color1: 0x6a88c0, drag: 1.5 }); }
-    const p = G.player; if (inCone(a.x, a.z, rot, 10, 1.1, p)) hitHero(a, p, 1.0, { seen: 6 });
-    if (a.dark) for (const b of braziers(a)) if (b.lit && inCone(a.x, a.z, rot, 10.5, 1.1, b)) { snuffLamp(b, a); tally(a, 'sweepSnuff'); }
+    for (let i = 0; i < 30; i++) { const ang = rot + rand.range(-0.8, 0.8), sp = rand.range(6, 12); P({ x: a.x, y: 1.8, z: a.z, vx: Math.sin(ang) * sp, vy: rand.range(-0.5, 0.5), vz: Math.cos(ang) * sp, life: 0.7, size: 0.4, size1: 0.05, color: 0xe0ecff, color1: 0x6a88c0, drag: 1.5 }); }
+    const p = G.player; if (inCone(a.x, a.z, rot, 10, 0.8, p)) hitHero(a, p, 1.0, { seen: 4 });
+    if (a.dark) for (const b of braziers(a)) if (b.lit && inCone(a.x, a.z, rot, 10.5, 0.8, b) && Math.hypot(b.x - G.player.x, b.z - G.player.z) > 3) { snuffLamp(b, a); tally(a, 'sweepSnuff'); }
   }, after: 0.5 };
 }
 // The Long Road: a 16 m line, then a dash that throws her down and leaves ash that slows (twice in a row when he remembers)
@@ -2994,7 +3000,7 @@ function longRoad(a, pl) {
   a.avatar?.play('block', 1); Audio.sfx('hornCall', { x: a.x, z: a.z, vol: 0.6, pitch: 0.8 });
   return { t: 0.9, noFace: true, fn() {
     a.avatar?.play('Shield_Dash', 1.3);
-    startDash(a, dir, 24, len, { probe: 0.6, dmg: 1.4, hitO: { push: 24 }, end() { a.avatar?.anim.stop?.(0.2); }, drop: { every: 2.4, fn: (x, z) => area('ash', x, z, 1.4, 3, { team: 'foe', src: a }) } });
+    startDash(a, dir, 24, len, { probe: 0.6, w: 2.6, dmg: 1.4, hitO: { push: 24 }, end() { a.avatar?.anim.stop?.(0.2); }, drop: { every: 2.4, fn: (x, z) => area('ash', x, z, 1.4, 3, { team: 'foe', src: a }) } });
     Audio.sfx('swingHeavy', { x: a.x, z: a.z });
   }, after: 0.35, chain: a.phase >= 2 && n < 1, chainFn: longRoad };
 }
@@ -3104,14 +3110,14 @@ const KARTHAX = {
     // every 15 s (cooldowns run a quarter faster in a last phase)
     { id: 'dark', when: (a) => a.phase >= 2 && heroNear(a), cd: 18.75, run: (a) => theDark(a) },
     { id: 'breath', when: (a, d) => a.phase >= 2 && !!getLightPool('isarn'), cd: 10, run: (a, pl) => ashBreath(a, pl) },
-    // behind the cages one every 5 s, wherever she is in the arena (the statues break only to it); never far out of it.
-    // Statues risen whole (gifts taken) take more blows, so he strikes faster: 5 s for three blows, 3.2 s for six (~30 s)
-    { id: 'hammerfall', when: (a, d) => (a.phase === 1 && heroInArena(a)) || (d > 3 && d < 16), phaseCd: [9, 5, 8], cdOf: (a, ph) => (ph === 1 && a.cageBlows ? 5 - 0.6 * (a.cageBlows - 3) : null), run: (a, pl) => hammerfall(a, pl) },
+    // behind the cages one every 3.8 s, wherever she is in the arena (the statues break only to it); never far out of it.
+    // Statues risen whole (gifts taken) take more blows, so he strikes faster: 3.8 s for three blows, 3.2 s for six
+    { id: 'hammerfall', when: (a, d) => (a.phase === 1 && heroInArena(a)) || (d > 3 && d < 16), phaseCd: [9, 5, 9], cdOf: (a, ph) => (ph === 1 && a.cageBlows ? 3.8 - 0.2 * (a.cageBlows - 3) : null), run: (a, pl) => hammerfall(a, pl) },
     { id: 'kneel', when: (a, d) => a.phase === 1 && cageUp(a, 'lord') && d < 8.5, cd: 12, run: (a) => kneel(a) },
     { id: 'rain', when: (a) => a.phase === 1 && cageUp(a, 'king') && heroInArena(a), cd: 10, run: (a, pl) => moltenRain(a, pl) },
     { id: 'host', when: (a) => a.phase === 0 && alive(a.host).length < 4, cd: 22, run: (a) => raiseHost(a) },
     { id: 'tongs', when: (a, d) => a.phase !== 1 && d > 3.5 && d < 10, cd: 12, run: (a, pl) => tongs(a, pl) },
-    { id: 'gaze', when: (a, d) => a.phase !== 1 && d > 4, phaseCd: [9, 9, 8], run: (a, pl) => gaze(a, pl) },
+    { id: 'gaze', when: (a, d) => a.phase !== 1 && d > 4, phaseCd: [9, 9, 10], run: (a, pl) => gaze(a, pl) },
     { id: 'combo', basic: true, when: (a, d) => d < 5.2, cd: 1.6, run(a, pl) { a.combo = 0; return emberCombo(a, pl); } }
   ]
 };
@@ -3124,7 +3130,7 @@ function threeCages(a) {
     if (Object.values(gifts).includes('taken')) later(3.2, inZone(a, () => say('d.karthax.take')));
     F.giftsTaken = true; refreshStats();
   }
-  a.lockPhase = 1; a.hpFloor = a.hpMax * 0.3; a.misses = 0;
+  a.lockPhase = 1; a.hpFloor = a.hpMax * 0.2; a.misses = 0;
   a.crown?.userData?.setSockets?.(1);
   const c = arena(a), spots = G.zone.L.spots?.cages || [];
   a.cages = KEEPERS.map((k) => {
@@ -3138,13 +3144,13 @@ function threeCages(a) {
     return m;
   });
   a.cageBlows = a.cages.reduce((n, s) => n + s.blows, 0);
-  a.mcd.hammerfall = 2;
+  a.mcd.hammerfall = 1.2;
   emit('karthaxCages', a, a.cages);
 }
 function crackLook(s) { s.avatar?.setRim(0xff5a18, 0.9); s.baseTint = 0x9a948c; s.statueTint = 0x9a948c; for (let i = 0; i < 12; i++) sparks(s.x, rand.range(0.5, 2.5), s.z, 1, 0xff8030, 2); }
-// a Hammerfall in the cages' phase: every statue within 4.5 m of the blow (6 m after three misses running) takes it
+// a Hammerfall in the cages' phase: every statue within 4.5 m of the blow (6 m after two misses running) takes it
 function cageBlow(a, x, z) {
-  const R0 = a.misses >= 3 ? 6 : 4.5;
+  const R0 = a.misses >= 2 ? 6 : 4.5;
   let hit = false;
   for (const s of a.cages || []) {
     if (s.dead || Math.hypot(s.x - x, s.z - z) > R0 + s.radius * 0.5) continue;
@@ -3154,20 +3160,22 @@ function cageBlow(a, x, z) {
     else { s.cracked = true; crackLook(s); emit('cageCracked', s, s.keeper, a); tally(a, 'cageCracked'); }
   }
   if (hit) a.misses = 0;
-  else if (++a.misses === 3) { say('d.karthax.hint'); emit('cageHint', a); tally(a, 'hint'); }
+  else if (++a.misses === 2) { say('d.karthax.hint'); emit('cageHint', a); tally(a, 'hint'); }
 }
 function breakCage(a, s) {
   s.dead = true; s.deadT = 0; s.hp = 0;
   explosion(s.x, s.z, 2.6, 0xb0a898, { smoke: 0x7a7670, shake: 0.6 }); puff(s.x, 1.5, s.z, 26, 0x8a8680, 2.2, 2.4, 1.8);
   glowBurst(s.x, 2.4, s.z, s.keeper === 'lady' ? 0xffb040 : s.keeper === 'king' ? 0xff6a20 : 0x7ad0ff, 40, 4, 0.35, 1);
   Audio.sfx('statueBreak', { x: s.x, z: s.z }); Audio.sfx('crownCrack');
+  dropGlobe(s.x, s.z);
   // the shard cracks and speaks the wish it held; then the keeper, for one breath, is himself
   say('d.cage.' + s.keeper);
   later(2.6, () => say('d.cage.' + s.keeper + '2'));
   emit('cageBroken', s, s.keeper, a); tally(a, 'cageBroken:' + s.keeper);
 }
+// (what she did to him behind the cages counts: he enters the last fire at 20-29.9%)
 function cagesBroken(a) {
-  a.cages = null; a.hpFloor = a.hpMax * 0.2; a.hp = Math.min(a.hp, a.hpMax * 0.299); a.ward = 0; restoreRim(a);
+  a.cages = null; a.hp = Math.min(a.hp, a.hpMax * 0.299); a.hpFloor = a.hpMax * 0.2; a.ward = 0; restoreRim(a);
   tally(a, 'cagesBroken'); daze(a, 3.4);
   // he staggers while the last keeper says her piece (no blow ends him there); then the last fire
   later(3.4, () => { a.lockPhase = null; a.hpFloor = 0; });
@@ -3191,38 +3199,40 @@ function ghostPools(a) {
   const c = arena(a), R0 = arenaR(16) - 3, gs = G.zone.L.spots?.ghosts || [0, 1, 2, 3].map((i) => ({ x: c.x + Math.sin(i * 1.571 + 0.785) * R0, z: c.z + Math.cos(i * 1.571 + 0.785) * R0 }));
   for (const g of gs) addLightPool(g.x, g.z, 4, Infinity, 'ghost', { owner: a, color: 0xc8d8ff, intensity: 14 });
 }
-// Ember Combo: three blows (0.6, 0.5, 0.8 s; quicker in the last fire), the third leaves fire
+// Ember Combo: three blows (0.8, 0.5, 0.8 s; 0.7, 0.45, 0.7 in the last fire), the third leaves fire. The aim is taken for the
+// first; the second and third strike along the same line, and a step out of it ends the combo. The hammer cools after the third
 function emberCombo(a, pl) {
-  const step = a.combo, W = a.phase >= 2 ? [0.5, 0.45, 0.7] : [0.6, 0.5, 0.8], t = W[step];
-  a.rot = angleTo(a.x, a.z, pl.x, pl.z);
+  const step = a.combo, W = a.phase >= 2 ? [0.7, 0.45, 0.7] : [0.8, 0.5, 0.8], t = W[step];
+  if (step === 0) a.rot = angleTo(a.x, a.z, pl.x, pl.z);
   a.tele = teleCone(a.x, a.z, a.rot, 5, 1.0, t, 0xff5010);
   a.avatar?.play(['slash1', 'slash2', 'slam'][step], 1.2, { hitIn: t });
-  return { t, fn() {
-    if (meleeLands(a, G.player, 5, 1.0)) hitHero(a, G.player, step === 2 ? 1.4 : 1, { burn: a.dmg * 0.4 });
+  return { t, noFace: step > 0, fn() {
+    if (meleeLands(a, G.player, 5, 1.0)) hitHero(a, G.player, step === 2 ? 1.15 : 1, { burn: a.dmg * 0.4 });
     Audio.sfx('swingHeavy', { x: a.x, z: a.z }); shake(step === 2 ? 0.35 : 0.12);
     if (step === 2) { const x = a.x + Math.sin(a.rot) * 3, z = a.z + Math.cos(a.rot) * 3; explosion(x, z, 1.8, 0xff6a10, { smoke: 0x2a1a10, shake: 0.3 }); area('fire', x, z, 1.5, 4, { team: 'foe', src: a, dmg: a.dmg * 0.3, tick: 0.5 }); }
     a.combo++;
-  }, after: 0.25, chain: step < 2 && Math.hypot(pl.x - a.x, pl.z - a.z) < 6.5, chainFn: emberCombo };
+  }, after: step === 2 ? 0.9 : 0.25, chain: step < 2 && inCone(a.x, a.z, a.rot, 5.5, 1.0, G.player), chainFn: emberCombo };
 }
-// Hammerfall: a 4.5 m circle on the hero (1.6 s while the cages stand, else 1.0 s); he leaps to bring the hammer down on it
+// Hammerfall: a circle on the hero, 4.5 m in 1.6 s while the cages stand, else 3.5 m in 1.4 s (a walk out of it); he leaps
+// to bring the hammer down on it, and wrenches it free after (an opening)
 function hammerfall(a, pl) {
-  const caged = !!a.cages, wind = caged ? 1.6 : 1.0, tx = pl.x, tz = pl.z, d = Math.hypot(tx - a.x, tz - a.z), dir = angleTo(a.x, a.z, tx, tz);
-  // after three misses running the statues break within 6 m (cageBlow), and the circle shows it; she is still hit within 4.5 m
-  const R0 = caged && a.misses >= 3 ? 6 : 4.5;
+  const caged = !!a.cages, wind = caged ? 1.6 : 1.4, tx = pl.x, tz = pl.z, d = Math.hypot(tx - a.x, tz - a.z), dir = angleTo(a.x, a.z, tx, tz);
+  // after two misses running the statues break within 6 m (cageBlow), and the circle shows it; she is still hit within 4.5 m
+  const R0 = caged ? (a.misses >= 2 ? 6 : 4.5) : 3.5;
   a.rot = dir;
   a.tele = teleCircle(tx, tz, R0, wind, 0xff5010);
   const leap = d > 4.8;
-  if (leap) { const k = d - 2.6, f = G.zone.map.nearestFloor(a.x + Math.sin(dir) * k, a.z + Math.cos(dir) * k, 3); a.lx = a.x; a.lz = a.z; a.leapTo = f; }
+  if (leap) { const k = d - 3.2, f = G.zone.map.nearestFloor(a.x + Math.sin(dir) * k, a.z + Math.cos(dir) * k, 3); a.lx = a.x; a.lz = a.z; a.leapTo = f; }
   a.avatar?.play('chop', 1, { hitIn: wind }); Audio.sfx('swingHeavy', { x: a.x, z: a.z });
   return { t: wind, leap, noFace: true, fn() {
     explosion(tx, tz, R0, 0xff6a10, { smoke: 0x2a1a10, shake: 0.7 }); ring(tx, tz, R0 + 0.3, 0xffa040, 0.6);
     Audio.sfx('slam'); Audio.sfx('anvil', { x: tx, z: tz });
-    const p = G.player; if (Math.hypot(p.x - tx, p.z - tz) < 4.5 + p.radius * 0.5) hitHero(a, p, 1.5, { stun: 0.4, burn: a.dmg * 0.5 });
-    for (let i = 0; i < 3; i++) { const ang = i * 2.094 + rand.range(0, 1), r = rand.range(1.2, 3), x = tx + Math.sin(ang) * r, z = tz + Math.cos(ang) * r; if (G.zone.map.walkable(x, z)) area('fire', x, z, 1.3, 4, { team: 'foe', src: a, dmg: a.dmg * 0.3, tick: 0.5 }); }
+    const p = G.player; if (Math.hypot(p.x - tx, p.z - tz) < (caged ? 4.5 : R0) + p.radius * 0.5) hitHero(a, p, 1.15, { stun: 0.4, burn: a.dmg * 0.4 });
+    for (let i = 0; i < 2; i++) { const ang = i * 2.094 + rand.range(0, 1), r = rand.range(1.2, 3), x = tx + Math.sin(ang) * r, z = tz + Math.cos(ang) * r; if (G.zone.map.walkable(x, z)) area('fire', x, z, 1.3, 4, { team: 'foe', src: a, dmg: a.dmg * 0.3, tick: 0.5 }); }
     if (caged) cageBlow(a, tx, tz);
-  }, after: 0.7 };
+  }, after: caged ? 0.7 : 1.1 };
 }
-// Tongs: a 10 m line; caught (no dodge during the wind-up), she is dragged to the anvil and hammered (1.8x and burn)
+// Tongs: a 10 m line; caught (no dodge during the wind-up), she is dragged to the anvil and hammered (1.3x and burn)
 function tongs(a, pl) {
   const dir = angleTo(a.x, a.z, pl.x, pl.z), stamp = pl.dodgeStamp || 0;
   a.rot = dir;
@@ -3236,10 +3246,10 @@ function tongs(a, pl) {
     const to = near ? (() => { const k = Math.atan2(p.x - an.x, p.z - an.z); return G.zone.map.nearestFloor(an.x + Math.sin(k) * 1.8, an.z + Math.cos(k) * 1.8, 3); })() : G.zone.map.nearestFloor(a.x + ux * (a.radius + 1.2), a.z + uz * (a.radius + 1.2), 3);
     p.pull = { x: to.x, z: to.z, sx: p.x, sz: p.z, t: 0.45, t0: 0.45 }; p.act = null;
     tally(a, 'tongsCaught'); Audio.sfx('chainRattle', { x: p.x, z: p.z });
-    later(0.5, inZone(a, () => { a.avatar?.play('slam', 1.4); const q = G.player; explosion(q.x, q.z, 1.6, 0xff6a10, { smoke: 0x2a1a10, shake: 0.5 }); Audio.sfx('anvil', { x: q.x, z: q.z }); hitHero(a, q, 1.8, { burn: a.dmg * 0.6 }); }));
+    later(0.5, inZone(a, () => { a.avatar?.play('slam', 1.4); const q = G.player; explosion(q.x, q.z, 1.6, 0xff6a10, { smoke: 0x2a1a10, shake: 0.5 }); Audio.sfx('anvil', { x: q.x, z: q.z }); hitHero(a, q, 1.3, { burn: a.dmg * 0.6 }); }));
   }, after: 1.0 };
 }
-// Gaze of the Brow-stone: a white-gold 20 m line that burns on for 4 s; in the last fire two crossing lines, never into Isarn's light
+// Gaze of the Brow-stone: a white-gold 20 m line that burns on for 3 s; in the last fire two crossing lines, never into Isarn's light
 function gaze(a, pl) {
   const wind = a.phase >= 2 ? 1.2 : 1.1, I = a.phase >= 2 ? getLightPool('isarn') : null;
   let rays = [angleTo(a.x, a.z, pl.x, pl.z)];
@@ -3253,8 +3263,8 @@ function gaze(a, pl) {
     for (const r of rays) {
       const ux = Math.sin(r), uz = Math.cos(r);
       for (let d = 1; d < 20; d += 0.6) P({ x: a.x + ux * d, y: 1.2, z: a.z + uz * d, vy: rand.range(0.5, 2), life: 0.5, size: 0.8, size1: 0.1, color: 0xfff0c0, color1: 0xff7020 });
-      for (let d = 3; d < 20; d += 3.5) { const x = a.x + ux * d, z = a.z + uz * d; if (G.zone.map.walkable(x, z)) area('fire', x, z, 1.2, 4, { team: 'foe', src: a, dmg: a.dmg * 0.3, tick: 0.5 }); }
-      if (!p.dead && inLine(a.x, a.z, r, 20, 2.4, p)) hitHero(a, p, 1.6, { burn: a.dmg * 0.6 });
+      for (let d = 3; d < 20; d += 5) { const x = a.x + ux * d, z = a.z + uz * d; if (G.zone.map.walkable(x, z)) area('fire', x, z, 1.2, 3, { team: 'foe', src: a, dmg: a.dmg * 0.2, tick: 0.5 }); }
+      if (!p.dead && inLine(a.x, a.z, r, 20, 2.4, p)) hitHero(a, p, 1.15, { burn: a.dmg * 0.6 });
     }
     Audio.sfx('explosion', { x: a.x, z: a.z, vol: 0.6 }); shake(0.3);
   }, after: 0.6 };
@@ -3285,16 +3295,16 @@ function kneel(a) {
   a.avatar?.play('slam', 1, { hitIn: 1.3 }); Audio.sfx('wraithWail', { vol: 0.6 });
   return { t: 1.3, noFace: true, fn() { ring(a.x, a.z, 8, 0x9ad0ff, 0.6); glowBurst(a.x, 1, a.z, 0x9ad0ff, 30, 6, 0.3, 0.6); const p = G.player; if (Math.hypot(p.x - a.x, p.z - a.z) < 8 + p.radius * 0.5) { hitHero(a, p, 1.0); rootHero(1.5); } tally(a, 'kneelHit'); }, after: 0.6 };
 }
-// Molten Rain (Durgan's statue stands): five drops on and around the hero, 1.1 to 2.1 s, each leaving fire
+// Molten Rain (Durgan's statue stands): three drops on and around the hero, 1.0 to 1.5 s, each leaving fire
 function moltenRain(a, pl) {
   a.avatar?.play('castUp', 1); Audio.sfx('lavaBurst', { vol: 0.7 });
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 3; i++) {
     const x = pl.x + (i ? rand.range(-4.5, 4.5) : 0), z = pl.z + (i ? rand.range(-4.5, 4.5) : 0);
     if (!G.zone.map.walkable(x, z)) continue;
-    const dl = 1.1 + i * 0.25;
+    const dl = 1.0 + i * 0.25;
     teleCircle(x, z, 1.8, dl, 0xff5010);
     later(dl - 0.32, inZone(a, () => fall(x, z, 0xffa040, true)));
-    later(dl, inZone(a, () => { explosion(x, z, 1.8, 0xff7a20, { smoke: 0x2a1a10, shake: 0.1 }); area('fire', x, z, 1.4, 4, { team: 'foe', src: a, dmg: a.dmg * 0.3, tick: 0.5 }); Audio.sfx('lavaBurst', { x, z, vol: 0.6 }); const p = G.player; if (Math.hypot(p.x - x, p.z - z) < 1.9) hitHero(a, p, 1.1, { burn: a.dmg * 0.5 }); }));
+    later(dl, inZone(a, () => { explosion(x, z, 1.8, 0xff7a20, { smoke: 0x2a1a10, shake: 0.1 }); area('fire', x, z, 1.4, 3, { team: 'foe', src: a, dmg: a.dmg * 0.2, tick: 0.5 }); Audio.sfx('lavaBurst', { x, z, vol: 0.6 }); const p = G.player; if (Math.hypot(p.x - x, p.z - z) < 1.9) hitHero(a, p, 1.0, { burn: a.dmg * 0.5 }); }));
   }
   return { t: 0.6, fn() {}, after: 0.4 };
 }
@@ -3309,7 +3319,7 @@ function theDark(a) {
     for (const s of safes) killTele(s);
     for (let i = 0; i < 60; i++) { const ang = Math.random() * 6.28, r = Math.random() * R0; P({ x: c.x + Math.sin(ang) * r, y: 0.2, z: c.z + Math.cos(ang) * r, vy: rand.range(2, 5), life: 0.6, size: 0.9, size1: 0.2, color: 0xff6020, color1: 0x300800 }); }
     shake(0.6); Audio.sfx('explosion', { vol: 0.8 });
-    const p = G.player; if (!p.dead && Math.hypot(p.x - c.x, p.z - c.z) < R0 && !lightAt(p.x, p.z)) { hitHero(a, p, 2.0, { burn: a.dmg * 0.5 }); tally(a, 'darkHit'); } else tally(a, 'darkSafe');
+    const p = G.player; if (!p.dead && Math.hypot(p.x - c.x, p.z - c.z) < R0 && !lightAt(p.x, p.z)) { hitHero(a, p, 1.3, { burn: a.dmg * 0.5 }); tally(a, 'darkHit'); } else tally(a, 'darkSafe');
   }, after: 0.6 };
 }
 // Ash Breath at the Lantern: an 8 m cone at Isarn; it dims his light to 3 m for 6 s unless the hero stands in it and takes it
@@ -3322,7 +3332,7 @@ function ashBreath(a, pl) {
   return { t: 1.0, noFace: true, fn() {
     for (let i = 0; i < 40; i++) { const ang = rot + rand.range(-0.8, 0.8), sp = rand.range(5, 10); P({ add: false, x: a.x, y: 2, z: a.z, vx: Math.sin(ang) * sp, vy: rand.range(-0.5, 0.5), vz: Math.cos(ang) * sp, life: 0.9, size: 0.6, size1: 1.4, color: 0x4a4642, alpha: 0.6, alpha1: 0, drag: 1.5 }); }
     const p = G.player;
-    if (!p.dead && inCone(a.x, a.z, rot, 8, 0.8, p)) { hitHero(a, p, 1.2, { burn: a.dmg * 0.3 }); tally(a, 'breathTaken'); }
+    if (!p.dead && inCone(a.x, a.z, rot, 8, 0.8, p)) { hitHero(a, p, 1.0, { burn: a.dmg * 0.3 }); tally(a, 'breathTaken'); }
     else if (Math.hypot(I.x - a.x, I.z - a.z) < 8 + I.r * 0.5) { shrinkPool(I, 3, 6); emit('isarnDimmed', a); tally(a, 'breathDimmed'); }
   }, after: 0.5 };
 }
@@ -3653,13 +3663,14 @@ function clawSweep(a, pl) {
 // twice in a row, the second back the other way
 function sideRush(a, pl, shell) {
   const aim = angleTo(a.x, a.z, pl.x, pl.z) + (a.blindT > 0 ? rand.sign() * 0.7 : 0), dist = Math.hypot(pl.x - a.x, pl.z - a.z);
-  const len = shell ? clamp(dist + 3, 6, 16) : 14, wide = a.radius * 2 + 0.2;
+  const len = shell ? clamp(dist + 3, 6, 16) : 14, wide = Math.max(4, a.radius * 2 + 0.2);
   a.rot = aim + Math.PI / 2;
-  a.tele = teleLine(a.x, a.z, aim, len, Math.max(4, wide), 1.1, 0xff4a20); bigTele(a, 1.1);
+  a.tele = teleLine(a.x, a.z, aim, len, wide, 1.1, 0xff4a20); bigTele(a, 1.1);
   a.avatar?.play('side', 1.6); Audio.sfx('louseSkitter', { x: a.x, z: a.z, vol: 1, pitch: 0.5 });
   if (shell) { a.rushes = (a.rushes || 0) + 1; tally(a, 'shellRush'); }
   return { t: 1.1, noFace: true, fn() {
-    const D = startDash(a, aim, 16, len, { probe: a.radius * 0.7, dmg: 1.4, hitO: { push: 14 }, end: rushEnd5, dust: 0xa8b4bc, dir: aim });
+    // (w: no hit wider than the drawn line, dashStep)
+    const D = startDash(a, aim, 16, len, { probe: a.radius * 0.7, w: wide, dmg: 1.4, hitO: { push: 14 }, end: rushEnd5, dust: 0xa8b4bc, dir: aim });
     D.shell = !!shell; D.ice5 = true;
     a.rot = aim + Math.PI / 2;
     Audio.sfx('swingHeavy', { x: a.x, z: a.z });
@@ -3820,11 +3831,12 @@ function islandEnd(a) {
   later(bcd(12), inZone(a, () => { if (a.phase === 2 && a.st === 'fight' && !a.dash) { a.move = null; killTele(a.tele); a.tele = null; islandStart(a); } else if (a.phase === 2) a.islandDue = true; }));
 }
 // the Cradle's fire given across (the Island's light): dur s with the fire streaming to it; a blow worth a tenth of her life
-// (one or several) breaks it, a lesser one does not
+// (one or several) breaks it, a lesser one does not. Like a touch (world.js), it takes the place of a basic attack held
+// down, not of a skill
 const CH = { hurt: 0 };
 on('hurt', (f) => { CH.hurt += f; });
 function lightChannel(it, dur, to, done) {
-  const pl = G.player; if (!pl || pl.dead || pl.act || G.mode !== 'play') return;
+  const pl = G.player; if (!pl || pl.dead || (pl.act && pl.act.name !== 'basic') || G.mode !== 'play') return;
   pl.rot = angleTo(pl.x, pl.z, it.x, it.z); CH.hurt = 0;
   const c = new THREE.Vector3();
   pl.act = { name: 'touch', t: 0, dur, ev: [], clip: dur, move: 0, st: 0,

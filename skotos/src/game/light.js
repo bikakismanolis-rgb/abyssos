@@ -41,21 +41,23 @@ const ember = () => lightKind() === 'ember';
 
 // ---------- queries ----------
 // is (x, z) in light? Everywhere is, in a zone with no light. o.ring === false: the hero's own ring does not count (the
-// Skuas mob a hero who lingers in the dark with only the Cradle's light round her)
+// Skuas mob a hero who lingers in the dark with only the Cradle's light round her). o.pad: a body's half-width (a light that
+// reaches the body lights it: combat.js, the Shroud's look); 0 for a point (the hero in the Dark). Beams stay a point test
 export function lightAt(x, z, o = {}) {
   if (!lightOn()) return true;
-  for (const p of S.pools) if (p.r > 0 && !p.beam && (p.x - x) ** 2 + (p.z - z) ** 2 < p.r * p.r) return true;
+  const pad = o.pad || 0;
+  for (const p of S.pools) if (p.r > 0 && !p.beam && (p.x - x) ** 2 + (p.z - z) ** 2 < (p.r + pad) ** 2) return true;
   if (S.beams.length && inBeam(x, z)) return true;
   // Karthax has drunk every fire: only the pools are left (Isarn's lantern, the ghosts)
   if (S.dark) return false;
   const pl = G.player, hr = heroLightR();
-  if (o.ring !== false && pl && !pl.dead && hr > 0 && (pl.x - x) ** 2 + (pl.z - z) ** 2 < hr * hr) return true;
-  if (lampAt(x, z)) return true;
-  return !!fireAt(x, z, 1.5);
+  if (o.ring !== false && pl && !pl.dead && hr > 0 && (pl.x - x) ** 2 + (pl.z - z) ** 2 < (hr + pad) ** 2) return true;
+  if (lampAt(x, z, pad)) return true;
+  return !!fireAt(x, z, 1.5 + pad);
 }
 // lit by a lamp, a brazier or a fire-pit (what blinds a landing Ashwing)
-export function lampAt(x, z) {
-  for (const it of G.zone?.interact || []) if (it.lit && it.lightR && (it.x - x) ** 2 + (it.z - z) ** 2 < it.lightR * it.lightR) return it;
+export function lampAt(x, z, pad = 0) {
+  for (const it of G.zone?.interact || []) if (it.lit && it.lightR && (it.x - x) ** 2 + (it.z - z) ** 2 < (it.lightR + pad) ** 2) return it;
   return null;
 }
 // burning ground at (x, z), pad metres past its edge (in a boss's dark the hero's own fire lights only as it bursts)
@@ -86,7 +88,7 @@ export function heroLightR() {
   if (S.over != null) return S.over;
   return (S.swellT > 0 && ember() ? LIGHT.swell : LIGHT.base) * (S.halfT > 0 ? 0.5 : 1);
 }
-// a boss's darkness: r metres (2.5 in Ivar's dark, 0 in Karthax's last fire) until null, or until the owner dies
+// a boss's darkness: r metres (3.5 in Ivar's dark, 0 in Karthax's last fire) until null, or until the owner dies
 export function setHeroLight(r, owner = null) { S.over = r; S.owner = r == null ? null : owner; }
 // only the pools give light (Karthax's Last Fire), until off or the owner dies
 export function setLightDark(on, owner = null) { S.dark = on ? owner || true : null; }
@@ -380,10 +382,11 @@ export function tickLight(dt) {
     else if (U.flame) { const s = (0.8 + Math.sin(R.time * 13) * 0.08 + Math.sin(R.time * 31) * 0.05) * k; U.flame.scale.set(0.22 * s, 0.3 * s, 1); }
     if (Math.random() < 0.25 * k) { const c = cradlePoint(V); FXM.P({ x: c.x + rand.range(-0.04, 0.04), y: c.y + 0.1, z: c.z + rand.range(-0.04, 0.04), vy: rand.range(0.5, 1.1), life: 0.4, size: 0.07, size1: 0.01, color: 0xffd080, color1: 0xff4010 }); }
   }
-  // the warm light it throws follows the ring (the atmosphere's reach at 6 m)
-  const kk = clamp(S.ringR / LIGHT.base, 0, 1.5);
-  R.heroLight.distance = Math.max(2, S.range0 * Math.max(0.3, kk));
-  R.heroLight.intensity *= Math.max(0.12, Math.min(1.25, kk));
+  // the warm light it throws follows the ring (the atmosphere's reach at 6 m); in a boss's darkness enough is left to read
+  // the floor by (a look only: what is lit is still lightAt's)
+  const kk = clamp(S.ringR / LIGHT.base, 0, 1.5), dim = S.over != null || !!S.dark;
+  R.heroLight.distance = Math.max(dim ? 6 : 2, S.range0 * Math.max(dim ? 0.45 : 0.3, kk));
+  R.heroLight.intensity *= Math.max(dim ? 0.4 : 0.12, Math.min(1.25, kk));
 }
 // on leaving a zone (projectiles.js clearProjs) and on entering one: no beams, no pools, no darkness, the Cradle at rest
 export function clearLight() {

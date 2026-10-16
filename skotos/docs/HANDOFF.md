@@ -5,7 +5,7 @@ Read this first when picking the project up in a new session.
 ## Where things are
 
 - Repo `bikakismanolis-rgb/abyssos`, game in `skotos/`, working branch `claude/sleepy-tesla-4030vd` (pull request #2 into the branch of #1). Commit only there.
-- The playable build is a private claude.ai artifact: https://claude.ai/artifact/74dKQSTSnJmPAyDHBz4BRP (version 10 at the time of writing). Update it in place (same URL), never publish a new one.
+- The playable build is a private claude.ai artifact: https://claude.ai/artifact/74dKQSTSnJmPAyDHBz4BRP, pinned in the owner's sidebar. **Version 12 (16 October) is Acts I-IV: commit 7eded86 plus the Act IV difficulty fix** (`docs/act4-balance/published-v12.patch`; why and what in `docs/act4-balance/README.md`). It was built from a worktree at 7eded86 so that the unfinished Act V stayed out; the same fix is ported into this branch (`docs/act4-balance/port.md`). Update it in place (same URL), never publish a new one.
 - The owner writes in Greek; answer in Greek. The game text is Greek and English (`src/i18n/text.js`).
 - **Act V is being built (paused on 10 October at the owner's request, to keep usage until the plan renews on Tuesday 13 October).** Its plan is `docs/act5-design.md`, its contract `docs/act5-contract.md` (the owner's decisions, the four stages and gates, file ownership, every shared name, and the stage-A outcome), the briefs and the measured asset report in `docs/act5-briefs/`, every stage's reports in `docs/act5-briefs/reports/`, and the workflow scripts of the running stages in `docs/act5-workflows/`. See "Act V: where it stopped" below.
 - Design and contracts of earlier acts: `docs/act4-design.md` (the Act IV plan), `docs/act4-contract.md`, `docs/act3-contract.md`. README.md describes every act (in Greek). CREDITS.txt, `src/ui/credits.js` and `src/assets/*/CREDITS.txt` list every third-party asset.
@@ -27,7 +27,9 @@ Read this first when picking the project up in a new session.
 
 ## Act V: where it stopped
 
-The published artifact is still Acts I-IV (version 11). Act V is on the branch, unpublished.
+The published artifact is still Acts I-IV (version 12, with the Act IV difficulty fix). Act V is on the branch, unpublished.
+
+**The Act IV difficulty fix (16 October).** The owner found the last act far harder than the others. Measured with `tools/balance-act.mjs` (a bot that plays zones and bosses for every class and difficulty; 724 runs): the cliff was Karthax for the Ranger and the Mage and the Forge's Breath, plus four bugs (slag drips on Karthax's platform, affixes firing from untouchable foes, the waylamp checkpoint lost on Continue, dash hits wider than drawn). Fixed and published as version 12; Karthax now costs 0.34 / 0.41 / 0.56 lives a fight (Warden / Ranger / Mage) against 0.64 / 0.80 / 1.47 before (bot-corrected). Act V's bosses were tuned against the old Karthax (Tower dmg 2.3, Skotos 2.6) and must be re-measured with the same tool so Act V is a step up from the fixed Act IV; Act V's own checkpoints must adopt the fixed Continue rule.
 
 - **Stage A, assets: done** (commit "Skotos: the Act V assets"). The frost people set, the rime pack, the creatures (crab, skotos, tentacle, icemaw, louse, skua; the Rime Bear reuses bear.glb); 7.6 MB raw, 93 MB phone GPU; credits complete. The Skotos is "Cloaked Figure" plus a code-built hood and arms (the design's squid sources failed the look gate).
 - **Stage B, foundation: done** (commit "Skotos: Act V foundation (stage B)"). Plumbing, the Anvil's Neck (parity over 2000 seeds), gen5/genlib with check-act5 clean, tide.js and ice.js (soaks pass), sea.js and build5.js, perf5 and shallowtele passing, every shipped scenario passing.

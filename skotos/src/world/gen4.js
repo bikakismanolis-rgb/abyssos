@@ -655,6 +655,8 @@ function tryForge(seed, o, last) {
     const slots = [4.5, 11.5, 18.5, 25.5];
     const nSt = i === 2 ? 2 : rng.int(1, 2), stSlots = rng.shuffle([1, 2]).slice(0, nSt), stSide = rng.sign();
     g.stations = [];
+    // the Breath's cover (forge.js shows it blue during an inhale): the alcoves, the stokers' bays, the pillars' lee
+    g.cover = [];
     slots.forEach((u0, k) => {
       for (const sv of [-1, 1]) {
         const j = stSlots.indexOf(k), st = j >= 0 && sv === (j ? -stSide : stSide);
@@ -663,11 +665,16 @@ function tryForge(seed, o, last) {
           gbox(g, u0 - 1.5, u0 + 3.5, sv * 2.5, sv * 6.5, 2);
           const post = gcell(g, u0 + 1, sv * 5), bel = gcell(g, u0 + 1, sv * 5.9);
           g.stations.push({ x: snap(post.x), z: snap(post.z), flue: i, r: Math.atan2(-g.px * sv, -g.pz * sv), bel });
-        } else gbox(g, u0 - 0.5, u0 + 1.5, sv * 2.5, sv * 4.5, 2);
+          g.cover.push({ ...gcell(g, u0 + 0.5, sv * 3.6), r: 1.0 });
+        } else { gbox(g, u0 - 0.5, u0 + 1.5, sv * 2.5, sv * 4.5, 2); g.cover.push({ ...gcell(g, u0 + 0.5, sv * 3.6), r: 0.95 }); }
       }
     });
-    // one or two pillars to hide behind
-    for (const [u, v] of [[8.5, rng.sign()], [21.5, rng.sign()]].slice(0, rng.int(1, 2))) pillars.push(gcell(g, u, v));
+    // one or two pillars to hide behind (the lee: 1.2 m behind it on the line from the mouth, as wide as its shadow)
+    const mo = gcell(g, g.len - 0.5, 0);
+    for (const [u, v] of [[8.5, rng.sign()], [21.5, rng.sign()]].slice(0, rng.int(1, 2))) {
+      const q = gcell(g, u, v), px = snap(q.x), pz = snap(q.z), k = 1 + 1.2 / Math.hypot(px - mo.x, pz - mo.z);
+      pillars.push(q); g.cover.push({ x: mo.x + (px - mo.x) * k, z: mo.z + (pz - mo.z) * k, r: 0.55 });
+    }
   });
   // ---- the Great Bellows: round chambers, the bellows against the back wall, two doors for what comes ----
   CH.forEach((c, i) => {
@@ -808,7 +815,7 @@ function tryForge(seed, o, last) {
   // ---- galleries: flues, grates, pillars, stations ----
   G3.forEach((g, i) => {
     const mouth = gcell(g, g.len - 0.5, 0), dir = Math.atan2(-g.d[0], -g.d[1]);
-    L.flues.push({ x: mouth.x, z: mouth.z, dir, len: g.len - 0.5, w: 5, period: 10, phase: rng.range(0, 10), gallery: i });
+    L.flues.push({ x: mouth.x, z: mouth.z, dir, len: g.len - 0.5, w: 5, period: 10, phase: rng.range(0, 10), gallery: i, cover: g.cover });
     L.props.push({ t: 'flueMouth', x: mouth.x, z: mouth.z, r: dir, g: i });
     L.grates.push({ x: mouth.x + Math.sin(dir) * 1.2, z: mouth.z + Math.cos(dir) * 1.2, r: dir, w: 4.2, l: 2.4, g: i });
     for (const u of [8, 15, 22]) { const p = gcell(g, u, 0); L.grates.push({ x: p.x, z: p.z, r: dir, w: 2.4, l: 1.4, g: i }); }
