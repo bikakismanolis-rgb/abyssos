@@ -2578,7 +2578,7 @@ const THEMES = {
     },
     step(S) {
       const th = S.th;
-      if (MOOD.breath) { MOOD.breath = 0; if (MOOD.heat >= 0) inhale(nv(th), S.t, 2.0); }
+      if (MOOD.breath) { MOOD.breath = 0; if (MOOD.heat >= 0) inhale(nv(th), S.t, 2.8); } // (forge.js BREATH.inhale)
       if (MOOD.roar) { MOOD.roar = 0; if (MOOD.heat >= 0) { exhale(nv(th), S.t); for (const k of [0, 3]) metal(nv(th), S.t + k * S.sd, 330, [1, 2.76, 5.4, 8.93, 13.3], 1, 0.07); } }
       if (S.lvl > 0.3 && MOOD.heat >= 0 && S.i % 3 === 0) INS.ost(nv(th), S.t, bassNote(S.ch, 36), S.sd * 2.6, 0.07 * S.lvl, { br: 6 });
     },
