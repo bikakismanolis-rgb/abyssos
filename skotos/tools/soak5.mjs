@@ -18,6 +18,10 @@ const require = createRequire(import.meta.url);
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const [, , which = 'all', out = '/tmp'] = process.argv;
 const BASE = process.env.BASE || 'http://localhost:5199/', DIFF = +(process.env.DIFF ?? 1), SIM = +(process.env.SIM || 30), SEED = process.env.SEED ? '&seed=' + process.env.SEED : '';
+// (the story past each zone's arrival scene, so no scene holds the clock: the coast at q26 after the rite, the Farthest
+// Light at q28 with the Icebound Ship's talk had)
+const STORY = ['alkyone', 'coastCall', 'cradle', 'coal', 'alkField', 'coastSeen', 'hearth', 'rite', 'tamMet', 'glaukosMet'];
+const FLAGS = { coast: '&quest=26&flags=' + STORY.join(','), farlight: '&quest=28&flags=' + [...STORY, 'towerWake', 'towerDown', 'frozen', 'farSeen', 'alkShip'].join(',') };
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 
 async function open(q, vw = 960, vh = 540) {
@@ -183,7 +187,7 @@ const stats = (a) => { if (!a.length) return null; const s = [...a].sort((x, y) 
 // ---------- the tide soak ----------
 async function tideSoak() {
   const CYCLES = +(process.env.CYCLES || 20), MON = +(process.env.MON || 12);
-  const { page, logs } = await open(`auto=coast&lvl=30&diff=${DIFF}&q=0&sim=${SIM}&norender${SEED}`);
+  const { page, logs } = await open(`auto=coast&lvl=30&diff=${DIFF}&q=0&sim=${SIM}&norender${SEED}${FLAGS.coast}`);
   const shot = shotOf(page);
   const setup = await page.evaluate(async ({ install, spawn, DIFF, MON }) => {
     window.__immortal = true;
@@ -227,7 +231,7 @@ async function tideSoak() {
 // ---------- the ice soak (one zone) ----------
 async function iceSoak(zone) {
   const MIN = +(process.env.MIN || 10);
-  const { page, logs } = await open(`auto=${zone}&lvl=30&diff=${DIFF}&q=0&sim=${SIM}&norender${SEED}`);
+  const { page, logs } = await open(`auto=${zone}&lvl=30&diff=${DIFF}&q=0&sim=${SIM}&norender${SEED}${FLAGS[zone]}`);
   const shot = shotOf(page);
   const setup = await page.evaluate(({ install, spawn, zone }) => {
     const G = window.__G, z = G.zone, L = z.L, pl = G.player, m = z.map;
@@ -276,7 +280,7 @@ async function iceSoak(zone) {
 async function perf() {
   const Q = process.env.Q || '1', out = {};
   for (const [zone, render] of [['coast', false], ['coast', true], ['farlight', false], ['farlight', true]]) {
-    const { page, logs } = await open(`auto=${zone}&lvl=30&diff=${DIFF}&q=${render ? Q : 0}${render ? '' : '&norender'}`, 915, 412);
+    const { page, logs } = await open(`auto=${zone}&lvl=30&diff=${DIFF}&q=${render ? Q : 0}${render ? '' : '&norender'}${FLAGS[zone]}`, 915, 412);
     const r = await page.evaluate(async ({ install, spawn, zone }) => {
       window.__immortal = true;
       const G = window.__G, z = G.zone, L = z.L, pl = G.player, A = window.__act5;

@@ -396,6 +396,8 @@ function skotosLook(a, av, id) {
   let e = null;
   for (let d = 10; d < 22; d += 0.5) if (!map.walkable(B.x, B.z - d)) { e = B.z - d; break; }
   if (e != null) { a.x = B.x; a.z = Math.floor(e) + 1 - 1.6; a.home = { x: a.x, z: a.z }; }
+  // (what it leaves falls on the skerry's core, not into the water at its feet)
+  const c = z.L.spots.core; if (c) a.dropAt = { x: c.x, z: c.z };
 }
 // an ice statue of itself, in a pose (the statue tint: ai.js), waking with the colour it had
 function statue(a, av, id) {

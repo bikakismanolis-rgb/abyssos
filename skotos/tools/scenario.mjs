@@ -3,11 +3,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const [, , name = 'combat', out = '/tmp', W = '1280', H = '720'] = process.argv;
-const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-const page = await browser.newPage({ viewport: { width: +W, height: +H } });
 const logs = [];
-page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') { const t = m.text(); if (!t.includes('ERR_CERT')) logs.push(m.type() + ': ' + t); } });
-page.on('pageerror', (e) => logs.push('pageerror: ' + e.message + ' ' + (e.stack || '').split('\n').slice(0, 3).join(' | ')));
 // Act IV: a dialog advances on Enter (the key finishes the line, then moves on), whatever the frame rate; what is said is
 // recorded for the report
 const A4 = {
@@ -30,6 +26,169 @@ const A4 = {
     return false;
   }
 };
+// ---------- Act V: what its scenarios share ----------
+// The act's flags in the order the story saves them (each before its scene), after Act IV's; A5.state(pg, f, o) gives the
+// hero the state just after flag f (its quest by the catch-up table, story.js enter5) and, with o.zone, builds that zone
+// fresh; A5.reload saves, loads the page again and takes the hero up from the title (a hero taken up again starts in
+// Whitecliff, at its waypoint); A5.until advances dialogs and waits scenes out until a condition holds
+const A5 = {
+  base: process.env.BASE || 'http://localhost:5199/',
+  ACT4: ['act1', 'act2', 'act3', 'act4', 'after3', 'hart', 'autumn', 'weaver', 'lord', 'fireTaken', 'ivar', 'plug', 'karthax', 'crownUnmade', 'giftsTaken', 'unbound', 'newFire'],
+  ORDER: ['alkyone', 'coastCall', 'cradle', 'coal', 'alkField', 'coastSeen', 'hearth', 'rite', 'tamMet', 'glaukosMet', 'light_grey', 'mem_i1', 'light_wreck', 'mem_i2', 'light_fall', 'mem_i3', 'towerWake', 'towerDown', 'frozen', 'farSeen', 'alkShip', 'hole0', 'hole1', 'hole2', 'ternSeen', 'skotosWake', 'skotosDown', 'selnaBack', 'seaLit', 'mem_i4', 'carved', 'homeSeen', 'toldChild'],
+  Q: { alkyone: 24, coal: 25, rite: 26, towerWake: 27, frozen: 28, hole2: 29, carved: 30 },
+  flagsTo(f) { return f ? A5.ORDER.slice(0, A5.ORDER.indexOf(f) + 1) : []; },
+  questAt(f) { let q = 23; for (const k of A5.flagsTo(f)) q = A5.Q[k] || q; return q; },
+  // the URL form (?auto=...&quest=&flags=): the flags up to f, Act IV's first
+  url(f) { return 'quest=' + A5.questAt(f) + '&flags=' + [...A5.ACT4, ...A5.flagsTo(f)].join(','); },
+  // the page keeps drawing frames with &norender (a page that paints nothing gets few): a tick of DOM
+  tick: (pg) => pg.evaluate(() => { if (window.__tick5) return; window.__tick5 = true; const d = document.createElement('div'); d.style.cssText = 'position:fixed;left:0;bottom:0;width:2px;height:2px;z-index:99;font-size:1px;color:#000'; document.body.appendChild(d); let k = 0; setInterval(() => { d.textContent = k++ % 2 ? '.' : ':'; }, 20); }),
+  async state(pg, f, o = {}) {
+    await pg.evaluate(async ({ flags, act4, q, o }) => {
+      const G = window.__G, h = G.hero, F = h.flags;
+      window.__immortal = o.immortal !== false;
+      h.quest = o.quest ?? q; h.act1 = h.act2 = h.act3 = 1; h.act4 = o.act4 ?? 1; h.act5 = o.act5 ?? -1;
+      h.boons = o.boons || ['ember', 'forge', 'amber', 'lantern'];
+      if (o.lvl) { h.level = o.lvl; h.points = 0; }
+      if (o.diff != null) h.diff = o.diff;
+      for (const k of Object.keys(F)) delete F[k];
+      for (const k of [...act4, ...flags]) if (!(o.drop || []).includes(k)) F[k] = true;
+      F.heat = 3; F.gifts = { throne: 'refused', forge: 'refused', unfading: 'refused' }; F.hints = ['tide', 'ice', 'cold', 'louse'];
+      F.lights5 = ['grey', 'wreck', 'fall'].filter((id) => F['light_' + id]);
+      if (o.names) F.names = o.names.slice();
+      Object.assign(F, o.flags || {});
+      for (const w of ['ashfield', 'forge', ...(F.hearth ? ['coast'] : []), ...(F.farSeen ? ['farlight'] : [])]) if (!h.wps.includes(w)) h.wps.push(w);
+      G.selnaBack = false;
+      window.__D.refreshStats();
+      if (o.zone) { const W = await import('/src/game/world.js'); await W.zoneReady(o.zone); window.__D.enterZone(o.zone, { fresh: true, at: o.at }); }
+      (await import('/src/game/save.js')).writeSave();
+    }, { flags: A5.flagsTo(f), act4: A5.ACT4, q: A5.questAt(f), o });
+  },
+  async reload(pg, o = {}) {
+    if (o.write !== false) await pg.evaluate(async () => (await import('/src/game/save.js')).writeSave());
+    await pg.goto(A5.base + '?' + (o.q || 'q=0&sim=4&norender'));
+    await pg.waitForFunction(() => window.__ready && window.__G?.save, null, { timeout: 240000 });
+    await pg.evaluate(() => { const S = window.__G.save; window.__D.emit('startHero', S.heroes.find((h) => h.id === S.last) || S.heroes[0], false); });
+    await pg.waitForFunction(() => window.__G?.zone && window.__G.mode === 'play', null, { timeout: 240000 });
+    await A5.tick(pg); await A4.listen(pg);
+    await pg.evaluate((im) => { window.__immortal = im; }, o.immortal !== false);
+  },
+  async travel(pg, to, at) {
+    await pg.evaluate(([to, at]) => window.__D.emit('travel', to, { at }), [to, at]);
+    await pg.waitForFunction((to) => window.__G.zone?.id === to && !document.getElementById('fade').classList.contains('on'), to, { timeout: 300000 });
+    await pg.waitForTimeout(400);
+  },
+  // dialogs advanced (Enter), scenes waited out, until fn() holds or ms of real time pass
+  async until(pg, fn, ms = 120000, arg) {
+    for (const t0 = Date.now(); Date.now() - t0 < ms;) {
+      if (await pg.evaluate(fn, arg)) return true;
+      if (await pg.evaluate(() => !!document.querySelector('#dialog:not([hidden])'))) await A4.enter(pg);
+      await pg.waitForTimeout(250);
+    }
+    return false;
+  },
+  // the hero beside an interactable (found by an expression over the zone z) and it used, as a tap on its prompt
+  use: (pg, find) => pg.evaluate((find) => { const G = window.__G, z = G.zone, it = new Function('z', 'G', 'return ' + find)(z, G); if (!it) return null; const f = z.map.nearestFloor(it.x, it.z + 1.2, 3); G.player.x = f.x; G.player.z = f.z; G.player.act = null; G.player.kx = G.player.kz = 0; it.use(); return it.kind + ':' + (it.id ?? it.npc ?? it.i ?? it.to ?? ''); }, find),
+  // a boss struck down to frac of its life (null: dead) through any floor, gate or hiding its rules keep
+  async hit(pg, frac) {
+    for (let i = 0; i < 14; i++) {
+      const ok = await pg.evaluate((frac) => { const b = window.__G.zone.boss; if (!b || b.dead) return true; b.dazed = 0; b.invuln = 0; b.under = false; b.hidden = false; if (frac == null) { b.hpFloor = 0; b.lockPhase = null; } if (frac == null) window.__D.kill(b); else { b.hp = Math.min(b.hp, b.hpMax * frac + 1); } return frac == null ? b.dead : b.hp <= b.hpMax * frac + 1; }, frac);
+      if (ok) return true;
+      await pg.waitForTimeout(700);
+    }
+    return false;
+  },
+  quest: (pg) => pg.evaluate(() => ({ q: window.__G.hero.quest, text: document.querySelector('#quest')?.textContent || '' })),
+  // a soak of tools/soak5.mjs, with this runner's browser closed first (one headless browser at a time)
+  async soak(which, out, env = {}) {
+    const { spawnSync } = await import('node:child_process'), fs = await import('node:fs'), path = await import('node:path');
+    const dir = path.join(out, 'soak5'); fs.mkdirSync(dir, { recursive: true });
+    const r = spawnSync(process.execPath, [new URL('./soak5.mjs', import.meta.url).pathname, which, dir], { env: { ...process.env, BASE: A5.base, ...env }, encoding: 'utf8', maxBuffer: 64 << 20 });
+    const file = path.join(dir, 'soak5-' + which + (env.SEED || process.env.SEED ? '-' + (env.SEED || process.env.SEED) : '') + '.json');
+    let rep = null; try { rep = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { rep = { error: 'no report: ' + (r.stderr || '').slice(-600) }; }
+    return rep;
+  }
+};
+// The boss bot (in the page; C3's calibration bot): the reference build of her level (a rare of her level in every slot,
+// every skill at rank 5, one blessing of each act before), then she fights on her own: skills at the boss (or its Hands),
+// out of every harm telegraph (into a blue calm when one stands inside it), onto an islet when the tide comes, onto thin
+// ice in the Tower's ice phase, its light on its flank, Selna remembered, the Farthest Light given its fire, a dark cairn
+// lit in the Night. Her life is real: a potion under half; a "death" (under 30%) is counted and she is put back whole.
+// window.BOT = { t, deaths, potions, low, phases, done, ... }; o.build false keeps her own gear
+async function BOT5(o) {
+  const M = (u) => import(u), FR = (n = 1) => new Promise((ok) => { let k = 0; const f = () => (++k >= n ? ok() : requestAnimationFrame(f)); requestAnimationFrame(f); });
+  const It = await M('/src/game/items.js'), St = await M('/src/game/stats.js'), Sk = await M('/src/game/skills.js'), Fx = await M('/src/gfx/fx.js'), Bus = await M('/src/ui/bus.js'), I = await M('/src/game/ice.js'), D0 = await M('/src/game/data.js');
+  const G = window.__G, h = G.hero, L = h.level, cls = h.cls, D = window.__D, IN = D.IN, SKILLS = D0.SKILLS;
+  if (o.build !== false) {
+    const W = { warden: 'sword', ranger: 'crossbow', mage: 'staff' }, OFF = { warden: 'shield', ranger: 'quiver', mage: 'orb' };
+    const mk = (base) => It.makeItem(L, { rar: 2, base, cls });
+    h.equip.weapon = mk(W[cls]); h.equip.offhand = mk(OFF[cls]);
+    for (const s of ['helm', 'chest', 'gloves', 'boots', 'amulet']) h.equip[s] = mk(s);
+    h.equip.ring1 = mk('ring'); h.equip.ring2 = mk('ring');
+    h.boons = ['hearth', 'anvil', 'root', 'rest'];
+    h.skills = {}; for (const sk of SKILLS[cls]) h.skills[sk.id] = 5;
+  }
+  St.refreshStats(); G.player.hp = G.player.hpMax; G.player.res = G.stats.resMax;
+  const B = window.BOT = { t: 0, deaths: 0, hurt: 0, potions: 0, low: 1, phases: [], done: false, kind: o.kind, cls, L, life: G.player.hpMax, stop: false };
+  Bus.on('hurt', (f) => { B.hurt += f; });
+  const pl = G.player, z = G.zone, Lz = z.L, ranged = cls !== 'warden';
+  const keys = (dx, dz) => { IN.keys.clear(); const l = Math.hypot(dx, dz); if (l < 0.35) return; const r = Math.round(Math.atan2(dx, dz) / (Math.PI / 4)), ux = Math.round(Math.sin(r * Math.PI / 4)), uz = Math.round(Math.cos(r * Math.PI / 4)); if (ux > 0) IN.keys.add('d'); if (ux < 0) IN.keys.add('a'); if (uz > 0) IN.keys.add('s'); if (uz < 0) IN.keys.add('w'); };
+  const calm = (t) => { const c = t.m.material.uniforms.uColor.value; return c.b > c.r; };
+  const _v = { x: 0, z: 0, r: 0 };
+  function under(x, zz, pad = 0.6) {
+    for (const t of Fx.FX.teles) {
+      if (!t.alive || t.t > t.dur || calm(t)) continue;
+      const m = t.m, u = m.material.uniforms, sh = u.uShape.value, dx = x - m.position.x, dz = zz - m.position.z, rot = m.rotation.y - Math.PI;
+      if (sh < 0.5) { if (Math.hypot(dx, dz) < m.scale.x + pad) { _v.x = dx; _v.z = dz; _v.r = m.scale.x; _v.c = m.position; return _v; } }
+      else if (sh < 1.5) { const d = Math.hypot(dx, dz), a = Math.atan2(dx, dz), da = Math.abs(((a - rot + Math.PI * 3) % (Math.PI * 2)) - Math.PI); if (d < m.scale.x + pad && da < u.uArc.value + 0.2) { _v.x = dx; _v.z = dz; _v.r = 0; return _v; } }
+      else { const ux = Math.sin(rot), uz = Math.cos(rot), along = dx * ux + dz * uz, side = dx * uz - dz * ux; if (along > -0.6 && along < m.scale.z * 2 + 0.6 && Math.abs(side) < m.scale.x + pad) { _v.x = uz * Math.sign(side || 1); _v.z = -ux * Math.sign(side || 1); _v.r = 0; return _v; } }
+    }
+    return null;
+  }
+  // a blue calm inside a red circle (the Tower Bell's body, the Deep Cold's lights): the nearest one
+  const calmIn = (c, big) => { let best = null, bd = 1e9; for (const t of Fx.FX.teles) { if (!t.alive || !calm(t) || t.m.material.uniforms.uShape.value > 0.5) continue; const p = t.m.position; if (!big && Math.hypot(p.x - c.x, p.z - c.z) > 1.2) continue; const d = Math.hypot(pl.x - p.x, pl.z - p.z) - t.m.scale.x; if (d < bd) { bd = d; best = { x: p.x, z: p.z, r: t.m.scale.x }; } } return best; };
+  let skT = 0, lastPhase = -1;
+  while (B.t < o.maxT && !B.stop) {
+    await FR(1);
+    const dt = 1 / 30 * (window.SIMK || 4), b = z.boss;
+    if (!b || G.zone !== z) { keys(0, 0); continue; }
+    if (b.dead) { B.done = true; B.phases.push(['dead', +B.t.toFixed(1)]); break; }
+    B.t = b.awake ? (B.t0 ??= G.hero.stats.time, G.hero.stats.time - B.t0) : 0;
+    if (G.mode !== 'play' || pl.dead) { keys(0, 0); continue; }
+    if (b.phase !== lastPhase && b.awake) { lastPhase = b.phase; B.phases.push([b.phase, +B.t.toFixed(1)]); }
+    if (pl.hp < pl.hpMax * 0.5 && !(pl.potionCd > 0) && !o.noHeal) { IN.events.push({ t: 'potion' }); B.potions++; }
+    B.low = Math.min(B.low, pl.hp / pl.hpMax);
+    if (!o.noHeal && pl.hp < pl.hpMax * 0.3) { B.deaths++; pl.hp = pl.hpMax; }
+    const hands = G.actors.filter((a) => (a.kind === 'skotosHand' || a.kind === 'skotosCoil') && !a.dead && !a.removed && !a.under && !a.sinking);
+    let tgt = b.under || b.hidden ? null : b;
+    const hn = hands.sort((p, q) => Math.hypot(p.x - pl.x, p.z - pl.z) - Math.hypot(q.x - pl.x, q.z - pl.z))[0];
+    if (hn && o.kind === 'skotos' && (b.ward > 0 || hn.kind === 'skotosCoil' || !tgt || Math.hypot(hn.x - pl.x, hn.z - pl.z) < 6)) tgt = hn;
+    const T = b.tide;
+    let goal = null;
+    if (o.kind === 'tower') {
+      if (b.phase === 0 && T && T.st !== 'low') { const isl = Lz.spots.bayIslets.slice().sort((p, q) => Math.hypot(p.x - pl.x, p.z - pl.z) - Math.hypot(q.x - pl.x, q.z - pl.z))[0]; goal = { x: isl.x, z: isl.z }; if (b.dazed > 0 && Math.hypot(b.x - isl.x, b.z - isl.z) < 6) goal = null; }
+      if (b.st === 'island' && b.lightIt) { goal = { x: b.lightIt.x, z: b.lightIt.z }; if (Math.hypot(goal.x - pl.x, goal.z - pl.z) < 2.5 && !pl.act) b.lightIt.use(); }
+      if (b.phase === 1 && b.st === 'fight' && !(b.dazed > 0)) { if (!B.icePt || Math.hypot(B.icePt.x - b.x, B.icePt.z - b.z) > 12 || (B.icePtT -= dt) <= 0) { B.icePtT = 6; B.icePt = null; for (let r = 7; r < 10 && !B.icePt; r++) for (let k = 0; k < 16; k++) { const g = k * 0.39, x = b.x + Math.sin(g) * r, zz = b.z + Math.cos(g) * r; if (I.iceAt(x, zz) === 'thin' && I.stageAt(x, zz) < 2 && z.map.walkable(x, zz)) { B.icePt = { x, z: zz }; break; } } } if (B.icePt) goal = B.icePt; }
+    } else if (o.kind === 'skotos') {
+      if (z.remember && !pl.act) { goal = { x: z.remember.x, z: z.remember.z + 1.0 }; if (Math.hypot(goal.x - pl.x, goal.z - pl.z) < 1.6 && (!b.nb || b.nb.st === 'down' || b.nb.st === 'up')) z.remember.use(); }
+      else if (z.giving && z.act5?.farIt && !pl.act) { const it = z.act5.farIt; goal = { x: it.x, z: it.z + 0.8 }; if (Math.hypot(goal.x - pl.x, goal.z - pl.z) < 1.6) it.use(); }
+      else if (b.phase === 1 && !tgt) { const cr = (z.act5?.cairns || []).find((q) => !q.lit); if (cr && !pl.act) { goal = { x: cr.x, z: cr.z + 1.4 }; if (Math.hypot(goal.x - pl.x, goal.z - pl.z) < 2) cr.use(); } }
+    }
+    if (!goal && tgt) { const d = Math.hypot(tgt.x - pl.x, tgt.z - pl.z), want = ranged ? 8 : tgt.radius + 1.0; if (d > want + 0.8) goal = { x: tgt.x, z: tgt.z }; else if (ranged && d < want - 3) goal = { x: pl.x * 2 - tgt.x, z: pl.z * 2 - tgt.z }; }
+    const u = under(pl.x, pl.z);
+    if (u) { const c = u.r > 0 && calmIn(u.c, u.r > 14); if (c) goal = { x: c.x, z: c.z }; else { const l = Math.hypot(u.x, u.z) || 1; goal = { x: pl.x + (u.x / l) * 4, z: pl.z + (u.z / l) * 4 }; } }
+    if (goal) keys(goal.x - pl.x, goal.z - pl.z); else keys(0, 0);
+    B.near = Math.min(B.near ?? 99, tgt === b && b ? Math.hypot(b.x - pl.x, b.z - pl.z) - b.radius : 99);
+    if ((skT -= dt) <= 0 && tgt && !pl.pull && !(pl.act && pl.act.name === 'touch')) {
+      skT = 0.2;
+      const d = Math.hypot(tgt.x - pl.x, tgt.z - pl.z), aim = { x: tgt.x, z: tgt.z };
+      let used = false;
+      for (const i of [4, 3, 2, 1]) { if (Sk.canUse(i) || used) continue; const sk = SKILLS[cls][i]; const rg = (sk.range || (ranged ? 12 : 3)) + tgt.radius; if (sk.id === 'cry' || sk.id === 'wolf' || d < rg) { if (sk.id === 'whirl' && d > tgt.radius + 2.5) continue; if (sk.id === 'nova' && d > tgt.radius + 5) continue; IN.events.push({ t: 'skill', i, aim }); used = true; } }
+      if (!used && d < (ranged ? 13 : tgt.radius + 2.6)) IN.events.push({ t: 'skill', i: 0, aim });
+    }
+  }
+  keys(0, 0);
+  return B;
+}
 const S = {
   combat: { q: 'auto=forest&sim=6&q=1', run: async (pg, shot) => {
     await pg.evaluate(() => { const G = window.__G; const p = G.zone.packs[1]; G.player.x = p.x; G.player.z = p.z + 5; G.player.hp = G.player.hpMax = 5000; });
@@ -668,52 +827,6 @@ const S = {
     }
     return out;
   } },
-  // Act V (q23 -> q25): Alkyone at the beacon, the fourth fire going out while she speaks, Halda and the Cradle, the coal,
-  // Alkyone gone north with her lantern lit from it
-  hook5: { q: 'auto=town&sim=4&q=0&lvl=28&cls=' + (process.env.CLS || 'warden'), run: async (pg, shot) => {
-    await A4.listen(pg);
-    await pg.evaluate(() => { const G = window.__G, h = G.hero; window.__immortal = true; h.quest = 23; h.act1 = h.act2 = h.act3 = h.act4 = 1; h.boons = ['ember', 'forge', 'amber', 'wayfarer']; for (const f of ['act1', 'act2', 'act3', 'act4', 'fireTaken', 'ivar', 'karthax', 'crownUnmade', 'newFire']) h.flags[f] = true; window.__D.refreshStats(); window.__D.enterZone('town', { fresh: true }); });
-    await pg.waitForFunction(() => !!window.__G.zone.p5?.alkyone && !window.__G.zone.p5.alkyone.scene, null, { timeout: 120000 });
-    const arrived = await pg.evaluate(() => { const G = window.__G, n = G.zone.p5.alkyone; return { quest: G.hero.quest, at: [+n.a.x.toFixed(1), +n.a.z.toFixed(1)], model: n.a.avatar.modelName }; });
-    await shot();
-    await pg.evaluate(() => { const G = window.__G, it = G.zone.p5.alkyone.it; G.player.x = it.x; G.player.z = it.z + 1.4; it.use(); });
-    await A4.dialogs(pg, 8, () => !!window.__G.cine);
-    const at = (t) => pg.waitForFunction((t) => !window.__G.cine || window.__G.cine.t >= t, t, { timeout: 180000 });
-    await at(5); await shot();
-    await pg.waitForFunction(() => !window.__G.cine, null, { timeout: 120000 });
-    // (Alkyone's last lines, then Halda's walk up with the Cradle and her line: as long as that takes on a slow machine)
-    for (let t0 = Date.now(); Date.now() - t0 < 90000 && !(await pg.evaluate(() => window.__G.hero.flags.cradle));) await A4.dialogs(pg, 4, () => window.__G.hero.flags.cradle);
-    const coal = await pg.evaluate(() => { const G = window.__G, it = G.zone.interact.find((i) => i.kind === 'coal'); if (!it) return null; G.player.x = it.x; G.player.z = it.z + 1.2; it.use(); return it.prompt; });
-    await pg.waitForFunction(() => window.__G.hero.quest >= 25, null, { timeout: 60000 }).catch(() => {});
-    await pg.waitForTimeout(1500); await shot();
-    const end = await pg.evaluate(() => { const G = window.__G, F = G.hero.flags; return { quest: G.hero.quest, flags: ['alkyone', 'coastCall', 'cradle', 'coal'].filter((f) => F[f]), quest25: document.querySelector('#quest')?.textContent }; });
-    return { arrived, coal, end, says: await pg.evaluate(() => window.__says) };
-  } },
-  // Act V's close (q30): the black gone from the sky over Whitecliff, the child told their names, the fourth fire and the
-  // three sea-lights answering, the act panel, the blessings with the Coast's third (the Name)
-  ending5: { q: 'auto=town&sim=4&q=0&lvl=30&cls=' + (process.env.CLS || 'mage'), run: async (pg, shot) => {
-    await A4.listen(pg);
-    await pg.evaluate(() => { const G = window.__G, h = G.hero; window.__immortal = true; h.quest = 30; h.act1 = h.act2 = h.act3 = h.act4 = 1; h.boons = ['ember', 'forge', 'amber', 'wayfarer']; for (const f of ['act1', 'act2', 'act3', 'act4', 'fireTaken', 'ivar', 'karthax', 'crownUnmade', 'newFire', 'alkyone', 'coastCall', 'cradle', 'coal', 'alkField', 'coastSeen', 'hearth', 'rite', 'towerWake', 'towerDown', 'frozen', 'hole0', 'hole1', 'hole2', 'ternSeen', 'skotosWake', 'skotosDown', 'selnaBack', 'seaLit', 'mem_i4', 'carved', 'remembered']) h.flags[f] = true; h.flags.names = ['keyx', 'thaleia', 'carriers', 'sailor']; window.__D.refreshStats(); window.__D.enterZone('town', { fresh: true }); });
-    const at = (t) => pg.waitForFunction((t) => !window.__G.cine || window.__G.cine.t >= t, t, { timeout: 180000 });
-    await pg.waitForFunction(() => !!window.__G.cine, null, { timeout: 30000 }).catch(() => {});
-    await at(3); await shot();
-    await pg.waitForFunction(() => !window.__G.cine && !!window.__G.zone.p5?.child, null, { timeout: 120000 });
-    const child = await pg.evaluate(() => { const n = window.__G.zone.p5.child; return { model: n.a.avatar.modelName, news: !n.it.used }; });
-    await pg.evaluate(() => { const G = window.__G, it = G.zone.p5.child.it; G.player.x = it.x; G.player.z = it.z + 1.4; it.use(); });
-    const told = await pg.evaluate(() => [...document.querySelectorAll('#dialog .txt')].map((e) => e.textContent).join(' '));
-    await A4.dialogs(pg, 6, () => !!window.__G.cine);
-    await at(4); await shot();
-    await at(10); await shot();
-    await pg.waitForFunction(() => !window.__G.cine, null, { timeout: 120000 });
-    await A4.dialogs(pg, 6, () => !!window.__G.panel);
-    await pg.waitForFunction(() => !!window.__G.panel, null, { timeout: 60000 }).catch(() => {});
-    await pg.waitForTimeout(1500); await shot();
-    const act = await pg.evaluate(() => ({ panel: window.__G.panel, done: document.querySelector('.act-h')?.textContent, sub: document.querySelector('#panel .pn-b p')?.textContent, next: [...document.querySelectorAll('#panel .muted')].map((e) => e.textContent).pop() }));
-    await pg.click('[data-a="close"]').catch(() => {}); await pg.waitForTimeout(3000); await shot();
-    const boon = await pg.evaluate(() => ({ panel: window.__G.panel, title: document.querySelector('.act-h')?.textContent, note: document.querySelector('#panel .pn-b .muted')?.textContent, cards: [...document.querySelectorAll('[data-a^="boon:"]')].map((e) => e.dataset.a + ' ' + e.querySelector('p')?.textContent) }));
-    const end = await pg.evaluate(() => { const G = window.__G, h = G.hero; return { act5: h.act5, flag: h.flags.act5, toldChild: h.flags.toldChild, quest: h.quest }; });
-    return { child, told, act, boon, end, says: await pg.evaluate(() => window.__says) };
-  } },
   title: { q: 'sim=1&q=' + (process.env.Q || '1'), run: async (pg, shot) => {
     await pg.waitForTimeout(2500); await shot();
     await pg.mouse.click(640, 360); await pg.waitForTimeout(1500); await shot();
@@ -868,9 +981,746 @@ const S = {
     for (const z of zones) if (out[z + '@q0']?.ms && out[z + '@q1']?.ms) out[z + '@q0'].floor = out[z + '@q0'].ms <= out[z + '@q1'].ms * 1.05;
     out.pass = ['coast@q1', 'coastLow@q1', 'farlight@q1'].every((k) => out[k]?.pass) && zones.every((z) => out[z + '@q0']?.floor !== false);
     return out;
+  } },
+  // ---------- Act V (the design's scenario table; perf5 and shallowtele above) ----------
+  // The way in, both of the design's cases. (a) From a q22 save: the Field visited first (cached before the new fire, its
+  // Neck still plugged), home, the beacon lit and Act IV's blessing chosen; in the same session the stranger at the beacon
+  // (q24), the fourth fire out, Halda and the Cradle, the coal (q25); back into the cached Field: the plug open and the
+  // Anvil's Neck leading to the coast. (b) From an Act IV-end save in the shipped format (no act5, no Act V field): the
+  // migration, the hook on entering Whitecliff, the same walk. PART=a|b (both by default)
+  hook5: { q: 'auto=town&sim=4&q=0&norender&lvl=28&cls=' + (process.env.CLS || 'warden'), run: async (pg, shot) => {
+    const out = {}, parts = (process.env.PART || 'ab').split('');
+    await A5.tick(pg); await A4.listen(pg);
+    const hook = async () => {
+      await pg.waitForFunction(() => !!window.__G.zone.p5?.alkyone && !window.__G.zone.p5.alkyone.scene, null, { timeout: 240000 });
+      const arrived = await pg.evaluate(() => { const G = window.__G, n = G.zone.p5.alkyone; return { quest: G.hero.quest, at: [+n.a.x.toFixed(1), +n.a.z.toFixed(1)], model: n.a.avatar.modelName, news: !n.it.used }; });
+      await shot();
+      await pg.evaluate(() => { const G = window.__G, it = G.zone.p5.alkyone.it; G.player.x = it.x; G.player.z = it.z + 1.4; it.use(); });
+      await A4.dialogs(pg, 8, () => !!window.__G.cine);
+      await pg.waitForFunction(() => !window.__G.cine || window.__G.cine.t >= 5, null, { timeout: 180000 }); await shot();
+      await A5.until(pg, () => window.__G.hero.flags.cradle, 240000);
+      const coal = await A5.use(pg, "z.interact.find((i) => i.kind === 'coal')");
+      await A5.until(pg, () => window.__G.hero.quest >= 25, 120000);
+      await pg.waitForTimeout(600); await shot();
+      const end = await pg.evaluate(() => { const G = window.__G, F = G.hero.flags; return { quest: G.hero.quest, flags: ['alkyone', 'coastCall', 'cradle', 'coal'].filter((f) => F[f]), text: document.querySelector('#quest')?.textContent }; });
+      return { arrived, coal, end };
+    };
+    // the Field (cached in a): the plug, the Neck; and through it to the coast
+    const field = async () => {
+      await A5.travel(pg, 'ashfield', 'town');
+      const f = await pg.evaluate(() => { const G = window.__G, z = G.zone, N = z.L.neck, e = z.interact.find((i) => i.kind === 'exit' && i.to === 'coast'); return { cached: !!window.__fieldZ && window.__fieldZ === z, plugOpen: !!N && N.plug.every(([x, zz]) => z.map.walkable(x + 0.5, zz + 0.5)), exit: e ? { locked: e.locked, open: !e.locked || !!G.hero.flags[e.locked] } : null }; });
+      await A5.use(pg, "z.interact.find((i) => i.kind === 'exit' && i.to === 'coast')");
+      await pg.waitForFunction(() => window.__G.zone?.id === 'coast' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 300000 }).catch(() => {});
+      f.reached = await pg.evaluate(() => window.__G.zone?.id);
+      await pg.waitForTimeout(1500); await shot();
+      return f;
+    };
+    if (parts.includes('a')) {
+      await A5.state(pg, null, { quest: 22, act4: -1, boons: ['ember', 'forge', 'amber'], drop: ['newFire', 'act4'], zone: 'ashfield' });
+      const before = await pg.evaluate(() => { const z = window.__G.zone, N = z.L.neck; window.__fieldZ = z; return { plugOpen: !!N && N.plug.every(([x, zz]) => z.map.walkable(x + 0.5, zz + 0.5)), exit: !!z.interact.find((i) => i.kind === 'exit' && i.to === 'coast') }; });
+      await A5.travel(pg, 'town', 'ashfield');
+      await A4.dialogs(pg, 4);
+      await A5.use(pg, "z.interact.find((i) => i.kind === 'beacon')");
+      await A5.until(pg, () => !window.__G.cine && window.__G.panel === 'act', 300000);
+      await pg.click('[data-a="close"]').catch(() => {});
+      await A5.until(pg, () => !!document.querySelector('[data-a="boon:lantern"]'), 60000);
+      await pg.click('[data-a="boon:lantern"]').catch(() => {});
+      const lit = await pg.evaluate(() => { const h = window.__G.hero; return { act4: h.act4, newFire: !!h.flags.newFire, quest: h.quest, boons: h.boons.slice() }; });
+      out.a = { before, lit, ...(await hook()) };
+      out.a.field = await field();
+    }
+    if (parts.includes('b')) {
+      // the shipped save: a hero record as the published game writes it (no act5, no seeds of the coast), Act IV done
+      await pg.evaluate((act4) => {
+        const now = Date.now(), h = { id: 'hS' + now.toString(36), cls: 'warden', level: 28, xp: 0, gold: 900, diff: 1, skills: {}, points: 27, inv: new Array(32).fill(null), equip: {}, stash: new Array(48).fill(null), quest: 23, flags: {}, wps: ['town', 'forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'ashfield@2', 'forge'], act1: 1, act2: 1, act3: 1, act4: 1, gateBest: 0, boons: ['ember', 'forge', 'amber', 'lantern'], stats: { kills: 900, deaths: 3, time: 30000, legs: 2, elites: 40 }, created: now, played: now, seeds: { forest: 11, crypt: 12, pass: 13, halls: 14, weep: 15, heart: 16, ashfield: 17, forge: 18 } };
+        for (const k of act4) h.flags[k] = true;
+        Object.assign(h.flags, { heat: 3, gifts: { throne: 'refused', forge: 'refused', unfading: 'refused' } });
+        localStorage.setItem('skotos.save.v1', JSON.stringify({ heroes: [h], settings: { quality: 0, lang: 'el', helpSeen: true }, last: h.id }));
+      }, A5.ACT4);
+      await A5.reload(pg, { write: false });
+      const mig = await pg.evaluate(() => { const h = window.__G.hero; return { act5: h.act5, quest: h.quest, zone: window.__G.zone.id, seaLit: !!h.flags.seaLit }; });
+      out.b = { mig, ...(await hook()) };
+      await pg.evaluate(() => { window.__fieldZ = null; });
+      out.b.field = await field();
+    }
+    const ok = (r) => r.end.quest === 25 && r.end.flags.length === 4 && r.field.plugOpen && !!r.field.exit?.open && r.field.reached === 'coast';
+    out.pass = [out.a, out.b].filter(Boolean).every(ok) && (!out.a || (!out.a.before.plugOpen && out.a.field.cached && out.a.lit.newFire)) && (!out.b || out.b.mig.act5 === -1);
+    out.says = await pg.evaluate(() => (window.__says || []).filter((k) => /alk|halda|coal|kindle|out\./.test(k)));
+    return out;
+  } },
+  // Every row of the design's catch-up table: the state just after that flag's save, the page loaded again and the hero
+  // taken up from the title (she starts in Whitecliff; the coast and the Farthest Light are reached by waypoint), then the
+  // quest, the scene played again or caught up quietly, the memories seen. ROWS=a,b (ids) runs some
+  catch5: { q: 'auto=town&sim=4&q=0&norender&lvl=30&cls=' + (process.env.CLS || 'warden'), run: async (pg, shot) => {
+    const rows = [], only = process.env.ROWS ? process.env.ROWS.split(',') : null;
+    await A5.tick(pg);
+    const row = async (id, f, o, check) => {
+      if (only && !only.includes(id)) return;
+      const t0 = Date.now();
+      let r;
+      try {
+        await A5.state(pg, f, o);
+        await A5.reload(pg);
+        if (o.go) await A5.travel(pg, o.go, 'waypoint');
+        r = await check();
+      } catch (e) { r = { pass: false, error: e.message.split('\n')[0] }; }
+      r.id = id; r.secs = Math.round((Date.now() - t0) / 1000);
+      rows.push(r); console.log('catch5 ' + JSON.stringify(r));
+    };
+    const ev = (fn) => pg.evaluate(fn);
+    // alkyone -> 24 (she is at the beacon)
+    await row('alkyone', 'alkyone', { quest: 23 }, async () => { await A5.until(pg, () => window.__G.hero.quest >= 24, 30000); const r = await ev(() => ({ q: window.__G.hero.quest, alk: !!window.__G.zone.p5?.alkyone })); r.pass = r.q === 24 && r.alk; return r; });
+    // coastCall without coal: q24 stays; Halda's Cradle line, then the coal at the beacon; the Neck locked on the coal
+    await row('coastCall', 'coastCall', { quest: 24 }, async () => {
+      const r = await ev(() => ({ q: window.__G.hero.quest, coal0: !!window.__G.zone.interact.find((i) => i.kind === 'coal') }));
+      await ev(() => { const G = window.__G, h = G.zone.townNpc?.smith?.a; if (h) { G.player.x = h.x; G.player.z = h.z + 1.4; window.__D.emit('talk', 'smith', h); } });
+      r.line = await ev(() => document.querySelector('#dialog:not([hidden]) .txt')?.textContent?.slice(0, 40) || null);
+      await A5.until(pg, () => window.__G.hero.flags.cradle, 20000);
+      await ev(() => window.__D.closePanel());
+      r.coal = await ev(() => !!window.__G.zone.interact.find((i) => i.kind === 'coal'));
+      await A5.travel(pg, 'ashfield', 'town');
+      await A5.use(pg, "z.interact.find((i) => i.kind === 'exit' && i.to === 'coast')");
+      await pg.waitForTimeout(1500);
+      r.neck = await ev(() => ({ zone: window.__G.zone.id, said: (window.__says || []).includes('d.coastShut') }));
+      r.pass = r.q === 24 && !r.coal0 && r.coal && r.neck.zone === 'ashfield' && r.neck.said;
+      return r;
+    });
+    await row('coal', 'coal', { quest: 24 }, async () => { const r = await ev(() => ({ q: window.__G.hero.quest })); r.pass = r.q === 25; return r; });
+    // hearth without rite: the rite again, then 26
+    await row('hearth', 'hearth', { quest: 25, go: 'coast' }, async () => { const ok = await A5.until(pg, () => window.__G.hero.flags.rite && !window.__G.cine && window.__G.hero.quest >= 26, 180000); const r = await ev(() => ({ q: window.__G.hero.quest, rite: (window.__says || []).length + (window.__G.hero.flags.rite ? 1 : 0) })); r.pass = ok && r.q === 26; return r; });
+    // a light lit, its memory unseen: the window offers it ("Remember") and the goal points there; then it plays
+    await row('memOwed', 'light_grey', { quest: 26, go: 'coast', flags: { mem_i1: false } }, async () => {
+      const r = await ev(() => { const z = window.__G.zone, it = z.act5.lights.find((l) => l.id === 'grey'); return { offered: !!it && !it.win.used, prompt: it?.win.prompt }; });
+      await A5.use(pg, "z.act5.lights.find((l) => l.id === 'grey').win");
+      r.seen = await A5.until(pg, () => window.__G.hero.flags.mem_i1 && !window.__G.cine, 180000);
+      r.pass = r.offered && r.seen;
+      return r;
+    });
+    // all three lights and their memories: the Tower wakes, 27
+    await row('lights', 'mem_i3', { quest: 26, go: 'coast' }, async () => { const ok = await A5.until(pg, () => window.__G.hero.flags.towerWake && !window.__G.cine && window.__G.hero.quest >= 27, 240000); const r = await ev(() => ({ q: window.__G.hero.quest, boss: window.__G.zone.boss?.kind })); r.pass = ok && r.q === 27 && r.boss === 'tower'; return r; });
+    // towerDown without frozen: the Freeze again (and the coast built frozen), 28
+    await row('towerDown', 'towerDown', { quest: 27, go: 'coast' }, async () => { const ok = await A5.until(pg, () => window.__G.hero.quest >= 28 && !window.__G.cine && window.__G.zone?.mode === 'frozen', 300000); const r = await ev(() => ({ q: window.__G.hero.quest, mode: window.__G.zone.mode, frozen: window.__G.hero.flags.frozen })); r.pass = ok && r.frozen; return r; });
+    await row('frozen', 'frozen', { quest: 27 }, async () => { const r = await ev(() => ({ q: window.__G.hero.quest })); r.pass = r.q === 28; return r; });
+    await row('holes', 'hole2', { quest: 28 }, async () => { const r = await ev(() => ({ q: window.__G.hero.quest })); r.pass = r.q === 29; return r; });
+    // the fight left behind: her name hidden, the stair touched again, the Skotos rises again
+    await row('skotosWake', 'skotosWake', { quest: 29, go: 'farlight' }, async () => {
+      const r = await ev(async () => { const S = await import('/src/game/story.js'), z = window.__G.zone; return { name: S.npcName('selna'), selnaBack: !!window.__G.selnaBack, prompt: z.act5.farIt.prompt, used: z.act5.farIt.used }; });
+      await A5.use(pg, 'z.act5.farIt');
+      r.rose = await A5.until(pg, () => { const b = window.__G.zone.boss; return !!b && !b.holdWake && !b.hidden && !window.__G.cine; }, 180000);
+      r.pass = r.name === '…' && !r.selnaBack && !r.used && r.rose;
+      return r;
+    });
+    // named, the answer unseen: the card and the answer again
+    await row('skotosDown', 'selnaBack', { quest: 29, go: 'farlight' }, async () => { const ok = await A5.until(pg, () => window.__G.hero.flags.seaLit && !window.__G.cine, 240000); const r = await ev(() => ({ q: window.__G.hero.quest, seaLit: !!window.__G.hero.flags.seaLit, title: (window.__says || []).includes('d.lit.1') })); r.pass = ok && r.seaLit; return r; });
+    // seaLit without the carving: q.29b
+    await row('seaLit', 'seaLit', { quest: 29 }, async () => { const r = await ev(async () => { const S = await import('/src/game/story.js'), I = await import('/src/i18n/i18n.js'); return { q: window.__G.hero.quest, text: S.questText(), want: I.t('q.29b') }; }); r.pass = r.q === 29 && r.text === r.want; return r; });
+    await row('carved', 'carved', { quest: 29 }, async () => { const r = await ev(() => ({ q: window.__G.hero.quest })); r.pass = r.q === 30; return r; });
+    // the child told but the act never closed: the act closes
+    await row('toldChild', 'toldChild', { quest: 30, act5: -1 }, async () => { const ok = await A5.until(pg, () => (window.__G.hero.act5 ?? -1) >= 0, 60000); const r = await ev(() => ({ q: window.__G.hero.quest, act5: window.__G.hero.act5, panel: window.__G.panel })); r.pass = ok && r.q === 31; return r; });
+    await shot();
+    return { pass: rows.length > 0 && rows.every((r) => r.pass), failed: rows.filter((r) => !r.pass).map((r) => r.id), rows };
+  } },
+  // The coast's first steps: down the Anvil's Neck (the arrival scene), the hearth (the Landing's waypoint, the Saltborn
+  // out of their houses) and the rite (the first «Σκότος»), the first sea-light (its beam, its memory); then the water
+  // forced high, the coast left and entered again: the map is at low water
+  coast: { q: 'auto=town&sim=4&q=0&norender&lvl=30&cls=' + (process.env.CLS || 'warden'), run: async (pg, shot) => {
+    await A5.tick(pg); await A4.listen(pg);
+    await A5.state(pg, 'alkField', { zone: 'ashfield' });
+    await A5.use(pg, "z.interact.find((i) => i.kind === 'exit' && i.to === 'coast')");
+    await pg.waitForFunction(() => window.__G.zone?.id === 'coast' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 300000 });
+    await pg.waitForFunction(() => !!window.__G.cine, null, { timeout: 30000 }).catch(() => {});
+    await pg.waitForFunction(() => !window.__G.cine || window.__G.cine.t >= 2.5, null, { timeout: 60000 }); await shot();
+    await A5.until(pg, () => window.__G.hero.flags.coastSeen && !window.__G.cine, 240000);
+    const arrival = await pg.evaluate(() => { const G = window.__G; return { coastSeen: !!G.hero.flags.coastSeen, quest: G.hero.quest, text: document.querySelector('#quest')?.textContent, says: (window.__says || []).filter((k) => /coast|skotos|alk\.c/.test(k)) }; });
+    await A5.use(pg, 'z.act5.hearth');
+    await A5.until(pg, () => window.__G.hero.flags.hearth, 30000);
+    await pg.waitForTimeout(1500); await shot();
+    const hearth = await pg.evaluate(() => { const G = window.__G, z = G.zone, A = z.act5; return { wp: G.hero.wps.includes('coast'), checkpoint: !!z.checkpoint, warm: !!window.__act5.warmAt(A.hearth.x + 2, A.hearth.z), shore: Object.keys(z.p5 || {}).filter((k) => k.startsWith('shore')).length }; });
+    await A5.until(pg, () => !!window.__G.cine, 60000);
+    await pg.waitForTimeout(2500); await shot();
+    const riteOk = await A5.until(pg, () => window.__G.hero.flags.rite && !window.__G.cine && window.__G.hero.quest >= 26, 240000);
+    const rite = await pg.evaluate((ok) => ({ ok, quest: window.__G.hero.quest }), riteOk);
+    const which = await A5.use(pg, "z.act5.lights.find((l) => l.id === 'grey') || z.act5.lights[0]");
+    await A5.until(pg, () => !!window.__G.cine, 30000);
+    await pg.waitForFunction(() => !window.__G.cine || window.__G.cine.t >= 3, null, { timeout: 60000 }); await shot();
+    const light = await pg.evaluate(() => { const A = window.__act5; return { beams: A.beams().length, beamTag: A.beams().map((b) => b.tag) }; });
+    light.mem = await A5.until(pg, () => window.__G.hero.flags.mem_i1 && !window.__G.cine, 240000);
+    Object.assign(light, await pg.evaluate(() => { const G = window.__G, F = G.hero.flags; return { which: F.lights5, buff: (G.player.buffs.memory || 0) > 0, checkpoint: !!G.zone.checkpoint, quest: G.hero.quest }; }));
+    // the water high, then the coast left and entered again
+    await pg.evaluate(() => { window.__act5.tide.TIDE.force = { h: 1.2, rate: 10 }; });
+    await A5.until(pg, () => window.__act5.tide.TIDE.h >= 1.05, 90000);
+    const tones = () => pg.evaluate(() => { const z = window.__G.zone, L = z.L, T = window.__act5.tide.TIDE, m = z.map, idx = z.tideC?.idx || []; let shut = 0, want = 0; for (const i of idx) { if (!m.cells[i]) shut++; if (T.h - L.bed[i] >= 0.45) want++; } return { h: +T.h.toFixed(2), phase: T.phase, force: !!T.force, tidal: idx.length, shut, want }; });
+    const high = await tones(); await shot();
+    await A5.travel(pg, 'town', 'waypoint');
+    await A5.travel(pg, 'coast', 'waypoint');
+    const low = await tones();
+    await shot();
+    const pass = arrival.coastSeen && hearth.wp && hearth.checkpoint && hearth.shore >= 1 && rite.ok && light.beams >= 1 && light.mem && light.buff && high.shut > low.shut && low.h === 0 && low.phase === 'low' && !low.force && low.shut === low.want;
+    return { pass, arrival, hearth, rite, which, light, high, low };
+  } },
+  // The tide soak (tools/soak5.mjs tide: CYCLES 20, packs hunting her on the flats, her lane held and washed out along)
+  tide: { child: async (out) => { const r = await A5.soak('tide', out, { CYCLES: process.env.CYCLES || '20' }); const t = r.tide?.res; return { pass: !!t?.pass, res: t && { cycles: t.cycles, steps: t.steps, washes: t.washes, closed: t.closed, stuck: t.stuck, snaps: t.snaps, jumps: t.jumps.length, maxJump: t.maxJump, offLane: t.offLane, wet: t.wet, verBumps: t.verBumps, laneTests: t.laneTests && { n: t.laneTests.n, washed: t.laneTests.washed, walkedOut: t.laneTests.walkedOut } }, logs: r.tide?.logs?.slice(0, 8), error: r.error }; } },
+  // The ice soak (tools/soak5.mjs ice: MIN 10 minutes on the coast's Fall shelf and on the Ice Road; breaks, refreezes,
+  // plunges, drownings, a big one baited through, map.ver bumps per second)
+  ice: { child: async (out) => { const r = await A5.soak('ice', out, { MIN: process.env.MIN || '10' }); const pick = (x) => x?.res && { pass: x.res.pass, breaks: x.res.breaks, refreezes: x.res.refreezes, slushed: x.res.slushed, plunges: x.res.plunges, plungeMaxD: x.res.plungeMaxD, far: x.res.far.length, drowned: x.res.drowned, floundered: x.res.floundered, bumpsMaxPerSec: x.res.bumpsMaxPerSec, lowHp: x.res.lowHp.length, snaps: x.res.snaps, closed: x.res.closed, logs: x.logs?.slice(0, 6) }; const c = pick(r.iceCoast), f = pick(r.iceFarlight); return { pass: !!c?.pass && !!f?.pass, coast: c, farlight: f, error: r.error }; } },
+  // Skerry, the Walking Tower, fought by the boss bot (the reference build of the zone's level, CLS): every phase; Beached,
+  // Overturned and Blinded each seen; her blade in reach; inside the Bell's calm when it tolls; the crawl home and the
+  // island where the skerry was; the time to kill against the curve (TTK=lo,hi seconds; the design's 3:30-5:00 is
+  // reported beside it). DIFF=0 also checks Wanderer against Warden (not under 60% of its time: TTK0 its Warden time)
+  tower: { q: 'auto=coast&sim=4&q=0&norender&lvl=' + (process.env.LVL || 30) + '&diff=' + (process.env.DIFF || 1) + '&cls=' + (process.env.CLS || 'warden') + '&' + A5.url('towerWake'), run: async (pg, shot) => {
+    await A5.tick(pg); await A4.listen(pg);
+    const setup = await pg.evaluate(() => { const G = window.__G, z = G.zone, B = z.L.boss, f = z.map.nearestFloor(B.x + 2, B.z + 11, 4); G.player.x = f.x; G.player.z = f.z; return { boss: B, sk: z.L.spots.skerry && { x: z.L.spots.skerry.x, z: z.L.spots.skerry.z } }; });
+    await A5.until(pg, () => !!window.__G.zone.boss, 30000);
+    await pg.evaluate(() => { const b = window.__G.zone.boss; window.__act5.damage(window.__G.player, b, 1, { crit: false }); });
+    await A5.until(pg, () => window.__G.zone.boss?.awake, 60000);
+    await shot();
+    await pg.evaluate((o) => { window.SIMK = 4; window.__botP = (new Function('return ' + o.src)())({ kind: 'tower', maxT: o.maxT }); }, { src: BOT5.toString(), maxT: +(process.env.MAXT || 900) });
+    const seen = {}, shots = new Set();
+    let last = null;
+    for (const t0 = Date.now(); Date.now() - t0 < 120 * 60000;) {
+      await pg.waitForTimeout(1500);
+      const s = await pg.evaluate(() => { const G = window.__G, b = G.zone.boss, B = window.BOT, L = window.__act5.AI_LOG, pl = G.player; if (!b || !B) return null; return { t: +B.t.toFixed(1), done: B.done, dead: b.dead, phase: b.phase, st: b.st, vulns: Object.keys(b.vulns || {}).filter((k) => b.vulns[k] > 0), hp: +(b.hp / b.hpMax).toFixed(3), bell: L['tower:bellRung'] || 0, d: +(Math.hypot(b.x - pl.x, b.z - pl.z) - b.radius).toFixed(1), cine: !!G.cine }; });
+      if (!s) continue;
+      for (const v of s.vulns) if (!seen[v]) { seen[v] = s.t; if (!shots.has(v)) { shots.add(v); await shot(); } }
+      if (last && s.phase !== last.phase && !shots.has('p' + s.phase)) { shots.add('p' + s.phase); await shot(); }
+      if (s.bell > (last?.bell || 0)) (seen.bellD ||= []).push(s.d);
+      last = s;
+      if (s.done || s.dead) break;
+    }
+    const bot = await pg.evaluate(() => window.__botP);
+    await pg.waitForTimeout(1500); await shot();
+    // the crawl home and the island
+    await A5.until(pg, () => { const b = window.__G.zone.boss; return !b || b.settled || window.__G.hero.flags.towerDown; }, 60000);
+    await pg.waitForTimeout(5000);
+    const home = await pg.evaluate((sk) => { const G = window.__G, z = G.zone, b = z.boss, S = z.L.spots.skerry, m = z.map; return { towerDown: !!G.hero.flags.towerDown, at: b && +Math.hypot(b.x - S.x, b.z - S.z).toFixed(1), closed: (S.cells || []).filter(([x, zz]) => !m.walkable(x + 0.5, zz + 0.5)).length, cells: (S.cells || []).length, heroIn: (S.cells || []).some(([x, zz]) => Math.floor(G.player.x) === x && Math.floor(G.player.z) === zz), checkpoint: !!z.checkpoint, beam: window.__act5.beams().map((x) => x.tag), log: Object.fromEntries(Object.entries(window.__act5.AI_LOG).filter(([k]) => k.startsWith('tower:'))) }; });
+    await shot();
+    const [lo, hi] = (process.env.TTK || '60,300').split(',').map(Number);
+    const ttk = bot?.t ?? null, inBand = ttk != null && ttk >= lo && ttk <= hi;
+    const bellIn = !seen.bellD || seen.bellD.some((d) => d <= 4.5);
+    const pass = !!bot?.done && !!seen.beached && !!seen.overturned && !!seen.blinded && (bot.near ?? 99) <= 1.5 && bellIn && home.towerDown && home.at != null && home.at <= 2.5 && home.closed > 0 && !home.heroIn && inBand && (!process.env.TTK0 || +process.env.DIFF !== 0 || ttk >= 0.6 * +process.env.TTK0);
+    return { pass, ttk, band: [lo, hi], design: [210, 300], diff: +(process.env.DIFF || 1), cls: process.env.CLS || 'warden', bot: bot && { t: bot.t, deaths: bot.deaths, potions: bot.potions, low: +bot.low.toFixed(2), phases: bot.phases, near: +(bot.near ?? 99).toFixed(2) }, seen, home, setup };
+  } },
+  // The Breathing-holes, sealed in turn (q28): the three lamps lit and the ring run; the Black Breath shielded (her in its
+  // cone) and a lamp lost and lit again; the first hole's Sunken climbing out of the water, the second's Icemaw and lice,
+  // the third's Ice Singer; the fail-safe (Alkyone holds the tongue's lamp); each seal's time against its ceiling
+  // (SEAL=seconds, by difficulty). DIFF picks the difficulty
+  holes: { q: 'auto=farlight&sim=4&q=0&norender&lvl=' + (process.env.LVL || 32) + '&diff=' + (process.env.DIFF || 1) + '&cls=' + (process.env.CLS || 'warden') + '&' + A5.url('alkShip'), run: async (pg, shot) => {
+    await A5.tick(pg); await A4.listen(pg);
+    await pg.evaluate(() => { window.__immortal = true; });
+    const ceil = +(process.env.SEAL || [75, 90, 90, 100, 110, 120][+(process.env.DIFF || 1)]);
+    const holes = [];
+    const order = await pg.evaluate(() => window.__G.zone.L.spots.holes.map((h) => h.id));
+    for (const k of order) {
+      const r = { k };
+      // to the hole: Alkyone there before her
+      r.alk = await pg.evaluate((k) => { const G = window.__G, z = G.zone, ho = z.L.spots.holes.find((h) => h.id === k), a = z.p5?.alkyone?.a; return a ? +Math.hypot(a.x - ho.alk.x, a.z - ho.alk.z).toFixed(1) : null; }, k);
+      const t0 = await pg.evaluate(() => window.__G.hero.stats.time);
+      for (let i = 0; i < 3; i++) { await A5.use(pg, `z.act5.lamps.find((l) => l.hole === ${k} && l.i === ${i})`); await A5.until(pg, (a) => !!window.__G.zone.act5.lamps.find((l) => l.hole === a[0] && l.i === a[1])?.lit, 15000, [k, i]); }
+      r.started = await pg.evaluate(() => !!window.__G.zone.seal);
+      if (k === order[0]) await shot();
+      // the run: she shields a lamp the Breath turns on (the first), lets the next go out and lights it again, kills what
+      // comes, keeps the others lit
+      let shielded = 0, lost = 0, relit = 0, failsafe = false;
+      for (const w0 = Date.now(); Date.now() - w0 < 20 * 60000;) {
+        const s = await pg.evaluate(([k, shielded, lost]) => {
+          const G = window.__G, z = G.zone, S = z.seal, pl = G.player, D = window.__D;
+          if (!S || S.ho.id !== k) return { done: !!G.hero.flags['hole' + k] };
+          const ho = S.ho;
+          for (const a of G.actors) if (a.team === 'foe' && !a.dead && !a.prop && Math.hypot(a.x - ho.x, a.z - ho.z) < 22 && !a.under) { if (a.kind === 'sunken' && a.rising > 0) window.__rose = (window.__rose || 0) + 1; else D.kill(a); }
+          if (S.tele && S.target) {
+            const it = S.target;
+            if (shielded < 2 && !lost) { const dl = Math.hypot(it.x - ho.x, it.z - ho.z) || 1, f = z.map.nearestFloor(it.x + (ho.x - it.x) / dl * 0.7, it.z + (ho.z - it.z) / dl * 0.7, 1.5); pl.x = f.x; pl.z = f.z; return { shield: it.i, ring: S.ring }; }
+            const f = z.map.nearestFloor(ho.x - (it.x - ho.x) * 0.9, ho.z - (it.z - ho.z) * 0.9, 3); pl.x = f.x; pl.z = f.z;
+            return { away: it.i, ring: S.ring };
+          }
+          const dark = z.act5.lamps.find((l) => l.hole === k && !l.lit);
+          if (dark && !pl.act) { const f = z.map.nearestFloor(dark.x, dark.z + 1.2, 2); pl.x = f.x; pl.z = f.z; dark.use(); return { relight: dark.i, ring: S.ring, lost: S.lost }; }
+          return { ring: +S.ring.toFixed(2), lost: S.lost, t: +S.t.toFixed(1), held: !!S.held };
+        }, [k, shielded, lost]);
+        if (s.done) break;
+        if (s.shield != null) { await pg.waitForTimeout(1400); const ok = await pg.evaluate((i) => !!window.__G.zone.act5.lamps.find((l) => l.i === i && l.hole === window.__G.zone.seal?.ho.id)?.lit, s.shield); if (ok) shielded++; if (shielded === 1 && k === order[0]) await shot(); }
+        if (s.away != null) { await pg.waitForTimeout(1400); lost++; }
+        if (s.relight != null) { await pg.waitForTimeout(1200); relit++; }
+        if (s.held) failsafe = true;
+        // the fail-safe, once: on the second hole the clock is moved on past the minute
+        if (k === order[1] && !failsafe && !r.forced) { r.forced = true; await pg.evaluate(() => { const S = window.__G.zone.seal; if (S) S.t = Math.max(S.t, 60.5); }); }
+        await pg.waitForTimeout(300);
+      }
+      const t1 = await pg.evaluate(() => window.__G.hero.stats.time);
+      Object.assign(r, { secs: +(t1 - t0).toFixed(1), shielded, lost, relit, failsafe, sealed: await pg.evaluate((k) => !!window.__G.hero.flags['hole' + k], k) });
+      r.adds = await pg.evaluate(() => { const L = window.__act5.AI_LOG, o = {}; for (const key in L) if (/^(sunken|icemaw|hullLouse|iceSinger|skua):/.test(key)) o[key] = L[key]; return o; });
+      r.rose = await pg.evaluate(() => window.__rose || 0);
+      await A5.until(pg, () => !window.__G.cine, 60000);
+      await shot();
+      holes.push(r); console.log('holes ' + JSON.stringify(r));
+      // the next hole: Alkyone gone ahead; she follows
+      await pg.waitForTimeout(2500);
+    }
+    const end = await pg.evaluate(() => ({ quest: window.__G.hero.quest, holes: [0, 1, 2].filter((k) => window.__G.hero.flags['hole' + k]).length, markers: window.__G.zone.act5.markers.length, says: (window.__says || []).filter((k) => /alk\.s|skotos\.law/.test(k)) }));
+    const pass = holes.length === 3 && holes.every((r) => r.sealed && r.secs <= ceil) && holes.some((r) => r.shielded > 0) && holes.some((r) => r.relit > 0) && holes.some((r) => r.failsafe) && end.quest >= 29;
+    return { pass, ceil, diff: +(process.env.DIFF || 1), holes, end };
+  } },
+  // The Skotos, fought by the boss bot: the three Remembers, a Breach beside a lit cairn (Seared), the relight, Smother;
+  // its life never under 30% before the relight; she dies after the third Remember and comes back (her name hidden again,
+  // the Remembers played again, the 30% floor let go by their count); the time to kill against the curve (TTK=lo,hi; the
+  // design's 5:30-7:30 reported beside it, and the clean time without the retry). RETRY=0 skips the death
+  skotos: { q: 'auto=farlight&sim=4&q=0&norender&lvl=' + (process.env.LVL || 34) + '&diff=' + (process.env.DIFF || 1) + '&cls=' + (process.env.CLS || 'warden') + '&' + A5.url('ternSeen'), run: async (pg, shot) => {
+    await A5.tick(pg); await A4.listen(pg);
+    await A5.use(pg, 'z.act5.farIt');
+    await A5.until(pg, () => { const b = window.__G.zone.boss; return !!b && !b.holdWake && !b.hidden && !window.__G.cine; }, 240000);
+    await shot();
+    await pg.evaluate(() => { const b = window.__G.zone.boss; window.__act5.damage(window.__G.player, b, 1, { crit: false }); });
+    await pg.evaluate((o) => { window.SIMK = 4; window.__botP = (new Function('return ' + o.src)())({ kind: 'skotos', maxT: o.maxT }); }, { src: BOT5.toString(), maxT: +(process.env.MAXT || 1500) });
+    const retry = process.env.RETRY !== '0', seen = { min: 1 }, shots = new Set();
+    let last = null, died = null, back = null;
+    for (const t0 = Date.now(); Date.now() - t0 < 150 * 60000;) {
+      await pg.waitForTimeout(1500);
+      const s = await pg.evaluate(() => { const G = window.__G, z = G.zone, b = z.boss, B = window.BOT, L = window.__act5.AI_LOG; if (!b || !B) return null; return { t: +B.t.toFixed(1), done: B.done, dead: b.dead, phase: b.phase, rem: b.remembers || 0, back: !!G.selnaBack, relit: !!z.relit, hp: +(b.hp / b.hpMax).toFixed(3), seared: L['skotos:seared'] || 0, smother: L['skotos:smothered'] || 0, coil: L['skotos:coil'] || 0, night: L['skotos:night'] || 0, breach: L['skotos:breach'] || 0, wrap: L['skotos:wrap'] || 0, cameo: (z.cameoNpcs || []).length, mode: G.mode, panel: G.panel }; });
+      if (!s) continue;
+      if (!s.relit && !s.dead) seen.min = Math.min(seen.min, s.hp);
+      for (const k of ['night', 'seared', 'wrap', 'smother', 'coil']) if (s[k] && !shots.has(k)) { shots.add(k); seen[k] = s.t; await shot(); }
+      if (s.rem > (last?.rem || 0)) (seen.rem ||= []).push([s.rem, s.t]);
+      if (s.relit && !seen.relit) { seen.relit = s.t; await shot(); }
+      if (s.back && !seen.back) seen.back = s.t;
+      if (s.phase === 1 && s.night && s.seared && !seen.searedNight) seen.searedNight = s.t;
+      // she dies just after the third Remember; then up again at the light, and the fight goes on
+      if (retry && !died && s.back && s.phase >= 1 && !s.relit) {
+        died = { t: s.t };
+        await pg.evaluate(() => { const G = window.__G; window.BOT.stop = false; G.player.hp = 0; window.__D.emit('heroDeath'); });
+        await A5.until(pg, () => window.__G.panel === 'dead', 30000);
+        died.hidden = await pg.evaluate(async () => { const S = await import('/src/game/story.js'); return { name: S.npcName('selna'), selnaBack: !!window.__G.selnaBack }; });
+        await pg.evaluate(() => { window.__D.closePanel(); window.__D.emit('respawn', false); });
+        await pg.waitForFunction(() => window.__G.zone?.id === 'farlight' && !window.__G.player.dead && !document.getElementById('fade').classList.contains('on'), null, { timeout: 240000 });
+        await pg.waitForTimeout(2000);
+        died.after = await pg.evaluate(() => { const b = window.__G.zone.boss; return { rem: b.remembers || 0, hp: +(b.hp / b.hpMax).toFixed(3), phase: b.phase, lock: b.lockPhase, floor: +(b.hpFloor / b.hpMax).toFixed(3) }; });
+        await pg.evaluate((o) => { window.BOT.stop = true; }, {});
+        await pg.evaluate((o) => { window.__botP = (new Function('return ' + o.src)())({ kind: 'skotos', maxT: o.maxT, build: false }); }, { src: BOT5.toString(), maxT: +(process.env.MAXT || 1500) });
+        await shot();
+      }
+      if (died && !back && s.back) back = { t: s.t };
+      last = s;
+      if (s.done || s.dead) break;
+    }
+    const bot = await pg.evaluate(() => window.__botP);
+    const end = await pg.evaluate(() => { const G = window.__G, z = G.zone, b = z.boss, L = window.__act5.AI_LOG; return { dead: !!b?.dead, skotosDown: !!G.hero.flags.skotosDown, log: Object.fromEntries(Object.entries(L).filter(([k]) => k.startsWith('skotos:'))), remembers: (window.__says || []).filter((k) => /^name\.|selna\.(self|p2)/.test(k)) }; });
+    await A5.until(pg, () => !!window.__G.cine, 30000); await pg.waitForTimeout(2500); await shot();
+    const [lo, hi] = (process.env.TTK || '90,420').split(',').map(Number);
+    const ttk = last?.t ?? null, clean = died && back ? +(died.t + (ttk - back.t)).toFixed(1) : ttk, inBand = clean != null && clean >= lo && clean <= hi;
+    const pass = end.dead && end.skotosDown && (seen.rem || []).length >= 3 && !!seen.searedNight && !!seen.relit && !!seen.smother && seen.min >= 0.295 && (!retry || (died?.hidden?.name === '…' && !died.hidden.selnaBack && died.after.rem === 0 && died.after.hp >= 0.6 && !!back)) && inBand;
+    return { pass, ttk, clean, band: [lo, hi], design: [330, 450], bot: bot && { deaths: bot.deaths, potions: bot.potions, low: +bot.low.toFixed(2), phases: bot.phases }, seen, died, back, end };
+  } },
+  // The Freeze: played to its end in one session (the coast built in the tide's reading is built again frozen, from its
+  // seed); then the state before it again, the scene started on entry and the game quit mid-scene; loaded again: the quest
+  // caught up, the coast built frozen from the same seed (the bay and the road north frozen, the exit north open)
+  freeze: { q: 'auto=town&sim=4&q=0&norender&lvl=30&cls=' + (process.env.CLS || 'warden'), run: async (pg, shot) => {
+    await A5.tick(pg); await A4.listen(pg);
+    const look = () => pg.evaluate(() => { const G = window.__G, z = G.zone, L = z.L, R = L.spots.iceRoad, e = z.interact.find((i) => i.kind === 'exit' && i.to === 'farlight'), B = L.boss; let bayIce = 0, bayShut = 0; for (let dz = -14; dz <= 14; dz++) for (let dx = -14; dx <= 14; dx++) { const x = Math.floor(B.x + dx), zz = Math.floor(B.z + dz), i = zz * L.w + x; if (L.thick[i] || L.ice[i]) bayIce++; if (!z.map.walkable(x + 0.5, zz + 0.5)) bayShut++; } return { mode: z.mode, Lmode: L.mode, seed: z.seed, camp: [L.spots.camp.x, L.spots.camp.z], road: R ? R.cells.filter(([x, zz]) => z.map.walkable(x + 0.5, zz + 0.5)).length + '/' + R.cells.length : null, exit: e ? (!e.locked || !!G.hero.flags[e.locked]) : null, bayIce, bayShut }; });
+    await A5.state(pg, 'towerDown', { quest: 27, zone: 'coast', at: 'waypoint' });
+    const tide = await look(); await pg.evaluate(() => { window.__coastZ = window.__G.zone; });
+    await A5.until(pg, () => !!window.__G.cine, 30000);
+    await pg.waitForFunction(() => !window.__G.cine || window.__G.cine.t >= 6, null, { timeout: 120000 }); await shot();
+    await A5.until(pg, () => window.__G.hero.quest >= 28 && window.__G.zone?.id === 'coast' && window.__G.zone.mode === 'frozen' && !window.__G.cine, 300000);
+    await pg.waitForTimeout(1500); await shot();
+    const played = { ...(await look()), rebuilt: await pg.evaluate(() => window.__G.zone !== window.__coastZ), quest: await pg.evaluate(() => window.__G.hero.quest) };
+    // again, quit mid-scene
+    await A5.state(pg, 'towerDown', { quest: 27, zone: 'coast', at: 'waypoint' });
+    await A5.until(pg, () => !!window.__G.cine, 30000);
+    await pg.waitForFunction(() => !window.__G.cine || window.__G.cine.t >= 6, null, { timeout: 120000 });
+    const mid = await pg.evaluate(() => ({ frozen: !!window.__G.hero.flags.frozen, t: +(window.__G.cine?.t || 0).toFixed(1) }));
+    await A5.reload(pg, { write: false });
+    const after = { quest: await pg.evaluate(() => window.__G.hero.quest) };
+    await A5.travel(pg, 'coast', 'waypoint');
+    Object.assign(after, await look());
+    await shot();
+    const pass = tide.mode === 'tide' && played.mode === 'frozen' && played.rebuilt && played.seed === tide.seed && mid.frozen && after.quest === 28 && after.mode === 'frozen' && after.Lmode === 'frozen' && after.seed === tide.seed && after.camp.join() === played.camp.join() && after.exit === true && after.bayShut < tide.bayShut && after.road === played.road && /^(\d+)\/\1$/.test(after.road || '');
+    return { pass, tide, played, mid, after };
+  } },
+  // The end of the act: the Skotos struck down (its Remembers given), the naming, the title card, the answer; the lantern
+  // room and the carving (q30); home: the green over Whitecliff, the child told their names, the fourth fire and the three
+  // sea-lights answering, the act panel, the blessings with the Coast's three. Selna's name back in the quest text
+  ending5: { q: 'auto=farlight&sim=4&q=0&norender&lvl=34&cls=' + (process.env.CLS || 'mage') + '&' + A5.url('ternSeen'), run: async (pg, shot) => {
+    await A5.tick(pg); await A4.listen(pg);
+    await pg.evaluate(() => { window.__immortal = true; window.__G.hero.flags.names = ['keyx', 'thaleia', 'carriers', 'sailor']; window.__G.hero.flags.remembered = true; });
+    const at = (t) => pg.waitForFunction((t) => !window.__G.cine || window.__G.cine.t >= t, t, { timeout: 180000 });
+    const q0 = await A5.quest(pg);
+    await A5.use(pg, 'z.act5.farIt');
+    await A5.until(pg, () => { const b = window.__G.zone.boss; return !!b && !b.holdWake && !b.hidden && !window.__G.cine; }, 240000);
+    // (the fight: its three Remembers given, then struck down)
+    await pg.evaluate(async () => { const G = window.__G, b = G.zone.boss, Bus = await import('/src/ui/bus.js'); b.remembers = 3; Bus.emit('selnaRemembered', b, 2); });
+    await pg.evaluate(async () => { window.__G.selnaBack = true; (await import('/src/ui/bus.js')).emit('quest'); });
+    await pg.waitForTimeout(800);
+    const q1 = { ...(await A5.quest(pg)), ...(await pg.evaluate(async () => { const S = await import('/src/game/story.js'), I = await import('/src/i18n/i18n.js'); return { name: S.npcName('selna'), want: I.t('npc.selna') }; })) };
+    await A5.hit(pg, null);
+    await A5.until(pg, () => !!window.__G.cine, 30000);
+    await at(2); await shot();
+    await A5.until(pg, () => !!document.querySelector('#titlecard'), 240000);
+    await pg.waitForTimeout(1500); await shot();
+    await A5.until(pg, () => window.__G.hero.flags.seaLit && !!window.__G.cine && window.__G.cine.t >= 6, 240000); await shot();
+    await A5.until(pg, () => window.__G.hero.flags.seaLit && !window.__G.cine, 240000);
+    const named = await pg.evaluate(() => { const F = window.__G.hero.flags; return { skotosDown: !!F.skotosDown, selnaBack: !!F.selnaBack, seaLit: !!F.seaLit, says: (window.__says || []).filter((k) => /naming|skotos\.die|lit\.|alk\.k/.test(k)) }; });
+    // the lantern room (Ice Memory 4), the carving
+    await A5.use(pg, 'z.act5.farIt');
+    await A5.until(pg, () => window.__G.hero.flags.mem_i4 && !window.__G.cine, 240000);
+    await A5.use(pg, 'z.act5.doorIt');
+    await A5.until(pg, () => !!window.__G.cine, 30000); await at(3); await shot();
+    await A5.until(pg, () => window.__G.hero.quest >= 30 && !window.__G.cine, 240000);
+    const carved = await pg.evaluate(() => ({ quest: window.__G.hero.quest, carved: !!window.__G.hero.flags.carved, mem: !!window.__G.hero.flags.mem_i4 }));
+    // home
+    await A5.travel(pg, 'town', 'waypoint');
+    await pg.waitForFunction(() => !!window.__G.cine, null, { timeout: 30000 }).catch(() => {});
+    await at(3); await shot();
+    await pg.waitForFunction(() => !window.__G.cine && !!window.__G.zone.p5?.child, null, { timeout: 180000 });
+    const child = await pg.evaluate(() => { const n = window.__G.zone.p5.child; return { model: n.a.avatar.modelName, news: !n.it.used }; });
+    await pg.evaluate(() => { const G = window.__G, it = G.zone.p5.child.it; G.player.x = it.x; G.player.z = it.z + 1.4; it.use(); });
+    const told = await pg.evaluate(() => [...document.querySelectorAll('#dialog .txt')].map((e) => e.textContent).join(' '));
+    await A4.dialogs(pg, 6, () => !!window.__G.cine);
+    await at(4); await shot();
+    await at(10); await shot();
+    await A5.until(pg, () => !window.__G.cine && !!window.__G.panel, 180000);
+    await pg.waitForTimeout(1200); await shot();
+    const act = await pg.evaluate(() => ({ panel: window.__G.panel, done: document.querySelector('.act-h')?.textContent, sub: document.querySelector('#panel .pn-b p')?.textContent, next: [...document.querySelectorAll('#panel .muted')].map((e) => e.textContent).pop() }));
+    await pg.click('[data-a="close"]').catch(() => {});
+    await A5.until(pg, () => !!document.querySelector('[data-a^="boon:"]'), 60000);
+    await pg.waitForTimeout(800); await shot();
+    const boon = await pg.evaluate(() => ({ panel: window.__G.panel, title: document.querySelector('.act-h')?.textContent, note: document.querySelector('#panel .pn-b .muted')?.textContent, cards: [...document.querySelectorAll('[data-a^="boon:"]')].map((e) => e.dataset.a + ' ' + e.querySelector('p')?.textContent) }));
+    const end = await pg.evaluate(() => { const G = window.__G, h = G.hero; return { act5: h.act5, flag: h.flags.act5, toldChild: h.flags.toldChild, quest: h.quest }; });
+    const pass = named.skotosDown && named.selnaBack && named.seaLit && carved.quest === 30 && carved.carved && carved.mem && !child.news === false && end.act5 >= 0 && end.quest === 31 && boon.cards.length === 3 && q0.text.includes('…') && !q1.text.includes('…') && q1.name === q1.want;
+    return { pass, q0, q1, named, carved, child, told, act, boon, end };
+  } },
+  // Act V's cast, real or stand-in: every new monster and person spawned and lined up, in a cold session that follows the
+  // real route (Whitecliff, the Field, down the Neck) and in one that starts at the coast's waypoint; the Farthest Light's
+  // (Selna, Tern, the keepers' memories) on the ice. Pass: none missing; on these routes none a stand-in
+  cast5: { q: 'auto=town&sim=2&q=' + (process.env.Q || '0') + '&norender&lvl=30&cls=warden', run: async (pg, shot) => {
+    await A5.tick(pg);
+    const MON = ['sunken', 'harpooner', 'iceSinger', 'hullLouse', 'icemaw', 'reefback', 'rimeBear', 'skua', 'tower', 'skotos', 'skotosHand', 'skotosCoil'];
+    const NPC = ['alkyone', 'selna', 'tern', 'tamarisk', 'glaukos', 'shorefolk', 'child', 'first', 'einarBoy', 'einar', 'arnaLast', 'keeperYoung'];
+    const line = (o) => pg.evaluate(async ({ MON, NPC }) => {
+      const G = window.__G, z = G.zone, A = window.__act5, gfx = await import('/src/gfx/gfx.js'), out = {};
+      for (const a of G.actors) if (a.team === 'foe') { a.dead = true; a.remove?.(); }
+      for (const p of z.packs) p.spawned = true; z.bossSpawned = true;
+      const c = z.L.spots.camp || z.L.spots.waypoint || z.L.start;
+      MON.forEach((id, i) => { const f = z.map.nearestFloor(c.x - 14 + i * 2.6, c.z - 4, 4); try { const m = A.spawnMonster(id, f.x, f.z, { surface: true, free: true, dormant: false }); m.dormant = true; m.hidden = false; m.under = false; m.aggro = false; if (m.avatar) m.avatar.group.visible = true; m.y = 0; m.rot = 0; G.actors.push(m); out[id] = (m.avatar?.modelName || '-') + (m.avatar?.standIn ? '*' : ''); } catch (e) { out[id] = 'ERR ' + e.message; } });
+      NPC.forEach((k, i) => { const f = z.map.nearestFloor(c.x - 14 + i * 2.6, c.z + 2, 4); try { const a = A.spawnNpc(k, f.x, f.z, 0, {}); G.actors.push(a); out['npc:' + k] = (a.avatar?.modelName || '-') + (a.avatar?.standIn ? '*' : ''); } catch (e) { out['npc:' + k] = 'ERR ' + e.message; } });
+      const h = z.map.nearestFloor(c.x, c.z + 8, 4); G.player.x = h.x; G.player.z = h.z;
+      gfx.R.cam.dist = 30; gfx.updateCamera(0, c.x, c.z, true);
+      return out;
+    }, { MON, NPC });
+    const out = {};
+    // the real route: Whitecliff at q25, the Field, the Neck
+    await A5.state(pg, 'alkField', {});
+    await A5.travel(pg, 'ashfield', 'town');
+    await A5.use(pg, "z.interact.find((i) => i.kind === 'exit' && i.to === 'coast')");
+    await pg.waitForFunction(() => window.__G.zone?.id === 'coast' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 300000 });
+    await A5.until(pg, () => window.__G.hero.flags.coastSeen && !window.__G.cine, 240000);
+    out.route = await line(); await pg.waitForTimeout(2000); await shot();
+    // cold, at the coast's waypoint (the Field never loaded)
+    await A5.state(pg, 'rite', { quest: 26 });
+    await A5.reload(pg, { q: 'q=' + (process.env.Q || '0') + '&sim=2&norender' });
+    await A5.travel(pg, 'coast', 'waypoint');
+    out.waypoint = await line(); await pg.waitForTimeout(2000); await shot();
+    out.sets = await pg.evaluate(async () => { const P = await import('/src/gfx/people.js'); return ['frost', 'folk', 'grove', 'ash'].filter((s) => P.hasPerson({ frost: 'alkyone', folk: 'brokka', grove: 'elati', ash: 'ivar' }[s])); });
+    const bad = (o) => Object.entries(o).filter(([, v]) => /ERR|^-$|\*$/.test(v)).map(([k, v]) => k + '=' + v);
+    return { pass: !bad(out.route).length && !bad(out.waypoint).length, standIns: { route: bad(out.route), waypoint: bad(out.waypoint) }, ...out };
+  } },
+  // Both echoes, once the sea is lit: the Tower's on its island, the Skotos's at the ice edge; each raised, fought, put
+  // down; the story untouched, loot, the toast
+  echo5: { q: 'auto=coast&sim=4&q=0&norender&lvl=34&cls=' + (process.env.CLS || 'warden') + '&' + A5.url('toldChild') + ',act5', run: async (pg, shot) => {
+    await A5.tick(pg); await A4.listen(pg);
+    const out = {};
+    for (const zid of ['coast', 'farlight']) {
+      await pg.evaluate(async (zid) => { const G = window.__G, h = G.hero; window.__immortal = true; h.quest = 31; h.act5 = 1; h.boons = ['ember', 'forge', 'amber', 'lantern', 'name']; window.__D.closePanel(); const W = await import('/src/game/world.js'); await W.zoneReady(zid); window.__D.enterZone(zid, { fresh: true }); for (const p of G.zone.packs) p.spawned = true; }, zid);
+      await pg.waitForTimeout(1500);
+      const before = await pg.evaluate(() => { const G = window.__G, z = G.zone, it = z.interact.find((i) => i.kind === 'echo'); if (!it) return { echo: false }; const f = z.map.nearestFloor(it.x, it.z + 2, 3); G.player.x = f.x; G.player.z = f.z; it.use(); it.use(); return { echo: it.boss, prompt: window.__D.t(it.prompt), flags: Object.keys(G.hero.flags).length }; });
+      await A5.until(pg, () => { const b = window.__G.zone.boss; return !!b && b.echo && !b.holdWake && !window.__G.cine; }, 60000);
+      await pg.waitForTimeout(2500); await shot();
+      const spawned = await pg.evaluate(() => { const G = window.__G, b = G.zone.boss; return b && { kind: b.kind, echo: b.echo, awake: b.awake, bar: G.bossActor === b, hidden: !!b.hidden }; });
+      await A5.hit(pg, null);
+      await pg.waitForTimeout(4000); await shot();
+      out[zid] = await pg.evaluate((o) => { const G = window.__G, z = G.zone, it = z.interact.find((i) => i.kind === 'echo'); return { ...o, dead: !!z.boss?.dead, bar: !!G.bossActor, quest: G.hero.quest, flags: Object.keys(G.hero.flags).length, used: it?.used, mode: G.mode, loot: G.pickups.filter((p) => p.item).length, toast: [...document.querySelectorAll('.toast')].map((e) => e.textContent).pop(), force: window.__act5.tide.TIDE?.force || null }; }, { before, spawned });
+    }
+    const ok = (r) => r.before.echo && r.spawned?.echo && r.dead && !r.bar && r.quest === 31 && r.loot > 0 && r.mode === 'play';
+    return { pass: ok(out.coast) && ok(out.farlight) && !out.coast.force, ...out };
+  } },
+  // Brokka and Elati walk on with the keepers in the Skotos's third phase, Deepstone's fire and the beacon-tree's in their
+  // sea-lanterns, and set them to the Farthest Light with the keepers: the real people when their sets are loaded; their
+  // stand-ins (the smith, the ranger) in a cold session where the two sets never come (their files refused)
+  cameo: { q: 'auto=farlight&sim=4&q=0&norender&lvl=34&cls=' + (process.env.CLS || 'warden') + '&' + A5.url('ternSeen'), run: async (pg, shot) => {
+    const run = async (p) => {
+      await A5.tick(p); await A4.listen(p);
+      await p.evaluate(() => { window.__immortal = true; });
+      await A5.use(p, 'z.act5.farIt');
+      await A5.until(p, () => { const b = window.__G.zone.boss; return !!b && !b.holdWake && !b.hidden && !window.__G.cine; }, 240000);
+      // (phase 3: its Remembers given, struck to the third phase; the keepers walk on, and with them the two)
+      await p.evaluate(async () => { const G = window.__G, b = G.zone.boss, Bus = await import('/src/ui/bus.js'); b.remembers = 3; G.selnaBack = true; Bus.emit('quest'); });
+      await A5.hit(p, 0.5); await p.waitForTimeout(1500);
+      await p.evaluate(() => { const b = window.__G.zone.boss; b.lockPhase = null; b.hpFloor = 0; b.hp = b.hpMax * 0.28; });
+      await A5.until(p, () => (window.__G.zone.cameoNpcs || []).length >= 2, 120000);
+      await p.waitForTimeout(3000); await shot(p);
+      const walk = await p.evaluate(() => { const G = window.__G, z = G.zone, L = window.__act4; return z.cameoNpcs.map((a) => ({ kind: a.kind || a.npc, model: a.avatar?.modelName, standIn: !!a.avatar?.standIn, lamp: !!a.avatar?.held?.R, pool: !!L.getLightPool('keeper:' + (a.npc || a.kind)) })); });
+      await A5.until(p, () => (window.__G.zone.cameoNpcs || []).every((a) => !a.walking), 90000);
+      const keepers = await p.evaluate(() => { const z = window.__G.zone, K = z.L.spots.npcs.keepers; return z.cameoNpcs.map((a, i) => +Math.hypot(a.x - K[i ? 5 : 0].x, a.z - K[i ? 5 : 0].z).toFixed(1)); });
+      // (the stair takes the fire in 2 s; a blow worth a tenth of her life breaks it: again)
+      for (let i = 0; i < 10 && !(await p.evaluate(() => !!window.__G.zone.relit)); i++) { await A5.use(p, 'z.act5.farIt'); await A5.until(p, () => !!window.__G.zone.relit, 6000); }
+      await p.waitForTimeout(2500); await shot(p);
+      const says = await p.evaluate(() => (window.__says || []).filter((k) => /brokka|elati|relight/.test(k)));
+      await A5.hit(p, null);
+      await A5.until(p, () => window.__G.hero.flags.seaLit && !window.__G.cine, 300000);
+      const gone = await p.evaluate(() => (window.__G.zone.cameoNpcs || []).every((a) => a.removed || a.fading || !a.avatar?.group.visible || a.dead));
+      return { walk, keepers, says, gone };
+    };
+    const warm = await run(pg);
+    // the cold session: the two sets refused (a failed load), a fresh page in a context of its own
+    const ctx = await pg.context().browser().newContext({ viewport: { width: 1280, height: 720 } });
+    const p2 = await ctx.newPage();
+    p2.on('pageerror', (e) => logs.push('pageerror(cold): ' + e.message));
+    await p2.route(/\/(folk|grove)\.glb/, (r) => r.abort());
+    await p2.addInitScript(() => { setInterval(() => { const G = window.__G; if (G?.player && window.__immortal) { G.player.hp = G.player.hpMax; G.player.dead = false; } }, 50); });
+    await p2.goto(A5.base + '?' + pg.url().split('?')[1]);
+    await p2.waitForFunction(() => window.__ready && window.__G?.player && window.__G.mode === 'play', null, { timeout: 300000 });
+    const shot2 = shot; let cold;
+    try { cold = await run(p2); } finally { await ctx.close(); }
+    void shot2;
+    const real = (w) => w.length === 2 && w.every((a) => !a.standIn && a.lamp && a.pool);
+    const stand = (w) => w.length === 2 && w.every((a) => a.standIn && a.lamp) && w.map((a) => a.model).sort().join() === 'ranger,smith';
+    return { pass: real(warm.walk) && stand(cold.walk) && warm.keepers.every((d) => d < 2.5) && warm.says.length >= 2 && warm.gone, warm, cold };
+  } },
+  // The sixth difficulty: locked until Act V is finished on Ash (the waypoints' six chips, the locked toast), open after;
+  // chosen: the zones dropped and disposed, an Act V zone on it with a seed of its own (coast@5) and HAZ5's values (the
+  // tide's clock, the wash-out and plunge, the ice's load, the Cold, the boss cooldowns and adds), the monsters' scaling
+  diff6: { q: 'auto=town&sim=2&q=0&lvl=40&cls=' + (process.env.CLS || 'ranger') + '&' + A5.url('toldChild') + ',act5', run: async (pg, shot) => {
+    await A5.tick(pg);
+    const out = {};
+    const chips = () => pg.evaluate(() => [...document.querySelectorAll('[data-a^="diff:"]')].map((e) => e.dataset.a + (e.classList.contains('lock') ? ':lock' : '') + (e.classList.contains('on') ? ':on' : '')));
+    // finished on Nightmare: the sixth is locked
+    await pg.evaluate(() => { const h = window.__G.hero; h.act5 = 3; h.act4 = 4; h.diff = 4; window.__D.openPanel('waypoints'); });
+    await pg.waitForTimeout(600);
+    out.locked = { chips: await chips() };
+    await pg.click('[data-a="diff:5"]').catch(() => {});
+    await pg.waitForTimeout(500);
+    out.locked.toast = await pg.evaluate(() => [...document.querySelectorAll('.toast')].map((e) => e.textContent).pop());
+    out.locked.want = await pg.evaluate(async () => { const I = await import('/src/i18n/i18n.js'); return I.t('pick.locked5', I.t('diff.ash')); });
+    out.locked.diff = await pg.evaluate(() => window.__G.hero.diff);
+    await shot();
+    // finished on Ash: open, chosen
+    await pg.evaluate(() => { window.__D.closePanel(); const h = window.__G.hero; h.act5 = 4; h.seeds = Object.assign(h.seeds || {}, { 'coast@4': 777 }); window.__D.openPanel('waypoints'); });
+    await pg.waitForTimeout(600);
+    out.open = { chips: await chips() };
+    await pg.evaluate(async () => { const W = await import('/src/game/world.js'); await W.zoneReady('coast'); window.__D.enterZone('coast', { at: 'waypoint' }); window.__coast4 = window.__G.zone; window.__D.enterZone('town', { at: 'waypoint' }); window.__D.openPanel('waypoints'); });
+    await pg.waitForTimeout(600);
+    await pg.click('[data-a="diff:5"]').catch(() => {});
+    await pg.waitForTimeout(800);
+    Object.assign(out.open, await pg.evaluate(() => ({ diff: window.__G.hero.diff, zones: Object.keys(window.__G.zones), disposed: !!window.__coast4?.disposed || !window.__G.zones.coast, chip: document.querySelector('[data-a="diff:5"]')?.style.color })));
+    await shot();
+    // an Act V zone on it
+    await pg.evaluate(async () => { window.__D.closePanel(); const W = await import('/src/game/world.js'); await W.zoneReady('coast'); window.__D.enterZone('coast', { at: 'waypoint' }); });
+    await pg.waitForTimeout(1500);
+    out.zone = await pg.evaluate(async () => {
+      const G = window.__G, h = G.hero, D = await import('/src/game/data.js'), A = window.__act5, T = A.tide.TIDE, H = D.HAZ5[h.diff];
+      const c0 = A.cold.COLD.v; A.cold.coldAdd(10); const cold = +(A.cold.COLD.v - c0).toFixed(2); A.cold.resetCold();
+      const m = A.spawnMonster('sunken', G.player.x + 4, G.player.z, {}); G.actors.push(m);
+      const base = D.MONSTERS.sunken.hp;
+      return { diff: h.diff, seeds: Object.keys(h.seeds).filter((k) => k.startsWith('coast@')), seed: G.zone.seed, seed4: h.seeds['coast@4'], haz: H, tideCycle: T && (T.cycle ?? T.len ?? null), cold, hpK: +(m.hpMax / base).toFixed(2), lvl: m.level };
+    });
+    await shot();
+    const H = out.zone.haz || {};
+    out.pass = out.locked.chips.length === 6 && out.locked.chips.includes('diff:5:lock') && out.locked.toast === out.locked.want && out.locked.diff === 4 && out.open.chips.includes('diff:5') && !out.open.chips.includes('diff:5:lock') && out.open.diff === 5 && out.open.disposed && out.zone.diff === 5 && out.zone.seeds.includes('coast@5') && out.zone.seed !== out.zone.seed4 && H.wash === 12 && H.plunge === 16 && H.load === 0.9 && H.cold === 1.45 && H.bossCd === 0.8 && H.adds === 2 && Math.abs(out.zone.cold - 14.5) < 0.05;
+    return out;
+  } },
+  // Act V from end to end in one session, as a Warden from an Act IV-end save in the shipped format (quest 23, no act5):
+  // the hook, the coal, the Field and the Neck; the coast (the arrival, the hearth and the rite, its people, packs fought,
+  // the three sea-lights and their memories, the Name-stones); the Walking Tower (the boss bot); the Freeze; the Farthest
+  // Light (the ship, the three holes sealed, Tern); the Skotos (the boss bot: Selna remembered, the keepers and the two
+  // fires, the relight); the naming and the answer; the lantern room and the carving; home, the child, the act's close and
+  // the blessing. A screenshot at every beat. The fights are hers with the scenarios' help (sim=4; her packs fought with
+  // her life kept full, the bosses by the bot with her life real and put back under 30%); LVL (30), CLS (warden)
+  play5: { q: 'sim=4&q=' + (process.env.Q || '0') + '&norender', run: async (pg, shot) => {
+    const beats = [], t0 = Date.now(), cls = process.env.CLS || 'warden', lvl = +(process.env.LVL || 30);
+    const ev = (fn, a) => pg.evaluate(fn, a);
+    const beat = async (name, ok, more = {}) => { const s = await ev(() => { const G = window.__G; return { q: G.hero.quest, zone: G.zone?.id, lvl: G.hero.level, hp: Math.round(G.player.hp / G.player.hpMax * 100), deaths: G.hero.stats.deaths, fatal: document.getElementById('fatal')?.textContent?.slice(0, 200) || undefined }; }); const b = { beat: name, ok: !!ok, min: +((Date.now() - t0) / 60000).toFixed(1), ...s, ...more }; beats.push(b); console.log('play5 ' + JSON.stringify(b)); await shot(); return b; };
+    const at = (t) => pg.waitForFunction((t) => !window.__G.cine || window.__G.cine.t >= t, t, { timeout: 240000 }).catch(() => {});
+    const cineShot = async (t = 2.5) => { if (await A5.until(pg, () => !!window.__G.cine, 30000)) { await at(t); await shot(); } };
+    const done = (fn, ms = 240000) => A5.until(pg, fn, ms);
+    // her packs: beside each, her skills (her life kept full while she fights them)
+    const fight = async (n, near) => {
+      const r = await ev(([n, near]) => { const G = window.__G, z = G.zone, pl = G.player; const ps = z.packs.filter((p) => !p.cleared).map((p) => ({ p, d: Math.hypot(p.x - (near?.x ?? pl.x), p.z - (near?.z ?? pl.z)) })).sort((a, b) => a.d - b.d).slice(0, n).map((x) => z.packs.indexOf(x.p)); return ps; }, [n, near]);
+      const kinds = {};
+      for (const i of r) {
+        await ev((i) => { const G = window.__G, p = G.zone.packs[i], f = G.zone.map.nearestFloor(p.x, p.z + 4, 4); G.player.x = f.x; G.player.z = f.z; window.__immortal = true; }, i);
+        for (let k = 0; k < 14; k++) { await ev(() => { const G = window.__G, pl = G.player, f = G.actors.filter((a) => a.team === 'foe' && !a.dead && !a.prop && !a.under && !a.hidden && Math.hypot(a.x - pl.x, a.z - pl.z) < 12).sort((a, b) => Math.hypot(a.x - pl.x, a.z - pl.z) - Math.hypot(b.x - pl.x, b.z - pl.z))[0]; pl.res = 100; window.__D.IN.events.push({ t: 'skill', i: [0, 0, 1, 2, 0, 3, 0, 4][k % 8], aim: f ? { x: f.x, z: f.z } : null }); }); await pg.waitForTimeout(260); if (k === 6 && i === r[0]) await shot(); }
+        Object.assign(kinds, await ev((i) => { const o = {}; for (const a of window.__G.actors) if (a.packId != null && a.team === 'foe' && !a.prop) o[a.kind] = (o[a.kind] || 0) + (a.dead ? 1 : 0); return o; }, i));
+      }
+      await ev(() => { window.__immortal = false; });
+      return { packs: r.length, kills: await ev(() => window.__G.hero.stats.kills), kinds };
+    };
+    const talk = async (key, until) => { const ok = await A5.use(pg, `z.p5?.${key}?.it`); await A4.dialogs(pg, 12, until); await ev(() => window.__D.closePanel()); return ok; };
+    const bot = async (kind) => {
+      await ev((o) => { window.SIMK = 4; window.__botP = (new Function('return ' + o.src)())({ kind: o.kind, maxT: 1500, build: false }); }, { src: BOT5.toString(), kind });
+      const seen = new Set();
+      for (const w0 = Date.now(); Date.now() - w0 < 120 * 60000;) {
+        await pg.waitForTimeout(2000);
+        const s = await ev(() => { const z = window.__G.zone, b = z.boss, B = window.BOT; return b && B && { t: +B.t.toFixed(0), phase: b.phase, dead: b.dead, done: B.done, v: Object.keys(b.vulns || {}).filter((k) => b.vulns[k] > 0).join(','), wrap: !!z.keepers, relit: !!z.relit, rem: b.remembers || 0 }; });
+        if (!s) continue;
+        const key = 'p' + s.phase + (s.v ? ':' + s.v : '') + (s.wrap ? ':keepers' : '') + (s.relit ? ':relit' : '') + (s.rem ? ':r' + s.rem : '');
+        if (!seen.has(key) && seen.size < 12) { seen.add(key); await shot(); }
+        if (s.dead || s.done) break;
+      }
+      return ev(() => { const B = window.BOT; return B && { t: +B.t.toFixed(1), deaths: B.deaths, potions: B.potions, low: +B.low.toFixed(2), phases: B.phases }; });
+    };
+    await A5.tick(pg); await A4.listen(pg);
+    // the shipped save: Act IV's end at quest 23, no act5
+    await ev(([act4, cls, lvl]) => {
+      const now = Date.now(), h = { id: 'hP' + now.toString(36), cls, level: lvl, xp: 0, gold: 2400, diff: 1, skills: {}, points: lvl - 1, inv: new Array(32).fill(null), equip: {}, stash: new Array(48).fill(null), quest: 23, flags: {}, wps: ['town', 'forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'ashfield@2', 'forge'], act1: 1, act2: 1, act3: 1, act4: 1, gateBest: 2, boons: ['hearth', 'anvil', 'root', 'rest'], stats: { kills: 1400, deaths: 4, time: 36000, legs: 3, elites: 60 }, created: now, played: now, seeds: { forest: 11, crypt: 12, pass: 13, halls: 14, weep: 15, heart: 16, ashfield: 17, forge: 18 } };
+      for (const k of act4) h.flags[k] = true;
+      Object.assign(h.flags, { heat: 3, gifts: { throne: 'refused', forge: 'refused', unfading: 'refused' }, helpSeen: true });
+      localStorage.setItem('skotos.save.v1', JSON.stringify({ heroes: [h], settings: { quality: 0, lang: 'el', helpSeen: true }, last: h.id }));
+    }, [A5.ACT4, cls, lvl]);
+    await A5.reload(pg, { write: false, immortal: false, q: 'sim=4&q=' + (process.env.Q || '0') + '&norender' });
+    // (what she wears after Act IV: a rare of her level in every slot, her skills spent)
+    await ev(async () => { const G = window.__G, h = G.hero, It = await import('/src/game/items.js'), D = await import('/src/game/data.js'); const W = { warden: 'sword', ranger: 'crossbow', mage: 'staff' }, OFF = { warden: 'shield', ranger: 'quiver', mage: 'orb' }, mk = (base) => It.makeItem(h.level, { rar: 2, base, cls: h.cls }); h.equip.weapon = mk(W[h.cls]); h.equip.offhand = mk(OFF[h.cls]); for (const s of ['helm', 'chest', 'gloves', 'boots', 'amulet']) h.equip[s] = mk(s); h.equip.ring1 = mk('ring'); h.equip.ring2 = mk('ring'); h.skills = {}; for (const sk of D.SKILLS[h.cls]) h.skills[sk.id] = 5; h.points = 0; window.__D.refreshStats(); G.player.hp = G.player.hpMax; });
+    await beat('loaded', await ev(() => window.__G.hero.act5 === -1 && window.__G.zone.id === 'town'), { act5: await ev(() => window.__G.hero.act5) });
+    // ---- q24: the stranger at the beacon ----
+    await done(() => !!window.__G.zone.p5?.alkyone && !window.__G.zone.p5.alkyone.scene, 240000);
+    await beat('q24 Alkyone at the beacon', await ev(() => window.__G.hero.quest === 24));
+    await A5.use(pg, 'z.p5.alkyone.it');
+    await A4.dialogs(pg, 10, () => !!window.__G.cine);
+    await cineShot(5);
+    await done(() => window.__G.hero.flags.cradle, 240000);
+    await beat('Halda and the Cradle', true);
+    await A5.use(pg, "z.interact.find((i) => i.kind === 'coal')");
+    await done(() => window.__G.hero.quest >= 25, 120000);
+    await beat('q25 the coal', await ev(() => window.__G.hero.flags.coal));
+    // ---- the Field: Alkyone at the Last Lamp, the Neck ----
+    await A5.travel(pg, 'ashfield', 'town');
+    await done(() => !!window.__G.zone.p5?.alkyone, 30000);
+    await talk('alkyone');
+    await beat('the Field: Alkyone at the Last Lamp', await ev(() => !!window.__G.hero.flags.alkField));
+    await A5.use(pg, "z.interact.find((i) => i.kind === 'exit' && i.to === 'coast')");
+    await pg.waitForFunction(() => window.__G.zone?.id === 'coast' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 300000 });
+    // ---- q25: the coast ----
+    await cineShot(2.5);
+    await done(() => window.__G.hero.flags.coastSeen && !window.__G.cine, 240000);
+    await beat('the coast: the arrival', true);
+    await A5.use(pg, 'z.act5.hearth');
+    await done(() => window.__G.hero.flags.hearth, 30000);
+    await pg.waitForTimeout(1500);
+    await beat('the hearth', await ev(() => window.__G.hero.wps.includes('coast')));
+    await cineShot(3);
+    await done(() => window.__G.hero.flags.rite && !window.__G.cine && window.__G.hero.quest >= 26, 240000);
+    await beat('q26 the rite', await ev(() => window.__G.hero.quest === 26));
+    await done(() => !!window.__G.zone.p5?.glaukos && !!window.__G.zone.p5?.tamarisk, 20000);
+    await talk('glaukos'); await talk('tamarisk');
+    await beat('Glaukos and Tamarisk', await ev(() => window.__G.hero.flags.glaukosMet && window.__G.hero.flags.tamMet));
+    // ---- q26: the sea-lights, the packs on the way, the Name-stones ----
+    const lights = await ev(() => window.__G.zone.act5.lights.map((l) => l.id));
+    for (const id of lights) {
+      const near = await ev((id) => { const l = window.__G.zone.act5.lights.find((x) => x.id === id); return { x: l.x, z: l.z }; }, id);
+      const f = await fight(2, near);
+      await beat('packs by the ' + id + ' light', true, f);
+      await A5.use(pg, `z.act5.lights.find((l) => l.id === '${id}')`);
+      await cineShot(3);
+      const n = await ev(() => (window.__G.hero.flags.lights5 || []).length);
+      await done((n) => (window.__G.hero.flags.lights5 || []).length >= n && ['mem_i1', 'mem_i2', 'mem_i3'].filter((k) => window.__G.hero.flags[k]).length >= n && !window.__G.cine, 300000, n);
+      await beat('the ' + id + ' light and its memory', await ev((id) => !!window.__G.hero.flags['light_' + id], id));
+      if (id !== lights[lights.length - 1]) {
+        const st = await ev(() => window.__G.zone.act5.stones.filter((s) => !s.lit).map((s) => s.id));
+        for (const sid of st.slice(0, 2)) { await A5.use(pg, `z.act5.stones.find((s) => s.id === '${sid}')`); await pg.waitForTimeout(2500); }
+        await beat('Name-stones', true, { names: await ev(() => (window.__G.hero.flags.names || []).length) });
+      }
+    }
+    // (the Tower wakes after the third memory)
+    await cineShot(3);
+    await done(() => window.__G.hero.quest >= 27 && !window.__G.cine, 300000);
+    await beat('q27 the Walking Tower wakes', await ev(() => window.__G.hero.flags.towerWake));
+    // ---- q27: the Tower ----
+    await ev(() => { const G = window.__G, b = G.zone.boss, f = G.zone.map.nearestFloor(b.x + 2, b.z + 11, 4); G.player.x = f.x; G.player.z = f.z; window.__act5.damage(G.player, b, 1, { crit: false }); });
+    const tower = await bot('tower');
+    await beat('the Tower down', await ev(() => !!window.__G.zone.boss?.dead), { tower });
+    // ---- the Freeze, q28 ----
+    await cineShot(6);
+    await done(() => window.__G.hero.quest >= 28 && window.__G.zone?.mode === 'frozen' && !window.__G.cine, 300000);
+    await beat('q28 the Freeze: the coast frozen', true);
+    await A5.use(pg, "z.interact.find((i) => i.kind === 'exit' && i.to === 'farlight')");
+    await pg.waitForFunction(() => window.__G.zone?.id === 'farlight' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 300000 });
+    await cineShot(3);
+    await done(() => window.__G.hero.flags.farSeen && !window.__G.cine, 120000);
+    await beat('the Farthest Light: the arrival', true);
+    await talk('alkyone', () => window.__G.hero.flags.alkShip);
+    await beat('the Icebound Ship', await ev(() => window.__G.hero.flags.alkShip));
+    // ---- the holes ----
+    const holes = await ev(() => window.__G.zone.L.spots.holes.map((h) => h.id));
+    for (const k of holes) {
+      await fight(1, await ev((k) => window.__G.zone.L.spots.holes.find((h) => h.id === k).alk, k));
+      await ev(() => { window.__immortal = true; });
+      for (let i = 0; i < 3; i++) { await A5.use(pg, `z.act5.lamps.find((l) => l.hole === ${k} && l.i === ${i})`); await A5.until(pg, (a) => !!window.__G.zone.act5.lamps.find((l) => l.hole === a[0] && l.i === a[1])?.lit, 15000, [k, i]); }
+      let shotDone = false;
+      for (const w0 = Date.now(); Date.now() - w0 < 15 * 60000;) {
+        const s = await ev((k) => { const G = window.__G, z = G.zone, S = z.seal, pl = G.player; if (!S) return { done: !!G.hero.flags['hole' + k] };
+          for (const a of G.actors) if (a.team === 'foe' && !a.dead && !a.prop && !a.under && !a.hidden && Math.hypot(a.x - pl.x, a.z - pl.z) < 4) window.__D.IN.events.push({ t: 'skill', i: 0, aim: { x: a.x, z: a.z } });
+          if (S.tele && S.target) { const it = S.target, ho = S.ho, dl = Math.hypot(it.x - ho.x, it.z - ho.z) || 1, f = z.map.nearestFloor(it.x + (ho.x - it.x) / dl * 0.7, it.z + (ho.z - it.z) / dl * 0.7, 1.5); pl.x = f.x; pl.z = f.z; return { breath: true }; }
+          const dark = z.act5.lamps.find((l) => l.hole === k && !l.lit); if (dark && !pl.act) { const f = z.map.nearestFloor(dark.x, dark.z + 1.2, 2); pl.x = f.x; pl.z = f.z; dark.use(); }
+          return { ring: S.ring }; }, k);
+        if (s.done) break;
+        if (s.breath && !shotDone) { shotDone = true; await pg.waitForTimeout(500); await shot(); }
+        await pg.waitForTimeout(400);
+      }
+      await ev(() => { window.__immortal = false; });
+      await done(() => !window.__G.cine, 60000);
+      await beat('hole ' + k + ' sealed', await ev((k) => !!window.__G.hero.flags['hole' + k], k));
+    }
+    await done(() => window.__G.hero.quest >= 29, 60000);
+    // ---- q29: Tern, the Skotos ----
+    await ev(() => { const G = window.__G, B = G.zone.L.boss, f = G.zone.map.nearestFloor(B.x, B.z + 13, 4); G.player.x = f.x; G.player.z = f.z; });
+    await cineShot(3);
+    await done(() => window.__G.hero.flags.ternSeen && !window.__G.cine, 120000);
+    await beat('q29 Tern on the road', await ev(() => window.__G.hero.quest === 29));
+    await A5.use(pg, 'z.act5.farIt');
+    await cineShot(5);
+    await done(() => { const b = window.__G.zone.boss; return !!b && !b.holdWake && !b.hidden && !window.__G.cine; }, 240000);
+    await beat('the Skotos rises', true);
+    await ev(() => window.__act5.damage(window.__G.player, window.__G.zone.boss, 1, { crit: false }));
+    const skotos = await bot('skotos');
+    await beat('the Skotos struck down', await ev(() => !!window.__G.hero.flags.skotosDown), { skotos, cameo: await ev(() => (window.__G.zone.cameoNpcs || []).map((a) => a.avatar?.modelName)) });
+    // ---- the naming, the card, the answer ----
+    await cineShot(3);
+    await done(() => (window.__says || []).includes('d.naming.you'), 240000); await shot();
+    await done(() => window.__G.hero.flags.seaLit && !!window.__G.cine && window.__G.cine.t >= 7, 300000); await shot();
+    await done(() => window.__G.hero.flags.seaLit && !window.__G.cine, 300000);
+    await beat('the naming and the answer', await ev(() => window.__G.hero.flags.seaLit));
+    await A5.use(pg, 'z.act5.farIt');
+    await cineShot(1.5);
+    await done(() => window.__G.hero.flags.mem_i4 && !window.__G.cine, 300000);
+    await beat('the lantern room', true);
+    await A5.use(pg, 'z.act5.doorIt');
+    await cineShot(3);
+    await done(() => window.__G.hero.quest >= 30 && !window.__G.cine, 240000);
+    await beat('q30 the carving', await ev(() => window.__G.hero.flags.carved));
+    // ---- home ----
+    await A5.travel(pg, 'town', 'waypoint');
+    await cineShot(3);
+    await done(() => !window.__G.cine && !!window.__G.zone.p5?.child, 240000);
+    await beat('home: the green over Whitecliff', true);
+    await A5.use(pg, 'z.p5.child.it');
+    await A4.dialogs(pg, 8, () => !!window.__G.cine);
+    await cineShot(5);
+    await done(() => !window.__G.cine && window.__G.panel === 'act', 240000);
+    await beat('the act panel', await ev(() => (window.__G.hero.act5 ?? -1) >= 0));
+    await pg.click('[data-a="close"]').catch(() => {});
+    await done(() => !!document.querySelector('[data-a^="boon:"]'), 60000);
+    await shot();
+    await pg.click('[data-a="boon:name"]').catch(() => {});
+    await pg.waitForTimeout(1500);
+    const end = await ev(() => { const G = window.__G, h = G.hero; return { quest: h.quest, act5: h.act5, boons: h.boons.slice(), flags: ['seaLit', 'carved', 'toldChild', 'act5'].filter((f) => h.flags[f]), deaths: h.stats.deaths, lvl: h.level, minutes: Math.round(h.stats.time / 60) }; });
+    await beat('the end: q31', end.quest === 31 && end.act5 >= 0, end);
+    return { pass: beats.every((b) => b.ok) && end.quest === 31, failed: beats.filter((b) => !b.ok).map((b) => b.beat), end, tower, skotos, beats };
   } }
 };
 const sc = S[name];
+// (a scenario run in a child process of its own, as the soaks: this runner's browser is never opened beside it)
+if (sc.child) { let res; try { res = await sc.child(out); } catch (e) { res = { error: e.message }; } console.log(name, JSON.stringify(res)); process.exit(0); }
+const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const page = await browser.newPage({ viewport: { width: +W, height: +H } });
+page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') { const t = m.text(); if (!t.includes('ERR_CERT')) logs.push(m.type() + ': ' + t); } });
+page.on('pageerror', (e) => logs.push('pageerror: ' + e.message + ' ' + (e.stack || '').split('\n').slice(0, 3).join(' | ')));
 // the test hero never dies (levelling up resets the life pool, so keep topping it up; window.__tough also puts back the
 // huge pool whenever the stats are recounted, as when Karthax takes the gifts back)
 await page.addInitScript(() => { setInterval(() => { const G = window.__G; if (G?.player && window.__tough && G.player.hpMax < 99999) G.player.hpMax = 99999; if (G?.player && G.player.hpMax >= 99999) G.player.hp = G.player.hpMax; if (G?.player && window.__immortal) { G.player.hp = G.player.hpMax; G.player.dead = false; } }, 50); });
@@ -880,7 +1730,7 @@ page.setDefaultTimeout(120000);
 await page.waitForFunction(() => window.__ready && (!location.search.includes('auto=') || window.__G?.player), null, { timeout: 180000 });
 let n = 0;
 // with &norender the game skips drawing; a screenshot asks for one drawn frame first
-const shot = async () => { await page.evaluate(() => new Promise((ok) => { window.__shoot = true; requestAnimationFrame(() => requestAnimationFrame(() => { window.__shoot = false; ok(); })); })); await page.screenshot({ path: `${out}/${name}-${n++}.png` }); };
+const shot = async (pg = page) => { await pg.evaluate(() => new Promise((ok) => { window.__shoot = true; requestAnimationFrame(() => requestAnimationFrame(() => { window.__shoot = false; ok(); })); })); await pg.screenshot({ path: `${out}/${name}-${n++}.png` }); };
 shot.dir = out;
 let res;
 try { res = await sc.run(page, shot); } catch (e) { logs.push('scenario error: ' + e.message); }

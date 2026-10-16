@@ -1207,7 +1207,7 @@ function riteScene(z) {
 on('sealight', (it, z) => {
   if (it.lit || G.mode !== 'play' || G.zone !== z) return;
   const s = it.spot, top = { x: s.x, y: it.mesh.userData.fireY ?? 9, z: s.z };
-  touch(1.5, it, top.y, () => lightSea(z, it), { at: top });
+  touch(1.5, it, top.y, () => lightSea(z, it), { at: top, tough: true });
 });
 function lightSea(z, it) {
   const F = G.hero.flags, id = it.id, s = it.spot, first = !lightsLit5(), top = it.mesh.userData.fireY ?? 9;
@@ -1434,7 +1434,8 @@ on('sealDone', (k, z) => {
       emit('toast', t('q.holeSealed', n), 'quest'); emit('quest');
       if (n === 2) later(3.4, () => skotosSay('d.skotos.law'));
       goAhead(z);
-      if (n >= 3) later(2, () => setQuest(29));
+      // (Brokka's and Elati's people come with q29, for the keepers' walk; a first trip has them from the Field already)
+      if (n >= 3) { later(2, () => setQuest(29)); loadFolk('folk'); loadFolk('grove'); }
     }
   });
 });
@@ -1472,7 +1473,7 @@ on('farLight', (it, z) => {
   const F = G.hero.flags;
   if (G.mode !== 'play' || G.zone !== z) return;
   if (F.seaLit) { if (!F.mem_i4) lanternRoom(z); return; }
-  if (z.giving) { const top = { x: z.L.spots.farLight.x, y: z.act5.farLight.userData.fireY ?? 16, z: z.L.spots.farLight.z }; touch(2.0, it, top.y, () => relight(z), { at: top }); return; }
+  if (z.giving) { const top = { x: z.L.spots.farLight.x, y: z.act5.farLight.userData.fireY ?? 16, z: z.L.spots.farLight.z }; touch(2.0, it, top.y, () => relight(z), { at: top, tough: true }); return; }
   if (holesSealed() >= 3) skotosRises(z);
 });
 // it rises at the ice edge, twelve metres of black water whose cloak is its own arms; out on the ring a woman kneels with a
@@ -1516,7 +1517,7 @@ on('skotosFalter', (a, n) => { if (!a?.echo) selnaFalter(G.zone, a, n); });
 function selnaFalter(z, a, n) {
   const sel = npc5(z, 'selna')?.a; if (!sel || z.remember) return;
   const it = { kind: 'remember', x: sel.x, z: sel.z, r: 2.0, prompt: 'selna.remember', n, t: 0 };
-  it.use = () => touch(1.2, it, 1.3, () => remembered(z, a, n, it));
+  it.use = () => touch(1.2, it, 1.3, () => remembered(z, a, n, it), { tough: true });
   z.interact.push(it); z.remember = it;
   sel.avatar?.setRim(0xe8f0ff, 1.6);
   const pulse = () => { if (z.remember !== it) return; ring(sel.x, sel.z, 2, 0xe8f0ff, 0.7); if ((it.t += 0.8) >= 12) { dropRemember(z, it); sel.avatar?.setRim(0x6080b0, 0.3); puff(sel.x, 1.3, sel.z, 10, 0x1a1620, 1, 0.8, 1.2); emit('selnaForgotten', a, n); return; } later(0.8, pulse); };
@@ -1634,7 +1635,7 @@ function naming(z) {
   let done = false;
   for (const it of z.interact.filter((i) => i.kind === 'remember')) dropRemember(z, it);
   const sink = () => {
-    skotosSay('d.skotos.die2');
+    skotosSay('d.skotos.die2'); emit('skotosSink');
     later(1.6, () => { freezeWave(0, FL.x, FL.z, 70, 3, true); Audio.sfx('freezeWave', { vol: 1 }); shake(0.6); });
     later(4.4, () => { done = true; });
   };

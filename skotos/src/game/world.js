@@ -843,15 +843,18 @@ function setPit(z, it, on, quiet) {
   setEmit(z, tag, on ? { x: p.x, y: 0.4, z: p.z, type: 'fire', s: 1 } : null, quiet);
 }
 // a touch that takes a moment (a waylamp, a brazier, a fire-pit): the Cradle's fire streams across; a blow breaks it
-// (o.at: the point the fire streams to, if not over it; o.take: the fire streams the other way, into the Cradle)
+// (o.at: the point the fire streams to, if not over it; o.take: the fire streams the other way, into the Cradle; o.tough:
+// Act V's channels, broken only by blows worth a tenth of her life between them, as the Tower's light: ai.js lightChannel)
+const TOUCH = { hurt: 0 };
+on('hurt', (f) => { TOUCH.hurt += f; });
 export function touch(dur, it, y, done, o = {}) {
   const pl = G.player; if (!pl || pl.dead || pl.act) return;
   pl.rot = angleTo(pl.x, pl.z, it.x, it.z);
   const c = new THREE.Vector3(), to = o.at || { x: it.x, y, z: it.z };
-  pl.act = { name: 'touch', t: 0, dur, ev: [], clip: dur, move: 0, blows: pl.blows || 0, st: 0,
+  pl.act = { name: 'touch', t: 0, dur, ev: [], clip: dur, move: 0, blows: pl.blows || 0, hurt: TOUCH.hurt, st: 0,
     update(dt, a) {
       // a blow that reaches her life breaks it (combat.js hurtHero counts them); a burn or a poison tick does not
-      if ((pl.blows || 0) !== a.blows) { a.dur = Infinity; pl.act = null; pl.avatar.anim.stop?.(0.15); return; }
+      if (o.tough ? TOUCH.hurt - a.hurt >= 0.1 : (pl.blows || 0) !== a.blows) { a.dur = Infinity; pl.act = null; pl.avatar.anim.stop?.(0.15); return; }
       if ((a.st -= dt) <= 0) { a.st = 0.08; cradlePoint(c); const C = { x: c.x, y: c.y, z: c.z }; if (o.take) fireStream(to, C, 3); else fireStream(C, to, 3); }
     },
     end() { done(); } };
@@ -1321,7 +1324,7 @@ function sealTick(z, dt) {
       S.addT = 6;
       for (let i = 0; i < 2 + (extra > 1 ? 1 : 0) && S.adds.length < 5 + extra; i++) {
         const a = rand.range(0, 6.28), p = z.map.nearestFloor(ho.x + Math.sin(a) * (ho.r + 0.8), ho.z + Math.cos(a) * (ho.r + 0.8), 3);
-        const m = spawnMonster('sunken', p.x, p.z, { packId: 'seal' }); m.aggro = true; m.alarmed = true; z.actors.push(m); S.adds.push(m);
+        const m = spawnMonster('sunken', p.x, p.z, { packId: 'seal', rising: true }); m.aggro = true; m.alarmed = true; z.actors.push(m); S.adds.push(m);
         splashAt(p.x, p.z);
       }
     } else if (ho.id === 1 && MONSTERS.hullLouse) {
@@ -1359,9 +1362,10 @@ on('lampSnuffed', (it, by) => {
   const S = G.zone?.seal;
   if (by && S && it.kind === 'holeLamp' && it.hole === S.ho.id) { S.lost++; S.ring = Math.max(0, S.ring - (S.t > 60 ? 1 : 2) / S.dur); }
 });
-// the third hole's Ice Singer: a finished song puts out the nearest lit lamp (one Alkyone holds stays lit)
-on('singerSong', (a) => {
-  const z = G.zone, S = z?.seal; if (!S) return;
+// the third hole's Ice Singer: a finished song puts out the nearest lit lamp (one Alkyone holds stays lit); sung at her
+// in lamp light it comes to nothing (ai.js songTick)
+on('iceSong', (a, at) => {
+  const z = G.zone, S = z?.seal; if (!S || S.ho.id !== 2 || at?.fizzled) return;
   let best = null, bd = 1e9;
   for (const it of holeLamps(z, S.ho)) if (it.lit && !it.held) { const d = Math.hypot(it.x - a.x, it.z - a.z); if (d < bd) { bd = d; best = it; } }
   if (best) snuffLamp(best, a);

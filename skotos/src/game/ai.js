@@ -1117,7 +1117,7 @@ function songTick(a, dt, pl) {
   const T = a.songAt; a.state = 'chase'; a.cd = 7; a.tele = null; a.avatar?.anim.stop?.(0.2);
   if (lampLightAt(T.x, T.z)) {
     // in lamp light the song comes to nothing
-    puff(T.x, 0.4, T.z, 10, 0xe8f0f4, 1, T.ice ? 2 : 3, 0.9); Audio.sfx('refreeze', { x: T.x, z: T.z, vol: 0.5 }); tally(a, 'songFizzled');
+    T.fizzled = true; puff(T.x, 0.4, T.z, 10, 0xe8f0f4, 1, T.ice ? 2 : 3, 0.9); Audio.sfx('refreeze', { x: T.x, z: T.z, vol: 0.5 }); tally(a, 'songFizzled');
   } else if (T.ice) {
     crackAt(T.x, T.z, 2.5, 2, { src: 'song' }); freezeCrystals(T.x, T.z, 2.5, 22); tally(a, 'songCracked');
   } else {
