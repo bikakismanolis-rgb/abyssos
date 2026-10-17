@@ -11,7 +11,7 @@ import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometr
 import { R, addLight, removeLight } from '../gfx/gfx.js';
 import { emitAt } from '../gfx/fx.js';
 import { ENV, packProp } from '../gfx/env.js';
-import { tex, runeLines } from '../gfx/textures.js';
+import { tex, runeLines, masonry } from '../gfx/textures.js';
 import { G } from '../gfx/rig.js';
 import { RNG, clamp, fbm, lerp } from '../core/util.js';
 import { BED_DRY, groundY } from './genlib.js';
@@ -38,9 +38,15 @@ function mats5() {
   M5.key = key;
   const pl = lay4('rime/planks'), cl = lay4('rime/seaCliff', 'cliff', 'wall');
   MAT.planks5 = pl ? worldMat(pl, { scale: 1.7, vc: 0.144, rough: 0.85, frost: true }) : (MAT.planks5c ||= occlude(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, color: 0x6a6866 })));
+  // (the same, never screened off round the hero: a thin post and beam, the tide bell's gallows, dissolved into a dotted
+  // ring each time she passed north of it)
+  MAT.planks5n = pl ? worldMat(pl, { scale: 1.7, vc: 0.144, rough: 0.85, frost: true, noOcc: true }) : (MAT.planks5cn ||= new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, color: 0x6a6866 }));
+  if (!MAT.iron5n) { const m = MAT.iron5n = new MAT.iron.constructor({ vertexColors: true, flatShading: true }); if (m.isMeshStandardMaterial) { m.metalness = 0.35; m.roughness = 0.68; m.envMapIntensity = 0.12; } }
   // (roofs: the grey planks with the snow lying on them where they face the sky, the boards showing at the eaves)
   MAT.roof5 = pl ? worldMat(pl, { scale: 1.3, vc: 0.144, rough: 0.85, snow: true, soft: true, frost: true }) : M.lam;
-  MAT.cliff5 = cl ? worldMat(cl, { scale: 3.0, vc: 0.144, tri: true, rough: 0.9, snow: true, soft: true, tint: cl === 'rime/seaCliff' ? 0xd8dce0 : 0xb4b8bc }) : M.lam;
+  // (darker stone, its snow a cap on what truly faces up, never brighter than the snow round it: a rock whitened over its
+  // facets read as plaster)
+  MAT.cliff5 = cl ? worldMat(cl, { scale: 3.0, vc: 0.144, tri: true, rough: 0.9, snow: true, soft: true, cap: true, tint: cl === 'rime/seaCliff' ? 0xb4b8be : 0xa0a4a8 }) : M.lam;
   MAT.icy5 = icyMat(); MAT.icyFall = icyMat(true);
   return M;
 }
@@ -81,14 +87,26 @@ vec3 icyEm = vec3(0.0);`)
   // are streaked up and down by the calving and the meltwater; the level ones smooth)
   float ylk = 0.55 + (yn.g - 0.5) * 0.45;
   float ystk = texture2D(tNoise, vec2(yq.x * 0.42, yq.y * 0.035) + 0.17).b;
-  ylk += (ystk - 0.5) * 0.7 * (1.0 - smoothstep(0.55, 0.85, abs(yN.y)));
+  // (the streaks fine and faint: strong, they hung down every berg as a shower curtain)
+  float ysh = 1.0 - smoothstep(0.55, 0.85, abs(yN.y));
+  ylk += (ystk - 0.5) * 0.22 * ysh;
   // old ice is white and opaque at its core: pale blue-white faces, blue-green only in the hollows, the cracks and
   // underneath; laid in strata that run level across it; snow on whatever faces the sky
   float yao = clamp(0.3 + 0.55 * (yN.y * 0.5 + 0.5) + (yn.r - 0.5) * 0.7, 0.0, 1.0);
   // (the sheer faces a deeper blue than the tops: lit alike, a pile of slabs read as sugar cubes)
-  vec3 ycol = mix(vec3(0.03, 0.1, 0.13), vec3(0.25, 0.35, 0.43), smoothstep(0.3, 0.95, yao)) * (0.7 + 0.45 * ylk);
-  float ystr = sin(vYW.y * 3.3 + yn.g * 2.2 + yn.r * 1.3);
-  ycol *= 0.9 + 0.12 * ystr;
+  // (old ice is blue-white, not teal: a cyan prism read as glass; its sheer faces a grey blue)
+  vec3 ycol = mix(vec3(0.05, 0.1, 0.15), vec3(0.34, 0.41, 0.48), smoothstep(0.3, 0.95, yao)) * (0.72 + 0.4 * ylk);
+  // (laid in strata of uneven thickness that run level across its faces, the seams between them dark; the band at the
+  // waterline dark and grey where the sea has cut it)
+  float ylay = vYW.y * 1.25 + yn.r * 0.9 + sin(vYW.x * 0.21 + vYW.z * 0.17) * 0.5;
+  float ystr = sin(ylay * 3.1416);
+#ifndef ICY_GLOW
+  ycol *= mix(1.0, (0.88 + 0.14 * smoothstep(-0.7, 0.7, ystr)) * (1.0 - 0.28 * (1.0 - smoothstep(0.0, 0.07, abs(fract(ylay) - 0.5)))), ysh);
+  ycol = mix(ycol, vec3(0.07, 0.1, 0.13), (1.0 - smoothstep(0.05, 0.7, vYW.y)) * 0.65 * ysh);
+#else
+  // (the frozen fall: no strata, its flutes white-blue on their crowns, a deep blue in the folds between them)
+  ycol = mix(vec3(0.1, 0.22, 0.32), vec3(0.62, 0.72, 0.78), smoothstep(0.25, 0.9, yao + (yn.g - 0.5) * 0.3)) * (0.85 + 0.2 * ylk);
+#endif
   // (cracks run up and down its sheer faces, deep blue in them)
   // (few: a noise's isoline everywhere drew worms)
   float ycr = (1.0 - smoothstep(0.0, 0.03, abs(ystk - 0.5))) * smoothstep(0.62, 0.8, yn.a);
@@ -100,12 +118,14 @@ vec3 icyEm = vec3(0.0);`)
 #ifdef ICY_GLOW
   ysn *= 0.25 * smoothstep(0.5, 0.75, yn.a);
 #endif
-  ycol = mix(ycol, vec3(0.6, 0.64, 0.7) * (0.92 + 0.12 * yn.g), ysn);
+  // (the snow on top in relief: drifted, ridged, shadowed blue in its hollows, never one blank white face)
+  ycol = mix(ycol, vec3(0.6, 0.64, 0.7) * (0.84 + 0.14 * yn.g + 0.1 * yn.b) * mix(vec3(0.84, 0.9, 1.0), vec3(1.0), smoothstep(0.3, 0.7, yn.a)), ysn);
   diffuseColor.rgb *= ycol;
   float yF = pow(1.0 - clamp(dot(yN, yV), 0.0, 1.0), 3.0);
   icyEm = (uSkyC * (0.25 + yF * 1.2) + vec3(0.006, 0.024, 0.032) * (1.0 - yao)) * (1.0 - ysn);
 #ifdef ICY_GLOW
-  icyEm += vec3(0.02, 0.07, 0.1) * (0.55 + 0.45 * yn.b) * (0.6 + 0.4 * yao) * (1.0 - ysn) * (0.7 + 0.3 * ystr);
+  // (a little cold light held inside, no more: brighter, the fall read as lit cellophane)
+  icyEm += vec3(0.008, 0.026, 0.04) * (0.55 + 0.45 * yn.b) * (0.6 + 0.4 * yao) * (1.0 - ysn) * (0.7 + 0.3 * ystr);
 #endif
 #ifdef ICY_HI
   vec3 yR = reflect(-yV, yN);
@@ -133,7 +153,8 @@ export function instDef5(type, M, quality) {
 function instDef(k, name, M, quality) {
   if (k === 'rime') {
     const parts = rime(name); if (!parts) return null;
-    return { parts: parts.map((p) => ({ geo: shared(p.geo), material: p.mat.transparent || /glow/i.test(p.mat.name) ? glowPart() : p.mat, glow: p.mat.transparent || /glow/i.test(p.mat.name) })), shadow: true };
+    const wet = name === 'wreck' || name === 'rowboat';
+    return { parts: parts.map((p) => ({ geo: shared(p.geo), material: p.mat.transparent || /glow/i.test(p.mat.name) ? glowPart() : wet ? wetWood(p.mat) : p.mat, glow: p.mat.transparent || /glow/i.test(p.mat.name) })), shadow: true };
   }
   if (name.startsWith('#') || k === 'c5') {
     const c = CODE5[name.replace('#', '')]?.(); if (!c) return null;
@@ -142,14 +163,47 @@ function instDef(k, name, M, quality) {
   const parts = ENV.props[name]; if (!parts) return null;
   return { parts: parts.map((p) => ({ geo: shared(k === 'icy' ? p.geo : withVC(p.geo)), material: k === 'icy' ? MAT.icy5 : MAT.cliff5 })), shadow: k !== 'icy' || quality >= 2 };
 }
+// a wreck scan's wood made old and wet: greyed and darkened to weathered timber, black-green with weed below the high
+// water, glossier there. (As packed, the Dalaro read as a bone-white crumpled tarp far brighter than the flats round it,
+// and the rowboat as white plastic.) Cached per material
+const WETW = new Map();
+function wetWood(mat) {
+  if (WETW.has(mat)) return WETW.get(mat);
+  const m = mat.clone();
+  occlude(m, (sh) => {
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying float vWwY;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n  vec4 wwp = vec4(transformed, 1.0);\n#ifdef USE_INSTANCING\n  wwp = instanceMatrix * wwp;\n#endif\n  vWwY = (modelMatrix * wwp).y;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vWwY;')
+      .replace('#include <map_fragment>', `#include <map_fragment>
+  {
+    float l = dot(diffuseColor.rgb, vec3(0.3, 0.55, 0.15)), wet = 1.0 - smoothstep(0.5, 1.4, vWwY);
+    diffuseColor.rgb = mix(vec3(l), diffuseColor.rgb, 0.5) * vec3(0.5, 0.45, 0.4);
+    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.42, 0.5, 0.4), wet * 0.85);
+  }`)
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n  roughnessFactor = mix(roughnessFactor, 0.35, 1.0 - smoothstep(0.5, 1.4, vWwY));');
+  });
+  m.customProgramCacheKey = () => 'wetwood|' + mat.uuid;
+  WETW.set(mat, m);
+  return m;
+}
 // (the sea-cliff stone is a vertex-coloured material, its layer times colour / GREY: a scan with no colours of its own
 // would read black, so it gets a copy coloured GREY throughout)
+// (and welded, smooth-shaded, its hollows darkened from its own shape: each facet shaded by its own normal, under the snow
+// on whichever facets faced up, a scan read as crumpled foil)
 const VC = new Map();
 function withVC(geo) {
   if (geo.attributes.color) return geo;
   if (VC.has(geo)) return VC.get(geo);
-  const g = geo.clone(), n = g.attributes.position.count, c = new THREE.Color(GREY), a = new Float32Array(n * 3);
-  for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; }
+  let g = geo.clone();
+  for (const k of Object.keys(g.attributes)) if (k !== 'position') g.deleteAttribute(k);
+  g = mergeVertices(g, 1e-4); g.computeVertexNormals(); g.computeBoundingBox();
+  const bb = g.boundingBox, ctr = bb.getCenter(new THREE.Vector3()), sy = Math.max(1e-3, bb.max.y - bb.min.y);
+  const n = g.attributes.position.count, P = g.attributes.position, N = g.attributes.normal, c = new THREE.Color(GREY), a = new Float32Array(n * 3), v = new THREE.Vector3();
+  for (let i = 0; i < n; i++) {
+    v.set(P.getX(i) - ctr.x, (P.getY(i) - ctr.y) * 1.4, P.getZ(i) - ctr.z).normalize();
+    const out = N.getX(i) * v.x + N.getY(i) * v.y + N.getZ(i) * v.z, k = (0.6 + 0.4 * clamp(out * 0.8 + 0.3, 0, 1)) * (0.72 + 0.28 * clamp((P.getY(i) - bb.min.y) / sy * 1.6, 0, 1));
+    a[i * 3] = c.r * k; a[i * 3 + 1] = c.g * k; a[i * 3 + 2] = c.b * k;
+  }
   g.setAttribute('color', new THREE.BufferAttribute(a, 3)); g.userData.shared = true;
   VC.set(geo, g);
   return g;
@@ -171,9 +225,10 @@ const CODE5 = new Proxy({
     return { mat: 'lam', geo: bake(parts), shadow: false };
   },
   // a cluster of icicles hanging from a lip of ice (from y 0 down)
+  // (no bar of ice along their tops, and their lengths uneven, clustered: on a straight bar they read as a picket comb)
   icicles: () => {
-    const rr = RNG(621), parts = [{ geo: jitter(G.box(1.4, 0.1, 0.3, 4, 1, 2), 0.04, 622), color: 0xffffff, o: { y: 0.03 } }];
-    for (let i = 0; i < 9; i++) { const l = rr.range(0.35, 1.6); parts.push({ geo: G.cone(rr.range(0.05, 0.11), l, 5), color: 0xffffff, o: { x: -0.62 + i * 0.155 + rr.range(-0.04, 0.04), y: -l / 2, z: rr.range(-0.12, 0.12), rx: Math.PI } }); }
+    const rr = RNG(621), parts = [];
+    for (let i = 0; i < 11; i++) { const l = rr.chance(0.3) ? rr.range(0.9, 1.7) : rr.range(0.15, 0.6); parts.push({ geo: G.cone(rr.range(0.035, 0.09) * (0.7 + l * 0.3), l, 5), color: 0xffffff, o: { x: -0.7 + rr.range(0, 1.4), y: -l / 2 + rr.range(-0.06, 0.04), z: rr.range(-0.14, 0.14), rx: Math.PI } }); }
     return { geo: bake(parts), shadow: false };
   },
   // firewood stacked against a wall: three courses of split logs, snow on the top
@@ -217,18 +272,68 @@ const CODE5 = new Proxy({
   fur: () => ({ mat: 'lam', geo: bake([{ geo: jitter(G.cyl(0.75, 0.8, 0.05, 9), 0.08, 647), color: 0x3a2c22, o: { y: 0.02, sx: 1.2 } }, { geo: jitter(G.cyl(0.45, 0.5, 0.05, 7), 0.06, 648), color: 0x4e3c2e, o: { y: 0.05, x: 0.3, sx: 1.3 } }]), shadow: false }),
   // the keepers' old cairn-pole: stones stacked about a pole, a rag at its head
   cairnPole: () => ({ mat: 'lam', geo: bake([...[0, 1, 2, 3, 4].map((i) => ({ geo: jitter(G.dodeca(0.3 - i * 0.04), 0.07, 650 + i), color: i % 2 ? 0x5a5a5e : 0x48484c, o: { x: Math.sin(i * 2.4) * (i < 3 ? 0.26 : 0.1), z: Math.cos(i * 2.4) * (i < 3 ? 0.26 : 0.1), y: 0.15 + (i < 3 ? 0 : (i - 2) * 0.26) }, snow: 1.3 })), { geo: G.cyl(0.04, 0.05, 2.2, 5), color: 0x4a3a2a, o: { y: 1.1, rz: 0.06 } }, { geo: G.box(0.05, 0.4, 0.02), color: 0x6a2a18, o: { y: 1.9, x: 0.08, rz: 0.2 } }]) }),
-  // a floe: a pancake of new ice riding low in the water, its middle grey and wet, its rim heaped up white where the plates
-  // knock together. (Fourteen pale sides read as paper stars on the black water, seven as paper hexagons)
+  // a floe: a broken plate of the old ice riding a hand out of the water, its outline a jagged polygon, its top snowed grey-
+  // white, its sides dark and wet down to the water, a darker wet line round the top's edge. (Round pancakes with a white
+  // rim read as fried eggs and pills strewn on the black water)
   floe: () => {
-    // (lumpy: an even ellipse with a white rim read as a ring or a plate)
-    const k = (x, z) => { const a = Math.atan2(z, x); return 0.86 + 0.12 * Math.sin(a * 2 + 0.7) + 0.06 * Math.sin(a * 3 + 2.1) + 0.03 * Math.sin(a * 5 + 1.1); };
-    const lump = (g) => { const pp = g.attributes.position; for (let i = 0; i < pp.count; i++) { const f = k(pp.getX(i), pp.getZ(i)); pp.setX(i, pp.getX(i) * f); pp.setZ(i, pp.getZ(i) * f * 0.86); } g.computeVertexNormals(); return g; };
-    const plate = lump(new THREE.CylinderGeometry(0.47, 0.5, 0.1, 18, 1));
-    const rim = new THREE.TorusGeometry(0.455, 0.055, 4, 18); rim.rotateX(Math.PI / 2); lump(rim);
-    return { mat: 'lam', geo: bake([{ geo: plate, color: 0x8a96a0, jit: 0.1 }, { geo: rim, color: 0xbcc6cc, o: { y: 0.04, sy: 0.6 }, jit: 0.16 }]), shadow: false };
+    const rr = RNG(701), N = 8, ring = [], pos = [], col = [], top = 0.03, bot = -0.13;
+    for (let i = 0; i < N; i++) { const a = (i / N) * Math.PI * 2 + rr.range(-0.25, 0.25), r = 0.5 * rr.range(0.68, 1.12); ring.push([Math.cos(a) * r, Math.sin(a) * r * 0.82]); }
+    const cT = new THREE.Color(0xa8b2ba), cE = new THREE.Color(0x6a7680), cS = new THREE.Color(0x2c3640), cB = new THREE.Color(0x182028);
+    const tri = (a, b, c, ca, cb, cc, up) => {
+      const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+      const n = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx], o = up ?? [(a[0] + b[0] + c[0]) / 3, 0, (a[2] + b[2] + c[2]) / 3];
+      const flip = n[0] * o[0] + n[1] * o[1] + n[2] * o[2] < 0, L3 = flip ? [a, c, b] : [a, b, c], C3 = flip ? [ca, cc, cb] : [ca, cb, cc];
+      for (let k = 0; k < 3; k++) { pos.push(...L3[k]); col.push(C3[k].r, C3[k].g, C3[k].b); }
+    };
+    for (let i = 0; i < N; i++) {
+      const [ax, az] = ring[i], [bx, bz] = ring[(i + 1) % N], k0 = 0.78, ia = [ax * k0, top + 0.01, az * k0], ib = [bx * k0, top + 0.01, bz * k0], oa = [ax, top, az], ob = [bx, top, bz];
+      const cTi = cT.clone().multiplyScalar(0.92 + rr.next() * 0.16);
+      tri([0, top + 0.015, 0], ia, ib, cTi, cTi, cTi, [0, 1, 0]);
+      tri(ia, oa, ob, cTi, cE, cE, [0, 1, 0]); tri(ia, ob, ib, cTi, cE, cTi, [0, 1, 0]);
+      tri(oa, [ax * 1.04, bot, az * 1.04], [bx * 1.04, bot, bz * 1.04], cS, cB, cB); tri(oa, [bx * 1.04, bot, bz * 1.04], ob, cS, cB, cS);
+    }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); geo.computeVertexNormals();
+    return { mat: 'lam', geo, shadow: false };
   },
   // a slab of sea ice (pressure ridges, a berg's rubble): a thick plate, its edges broken
   slab: () => ({ geo: bake([{ geo: jitter(G.box(1.3, 0.3, 0.95, 3, 1, 2), 0.07, 631), color: 0xffffff, o: { y: 0.1 } }]), shadow: true }),
+  // a clump of dry grass through the snow: thin blades standing up, leaning downwind (local +x), pale straw darkening to
+  // the seed heads. (Dry stalks laid flat on the snow read as claw marks, tally marks scratched on it)
+  grass: () => {
+    const rr = RNG(681), parts = [];
+    for (let i = 0; i < 9; i++) {
+      const a = rr.range(0, 6.28), d = rr.range(0, 0.13), h = rr.range(0.26, 0.52), lean = rr.range(0.12, 0.42), x = Math.cos(a) * d, z = Math.sin(a) * d, h1 = h * 0.64, h2 = h - h1, zz = rr.range(-0.05, 0.05);
+      parts.push({ geo: G.segTo(lean * h1 * 0.55, h1, zz, 0.022, 0.014, 3), color: rr.chance(0.5) ? 0xb8a070 : 0xa38c5e, o: { x, y: -0.03, z } });
+      parts.push({ geo: G.segTo(lean * h2 * 1.4, h2 * 0.8, zz * 0.6, 0.014, 0.004, 3), color: rr.chance(0.6) ? 0x5e4c34 : 0x7a6444, o: { x: x + lean * h1 * 0.55, y: h1 - 0.035, z: z + zz } });
+    }
+    return { mat: 'lam', geo: bake(parts), shadow: false };
+  },
+  // a log of driftwood lying along local x: a trunk bent at two knots, grey and silvered, a root flare with its stubs at
+  // one end, the other broken, a branch stub, snow lying along its top. (The pine driftwood scan, a gnarled root on its
+  // side, read as a flayed carcass on the snow, and stood up out of the water like a ghost)
+  log: () => {
+    const rr = RNG(691), parts = [];
+    let x = -1.1, z = 0, a = 0;
+    for (let j = 0; j < 3; j++) {
+      const l = 0.82 - j * 0.04; a += rr.range(-0.14, 0.14);
+      const dx = Math.cos(a) * l, dz = Math.sin(a) * l;
+      // (the snow a thin line along its crown only: snowed over its whole top, from above it read as a white bone)
+      parts.push({ geo: G.segTo(dx, rr.range(-0.015, 0.015), dz, 0.15 - j * 0.022, 0.13 - j * 0.022, 7), color: j % 2 ? 0x625a4e : 0x5a5348, o: { x, y: 0.12, z }, jit: 0.16, snow: 0.22 });
+      x += dx; z += dz;
+    }
+    parts.push({ geo: G.cyl(0.2, 0.17, 0.22, 7), color: 0x4e463c, o: { x: -1.16, y: 0.13, rz: Math.PI / 2 }, jit: 0.2 });
+    parts.push({ geo: G.segTo(0.14, 0.2, 0.24, 0.045, 0.018, 4), color: 0x5a5246, o: { x: 0.1, y: 0.19, z: 0.04 } });
+    parts.push({ geo: G.cone(0.1, 0.16, 6), color: 0x8a8070, o: { x: x + 0.05, y: 0.12, z, rz: -Math.PI / 2 }, jit: 0.3 });
+    return { mat: 'lam', geo: bake(parts) };
+  },
+  // the same, waterlogged on the flats: dark and wet, no snow, half under the sand
+  logWet: () => {
+    const rr = RNG(693), parts = [];
+    let x = -1.0, z = 0, a = 0;
+    for (let j = 0; j < 3; j++) { const l = 0.78; a += rr.range(-0.14, 0.14); const dx = Math.cos(a) * l, dz = Math.sin(a) * l; parts.push({ geo: G.segTo(dx, 0, dz, 0.14 - j * 0.02, 0.12 - j * 0.02, 7), color: j % 2 ? 0x3e3a34 : 0x46403a, o: { x, y: 0.1, z }, jit: 0.1 }); x += dx; z += dz; }
+    parts.push({ geo: G.cone(0.22, 0.3, 7), color: 0x342e28, o: { x: -1.1, y: 0.11, rz: Math.PI / 2 }, jit: 0.2 });
+    return { mat: 'lam', geo: bake(parts), shadow: false };
+  },
   // a stockfish card (two dried fish hung tail to tail)
   fish: () => ({ mat: 'lam', geo: bake([{ geo: G.box(0.1, 0.5, 0.02), color: FISH, o: { y: -0.25 }, jit: 0.2 }, { geo: G.box(0.06, 0.1, 0.022), color: 0x6a6458, o: { y: -0.52 } }]), shadow: false })
 }, { get: (t, k) => (t[k] ? () => (CODE5_CACHE[k] ||= ((c) => { c.geo.userData.shared = true; return c; })(t[k]())) : undefined) });
@@ -352,10 +457,8 @@ const PLACE = {
   anchor(p, I, B) { if (!fitInst(I, 'rime:anchor', p, 2.2, 'l', -0.3)) anchorCode(p, B, true); },
   sunkenAnchor(p, I, B) { if (!fitInst(I, 'rime:sunkenAnchor', { ...p, tilt: (p.tilt || 0.4) + 0.25 }, 2.2, 'l', -0.62)) anchorCode(p, B, false); },
   kelp(p, I) { if (!fitInst(I, 'rime:kelp', p, 1.6 * p.s, 'w', -0.05)) I.add('c5:kelp', p.x, p.z, p.r, p.s, 0.0); },
-  driftwood(p, I) {
-    if (fitInst(I, 'rime:driftwood', p, 2.4 * p.s, 'l', -0.05)) return;
-    const f = fit('log', 2.2 * p.s, 'l'); if (f) I.add('cliff5:log~ns', p.x, p.z, p.r, f.k, -f.y0 - 0.08, f.k * 0.8, f.k);
-  },
+  // (the wrack line's driftwood: a waterlogged log lying flat, half under the sand; it never stands up out of the water)
+  driftwood(p, I) { I.add('c5:logWet', p.x, p.z, p.r, 0.7 + p.s * 0.45, -0.07, 0.85, 0.85 + p.s * 0.2); },
   barnacleRock(p, I) { if (!fitInst(I, 'rime:barnacleRock', p, 1.2 * p.s, 'w', -0.1)) rock5(I, 'cliff5', p, 1.2 * p.s, 0.55, -0.12, ROCKS, '~ns'); },
   rockFace(p, I) {
     // (the rime faces are geometry only, packed untextured: drawn in the sea-cliff stone. Each is a one-sided scan facing
@@ -381,7 +484,7 @@ const PLACE = {
     }
   },
   shoreRock(p, I) { rock5(I, 'cliff5', p, 1.6 * p.s, 0.75, -0.08, ROCKS, p.s < 1 ? '~ns' : ''); },
-  boulder(p, I) { rock5(I, 'cliff5', p, 2.3 * p.s, 0.75, -0.1, ['boulder']); },
+  boulder(p, I) { rock5(I, 'cliff5', p, 2.3 * p.s, 0.75, -0.1); },
   skerryRock(p, I) { rock5(I, 'cliff5', p, 2.4 * p.s, 1.2, -0.2, ['boulder', 'rockA', 'rockB']); },
   // the wrecked hull in Skerry Bay: its ribs standing in an arc on one flank of the bowl, the keel along their feet
   ribs(p, I, B) {
@@ -410,20 +513,31 @@ const PLACE = {
     }
   },
   // a pressure ridge's block: two or three slabs of the sea ice shoved up on edge, leaning on each other
+  // (fewer and larger: one block in three left out, the rest two great slabs of 1.5-3 m leaning in on each other across the
+  // ridge's line, a third laid low and snowed over between their feet, the drift in the gap; a heap of small slabs read
+  // as pale paper or sugar cubes)
   iceBlock(p, I) {
-    const rr = RNG(Math.round(p.x * 31 + p.z * 17)), n = 2 + (rr.next() < 0.5 ? 1 : 0);
-    for (let k = 0; k < n; k++) {
-      const a = p.r + rr.range(-0.5, 0.5), d = rr.range(0, 0.45) * p.s, ox = Math.cos(p.r + k * 2.1) * d, oz = Math.sin(p.r + k * 2.1) * d;
-      I.add('icy:#slab', p.x + ox, p.z + oz, a, p.s * rr.range(0.75, 1.05), 0.0, p.s * rr.range(0.8, 1.15), p.s * rr.range(0.65, 0.9), (rr.next() < 0.5 ? -1 : 1) * rr.range(0.45, 0.95));
+    if (hash2(p.x * 1.3, p.z * 0.7) < 0.34) return;
+    const rr = RNG(Math.round(p.x * 31 + p.z * 17)), sg = rr.next() < 0.5 ? -1 : 1, ca = Math.cos(p.r), sa = Math.sin(p.r);
+    for (let k = 0; k < 2; k++) {
+      const side = k ? -1 : 1, d = 0.32 * p.s, ox = -sa * side * d, oz = ca * side * d;
+      I.add('icy:#slab', p.x + ox, p.z + oz, p.r + rr.range(-0.25, 0.25), p.s * rr.range(1.3, 1.9), -0.15, p.s * rr.range(1.0, 1.4), p.s * rr.range(1.0, 1.5), side * sg * rr.range(0.55, 0.85));
     }
+    I.add('icy:#slab~ns', p.x, p.z, p.r + 1.57, p.s * rr.range(1.1, 1.5), -0.22, p.s * 0.9, p.s * rr.range(0.9, 1.3), rr.range(-0.12, 0.12));
   },
   pole(p, I) { I.add('c5:pole', p.x, p.z, p.r, 1, 0); },
   // a drowned lantern under its window (warm glass: the ice shader's uGlow lights the ice round it)
   sunkenLantern(p, I, B, out) {
     const y = p.y ?? -2;
     if (!fitInst(I, 'rime:oilLamp', { ...p, tilt: 1.1 }, 0.6, 'h', y)) { const f = fit('lantern', 0.6); if (f) I.add('env:lantern', p.x, p.z, p.r, f.k, y - f.y0, f.k, f.k, 1.1); }
-    const s = new THREE.Sprite(own(new THREE.SpriteMaterial({ map: tex('dot'), color: 0xffa040, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false })));
-    s.scale.setScalar(1.6); s.position.set(p.x, (p.y ?? -2) + 0.4, p.z); out.group.add(s);
+    // (its light: a warm point and a soft bloom drawn after the pane, flickering, readable from ten metres; under the pane's
+    // dim glass alone the lantern was lost)
+    const s = new THREE.Sprite(own(new THREE.SpriteMaterial({ map: tex('dot'), color: 0xffa040, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false })));
+    s.scale.setScalar(1.3); s.position.set(p.x, (p.y ?? -2) + 0.35, p.z); s.renderOrder = 1.5; out.group.add(s);
+    const c = new THREE.Sprite(own(new THREE.SpriteMaterial({ map: tex('dot'), color: 0xffd8a0, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false })));
+    c.scale.setScalar(0.32); c.position.copy(s.position); c.renderOrder = 1.5; out.group.add(c);
+    const ph = hash2(p.x, p.z) * 9;
+    s.onBeforeRender = () => { const k = 0.82 + 0.12 * Math.sin(R.time * 2.3 + ph) + 0.06 * Math.sin(R.time * 7.1 + ph * 2); s.material.opacity = 0.8 * k; s.scale.setScalar(1.3 * (0.94 + 0.08 * k)); };
   },
   // the camp's fire on the ice: an iron basket on three splayed legs, stones round its feet, a real fire in it (its flames,
   // embers, smoke and light: fireLife). (The Field's brazier without its scan, the cinder pack being away, was a glowing
@@ -440,10 +554,17 @@ const PLACE = {
   // ---- the dressing (gen5 dress5Coast, dress5Far): decoration that blocks nothing ----
   // a stone of the base set half sunk in the snow (scree at a cliff's foot, shingle on the flats)
   stone(p, I) { rock5(I, 'cliff5', p, 0.6 * p.s, 0.6, -0.08 - 0.06 * p.s, STONES, p.s < 0.9 ? '~ns' : ''); },
-  // a tuft of dry stalks poking through the snow
-  tuft(p, I) { const f = fit('branches', 0.9 * p.s, 'w'); if (f) I.add('env:branches', p.x, p.z, p.r, f.k, -0.04 - f.y0, f.k * 1.6, f.k); },
-  // timber washed up long ago and drifted over
-  log(p, I) { fitInst(I, 'rime:driftwood', p, 2.2 * p.s, 'l', -0.16); },
+  // dry grass through the snow: a few clumps together, standing up and leaning on the wind (out of the north-east, as the
+  // drifts lie)
+  tuft(p, I) {
+    const n = 2 + Math.floor(hash2(p.x * 3.1, p.z * 1.7) * 4);
+    for (let k = 0; k < n; k++) {
+      const a = p.r + k * 2.4, d = k ? 0.18 + hash2(p.x + k, p.z - k) * 0.42 : 0, s = (0.7 + hash2(p.z + k, p.x) * 0.6) * (0.75 + p.s * 0.4);
+      I.add('c5:grass~ns', p.x + Math.cos(a) * d, p.z + Math.sin(a) * d, 2.75 + (hash2(p.x - k, p.z + k) - 0.5) * 0.7, s, 0);
+    }
+  },
+  // timber washed up long ago and drifted over: lying flat along its length, a third sunk in the snow
+  log(p, I) { I.add('c5:log', p.x, p.z, p.r, 0.75 + p.s * 0.5, -0.06, 0.9 + p.s * 0.3, 0.9 + p.s * 0.3); },
   crate(p, I) { if (!fitInst(I, 'rime:crate', p, 0.75 * p.s, 'h', -0.03)) { const f = fit('crate', 0.75 * p.s); if (f) I.add('env:crate', p.x, p.z, p.r, f.k, -0.03 - f.y0); } },
   cask5(p, I) { if (!fitInst(I, 'rime:cask', p, 0.9 * p.s, 'h', -0.03)) { const f = fit('barrel', 0.9 * p.s); if (f) I.add('env:barrel', p.x, p.z, p.r, f.k, -0.03 - f.y0); } },
   bucket(p, I) { const f = fit('bucket', 0.4 * p.s); if (f) I.add('env:bucket', p.x, p.z, p.r, f.k, -0.02 - f.y0); },
@@ -455,10 +576,13 @@ const PLACE = {
   // gear frozen into the ice: a cask or a crate tilted, half under
   gear(p, I) { fitInst(I, p.k === 'cask' ? 'rime:cask' : 'rime:crate', { ...p, tilt: 0.35 }, (p.k === 'cask' ? 0.9 : 0.75) * p.s, 'h', -0.3); },
   // ice rubble: two or three plates of the sea ice shoved up together
-  iceRubble(p, I) { const rr = RNG(Math.round(p.x * 37 + p.z * 11)); for (let k = 0; k < 3; k++) { const a = p.r + k * 2.2, d = rr.range(0, 0.5) * p.s; I.add('icy:#slab~ns', p.x + Math.cos(a) * d, p.z + Math.sin(a) * d, a + rr.range(-0.4, 0.4), p.s * rr.range(0.35, 0.7), -0.04, p.s * rr.range(0.4, 0.8), p.s * rr.range(0.35, 0.6), rr.range(0.2, 0.9) * (k % 2 ? 1 : -1)); } },
+  // (half under the snow and the ice, a few plates to a cluster leaning together: strewn whole, they lay over the fields as
+  // white confetti)
+  iceRubble(p, I) { const rr = RNG(Math.round(p.x * 37 + p.z * 11)), n = 2 + (rr.next() < 0.5 ? 1 : 0); for (let k = 0; k < n; k++) { const a = p.r + k * 2.2, d = rr.range(0.1, 0.55) * p.s; I.add('icy:#slab~ns', p.x + Math.cos(a) * d, p.z + Math.sin(a) * d, a + rr.range(-0.4, 0.4), p.s * rr.range(0.5, 0.85), -0.16 * p.s, p.s * rr.range(0.6, 1.0), p.s * rr.range(0.45, 0.7), rr.range(0.3, 0.8) * (k % 2 ? 1 : -1)); } },
   // a floe: a plate of broken ice floating at a hole's rim
   // (riding level and a little higher: tilted, an Icemaw hole's water closed over one side and left a white crescent)
-  floe(p, I) { I.add('c5:floe~ns', p.x, p.z, p.r, p.s * 1.2, -0.06, p.s * 0.8, p.s * 1.2, (hash2(p.x, p.z) - 0.5) * 0.05); },
+  // (rafted ones riding up on their neighbour, tilted)
+  floe(p, I) { I.add('c5:floe~ns', p.x, p.z, p.r, p.s * 1.2, p.raft ? 0.05 : 0, 1, p.s * 1.2, p.raft ? 0.12 : (hash2(p.x, p.z) - 0.5) * 0.04); },
   // the ropes from the camp to the ship: posts, and two sagging lines between them
   ropeLine(p, I, B) {
     const dx = p.x1 - p.x, dz = p.z1 - p.z, L2 = Math.hypot(dx, dz), parts = [], n = Math.max(2, Math.round(L2 / 4.5));
@@ -473,9 +597,11 @@ const PLACE = {
   // it dark (build.js darkens the ground in the caves)
   caveArch(p, I) {
     const f = fit('boulder', 1, 'w'), g = fit('rockA', 1, 'w');
-    if (f) I.add('cliff5:boulder', p.x, p.z + 1.6, 0.3, 5.2 * f.k, 2.3 - f.sz.y0 * 1.5 * f.k, 1.5 * f.k, 3.6 * f.k);
+    // (two great rocks over the back of the pool as its roof, their undersides in shadow, a third leaning in from a side)
+    if (f) { I.add('cliff5:boulder', p.x, p.z + 1.6, 0.3, 5.2 * f.k, 2.3 - f.sz.y0 * 1.5 * f.k, 1.5 * f.k, 3.6 * f.k); I.add('cliff5:boulder', p.x + 1.2, p.z + 1.1, 2.1, 3.6 * f.k, 2.9 - f.sz.y0 * 1.2 * f.k, 1.2 * f.k, 2.8 * f.k); }
+    if (g) I.add('cliff5:rockA', p.x - 1.4, p.z + 0.9, 4.0, 2.8 * g.k, 2.2 - g.sz.y0 * 1.3 * g.k, 1.3 * g.k, 2.2 * g.k);
     if (g) for (const s of [-1, 1]) I.add('cliff5:rockA', p.x + s * 2.6, p.z + 0.9, s, 2.4 * g.k, -0.3 - g.sz.y0 * 3.4 * g.k, 3.4 * g.k, 2.4 * g.k);
-    for (let k = 0; k < 4; k++) I.add('icy:#icicles~ns', p.x - 1.6 + k * 1.05, p.z - 0.1, 0, 0.7 + (k % 2) * 0.3, 2.15);
+    for (let k = 0; k < 5; k++) I.add('icy:#icicles~ns', p.x - 1.9 + k * 0.92 + hash2(p.x + k, p.z) * 0.3, p.z - 0.1 + (hash2(p.z, k) - 0.5) * 0.5, k * 1.3, 0.6 + hash2(k, p.x) * 0.5, 2.0 + hash2(p.x, k) * 0.35);
     I.add('c5:kelp', p.x - 0.8, p.z - 0.6, 1.1, 0.8, 0.0);
   },
   fx(p, I, B, out) { out.emitters.push({ x: p.x, y: p.y, z: p.z, type: p.fx, s: p.s || 1, color: p.color }); }
@@ -489,11 +615,13 @@ function fitInst(I, type, p, want, by = 'l', y = 0) {
   return true;
 }
 // a rock scan in a material ('cliff5' or 'icy'), want metres wide, sy its height over its width
+// (each stretched its own way, 0.75-1.3 on each axis: four scans at one shape each read as one rock repeated)
 function rock5(I, kind, p, want, sy, y, list = ROCKS, tag = '') {
   const n = rockAt(p.x, p.z, list), f = fit(n, want, 'w');
   if (!f) return;
-  const ky = (want * sy) / Math.max(0.01, f.sz.y);
-  I.add(kind + ':' + n + tag, p.x, p.z, p.r || 0, f.k, y - f.sz.y0 * ky, ky, f.k);
+  const hx = 0.75 + 0.55 * hash2(p.x * 5.3, p.z * 1.9), hz = 0.75 + 0.55 * hash2(p.z * 4.1, p.x * 2.7), hy = 0.8 + 0.4 * hash2(p.x * 2.2 + p.z, 7.7);
+  const ky = (want * sy * hy) / Math.max(0.01, f.sz.y);
+  I.add(kind + ':' + n + tag, p.x, p.z, p.r || 0, f.k * hx, y - f.sz.y0 * ky, ky, f.k * hz);
 }
 // wrecks drip as the tide leaves them (fx.js 'seaDrip': its bed, its height)
 function drip(out, p, h) { if (COAST_L) out.emitters.push({ x: p.x, y: h, z: p.z, type: 'seaDrip', s: 1.6, bed: bedAt(COAST_L, p.x, p.z) }); }
@@ -518,8 +646,24 @@ function shackCode(p, B) {
   walls.push({ geo: G.box(1.1, H, 0.12), color: WOODG, o: { x: -1.1, y: H / 2, z: D / 2 } }, { geo: G.box(1.3, H, 0.12), color: WOODG, o: { x: 1.0, y: H / 2, z: D / 2 } }, { geo: G.box(1.0, 0.5, 0.12), color: WOODG, o: { x: -0.05, y: H - 0.25, z: D / 2 } });
   walls.push({ geo: G.box(0.9, 1.6, 0.06), color: 0x2a2420, o: { x: -0.05, y: 0.8, z: D / 2 - 0.1 } });
   for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) walls.push({ geo: G.box(0.16, H + 0.3, 0.16), color: WOODD, o: { x: (x * W) / 2, y: (H + 0.3) / 2, z: (z * D) / 2 } });
-  roof.push({ geo: G.box(W + 0.6, 0.2, D + 0.7), color: 0x5a5650, o: { y: H + 0.35, rx: 0.2 }, jit: 0.12 });
+  // (the lean-to roof laid in courses of boards, each a little proud of the one above, its tone the hut's own)
+  const tone = 0.85 + hash2(p.x, p.z) * 0.3, L2 = D + 0.7, nC = 13;
+  for (let k = 0; k < nC; k++) { const z = -L2 / 2 + (k + 0.5) * (L2 / nC); roof.push({ geo: G.box(W + 0.6, 0.07, L2 / nC + 0.05), color: new THREE.Color(0x5a5650).multiplyScalar(tone * (0.85 + 0.3 * hash2(k, p.x))).getHex(), o: { y: H + 0.35 - z * Math.sin(0.2) + (k % 2) * 0.02, z: z * Math.cos(0.2), rx: 0.2 }, jit: 0.1 }); }
+  roof.push({ geo: G.box(W + 0.7, 0.16, 0.1), color: WOODD, o: { y: H + 0.3 - (L2 / 2) * Math.sin(0.2), z: (L2 / 2) * Math.cos(0.2) } });
   B.add('planks5', walls, p.x, p.z, p.r); B.add('roof5', roof, p.x, p.z, p.r);
+}
+// a gabled roof of boards in courses up each side from the eaves to a ridge along local z: { parts } (eave y0, half-span
+// hw, rise, length), each course a little proud of the one above and its own tone, a ridge cap and fascia boards. (One
+// smooth prism read as a pale slab from the phone's camera and the cines)
+function gableBoards(y0, hw, rise, len, tone, seed) {
+  const parts = [], sl = Math.hypot(hw, rise), a = Math.atan2(rise, hw), n = 8, rr = RNG(seed);
+  for (const sd of [-1, 1]) for (let k = 0; k < n; k++) {
+    const t = (k + 0.5) / n, x = sd * (hw - t * hw), y = y0 + t * rise + 0.03 + (k % 2) * 0.012;
+    parts.push({ geo: G.box(sl / n + 0.04, 0.06, len), color: new THREE.Color(0x5a5650).multiplyScalar(tone * rr.range(0.82, 1.12)).getHex(), o: { x, y, rz: -sd * a }, jit: 0.1 });
+  }
+  parts.push({ geo: G.box(0.22, 0.14, len + 0.1), color: WOODD, o: { y: y0 + rise + 0.07 } });
+  for (const sd of [-1, 1]) parts.push({ geo: G.box(0.06, 0.18, len + 0.04), color: WOODD, o: { x: sd * (hw + 0.02), y: y0 - 0.02 } });
+  return parts;
 }
 // a stilt hut: a plank house on posts, a pitched roof of turf under snow, steps to its door (local +z)
 function stiltHut(p, B, I) {
@@ -530,8 +674,8 @@ function stiltHut(p, B, I) {
   walls.push({ geo: G.box(0.95, H, 0.1), color: WOODG, o: { x: -0.93, y: F + H / 2, z: D / 2 } }, { geo: G.box(0.95, H, 0.1), color: WOODG, o: { x: 0.93, y: F + H / 2, z: D / 2 } }, { geo: G.box(0.9, 0.45, 0.1), color: WOODG, o: { y: F + H - 0.22, z: D / 2 } });
   walls.push({ geo: G.box(0.86, 1.45, 0.05), color: 0x241e1a, o: { y: F + 0.72, z: D / 2 - 0.08 } }, { geo: G.box(0.5, 0.4, 0.05), color: 0x181412, o: { x: W / 2 + 0.03, y: F + 1.2, rz: 0, ry: Math.PI / 2 } });
   for (let k = 0; k < 3; k++) walls.push({ geo: G.box(0.9, 0.08, 0.3), color: WOODD, o: { y: F - 0.22 - k * 0.25, z: D / 2 + 0.45 + k * 0.3 } });
-  roof.push({ geo: prism(W + 0.7, 1.15, D + 0.8), color: 0x5a5650, o: { y: F + H, ry: Math.PI / 2 }, jit: 0.12 });
-  roof.push({ geo: G.box(0.12, 0.12, D + 0.9), color: WOODD, o: { y: F + H + 1.15 } });
+  roof.push({ geo: prism(W + 0.5, 1.08, D + 0.7), color: 0x2a2622, o: { y: F + H - 0.02, ry: Math.PI / 2 } });
+  roof.push(...gableBoards(F + H, (W + 0.7) / 2, 1.15, D + 0.8, 0.85 + hash2(p.z, p.x) * 0.3, Math.round(p.x * 7 + p.z * 3)));
   B.add('planks5', walls, p.x, p.z, p.r); B.add('roof5', roof, p.x, p.z, p.r);
   // icicles along both eaves
   if (I) { const c = Math.cos(p.r), sn = Math.sin(p.r); for (const [lx, lz, k] of [[-1.72, -0.7, 0.55], [-1.72, 0.9, 0.7], [1.72, -0.2, 0.6], [1.72, 1.1, 0.45]]) I.add('icy:#icicles~ns', p.x + lx * c + lz * sn, p.z - lx * sn + lz * c, p.r + Math.PI / 2, k, F + H - 0.02); }
@@ -556,7 +700,9 @@ function jettyCode(p, B) {
   for (let z = 0.1; z < len; z += 0.26) parts.push({ geo: G.box(wd + 0.25 + rr.range(-0.06, 0.08), 0.06, 0.22), color: rr.chance(0.2) ? WOODD : WOODG, o: { y: 0.03, z: z + 0.05, x: rr.range(-0.05, 0.05) }, jit: 0.12 });
   for (const s of [-1, 1]) {
     parts.push({ geo: G.box(0.16, 0.34, len), color: TAR, o: { x: (s * wd) / 2, y: -0.16, z: len / 2 } });
-    for (let z = 0.6; z < len; z += 1.6) parts.push({ geo: G.cyl(0.11, 0.13, 1.3, 6), color: TAR, o: { x: (s * (wd + 0.2)) / 2, y: -0.4, z } });
+    // (piles down into the channel under it, weed and wet black on them below the high water)
+    for (let z = 0.6; z < len; z += 1.6) parts.push({ geo: G.cyl(0.11, 0.13, 1.6, 6), color: TAR, o: { x: (s * (wd + 0.2)) / 2, y: -0.55, z } }, { geo: G.cyl(0.135, 0.15, 0.7, 6), color: 0x1c2618, o: { x: (s * (wd + 0.2)) / 2, y: -1.0, z }, jit: 0.3 });
+    for (let z = 1.4; z < len; z += 1.6) parts.push({ geo: G.cyl(0.1, 0.12, 1.4, 6), color: TAR, o: { x: s * 0.2, y: -0.7, z } });
   }
   parts.push({ geo: G.cyl(0.13, 0.15, 0.9, 6), color: WOODD, o: { x: wd / 2 - 0.2, y: 0.42, z: len - 0.3 } }, { geo: G.torus(0.16, 0.035, 4, 8), color: 0x6a5a40, o: { x: wd / 2 - 0.2, y: 0.5, z: len - 0.3, rx: Math.PI / 2 } });
   B.add('planks5', parts, p.x, p.z, p.r);
@@ -607,8 +753,10 @@ function fallCode(p, I, B, L) {
     if (nx * ox + nz * oz < 0) pos.push(...a, ...c, ...b); else pos.push(...a, ...b, ...c);
   };
   const KS = 7;
-  for (let k = 0; k < 11; k++) {
-    const lx = -4.3 + k * 0.86 + rr.range(-0.2, 0.2), w0 = rr.range(0.32, 0.62) * (k % 3 === 1 ? 1.35 : 1), q0 = rr.range(0.45, 0.95), hk = top * rr.range(0.62, 0.98), ph = rr.range(0, 9);
+  // (thirteen round flutes standing well out of the rock, overlapping into one mass: eleven broad flat sheets read as
+  // stacked cellophane)
+  for (let k = 0; k < 13; k++) {
+    const lx = -4.3 + k * 0.72 + rr.range(-0.12, 0.12), w0 = rr.range(0.34, 0.52) * (k % 4 === 1 ? 1.3 : 1), q0 = rr.range(0.6, 1.05), hk = top * rr.range(0.55, 0.98), ph = rr.range(0, 9);
     let d0 = 3; while (d0 > -3 && gy(lx, d0) < 0.12) d0 -= 0.1;
     const rows = [];
     // (the flare: out over the floor at the foot, low and wide)
@@ -617,7 +765,8 @@ function fallCode(p, I, B, L) {
       const t = y / hk, bul = 1 + 0.32 * Math.sin(j * 0.8 + ph) + 0.18 * Math.sin(j * 2.1 + ph * 1.7);
       rows.push({ y, d: at(lx, y, d0 + 0.2) + 0.04, w: w0 * bul * (0.55 + 0.6 * (1 - t)), q: q0 * bul * (0.5 + 0.7 * (1 - t)) });
     }
-    rows.push({ y: hk + 0.3, d: at(lx, hk + 0.3, d0) + 0.02, w: w0 * 0.3, q: 0.05 });
+    // (its crown rounded over where the flow froze at the lip)
+    rows.push({ y: hk + 0.16, d: at(lx, hk + 0.16, d0) + 0.03, w: w0 * 0.62, q: q0 * 0.35 }, { y: hk + 0.32, d: at(lx, hk + 0.32, d0) + 0.02, w: w0 * 0.24, q: 0.04 });
     const ring = (r) => Array.from({ length: KS }, (_, i) => { const th = -Math.PI / 2 + (Math.PI * i) / (KS - 1); return [lx + r.w * Math.sin(th), r.y + (i === 0 || i === KS - 1 ? 0 : 0.02), r.d + r.q * Math.cos(th)]; });
     let prev = ring(rows[0]);
     for (let j = 1; j < rows.length; j++) {
@@ -645,21 +794,25 @@ function fallCode(p, I, B, L) {
   const pn = pg.attributes.normal; for (let i = 0; i < pn.count; i++) if (pn.getY(i) < 0) { pn.setXYZ(i, -pn.getX(i), -pn.getY(i), -pn.getZ(i)); }
   const pp = pg.attributes.position.array; for (let i = 0; i < pp.length; i += 9) { const ux = pp[i + 3] - pp[i], uz = pp[i + 5] - pp[i + 2], vx = pp[i + 6] - pp[i], vz = pp[i + 8] - pp[i + 2]; if (uz * vx - ux * vz < 0) for (let k = 0; k < 3; k++) { const t = pp[i + 3 + k]; pp[i + 3 + k] = pp[i + 6 + k]; pp[i + 6 + k] = t; } }
   pg.computeVertexNormals();
-  pg.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(pg.attributes.position.count * 3).fill(1), 3));
+  // (glassy in the middle, frosted white round its rim: a flat pale plate before)
+  { const P3 = pg.attributes.position, cl = new Float32Array(P3.count * 3); for (let i = 0; i < P3.count; i++) { const dx = P3.getX(i), dz = P3.getZ(i) - pc, a = Math.atan2(dx, dz), f = Math.hypot(dx, dz) / rim(a), k = 0.62 + 0.62 * Math.max(0, Math.min(1, (f - 0.55) / 0.4)) ** 2; cl[i * 3] = cl[i * 3 + 1] = cl[i * 3 + 2] = k; } pg.setAttribute('color', new THREE.Float32BufferAttribute(cl, 3)); }
   B.put('icyFall', pg, TRS(p.x, 0, p.z, p.r));
-  for (let k = 0; k < 5; k++) { const lx = -4 + k * 2 + rr.range(-0.4, 0.4); let d = 2.5; while (d > -6 && gy(lx, d) < top * 0.55) d -= 0.25; I.add('icy:#icicles', p.x + cx * lx + fx * (d + 0.15), p.z + cz * lx + fz * (d + 0.15), p.r, rr.range(0.8, 1.3), gy(lx, d) - 0.1); }
+  // (fringes of icicles at the fall's ledges, at three heights, uneven)
+  for (const hf of [0.32, 0.55, 0.8]) for (let k = 0; k < 4; k++) { const lx = -4 + k * 2.6 + rr.range(-0.6, 0.6); let d = 2.5; while (d > -6 && gy(lx, d) < top * hf) d -= 0.25; I.add('icy:#icicles', p.x + cx * lx + fx * (d + 0.15), p.z + cz * lx + fz * (d + 0.15), p.r, rr.range(0.6, 1.2), gy(lx, d) - 0.1); }
 }
 // a berg: a great slab of old ice calved off the shelf (sheer, noisy walls leaning in a little, a snow-capped top that is
 // nearly flat), two or three lesser slabs leaning against it, tilted; their walls smooth-shaded, their rims crisp. Its
 // half-axes 1.15 r along local x and 0.95 r along z cover the ground's rise under it (gen5 bergH, kept under the slabs)
 const BERG = {};
+const smoothT = (a, b, t) => { const x = clamp((t - a) / (b - a), 0, 1); return x * x * (3 - 2 * x); };
 function slabGeo(rx, rz, h, rr, sink = 0.8) {
-  const N = 11, rows = 5, pos = [], idx = [], out = [], off = rr.range(0, 9);
+  const N = 11, rows = 8, pos = [], idx = [], out = [], off = rr.range(0, 9);
   for (let i = 0; i < N; i++) { const a = (i / N) * Math.PI * 2; out.push([Math.cos(a), Math.sin(a), 0.84 + 0.3 * fbm(Math.cos(a) * 1.4 + off, Math.sin(a) * 1.4, 5, 2)]); }
   const top = out.map(() => h * (0.92 + rr.range(0, 0.1)));
   // the walls: rows from under the ice to the rim, each vertex pushed about by the calving
   for (let j = 0; j <= rows; j++) for (let i = 0; i < N; i++) {
-    const t = j / rows, [c, sn, k] = out[i], lean = 1 - 0.1 * t, y = -sink + (top[i] + sink) * t, n = (j && j < rows) ? rr.range(-0.22, 0.22) : 0;
+    // (stepped in at two ledges, its strata, and scalloped where it calved, not a smooth prism)
+    const t = j / rows, [c, sn, k] = out[i], lean = 1 - 0.1 * t - 0.06 * smoothT(0.48, 0.6, t) - 0.05 * smoothT(0.76, 0.86, t), y = -sink + (top[i] + sink) * t, n = (j && j < rows) ? rr.range(-0.16, 0.16) + 0.14 * Math.sin(i * 2.7 + j * 1.3 + off) * Math.min(rx, rz) * 0.12 : 0;
     pos.push(c * (rx * k * lean + n), y, sn * (rz * k * lean + n));
   }
   for (let j = 0; j < rows; j++) for (let i = 0; i < N; i++) { const a = j * N + i, b2 = j * N + (i + 1) % N, c = a + N, d = b2 + N; idx.push(a, c, b2, b2, c, d); }
@@ -771,7 +924,8 @@ function flames(s, color) {
 // round it (gfx.js's pooled lights), run through sea.js TICKS while the prop stands in the scene. at: the fire's bed in the
 // prop's frame. Returns set(b)
 function fireLife(g, at, o = {}) {
-  const fx = [{ type: 'fire', s: o.s ?? 1, y0: 0 }, { type: 'embers', s: 1, y0: 0.2 }];
+  // (o.fx false: the light alone, a lantern's)
+  const fx = o.fx === false ? [] : [{ type: 'fire', s: o.s ?? 1, y0: 0 }, { type: 'embers', s: 1, y0: 0.2 }];
   if (o.smoke) fx.push({ type: 'smoke', s: 1, y0: 0.9 * (o.s ?? 1) });
   const p = new THREE.Vector3();
   let lit = false, light = null;
@@ -831,6 +985,25 @@ function towerMesh(o) {
   const m = new THREE.Mesh(bake(parts), MAT.cliff5); m.castShadow = true; m.receiveShadow = true;
   return m;
 }
+// the Farthest Light's shaft: a tapering cylinder of dressed stone (textures.js masonry, three tiles round it, courses of
+// 0.4 m), weathered as the scans are; string courses at its foot, a third and two thirds up and under the gallery, slit
+// windows, the doorway at door
+let MASON = null;
+function shaftMesh(H, r0, r1, door) {
+  const g = new THREE.Group(), geo = new THREE.CylinderGeometry(r1, r0, H, 32, 12, true), uv = geo.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 3, uv.getY(i) * (H / 3.2));
+  geo.translate(0, H / 2, 0);
+  MASON ||= weathered(new THREE.MeshLambertMaterial({ map: masonry(), color: 0xd0d4da }));
+  const m = new THREE.Mesh(geo, MASON); m.castShadow = true; m.receiveShadow = true; g.add(m);
+  const rAt = (y) => r0 + (r1 - r0) * (y / H), parts = [];
+  for (const y of [0.45, H * 0.34, H * 0.67, H - 0.35]) parts.push({ geo: jitter(G.cyl(rAt(y) + 0.1, rAt(y) + 0.13, 0.26, 24), 0.015, 760 + Math.round(y)), color: STONED, o: { y } });
+  const rr = RNG(761);
+  for (let k = 0; k < 5; k++) { const a = rr.range(0, 6.28), y = H * (0.22 + k * 0.14), r = rAt(y); parts.push({ geo: G.box(0.16, 0.62, 0.22), color: 0x121010, o: { x: Math.sin(a) * r, y, z: Math.cos(a) * r, ry: a } }); }
+  const a = Math.atan2(door.x, door.z), r = rAt(1.0);
+  parts.push({ geo: G.box(1.0, 2.0, 0.42), color: 0x121010, o: { x: Math.sin(a) * (r - 0.12), y: 1.0, z: Math.cos(a) * (r - 0.12), ry: a } }, { geo: G.box(1.35, 0.28, 0.5), color: STONEL, o: { x: Math.sin(a) * (r - 0.04), y: 2.12, z: Math.cos(a) * (r - 0.04), ry: a } });
+  g.add(solid5(parts, MAT.cliff5));
+  return g;
+}
 // a tower scan's stone weathered for the coast: greyed and darkened (the farLight scan's pale render read as birch bark),
 // mottled by the weather at a metre's scale, snow on its ledges and rime on its north side (cached per material)
 const WEATHER = new Map();
@@ -863,7 +1036,7 @@ function rimeTower(name, h) {
   for (const p of parts) { const m = new THREE.Mesh(shared(p.geo), weathered(p.mat)); m.castShadow = true; m.receiveShadow = true; g.add(m); }
   g.scale.setScalar(k); g.position.y = -sz.y0 * k;
   const top = ENV.extras['rime/' + name]?.top;
-  return { group: g, top: top != null ? (top - sz.y0) * k : h };
+  return { group: g, top: top != null ? (top - sz.y0) * k : h, r: (Math.max(sz.x, sz.z) * k) / 2 };
 }
 // the lantern room: a corbelled stone gallery and its parapet, the glass ring with the iron fire-cage inside, an iron cap
 // (local y 0 at the gallery's floor). userData.setLit(b), fireY
@@ -904,10 +1077,10 @@ function rockPile(seed, n, d0, d1, s0, s1, sy = 0.8, y = -0.25) {
 // (position, normal and colour only, so scans and code stones merge)
 const strip = (g) => { const o = new THREE.BufferGeometry(), src = g.index ? g.toNonIndexed() : g; for (const k of ['position', 'normal', 'color']) if (src.attributes[k]) o.setAttribute(k, src.attributes[k]); if (!o.attributes.normal) o.computeVertexNormals(); if (!o.attributes.color) o.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(o.attributes.position.count * 3).fill(0.144), 3)); return o; };
 // a bell hanging from a beam: the bell swings and fades (ring(k), k its strength)
-function bellMesh(s = 1, cracked = false) {
+function bellMesh(s = 1, cracked = false, mat = MAT.iron) {
   const g = new THREE.Group(), pivot = new THREE.Group(); g.add(pivot);
   const pts = [[0, 0.02], [0.2, 0.0], [0.22, 0.06], [0.18, 0.2], [0.14, 0.36], [0.1, 0.42], [0, 0.44]].map(([a, b]) => [a * s * 2, (b - 0.44) * s * 2]);
-  const bell = solid5([{ geo: G.lathe(pts, 12), color: cracked ? 0x4a5a48 : 0x7a5a30, o: {} }, { geo: G.ball(0.07 * s, 6, 4), color: IRON, o: { y: -0.8 * s } }, ...(cracked ? [{ geo: G.box(0.02, 0.35 * s, 0.02), color: 0x101010, o: { x: 0.28 * s, y: -0.55 * s, rz: 0.3 } }] : [])], MAT.iron);
+  const bell = solid5([{ geo: G.lathe(pts, 12), color: cracked ? 0x4a5a48 : 0x7a5a30, o: {} }, { geo: G.ball(0.07 * s, 6, 4), color: IRON, o: { y: -0.8 * s } }, ...(cracked ? [{ geo: G.box(0.02, 0.35 * s, 0.02), color: 0x101010, o: { x: 0.28 * s, y: -0.55 * s, rz: 0.3 } }] : [])], mat);
   pivot.add(bell);
   let t0 = -99, amp = 0;
   bell.onBeforeRender = () => { const t = R.time - t0; pivot.rotation.z = amp * Math.exp(-t * 1.1) * Math.sin(t * 6.5); };
@@ -928,13 +1101,24 @@ const PROP5 = {
   sealight(o) {
     const g = new THREE.Group(), v = o.v ?? 0, H = [9.2, 10.4, 8.4][v % 3];
     const sc = rimeTower(['towerA', 'towerB', 'towerC'][v % 3], H);
-    let top = H;
-    if (sc) { g.add(sc.group); top = sc.top; } else g.add(towerMesh({ h: H, r0: 1.65, r1: 1.4, broken: true, door: true, seed: v + 1 }));
+    let top = H, rad = 1.65;
+    if (sc) { g.add(sc.group); top = sc.top; rad = Math.min(2.6, sc.r * 0.85); } else g.add(towerMesh({ h: H, r0: 1.65, r1: 1.4, broken: true, door: true, seed: v + 1 }));
     // (a broad iron brazier on a stone cap over the ruin's open top)
     g.add(solid5([{ geo: jitter(G.cyl(1.25, 1.15, 0.28, 12), 0.04, 735), color: STONED, o: { y: top - 0.1 } }, { geo: G.cyl(0.85, 0.95, 0.12, 12), color: STONEL, o: { y: top + 0.08 } }], MAT.cliff5));
     const fire = fireCage(0.62, 0.8, 1.9, 6.5, 0xffc070, { life: { s: 1.0, i: 22, range: 13, smoke: true } }); fire.group.position.y = top + 0.14; g.add(fire.group);
     g.userData.top = top; g.userData.fireY = top + 0.14 + fire.y;
-    g.userData.setLit = (b) => { fire.set(b); g.userData.lit = !!b; if (!b) g.userData.setBeam(null); };
+    // (and lit, a keeper's lantern hung at its foot, on the side toward the land, its warm light on the rock round the tower
+    // and the water by it: the fire nine metres up hardly reached the ground, and lighting a sea-light barely changed the
+    // play frame)
+    const foot = new THREE.Group(); foot.position.set(0, 0, rad + 0.35); g.add(foot);
+    foot.add(solid5([{ geo: G.cyl(0.05, 0.06, 1.6, 6), color: WOODD, o: { y: 0.8 } }, { geo: G.box(0.5, 0.05, 0.05), color: WOODD, o: { x: 0.22, y: 1.55 } }], MAT.planks5n || MAT.planks5));
+    const lan = lanternMesh(0.42); lan.position.set(0.42, 1.02, 0); foot.add(lan);
+    const lf = flameMesh(0.42, 0xffc070); lf.position.set(0.42, 1.1, 0); foot.add(lf);
+    const lh = halo(0xffb060, 3.4); lh.position.set(0.42, 1.2, 0); lh.material.opacity = 0.6; foot.add(lh);
+    const footLife = fireLife(foot, { x: 0.42, y: 0.5, z: 0 }, { fx: false, i: 12, range: 9, color: 0xffa860 });
+    const lightFoot = (b) => { lan.userData.glass.color.copy(b ? LIT5 : DEAD5); lf.visible = lh.visible = !!b; footLife(b); };
+    lightFoot(false);
+    g.userData.setLit = (b) => { fire.set(b); lightFoot(b); g.userData.lit = !!b; if (!b) g.userData.setBeam(null); };
     g.userData.setBeam = beamOn(g, top + 0.6);
     g.userData.flash = (k) => fire.k(k);
     return g;
@@ -957,10 +1141,11 @@ const PROP5 = {
     return g;
   },
   // the Farthest Light: the tall shaft (the rime farLight scan, or code) and its lantern room; the door to local +z
+  // (the shaft is code, dressed stone in courses that taper up it with three string courses; the scan's stretched render,
+  // seen from above as the backdrop of the last fight, smeared into a grey pipe with a seam down it)
   farLight() {
-    const g = new THREE.Group(), H = 15.5, sc = rimeTower('farLight', H);
-    let top = H;
-    if (sc) { g.add(sc.group); top = sc.top; } else g.add(towerMesh({ h: H, r0: 1.7, r1: 1.2, door: true, seed: 21 }));
+    const g = new THREE.Group(), H = 15.5, top = H, dx0 = ENV.extras['rime/farLight']?.door;
+    g.add(shaftMesh(H, 1.75, 1.22, dx0 ? { x: dx0[0] ?? 0, z: dx0[2] ?? 1.7 } : { x: 0, z: 1.75 }));
     // (seated on a stepped stone base; its cut top capped under the lantern room, so it is never seen hollow)
     g.add(solid5([{ geo: jitter(G.cyl(2.25, 2.45, 0.45, 14), 0.05, 751), color: STONED, o: { y: 0.12 } }, { geo: jitter(G.cyl(1.95, 2.1, 0.4, 14), 0.04, 752), color: GREY, o: { y: 0.5 } }, { geo: G.cyl(1.32, 1.32, 0.3, 14), color: STONED, o: { y: top - 0.2 } }], MAT.cliff5));
     const room = lanternRoom({ s: 0.95 }); room.position.y = top; g.add(room);
@@ -990,7 +1175,8 @@ const PROP5 = {
     // legs stouter, the pot a cauldron with its lip catching the fire)
     for (let k = 0; k < 3; k++) { const a = (k / 3) * Math.PI * 2; iron.push({ geo: G.segTo(-Math.sin(a) * 0.6, 1.55, -Math.cos(a) * 0.6, 0.065, 0.045, 6), color: 0x24201c, o: { x: Math.sin(a) * 0.68, z: Math.cos(a) * 0.68 } }); }
     iron.push({ geo: G.cyl(0.022, 0.022, 0.36, 4), color: 0x1e1c1a, o: { y: 1.37 } }, { geo: G.lathe([[0, 0], [0.26, 0.03], [0.33, 0.17], [0.32, 0.3], [0.28, 0.36], [0.26, 0.34]], 12), color: 0x2a2622, o: { y: 0.84 } }, { geo: G.torus(0.275, 0.03, 4, 14), color: 0x5a4e44, o: { y: 1.2, rx: Math.PI / 2 } }, { geo: G.cyl(0.25, 0.25, 0.02, 12), color: 0x3a3a3c, o: { y: 1.15 } });
-    g.add(solid5(iron, MAT.iron));
+    // (never screened off round her: a leg south of her dissolved into a dotted line under the pot)
+    g.add(solid5(iron, MAT.iron5n || MAT.iron));
     const coal = glowMat(0x2a1a10), bed = new THREE.Mesh(jitter(G.dome(0.5, 0.2, 9), 0.05, 742), coal); bed.position.y = 0.02; g.add(bed);
     // (its light and glow kept to a fire's orange: on the snow, at the Field brazier's strength, the hearth and the snow
     // round it burnt to one white disc)
@@ -1079,16 +1265,18 @@ const PROP5 = {
     const g = new THREE.Group(), d = 2.2, parts = [];
     // (the pit's walls pale only at the top: lower down the ice is dark, so the pane reads as a shaft into deep water, not a
     // lit glass case)
+    // (and no pale walls at all: the pane's frosted round rim hides the shaft's square edges, and its walls are the deep
+    // ice's dark, the light fading down them: lit, they stood as a square glass skylight)
     for (const [x, z, w, dd] of [[0, -1.02, 2.1, 0.06], [0, 1.02, 2.1, 0.06], [-1.02, 0, 0.06, 2.1], [1.02, 0, 0.06, 2.1]]) {
-      parts.push({ geo: G.box(w, 0.5, dd), color: 0xc8d4dc, o: { x, y: -0.26, z } });
-      parts.push({ geo: G.box(w, d - 0.5, dd), color: 0x3a4652, o: { x, y: -0.5 - (d - 0.5) / 2 - 0.01, z } });
+      parts.push({ geo: G.box(w, 0.6, dd), color: 0x2a3640, o: { x, y: -0.31, z } });
+      parts.push({ geo: G.box(w, d - 0.6, dd), color: 0x10161c, o: { x, y: -0.6 - (d - 0.6) / 2 - 0.01, z } });
     }
-    parts.push({ geo: G.box(2, 0.1, 2), color: 0x1c242c, o: { y: -d - 0.05 } });
+    parts.push({ geo: G.box(2, 0.1, 2), color: 0x0c1014, o: { y: -d - 0.05 } });
     // (the window's cells lie square to the grid whatever way the prop is turned: this part takes the turn off again)
     const inner = new THREE.Group(); g.add(inner);
     inner.updateMatrixWorld = function (f) { this.rotation.y = -g.rotation.y; THREE.Object3D.prototype.updateMatrixWorld.call(this, f); };
     const m = new THREE.Mesh(bake(parts), MAT.icy5); m.receiveShadow = true; inner.add(m);
-    if (!o.drowned) { const c = halo(0x9ad8ff, 1.1); c.position.y = -d + 0.5; g.add(c); }
+    if (!o.drowned) { const c = halo(0x8ac0e0, 0.8); c.material.opacity = 0.45; c.position.y = -d + 0.5; g.add(c); }
     g.userData.figureY = -d;
     return g;
   },
@@ -1116,8 +1304,8 @@ const PROP5 = {
   // the tide bell on its gallows by the jetty's root
   bell() {
     const g = new THREE.Group();
-    g.add(solid5([{ geo: G.cyl(0.08, 0.1, 2.5, 6), color: WOODD, o: { y: 1.25 } }, { geo: G.box(0.1, 0.1, 1.0), color: WOODD, o: { y: 2.42, z: 0.4 } }, { geo: G.segTo(0, 0.5, 0.45, 0.04, 0.04, 4), color: WOODD, o: { y: 1.9 } }, ...[0, 1, 2].map((i) => ({ geo: jitter(G.dodeca(0.2), 0.05, 810 + i), color: STONED, o: { x: Math.sin(i * 2.1) * 0.22, z: Math.cos(i * 2.1) * 0.22, y: 0.1 } }))], MAT.planks5));
-    const b = bellMesh(0.75); b.position.set(0, 2.38, 0.75); g.add(b);
+    g.add(solid5([{ geo: G.cyl(0.08, 0.1, 2.5, 6), color: WOODD, o: { y: 1.25 } }, { geo: G.box(0.1, 0.1, 1.0), color: WOODD, o: { y: 2.42, z: 0.4 } }, { geo: G.segTo(0, 0.5, 0.45, 0.04, 0.04, 4), color: WOODD, o: { y: 1.9 } }, ...[0, 1, 2].map((i) => ({ geo: jitter(G.dodeca(0.2), 0.05, 810 + i), color: STONED, o: { x: Math.sin(i * 2.1) * 0.22, z: Math.cos(i * 2.1) * 0.22, y: 0.1 } }))], MAT.planks5n || MAT.planks5));
+    const b = bellMesh(0.75, false, MAT.iron5n || MAT.iron); b.position.set(0, 2.38, 0.75); g.add(b);
     g.userData.ring = (k) => b.userData.ring(k);
     return g;
   },

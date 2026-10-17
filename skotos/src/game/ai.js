@@ -3465,6 +3465,9 @@ function towerPre(a, dt, pl, d) {
     if (!a.lit) a.unlitT += dt;
     if (a.unlitT > 60) a.hpFloor = 0;
     if (a.st === 'island' && a.unlitT > 45 && !a.flask) towerFlask(a);
+    // (an Island that fell due while it was in a rush, and its light never lit since: at its first free moment, or the
+    // Islands, the light and Alkyone's flask would never come round again)
+    if (a.islandDue && !a.lit && a.st === 'fight' && !a.dash && !a.move && !(a.dazed > 0)) { a.islandDue = false; killTele(a.tele); a.tele = null; islandStart(a); }
   }
   if (a.st === 'island') { a.resist = 0.3; if ((a.islandT -= dt) <= 0) islandEnd(a); return 0; }
   if (a.st === 'over') { if ((a.overT -= dt) <= 0) overEnd(a); return 0; }
@@ -3664,8 +3667,9 @@ function clawSweep(a, pl) {
 }
 // Sidelong Rush (phases 1 and 3; in phase 2 the Shell Rush): it turns broadside and scuttles sideways along a 14 x 4 m line
 // (1.1 s) at 16 m/s, 1.3x and thrown 14 m. Into an islet's boulder or the wreck's ribs: dazed 3 s. The Shell Rush over
-// thin ice webbed to stage 2 goes through (Overturned 5 s, x2); each thin cell it runs over cracks a stage. In phase 3
-// twice in a row, the second back the other way
+// thin ice webbed to stage 2 goes through (Overturned 5 s, x2); each thin cell it runs over cracks a stage. After three
+// Shell Rushes that held, the next goes through the first thin ice it crosses (the fail-safe: the Hammer Claw's +3 only
+// reaches a hero within its 9 m). In phase 3 twice in a row, the second back the other way
 function sideRush(a, pl, shell) {
   const aim = angleTo(a.x, a.z, pl.x, pl.z) + (a.blindT > 0 ? rand.sign() * 0.7 : 0), dist = Math.hypot(pl.x - a.x, pl.z - a.z);
   const len = shell ? clamp(dist + 3, 6, 16) : 14, wide = Math.max(4, a.radius * 2 + 0.2);
@@ -3676,13 +3680,13 @@ function sideRush(a, pl, shell) {
   return { t: 1.1, noFace: true, fn() {
     // (w: no hit wider than the drawn line, dashStep)
     const D = startDash(a, aim, 16, len, { probe: a.radius * 0.7, w: wide, dmg: 1.3, hitO: { push: 14 }, end: rushEnd5, dust: 0xa8b4bc, dir: aim });
-    D.shell = !!shell; D.ice5 = true;
+    D.shell = !!shell; D.ice5 = true; D.tired = !!shell && a.rushes > 3;
     a.rot = aim + Math.PI / 2;
     Audio.sfx('swingHeavy', { x: a.x, z: a.z });
   }, after: 0.4, chain: a.phase === 2 && !shell && (a.rushN = (a.rushN || 0) + 1) < 2, chainFn: (b, p) => sideRush(b, p) };
 }
 // each step of a rush on thin ice: the cells under it crack a stage; one webbed (2+) under its body breaks: the Shell Rush
-// goes through
+// goes through (after three that held, any thin cell does)
 function rushIce(a, D) {
   const ix = Math.floor(a.x), iz = Math.floor(a.z), c = iz * 4096 + ix;
   if (c === D.iceCell) return;
@@ -3691,7 +3695,7 @@ function rushIce(a, D) {
   for (const o of [0, 1.2, -1.2]) {
     const x = a.x + px * o, z = a.z + pz * o;
     if (iceAt(x, z) !== 'thin') continue;
-    if (D.shell && stageAt(x, z) >= 2) { D.t = 0; D.broke = { x, z }; return; }
+    if (D.shell && (stageAt(x, z) >= 2 || D.tired)) { D.t = 0; D.broke = { x, z }; return; }
     crackAt(Math.floor(x) + 0.5, Math.floor(z) + 0.5, 0.5, 1, { src: 'tower' });
   }
 }
@@ -3701,6 +3705,8 @@ function rushEnd5(a, D) {
   // (a Shell Rush run up against an open hole in the thin ice goes into it all the same)
   const L = G.zone.L, w = D.wall;
   if (D.shell && w && iceAt(w.x, w.z) === 'water' && L.ice?.[Math.floor(w.z) * L.w + Math.floor(w.x)]) { a.x += (w.x - a.x) * 0.6; a.z += (w.z - a.z) * 0.6; overturn(a, w); return; }
+  // (the third Shell Rush that held: Alkyone calls the rule again at once, wherever she stands)
+  if (D.shell && a.phase === 1 && a.rushes >= 3 && !a.hinted) { a.hinted = true; emit('towerHint', a); tally(a, 'hint'); }
   // (in the ice phase, off the thick after a rush that held: it hauls itself back onto it before anything else)
   if (a.phase === 1 && iceAt(a.x, a.z) !== 'thick') { const n = thickNear(a, a.x, a.z); if (n) { a.st = 'haul'; a.haul = n; a.move = null; } }
   if (!w) { puff(a.x, 0.3, a.z, 8, 0xa8b4bc, 1.2, 1.4, 1); return; }
@@ -3714,7 +3720,7 @@ function rushEnd5(a, D) {
 function overturn(a, p) {
   a.dash = null; a.move = null; killTele(a.tele); a.tele = null;
   breakAt(p.x, p.z, 2.6);
-  a.st = 'over'; a.overT = 5; a.rushes = 0; a.vulnWindow = true; a.y = -0.9; if (a.lockPhase === 1) a.lockPhase = null;
+  a.st = 'over'; a.overT = 5; a.rushes = 0; a.hinted = false; a.vulnWindow = true; a.y = -0.9; if (a.lockPhase === 1) a.lockPhase = null;
   addVuln(a, 'overturned', 5);
   a.avatar?.play('overturned', 1); a.avatar?.setRim(0xffb070, 1.6);
   splashFx(a.x, a.z, 2.6); iceShards(a.x, a.z, 24); Audio.sfx('iceBreak', { x: a.x, z: a.z, vol: 1 }); Audio.sfx('splash', { x: a.x, z: a.z, vol: 1 }); shake(0.6);
@@ -3726,7 +3732,7 @@ function overEnd(a) {
   a.st = 'haul'; a.haul = thickNear(a, a.x, a.z) || { x: a.x, z: a.z };
 }
 // Hammer Claw: a 3 m circle on her (1.4 s: walked out of even wading), 1.3x and a 0.4 s stun; on ice +2 stages in it (+3
-// after three Shell Rushes that never broke through: Alkyone calls the rule again)
+// after three Shell Rushes that never broke through: Alkyone calls the rule again, if the third Rush's end has not)
 function hammerClaw(a, pl) {
   const aim = angleTo(a.x, a.z, pl.x, pl.z) + (a.blindT > 0 ? rand.sign() * 0.7 : 0), d = Math.min(Math.hypot(pl.x - a.x, pl.z - a.z), a.def.reach + 2.5);
   const tx = a.x + Math.sin(aim) * d, tz = a.z + Math.cos(aim) * d, extra = a.phase === 1 && (a.rushes || 0) >= 3;
@@ -4377,7 +4383,8 @@ on('farLightGiven', (b) => skotosRelit(b));
 // the Light lit: its Hands let go of the tower, the beam sweeps the arena (8 s a turn, 26 m); those who brought the fire lift
 // their lamps to it
 function skotosRelit(a) {
-  if (!a || a.dead || a.kind !== 'skotos' || a.relit) return;
+  // (only while it wraps the Light: a fire given before a fight started over must not light the Night)
+  if (!a || a.dead || a.kind !== 'skotos' || a.relit || !a.wrapped) return;
   a.relit = true; a.hpFloor = 0;
   dropWrap(a);
   skotosBeam(a);

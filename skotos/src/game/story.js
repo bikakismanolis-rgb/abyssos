@@ -972,6 +972,9 @@ function ease(z, dur, fn, done) { let k = 0; const st = () => { k = Math.min(1, 
 // a light's fire flares once (the keepers' call and answer)
 function flare(m, k = 1.4) { m?.userData.flash?.(k); later(0.6, () => m?.userData.flash?.(0)); }
 const busy = () => G.mode !== 'play' || !!G.panel || !!G.cine;
+// the Skotos fight's own timers (the third Remember owed at the floor, the fire's climb, the keepers' coming): a death
+// leaves that fight behind, and what it had on a timer must not reach into the fight started over
+const fightOn = (z) => { const k = z.fightK || 0; return () => G.zone === z && (z.fightK || 0) === k && !G.player?.dead; };
 
 // what the people of Act V say, and what Whitecliff, Deepstone and the wood say once the coast has called (true: said)
 function talk5(kind, a) {
@@ -1555,14 +1558,15 @@ function selnaBack(z, self) {
   if (G.selnaBack) return;
   G.selnaBack = true;
   say('name.arna');
-  later(1.4, () => { say(self ? 'd.selna.self' : 'd.selna.p2'); emit('toast', t('q.selnaBack'), 'quest'); emit('quest'); Audio.mood({ forget: 0 }); people5(z); });
-  later(3.2, () => say('d.alk.j1'));
+  const on5 = fightOn(z);
+  later(1.4, () => { if (!on5()) return; say(self ? 'd.selna.self' : 'd.selna.p2'); emit('toast', t('q.selnaBack'), 'quest'); emit('quest'); Audio.mood({ forget: 0 }); people5(z); });
+  later(3.2, () => { if (on5()) say('d.alk.j1'); });
 }
 // (ai.js, at the 30% floor in phase 2: forty seconds and she remembers herself, the third Remember)
 on('skotosFloor', (a) => {
   if (a?.echo) return;
-  const z = G.zone;
-  later(40, () => { if (G.zone === z && !a.dead && !G.selnaBack) { dropRemember(z, z.remember); a.remembers = 3; emit('selnaRemembered', a, 2); selnaBack(z, true); } });
+  const z = G.zone, on5 = fightOn(z);
+  later(40, () => { if (on5() && !a.dead && !G.selnaBack) { dropRemember(z, z.remember); a.remembers = 3; emit('selnaRemembered', a, 2); selnaBack(z, true); } });
 });
 // phase 3, Wrap the Light (ai.js 'skotosWrap'): the keepers walk out onto the ice with their lamps (moving lamp light) and
 // relight the cairns; Brokka and Elati come up the road with their fires; the stair now takes Whitecliff's fire
@@ -1571,7 +1575,8 @@ function keepersCome(z, a) {
   if (z.keepers || z?.id !== 'farlight') return;
   z.keepers = true; z.giving = true;
   act5Presence(z);
-  say('d.alk.j2'); later(1.8, () => say('d.tern.j1')); later(3.6, () => say('d.tam.j1'));
+  const on5 = fightOn(z);
+  say('d.alk.j2'); later(1.8, () => { if (on5()) say('d.tern.j1'); }); later(3.6, () => { if (on5()) say('d.tam.j1'); });
   const fires = z.L.spots.fires, cairns = z.act5.cairns;
   z.follow ||= [];
   ['alkyone', 'tern', 'tamarisk', 'selna'].forEach((k, i) => {
@@ -1580,9 +1585,9 @@ function keepersCome(z, a) {
     const pool = addLightPool(al.x, al.z, 3.5, Infinity, 'keeper:' + k, { lamp: true, color: 0xfff0d8, intensity: 12 });
     z.follow.push({ a: al, p: pool });
     al.still = false;
-    later(0.6 + i * 0.7, () => walkTo(al, to.x, to.z, 2.2, () => { al.home = al.rot = angleTo(al.x, al.z, c.x, c.z); if (!c.lit) { c.relight(); glowBurst(c.x, 1.2, c.z, 0xffb050, 24, 2.5, 0.3, 0.7); } }));
+    later(0.6 + i * 0.7, () => { if (on5()) walkTo(al, to.x, to.z, 2.2, () => { al.home = al.rot = angleTo(al.x, al.z, c.x, c.z); if (!c.lit && on5()) { c.relight(); glowBurst(c.x, 1.2, c.z, 0xffb050, 24, 2.5, 0.3, 0.7); } }); });
   });
-  later(5, () => cameo(z));
+  later(5, () => { if (on5()) cameo(z); });
 }
 // Brokka with Deepstone's fire, Elati with the beacon-tree's: up the road from the south, to the tower with the keepers
 function cameo(z) {
@@ -1608,7 +1613,10 @@ function relight(z) {
   for (let k = 0; k < 40; k++) later(k * 0.04, () => { const c = cradlePoint(); fireStream({ x: c.x, y: c.y, z: c.z }, top, 4); });
   // the keepers' lamps and the two fires from the south go up with it
   for (const f of z.follow || []) { const p = f.a.avatar?.weaponPoint?.('R', 0.25, new THREE.Vector3()); if (p) for (let k = 0; k < 10; k++) later(0.4 + k * 0.06, () => fireStream({ x: p.x, y: p.y, z: p.z }, top, 3)); }
+  const on5 = fightOn(z);
   later(1.4, () => {
+    // (a death in the fire's climb: the fight starts over, the Light dark again)
+    if (!on5()) return;
     m.userData.setLit?.(true); flare(m, 2);
     glowBurst(top.x, top.y, top.z, 0xfff0c8, 70, 6, 0.5, 1.4); shake(0.5);
     Audio.sting('relight'); Audio.sfx('lightCatch', { vol: 1 }); Audio.mood({ lit: true });
@@ -1616,7 +1624,7 @@ function relight(z) {
     act5Presence(z);
     emit('farLightGiven', z.boss);
   });
-  later(8, () => { if (z.boss && !z.boss.dead) skotosSay('d.skotos.p3'); });
+  later(8, () => { if (on5() && z.boss && !z.boss.dead) skotosSay('d.skotos.p3'); });
 }
 // at 15% (ai.js 'skotosRoll'): Selna begins the roll of names, one every 3 s, until the dark is named
 on('skotosRoll', (a) => {
@@ -1759,7 +1767,7 @@ function seaAnswers(z) {
 on('heroDeath', () => {
   const z = G.zone, F = G.hero.flags;
   if (z?.id !== 'farlight' || !F.skotosWake || F.skotosDown) return;
-  G.selnaBack = false;
+  G.selnaBack = false; z.fightK = (z.fightK || 0) + 1;
   if (z.remember) dropRemember(z, z.remember);
   Audio.mood({ lit: false, forget: 0.3 });
   emit('quest');

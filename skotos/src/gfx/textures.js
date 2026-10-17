@@ -92,6 +92,23 @@ export function runeLines(seed = 1, rows = 4) {
   return (cache[key] = finish(c, { srgb: false, repeat: false }));
 }
 
+// Act V: dressed stone in courses (the Farthest Light's shaft): 8 courses of 4 blocks to the tile, every other course half
+// a block on, each block its own tone and wear, dark mortar between, chips at the arrises (cached)
+export function masonry() {
+  if (cache.masonry) return cache.masonry;
+  const c = canvas(256), r = RNG(4417), tone = Array.from({ length: 32 }, () => r.range(0.72, 1.08));
+  pixels(c, (u, v, x, y) => {
+    const row = Math.floor(v * 8), fu = u * 4 + (row % 2) * 0.5, col = Math.floor(fu) % 4, bu = fu - Math.floor(fu), bv = v * 8 - row;
+    const ed = Math.min(bu, 1 - bu) * 0.5, ev = Math.min(bv, 1 - bv), e = Math.min(ed * 2.2, ev);
+    const n = tfbm(u, v, 8, 91, 4), n2 = tfbm(u, v, 32, 93, 2);
+    const chip = smooth(Math.min(1, Math.max(0, (e - 0.035 - (n2 - 0.5) * 0.06) / 0.05)));
+    const k = tone[row * 4 + col] * (0.8 + 0.4 * n) * (0.9 + 0.2 * n2);
+    const st = [148 * k, 150 * k, 152 * k], mo = [46, 46, 48];
+    return mix3(mo, st, chip);
+  });
+  return (cache.masonry = finish(c));
+}
+
 const MAKERS = {
   dot() {
     const c = canvas(64), g = c.getContext('2d');

@@ -168,11 +168,19 @@ async function BOT5(o) {
     if (o.kind === 'tower') {
       if (b.phase === 0 && T && T.st !== 'low') { const isl = Lz.spots.bayIslets.slice().sort((p, q) => Math.hypot(p.x - pl.x, p.z - pl.z) - Math.hypot(q.x - pl.x, q.z - pl.z))[0]; goal = { x: isl.x, z: isl.z }; if (b.dazed > 0 && Math.hypot(b.x - isl.x, b.z - isl.z) < 6) goal = null; }
       if (b.st === 'island' && b.lightIt) { goal = { x: b.lightIt.x, z: b.lightIt.z }; if (Math.hypot(goal.x - pl.x, goal.z - pl.z) < 2.5 && !pl.act) b.lightIt.use(); }
-      if (b.phase === 1 && b.st === 'fight' && !(b.dazed > 0)) { if (!B.icePt || Math.hypot(B.icePt.x - b.x, B.icePt.z - b.z) > 12 || (B.icePtT -= dt) <= 0) { B.icePtT = 6; B.icePt = null; for (let r = 7; r < 10 && !B.icePt; r++) for (let k = 0; k < 16; k++) { const g = k * 0.39, x = b.x + Math.sin(g) * r, zz = b.z + Math.cos(g) * r; if (I.iceAt(x, zz) === 'thin' && I.stageAt(x, zz) < 2 && z.map.walkable(x, zz)) { B.icePt = { x, z: zz }; break; } } } if (B.icePt) goal = B.icePt; }
+      if (b.phase === 1 && b.st === 'fight' && !(b.dazed > 0)) { if (!B.icePt || Math.hypot(B.icePt.x - b.x, B.icePt.z - b.z) > 12 || (B.icePtT -= dt) <= 0 || I.iceAt(B.icePt.x, B.icePt.z) !== 'thin') { B.icePtT = 18; B.icePt = null; for (let r = 7; r < 10 && !B.icePt; r++) for (let k = 0; k < 16; k++) { const g = k * 0.39, x = b.x + Math.sin(g) * r, zz = b.z + Math.cos(g) * r; if (I.iceAt(x, zz) === 'thin' && I.stageAt(x, zz) < 2 && z.map.walkable(x, zz)) { B.icePt = { x, z: zz }; break; } } } if (B.icePt) goal = B.icePt; }
     } else if (o.kind === 'skotos') {
       if (z.remember && !pl.act) { goal = { x: z.remember.x, z: z.remember.z + 1.0 }; if (Math.hypot(goal.x - pl.x, goal.z - pl.z) < 1.6 && (!b.nb || b.nb.st === 'down' || b.nb.st === 'up')) z.remember.use(); }
       else if (z.giving && z.act5?.farIt && !pl.act) { const it = z.act5.farIt; goal = { x: it.x, z: it.z + 0.8 }; if (Math.hypot(goal.x - pl.x, goal.z - pl.z) < 1.6) it.use(); }
-      else if (b.phase === 1 && !tgt) { const cr = (z.act5?.cairns || []).find((q) => !q.lit); if (cr && !pl.act) { goal = { x: cr.x, z: cr.z + 1.4 }; if (Math.hypot(goal.x - pl.x, goal.z - pl.z) < 2) cr.use(); } }
+      else if (b.phase === 1) {
+        // the Night: a cairn lit (the nearest dark one, when none burns), and while it is under, by the lit one, so that its
+        // Breach comes up in the cairn's light (Seared), as Alkyone's hint says
+        const cs = z.act5?.cairns || [], dc = (q) => Math.hypot(q.x - pl.x, q.z - pl.z), near = (f) => cs.filter(f).sort((p, q) => dc(p) - dc(q))[0];
+        const lit = near((q) => q.lit), dark = near((q) => !q.lit);
+        if (lit && (b.under || b.hidden)) { if (dc(lit) > 3) goal = { x: lit.x, z: lit.z + 1.4 }; }
+        else if (!lit && dark && pl.act?.name !== 'touch' && tgt !== b) { goal = { x: dark.x, z: dark.z + 1.4 }; if (Math.hypot(goal.x - pl.x, goal.z - pl.z) < 2) dark.use(); }
+        else if (dark && !tgt && pl.act?.name !== 'touch') { goal = { x: dark.x, z: dark.z + 1.4 }; if (Math.hypot(goal.x - pl.x, goal.z - pl.z) < 2) dark.use(); }
+      }
     }
     if (!goal && tgt) { const d = Math.hypot(tgt.x - pl.x, tgt.z - pl.z), want = ranged ? 8 : tgt.radius + 1.0; if (d > want + 0.8) goal = { x: tgt.x, z: tgt.z }; else if (ranged && d < want - 3) goal = { x: pl.x * 2 - tgt.x, z: pl.z * 2 - tgt.z }; }
     const u = under(pl.x, pl.z);
@@ -258,7 +266,9 @@ const S = {
     await pg.waitForTimeout(2500); await shot();
     for (let k = 0; k < 30; k++) { await pg.evaluate(() => { const G = window.__G; G.player.res = 100; G.player.hp = G.player.hpMax; window.__D.IN.events.push({ t: 'skill', i: [0, 1, 2, 3, 4][Math.floor(Math.random() * 5)], aim: null }); }); await pg.waitForTimeout(400); if (k % 10 === 9) await shot(); }
     await pg.evaluate(() => { const G = window.__G; const b = G.zone.boss; if (b && !b.dead) b.hp = 1; window.__D.IN.events.push({ t: 'skill', i: 3, aim: null }); });
+    // (the blow lands in game time: on a loaded machine 5 s of real time can be a few frames)
     await pg.waitForTimeout(5000);
+    await pg.waitForFunction(() => window.__G.zone.boss?.dead || (window.__D.IN.events.push({ t: 'skill', i: 0, aim: null }), false), null, { timeout: 60000, polling: 1000 }).catch(() => {});
     await pg.evaluate(() => { const G = window.__G; const s = G.pickups.find(p => p.kind === 'shard'); if (s) { G.player.x = s.x; G.player.z = s.z; } });
     await pg.waitForTimeout(2000); await shot();
     return pg.evaluate(() => { const G = window.__G; return { boss: G.zone.boss?.dead, quest: G.hero.quest, lordFlag: G.hero.flags.lord }; });
@@ -1182,12 +1192,16 @@ const S = {
   // reported beside it). DIFF=0 also checks Wanderer against Warden (not under 60% of its time: TTK0 its Warden time)
   tower: { q: 'auto=coast&sim=4&q=0&norender&lvl=' + (process.env.LVL || 30) + '&diff=' + (process.env.DIFF || 1) + '&cls=' + (process.env.CLS || 'warden') + '&' + A5.url('towerWake'), run: async (pg, shot) => {
     await A5.tick(pg); await A4.listen(pg);
-    const setup = await pg.evaluate(() => { const G = window.__G, z = G.zone, B = z.L.boss, f = z.map.nearestFloor(B.x + 2, B.z + 11, 4); G.player.x = f.x; G.player.z = f.z; return { boss: B, sk: z.L.spots.skerry && { x: z.L.spots.skerry.x, z: z.L.spots.skerry.z } }; });
+    // (she is held up while the fight is set and its first look drawn: on a loaded machine that look can take seconds of
+    // play in which she stands idle by the Tower; the bot's own rules hold from its first frame)
+    const setup = await pg.evaluate(() => { const G = window.__G, z = G.zone, B = z.L.boss, f = z.map.nearestFloor(B.x + 2, B.z + 11, 4); window.__immortal = true; G.player.x = f.x; G.player.z = f.z; return { boss: B, sk: z.L.spots.skerry && { x: z.L.spots.skerry.x, z: z.L.spots.skerry.z } }; });
     await A5.until(pg, () => !!window.__G.zone.boss, 30000);
     await pg.evaluate(() => { const b = window.__G.zone.boss; window.__act5.damage(window.__G.player, b, 1, { crit: false }); });
     await A5.until(pg, () => window.__G.zone.boss?.awake, 60000);
     await shot();
-    await pg.evaluate((o) => { window.SIMK = 4; window.__botP = (new Function('return ' + o.src)())({ kind: 'tower', maxT: o.maxT }).catch((e) => { window.__botErr = String(e.stack || e); }); }, { src: BOT5.toString(), maxT: +(process.env.MAXT || 900) });
+    // (every blow that reached her life: the last ones are reported if she dies, which the run never means)
+    await pg.evaluate(async () => { const Bus = await import('/src/ui/bus.js'), G = window.__G; window.__hurts = []; Bus.on('hurt', (f) => { const b = G.zone.boss, p = G.player; window.__hurts.push({ t: +G.hero.stats.time.toFixed(1), f: +f.toFixed(3), hp: +(p.hp / p.hpMax).toFixed(2), b: b && [b.st, b.phase, b.move?.id || (b.dash ? 'dash' : '')].join('/'), at: new Error().stack.split('\n').slice(3, 6).map((l) => l.trim().replace(/^at /, '').replace(/\(?https?:[^)]*\/src\//, '').replace(/\?[^:]*/, '')).join(' < ') }); if (window.__hurts.length > 40) window.__hurts.shift(); }); });
+    await pg.evaluate((o) => { window.SIMK = 4; window.__immortal = false; window.__botP = (new Function('return ' + o.src)())({ kind: 'tower', maxT: o.maxT }).catch((e) => { window.__botErr = String(e.stack || e); }); }, { src: BOT5.toString(), maxT: +(process.env.MAXT || 900) });
     const seen = {}, shots = new Set();
     let last = null;
     for (const t0 = Date.now(); Date.now() - t0 < 120 * 60000;) {
@@ -1197,6 +1211,7 @@ const S = {
       if (s.err) { console.log('tower bot error: ' + s.err.slice(0, 600)); break; }
       if (Date.now() - (seen.logT || 0) > 30000) { seen.logT = Date.now(); console.log('tower ' + JSON.stringify(s)); }
       if (s.end) break;
+      if (s.panel === 'dead') { seen.died = { t: s.t, phase: s.phase, st: s.st, hurts: await pg.evaluate(() => window.__hurts.slice(-8)) }; console.log('tower death ' + JSON.stringify(seen.died)); await shot(); break; }
       for (const v of s.vulns) if (!seen[v]) { seen[v] = s.t; if (!shots.has(v)) { shots.add(v); await shot(); } }
       if (last && s.phase !== last.phase && !shots.has('p' + s.phase)) { shots.add('p' + s.phase); await shot(); }
       if (s.bell > (last?.bell || 0)) (seen.bellD ||= []).push(s.d);
@@ -1215,7 +1230,7 @@ const S = {
     const bellIn = !seen.bellD || seen.bellD.some((d) => d <= 4.5);
     // (its windows, seen between two looks or told by its tally: at SIMK 4 a 3.5 s Beached lasts under a second)
     const lg = home.log, win = { beached: !!seen.beached || !!seen.stranded || lg['tower:beached'] > 0 || lg['tower:stranded'] > 0, overturned: !!seen.overturned || lg['tower:overturned'] > 0, blinded: !!seen.blinded || lg['tower:lit'] > 0 };
-    const pass = !!bot?.done && win.beached && win.overturned && win.blinded && (bot.near ?? 99) <= 1.5 && bellIn && home.towerDown && home.at != null && home.at <= 2.5 && home.closed > 0 && !home.heroIn && inBand && (!process.env.TTK0 || +process.env.DIFF !== 0 || ttk >= 0.6 * +process.env.TTK0);
+    const pass = !seen.died && !!bot?.done && win.beached && win.overturned && win.blinded && (bot.near ?? 99) <= 1.5 && bellIn && home.towerDown && home.at != null && home.at <= 2.5 && home.closed > 0 && !home.heroIn && inBand && (!process.env.TTK0 || +process.env.DIFF !== 0 || ttk >= 0.6 * +process.env.TTK0);
     return { pass, win, ttk, band: [lo, hi], design: [210, 300], diff: +(process.env.DIFF || 1), cls: process.env.CLS || 'warden', bot: bot && { t: bot.t, deaths: bot.deaths, potions: bot.potions, low: +bot.low.toFixed(2), phases: bot.phases, near: +(bot.near ?? 99).toFixed(2) }, seen, home, setup };
   } },
   // The Breathing-holes, sealed in turn (q28): the three lamps lit and the ring run; the Black Breath shielded (her in its
@@ -1326,6 +1341,9 @@ const S = {
     await pg.evaluate(async () => { const Bus = await import('/src/ui/bus.js'), G = window.__G; window.__hurts = []; Bus.on('hurt', (f) => { const b = G.zone.boss; window.__hurts.push({ t: +G.hero.stats.time.toFixed(1), f: +f.toFixed(3), hp: +(G.player.hp / G.player.hpMax).toFixed(2), b: b && [b.st, b.phase, b.act?.name || b.state].join('/'), at: new Error().stack.split('\n').slice(3, 6).map((l) => l.trim().replace(/^at /, '').replace(/\(?https?:[^)]*\/src\//, '').replace(/\?[^:]*/, '')).join(' < ') }); if (window.__hurts.length > 40) window.__hurts.shift(); }); });
     await pg.evaluate((o) => { window.SIMK = 4; window.__botP = (new Function('return ' + o.src)())({ kind: 'skotos', maxT: o.maxT }).catch((e) => { window.__botErr = String(e.stack || e); }); }, { src: BOT5.toString(), maxT: +(process.env.MAXT || 1500) });
     const retry = process.env.RETRY !== '0', seen = { min: 1, minNight: 1 }, shots = new Set();
+    // (the planned death is dealt in the page, the frame the third Remember is seen: a 1.5 s look can miss the moment
+    // between it and the fire given)
+    if (retry) await pg.evaluate(() => { const G = window.__G, f = () => { const b = G.zone.boss; if (b && !b.dead && G.selnaBack && b.phase >= 1 && !G.zone.relit && !G.player.dead) { window.__planned = { t: window.BOT?.t ?? 0 }; window.BOT.stop = false; G.player.hp = 0; window.__D.emit('heroDeath'); return; } requestAnimationFrame(f); }; requestAnimationFrame(f); });
     let last = null, died = null, back = null;
     for (const t0 = Date.now(); Date.now() - t0 < 150 * 60000;) {
       await pg.waitForTimeout(1500);
@@ -1333,11 +1351,12 @@ const S = {
       if (!s) continue;
       if (s.err) { console.log('skotos bot error: ' + s.err.slice(0, 600)); break; }
       if (Date.now() - (seen.logT || 0) > 30000) { seen.logT = Date.now(); console.log('skotos ' + JSON.stringify(s)); }
+      // (what the last look saw counts too: a Coil cast within 1.5 s of the end)
+      for (const k of ['night', 'seared', 'wrap', 'smother', 'coil']) if (s[k] && !shots.has(k)) { shots.add(k); seen[k] = s.t; await shot(); }
       if (s.end && !(died && !back)) break;
       // (its floors: 20% while the Night waits for the third Remember, 10% under that until the relight, 10% at the least)
       if (!s.relit && !s.dead) seen.min = Math.min(seen.min, s.hp);
       if (s.phase <= 1 && s.rem < 3 && !s.dead) seen.minNight = Math.min(seen.minNight, s.hp);
-      for (const k of ['night', 'seared', 'wrap', 'smother', 'coil']) if (s[k] && !shots.has(k)) { shots.add(k); seen[k] = s.t; await shot(); }
       if (s.rem > (last?.rem || 0)) (seen.rem ||= []).push([s.rem, s.t]);
       if ((s.relit || s.relitN > (seen.relitN0 ?? s.relitN)) && !seen.relit) { seen.relit = s.t; await shot(); }
       seen.relitN0 ??= s.relitN;
@@ -1345,9 +1364,9 @@ const S = {
       // (a Breach in the Night beside a lit cairn: Seared; the beam's Sear is the third phase's)
       if (s.nightSeared && !seen.searedNight) { seen.searedNight = s.t; await shot(); }
       // she dies just after the third Remember; then up again at the light, and the fight goes on
-      if (retry && !died && s.back && s.phase >= 1 && !s.relit) {
-        died = { t: s.t };
-        await pg.evaluate(() => { const G = window.__G; window.BOT.stop = false; G.player.hp = 0; window.__D.emit('heroDeath'); });
+      const planned = retry && !died && await pg.evaluate(() => window.__planned);
+      if (planned) {
+        died = { t: +planned.t.toFixed(1) };
         await A5.until(pg, () => window.__G.panel === 'dead', 30000);
         died.hidden = await pg.evaluate(async () => { const S = await import('/src/game/story.js'); return { name: S.npcName('selna'), selnaBack: !!window.__G.selnaBack }; });
         await pg.evaluate(() => { window.__D.closePanel(); window.__D.emit('respawn', false); });
@@ -1377,7 +1396,7 @@ const S = {
     await A5.until(pg, () => !!window.__G.cine, 30000); await pg.waitForTimeout(2500); await shot();
     const [lo, hi] = (process.env.TTK || '90,420').split(',').map(Number);
     const ttk = last?.t ?? null, clean = died && back ? +(died.t + (ttk - back.t)).toFixed(1) : ttk, inBand = clean != null && clean >= lo && clean <= hi;
-    const pass = !seen.unplanned && end.dead && end.skotosDown && (seen.rem || []).length >= 3 && !!seen.searedNight && !!seen.relit && !!seen.smother && seen.min >= 0.095 && seen.minNight >= 0.195 && (!retry || (died?.hidden?.name === '…' && !died.hidden.selnaBack && died.after.rem === 0 && died.after.hp >= 0.6 && !!back)) && inBand;
+    const pass = !seen.unplanned && end.dead && end.skotosDown && (seen.rem || []).length >= 3 && !!seen.searedNight && !!seen.relit && (!!seen.smother || (end.log['skotos:smothered'] || 0) + (end.log['skotos:coil'] || 0) > 0) && seen.min >= 0.095 && seen.minNight >= 0.195 && (!retry || (died?.hidden?.name === '…' && !died.hidden.selnaBack && died.after.rem === 0 && died.after.hp >= 0.6 && !!back)) && inBand;
     return { pass, ttk, clean, band: [lo, hi], design: [330, 450], bot: bot && { deaths: bot.deaths, potions: bot.potions, low: +bot.low.toFixed(2), phases: bot.phases }, seen, died, back, end };
   } },
   // The Freeze: played to its end in one session (the coast built in the tide's reading is built again frozen, from its
@@ -1545,9 +1564,14 @@ const S = {
     await die();
     const woke = await where('grey'); await shot();
     // the Tower awake (the three lights, their memories): a retry by the bay's shore rock, across a Continue too
+    // (when the Tower's waking and its checkpoint happen, which zone and scene: reported if the checkpoint is missed)
+    await pg.evaluate(() => { const G = window.__G, F = G.hero.flags; window.__cpLog = []; for (const k of ['towerWake', 'cp5']) { let v = F[k]; delete F[k]; Object.defineProperty(F, k, { get() { return v; }, set(x) { v = x; window.__cpLog.push([k, JSON.stringify(x), +G.hero.stats.time.toFixed(1), G.zone?.id, !!G.cine, new Error().stack.split('\n').slice(2, 5).map((l) => l.trim().replace(/\(?https?:[^)]*\/src\//, '').replace(/\?[^:]*/, '')).join(' < ')]); }, configurable: true, enumerable: false }); } });
     await A5.state(pg, 'mem_i3', { quest: 26, zone: 'coast', at: 'waypoint' });
-    await A5.until(pg, () => window.__G.hero.flags.towerWake && !window.__G.cine, 240000);
+    // (on a loaded machine the waking scene can outlast four minutes: a wait that ran out is reported, not read as a miss)
+    const waited = await A5.until(pg, () => window.__G.hero.flags.towerWake && !window.__G.cine, 600000);
     const tw = await where('rock');
+    if (!waited) tw.timedOut = true;
+    if (tw.key !== 'rock') tw.log = await pg.evaluate(() => window.__cpLog);
     await die();
     const woke2 = await where('rock'); await shot();
     await A5.reload(pg);

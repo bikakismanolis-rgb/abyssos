@@ -17,7 +17,7 @@ export const DIFFS = [
 // Telegraphs never change.
 const H5 = (o) => Object.assign({ tide: 152, phases: [40, 36, 40, 36], stepT: 4.5, bell: 6, reveal: 1.25, dmg: 1 }, o);
 export const HAZ5 = [
-  H5({ tide: 180, phases: [50, 40, 50, 40], stepT: 5, bell: 8, wash: 3, plunge: 4, load: 1.4, cold: 0.8, frost: 2.5, reveal: 1.25, dmg: 1.25, ring: 6, breath: 7, bossCd: 1, adds: 0 }),
+  H5({ tide: 180, phases: [50, 40, 50, 40], stepT: 5, bell: 8, wash: 3, plunge: 4, load: 1.4, cold: 0.8, frost: 2.5, reveal: 1.25, dmg: 1.5, ring: 6, breath: 7, bossCd: 1, adds: 0 }),
   H5({ wash: 6, plunge: 6, load: 1.2, cold: 1, frost: 5, ring: 8, breath: 6, bossCd: 1, adds: 0 }),
   H5({ wash: 6, plunge: 6, load: 1.2, cold: 1, frost: 5, ring: 8, breath: 6, bossCd: 1, adds: 0 }),
   H5({ wash: 8, plunge: 8, load: 1.1, cold: 1.15, frost: 6, ring: 9, breath: 5.5, bossCd: 0.9, adds: 1 }),
@@ -136,7 +136,7 @@ export const MONSTERS = {
   // against the fixed Karthax by tools/balance-act.mjs: a step up from the Ashen Forge for every class, as the acts before
   // stepped up, with no single blow much past his biggest)
   tower: { model: 'tower', hp: 170, dmg: 2.2, speed: 2.4, wakeSpeed: 6.5, radius: 0.7, ai: 'tower', reach: 5.5, atk: 'smash', atkTime: 1.6, flesh: 'chitin', xp: 150, boss: true, big: true, swim: true, sfx: 'spider', dieSfx: 'towerBell', dieClip: 'settle', look: { scale: 4.0, rim: 0x9ad8ff, rimI: 0.35 } },
-  skotos: { model: 'skotos', hp: 170, dmg: 2.3, speed: 0, underSpeed: 4.0, radius: 0.8, ai: 'skotos', reach: 7, atk: 'smash', atkTime: 1.8, flesh: 'skotos', xp: 260, boss: true, anchored: true, float: true, dieSfx: 'skotosRoar', dieClip: 'sink', look: { scale: 3.2, rim: 0x6a4a9a, rimI: 0.6 } },
+  skotos: { model: 'skotos', hp: 170, dmg: 2.3, speed: 0, underSpeed: 4.0, radius: 0.8, ai: 'skotos', reach: 7, atk: 'smash', atkTime: 1.8, flesh: 'skotos', xp: 260, boss: true, anchored: true, float: true, dieSfx: 'skotosRoar', dieClip: 'sink', look: { scale: 3.2, rim: 0x6a4a9a, rimI: 0.6, vulnRim: 0.5 } },
   skotosHand: { model: 'skotosHand', hp: 5, dmg: 0, speed: 0, radius: 0.8, ai: 'node', reach: 0, atk: 'cast', atkTime: 9, flesh: 'skotos', xp: 0, big: true, anchored: true, weight: 0, dieClip: 'sink', look: { rim: 0x8a6ac0, rimI: 0.5 } },
   skotosCoil: { model: 'skotosHand', hp: 4, dmg: 0, speed: 0, radius: 0.8, ai: 'node', reach: 0, atk: 'cast', atkTime: 9, flesh: 'skotos', xp: 0, big: true, anchored: true, weight: 0, dieClip: 'sink', look: { scale: 0.85, rim: 0xc0a0ff, rimI: 0.8 } },
   // the ranger's companion

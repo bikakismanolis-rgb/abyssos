@@ -56,11 +56,13 @@ Test every panel and HUD element on a phone-sized viewport (isMobile, hasTouch, 
 ]
 
 phase('Build')
-const lanes = await parallel(LANES.map((steps) => async () => {
+const DONE = ['C1', 'C2', 'S1', 'S2']  // finished before the pause: reports in ${S}/c/
+const TODO = LANES.map((steps) => steps.filter((st) => !DONE.includes(st.key))).filter((steps) => steps.length)
+const lanes = await parallel(TODO.map((steps) => async () => {
   const out = []
   for (const st of steps) {
     out.push(await agent(`${CTX}
-YOUR ROLE: ${st.role}. YOUR TASK (${st.key}): ${st.task}
+${st.key === 'C3' ? 'A previous run of this exact task was cut off (the work was paused and the container restarted; files on disk survived and are committed). Part of your work may already be on disk: read what exists first (${S}/c/${st.key}.md and the code) and continue from there; do not start over.\n' : ''}YOUR ROLE: ${st.role}. YOUR TASK (${st.key}): ${st.task}
 When done, write ${S}/c/${st.key}.md (create ${S}/c/ if needed; keep it updated as you go): what you built (files, functions, names), how you tested it (commands, results, screenshot paths), requests for the other lane, anything stubbed, and open problems. Return a 12-line summary.`, { label: st.key, phase: 'Build' }))
   }
   return out
@@ -69,8 +71,8 @@ log('Build: ' + lanes.map((l) => (l || []).filter(Boolean).length).join(' + ') +
 
 phase('Integrate')
 const integ = await agent(`${CTX}
-YOUR ROLE: integrator (you may edit any stage-C file; asset files and stage-B systems only for real bugs).
-Read every report in ${S}/c/ first and do every cross-lane join they request.
+YOUR ROLE: integrator (you may edit any stage-C file; asset files and stage-B systems only for real bugs). A previous run of this exact task was cut off by a container restart (files on disk survived and are committed). Your progress notes are in ${S}/c/integrate.md: read them first and continue from where they stop; do not redo finished items.
+Read every report in ${S}/c/ first and do every cross-lane join they request. THE DIFFICULTY FIX (already done, committed): the owner found Act IV far harder than Acts I-III; it was fixed, published as version 12 and ported into this tree (/home/user/abyssos/skotos/docs/act4-balance/README.md and port.md). Act V must now continue the new curve: re-tune Act V's numbers (enemies, the Tower and the Skotos, which were pinned to the OLD Karthax: Tower dmg 2.3, Skotos 2.6; HAZ5; XP) with tools/balance-act.mjs, extending it to coast and farlight and both bosses, so Act V is a step up from the fixed Act IV for every class on Warden and Wanderer, like the steps between earlier acts and not a cliff; apply the fix's lessons (telegraphs that can be walked out of, damage behind a lock phase that still counts, no pure-damage tax that ignores the difficulty, a retry checkpoint near each boss, Act V's checkpoints surviving Continue like the fixed waylamps). port.md also lists two side effects to check: the Tower's Sidelong Rush now uses the narrowed dash width, and the boss-darkness light floor makes the Skotos's Night and Drink less black (port.md gives a one-line revert).
 Then write the Act V scenarios in tools/scenario.mjs exactly as the design's scenario table describes (hook5, catch5, coast, tide, ice, tower, freeze, holes, skotos, ending5, cast5, echo5; perf5 and shallowtele exist), plus 'cameo' (Brokka and Elati walk on in the Skotos phase 3, real models when the sets are loaded, stand-ins in a cold session) and 'diff6' (the sixth difficulty unlocks after Act V on Ash, shows in the panels, and an Act V zone on it gets its own seed and the HAZ5 values). Run each on a private no-HMR server and fix what fails at its root, in whichever lane's file it lives. Then play the whole act start to finish in one session as a Warden from an Act IV-end save (quest 23, the shipped save format) with a script that drives it (dialogs, interacts, fights with sim help as the shipped scenarios do), with screenshots at every beat, and fix what breaks or reads badly.
 Write ${S}/c/integrate.md and return a 12-line summary.`, { label: 'integrate', phase: 'Integrate' })
 
@@ -80,7 +82,8 @@ YOUR ROLE: the stage-C gate keeper (you may edit any stage-C file to fix what th
 Read ${S}/c/integrate.md first. Run gate G4 and fix every failure at its root:
 1. Every Act V scenario (hook5, catch5, coast, tide, ice, tower, freeze, holes, skotos, ending5, cast5, echo5, cameo, diff6, perf5, shallowtele) and every shipped scenario (Act I combat, ranger, mage, weaver, lord, ending, title, panels; Act II pass, stonewarden, halls, king, ending2, cast2, boons; Act III weep, hart, heart, amaranthe, echo, ending3, cast3; Act IV ashfield, ivar, forge, karthax, ending4, cast4, echo4), one at a time on a private no-HMR server; soak5 tide and ice; check-act5, check-act4 and parity-ashfield.
 2. The builds: \`npx vite build --logLevel error\` and \`npm run build:artifact\` (every file under 16 MB); then serve skotos/artifact with tools/csp-server.mjs under the strict CSP in docs/HANDOFF.md and check in Playwright, desktop and an isMobile/hasTouch context, that there are no CSP violations, no console errors and no white models in the coast and the farlight fight.
-3. The memory report: phone GPU texture memory in coast and farlight after a warm run (the Field first) and on a cold start at each waypoint, against the budget in the contract (and the cameo's accepted cold-start cost).
+3. The difficulty curve (the Act IV fix is already ported): run tools/balance-act.mjs over Acts III, IV and V (coast, farlight, the Tower, the Skotos) for all classes on Warden and Wanderer and make Act V a step up from Act IV like the steps between earlier acts, not a cliff; record the numbers.
+4. The memory report: phone GPU texture memory in coast and farlight after a warm run (the Field first) and on a cold start at each waypoint, against the budget in the contract (and the cameo's accepted cold-start cost).
 Write ${S}/c/gate.md with every result and fix. Return a 12-line summary.`, { label: 'G4 gate', phase: 'Gate' })
 
 phase('Review')
