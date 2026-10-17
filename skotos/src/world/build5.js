@@ -133,14 +133,14 @@ export function instDef5(type, M, quality) {
 function instDef(k, name, M, quality) {
   if (k === 'rime') {
     const parts = rime(name); if (!parts) return null;
-    return { parts: parts.map((p) => ({ geo: p.geo, material: p.mat.transparent || /glow/i.test(p.mat.name) ? glowPart() : p.mat, glow: p.mat.transparent || /glow/i.test(p.mat.name) })), shadow: true };
+    return { parts: parts.map((p) => ({ geo: shared(p.geo), material: p.mat.transparent || /glow/i.test(p.mat.name) ? glowPart() : p.mat, glow: p.mat.transparent || /glow/i.test(p.mat.name) })), shadow: true };
   }
   if (name.startsWith('#') || k === 'c5') {
     const c = CODE5[name.replace('#', '')]?.(); if (!c) return null;
     return { parts: [{ geo: c.geo, material: k === 'icy' ? MAT.icy5 : k === 'cliff5' ? MAT.cliff5 : MAT[c.mat] || M.lam }], shadow: c.shadow ?? true };
   }
   const parts = ENV.props[name]; if (!parts) return null;
-  return { parts: parts.map((p) => ({ geo: k === 'icy' ? p.geo : withVC(p.geo), material: k === 'icy' ? MAT.icy5 : MAT.cliff5 })), shadow: k !== 'icy' || quality >= 2 };
+  return { parts: parts.map((p) => ({ geo: shared(k === 'icy' ? p.geo : withVC(p.geo)), material: k === 'icy' ? MAT.icy5 : MAT.cliff5 })), shadow: k !== 'icy' || quality >= 2 };
 }
 // (the sea-cliff stone is a vertex-coloured material, its layer times colour / GREY: a scan with no colours of its own
 // would read black, so it gets a copy coloured GREY throughout)
@@ -309,6 +309,8 @@ function boatGeo(kind, o = {}) {
 }
 const BOAT_GEO = {};
 const boatGeoC = (kind, o = {}) => (BOAT_GEO[kind + (o.weed ? 'w' : '')] ||= shared(boatGeo(kind, o)));
+// (a pack's geometry is the pack's, built again into every zone that shows it: world.js disposeZone must never drop it. A
+// rebuilt Farthest Light drew no shaft after its scan's buffers had been disposed and uploaded again)
 const shared = (g) => { g.userData.shared = true; return g; };
 
 // ---------- the dressing: L.props, rime scan or code model ----------
@@ -858,7 +860,7 @@ function weathered(mat) {
 function rimeTower(name, h) {
   const parts = rime(name), sz = size4(parts); if (!sz) return null;
   const k = h / Math.max(0.01, sz.y), g = new THREE.Group();
-  for (const p of parts) { const m = new THREE.Mesh(p.geo, weathered(p.mat)); m.castShadow = true; m.receiveShadow = true; g.add(m); }
+  for (const p of parts) { const m = new THREE.Mesh(shared(p.geo), weathered(p.mat)); m.castShadow = true; m.receiveShadow = true; g.add(m); }
   g.scale.setScalar(k); g.position.y = -sz.y0 * k;
   const top = ENV.extras['rime/' + name]?.top;
   return { group: g, top: top != null ? (top - sz.y0) * k : h };
@@ -1045,7 +1047,7 @@ const PROP5 = {
   nameStone(o) {
     const g = new THREE.Group(), parts = rime('runestone'), sz = size4(parts);
     let face = 0.2, hgt = 2.0;
-    if (sz) { const k = 2.1 / Math.max(0.01, sz.y); for (const p of parts) { const m = new THREE.Mesh(p.geo, p.mat); m.scale.setScalar(k); m.position.y = -sz.y0 * k; m.castShadow = true; g.add(m); } face = (sz.z * k) / 2 + 0.01; hgt = 2.1; }
+    if (sz) { const k = 2.1 / Math.max(0.01, sz.y); for (const p of parts) { const m = new THREE.Mesh(shared(p.geo), p.mat); m.scale.setScalar(k); m.position.y = -sz.y0 * k; m.castShadow = true; g.add(m); } face = (sz.z * k) / 2 + 0.01; hgt = 2.1; }
     else g.add(solid5([{ geo: jitter(G.box(0.9, 1.85, 0.36, 2, 3, 1), 0.04, 790 + (o.id?.length || 0)), color: GREY, o: { y: 0.95 } }, { geo: jitter(G.dome(0.45, 0.5, 8), 0.04, 791), color: GREY, o: { y: 1.86, sz: 0.4 } }, { geo: jitter(G.box(1.3, 0.3, 0.8), 0.06, 792), color: STONED, o: { y: 0.12 } }], MAT.cliff5));
     // (the names cut in its face: rows of runes, dark in the stone; lit, a soft glow from inside the strokes, the stone's
     // own scanned face round them)
@@ -1098,7 +1100,7 @@ const PROP5 = {
   boat() {
     const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
     const parts = rime('keelboat'), sz = size4(parts);
-    if (sz) { const k = 5.2 / Math.max(0.01, sz.x, sz.z); for (const p of parts) { const m = new THREE.Mesh(p.geo, p.mat); m.scale.setScalar(k); m.position.y = -sz.y0 * k; if (sz.x > sz.z) m.rotation.y = Math.PI / 2; m.castShadow = true; body.add(m); } }
+    if (sz) { const k = 5.2 / Math.max(0.01, sz.x, sz.z); for (const p of parts) { const m = new THREE.Mesh(shared(p.geo), p.mat); m.scale.setScalar(k); m.position.y = -sz.y0 * k; if (sz.x > sz.z) m.rotation.y = Math.PI / 2; m.castShadow = true; body.add(m); } }
     else { const m = new THREE.Mesh(boatGeoC('landing'), MAT.planks5); m.castShadow = true; m.receiveShadow = true; body.add(m); }
     body.rotation.z = 0.06; body.position.y = -0.04;
     let bed = null;
@@ -1122,7 +1124,7 @@ const PROP5 = {
   // a whale-oil cask (the oilCask breakable): the rime cask, the base set's barrel, or code staves; oily dark
   cask() {
     const g = new THREE.Group(), parts = rime('cask') || ENV.props.barrel, sz = size4(parts);
-    if (sz) { const k = 0.95 / Math.max(0.01, sz.y); for (const p of parts) { const m = new THREE.Mesh(p.geo, p.mat); m.scale.setScalar(k); m.position.y = -sz.y0 * k; m.castShadow = true; g.add(m); } }
+    if (sz) { const k = 0.95 / Math.max(0.01, sz.y); for (const p of parts) { const m = new THREE.Mesh(shared(p.geo), p.mat); m.scale.setScalar(k); m.position.y = -sz.y0 * k; m.castShadow = true; g.add(m); } }
     else g.add(solid5([{ geo: G.cyl(0.36, 0.33, 0.95, 10), color: 0x3a2c1e, o: { y: 0.48 } }, ...[0.12, 0.48, 0.84].map((y) => ({ geo: G.cyl(0.38, 0.38, 0.05, 10), color: IRON, o: { y } }))]));
     const stain = new THREE.Mesh(new THREE.CircleGeometry(0.6, 12).rotateX(-Math.PI / 2), own(new THREE.MeshBasicMaterial({ color: 0x0a0806, transparent: true, opacity: 0.45, depthWrite: false })));
     stain.position.y = 0.025; stain.renderOrder = 2; g.add(stain);

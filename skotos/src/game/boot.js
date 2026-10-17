@@ -24,7 +24,7 @@ import { initPanels, open as openPanel, close as closePanel, panelOpen } from '.
 import { buildTitleScene, removeTitleScene, titleCamera, showTitle, hideScreen } from '../ui/screens.js';
 import { on, emit } from '../ui/bus.js';
 import { setLang, t } from '../i18n/i18n.js';
-import { DIFFS } from './data.js';
+import { DIFFS, BOONS } from './data.js';
 import Audio from '../audio/audio.js';
 import { offerBoons } from './story.js';
 import { clamp, rand } from '../core/util.js';
@@ -71,6 +71,9 @@ export async function boot(q) {
     // &quest=N, &flags=a,b,c (e.g. auto=coast&flags=frozen: the coast after the Freeze; auto=farlight starts frozen)
     if (q.has('quest')) h.quest = +q.get('quest');
     for (const f of (q.get('flags') || '').split(',').filter(Boolean)) h.flags[f] = true;
+    // (an act's flag reads as that act finished, on this difficulty, its first blessing taken: an Act V state is not
+    // taken for an Act IV left open, nor stopped by the blessings owed)
+    for (let n = 1; n <= 5; n++) if (h.flags['act' + n]) { h['act' + n] = h.diff; h.boons[n - 1] ||= BOONS[n]?.[0]?.id; }
     if (q.get('auto') === 'farlight') h.flags.frozen = true;
     // &seed=N: the zone's layout seed (Act V's are kept per difficulty)
     if (q.has('seed')) { const z = q.get('auto'); h.seeds = { [z]: +q.get('seed'), [z + '@' + h.diff]: +q.get('seed') }; }

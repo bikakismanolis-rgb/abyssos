@@ -1076,13 +1076,13 @@ function singer(a, dt, pl, d) {
   if (d < 3.2 && a.wailCd <= 0) {
     a.wailCd = 4.5; a.state = 'wail'; a.atkT = 0; a.atkHit = false; a.rot = angleTo(a.x, a.z, pl.x, pl.z);
     a.tele = teleCone(a.x, a.z, a.rot, 4, 0.75, 0.5, 0xff8040);
-    a.avatar?.play('wail', 1.1); Audio.sfx('wraithWail', { x: a.x, z: a.z, vol: 0.6 }); tally(a, 'wail');
+    a.avatar?.play('wail', 1.1); Audio.sfx('singerWail', { x: a.x, z: a.z }); tally(a, 'wail');
     return 0;
   }
   const los = map.los(a.x, a.z, pl.x, pl.z);
   if (a.cd <= 0 && d < 13 && los && songToken(a)) {
     a.state = 'song'; a.atkT = 0; a.songHp = a.hp; a.interrupted = false; a.songAt = null;
-    a.avatar?.play('song', 1, { loop: true }); Audio.sfx('iceSing', { x: a.x, z: a.z }); tally(a, 'song');
+    a.avatar?.play('song', 1, { loop: true }); Audio.sfx('singerSong', { x: a.x, z: a.z }); tally(a, 'song');
     return 0;
   }
   // keep 8-11 m off, and run from anything closer than 5
@@ -1337,7 +1337,7 @@ function goUnder(a, L, quiet) {
 }
 function slideIn(a, L) {
   a.state = 'slide'; a.atkT = 0; a.rot = angleTo(L.hole.x, L.hole.z, a.x, a.z);
-  a.avatar?.play('slide', 1); splashFx(L.hole.x, L.hole.z, 0.8);
+  a.avatar?.play('slide', 1); splashFx(L.hole.x, L.hole.z, 0.8); Audio.sfx('icemawDive', { x: L.hole.x, z: L.hole.z });
 }
 function strand(a, L) {
   a.state = 'stranded'; a.atkT = 0; killTele(a.tele); a.tele = null; L.back = null;
@@ -1437,7 +1437,7 @@ function mawUp(a, L, pl) {
   a.tele = teleLine(L.hole.x, L.hole.z, L.dir, 7, 1.6, 0.7, 0xff4020);
   // the drag's way, back toward the hole
   L.arrow = teleLine(L.hole.x + Math.sin(L.dir) * 6.5, L.hole.z + Math.cos(L.dir) * 6.5, L.dir + Math.PI, 4.5, 0.5, 0.7, SEA);
-  splashFx(L.hole.x, L.hole.z, 1.1); Audio.sfx('splash', { x: a.x, z: a.z });
+  splashFx(L.hole.x, L.hole.z, 1.1); Audio.sfx('icemawSurface', { x: a.x, z: a.z });
 }
 // what a Frost Nova does to the Icemaws: one under a hole it covers is held below 6 s (and a sea hole skins over a moment)
 const NOVA = { t: -99, x: 0, z: 0, r: 0 };
@@ -1502,7 +1502,7 @@ function roar(a, dt, pl) {
     for (let i = 0; i < 30; i++) { const ang = a.rot + rand.range(-0.55, 0.55), sp = rand.range(3, 7); P({ add: false, x: hx, y: 1.2, z: hz, vx: Math.sin(ang) * sp, vy: rand.range(-0.2, 0.5), vz: Math.cos(ang) * sp, life: rand.range(0.6, 1.0), size: 0.4, size1: 1.5, color: 0xa8d0ec, alpha: 0.6, alpha1: 0, drag: 2 }); }
     for (let i = 0; i < 16; i++) { const ang = a.rot + rand.range(-0.6, 0.6), sp = rand.range(4, 9); P({ x: hx, y: 1.1, z: hz, vx: Math.sin(ang) * sp, vy: rand.range(0, 0.6), vz: Math.cos(ang) * sp, life: 0.5, size: 0.14, size1: 0.03, color: 0xe8f8ff, color1: 0x6ab0e8, drag: 2 }); }
     ring(a.x, a.z, 4, 0x9ad0f0, 0.6); freezeCrystals(a.x, a.z, 4, 24); shake(0.4);
-    Audio.sfx('bearRoar', { x: a.x, z: a.z }); Audio.sfx('frost', { x: a.x, z: a.z, vol: 0.6 });
+    Audio.sfx('frostRoar', { x: a.x, z: a.z }); Audio.sfx('frost', { x: a.x, z: a.z, vol: 0.6 });
     if (inCone(a.x, a.z, a.rot, 5, 0.6, pl) && !(pl.iframes > 0) && !pl.dead) { coldAdd(15); pl.status.slow = Math.max(pl.status.slow, 2); pl.status.slowK = Math.max(pl.status.slowK, 0.2); tally(a, 'roarHit'); }
     crackAt(a.x, a.z, 4, 1, { src: 'roar' });
   }

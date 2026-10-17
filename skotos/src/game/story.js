@@ -60,7 +60,12 @@ export function npcHasNews(kind, a) {
     || (kind === 'brokka' && (zid === 'ashfield' ? !F.brokkaField : !F.brokkaForge))
     || (kind === 'elati' && (zid === 'ashfield' ? !F.elatiGraves : !F.elatiForge))
     || (kind === 'alkyone' && !F.alkField);
-  // Act V: Alkyone at each new place, the Landing's two the first time, a child with a question
+  // Act V: Alkyone at each new place, the Landing's two the first time, a child with a question; none while a boss of the
+  // act is up (the keepers who walk on in the Skotos's last phase have nothing to say then), nor Brokka and Elati there
+  if (zid === 'coast' || zid === 'farlight') {
+    const b = G.zone.boss;
+    if ((b && !b.dead && !b.holdWake) || kind === 'brokka' || kind === 'elati') return false;
+  }
   if (kind === 'alkyone') return zid === 'town' ? !F.coastCall : zid === 'coast' ? (!F.hearth && !F.alkHearth) || (!!F.carved && !F.alkGates) : zid === 'farlight' ? !F.alkShip || (!!F.hole0 && !!F.hole1 && !!F.hole2 && !F.skotosWake && !F.alkSkerry) : false;
   if (kind === 'glaukos') return !F.glaukosMet || (!!F.mem_i3 && !F.glaukos3);
   if (kind === 'tamarisk') return zid === 'farlight' ? !F.tamFar : !F.tamMet || (!!F.tamSapling && !F.tamAtLast && G.hero.cls !== 'ranger');
@@ -328,6 +333,14 @@ on('kill', (a) => {
 function dismiss(z, b) {
   for (const m of b.summons || []) if (!m.dead && z?.actors.includes(m)) release(z, m, true);
   for (const m of b.host || []) if (!m.dead && z?.actors.includes(m)) { puff(m.x, 1, m.z, 14, 0x6a6660, 1.4, 1.4, 1.4); release(z, m, false); }
+}
+// and Act V's: what the Tower brought up (its lice, the Drowned) and the Skotos's Hands, Coils and Icemaws go back into the
+// water (a pack's creatures stay: they were the sea's before the fight)
+function dismiss5(z, b) {
+  for (const m of z?.actors.slice() || []) {
+    if (m === b || m.dead || m.team !== 'foe' || m.boss || m.packId != null || Math.hypot(m.x - b.x, m.z - b.z) > 40) continue;
+    puff(m.x, 0.6, m.z, 10, 0xd8e8f0, 1.2, 1.2, 1); release(z, m, false);
+  }
 }
 // her lucid moment, then the Autumn (at the kill, or on the next entry if the game closed or the hero left first)
 function ladyFalls(z, a) {
@@ -1364,6 +1377,7 @@ on('towerFlask', (a) => {
 function towerDown(z, a) {
   G.bossActor = null;
   emit('bossDown', a);
+  dismiss5(z, a);
   if (a.echo) return;
   const F = G.hero.flags;
   if (!F.towerDown) { F.towerDown = true; writeSave(); later(3.6, () => { if (G.zone === z) towerSleeps(z); }); }
@@ -1623,6 +1637,7 @@ function rollNames(rite) {
 function skotosDown(z, a) {
   G.bossActor = null;
   emit('bossDown', a);
+  dismiss5(z, a);
   if (a.echo) return;
   const F = G.hero.flags;
   if (!F.skotosDown) { F.skotosDown = true; F.selnaBack = true; writeSave(); later(1.2, () => { if (G.zone === z) naming(z); }); }
@@ -1779,11 +1794,11 @@ function enter5(id, z) {
   if (id === 'farlight') {
     if (!F.farSeen) later(1.2, () => farArrival(z));
     // a fight left behind (a death, a quit): her name hidden again and the Remembers to play again (ai.js starts the fight
-    // over); the keepers back at the tower. (Were the boss still standing in its last phase, the stair still takes the fire)
+    // over: a death past the third Remember starts its Night again, a quit its first phase); the keepers back at the tower,
+    // the Light dark and its stair taking no fire until the Skotos wraps it again
     if (F.skotosWake && !F.skotosDown) {
-      const b = z.boss, p3 = !!b && !b.dead && !b.holdWake && (b.phase ?? 0) >= 2;
       G.selnaBack = false; z.remember = null;
-      z.relit = p3 && !!z.relit; z.giving = p3 && !z.relit; z.keepers = p3;
+      z.relit = false; z.giving = false; z.keepers = false;
       for (const k in z.p5 || {}) z.p5[k].scene = false;
       for (const a of z.cameoNpcs || []) if (!a.removed) vanish(z, a, 0.1);
       z.cameoNpcs = []; z.cameo = false; z.follow = [];

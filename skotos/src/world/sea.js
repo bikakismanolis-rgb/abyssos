@@ -345,7 +345,9 @@ ${FREEZE}`)
 #endif
   // the long swell: its crests catch the sky; small ripples glint (the water reads by its motion)
   col += skyG * smoothstep(-0.2, 1.0, vSw) * 0.3 * deep;
-  col += (skyG * 2.2 + uMoonC * 0.04) * smoothstep(0.82, 0.97, n2.b * 0.6 + n1.a * 0.4 + (g.x + g.y) * 0.08) * deep * 0.6;
+  // (the glints gathered in patches a few metres across, where the ripple's broad read is high: strewn evenly they lay
+  // over the water as confetti)
+  col += (skyG * 2.2 + uMoonC * 0.04) * smoothstep(0.82, 0.97, n2.b * 0.6 + n1.a * 0.4 + (g.x + g.y) * 0.08) * smoothstep(0.42, 0.72, n1.r) * deep * 0.75;
   // the moon's glint, broken by the ripple, and its broad path
   col += uMoonC * (pow(max(dot(Rf, uMoonD), 0.0), 300.0) * 0.35 + pow(max(dot(Rc, uMoonD), 0.0), 14.0) * 0.03) * deep;
   // the hero's lantern: it lights the shallows and glints on the water
@@ -1074,21 +1076,31 @@ export function buildIce(L, group, quality = R.quality) {
 // which a plane of sky would squash into streaks this low). Shown while SEA.sky is set and the camera is low enough to see
 // any sky (R.skyHook below).
 let dome = null;
+const HOR_S = { r: 0, g: 0, b: 0 };
 export function auroraSky() {
   if (dome) return dome;
   noiseTex();
   const geo = new THREE.SphereGeometry(110, 40, 14, 0, Math.PI * 2, 0, Math.PI * 0.56);
   geo.userData.shared = true;
-  const u = SEA_U({ uHor: { value: new THREE.Color() }, uTop: { value: new THREE.Color(0x02040a) } });
+  const u = SEA_U({ uHorS: { value: new THREE.Color() }, uTop: { value: new THREE.Color(0x02040a) }, uSkyC: LIT.uSkyC, uFogD: { value: 0.02 } });
   const mat = new THREE.ShaderMaterial({
     uniforms: u, depthWrite: false, fog: false, side: THREE.BackSide,
     vertexShader: 'varying vec3 vD; void main(){ vec4 wp = modelMatrix * vec4(position, 1.0); vD = wp.xyz - cameraPosition; gl_Position = projectionMatrix * viewMatrix * wp; }',
     fragmentShader: `${COMMON}
-uniform vec3 uHor; uniform vec3 uTop; varying vec3 vD;
+uniform vec3 uHorS; uniform vec3 uTop; uniform vec3 uSkyC; uniform float uFogD; varying vec3 vD;
 void main() {
   vec3 D = normalize(vD);
   float e = clamp(D.y, 0.0, 1.0), hz = smoothstep(0.0, 0.32, e), t = uTime;
-  vec3 col = mix(uHor, uTop, hz);
+  // (the horizon's colour, the fog's, horK of it, is laid on after the tone mapping, as three lays its fog on what it
+  // draws: tone-mapped, the fog's dark colour fell to near black, and the dome stood a shade darker than the fogged sea
+  // and land in front of it, a black band along every low cine's horizon)
+  vec3 col = uTop * hz;
+  float horK = 1.0 - hz;
+  // under the horizontal, past the far plane (160 m) where the sea's own quads stop: the far sea as they would draw it,
+  // the sky's sheen at a grazing look, in the fog as far off as the ray would meet it (in the fog's colour alone, a black
+  // band lay between the sea's far edge and the sky in every low cine)
+  float yF = -max(cameraPosition.y, 1.0) / 150.0;
+  if (D.y < 0.0) { float dd = max(cameraPosition.y, 1.0) / max(-D.y, 0.0005) * uFogD; horK = 1.0 - exp(-dd * dd); col = (uSkyC * 0.62 + vec3(0.003, 0.009, 0.014)) * (1.0 - horK); }
   // far headlands and islands low over the horizon, in the fog's own colour (as far land drawn in the fog is), the
   // curtains' glow standing behind them: long gentle rises with ragged crests. (Darker than the fog, steep-sided and
   // smooth-topped, they stood on the horizon as a row of dark blocks)
@@ -1097,7 +1109,7 @@ void main() {
     + (texture2D(tNoise, vec2(azh * 6.0 + 0.2, 0.47)).b - 0.5) * 0.004 + (texture2D(tNoise, vec2(azh * 19.0, 0.13)).a - 0.5) * 0.0015;
   // (D.y itself, not e, which stops at 0; and only over the horizontal: under it lies the far sea)
   float islM = smoothstep(-0.0016, 0.0016, isl - D.y) * smoothstep(-0.003, 0.0, D.y);
-  col = mix(col, uHor, islM);
+  col *= 1.0 - islM; horK = mix(horK, 1.0, islM);
   // stars: one in a few hundred cells of a grid on the sky
   vec2 sp = D.xz / (D.y + 0.2) * 70.0, c = floor(sp);
   float hs = sH(c), star = step(0.982, hs) * (1.0 - smoothstep(0.05, 0.22, length(fract(sp) - 0.5 - (sH2(c + 3.1) - 0.5) * 0.6))) * smoothstep(0.02, 0.2, e);
@@ -1148,19 +1160,21 @@ void main() {
   // (at full dark almost none of the green left: at 8% the frozen coast's sky still read as a dim green aurora)
   vec3 edgeV = vec3(0.16, 0.06, 0.28) * blk * (1.0 - blk) * 2.6;
   acc = mix(acc, edgeV * (0.6 + 0.4 * bands), dk * 0.975) * (1.0 - dk * bands * 0.5);
-  // (the glow down to the horizon itself, where the land in the fog cuts it; under the horizontal the far sea mirrors it,
-  // dimmer and fading down toward the fog: a black band lay there between the lit sea's far edge and the sky)
-  acc *= uAur * 0.5 * (D.y >= 0.0 ? mix(0.3, 1.0, smoothstep(0.0, 0.012, D.y)) : 0.3 * smoothstep(-0.07, 0.0, D.y)) * (1.0 - islM);
+  // (the glow down to the horizon itself, where the land in the fog cuts it; under the horizontal the far sea mirrors it
+  // and the haze over it holds it, fading to nothing where the sea's own quads begin, at the far plane, so the two meet
+  // in the fog's colour: a black band lay there between the lit sea's far edge and the sky)
+  acc *= uAur * 0.5 * (D.y >= 0.0 ? mix(0.3, 1.0, smoothstep(0.0, 0.012, D.y)) : 0.55 * smoothstep(yF, 0.0, D.y)) * (1.0 - islM);
   float blot = clamp(dk * blk * 1.3 * smoothstep(0.004, 0.04, e) + thr * rib, 0.0, 0.92);
   col = col * (1.0 - blot * 0.7) + acc + vec3(0.75, 0.8, 0.9) * star * (1.0 - clamp(dot(acc, vec3(1.5)), 0.0, 1.0)) * (1.0 - blot) * (1.0 - islM);
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
+  gl_FragColor.rgb += uHorS * horK * (1.0 - blot * 0.7);
 }`
   });
   dome = new THREE.Mesh(geo, mat);
   dome.frustumCulled = false; dome.renderOrder = -10; dome.visible = false; dome.name = 'auroraSky';
-  dome.onBeforeRender = (r, s, cam) => { dome.position.copy(cam.position); dome.updateMatrixWorld(); u.uHor.value.copy(R.scene.background); };
+  dome.onBeforeRender = (r, s, cam) => { dome.position.copy(cam.position); dome.updateMatrixWorld(); R.scene.background.getRGB(HOR_S, THREE.SRGBColorSpace); u.uHorS.value.setRGB(HOR_S.r, HOR_S.g, HOR_S.b); u.uFogD.value = R.scene.fog?.density ?? 0.02; };
   R.scene.add(dome);
   return dome;
 }
