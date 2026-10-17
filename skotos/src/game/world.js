@@ -1087,6 +1087,25 @@ function act5Zone(z) {
     if (F.seaLit) echoAt(z, 'skotos', S.skotos.x, L.boss.z - 14.5);
   }
 }
+// the place to wake in an Act V zone, kept in the save as Act IV's last lamp is (G.hero.flags.cp5[zone]: a Continue builds
+// the zone again): the hearth, the last sea-light lit, the bay's shore rock while the Tower is awake (the retry beside its
+// fight), its island once it is down; on the ice the last hole sealed (the third is the Skotos's retry, 14 m south of its
+// rim). Each holds only while what it names does
+const CP5 = { hearth: (F) => F.hearth, rock: (F) => F.towerWake && !F.towerDown, island: (F) => F.towerDown };
+export function checkpoint5(z, key) {
+  const S = z.L.spots, F = G.hero.flags, m = z.map;
+  const ok = CP5[key] ? CP5[key](F) : /^hole\d$/.test(key) ? F[key] : F['light_' + key];
+  if (!key || !ok) return false;
+  let p = null;
+  if (key === 'hearth') p = m.nearestFloor(S.hearth.x, S.hearth.z + 2.4, 3);
+  else if (key === 'rock') p = S.npcs?.rock && m.nearestFloor(S.npcs.rock.x, S.npcs.rock.z + 1.2, 3);
+  else if (key === 'island') p = S.skerry && m.nearestFloor(S.skerry.x, S.skerry.z + S.skerry.r + 2.5, 4);
+  else if (key.startsWith('hole')) { const ho = S.holes?.find((h) => 'hole' + h.id === key); p = ho && m.nearestFloor(ho.alk.x, ho.alk.z, 3); }
+  else { const it = z.act5?.lights.find((l) => l.id === key); p = it && m.nearestFloor(it.x, it.z, 3); }
+  if (!p) return false;
+  z.checkpoint = p; (F.cp5 ||= {})[z.id] = key;
+  return true;
+}
 // a sealed Breathing-hole's marker-light: a small light and a short beam over the new ice
 function marker5(z, ho) {
   const m = put(z, act5Prop('markerLight'), ho.x, ho.z);
@@ -1116,6 +1135,8 @@ function act5Enter(z) {
     // the cairns burn once the sea is lit (in the fight the Skotos puts them out, and the keepers light them again)
     for (const it of z.act5.cairns) light5(z, it, !!F.seaLit || (!!z.boss && !z.boss.dead && !z.boss.holdWake && !!it.lit));
   }
+  // the place to wake, as the save keeps it (the zone is built again on a Continue)
+  if (F.cp5?.[z.id]) checkpoint5(z, F.cp5[z.id]);
   act5Presence(z);
   refreshEmit(z);
 }
@@ -1405,7 +1426,7 @@ function sealDone(z, S) {
   z.act5.lamps = z.act5.lamps.filter((it) => it.hole !== k);
   const m = marker5(z, ho); z.act5.markers.push(m); if (G.zone === z) R.scene.add(m);
   light5(z, m.userData.it, true);
-  z.checkpoint = z.map.nearestFloor(ho.alk.x, ho.alk.z, 3);
+  checkpoint5(z, 'hole' + k);
   glowBurst(ho.x, 1, ho.z, 0xf0f8ff, 60, 6, 0.4, 1.2); ring(ho.x, ho.z, ho.r + 1, 0xe8f4ff, 1); shake(0.35);
   Audio.sfx('freezeWave', { vol: 1 }); Audio.sfx('iceSing', { vol: 1, pitch: 0.7 }); Audio.sting('sealight');
   emit('sealDone', k, z);

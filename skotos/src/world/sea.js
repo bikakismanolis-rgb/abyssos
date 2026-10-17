@@ -130,7 +130,9 @@ vec3 aurora(vec2 p, float soft, float blur) {
   float t = uTime;
   vec2 q = vec2(p.x * 0.0016, p.y * 0.0034);
   vec4 n = texture2D(tNoise, q + vec2(t * 0.0011, t * 0.0003));
-  float w = (n.r - 0.5) * 3.2 + (n.g - 0.5) * 1.3 + sin(p.x * 0.11 + n.b * 4.0 + t * 0.07) * 0.75 + sin(p.x * 0.009 + t * 0.05) * 0.35;
+  // (and kinked every score of metres: what the play camera's mirror sees of the sheet, some 25 m, held one straight band)
+  float w = (n.r - 0.5) * 3.2 + (n.g - 0.5) * 1.3 + sin(p.x * 0.11 + n.b * 4.0 + t * 0.07) * 0.75 + sin(p.x * 0.009 + t * 0.05) * 0.35
+    + sin(p.x * 0.31 + n.g * 5.0 + t * 0.13) * 0.24;
   float arc = 1.0 - abs(sin(p.y * 0.045 + w)), arc2 = 1.0 - abs(sin(p.y * 0.071 - w * 0.7 + 1.3));
   // (the rays: a fine noise drawn out across the arcs, drifting along them)
   float ray = texture2D(tNoise, vec2(p.x * 0.012 + w * 0.03, p.y * 0.0009) + vec2(t * 0.0009, 0.0)).a;
@@ -358,13 +360,10 @@ ${FREEZE}`)
   if (uAur * max(1.0 - uAurDark, uAurFront) > 0.02) col += aurora(sp, 1.0, length(spw) + 6.0) * (0.1 + 0.65 * F) * mix(0.25, 1.0, deep) * smoothstep(0.04, 0.3, Rc.y);
 #else
   // (broken by the ripple into streaks drawn out toward the eye, as a reflection on moving water is)
-#ifdef SEA_Q2
+  // (the phones too: with the ripple's own reads in its place the aurora lay on the water in mould-like blots, and a line
+  // pattern read as corrugated sheet)
   vec2 vd = normalize(V.xz + vec2(0.0001, 0.0)), vp = vec2(-vd.y, vd.x);
   float stk = texture2D(tNoise, vec2(dot(P, vp) * 0.34, dot(P, vd) * 0.045) + vec2(t * 0.004, t * 0.021) + g * 0.03).b;
-#else
-  // (the phones: the ripple's own read, no third fetch)
-  float stk = n2.b * 0.6 + n1.a * 0.4;
-#endif
   col += vAur * (0.35 + 1.3 * smoothstep(0.35, 0.75, stk)) * (0.75 + 0.5 * n1.r) * (0.1 + 0.65 * F) * mix(0.3, 1.0, deep);
 #endif
   // light paths: the long broken streaks a lit sea-light lays across the water toward the eye
@@ -811,8 +810,9 @@ vec3 iceEm = vec3(0.0);`)
   // surface; old pressure cracks; frost and drifted snow on top
   vec3 col = mix(vec3(0.026, 0.04, 0.056), vec3(0.058, 0.08, 0.104), smoothstep(0.3, 0.75, nD.r * 0.7 + nD.g * 0.3));
   col += vec3(0.024, 0.032, 0.036) * smoothstep(0.62, 0.85, nD.b);
-  float bub = smoothstep(0.76, 0.9, nB.a) * smoothstep(0.5, 0.75, nB.r);
-  col += vec3(0.14, 0.17, 0.19) * bub;
+  // (only the noise's peaks, and dimmer: at a lower cut the bubbles lay over every field as even pale lozenges, a cow's hide)
+  float bub = smoothstep(0.84, 0.95, nB.a) * smoothstep(0.55, 0.8, nB.r);
+  col += vec3(0.09, 0.11, 0.125) * bub;
 #if defined(ICE_HI) && !defined(ICE_FAR) && !defined(ICE_FLOE) && !defined(ICE_WINDOW)
   // (old pressure cracks: long, few, a pale line in the ice where a Voronoi of 5 m cells has its walls, here and there)
   { float ce = vEdge(Pr * 0.19 + nD.gb * 0.12); col = mix(col, vec3(0.24, 0.29, 0.33), (1.0 - smoothstep(0.0, 0.02, ce)) * smoothstep(0.55, 0.75, nS.a) * 0.55); }
@@ -1145,8 +1145,9 @@ void main() {
   float rib = (1.0 - smoothstep(0.012, 0.03, abs(az - 0.3 - 0.5 * sin(el * 3.4 + t * 0.25) * el))) * smoothstep(0.55, 0.0, el);
   acc *= 1.0 - thr * rib * 0.97;
   // the black aurora: the curtains turn black and blot what is behind them, their edges violet
-  vec3 edgeV = vec3(0.16, 0.06, 0.28) * blk * (1.0 - blk) * 2.0;
-  acc = mix(acc, edgeV * (0.6 + 0.4 * bands), dk * 0.92) * (1.0 - dk * bands * 0.5);
+  // (at full dark almost none of the green left: at 8% the frozen coast's sky still read as a dim green aurora)
+  vec3 edgeV = vec3(0.16, 0.06, 0.28) * blk * (1.0 - blk) * 2.6;
+  acc = mix(acc, edgeV * (0.6 + 0.4 * bands), dk * 0.975) * (1.0 - dk * bands * 0.5);
   // (the glow down to the horizon itself, where the land in the fog cuts it; under the horizontal the far sea mirrors it,
   // dimmer and fading down toward the fog: a black band lay there between the lit sea's far edge and the sky)
   acc *= uAur * 0.5 * (D.y >= 0.0 ? mix(0.3, 1.0, smoothstep(0.0, 0.012, D.y)) : 0.3 * smoothstep(-0.07, 0.0, D.y)) * (1.0 - islM);

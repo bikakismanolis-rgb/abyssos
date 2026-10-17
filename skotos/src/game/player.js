@@ -100,9 +100,11 @@ export function updatePlayer(dt) {
     if (speed > 0.2 && (!pl.act || pl.act.name === 'whirl')) pl.rot = dampAngle(pl.rot, Math.atan2(mx, mz), 14, dt);
     // move-cancel the tail of an attack
   } else if (pl.act && pl.act.name === 'basic' && Math.hypot(mx, mz) > 0.5 && pl.act.t > pl.act.dur * 0.7) { pl.act = null; av.anim.stop?.(0.12); }
-  // knockback and collisions
+  // knockback and collisions (none while a pull along a path carries her: a wash-out keeps to its lane)
+  const owned = !!pl.pull?.path;
+  if (owned) pl.kx = pl.kz = 0;
   if (pl.kx || pl.kz) { pl.x += pl.kx * dt; pl.z += pl.kz * dt; pl.kx *= Math.exp(-dt * 8); pl.kz *= Math.exp(-dt * 8); if (Math.abs(pl.kx) + Math.abs(pl.kz) < 0.05) pl.kx = pl.kz = 0; }
-  for (const f of foes(pl.x, pl.z, 1.5)) {
+  for (const f of owned ? [] : foes(pl.x, pl.z, 1.5)) {
     if (f.prop || f.status.freeze > 0 && false) continue;
     const dx = pl.x - f.x, dz = pl.z - f.z, d = Math.hypot(dx, dz), min = pl.radius + f.radius * 0.85;
     if (d < min && d > 0.001) {

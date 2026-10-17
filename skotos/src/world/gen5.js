@@ -319,8 +319,15 @@ function tryCoast(seed, last) {
     let b;
     if (inBay(L, x, z)) b = 0.2 + 0.4 * clamp(Math.hypot(x + 0.5 - C.x, z + 0.5 - C.z) / 16, 0, 1) ** 1.3 + nz * 0.15;
     else if (z >= 84 && z < 92 && x > 62) b = 0.9 - (92 - z) * 0.09 + nz * 0.2;       // the Graveyard's shingle
-    else if (z >= LD.z - 8 && x < 60 && dCove[i] < 30) b = 0.95 - dCove[i] * 0.06 + nz * 0.25; // the Landing water
-    else b = 0.9 * nz + 0.12 + 0.8 * clamp((dSea[i] < 255 ? dSea[i] : 40) / 40, 0, 1);
+    else {
+      // the Landing water, else the flats. (The Landing water's east edge against the high flats wanders: on x = 60 itself
+      // it ran as a ruler-straight seam down the middle of the act's first image. A cell only changes sides where neither
+      // bed lies in the range the packs, the wrack and the beach read, so the layout stays what it was)
+      const inL = z >= LD.z - 8 && dCove[i] < 30, bL = 0.95 - dCove[i] * 0.06 + nz * 0.25, bF = 0.9 * nz + 0.12 + 0.8 * clamp((dSea[i] < 255 ? dSea[i] : 40) / 40, 0, 1);
+      b = inL && x < 60 ? bL : bF;
+      const out = (v) => v < 0.2 || v > 0.85;
+      if (inL && (x < 60) !== (x < 60 + (fbm(z * 0.27, 3.7, seed + 29) - 0.5) * 13) && out(bL) && out(bF)) b = x < 60 ? bF : bL;
+    }
     if (creek[i] >= 0) b = Math.min(b, -0.3 + 0.6 * (1 - creek[i]) + nz * 0.1);
     if (bar[i]) b = 0.6 + (fbm(x * 0.4, z * 0.4, seed + 19) > 0.5 ? 0.15 : 0);
     if (cave[i]) b = 0.3 + clamp(fbm(x * 0.5, z * 0.5, seed + 21), 0, 1) * 0.3;
@@ -630,7 +637,9 @@ function heights(L, K, frame, type, bergH) {
       const d = rd / Math.max(1, rock), t = smooth(clamp((d - 0.2) / 3.4, 0, 1));
       let top = 8 + 10 * fbm(vx * 0.05, vz * 0.05, seed + 41) + (fbm(vx * 0.15, vz * 0.15, seed + 43) - 0.5) * 7;
       if (ra < 90) top = Math.min(top, 3.4 + 2.8 * fbm(vx * 0.2, vz * 0.2, seed + 45));
-      y = top * t + (fbm(vx * 0.42, vz * 0.42, seed + 47) - 0.5) * 2.6 * Math.min(1, t * 2.5);
+      // (and crags along the crest, a few metres apart: with the long noises alone a headland's top ran in one smooth roll
+      // across a cine, a tarp over a wall)
+      y = top * t + (fbm(vx * 0.42, vz * 0.42, seed + 47) - 0.5) * 2.6 * Math.min(1, t * 2.5) + (fbm(vx * 0.27, vz * 0.27, seed + 49) - 0.5) * 4.2 * t * t;
       // (and a narrow rib of rock between two floors stays a ridge, never a spire: no steeper than its thickness allows)
       y = Math.min(Math.max(y, 0) + 0.3, Math.max(0.3, cap(vx, vz)), 1.0 + 1.3 * d);
     }
@@ -912,11 +921,13 @@ function dress5Coast(L, K, blk, res, seed) {
       let edge = false; for (const [dx, dz] of N4) if (K[(z + dz) * w + x + dx] === ROCK) edge = true;
       // (stones and dry stalks through the snow a little more often than one cell in twenty: the snow between the huts and
       // along the strand read as an empty sheet)
-      if (edge && q < 0.2) P({ t: 'stone', x: px, z: pz, r, s: 0.7 + s * 0.8 });
-      else if (q < 0.06) P({ t: 'stone', x: px, z: pz, r, s: 0.3 + s * 0.5 });
-      else if (q < 0.115) P({ t: 'tuft', x: px, z: pz, r, s: 0.5 + s * 0.55 });
-      else if (q < 0.122) P({ t: 'log', x: px, z: pz, r, s: 0.45 + s * 0.45 });
-      else if (q < 0.132) P({ t: 'drift', x: px, z: pz, r, s: 0.8 + s * 0.8 });
+      // (about one cell in five: at one in eight the coast still had a third of the Field's dressing)
+      if (edge && q < 0.24) P({ t: 'stone', x: px, z: pz, r, s: 0.7 + s * 0.8 });
+      else if (q < 0.075) P({ t: 'stone', x: px, z: pz, r, s: 0.3 + s * 0.5 });
+      // (no drift mounds: a mesh of snow on the snow never took the ground's own light, and read as a faceted paper oval;
+      // the ground's shader lays the drifts)
+      else if (q < 0.165) P({ t: 'tuft', x: px, z: pz, r, s: 0.5 + s * 0.55 });
+      else if (q < 0.175) P({ t: 'log', x: px, z: pz, r, s: 0.45 + s * 0.45 });
     } else if (K[i] === FLAT && L.bed[i] < BED_DRY && q < 0.04) P({ t: 'stone', x: px, z: pz, r, s: 0.22 + s * 0.32, wet: true });
   }
   // the Landing: by each hut its gear (firewood stacked at a side wall, a crate and a cask at the back, a bucket)
@@ -944,7 +955,12 @@ function dress5Coast(L, K, blk, res, seed) {
     }
   }
   // the Icemaw holes: broken plates of the shelf round their rims
-  for (const m of sp.mawHoles) for (let k = 0; k < 7; k++) { const a = rng.range(0, 6.28), d = rng.range(1.1, 1.8); P({ t: 'floe', x: m.x + Math.sin(a) * d, z: m.z + Math.cos(a) * d, r: rng.range(0, 6.28), s: rng.range(0.45, 0.85) }); }
+  // (never one through another)
+  const floes = [];
+  for (const m of sp.mawHoles) for (let k = 0; k < 7; k++) {
+    const a = rng.range(0, 6.28), d = rng.range(1.1, 1.8), x = m.x + Math.sin(a) * d, z = m.z + Math.cos(a) * d, r = rng.range(0, 6.28), s = rng.range(0.45, 0.85);
+    if (floes.every((f) => Math.hypot(f.x - x, f.z - z) > (f.s + s) * 0.62)) { floes.push({ x, z, s }); P({ t: 'floe', x, z, r, s }); }
+  }
   // the ebb caves: an overhang of the cliff over the pool's back half, icicles on its lip
   for (const c of sp.caves) P({ t: 'caveArch', x: c.x, z: c.z, r: 0, s: 1 });
 }
@@ -1198,15 +1214,14 @@ function dress5Far(L, K, blk, res, seed, o) {
     const i = z * w + x, q = rng.next(), px = x + rng.range(0.15, 0.85), pz = z + rng.range(0.15, 0.85), r = rng.range(0, 6.28), s = rng.next();
     if (blk[i] || res[i] || !L.cells[i]) continue;
     if (L.ice[i]) {
-      if (q < 0.022) P({ t: 'iceRubble', x: px, z: pz, r, s: 0.5 + s * 0.6 });
-      else if (q < 0.025 && clear(px, pz, 3)) P({ t: 'cairnPole', x: px, z: pz, r, s: 0.9 + s * 0.3 });
-      else if (q < 0.027 && clear(px, pz, 3)) P({ t: 'gear', x: px, z: pz, r, s: 0.8 + s * 0.3, k: s < 0.5 ? 'cask' : 'crate' });
-      // (a little snow blown onto the black ice in low wisps)
-      else if (q < 0.04) P({ t: 'drift', x: px, z: pz, r, s: 0.4 + s * 0.45 });
+      // (smaller and fewer than on the thick: strewn pale blocks read as litter on the dark ice)
+      if (q < 0.03) P({ t: 'iceRubble', x: px, z: pz, r, s: 0.4 + s * 0.5 });
+      else if (q < 0.033 && clear(px, pz, 3)) P({ t: 'cairnPole', x: px, z: pz, r, s: 0.9 + s * 0.3 });
+      else if (q < 0.035 && clear(px, pz, 3)) P({ t: 'gear', x: px, z: pz, r, s: 0.8 + s * 0.3, k: s < 0.5 ? 'cask' : 'crate' });
+      // (no drifts on the thin ice: a mound of snow there read as a white paper oval on the dark; its dusting is the ice's own)
     } else if (L.thick[i]) {
-      // (the thick ice: rubble, and the snow drifted into low mounds across the road and the pads)
-      if (q < 0.03) P({ t: 'iceRubble', x: px, z: pz, r, s: 0.4 + s * 0.4 });
-      else if (q < 0.075) P({ t: 'drift', x: px, z: pz, r, s: 0.7 + s * 0.9 });
+      // (the thick ice: rubble; its drifts are the ground's own, as on the land)
+      if (q < 0.055) P({ t: 'iceRubble', x: px, z: pz, r, s: 0.4 + s * 0.4 });
     }
   }
   // along the road: now and then a sledge left behind or a barrel held in the ice at its edge
@@ -1237,8 +1252,10 @@ function dress5Far(L, K, blk, res, seed, o) {
   }
   // the holes: broken plates crowding their rims (and the Icemaws' holes)
   // (floes adrift anywhere over the hole, not a ring at even steps round its rim: that read as a clock face)
-  for (const ho of sp.holes) for (let k = 0; k < 14; k++) { const a = rng.range(0, Math.PI * 2), d = ho.r * rng.range(0.35, 0.92); P({ t: 'floe', x: ho.x + Math.sin(a) * d, z: ho.z + Math.cos(a) * d, r: rng.range(0, 6.28), s: rng.range(0.55, 1.1) }); }
-  for (const m of sp.mawHoles) for (let k = 0; k < 6; k++) { const a = rng.range(0, 6.28), d = rng.range(1.0, 1.6); P({ t: 'floe', x: m.x + Math.sin(a) * d, z: m.z + Math.cos(a) * d, r: rng.range(0, 6.28), s: rng.range(0.4, 0.8) }); }
+  // (and never one through another: pancakes jostle, they do not overlap)
+  const floes = [], floe = (x, z, r, s) => { if (floes.every((f) => Math.hypot(f.x - x, f.z - z) > (f.s + s) * 0.62)) { floes.push({ x, z, s }); P({ t: 'floe', x, z, r, s }); } };
+  for (const ho of sp.holes) for (let k = 0; k < 14; k++) { const a = rng.range(0, Math.PI * 2), d = ho.r * rng.range(0.35, 0.92); floe(ho.x + Math.sin(a) * d, ho.z + Math.cos(a) * d, rng.range(0, 6.28), rng.range(0.55, 1.1)); }
+  for (const m of sp.mawHoles) for (let k = 0; k < 6; k++) { const a = rng.range(0, 6.28), d = rng.range(1.0, 1.6); floe(m.x + Math.sin(a) * d, m.z + Math.cos(a) * d, rng.range(0, 6.28), rng.range(0.4, 0.8)); }
 }
 // a cell within a lead's band (the hole's own water is drawn round it)
 const leadBand = (leads, x, z) => leads.some((l) => Math.abs(z + 0.5 - l.zc(x + 0.5)) <= l.hw(x + 0.5));

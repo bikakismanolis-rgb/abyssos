@@ -21,7 +21,7 @@ import { addLightPool, removeLightPool, cradlePoint } from './light.js';
 import { angleTo } from '../core/util.js';
 import { openDeepGate, FAR_BEACONS, farFire, openRootGate, witherWall, firstAutumn, growProp, zoneEmitters, setFar, setBeacon, townFires, townPresence, walkTo, stopWalk, vanish, release,
   act4Presence, isarnLantern, setLastLamp, openAnvilGate, meltPlug, forgeCold, bellowsDone, echoAt,
-  act5Presence, people5, scene5, npc5, spawnNpc5, light5, iceMemOf, ICE_WHO, LIGHTS5, touch, spawnBoss } from './world.js';
+  act5Presence, people5, scene5, npc5, spawnNpc5, light5, iceMemOf, ICE_WHO, LIGHTS5, touch, spawnBoss, checkpoint5 } from './world.js';
 
 // Act III's counters: the three verses of the Long Sorrow, the three thorn walls of the Heartwood
 const STORY_TEARS = ['planting', 'sorrow', 'breaking'];
@@ -1168,7 +1168,7 @@ on('hearth', (it, z) => {
     if (!G.hero.wps.includes('coast')) { G.hero.wps.push('coast'); emit('toast', t('hud.discovered')); }
     writeSave();
     act5Presence(z);
-    z.checkpoint = z.map.nearestFloor(it.x, it.z + 2.4, 3);
+    checkpoint5(z, 'hearth');
     glowBurst(it.x, 0.8, it.z, 0xffc070, 40, 3.5, 0.35, 1); ring(it.x, it.z, it.lightR, 0xffb060, 1); Audio.sfx('beaconIgnite', { vol: 0.55, pitch: 1.2 }); Audio.sting('lantern');
     later(0.8, () => emit('say', 'd.landing.1'));
     // the Saltborn come out to the fire, each from a house
@@ -1215,7 +1215,7 @@ function lightSea(z, it) {
   F['light_' + id] = true; F.lights5 ||= []; if (!F.lights5.includes(id)) F.lights5.push(id);
   writeSave();
   act5Presence(z);
-  z.checkpoint = z.map.nearestFloor(it.x, it.z, 3);
+  checkpoint5(z, id);
   glowBurst(s.x, top, s.z, 0xfff0d0, 50, 4, 0.4, 1.2); ring(it.x, it.z, it.lightR, 0xffe0b0, 1); shake(0.25);
   Audio.sfx('lightCatch', { x: s.x, z: s.z, vol: 1 }); Audio.sting('sealight'); Audio.mood({ bloom: 1 });
   emit('quest');
@@ -1319,7 +1319,7 @@ function towerWake(z) {
   const F = G.hero.flags;
   if (F.towerWake || z.waking || G.zone !== z || z.id !== 'coast') return;
   if (busy() || z.memory) { later(2, () => towerWake(z)); return; }
-  z.waking = true; F.towerWake = true; writeSave();
+  z.waking = true; F.towerWake = true; checkpoint5(z, 'rock'); writeSave();
   act5Presence(z);
   const B = z.L.boss, sk = z.L.spots.skerry, b = spawnBoss(z);
   let done = false;

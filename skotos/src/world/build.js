@@ -1370,7 +1370,10 @@ function groundMat(cfg, type) {
       // (the aurora's light on the ground: slow ribbons of green drifting over it, worked out at the vertices, a metre apart;
       // under the black aurora its dark curtains crossing it as slow bands)
       // (only on what faces the sky: worked out over x/z, the ribbons ran down a cliff's face as green stripes)
-      + (X5.aur ? '\n  vGAur = uAur * max(1.0 - uAurDark, uAurFront) > 0.02 ? (aurora(vGW.xz * 0.9 + vec2(13.0, -40.0), 0.7, 0.0) * ' + (X5.v5 ? '0.2 + uAurCol * uAur * max(1.0 - uAurDark, uAurFront) * 0.016' : '0.06') + ') * smoothstep(0.55, 0.9, normal.y) : vec3(0.0);\n  vGAurK = uAurDark > 0.02 ? auroraDark(vGW.xz * 0.9 + vec2(13.0, -40.0)) : 0.0;' : ''));
+      // (Act V: the sheet read at twice the scale, so the play camera's 25 m of snow holds a ribbon or two, not the gap
+      // between two; and a cast of the aurora's colour over all of it, stronger for the true aurora: at 0.016 the snow under
+      // the green sky stayed the grey-blue of any night)
+      + (X5.aur ? '\n  vGAur = uAur * max(1.0 - uAurDark, uAurFront) > 0.02 ? (aurora(vGW.xz * ' + (X5.v5 ? '1.8' : '0.9') + ' + vec2(13.0, -40.0), 0.7, 0.0) * ' + (X5.v5 ? '0.2 + uAurCol * uAur * uAur * max(1.0 - uAurDark, uAurFront) * 0.034' : '0.06') + ') * smoothstep(0.55, 0.9, normal.y) : vec3(0.0);\n  vGAurK = uAurDark > 0.02 ? auroraDark(vGW.xz * 0.9 + vec2(13.0, -40.0)) : 0.0;' : ''));
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
 uniform sampler2D tA; uniform sampler2D tB; uniform sampler2D tP; uniform sampler2D tAn; uniform sampler2D tBn; uniform sampler2D tPn;
 uniform vec3 uS; uniform vec3 uR; uniform float uNS;
@@ -1440,7 +1443,9 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
   // the flats' own marks: ripple bands along the bed's contours, darker wet patches, rock pools where the bed dips; the
   // shore's stone greyed (its weed read as a lawn from afar)
   gc = mix(vec3(dot(gc, vec3(0.3, 0.59, 0.11))) * vec3(0.94, 0.97, 1.03), gc, mix(1.0, 0.5, wB));
-  {
+  // (each mark only where it shows: the shore's on the shore, the snow's on the snow; a read nobody sees costs a phone
+  // its frame in the Shallows: perf5's coastLow)
+  if (wB > 0.002) {
     vec4 gR = texture2D(tNoise, vGW.xz * 0.045 + vec2(0.17, 0.83));
     float rip = 0.5 + 0.5 * sin(vBed * 46.0 + (gR.r - 0.5) * 9.0 + vGW.x * 0.7 * (gR.g - 0.5));
     float pool = smoothstep(0.62, 0.78, gR.b + (0.6 - clamp(vBed, -0.3, 1.0)) * 0.25) * step(vBed, 1.2);
@@ -1449,7 +1454,7 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
   }
   // wet sand: dark and glossy where the tide has been within the last 20 s (and under the water now); its edge wanders
   // inside the cells with the water's own (sea.js shoreN)
-  float gWet = smoothstep(-0.03, 0.06, mix(uWetLevel, uBayLevel, vBay) - vBed + shoreN(vGW.xz)) * (1.0 - wP * 0.6);
+  float gWet = vBed < 2.0 ? smoothstep(-0.03, 0.06, mix(uWetLevel, uBayLevel, vBay) - vBed + shoreN(vGW.xz)) * (1.0 - wP * 0.6) : 0.0;
   gc *= mix(vec3(1.0), vec3(0.46, 0.5, 0.54), gWet);` : '') + (X5.any ? `
   vec3 gV = normalize(cameraPosition - vGW);` : '') + (X5.wet ? `
   gEm += uMoonC * pow(max(dot(reflect(-gV, vec3(0.0, 1.0, 0.0)), uMoonD), 0.0), 18.0) * gWet * 0.05;` : '') + (X5.glint ? `
@@ -1460,13 +1465,13 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
   float gwb = cos(gPw.x * 0.045 + 0.6) * 0.099 + cos(gPw.x * 0.017 + 1.3) * 0.068;
   gPw.y += sin(gPw.x * 0.045 + 0.6) * 2.2 + sin(gPw.x * 0.017 + 1.3) * 4.0;
   float gsk = (1.0 - wB) * (1.0 - wP * 0.5);
-  {
+  if (gsk > 0.002) {
     vec4 gS = texture2D(tNoise, vec2(gPw.x * 0.016, gPw.y * 0.033) + 0.53);
     float sst = gS.b * 0.55 + gS.a * 0.25 + gS.r * 0.2;
     gc *= mix(vec3(1.0), mix(vec3(0.68, 0.75, 0.88), vec3(1.1), smoothstep(0.25, 0.75, sst)), gsk);
   }
   // the snow glitters: a few 4 cm cells, each with its own tilt, catch the moon or the lantern toward the eye
-  {
+  if (gsk > 0.002) {
     vec3 g3 = floor(vGW * 25.0);
     vec2 gq = g3.xz + g3.y * vec2(0.131, 0.217);
     float gs = sH(gq) * smoothstep(0.55, 0.85, normalize(vGN).y);
@@ -2829,20 +2834,26 @@ const PROP4 = {
   // a light pool's rim on the ground (radius 1)
   lightRing() {
     const mat = new THREE.MeshBasicMaterial({ map: ringTexture(), color: 0xffb060, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
-    // (on the snow of Act V, WIND.uSnow: a soft deep-amber glow falling off from 0.4 of the radius and a thin, faint,
-    // flickering rim; the ash's bright decal on white snow read as a selection circle)
+    // (on the snow of Act V, WIND.uSnow: a soft deep-amber glow falling off from 0.4 of the radius and a flickering rim at
+    // 0.9, where the ash's ring has its own; laid on in screen blending, so it gives what the ground underneath lacks: on
+    // white snow the ash's additive decal read as a selection circle, the brightest shape on screen, while over the dark
+    // wading water a decal faint enough for the snow lost the pool's edge: scenario shallowtele)
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uSnow = WIND.uSnow; sh.uniforms.uTime = WIND.uTime;
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uSnow; uniform float uTime;')
         .replace('#include <map_fragment>', `#include <map_fragment>
   if (uSnow > 0.5) {
     float rr = length(vMapUv - 0.5) * 2.0, fl = 0.85 + 0.15 * sin(uTime * 7.3 + rr * 9.0) * sin(uTime * 3.1);
-    diffuseColor = vec4(diffuse * vec3(1.0, 0.8, 0.58), opacity * (0.2 * (1.0 - smoothstep(0.38, 1.0, rr)) + 0.24 * fl * (1.0 - smoothstep(0.0, 0.03, abs(rr - 0.93)))));
+    float ra = opacity * (0.06 * (1.0 - smoothstep(0.38, 1.0, rr)) + 0.3 * fl * (1.0 - smoothstep(0.015, 0.07, abs(rr - 0.9))));
+    diffuseColor = vec4(diffuse * vec3(1.0, 0.8, 0.58) * ra, ra);
   }`);
     };
+    mat.blendEquation = THREE.AddEquation; mat.blendSrc = THREE.OneMinusDstColorFactor; mat.blendDst = THREE.OneFactor;
     mat.customProgramCacheKey = () => 'ring5';
     const m = new THREE.Mesh(drapable(new THREE.PlaneGeometry(2, 2, 16, 16).rotateX(-Math.PI / 2), 0.05), mat);
     m.renderOrder = 2;
+    // (the blending follows the zone: additive elsewhere, as it always was; a GL state, no recompile)
+    m.onBeforeRender = () => { mat.blending = WIND.uSnow.value > 0.5 ? THREE.CustomBlending : THREE.AdditiveBlending; };
     const g = new THREE.Group(); g.add(m);
     g.userData.setColor = (c) => m.material.color.set(c);
     g.userData.setOpacity = (a) => { m.material.opacity = a; };
