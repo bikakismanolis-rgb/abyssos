@@ -2909,12 +2909,18 @@ export function drapable(geo, lift) {
 export function drape(obj, L) {
   if (!L?.hgt || !obj) return;
   obj.updateWorldMatrix(true, true);
+  // (Act V: over open water no tide moves, L.sea, at the ice's own height: its surface stands at -0.08, the ice frays
+  // into those cells at ICE_Y; laid down into the pit, the hero's ring was cut off by the water along a straight row of
+  // its grid, right across a Breathing-hole's lip)
+  const S = L.sea, sw = L.w;
   obj.traverse((o) => {
     const D = o.geometry?.userData.drape; if (!D) return;
     const e = o.matrixWorld.elements, sy = e[5] || 1, P = o.geometry.attributes.position, A = P.array, xz = D.xz;
     for (let i = 0; i < P.count; i++) {
-      const x = xz[i * 2], z = xz[i * 2 + 1];
-      A[i * 3 + 1] = (groundY(L, e[0] * x + e[8] * z + e[12], e[2] * x + e[10] * z + e[14]) + D.lift - e[13]) / sy;
+      const x = xz[i * 2], z = xz[i * 2 + 1], wx = e[0] * x + e[8] * z + e[12], wz = e[2] * x + e[10] * z + e[14];
+      let y = groundY(L, wx, wz);
+      if (S && S[clamp(Math.floor(wz), 0, L.h - 1) * sw + clamp(Math.floor(wx), 0, sw - 1)]) y = Math.max(y, -0.025);
+      A[i * 3 + 1] = (y + D.lift - e[13]) / sy;
     }
     P.needsUpdate = true;
     o.geometry.computeBoundingSphere();
