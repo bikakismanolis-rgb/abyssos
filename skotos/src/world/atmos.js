@@ -25,16 +25,17 @@ export const ATMOS = {
   forgeHot: { fog: 0x2a1206, density: 0.029, sky: 0x7a3016, ground: 0x24100a, hemi: 0.55, moon: 0xff8a40, moonI: 0.28, exposure: 1.34, heroI: 26, heroRange: 11, zoom: 1, heroColor: 0xffb070 },
   forgeCold: { fog: 0x1a1a1c, density: 0.03, sky: 0x40404a, ground: 0x121214, hemi: 0.45, moon: 0x9aa0b0, moonI: 0.15, exposure: 1.28, heroI: 26, heroRange: 11, zoom: 1, heroColor: 0xffc890 },
   // Act V: the Frozen Coast under the green aurora (its light drifting over the snow); the arrival with the horizon open;
-  // the black aurora after the Freeze; the true aurora once the sea is lit. (The hero's light is weaker and warmer than on
-  // the ash: snow gives back four times what ash does, and at the ash's strength her pool burnt to a white disc)
-  coast: { fog: 0x0b1416, density: 0.02, sky: 0x4a6a78, ground: 0x1a2024, hemi: 0.85, moon: 0xb8d8c8, moonI: 1.0, exposure: 1.2, heroI: 15, heroRange: 11, zoom: 1.05, heroColor: 0xffcf9c, aur: 0.8, aurDark: 0, drift: 0.55 },
+  // the black aurora after the Freeze; the true aurora once the sea is lit. (The hero's light is weaker than on the ash:
+  // snow gives back four times what ash does, and at the ash's strength her pool burnt to a white disc. And a lantern's warm
+  // white, not amber: on the cold ice and the wet flats an amber pool read as mud)
+  coast: { fog: 0x0b1416, density: 0.02, sky: 0x4a6a78, ground: 0x1a2024, hemi: 0.85, moon: 0xb8d8c8, moonI: 1.0, exposure: 1.2, heroI: 15, heroRange: 11, zoom: 1.05, heroColor: 0xffe0c0, aur: 0.8, aurDark: 0, drift: 0.55 },
   // (after the Freeze the night itself is another: the sky gone violet-black, the moon cold and weak, the fog closing in
   // toward black; the hero's warm light, the lit hearth and the sea-lights are all the warmth there is)
-  coastFrozen: { fog: 0x06070e, density: 0.027, sky: 0x2c2e4c, ground: 0x0e0e18, hemi: 0.5, moon: 0x8c96d8, moonI: 0.6, exposure: 1.08, heroI: 18, heroRange: 11.5, zoom: 1.05, heroColor: 0xffc48a, aur: 0.35, aurDark: 1, drift: 0 },
+  coastFrozen: { fog: 0x06070e, density: 0.027, sky: 0x2c2e4c, ground: 0x0e0e18, hemi: 0.5, moon: 0x8c96d8, moonI: 0.6, exposure: 1.08, heroI: 18, heroRange: 11.5, zoom: 1.05, heroColor: 0xffd4a8, aur: 0.35, aurDark: 1, drift: 0 },
   // the Farthest Light under the black aurora; the Skotos fight (closer), its Night; the true aurora after the naming
-  farlight: { fog: 0x070a10, density: 0.026, sky: 0x2a3448, ground: 0x101418, hemi: 0.6, moon: 0x8a9ac8, moonI: 0.7, exposure: 1.3, heroI: 17, heroRange: 10, zoom: 1, heroColor: 0xffcf9c, aur: 0.3, aurDark: 1, drift: 0 },
+  farlight: { fog: 0x070a10, density: 0.026, sky: 0x2a3448, ground: 0x101418, hemi: 0.6, moon: 0x8a9ac8, moonI: 0.7, exposure: 1.3, heroI: 17, heroRange: 10, zoom: 1, heroColor: 0xffe0c0, aur: 0.3, aurDark: 1, drift: 0 },
   farlightNight: { fog: 0x020304, density: 0.05, sky: 0x1a2030, ground: 0x08090c, hemi: 0.2, moon: 0x6a7aa8, moonI: 0.1, exposure: 1.3, heroI: 20, heroRange: 10, zoom: 1.25, heroColor: 0xffcf9c, aur: 0, aurDark: 1, drift: 0 },
-  farlightAurora: { fog: 0x0a1612, density: 0.018, sky: 0x5a8a78, ground: 0x121a18, hemi: 0.95, moon: 0xb8d8c8, moonI: 1.0, exposure: 1.25, heroI: 15, heroRange: 11, zoom: 1, heroColor: 0xffcf9c, aur: 1, aurDark: 0, drift: 0.6, aurCol: [0.32, 1.0, 0.62] }
+  farlightAurora: { fog: 0x0a1414, density: 0.018, sky: 0x5a7c88, ground: 0x121a18, hemi: 0.95, moon: 0xb8d0d8, moonI: 1.0, exposure: 1.25, heroI: 15, heroRange: 11, zoom: 1, heroColor: 0xffe0c0, aur: 1, aurDark: 0, drift: 0.3, aurCol: [0.32, 1.0, 0.62] }
 };
 ATMOS.coastCine = { ...ATMOS.coast, density: 0.008 };
 // once the sea is lit: the true aurora, greener and whiter, its light on the snow (the hemisphere green)

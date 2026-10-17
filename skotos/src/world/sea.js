@@ -163,7 +163,10 @@ float auroraDark(vec2 p) {
 }
 // a still noise (metres, about +-0.11) the waterline and the wading step are moved by, so neither traces the cells; the
 // ground's wet sand reads the same (build.js)
-float shoreN(vec2 P) { vec4 n = texture2D(tNoise, P * 0.11 + vec2(0.37, 0.61)); return (n.r - 0.5) * 0.17 + (n.g - 0.5) * 0.07; }`;
+float shoreN(vec2 P) { vec4 n = texture2D(tNoise, P * 0.11 + vec2(0.37, 0.61)); return (n.r - 0.5) * 0.17 + (n.g - 0.5) * 0.07; }
+// an ice window's round hole (d from its centre c, the corner its 2 x 2 cells share): under 1 inside; its outline wanders
+// with the angle, each window its own (the ground cuts it, build.js G_WIN; the pane fills it)
+float winR(vec2 d, vec2 c) { float a = atan(d.y, d.x); return length(d * vec2(1.0, 1.12)) / (0.8 + 0.08 * sin(a * 3.0 + c.x * 1.7) + 0.05 * sin(a * 5.0 + c.y) + 0.03 * sin(a * 9.0 + c.x + c.y)); }`;
 // (for groundMat's G_GLINT, G_WET and G_AUR: the same uniforms and functions)
 export const SEA_GLSL = () => COMMON;
 export const SEA_LIT = LIT;
@@ -209,9 +212,9 @@ function seaMat(o = {}) {
     Object.assign(sh.uniforms, u);
     sh.defines = Object.assign(sh.defines || {}, hi ? { SEA_HI: '' } : {}, R.quality >= 2 ? { SEA_Q2: '' } : {}, o.low ? { SEA_LOW: '' } : {}, o.far ? { SEA_FAR: '' } : {});
     sh.vertexShader = sh.vertexShader.replace('#include <common>', `#include <common>
-attribute float aBed; attribute float aHold; attribute float aLead; attribute float aShore; attribute float aFrz; attribute float aBay; attribute float aLand;
+attribute float aBed; attribute float aHold; attribute float aLead; attribute float aShore; attribute float aFrz; attribute float aBay; attribute float aLand; attribute float aGd;
 uniform float uLevel; uniform float uBayLevel; uniform float uFrzT;
-varying vec3 vWP; varying float vDep; varying float vLead; varying float vShore; varying float vSw; varying float vHold; varying float vFrz; varying float vLand; varying float vCr;
+varying vec3 vWP; varying float vDep; varying float vLead; varying float vShore; varying float vSw; varying float vHold; varying float vFrz; varying float vLand; varying float vCr; varying float vGd;
 ${COMMON}
 #if defined(SEA_HI) && !defined(SEA_FAR)
 varying vec3 vAur; varying float vAurK;
@@ -239,8 +242,10 @@ ${FREEZE}`)
 #else
   // the surface stands clamp(depth) over the flat floor: a dry corner sits under the ground, so the ground cuts a true
   // shoreline that moves with the tide; under and beside the ice (and the jetty) it is held a hand under the ice
+  // (no swell where it is a film over the flats: there the swell lifted the surface through the ground and back, and a
+  // flat whose bed stood at the level drew moving contour rings of water over the dry sand)
   float lift = clamp(dep, -0.05, 0.3);
-  float y = lift + sw * mix(0.06, 0.18, smoothstep(0.2, 1.6, dep)) * smoothstep(-0.05, 0.12, lift);
+  float y = lift + sw * mix(0.06, 0.18, smoothstep(0.2, 1.6, dep)) * smoothstep(0.03, 0.15, lift);
   y = mix(y, -0.08 + sw * 0.02, aHold);
 #endif
 #ifndef SEA_FAR
@@ -258,7 +263,7 @@ ${FREEZE}`)
 #endif
   y = mix(y, ${(ICE_Y - 0.005).toFixed(3)}, frz.y);
   transformed.y = y;
-  vWP = vec3(wp0.x, y, wp0.z); vDep = dep; vLead = aLead; vShore = aShore; vSw = sw; vHold = aHold; vFrz = aFrz; vLand = aLand;
+  vWP = vec3(wp0.x, y, wp0.z); vDep = dep; vLead = aLead; vShore = aShore; vSw = sw; vHold = aHold; vFrz = aFrz; vLand = aLand; vGd = aGd;
 #if defined(SEA_HI) && !defined(SEA_FAR)
   // the aurora in the water, worked out at the vertices (a metre apart: its folds and rays are metres wide); the ripple
   // breaks it into streaks in the fragment. Under the black aurora: its dark curtains (vAurK), blotting the sky's sheen
@@ -275,7 +280,7 @@ ${FREEZE}`)
 ${COMMON}
 uniform float uFrzT; uniform vec4 uWake; uniform vec4 uLights[2];
 uniform float uAmbK; uniform vec3 uSkyC; uniform vec3 uMoonD; uniform vec3 uMoonC; uniform vec3 uHeroP; uniform vec3 uHeroC; uniform float uHeroR;
-varying vec3 vWP; varying float vDep; varying float vLead; varying float vShore; varying float vSw; varying float vHold; varying float vFrz; varying float vLand; varying float vCr;
+varying vec3 vWP; varying float vDep; varying float vLead; varying float vShore; varying float vSw; varying float vHold; varying float vFrz; varying float vLand; varying float vCr; varying float vGd;
 #if defined(SEA_HI) && !defined(SEA_FAR)
 varying vec3 vAur; varying float vAurK;
 #endif
@@ -289,6 +294,10 @@ ${FREEZE}`)
   // noise moves the waterline, and the step a little, inside the cells, so neither traces the grid
   float sn = shoreN(P), dw = dep + sn;
   float deep = smoothstep(0.37, 0.43, dep + sn * 0.4);
+#ifndef SEA_LOW
+  // (over a drop, the ground metres down, the water is the open sea's whatever its bed says)
+  deep = max(deep, smoothstep(0.25, 0.9, vGd));
+#endif
   vec4 n1 = texture2D(tNoise, P * 0.085 + vec2(t * 0.011, t * 0.007));
 #ifdef SEA_HI
   vec4 n2 = texture2D(tNoise, P * 0.21 - vec2(t * 0.009, -t * 0.016));
@@ -300,18 +309,22 @@ ${FREEZE}`)
   // the waterline drawn in from the cells' bands by the slow ripple read, metres at a time and creeping as it drifts
   // (where the flats shelve gently, as the Landing's do in straight bands, it ran ruled along a band's edge): what it
   // uncovers is the wet sand under a hand of water, still walkable; the closed step is left where it is
+  // (by the broad reads, metres across: the fine one cut the shallows into worms and lava-lamp blobs)
 #ifndef SEA_LOW
-  dw -= smoothstep(0.32, 0.72, n1.b * 0.7 + n2.r * 0.3) * 0.2 * (1.0 - deep);
+  dw -= smoothstep(0.35, 0.7, n1.r * 0.6 + n1.g * 0.4) * 0.13 * (1.0 - deep);
 #endif
   // two normals: the ripple's for the glints, a calmer one for what the water mirrors (the sky is far: a fine ripple
   // would scatter it into noise)
-  vec3 N = normalize(vec3(g.x * mix(0.12, 0.3, deep), 1.0, g.y * mix(0.12, 0.3, deep)));
-  vec3 Nc = normalize(vec3((n1.r - 0.5) * 0.08, 1.0, (n1.g - 0.5) * 0.08));
+  // (and the swell's own slope in both, so open water heaves as a sheet: thin ice beside it lies still)
+  vec2 swg = (cos(P.x * 0.21 + P.y * 0.13 + t * 1.1) * vec2(0.21, 0.13) + cos(-P.x * 0.09 + P.y * 0.27 + t * 0.83) * vec2(-0.09, 0.27)) * 0.5 * 0.18 * 2.5 * deep;
+  vec3 N = normalize(vec3(g.x * mix(0.12, 0.3, deep) - swg.x, 1.0, g.y * mix(0.12, 0.3, deep) - swg.y));
+  vec3 Nc = normalize(vec3((n1.r - 0.5) * 0.08 - swg.x, 1.0, (n1.g - 0.5) * 0.08 - swg.y));
   float NdV = clamp(dot(Nc, V), 0.0, 1.0), F = 0.02 + 0.98 * pow(1.0 - NdV, 5.0);
   vec3 Rf = reflect(-V, N), Rc = reflect(-V, Nc);
   // see-through grey-green where she can wade; a night teal where it is closed (never black: closed water must read as
   // water at a glance, and open water by its motion); the leads' open sea darker still
-  vec3 shal = vec3(0.05, 0.072, 0.075), dcol = vec3(0.009, 0.026, 0.04);
+  // (the closed water a northern grey-green teal, not a tropical cyan: its sky sheen half greyed below)
+  vec3 shal = vec3(0.05, 0.068, 0.07), dcol = vec3(0.011, 0.024, 0.032);
 #ifdef SEA_LOW
   dcol = vec3(0.005, 0.014, 0.024);
 #endif
@@ -326,7 +339,9 @@ ${FREEZE}`)
   sheen *= 1.0 - 0.85 * vAurK;
   col += vec3(0.05, 0.02, 0.09) * vAurK * smoothstep(0.2, 0.5, vAurK) * (1.0 - smoothstep(0.5, 0.9, vAurK)) * 0.25 * deep;
 #endif
-  col += uSkyC * sheen;
+  col += mix(uSkyC, vec3(dot(uSkyC, vec3(0.3, 0.45, 0.25))), 0.35) * sheen;
+  // (under the black aurora the far water still gives back the pale haze low over the horizon: the sea reads to its edge)
+  col += vec3(0.007, 0.009, 0.014) * uAurDark * F * 1.4;
 #ifdef SEA_LOW
   // a lead: black water with a cold sheen; brash plates crowding its edges (a cell pattern of floating ice, dark water in
   // the gaps, bobbing), grease ice as a grey band right at the ice's edge
@@ -365,18 +380,23 @@ ${FREEZE}`)
   // (the phones too: with the ripple's own reads in its place the aurora lay on the water in mould-like blots, and a line
   // pattern read as corrugated sheet)
   vec2 vd = normalize(V.xz + vec2(0.0001, 0.0)), vp = vec2(-vd.y, vd.x);
-  float stk = texture2D(tNoise, vec2(dot(P, vp) * 0.34, dot(P, vd) * 0.045) + vec2(t * 0.004, t * 0.021) + g * 0.03).b;
-  col += vAur * (0.35 + 1.3 * smoothstep(0.35, 0.75, stk)) * (0.75 + 0.5 * n1.r) * (0.1 + 0.65 * F) * mix(0.3, 1.0, deep);
+  // (long and soft: drawn out toward the eye over metres; short, the strokes stood in rows over the water like a comb)
+  float stk = texture2D(tNoise, vec2(dot(P, vp) * 0.2, dot(P, vd) * 0.012) + vec2(t * 0.004, t * 0.008) + g * 0.02).b;
+  col += vAur * (0.55 + 0.9 * smoothstep(0.3, 0.8, stk)) * (0.8 + 0.4 * n1.r) * (0.1 + 0.65 * F) * mix(0.3, 1.0, deep);
 #endif
   // light paths: the long broken streaks a lit sea-light lays across the water toward the eye
-  // (glints off the small ripple, so the path breaks into sparks, over a faint glow off the swell)
+  // (glints off the small ripple, so the path breaks into sparks, over a faint glow off the swell; the sparks fine and
+  // gathered where the ripple's broad read is high: under a tower's fire they lay round her as a field of white confetti)
   vec3 Ng = normalize(vec3((n2.a - 0.5) * 0.22 + g.x * 0.05, 1.0, (n2.b - 0.5) * 0.22 + g.y * 0.05)), Rg = reflect(-V, Ng);
   for (int i = 0; i < 2; i++) {
     vec4 Lp = uLights[i];
     if (Lp.w <= 0.0) continue;
     vec3 ld = Lp.xyz - vWP; float dl = length(ld); ld /= dl;
-    float s = pow(max(dot(Rg, ld), 0.0), 160.0) * 2.2 + pow(max(dot(Rc, ld), 0.0), 24.0) * 0.06;
-    col += vec3(1.0, 0.82, 0.55) * s * Lp.w * deep / (1.0 + dl * 0.04);
+    // (and its fire on the water round the tower's foot, so lighting it changes the play frame: a broad warm path, its sparks,
+    // and a glow on the water within a dozen metres)
+    float s = pow(max(dot(Rg, ld), 0.0), 220.0) * 2.0 * smoothstep(0.34, 0.64, n1.r) + pow(max(dot(Rc, ld), 0.0), 16.0) * 0.2;
+    vec2 lq = P - Lp.xz; float pool = exp(-dot(lq, lq) * 0.012) * (0.6 + 0.4 * n1.g);
+    col += vec3(1.0, 0.72, 0.42) * (s * deep / (1.0 + dl * 0.04) + pool * 0.05 * mix(0.6, 1.0, deep)) * Lp.w;
   }
 #endif
   float plateK = 0.0;
@@ -393,17 +413,21 @@ ${FREEZE}`)
       vec2 bv = vorT(bp);
       float cellK = bv.y, bedge = bv.x;
       float near = (1.0 - smoothstep(0.25, 1.0, sd0 + (cellK - 0.5) * 0.9 + (n1.a - 0.5) * 0.5)) * smoothstep(0.4, 0.8, sl0);
-      plateK = near * smoothstep(0.05, 0.12, bedge) * step(0.45, cellK) * (0.55 + 0.45 * cellK);
-      // (grey slush plates, half sunk: white, they read as broken tiles)
-      vec3 pc = vec3(0.1, 0.115, 0.13) * (0.75 + 0.45 * cellK) * amb + uSkyC * (0.25 + 0.2 * cellK);
-      col = mix(col, pc, plateK * 0.85);
+      plateK = near * smoothstep(0.05, 0.12, bedge) * step(0.6, cellK) * (0.35 + 0.45 * cellK) * (1.0 - smoothstep(0.3, 1.2, vGd));
+      // (grey slush plates, half sunk, near the water's own tone: white, they read as broken tiles; over a drop, as grey
+      // blobs in a black strip)
+      vec3 pc = mix(col, vec3(0.08, 0.095, 0.105) * amb + uSkyC * 0.3, 0.6 + 0.2 * cellK);
+      col = mix(col, pc, plateK * 0.8);
     }
   }
 #endif
   // foam: where it meets the shore, lapping in moving lines; churned in the Walking Tower's wake
-  float shore = 1.0 - smoothstep(0.01, 0.05, dw);
-  float lap = smoothstep(0.7, 0.92, sin(dw * 90.0 - t * 2.2 + n1.r * 5.0) * 0.5 + 0.5) * (1.0 - smoothstep(0.03, 0.14, dw)) * smoothstep(0.35, 0.6, n1.a + n1.r * 0.3);
-  float foam = max(shore * smoothstep(0.45, 0.8, n1.a + n1.g * 0.35) * 0.8, lap * 0.45) * smoothstep(0.004, 0.014, dw);
+  // (a soft band a hand to a few hands deep, the half metre or so in from the waterline on the flats, broken into lengths that
+  // come and go as the water laps: the lines of a lapping sine and a foam isoline drew the tide as a map's contours)
+  float lapK = 0.75 + 0.25 * sin(t * 0.9 + n1.r * 6.0 + P.x * 0.13);
+  float foam = smoothstep(0.0, 0.025, dw) * (1.0 - smoothstep(0.025 * lapK, 0.075 * lapK, dw)) * smoothstep(0.5, 0.78, n1.r * 0.5 + n1.g * 0.3 + n2.b * 0.2 + sin(t * 0.5 + P.x * 0.23 - P.y * 0.17) * 0.12) * 0.5;
+  // (and a few sparkles on the shallows, here and gone)
+  col += skyG * 4.0 * step(0.993, sH(floor(P * 7.0) + floor(t * 2.0 + n1.g * 3.0))) * (1.0 - deep) * smoothstep(0.02, 0.1, dw);
 #ifndef SEA_LOW
   // and wherever it meets a steep shore at any depth (a rock, an islet, the bay's rim, the cliff's foot): a broken line of
   // foam riding the swell (vLand: the share of land at the corners, 0.5 along the shore's edge)
@@ -423,14 +447,21 @@ ${FREEZE}`)
   // rock, the shore itself shows where the water closes, and a line there would only trace the cells' steps)
   float fw = fwidth(dep) * 1.5 + 0.004, slope = fwidth(dep) / max(length(fwidth(P)), 1e-4);
   // (broken into lengths: whole, it ruled the Landing's long straight step)
-  float edge = (1.0 - smoothstep(fw * 0.5, fw * 1.6, abs(dep + sn * 0.4 - 0.4))) * (0.75 + 0.25 * sin(t * 1.7 + P.x * 0.7 + P.y * 0.5)) * (1.0 - smoothstep(0.9, 1.8, slope)) * smoothstep(0.3, 0.6, n1.a + (n1.r - 0.5) * 0.4);
+  // (and not where the step lies at the shore itself, the high flats against the low: there the shore shows it, and the
+  // line along it read as a dashed map border; in long lengths, not dashes)
+  float edge = (1.0 - smoothstep(fw * 0.5, fw * 1.6, abs(dep + sn * 0.4 - 0.4))) * (0.75 + 0.25 * sin(t * 1.7 + P.x * 0.7 + P.y * 0.5)) * (1.0 - smoothstep(0.35, 0.8, slope)) * smoothstep(0.35, 0.6, n1.g + (n1.r - 0.5) * 0.4);
   col = mix(col, vec3(0.5, 0.62, 0.68) * uAmbK, edge * 0.45);
   float a = mix(mix(0.32, 0.62, smoothstep(0.0, 0.42, dw)), 0.95, deep);
   // (where the bed drops away steeply, off a rock, an islet or the bay's rim, the water is closed right up to the shore:
-  // no see-through strip over the drop's dark face to trace the cells' steps)
-  a = max(a, smoothstep(1.0, 2.2, slope) * 0.95);
-  a = max(a, edge * 0.5) * smoothstep(0.006, 0.045, dw);
-  a = max(a, max(foam * 0.7, plateK * 0.95));
+  // no see-through strip over the drop's dark face to trace the cells' steps; and wherever the ground under it lies a
+  // fifth of a metre down or more)
+  a = max(a, max(smoothstep(1.0, 2.2, slope), smoothstep(0.12, 0.5, vGd)) * 0.95);
+  // (its edge soft over a hand of depth, and none where it is a film: at a level that stood at a flat's bed exactly the
+  // water drew contour rings)
+  float film = smoothstep(0.0, 0.025, dep + 0.03 * smoothstep(0.1, 0.5, vGd));
+  a = max(a, edge * 0.5) * smoothstep(0.0, 0.06, dw) * film;
+  // (the foam and the plates too only where there is water: on a flat at the level they ringed the dry sand)
+  a = max(a, max(foam * 0.7, plateK * 0.95) * film);
 #ifndef SEA_FAR
   // frozen: white rime in a frost-crystal pattern; the front glitters as it races out
   vec3 frz = freezeIf(P, vLead, vShore);
@@ -479,6 +510,21 @@ export function cornerBeds(L) {
   }
   return out;
 }
+// a tidal flat the hero walks on (no ice, deck or window, never the always-open water): the bay's sand, the wading flats
+export const flatCell = (L, i) => !!(L.bed && L.cells[i] && !L.low?.[i] && !L.sea?.[i] && L.bed[i] > -0.45 && L.bed[i] < BED_DRY && !L.thick?.[i] && !L.window?.[i] && !L.deck?.[i] && !L.ice?.[i]);
+// the bed at a corner where thin ice meets tidal flats and nothing else: the flats' (null elsewhere). With the ice's deep
+// bed averaged in, the water stood a hand over the sand along the ice's edge and the ice frayed back off it: a dark plank
+// ruled along the cells' line (Skerry Bay's ice against its sand, the Graveyard's ice against its shore)
+export function iceFlatBed(L, vx, vz) {
+  if (!L.bed || !L.ice) return null;
+  let s = 0, nf = 0, ni = 0;
+  for (const [dx, dz] of CORNER) {
+    const x = vx + dx, z = vz + dz; if (x < 0 || z < 0 || x >= L.w || z >= L.h) return null;
+    const i = z * L.w + x;
+    if (L.ice[i]) ni++; else if (flatCell(L, i)) { s += L.bed[i]; nf++; } else return null;
+  }
+  return ni && nf ? s / nf : null;
+}
 // Skerry Bay's share of each corner's cells (0-1, (w+1)(h+1); null off the coast): the water and the ground over the bay
 // read uBayLevel instead of uLevel (cached on L)
 export function bayCorners(L) {
@@ -504,16 +550,18 @@ export function shoreJit(L) {
   if (L.jit5) return L.jit5;
   const { w, h } = L, W = w + 1, out = new Float32Array(W * (h + 1) * 2), H = L.hgt, seed = L.seed || 1;
   // a cell's class: 0 floor (dry land, thick ice, a footprint), 1 a high tidal flat, 5 a low one, 2 the pit (open water,
-  // thin ice, a hole), 3 rock; 4 a window or the jetty (its corners stay)
+  // a hole), 6 thin ice (a pit too, against the land; against open water its own edge), 3 rock; 4 a window or the jetty
+  // (its corners stay)
   const cls = new Uint8Array(w * h);
   for (let i = 0; i < w * h; i++) {
     const x = i % w, z = (i - x) / w, k = z * W + x;
     const lo = Math.min(H[k], H[k + 1], H[k + W], H[k + W + 1]), hi = Math.max(H[k], H[k + 1], H[k + W], H[k + W + 1]);
-    cls[i] = L.window[i] || L.deck?.[i] ? 4 : L.ice[i] || L.low[i] || L.sea?.[i] || (!L.cells[i] && lo < -0.5) ? 2 : !L.cells[i] && hi > 0.25 ? 3
+    cls[i] = L.window[i] || L.deck?.[i] ? 4 : L.ice[i] ? 6 : L.low[i] || L.sea?.[i] || (!L.cells[i] && lo < -0.5) ? 2 : !L.cells[i] && hi > 0.25 ? 3
       : L.bed && L.bed[i] < BED_DRY && L.cells[i] && !L.thick[i] ? (L.bed[i] < 0.42 ? 5 : 1) : 0;
   }
   const C = (x, z) => cls[clamp(z, 0, h - 1) * w + clamp(x, 0, w - 1)];
-  const preds = [(c) => c === 2, (c) => c === 3, (c) => c === 1 || c === 5, (c) => c === 5];
+  // (thin ice against open water moves too: as one pit they kept the cells' ruled lines and right angles, frilled only)
+  const preds = [(c) => c === 2 || c === 6, (c) => c === 3, (c) => c === 1 || c === 5, (c) => c === 5, (c) => c === 6];
   const edgeC = new Uint8Array(W * (h + 1)), runs = [];
   for (let vz = 2; vz < h - 1; vz++) for (let vx = 2; vx < w - 1; vx++) {
     const c = CORNER.map(([dx, dz]) => C(vx + dx, vz + dz));
@@ -533,9 +581,18 @@ export function shoreJit(L) {
     out[k0 * 2] = clamp(ox, -0.4, 0.4); out[k0 * 2 + 1] = clamp(oz, -0.4, 0.4);
     // (a straight run of the tide's own shore, flats against the land or low flats against high, both walkable: listed to
     // wander further, below)
-    if (n === 2 && (f === preds[2] || f === preds[3]) && (t[0] === t[1] || t[0] === t[2])) {
+    // (and thin ice against a tidal flat, both walkable: the bay's ice ran ruled across the Walking Tower's arena)
+    // (and thin ice against any ground she can stand on, thick ice or dry land: the Ice Road's edge ran ruled down the road)
+    const thinRun = f === preds[0] && CORNER.every(([dx, dz], j) => { const i = clamp(vz + dz, 0, h - 1) * w + clamp(vx + dx, 0, w - 1); return t[j] ? !!L.ice[i] : flatCell(L, i) || (!!L.cells[i] && cls[i] === 0); });
+    // (a pit's own straight edge, an islet's or a shelf's over the water, and the rock's foot wander too, but no further
+    // than a lone corner may: there the cells' line is where she can stand. Each corner on its own, such a run stayed
+    // ruled, only roughened: a rock rib's snowed face ran across the Landing as one straight slab)
+    if (n === 2 && (t[0] === t[1] || t[0] === t[2])) {
       const ax = t[0] === t[1] ? 1 : 0, sl = fbm(vx * 0.09 + 3, vz * 0.09 - 5, seed + 79, 2) - 0.5, qk = ax ? nz : nx;
-      runs.push([k0, ax, sl * 3.4 + qk * 1.1, f === preds[2] ? 0.8 : 0.55]);
+      // (those held to 0.4 m wander on the quicker read: the slow one, held, only shifted a short islet's edge, still ruled)
+      const held = (f === preds[0] && !thinRun) || f === preds[1];
+      // (the quick read leads: led by the slow one, a run of ten metres sat at its cap all along, shifted but as ruled)
+      runs.push([k0, ax, held ? sl * 1.2 + qk * 1.3 : sl * 1.3 + qk * 2.0, f === preds[3] || f === preds[4] ? 0.55 : held ? 0.4 : 0.8]);
     }
   }
   // the tide's long straight shores (the Landing's bands, the flats against the strand) wander up to 0.8 m off the cells'
@@ -603,11 +660,23 @@ export function buildSea(L, group, quality = R.quality) {
   // (the water's bed at a corner of level land: a hand over its wettest cell's, not the land's own averaged in. With the
   // land's (BED_DRY) in the mean the surface sank under the ground most of a cell out from the shore, so the water's edge
   // ran along the next row of corners, the cells' line a metre off the land, a pale strip of nothing between)
+  // (a rock cell whose corner the sea's bed has pulled under the water, gen5 heights: the water lies over it too, flat at
+  // the sea's level, the rock standing out of it; without it the sunk rock showed as black pits with lit rims all along
+  // the coast's rock, the bay's north rim most of all)
+  const rockSea = (i) => { if (!L.bed || !L.hgt || L.cells[i] || L.low?.[i] || L.sea?.[i] || iceLike(i) || L.bed[i] < BED_DRY) return false; const x = i % w, z = (i - x) / w; return [0, 1, W, W + 1].some((d) => L.hgt[z * W + x + d] < -0.2); };
   const shoreBed = (vx, vz, key) => {
+    // (a corner the ground drops under the water at: the sea's own bed there, not the rock's or the land's averaged in)
+    if (L.bed && (L.hgt?.[key] ?? 0) < -0.2) {
+      let m = 99, dry = false;
+      for (const [dx, dz] of CORNER) { const x = vx + dx, z = vz + dz; if (x < 0 || z < 0 || x >= w || z >= h) continue; const i = z * w + x; if (L.bed[i] < BED_DRY && !iceLike(i)) m = Math.min(m, L.bed[i]); else if (!iceLike(i)) dry = true; }
+      if (dry) return m < 99 ? Math.min(m, -0.6) : -0.6;
+    }
     if (!L.bed || vb[key] < 2 || Math.abs(L.hgt?.[key] ?? 0) > 0.3) return vb[key];
+    // (and level land against closed water, a drop: the water meets it there too, a little under its edge; with the land's
+    // bed in, it stopped a hand off the drop and the drop's face showed as a black strip along the Strand)
     let m = -99;
-    for (const [dx, dz] of CORNER) { const x = vx + dx, z = vz + dz; if (x >= 0 && z >= 0 && x < w && z < h && L.cells[z * w + x] && L.bed[z * w + x] < BED_DRY && !iceLike(z * w + x)) m = Math.max(m, L.bed[z * w + x]); }
-    return m > -99 ? m + 0.3 : vb[key];
+    for (const [dx, dz] of CORNER) { const x = vx + dx, z = vz + dz; if (x >= 0 && z >= 0 && x < w && z < h && L.bed[z * w + x] < BED_DRY && !iceLike(z * w + x)) m = Math.max(m, L.bed[z * w + x] + (L.cells[z * w + x] ? 0.3 : 0.45)); }
+    return m > -99 ? m : vb[key];
   };
   const out = new THREE.Group(); out.name = 'sea';
   // (the open water's cells, for the Freeze's spray: sprayTick)
@@ -616,7 +685,7 @@ export function buildSea(L, group, quality = R.quality) {
   L.open5 = Float32Array.from(open);
   const hook = () => { SEA.uMap.value.set(w, h); SEA.seaL = L; };
   for (let cz0 = 0; cz0 < h; cz0 += CH) for (let cx0 = 0; cx0 < w; cx0 += CH) {
-    const vid = new Map(), pos = [], bed = [], hold = [], ld = [], sh = [], fr = [], by = [], lnd = [], idx = [];
+    const vid = new Map(), pos = [], bed = [], hold = [], ld = [], sh = [], fr = [], by = [], lnd = [], gd = [], idx = [];
     const vert = (vx, vz) => {
       const key = vz * W + vx;
       let k = vid.get(key);
@@ -628,19 +697,37 @@ export function buildSea(L, group, quality = R.quality) {
         const i = z * w + x; if (iceLike(i)) ice++; if (L.deck?.[i]) dk++; if (flat(i)) fl++; if (lead[i]) le = lead[i]; if (wet(i)) { sd = Math.min(sd, D[i]); wt++; if (sealed(i)) sl++; }
         // (land a steep shore drops from: dry ground or rock, not ice, a deck or a tidal flat)
         else if (!iceLike(i) && !(L.bed && L.bed[i] < BED_DRY)) la += 0.25;
+        // (and the ice's lip: the open water breaks against it in foam, so the two read apart at a glance)
+        if (L.ice?.[i] || L.thick?.[i]) la += 0.12;
       }
       // (held: under and beside the ice with no tidal flat, and always under the jetty, whose deck lies flush with the floor:
       // the flood would cover its planks)
-      pos.push(vx + (J ? J[key * 2] : 0), 0, vz + (J ? J[key * 2 + 1] : 0)); bed.push(shoreBed(vx, vz, key)); hold.push((ice && !fl) || dk ? 1 : 0); ld.push(le); sh.push(sd === 99 ? 0 : sd); fr.push(sl ? 1 : 0); by.push(BY ? BY[key] : 0); lnd.push(la);
+      const ib = iceFlatBed(L, vx, vz);
+      pos.push(vx + (J ? J[key * 2] : 0), 0, vz + (J ? J[key * 2 + 1] : 0)); bed.push(ib ?? shoreBed(vx, vz, key)); hold.push((ice && !fl) || dk ? 1 : 0); ld.push(le); sh.push(sd === 99 ? 0 : sd); fr.push(sl ? 1 : 0); by.push(BY ? BY[key] : 0); lnd.push(la);
+      // (how far the ground lies under the surface here: over a drop the water is closed right up to the land)
+      gd.push(L.bed && L.hgt ? clamp(-L.hgt[key], 0, 3) : 0);
       return k;
     };
+    const quads = [];
     for (let z = cz0; z < Math.min(h, cz0 + CH); z++) for (let x = cx0; x < Math.min(w, cx0 + CH); x++) {
-      if (!wet(z * w + x) && !band(z * w + x)) continue;
+      const rs = !wet(z * w + x) && rockSea(z * w + x);
+      if (!wet(z * w + x) && !band(z * w + x) && !rs) continue;
       // (split as the ground's grid is: (x, z + 1) to (x + 1, z))
       const a = vert(x, z), b = vert(x + 1, z), c = vert(x, z + 1), d = vert(x + 1, z + 1);
-      idx.push(a, c, b, c, d, b);
+      // (each quad keyed by the lowest bed among its corners, the level that first wets it; held, frozen or the bay's
+      // corners always drawn)
+      let kq = rs ? -Infinity : Infinity;
+      for (const k of [a, b, c, d]) { if (hold[k] || fr[k] || by[k] > 0) { kq = -Infinity; break; } kq = Math.min(kq, bed[k]); }
+      quads.push(kq, a, c, b, c, d, b);
     }
-    if (!idx.length) continue;
+    if (!quads.length) continue;
+    // (the quads in the order the tide wets them: at low water the draw stops short of those whose every corner lies dry
+    // under the ground, never seen and all the same shaded, the sea's whole cost on the Shallows' flats: perf5's coastLow)
+    const ord = [];
+    for (let q = 0; q < quads.length; q += 7) ord.push(q);
+    if (!low) ord.sort((p, q) => (quads[p] === quads[q] ? 0 : quads[p] < quads[q] ? -1 : 1));
+    const keys = new Float32Array(ord.length);
+    ord.forEach((q, n) => { keys[n] = quads[q]; for (let j = 1; j < 7; j++) idx.push(quads[q + j]); });
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geo.setAttribute('aBed', new THREE.Float32BufferAttribute(bed, 1));
@@ -650,11 +737,21 @@ export function buildSea(L, group, quality = R.quality) {
     geo.setAttribute('aFrz', new THREE.Float32BufferAttribute(fr, 1));
     geo.setAttribute('aBay', new THREE.Float32BufferAttribute(by, 1));
     geo.setAttribute('aLand', new THREE.Float32BufferAttribute(lnd, 1));
+    geo.setAttribute('aGd', new THREE.Float32BufferAttribute(gd, 1));
     geo.setIndex(idx);
     geo.computeBoundingBox(); geo.boundingBox.min.y = -0.2; geo.boundingBox.max.y = 0.6; geo.computeBoundingSphere();
     const m = new THREE.Mesh(geo, mat);
     m.renderOrder = low ? -0.5 : SEA_RO; m.receiveShadow = false; m.castShadow = false;
-    m.onBeforeRender = hook;
+    // (dry under the ground: the water's surface stands at -0.05 from 0.05 below its bed, so a quad whose every corner's
+    // bed lies 0.08 over the level is never seen. Not while a freeze slot may raise water to the ice's height)
+    m.onBeforeRender = low ? hook : () => {
+      hook();
+      if (SEA.uFrzOn.value > 0.5) { geo.setDrawRange(0, Infinity); return; }
+      const lv = SEA.uLevel.value + 0.08;
+      let lo = 0, hi = keys.length;
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (keys[mid] < lv) lo = mid + 1; else hi = mid; }
+      geo.setDrawRange(0, lo * 6);
+    };
     out.add(m);
   }
   out.userData = { mat, L, kind: 'sea' };
@@ -693,7 +790,7 @@ export function seaBeyond(L, group, o = {}) {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geo.setAttribute('aBed', new THREE.Float32BufferAttribute(bed, 1));
-    for (const a of ['aHold', 'aLead', 'aShore', 'aFrz', 'aBay', 'aLand']) geo.setAttribute(a, new THREE.Float32BufferAttribute(z0s, 1));
+    for (const a of ['aHold', 'aLead', 'aShore', 'aFrz', 'aBay', 'aLand', 'aGd']) geo.setAttribute(a, new THREE.Float32BufferAttribute(z0s, 1));
     geo.computeVertexNormals(); geo.computeBoundingSphere();
     return geo;
   };
@@ -724,7 +821,7 @@ export function iceMat(o = {}) {
   const m = R.quality >= 2 && o.window ? new THREE.MeshPhongMaterial({ color: 0xffffff, specular: new THREE.Color(o.window ? 0x5a6876 : 0x2a3440), shininess: o.window ? 300 : 420 })
     : new THREE.MeshLambertMaterial({ color: 0xffffff });
   if (o.window) { m.transparent = true; m.depthWrite = false; }
-  const u = SEA_U({ tCrack: SEA.tCrack, uShade: SEA.uShade, uGlow: SEA.uGlow, uGlowOn: SEA.uGlowOn, uLights: SEA.uLights, uFreezeAll: SEA.uFreezeAll, tIceL: { value: lay?.d || null }, uSkyC: LIT.uSkyC, uHeroP: LIT.uHeroP, uHeroC: LIT.uHeroC, uHeroR: LIT.uHeroR });
+  const u = SEA_U({ tCrack: SEA.tCrack, uShade: SEA.uShade, uGlow: SEA.uGlow, uGlowOn: SEA.uGlowOn, uLights: SEA.uLights, uFreezeAll: SEA.uFreezeAll, tIceL: { value: lay?.d || null }, uSkyC: LIT.uSkyC, uHeroP: LIT.uHeroP, uHeroC: LIT.uHeroC, uHeroR: LIT.uHeroR, uMoonD: LIT.uMoonD, uMoonC: LIT.uMoonC });
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
     sh.defines = Object.assign(sh.defines || {}, hi ? { ICE_HI: '' } : {}, hi && !o.window ? { ICE_GLINT: '' } : {}, hi && R.quality < 2 ? { ICE_Q1: '' } : {}, o.far ? { ICE_FAR: '' } : {}, o.window ? { ICE_WINDOW: '' } : {}, o.floe ? { ICE_FLOE: '' } : {}, lay ? { ICE_LAY: '' } : {});
@@ -758,7 +855,7 @@ varying float vIAurK;`)
 #endif`);
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
 ${COMMON}
-uniform sampler2D tCrack; uniform vec4 uShade[4]; uniform vec4 uGlow[8]; uniform float uGlowOn; uniform vec4 uLights[2]; uniform sampler2D tIceL; uniform vec3 uSkyC; uniform vec3 uHeroP; uniform vec3 uHeroC; uniform float uHeroR;
+uniform sampler2D tCrack; uniform vec4 uShade[4]; uniform vec4 uGlow[8]; uniform float uGlowOn; uniform vec4 uLights[2]; uniform sampler2D tIceL; uniform vec3 uSkyC; uniform vec3 uHeroP; uniform vec3 uHeroC; uniform float uHeroR; uniform vec3 uMoonD; uniform vec3 uMoonC;
 varying vec3 vIP; varying vec2 vIC; varying vec2 vIE; varying float vIB;
 #if defined(ICE_HI) && !defined(ICE_FAR)
 varying vec3 vIAur;
@@ -788,10 +885,11 @@ vec3 iceEm = vec3(0.0);`)
 #if defined(ICE_HI) && !defined(ICE_WINDOW)
   // read through the surface: what lies deeper slides further as the eye moves (the deep mottle on high quality only)
   vec4 nB = texture2D(tNoise, mat2(0.6, 0.8, -0.8, 0.6) * (P + par * 0.3) * 0.9 + 0.13);
+// (the deep patches broad and slow, metres across)
 #ifdef ICE_Q1
-  vec4 nD = vec4(nS.g, nB.r, nS.a, nS.b);
+  vec4 nD = vec4(nS.r, nS.g, nB.r, nS.b);
 #else
-  vec4 nD = texture2D(tNoise, (Pr + par * 1.6) * 0.09 + 0.37);
+  vec4 nD = texture2D(tNoise, (Pr + par * 1.6) * 0.04 + 0.37);
 #endif
 #else
   vec4 nB = nS.abgr, nD = nS.gbar;
@@ -810,22 +908,46 @@ vec3 iceEm = vec3(0.0);`)
   // clear ice over black water: a steel blue-grey you can read as walkable at a glance (lighter than the open water,
   // darker than the snow), its depth mottled; pale veils of trapped air lower down; small bubbles in clusters near the
   // surface; old pressure cracks; frost and drifted snow on top
-  vec3 col = mix(vec3(0.026, 0.04, 0.056), vec3(0.058, 0.08, 0.104), smoothstep(0.3, 0.75, nD.r * 0.7 + nD.g * 0.3));
-  col += vec3(0.024, 0.032, 0.036) * smoothstep(0.62, 0.85, nD.b);
-  // (only the noise's peaks, and dimmer: at a lower cut the bubbles lay over every field as even pale lozenges, a cow's hide)
-  float bub = smoothstep(0.84, 0.95, nB.a) * smoothstep(0.55, 0.8, nB.r);
-  col += vec3(0.09, 0.11, 0.125) * bub;
+  // (black glass over black water: one flat, glassy sheet you can read as walkable at a glance (lighter than the open water
+  // beside it, which heaves; darker than the snow), its depth in broad slow patches of low contrast; bubbles trapped in
+  // columns at depth; a few long straight pressure cracks; a faint frost dust only toward the land. Mottled, streaked and
+  // dusted all over, it read as choppy water or camouflage)
+  vec3 col = mix(vec3(0.03, 0.046, 0.064), vec3(0.05, 0.07, 0.092), smoothstep(0.25, 0.8, nD.r * 0.8 + nD.g * 0.2));
+  col += vec3(0.01, 0.014, 0.016) * smoothstep(0.6, 0.9, nD.b);
+  float bub = 0.0;
 #if defined(ICE_HI) && !defined(ICE_FAR) && !defined(ICE_FLOE) && !defined(ICE_WINDOW)
-  // (old pressure cracks: long, few, a pale line in the ice where a Voronoi of 5 m cells has its walls, here and there)
-  { float ce = vEdge(Pr * 0.19 + nD.gb * 0.12); col = mix(col, vec3(0.24, 0.29, 0.33), (1.0 - smoothstep(0.0, 0.02, ce)) * smoothstep(0.55, 0.75, nS.a) * 0.55); }
+  // (bubble columns: the same few spots of a 0.45 m grid read at three depths, each slid by its own parallax, so a column
+  // of beads leans away from the eye as you walk; in loose clusters)
+  {
+    float clu = smoothstep(0.58, 0.82, nS.g * 0.6 + nB.r * 0.4);
+    if (clu > 0.01) for (int j = 0; j < 3; j++) {
+      float dj = 0.18 + float(j) * 0.26;
+      vec2 bq = (P + par * dj) * 2.2, bc = floor(bq), bh = sH2(bc + 0.37);
+      if (bh.x < 0.955) continue;
+      float br = length(bq - bc - 0.25 - bh * 0.5) * 0.45;
+      bub = max(bub, (1.0 - smoothstep(0.012, 0.035 + float(j) * 0.008, br)) * (1.0 - float(j) * 0.25) * clu);
+    }
+  }
+  col += vec3(0.15, 0.18, 0.2) * bub;
+  // (old pressure cracks: long, few, straight, white with a faint glow in the ice round them, where a Voronoi of 5 m cells
+  // has its walls along a length here and there; and a fainter set lower down, slid by the parallax)
+  { float ce = vEdge(Pr * 0.19 + nD.gb * 0.02), cm = smoothstep(0.52, 0.68, nS.r * 0.7 + nS.a * 0.3);
+    col = mix(col, vec3(0.46, 0.52, 0.56), (1.0 - smoothstep(0.0, 0.018, ce)) * cm * 0.8);
+    col += vec3(0.03, 0.04, 0.045) * (1.0 - smoothstep(0.0, 0.09, ce)) * cm;
+    float cd = vEdge((Pr + par * 0.5) * 0.31 + 2.7);
+    col = mix(col, vec3(0.16, 0.2, 0.23), (1.0 - smoothstep(0.0, 0.025, cd)) * smoothstep(0.55, 0.75, nS.b) * 0.45); }
+#else
+  bub = smoothstep(0.86, 0.96, nB.a) * smoothstep(0.55, 0.8, nB.r);
+  col += vec3(0.07, 0.085, 0.095) * bub;
 #endif
-  // (the drifted snow: a soft low mask with a fine sparkle in it, fading with distance so it never turns to static)
+  // (the drifted snow: a faint dust in streaks, a soft low mask with a fine sparkle in it, fading with distance so it never
+  // turns to static; the snow proper lies at the land's edge, below)
   float dfar = 1.0 - smoothstep(16.0, 42.0, length(cameraPosition - vIP));
-  float frost = smoothstep(0.52, 0.82, nS.r * 0.75 + nS.b * 0.25 + (nB.a - 0.5) * 0.1) * (0.26 + 0.16 * smoothstep(0.55, 0.8, nS.g)) * (0.55 + 0.45 * dfar);
+  float frost = smoothstep(0.62, 0.9, nS.r * 0.75 + nS.b * 0.25 + (nB.a - 0.5) * 0.1) * (0.14 + 0.08 * smoothstep(0.55, 0.8, nS.g)) * (0.55 + 0.45 * dfar);
 #ifdef ICE_LAY
   // (a low-contrast tone only: its bright crack lines, thresholded into frost, scattered white hooks over every field)
   vec3 lay = texture2D(tIceL, P * 0.13).rgb;
-  col *= 0.9 + lay * 0.22;
+  col *= 0.95 + lay * 0.1;
 #endif
   col = mix(col, vec3(0.3, 0.34, 0.38) * (0.8 + 0.4 * nB.g), frost * 0.6);
 #ifdef ICE_FAR
@@ -911,19 +1033,29 @@ vec3 iceEm = vec3(0.0);`)
   }
 #endif
 #ifdef ICE_WINDOW
-  // the clear pane: frost round its outline (the 2 x 2 window's own, vIC its centre), ragged; black glass in the middle
-  vec2 wq = abs(P - vIC);
-  float rim = 1.0 - smoothstep(0.0, 0.16 + (nS.a - 0.5) * 0.16 + (nB.g - 0.5) * 0.06, 1.0 - max(wq.x, wq.y));
-  col = mix(vec3(0.02, 0.05, 0.08), vec3(0.6, 0.68, 0.74), rim * 0.5);
+  // the clear pane: a round hole of clear ice, its outline wandering (vIC the 2 x 2 window's centre), the thick ice round it
+  // frosted and opaque to the cells' edge, so neither the square nor the shaft's walls show; black glass in the middle,
+  // darkening toward the deep. (Square to the cells, it read as a glass skylight)
+  // (the ground covers the rest of its cells, cutting the same hole: build.js G_WIN)
+  float wr = winR(P - vIC, vIC);
+  if (wr > 1.02) discard;
+  float rim = smoothstep(0.84, 1.0, wr + (nS.a - 0.5) * 0.1 + (nB.g - 0.5) * 0.06);
+  col = mix(vec3(0.012, 0.03, 0.05) * (0.55 + 0.45 * smoothstep(0.2, 0.9, wr)), vec3(0.44, 0.5, 0.56) * (0.85 + 0.25 * nB.g), rim);
+  col = mix(col, vec3(0.3, 0.36, 0.42), smoothstep(0.66, 0.84, wr) * (1.0 - rim) * 0.5 * (0.6 + 0.8 * nS.b));
 #endif
 #if !defined(ICE_FAR) && !defined(ICE_FLOE)
   // fresh rime as the Freeze passes over
   col = mix(col, vec3(0.55, 0.62, 0.68), uFreezeAll * 0.5);
 #endif
   // glassy: the sky in it, a dull sheen looking down, brighter at a low angle (blotted by the black aurora's curtains)
-  vec3 Nr = normalize(vec3((nS.g - 0.5) * 0.03, 1.0, (nS.b - 0.5) * 0.03));
+  vec3 Nr = normalize(vec3((nS.g - 0.5) * 0.012, 1.0, (nS.b - 0.5) * 0.012));
   float F = 0.03 + 0.97 * pow(1.0 - clamp(dot(Nr, V), 0.0, 1.0), 5.0);
   iceEm += uSkyC * (0.12 + 0.6 * F) * (1.0 - frost) * (1.0 - 0.8 * vIAurK);
+#if !defined(ICE_FAR) && !defined(ICE_FLOE)
+  // (one broad sheen of the moon across the glass, and its small hard glint: the sheet reads as still and polished)
+  { vec3 Rm = reflect(-V, Nr); float mm = max(dot(Rm, uMoonD), 0.0);
+    iceEm += uMoonC * (pow(mm, 9.0) * 0.045 + pow(mm, 160.0) * 0.2) * (1.0 - frost) * (1.0 - 0.8 * vIAurK); }
+#endif
 #ifdef ICE_HI
   // the aurora mirrored in the ice; the lit sea-lights' lanterns
   vec3 Rf = reflect(-V, Nr);
@@ -931,7 +1063,10 @@ vec3 iceEm = vec3(0.0);`)
   vec2 sp = P + Rf.xz * ((70.0 - vIP.y) / max(Rf.y, 0.04)), spw = fwidth(sp);
   if (uAur * max(1.0 - uAurDark, uAurFront) > 0.02) iceEm += aurora(sp, 1.0, length(spw)) * (0.1 + 0.3 * F) * (1.0 - frost * 0.6) * smoothstep(0.04, 0.3, Rf.y);
 #else
-  iceEm += vIAur * (0.85 + 0.3 * nS.g) * (0.14 + 0.4 * F) * (1.0 - frost * 0.6);
+  // (in long smooth streaks drawn toward the eye, as still glass shows a far light: per vertex alone it lay in blots)
+  vec2 ivd = normalize(V.xz + vec2(0.0001, 0.0)), ivp = vec2(-ivd.y, ivd.x);
+  float istk = texture2D(tNoise, vec2(dot(P, ivp) * 0.12, dot(P, ivd) * 0.01) + 0.21).g;
+  iceEm += vIAur * (0.5 + 0.9 * smoothstep(0.3, 0.8, istk)) * (0.14 + 0.4 * F) * (1.0 - frost * 0.6);
 #endif
   for (int i = 0; i < 2; i++) {
     vec4 Lp = uLights[i];
@@ -949,7 +1084,7 @@ vec3 iceEm = vec3(0.0);`)
 #endif
   diffuseColor.rgb = col;
 #ifdef ICE_WINDOW
-  diffuseColor.a = 0.35 + 0.5 * pow(1.0 - clamp(dot(V, vec3(0.0, 1.0, 0.0)), 0.0, 1.0), 2.0) + rim * 0.3;
+  diffuseColor.a = mix(0.42 + 0.35 * pow(1.0 - clamp(dot(V, vec3(0.0, 1.0, 0.0)), 0.0, 1.0), 2.0) + 0.3 * smoothstep(0.5, 0.8, wr), 1.0, rim);
 #endif`)
       .replace('#include <specularmap_fragment>', '#include <specularmap_fragment>\n  specularStrength *= 1.0 - frost * 0.85;')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += iceEm;');
@@ -997,7 +1132,9 @@ export function buildIce(L, group, quality = R.quality) {
       // corner, 0.75 in an inner one, so the drift and the rim hug the edge instead of filling the edge's cells)
       let la = 0, wa = 0;
       // (a footprint standing in the thin ice is ice too: no drift is painted over the square of its cell)
-      for (const [dx, dz] of CORNER) { const x = vx + dx, z = vz + dz; if (x < 0 || z < 0 || x >= w || z >= h) continue; const i = z * w + x; if (L.ice[i] || pit(i)) continue; if (wat(i)) wa += 0.25; else la += 0.25; }
+      // (a tidal flat counts as land here: the sand meets the ice at its own level, and frayed back off it the ice bared
+      // a ruled strip of the pit along the cells' line)
+      for (const [dx, dz] of CORNER) { const x = vx + dx, z = vz + dz; if (x < 0 || z < 0 || x >= w || z >= h) continue; const i = z * w + x; if (L.ice[i] || pit(i)) continue; if (wat(i) && !flatCell(L, i)) wa += 0.25; else la += 0.25; }
       ed.push(la, wa);
       return k;
     };
@@ -1094,7 +1231,9 @@ void main() {
   // (the horizon's colour, the fog's, horK of it, is laid on after the tone mapping, as three lays its fog on what it
   // draws: tone-mapped, the fog's dark colour fell to near black, and the dome stood a shade darker than the fogged sea
   // and land in front of it, a black band along every low cine's horizon)
-  vec3 col = uTop * hz;
+  // (under the black aurora the night sky itself a little lifted, a faint violet-blue glow low down, so the black curtains
+  // can read against it: on the old near-black they were lost and the sky read as a plain dark)
+  vec3 col = mix(uTop, vec3(0.0045, 0.0075, 0.018), uAurDark) * hz + vec3(0.003, 0.004, 0.009) * uAurDark * exp(-e * 5.0);
   float horK = 1.0 - hz;
   // under the horizontal, past the far plane (160 m) where the sea's own quads stop: the far sea as they would draw it,
   // the sky's sheen at a grazing look, in the fog as far off as the ray would meet it (in the fog's colour alone, a black
@@ -1121,27 +1260,34 @@ void main() {
   // 0.15) is no dimming but a thread: a narrow black ribbon crossing the hems from the north
   float az = atan(D.x, -D.z), el = asin(clamp(D.y, 0.0, 1.0));
   vec3 acc = vec3(0.0); float blk = 0.0;
+  // (three sheets at three depths: the near one tallest, its hem swinging ten degrees up and down; the far ones lower on the
+  // sky, shorter, fainter and bluer behind it. Side by side at one depth they read as a theatre's band)
   for (int k = 0; k < 3; k++) {
     float fk = float(k);
     vec4 n = texture2D(tNoise, vec2(az * (0.16 + fk * 0.05) + fk * 0.31 + t * 0.0018, fk * 0.37 + t * 0.0009));
-    float fold = sin(az * (1.7 + fk * 1.3) + t * 0.045 + fk * 1.7 + n.g * 3.0);
+    float fold = sin(az * (1.5 + fk * 1.1) + t * 0.045 + fk * 1.7 + n.g * 3.0);
     // (a soft max: max() put a corner in the hem where a fold began, and the folds read as the pleats of a tent)
-    float hem = 0.014 + fk * 0.035 + (fold + sqrt(fold * fold + 0.09)) * 0.5 * (0.07 + fk * 0.06) + (n.r - 0.5) * 0.05 + sin(az * (9.0 + fk * 4.0) - t * 0.11 + n.b * 4.0) * 0.008;
+    float hem = 0.05 - fk * 0.016 + (fold + sqrt(fold * fold + 0.09)) * 0.5 * (0.16 - fk * 0.05) + (n.r - 0.5) * 0.06 + sin(az * (7.0 + fk * 4.0) - t * 0.11 + n.b * 4.0) * 0.01;
     float up = el - hem;
-    float sheet = smoothstep(-0.006, 0.002, up) * exp(-max(up, 0.0) * (3.6 + fk * 1.6));
-    // (the rays: a fine comb over a coarse one, and how combed a length of curtain is wanders along it, so some lengths hang
-    // in smooth folds and others are drawn into rays; softening as they rise. One even comb read as a barcode)
-    float r1 = texture2D(tNoise, vec2(az * 3.1 + fk * 1.7 + t * 0.004, up * 0.45 + fk)).a;
-    float r2 = texture2D(tNoise, vec2(az * 0.83 + fk * 0.61 - t * 0.0025, up * 0.25 + fk * 0.5)).b;
-    float comb = smoothstep(0.3, 0.75, texture2D(tNoise, vec2(az * 0.37 + fk * 0.9, fk * 0.23 + t * 0.0012)).g) * (1.0 - 0.5 * smoothstep(0.04, 0.3, up));
-    float rays = mix(0.6 + 0.7 * smoothstep(0.2, 0.8, r2), 0.25 + 1.2 * smoothstep(0.25, 0.8, r1 * 0.65 + r2 * 0.35), comb);
-    float lit = smoothstep(0.2, 0.62, n.g + 0.28 * sin(az * 1.9 + t * 0.03 + fk * 2.3)) * (1.0 - fk * 0.24) * (0.45 + 0.55 * smoothstep(-0.5, 0.4, cos(az)));
+    float sheet = smoothstep(-0.006, 0.002, up) * exp(-max(up, 0.0) * (3.2 + fk * 2.6));
+    // (the rays: a fine comb over a coarse one, their spacing bent along the curtain and gathered in bright clusters with
+    // dark gaps between, how combed a length is wandering along it. One even comb read as a barcode)
+    float azw = az + sin(az * 2.3 + n.b * 3.0 + t * 0.01) * 0.07 + (n.a - 0.5) * 0.05;
+    float r1 = texture2D(tNoise, vec2(azw * 3.1 + fk * 1.7 + t * 0.004, up * 0.45 + fk)).a;
+    float r2 = texture2D(tNoise, vec2(azw * 0.83 + fk * 0.61 - t * 0.0025, up * 0.25 + fk * 0.5)).b;
+    vec4 nc = texture2D(tNoise, vec2(az * 0.55 + fk * 2.1 + t * 0.0016, 0.13 + fk * 0.2));
+    float comb = smoothstep(0.3, 0.75, nc.g) * (1.0 - 0.5 * smoothstep(0.04, 0.3, up));
+    float rays = mix(0.6 + 0.7 * smoothstep(0.2, 0.8, r2), 0.2 + 1.3 * smoothstep(0.3, 0.85, r1 * 0.65 + r2 * 0.35), comb);
+    rays *= 0.25 + 1.05 * smoothstep(0.3, 0.75, nc.r * 0.65 + n.a * 0.35);
+    float lit = smoothstep(0.25, 0.68, n.g + 0.3 * sin(az * 1.9 + t * 0.03 + fk * 2.3)) * (1.0 - fk * 0.3) * (0.45 + 0.55 * smoothstep(-0.5, 0.4, cos(az)));
     vec3 cc = mix(uAurCol, vec3(0.42, 0.12, 0.62), smoothstep(0.0, 0.24, up));
     cc = mix(cc, vec3(0.8, 1.0, 0.9), exp(-max(up, 0.0) * 110.0) * 0.55);
+    cc = mix(cc, vec3(0.3, 0.5, 0.8) * dot(cc, vec3(0.3, 0.5, 0.2)), fk * 0.3);
     acc += cc * sheet * rays * lit * (1.0 + 1.5 * exp(-max(up, 0.0) * 40.0));
     // (under the hem the curtain's light scatters down toward the horizon: a faint glow the far headlands stand against,
-    // where the sky under the curtains was a black band)
-    acc += uAurCol * lit * exp(min(up, 0.0) * 16.0) * (1.0 - step(0.0, up) * (1.0 - exp(-up * 30.0))) * (0.14 - fk * 0.03);
+    // where the sky under the curtains was a black band; half as green, and gone into the haze over the last five degrees:
+    // whole, it ran along the horizon as a green felt wall)
+    acc += mix(uAurCol, vec3(dot(uAurCol, vec3(0.33))), 0.5) * lit * exp(min(up, 0.0) * 16.0) * (1.0 - step(0.0, up) * (1.0 - exp(-up * 30.0))) * (0.09 - fk * 0.02) * smoothstep(0.0, 0.09, el);
     // (the black curtains combed into rays as the green ones are: plain, their blots stood in the haze like doorways)
     blk = max(blk, sheet * lit * smoothstep(0.3, 1.25, rays));
   }
@@ -1165,7 +1311,10 @@ void main() {
   // in the fog's colour: a black band lay there between the lit sea's far edge and the sky)
   acc *= uAur * 0.5 * (D.y >= 0.0 ? mix(0.3, 1.0, smoothstep(0.0, 0.012, D.y)) : 0.55 * smoothstep(yF, 0.0, D.y)) * (1.0 - islM);
   float blot = clamp(dk * blk * 1.3 * smoothstep(0.004, 0.04, e) + thr * rib, 0.0, 0.92);
-  col = col * (1.0 - blot * 0.7) + acc + vec3(0.75, 0.8, 0.9) * star * (1.0 - clamp(dot(acc, vec3(1.5)), 0.0, 1.0)) * (1.0 - blot) * (1.0 - islM);
+  // (a pale band of haze low over the horizon under the black aurora, the far ice catching what light there is: the Skotos
+  // rises against it, and the frame is no black void)
+  col += vec3(0.006, 0.007, 0.011) * uAurDark * exp(-max(D.y, 0.0) * 45.0) * smoothstep(-0.004, 0.002, D.y) * (1.0 - islM);
+  col = col * (1.0 - blot * 0.85) + acc + vec3(0.75, 0.8, 0.9) * star * (1.0 - clamp(dot(acc, vec3(1.5)), 0.0, 1.0)) * (1.0 - blot) * (1.0 - islM);
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>

@@ -261,6 +261,8 @@ export function vulnOf(a) {
   if (a?.vulns) for (const kind in a.vulns) { const k = vulnK(kind); if (!best || k > best.k) best = { kind, k: a.boss && !a.vulnWindow ? Math.min(k, 1.6) : k, t: a.vulns[kind] }; }
   return best;
 }
+// (a status's rim: a dark body takes a fainter one, look.vulnRim, or a pale rim washes it to a flat grey shape)
+const vulnRim = (a) => a.def?.look?.vulnRim ?? 1.1;
 // a status for t seconds (never shortened by a shorter one): its hit text the first time, and a rim while it lasts.
 // Floundering is not a boss's (the Tower is Overturned instead)
 export function addVuln(a, kind, t, o = {}) {
@@ -268,7 +270,7 @@ export function addVuln(a, kind, t, o = {}) {
   const vs = (a.vulns ||= {}), fresh = !(vs[kind] > 0), top = vuln(a);
   vs[kind] = Math.max(vs[kind] || 0, t);
   const V = VULN[kind];
-  if (fresh && vulnK(kind) >= top && V.rim != null) a.avatar?.setRim(V.rim, 1.1);
+  if (fresh && vulnK(kind) >= top && V.rim != null) a.avatar?.setRim(V.rim, vulnRim(a));
   if (fresh && V.key && !o.quiet && !(a.vulnTxt > 0)) {
     a.vulnTxt = 0.8;
     const T = VULN_TX[kind] || [kind, kind];
@@ -281,7 +283,7 @@ function tickVulns(a, dt) {
   if (a.vulnTxt > 0) a.vulnTxt -= dt;
   let gone = false;
   for (const kind in a.vulns) if ((a.vulns[kind] -= dt) <= 0) { delete a.vulns[kind]; gone = true; }
-  if (gone && !a.dead) { const v = vulnOf(a); if (v && VULN[v.kind].rim != null) a.avatar?.setRim(VULN[v.kind].rim, 1.1); else restoreRim(a); }
+  if (gone && !a.dead) { const v = vulnOf(a); if (v && VULN[v.kind].rim != null) a.avatar?.setRim(VULN[v.kind].rim, vulnRim(a)); else restoreRim(a); }
 }
 export function breakGuard(a, t = 3) {
   if (!a.def.guard) return;

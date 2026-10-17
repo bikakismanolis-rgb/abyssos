@@ -40,7 +40,7 @@ List every visual defect (things that look broken, flat, paper-like, untextured,
   if (!crit || (!major.length && round > 1)) { rounds.push({ crit, fix: 'stopped: no major issues' }); break }
   phase('Polish')
   const fix = await agent(`${CTX}
-YOUR ROLE: look fixer, round ${round}.
+YOUR ROLE: look fixer, round ${round}.${round === 1 ? ' A previous run of this exact task was cut off (the work was paused and the container restarted; files on disk survived and are committed). Your notes so far are in ${S}/look/round${round}.md and your shots in ${S}/look/r${round}/: read them first and continue from there (the perf5 re-run and the final re-shoots were still to do); do not start over.' : ''}
 The critic's verdict: ${crit.verdict}
 The critic's issues (screenshots under ${S}/look/crit${round}/):
 ${JSON.stringify(crit.issues, null, 1)}

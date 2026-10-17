@@ -13,7 +13,7 @@ import { RNG, fbm, clamp, smooth, angleDiff } from '../core/util.js';
 import { KIT, KITMAT, KIT_SCALE } from '../gfx/kits.js';
 import { ENV } from '../gfx/env.js';
 import { BED_DRY } from './genlib.js';
-import { SEA, SEA_U, SEA_LIT, SEA_GLSL, buildSea, buildIce, seaBeyond, noiseTex, shoreJit, bayCorners } from './sea.js';
+import { SEA, SEA_U, SEA_LIT, SEA_GLSL, buildSea, buildIce, seaBeyond, noiseTex, shoreJit, bayCorners, iceFlatBed } from './sea.js';
 import { act5Level, instDef5 } from './build5.js';
 
 // uWind: amplitude of all tree and grass sway (Act III's Still Wood sets 0 until the First Autumn). uEdge (z0, z1): south of
@@ -211,8 +211,10 @@ function worldMat(layer, o = {}) {
   float snf = texture2D(tSnow, vWP.xz * 1.9 + vWP.y * 0.7).g;
   float sny = wN.y + (snc.r - 0.5) * 0.3 + (snf - 0.5) * 0.35 + clamp(vWP.y, 0.0, 6.0) * 0.02;
   // (only what truly faces the sky: on a scan's many tilted facets a lower ramp whitened most of a rock face)
-  float snw = smoothstep(0.6, 0.97, sny) * 0.62 + smoothstep(0.88, 1.0, sny) * 0.32;
-  wc = mix(wc, snc * 1.08 * mix(vec3(0.72, 0.8, 0.94), vec3(1.0), smoothstep(0.55, 0.95, wN.y)), snw);` : SN ? `
+  float snw = ${o.cap ? 'smoothstep(0.8, 0.97, sny) * 0.74' : 'smoothstep(0.6, 0.97, sny) * 0.62 + smoothstep(0.88, 1.0, sny) * 0.32'};
+  wc = mix(wc, snc * ${o.cap ? '0.86' : '1.08'} * mix(vec3(0.72, 0.8, 0.94), vec3(1.0), smoothstep(0.55, 0.95, wN.y)), snw);` + (o.cap ? `
+  // (its foot darker, wet where the sea or the snow meets it: a stack in the sea stood white to the waterline)
+  wc *= mix(0.6, 1.0, smoothstep(-0.3, 0.9, vWP.y));` : '') : SN ? `
   // snow settles on whatever faces the sky, thicker higher up the slope
   vec3 snc = texture2D(tSnow, vWP.xz * 0.33).rgb;
   float snw = smoothstep(0.45, 0.8, wN.y + (snc.r - 0.5) * 0.5 + clamp(vWP.y, 0.0, 6.0) * 0.03);
@@ -222,7 +224,9 @@ function worldMat(layer, o = {}) {
   diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.6, 0.66, 0.74), uFrost * (0.18 + 0.3 * smoothstep(0.35, 0.75, texture2D(tW, vWP.xz * 0.21 + vWP.y * 0.13).g)));` : ''))
       .replace('#include <normal_fragment_maps>', '#ifdef W_NRM\n  normal = normalize((viewMatrix * vec4(wPN, 0.0)).xyz);\n#endif');
   };
-  m.customProgramCacheKey = () => 'world|' + layer + (o.tri ? '|tri' : '') + (o.kit ? '|kit' : '') + (o.vc ? '|vc' : '') + (SN ? '|snow' + (o.soft ? 's' : '') : '') + (o.frost ? '|frost' : '');
+  m.customProgramCacheKey = () => 'world|' + layer + (o.tri ? '|tri' : '') + (o.kit ? '|kit' : '') + (o.vc ? '|vc' : '') + (SN ? '|snow' + (o.soft ? 's' : '') + (o.cap ? 'c' : '') : '') + (o.frost ? '|frost' : '');
+  // (o.noOcc: never screened off round the hero, for a thin prop that never hides her)
+  if (o.noOcc) { m.onBeforeCompile = patch; return m; }
   return occlude(m, patch);
 }
 
@@ -1130,13 +1134,44 @@ function ground5(type) {
 }
 // the ground's beds at its corners (the wet sand, and the bed the deep water hides): the corner's cells' mean, as the
 // water's (cornerBeds), but thick ice, a window or the jetty count as dry land (the layout gives them the open sea's bed
-// for the water's colour under them)
+// for the water's colour under them); where thin ice meets tidal flats the flats' own, as the water takes it (sea.js
+// iceFlatBed: a wet band ruled along the ice's edge)
 function groundBeds(L) {
   const { w, h } = L, W = w + 1, out = new Float32Array(W * (h + 1));
   for (let vz = 0; vz <= h; vz++) for (let vx = 0; vx <= w; vx++) {
-    let s = 0;
-    for (const [dx, dz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) { const x = vx + dx, z = vz + dz, i = z * w + x; s += x < 0 || z < 0 || x >= w || z >= h ? -0.6 : L.thick[i] || L.window[i] || L.deck[i] ? BED_DRY : L.bed[i]; }
-    out[vz * W + vx] = s / 4;
+    const ib = iceFlatBed(L, vx, vz);
+    if (ib != null) { out[vz * W + vx] = ib; continue; }
+    let s = 0, fp = false;
+    for (const [dx, dz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) { const x = vx + dx, z = vz + dz, i = z * w + x; if (x >= 0 && z >= 0 && x < w && z < h && !L.cells[i] && !L.thick[i] && !L.window[i] && !L.deck[i]) fp = true; s += x < 0 || z < 0 || x >= w || z >= h ? -0.6 : L.thick[i] || L.window[i] || L.deck[i] ? BED_DRY : L.bed[i]; }
+    // (a footprint standing on the flats, a hull's, keeps the flats' bed it had before (gen5 L.vbed): dry under a wet
+    // shore, it lay round the Dalaro as a pale rectangle)
+    out[vz * W + vx] = fp && L.vbed ? Math.min(s / 4, L.vbed[vz * W + vx]) : s / 4;
+  }
+  return out;
+}
+// the beds the flats' own marks read (the wet sand, its ripples and pools): each corner's tidal cells only, the land's
+// BED_DRY left out (BED_DRY where none is tidal). With the land's 9 m averaged in, the wet sand's edge ran along the
+// triangles that reach the land, a sawtooth round Skerry Bay, and the ripples spun hundreds of times a metre inside them
+// into hatched rectangles; where the shore meets the snow is the layer's own business (wB)
+function wetBeds(L) {
+  const { w, h } = L, W = w + 1, out = new Float32Array(W * (h + 1));
+  for (let vz = 0; vz <= h; vz++) for (let vx = 0; vx <= w; vx++) {
+    const ib = iceFlatBed(L, vx, vz);
+    if (ib != null) { out[vz * W + vx] = ib; continue; }
+    let s = 0, n = 0;
+    for (const [dx, dz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) { const x = vx + dx, z = vz + dz, i = z * w + x; if (x < 0 || z < 0 || x >= w || z >= h || L.thick[i] || L.window[i] || L.deck[i] || L.ice[i] || !(L.bed[i] < BED_DRY)) continue; s += L.bed[i]; n++; }
+    out[vz * W + vx] = n ? s / n : BED_DRY;
+  }
+  // (and carried up the land three corners, a little higher each: a jump to 9 m a corner away put the wet sand's edge
+  // on the triangles again; the shore's own layer says how far up the sand goes)
+  for (let k = 0; k < 3; k++) {
+    const prev = out.slice();
+    for (let vz = 0; vz <= h; vz++) for (let vx = 0; vx <= w; vx++) {
+      const i = vz * W + vx; if (prev[i] < BED_DRY) continue;
+      let m = BED_DRY;
+      if (vx > 0) m = Math.min(m, prev[i - 1]); if (vx < w) m = Math.min(m, prev[i + 1]); if (vz > 0) m = Math.min(m, prev[i - W]); if (vz < h) m = Math.min(m, prev[i + W]);
+      if (m < BED_DRY) out[i] = m + 0.3;
+    }
   }
   return out;
 }
@@ -1151,6 +1186,7 @@ function buildGround(L, group) {
   const heart = L.type === 'heart', act3 = heart || L.type === 'weep', LG = L.spots?.lanternglade;
   const act4 = !!L.hgt, forge = L.type === 'forge'; // Act IV: the layout carries its own heights (gen4.js terrain)
   const act5 = ACT5.has(L.type), vbed = act5 && L.bed ? groundBeds(L) : null, vbay = act5 ? bayCorners(L) : null, far = L.type === 'farlight', jit = act5 ? shoreJit(L) : null;
+  const vwet = vbed ? wetBeds(L) : null;
   const sapW = act3 ? new Float32Array(n) : null, watW = far ? new Float32Array(n) : null;
   // (the Farthest Light: a lead sealed before this build, thick ice over the sea's bed, which the frozen water covers)
   const sealedF = (c) => far && L.thick[c] && cells[c] && [0, 1, w + 1, w + 2].some((d) => L.hgt[c + Math.floor(c / w) + d] < -2.3);
@@ -1165,6 +1201,29 @@ function buildGround(L, group) {
   const roomAt = crypt ? new Uint8Array(w * h) : null;
   if (crypt) for (const r of L.rooms) for (let z = r.z; z < r.z + r.h; z++) for (let x = r.x; x < r.x + r.w; x++) roomAt[z * w + x] = 1;
   const cap = pass ? 12 : 9;
+  // (Act V's coast: how much of the tide's ground lies round each corner, weighted smoothly over the 6 x 6 cells about it:
+  // the shore layer's edge then runs as a curve; counted over 4 x 4 cells, its edge stepped along the cells and broke into
+  // triangle teeth round Skerry Bay)
+  // (a footprint standing on the flats, a hull or a boulder, keeps the shore under it: its corners keep the flats' beds,
+  // gen5 vbed. Drawn as land, each hull stood on a staircase of snow)
+  const tidal5 = act5 && L.bed ? (c) => (L.bed[c] < BED_DRY && !L.thick[c] && !L.ice[c] && !L.window[c] && !L.deck[c]) || (L.vbed && !cells[c] && !L.low[c] && [0, 1, w + 1, w + 2].every((d) => L.vbed[c + Math.floor(c / w) + d] < BED_DRY - 1 && Math.abs(L.hgt[c + Math.floor(c / w) + d]) < 0.3)) : () => false;
+  let tB = null;
+  if (act5 && L.bed && !far) {
+    const tm = new Uint8Array(w * h); for (let c = 0; c < w * h; c++) tm[c] = tidal5(c) ? 1 : 0;
+    tB = new Float32Array((w + 1) * (h + 1));
+    // (weighed from where the corner is drawn, shoreJit's nudge included: from the grid's point, a corner nudged across the
+    // edge carried the far side's share with it, and the edge broke into teeth along every staircase of cells)
+    for (let vz = 0; vz <= h; vz++) for (let vx = 0; vx <= w; vx++) {
+      const kk = vz * (w + 1) + vx, px = vx + (jit ? jit[kk * 2] : 0), pz = vz + (jit ? jit[kk * 2 + 1] : 0);
+      let s = 0, sw = 0;
+      for (let dz = -4; dz <= 3; dz++) for (let dx = -4; dx <= 3; dx++) {
+        const x = vx + dx, z = vz + dz, d = Math.hypot(x + 0.5 - px, z + 0.5 - pz), k = Math.max(0, 1 - d / 3.3) ** 2;
+        if (!k) continue;
+        sw += k; if (x >= 0 && z >= 0 && x < w && z < h && tm[z * w + x]) s += k;
+      }
+      tB[kk] = s / sw;
+    }
+  }
   for (let i = 0; i < n; i++) {
     const vx = Math.round(pos.getX(i)), vz = Math.round(pos.getZ(i));
     let pv = 0, fl = 0, dd = 0, cnt = 0, rm = 0, hole = 0, cave = 0, ave = 0, dk = 0, sp = 0, iron = 0;
@@ -1188,24 +1247,29 @@ function buildGround(L, group) {
       let y = L.hgt[vz * (w + 1) + vx];
       // (an ice window's pit has its own walls, the iceWindow prop's, along the window's edge: the floor round it stays
       // level to that edge instead of sloping down into the pit)
-      if (y < -0.5) { let win = 0, fl2 = 0; for (const [dx, dz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) { const c = cellAt(vx + dx, vz + dz); if (c < 0) continue; if (L.window[c]) win++; else if (cells[c] && !L.ice[c] && !L.sea?.[c] && !L.low[c]) fl2++; } if (win && fl2) y = 0; }
+      // (and over the window's own cells too: the ground runs on over them and cuts a round hole, G_WIN)
+      if (y < -0.5) { let win = 0; for (const [dx, dz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) { const c = cellAt(vx + dx, vz + dz); if (c >= 0 && L.window[c]) win++; } if (win) y = 0; }
+      // (under the jetty a channel: the flats dip under its deck, so its piles stand down into the water and the deck stands
+      // over it; lying flush on the flats it read as boards laid on the sand)
+      if (L.deck && [[-1, -1], [0, -1], [-1, 0], [0, 0]].every(([dx, dz]) => { const c = cellAt(vx + dx, vz + dz); return c >= 0 && L.deck[c]; })) y = -0.85;
       pos.setY(i, y);
       // (the coast's shore wanders off the grid: sea.js shoreJit, the water takes the same nudge)
       if (jit) { const j = (vz * (w + 1) + vx) * 2; pos.setX(i, vx + jit[j]); pos.setZ(i, vz + jit[j + 1]); }
       // (tidal: a bed the tide reaches and nothing over it; the thin ice's cells carry the sea's bed but are no shore)
       let walls = 0, tide = 0, thick = 0, tw = 0;
-      // (a footprint standing on the flats, a hull or a boulder, keeps the shore under it: its corners keep the flats' beds,
-      // gen5 vbed. Drawn as land, each hull stood on a staircase of snow)
-      const tidal = (c) => L.bed && ((L.bed[c] < BED_DRY && !L.thick[c] && !L.ice[c] && !L.window[c] && !L.deck[c]) || (L.vbed && !cells[c] && !L.low[c] && [0, 1, w + 1, w + 2].every((d) => L.vbed[c + Math.floor(c / w) + d] < BED_DRY - 1 && Math.abs(L.hgt[c + Math.floor(c / w) + d]) < 0.3)));
+      const tidal = tidal5;
       for (let dz = -2; dz <= 1; dz++) for (let dx = -2; dx <= 1; dx++) { const c = cellAt(vx + dx, vz + dz); if (c < 0 || (!cells[c] && !L.low[c])) walls++; if (c >= 0 && tidal(c)) tw++; }
       for (const [dx, dz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) { const c = cellAt(vx + dx, vz + dz); if (c < 0) continue; if (tidal(c)) tide++; if (L.thick[c]) thick++; if (watW && (L.sea[c] || sealedF(c))) watW[i] += 0.25; }
+      const tv = tB ? tB[vz * (w + 1) + vx] : tw / 16;
       wp = clamp(pv * 1.25, 0, 1);
       // (the shore's stone runs a little up the dry land, ragged, so the tide line is no polygon)
       // (the blue ice shows through the snow only in patches: mostly it lies buried)
       if (far) wb = thick ? clamp((nz - 0.5) * 2.2 + (big - 0.5) * 1.6 - 0.12, 0, 0.7) : 0;
       // (thick ice by the shore, the ice windows' rims: its snow frays into the stone instead of ending on a square)
-      else if (thick && !tide) { wb = clamp(tw / 16 * 1.9 - 0.5 + (nz - 0.5) * 1.3 + (big - 0.5) * 0.6, 0, 0.9); wp *= 1 - wb; }
-      else wb = clamp(tw / 16 * 1.7 - 0.15 + (nz - 0.5) * 0.9 + (big - 0.5) * 0.6, 0, 1);
+      else if (thick && !tide) { wb = clamp(tv * 1.9 - 0.5 + (nz - 0.5) * 1.3 + (big - 0.5) * 0.6, 0, 0.9); wp *= 1 - wb; }
+      // (left unclamped a little either side, so the shader's threshold meets a field that runs on through the edge: clamped
+      // at 0 and 1 a corner away, its isoline broke at every corner into the triangles' teeth)
+      else { wb = clamp(tv * 1.7 - 0.15 + (nz - 0.5) * 0.9 + (big - 0.5) * 0.6, tB ? -0.6 : 0, tB ? 1.6 : 1); }
       k = fl > 0 || tide || thick ? 0.92 + nz * 0.16 : Math.max(0.5, 0.96 - Math.min(Math.max(y, 0), 14) * 0.025) + (nz - 0.5) * 0.12;
       if (y < -0.3) k *= 0.45;
       // (the ebb caves: dark under their overhangs, build5 caveArch)
@@ -1294,15 +1358,18 @@ function buildGround(L, group) {
     const ix = geo.index.array, keep = [];
     // (and the pit under a footprint in the thin ice, which the ice covers: sea.js)
     const pit = (c) => L.thick[c] && !cells[c] && [0, 1, w + 1, w + 2].some((d) => L.hgt[c + Math.floor(c / w) + d] < -0.5);
-    for (let c = 0; c < w * h; c++) if (!L.window[c] && !(far && (L.ice[c] || L.sea?.[c] || pit(c) || sealedF(c)))) for (let k = 0; k < 6; k++) keep.push(ix[c * 6 + k]);
+    for (let c = 0; c < w * h; c++) if (!(far && (L.ice[c] || L.sea?.[c] || pit(c) || sealedF(c)))) for (let k = 0; k < 6; k++) keep.push(ix[c * 6 + k]);
     geo.setIndex(keep);
   }
   const cfg = GROUND[L.type] || (act5 ? ground5(L.type) : act4 ? ground4(L.type) : GROUND.forest);
+  // (Act V: the ice windows' centres, the corner each 2 x 2 window's cells share: the ground cuts the round hole, G_WIN)
+  if (act5 && L.window) { const wins = []; for (let z = 0; z < h - 1; z++) for (let x = 0; x < w - 1; x++) if (L.window[z * w + x] && L.window[z * w + x + 1] && L.window[(z + 1) * w + x] && L.window[(z + 1) * w + x + 1] && !(x > 0 && L.window[z * w + x - 1]) && !(z > 0 && L.window[(z - 1) * w + x])) wins.push(x + 1, z + 1); cfg.wins = wins.slice(0, 16); }
   if (ENV.ready && ENV.layers[cfg.A]) {
     geo.setAttribute('aLay', new THREE.BufferAttribute(lay, 4));
     if (sapW) geo.setAttribute('aSap', new THREE.BufferAttribute(sapW, 1));
     if (watW) geo.setAttribute('aWat', new THREE.BufferAttribute(watW, 1));
     if (cfg.wet) geo.setAttribute('aBed', new THREE.BufferAttribute(vbed || new Float32Array(n).fill(BED_DRY), 1));
+    if (cfg.wet) geo.setAttribute('aBedW', new THREE.BufferAttribute(vwet || new Float32Array(n).fill(BED_DRY), 1));
     if (cfg.wet) geo.setAttribute('aBay', new THREE.BufferAttribute(vbay || new Float32Array(n), 1));
     const mesh = new THREE.Mesh(geo, groundMat(cfg, L.type));
     mesh.receiveShadow = true;
@@ -1354,8 +1421,9 @@ function groundMat(cfg, type) {
   if (X.dry) { const Dr = ENV.layers.dryleaf; Object.assign(uni, { tD: { value: (Dr || A).d }, uDryTint: { value: new THREE.Color(Dr ? 0xffffff : 0xc89a70).multiplyScalar(cfg.dryK ?? 1) }, uAut: WIND.uAutumn }); }
   if (X.wall) { const W = lay(cfg.W); Object.assign(uni, { tW: { value: W.d }, tWn: { value: W.n }, uWS: { value: 1 / (cfg.ws || 2.4) } }); }
   // Act V (sea.js): the snow's glints (not on low quality), the wet sand behind the ebb, the aurora's light on the ground
-  const X5 = { glint: !!cfg.glint && R.quality >= 1, wet: !!cfg.wet, aur: !!cfg.aur, fake: !!cfg.fake, hueB: !!cfg.hueB, edge: !!cfg.edge, v5: !!cfg.act5 };
-  X5.any = X5.glint || X5.wet || X5.aur || X5.edge;
+  const X5 = { glint: !!cfg.glint && R.quality >= 1, wet: !!cfg.wet, aur: !!cfg.aur, fake: !!cfg.fake, hueB: !!cfg.hueB, edge: !!cfg.edge, v5: !!cfg.act5, win: !!cfg.wins?.length };
+  if (X5.win) uni.uWin = { value: Array.from({ length: 8 }, (_, i) => new THREE.Vector2(cfg.wins[i * 2] ?? -99, cfg.wins[i * 2 + 1] ?? -99)) };
+  X5.any = X5.glint || X5.wet || X5.aur || X5.edge || X5.win;
   if (X5.any) { noiseTex(); Object.assign(uni, SEA_U({ uWetLevel: SEA.uWetLevel, uLevel: SEA.uLevel, uBayLevel: SEA.uBayLevel }), SEA_LIT); }
   if (X5.hueB) uni.uHueB = { value: new THREE.Vector3(...cfg.hueB) };
   m.onBeforeCompile = (sh) => {
@@ -1365,8 +1433,8 @@ function groundMat(cfg, type) {
     sh.defines = Object.assign(sh.defines || {}, nrm ? { G_NRM: '' } : {}, dual && cfg.dual[0] ? { G_DA: '' } : {}, dual && cfg.dual[1] ? { G_DP: '' } : {},
       X.sap ? { G_SAP: '' } : {}, X.dry ? { G_DRY: '' } : {}, X.wall ? { G_WALL: '' } : {}, X.wall && nrm && uni.tWn.value ? { G_WNRM: '' } : {},
       X5.glint ? { G_GLINT: '' } : {}, X5.wet ? { G_WET: '' } : {}, X5.aur ? { G_AUR: '' } : {}, X5.edge ? { G_EDGE: '' } : {});
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec4 aLay;\nvarying vec4 vLay;\nvarying vec2 vGP;\nvarying vec3 vGN;' + (X.sap ? '\nattribute float aSap;\nvarying float vSap;' : '') + (X.wall ? '\nvarying float vGY;' : '') + (X5.wet ? '\nattribute float aBed;\nvarying float vBed;\nattribute float aBay;\nvarying float vBay;' : '') + (X5.edge ? '\nattribute float aWat;\nvarying float vWat;' : '') + (X5.any ? '\nvarying vec3 vGW;' : '') + (X5.aur ? '\n' + SEA_GLSL() + '\nvarying vec3 vGAur; varying float vGAurK;' : ''))
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLay = aLay; vGP = (modelMatrix * vec4(transformed, 1.0)).xz; vGN = normal;' + (X.sap ? ' vSap = aSap;' : '') + (X.wall ? ' vGY = (modelMatrix * vec4(transformed, 1.0)).y;' : '') + (X5.wet ? ' vBed = aBed; vBay = aBay;' : '') + (X5.edge ? ' vWat = aWat;' : '') + (X5.any ? ' vGW = (modelMatrix * vec4(transformed, 1.0)).xyz;' : '')
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec4 aLay;\nvarying vec4 vLay;\nvarying vec2 vGP;\nvarying vec3 vGN;' + (X.sap ? '\nattribute float aSap;\nvarying float vSap;' : '') + (X.wall ? '\nvarying float vGY;' : '') + (X5.wet ? '\nattribute float aBed;\nvarying float vBed;\nattribute float aBay;\nvarying float vBay;\nattribute float aBedW;\nvarying float vBedW;' : '') + (X5.edge ? '\nattribute float aWat;\nvarying float vWat;' : '') + (X5.any ? '\nvarying vec3 vGW;' : '') + (X5.aur ? '\n' + SEA_GLSL() + '\nvarying vec3 vGAur; varying float vGAurK;' : ''))
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLay = aLay; vGP = (modelMatrix * vec4(transformed, 1.0)).xz; vGN = normal;' + (X.sap ? ' vSap = aSap;' : '') + (X.wall ? ' vGY = (modelMatrix * vec4(transformed, 1.0)).y;' : '') + (X5.wet ? ' vBed = aBed; vBay = aBay; vBedW = aBedW;' : '') + (X5.edge ? ' vWat = aWat;' : '') + (X5.any ? ' vGW = (modelMatrix * vec4(transformed, 1.0)).xyz;' : '')
       // (the aurora's light on the ground: slow ribbons of green drifting over it, worked out at the vertices, a metre apart;
       // under the black aurora its dark curtains crossing it as slow bands)
       // (only on what faces the sky: worked out over x/z, the ribbons ran down a cliff's face as green stripes)
@@ -1379,9 +1447,12 @@ uniform sampler2D tA; uniform sampler2D tB; uniform sampler2D tP; uniform sample
 uniform vec3 uS; uniform vec3 uR; uniform float uNS;
 varying vec4 vLay; varying vec2 vGP; varying vec3 vGN;
 float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\nvarying float vSap;' : '') + (X.sat ? '\nuniform float uSat;' : '') + (cfg.hueA ? '\nuniform vec3 uHueA;' : '') + (X.dry ? '\nuniform sampler2D tD; uniform vec3 uDryTint; uniform float uAut;' : '') + (X.wall ? '\nuniform sampler2D tW; uniform sampler2D tWn; uniform float uWS; varying float vGY;' : '')
-      + (X5.hueB ? '\nuniform vec3 uHueB;' : '') + (X5.wet ? '\nvarying float vBed; varying float vBay; uniform float uWetLevel; uniform float uLevel; uniform float uBayLevel;' : '') + (X5.edge ? '\nvarying float vWat;' : '')
+      + (X5.hueB ? '\nuniform vec3 uHueB;' : '') + (X5.win ? '\nuniform vec2 uWin[8];' : '') + (X5.wet ? '\nvarying float vBed; varying float vBay; varying float vBedW; uniform float uWetLevel; uniform float uLevel; uniform float uBayLevel;' : '') + (X5.edge ? '\nvarying float vWat;' : '')
       + (X5.any ? SEA_GLSL() + '\nvarying vec3 vGW; uniform vec3 uMoonD; uniform vec3 uMoonC; uniform vec3 uHeroP; uniform vec3 uHeroC;\nvec3 gEm = vec3(0.0);' : '') + (X5.aur ? '\nvarying vec3 vGAur; varying float vGAurK;' : ''))
-      .replace('#include <map_fragment>', (X5.wet ? `
+      .replace('#include <map_fragment>', (X5.win ? `
+  // the ice windows: the ground runs over their cells and leaves a round hole of clear ice (the pane, sea.js, the same
+  // outline): cut square to the cells they read as glass skylights
+  for (int i = 0; i < 8; i++) { if (uWin[i].x < -50.0) break; if (winR(vGW.xz - uWin[i], uWin[i]) < 1.0) discard; }` : '') + (X5.wet ? `
   // (under closed water the sea, 95% opaque from 0.43 m, hides the bed: past 0.5 m it is not drawn at all, its layers and
   // its lights spared, the open sea's floor at low water too. Skerry Bay keeps its own level: sea.js)
   if (mix(uLevel, uBayLevel, vBay) - vBed > 0.56) discard;` : '') + (X5.edge ? `
@@ -1399,19 +1470,32 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
 #else
   vec3 cA = texture2D(tA, uA).rgb;
 #endif
-  vec3 cB = texture2D(tB, uB).rgb;` + (cfg.hueA ? '\n  cA *= uHueA;' : '') + (X5.hueB ? '\n  cB *= uHueB;' : '') + `
+  vec3 cB = texture2D(tB, uB).rgb;` + (cfg.hueA ? '\n  cA *= uHueA;' : '') + (X5.hueB ? '\n  cB *= uHueB;' : '') + (X5.v5 ? `
+  // (the path's layer read only where a path lies near: off it its weight is 0 whatever it reads, and on the Shallows'
+  // flats those reads cost a phone its frame, perf5's coastLow)
+  vec3 cP = vec3(0.0); float gmP = 0.0;
+  if (vLay.y > 0.01) {` : '') + `
+` + (X5.v5 ? `
+  // (two reads at two scales and angles on every quality, swapped every few metres: one read laid the same boot prints in
+  // rows down the path, a stamp repeating every 2.6 m)
+    gmP = smoothstep(0.3, 0.7, vLay.w + sin(vGP.x * 0.71 + sin(vGP.y * 0.53) * 1.3) * 0.22 + sin(vGP.y * 0.43 - vGP.x * 0.21) * 0.14);
+    cP = mix(texture2D(tP, uP).rgb, texture2D(tP, uP2).rgb, gmP);` : `
 #ifdef G_DP
   vec3 cP = mix(texture2D(tP, uP).rgb, texture2D(tP, uP2).rgb, gm);
 #else
   vec3 cP = texture2D(tP, uP).rgb;
-#endif
- ` + (X5.v5 ? `
+#endif`) + `
+ ` + (X5.v5 ? `}` : '') + (X5.v5 ? `
   // (the trodden snow: a little greyer than the snow round it, its boot prints and scuffs kept, so a path reads as walked)
   cP = mix(cP, cA * vec3(0.84, 0.87, 0.92), 0.25);` : '') + `
-  float hA = gH(cA), hB = gH(cB), hP = gH(cP);
-  float wB = smoothstep(-0.15, 0.15, vLay.x * 2.0 - 1.1 + (hB - hA) * 1.3);
+  float hA = gH(cA), hB = gH(cB), hP = gH(cP);` + (X5.v5 ? `
+  // (a slow wobble, metres across, worked out here, no read: the shore's edge and the path's wander through the triangles
+  // on it instead of following the field the vertices carry)
+  float gWob = sin(vGP.x * 0.83 + sin(vGP.y * 0.61) * 1.7) * sin(vGP.y * 0.97 + sin(vGP.x * 0.53) * 1.5);
+  float wB = smoothstep(-0.15, 0.15, vLay.x * 2.0 - 1.1 + (hB - hA) * 1.3 + gWob * 0.32);` : `
+  float wB = smoothstep(-0.15, 0.15, vLay.x * 2.0 - 1.1 + (hB - hA) * 1.3);`) + `
   vec3 gc = mix(cA, cB, wB); float gh = mix(hA, hB, wB);
-  float wP = smoothstep(-0.15, 0.15, vLay.y * 2.0 - 1.3 + (hP - gh) * 1.2);
+  float wP = smoothstep(-0.15, 0.15, vLay.y * 2.0 - 1.3 + (hP - gh) * 1.2` + (X5.v5 ? ' + gWob * 0.22' : '') + `);
   gc = mix(gc, cP, wP); gh = mix(gh, hP, wP);` + (X.sat ? `
   gc = mix(vec3(dot(gc, vec3(0.3, 0.59, 0.11))), gc, uSat);` : '') + (X.dry ? `
   // the First Autumn: dry leaves drift over everything but the trodden paths (none before it: a uniform branch)
@@ -1427,7 +1511,14 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
   totalEmissiveRadiance += vec3(1.0, 0.45, 0.06) * 0.08 * wS;` : '') + (X.wall ? `
   // root walls: the steep faces take the bark, projected sideways
   vec3 gNw = normalize(vGN);
-  float steep = 1.0 - smoothstep(0.45, 0.82, gNw.y);
+  float steep = 1.0 - smoothstep(0.45, 0.82, gNw.y);` + (X5.v5 ? `
+  // (high on a cliff a gentler facet is still the cliff, dusted below: taking the floor's snow whole, a long thin facet
+  // ran down a face as a pale hard-edged blade. Only a true top or ledge keeps the sheet)
+  // (and a low rock rib's faces are its stone: half the floor's snow on them read as one pale slab along the Landing)
+  steep = max(max(steep, 1.0 - smoothstep(0.6, 0.86, gNw.y)), smoothstep(1.5, 4.5, vGY) * (1.0 - smoothstep(0.9, 0.99, gNw.y + (vLay.z - 0.5) * 0.06)));
+  // (and a rock's top, a rib's or a headland's, is stone with the snow lying in its hollows, not one smooth sheet: the
+  // ribs by the huts read as plaster wedges)
+  steep = max(steep, smoothstep(0.9, 2.2, vGY) * smoothstep(0.05, 0.4, gWob * 0.45 + (hA - 0.5) * 0.9 + (vLay.w - 0.5) * 1.1) * 0.9);` : '') + `
   vec2 wbw = abs(gNw.xz) + 0.001; wbw /= wbw.x + wbw.y;
   vec2 uWx = vec2(vGP.y, -vGY) * uWS, uWz = vec2(vGP.x, -vGY) * uWS;
   // (the flat floor skips the bark: steep changes smoothly, so where the branch splits a pixel quad its weight is ~0)
@@ -1435,40 +1526,55 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
     vec3 cW = texture2D(tW, uWx).rgb * wbw.x + texture2D(tW, uWz).rgb * wbw.y;` + (X5.v5 ? `
     // (the sea-cliffs: read from above too where the face leans back, so a slope never smears; laid in strata)
     cW = mix(cW, texture2D(tW, vGP * uWS * 0.9 + 0.37).rgb, smoothstep(0.25, 0.6, gNw.y));
-    cW *= 0.8 + 0.2 * sin(vGY * 2.1 + (vLay.z - 0.5) * 7.0 + (vLay.w - 0.5) * 3.0) + 0.08 * sin(vGY * 6.3 + vLay.w * 9.0);` : '') + `
+    cW *= 0.8 + 0.2 * sin(vGY * 2.1 + (vLay.z - 0.5) * 7.0 + (vLay.w - 0.5) * 3.0) + 0.08 * sin(vGY * 6.3 + vLay.w * 9.0);
+    // (snow settling on what leans back, in drifts the snow's own relief breaks up, the stone showing between)
+    cW = mix(cW, cA * vec3(0.9, 0.93, 0.98), smoothstep(0.62, 0.95, gNw.y + (hA - 0.5) * 0.35) * 0.6);` : '') + `
     gc = mix(gc, cW, steep); gh = mix(gh, gH(cW), steep);
   }` : '') + (X5.fake ? `
   // (no snow layer loaded: whiten whatever stands in for it, keeping its relief)
   gc = mix(gc, vec3(0.7, 0.74, 0.8) * (0.8 + 0.34 * gh), 0.8 * (1.0 - wB) * (1.0 - wP * 0.4));` : '') + (X5.wet ? `
   // the flats' own marks: ripple bands along the bed's contours, darker wet patches, rock pools where the bed dips; the
   // shore's stone greyed (its weed read as a lawn from afar)
-  gc = mix(vec3(dot(gc, vec3(0.3, 0.59, 0.11))) * vec3(0.94, 0.97, 1.03), gc, mix(1.0, 0.5, wB));
+  // (Skerry Bay's sand greyer and lighter still: its weed read as moss, the arena a target of camouflage bands)
+  gc = mix(vec3(dot(gc, vec3(0.3, 0.59, 0.11))) * vec3(0.94, 0.97, 1.03), gc, mix(1.0, mix(0.5, 0.22, vBay), wB));
+  gc *= 1.0 + 0.16 * vBay * wB;
   // (each mark only where it shows: the shore's on the shore, the snow's on the snow; a read nobody sees costs a phone
   // its frame in the Shallows: perf5's coastLow)
+  // (the marks read the flats' own bed, vBedW: the land's BED_DRY never spins them)
+  float gPool = 0.0;
   if (wB > 0.002) {
     vec4 gR = texture2D(tNoise, vGW.xz * 0.045 + vec2(0.17, 0.83));
-    float rip = 0.5 + 0.5 * sin(vBed * 46.0 + (gR.r - 0.5) * 9.0 + vGW.x * 0.7 * (gR.g - 0.5));
-    float pool = smoothstep(0.62, 0.78, gR.b + (0.6 - clamp(vBed, -0.3, 1.0)) * 0.25) * step(vBed, 1.2);
-    gc *= mix(1.0, (0.86 + 0.2 * rip) * mix(1.0, 0.72, smoothstep(0.45, 0.75, gR.a)), wB);
-    gc = mix(gc, gc * vec3(0.42, 0.48, 0.52), pool * wB * 0.8);
+    float bw = clamp(vBedW, -0.6, 1.2);
+    // ripple marks a metre apart, their crests bent by the noise over metres (world space: the bed's own contours spun into
+    // hatching where they crowd); faded to their mean where a pixel spans a ripple
+    float rph = dot(vGW.xz, vec2(0.6, 0.8)) * 5.4 + (gR.g - 0.5) * 11.0 + (gR.r - 0.5) * 17.0 + bw * 3.0;
+    float rip = mix(0.5 + 0.5 * sin(rph), 0.5, smoothstep(0.7, 1.5, fwidth(rph)));
+    // pools the ebb left: broad soft dark patches where the bed lies low (no rings: their edges a fifth of a metre soft)
+    gPool = smoothstep(0.6, 0.7, gR.r * 0.6 + gR.g * 0.4 + (0.55 - bw) * 0.22) * (1.0 - smoothstep(0.85, 1.25, vBedW));
+    gc *= mix(1.0, (0.88 + 0.16 * rip) * mix(1.0, 0.78, smoothstep(0.45, 0.75, gR.a)), wB);
+    gc = mix(gc, gc * vec3(0.5, 0.56, 0.6), gPool * wB * 0.75);
   }
   // wet sand: dark and glossy where the tide has been within the last 20 s (and under the water now); its edge wanders
-  // inside the cells with the water's own (sea.js shoreN)
-  float gWet = vBed < 2.0 ? smoothstep(-0.03, 0.06, mix(uWetLevel, uBayLevel, vBay) - vBed + shoreN(vGW.xz)) * (1.0 - wP * 0.6) : 0.0;
-  gc *= mix(vec3(1.0), vec3(0.46, 0.5, 0.54), gWet);` : '') + (X5.any ? `
+  // inside the cells with the water's own (sea.js shoreN); toward the land it ends with the shore's own layer
+  float gWet = vBedW < 2.0 ? smoothstep(-0.03, 0.06, mix(uWetLevel, uBayLevel, vBay) - vBedW + shoreN(vGW.xz)) * (1.0 - wP * 0.6) * smoothstep(0.2, 0.55, wB) : 0.0;
+  gc *= mix(vec3(1.0), vec3(0.46, 0.5, 0.54) + 0.08 * vBay, gWet);` : '') + (X5.any ? `
   vec3 gV = normalize(cameraPosition - vGW);` : '') + (X5.wet ? `
-  gEm += uMoonC * pow(max(dot(reflect(-gV, vec3(0.0, 1.0, 0.0)), uMoonD), 0.0), 18.0) * gWet * 0.05;` : '') + (X5.glint ? `
+  gEm += uMoonC * pow(max(dot(reflect(-gV, vec3(0.0, 1.0, 0.0)), uMoonD), 0.0), 18.0) * max(gWet, gPool * wB) * 0.05;` : '') + (X5.glint ? `
   // the wind's work on the snow: long low drifts and scoured hollows, a cold blue in the hollows (not on the shore's stone);
   // the wind's way wanders over the land, so the drifts turn with it (its streak lines bent in long meanders, the frame
   // itself kept: sea.js ice)
   vec2 gPw = mat2(0.94, -0.34, 0.34, 0.94) * vGW.xz;
   float gwb = cos(gPw.x * 0.045 + 0.6) * 0.099 + cos(gPw.x * 0.017 + 1.3) * 0.068;
   gPw.y += sin(gPw.x * 0.045 + 0.6) * 2.2 + sin(gPw.x * 0.017 + 1.3) * 4.0;
-  float gsk = (1.0 - wB) * (1.0 - wP * 0.5);
+  float gsk = (1.0 - wB) * (1.0 - wP * 0.5), gSa = 0.0, gSp = 0.0;
   if (gsk > 0.002) {
     vec4 gS = texture2D(tNoise, vec2(gPw.x * 0.016, gPw.y * 0.033) + 0.53);
     float sst = gS.b * 0.55 + gS.a * 0.25 + gS.r * 0.2;
-    gc *= mix(vec3(1.0), mix(vec3(0.68, 0.75, 0.88), vec3(1.1), smoothstep(0.25, 0.75, sst)), gsk);
+    gc *= mix(vec3(1.0), mix(vec3(0.72, 0.78, 0.9), vec3(1.08), smoothstep(0.25, 0.75, sst)), gsk);
+    // (where the wind has scoured, a fifth of the snow in patches some metres across: the sastrugi below, their crests'
+    // phase bent by the same read; everywhere and on one sine, they ran over whole fields as corrugated sheet)
+    gSa = gsk * smoothstep(0.6, 0.74, vLay.w + (vLay.z - 0.5) * 0.5 + (gS.r - 0.5) * 0.35);
+    gSp = (gS.g - 0.5) * 7.0 + (gS.r - 0.5) * 5.0;
   }
   // the snow glitters: a few 4 cm cells, each with its own tilt, catch the moon or the lantern toward the eye
   if (gsk > 0.002) {
@@ -1488,10 +1594,23 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
   gEm += vGAur` + (X5.v5 ? ` * clamp(dot(gc, vec3(0.3, 0.59, 0.11)) * 1.6, 0.12, 1.0)` : '') + `;
   gc *= 1.0 - 0.16 * vGAurK;` : '') + `
   diffuseColor.rgb *= gc * (0.82 + 0.36 * vLay.w);`)
-      .replace('#include <roughnessmap_fragment>', `float roughnessFactor = clamp(mix(mix(uR.x, uR.y, wB), uR.z, wP) * (1.12 - 0.25 * gh), 0.3, 1.0);` + (X.sap ? '\n  roughnessFactor = mix(roughnessFactor, 0.14, wS);' : '') + (X5.wet ? '\n  roughnessFactor = mix(roughnessFactor, 0.2, gWet);' : ''))
+      .replace('#include <roughnessmap_fragment>', `float roughnessFactor = clamp(mix(mix(uR.x, uR.y, wB), uR.z, wP) * (1.12 - 0.25 * gh), 0.3, 1.0);` + (X.sap ? '\n  roughnessFactor = mix(roughnessFactor, 0.14, wS);' : '') + (X5.wet ? '\n  roughnessFactor = mix(roughnessFactor, 0.2, max(gWet, gPool * wB * 0.8));' : ''))
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>' + (X5.any ? '\n  totalEmissiveRadiance += gEm;' : ''))
       .replace('#include <normal_fragment_maps>', `#ifdef G_NRM
-  // the second readings are rotated: turn their tangent-space xy back into the first frame
+  // the second readings are rotated: turn their tangent-space xy back into the first frame` + (X5.v5 ? `
+  // (each layer's normal read only where its weight is not 0: mix() then takes the other's exactly)
+  vec3 nA = vec3(0.0, 0.0, 1.0), nP = vec3(0.0, 0.0, 1.0), nB = vec3(0.0, 0.0, 1.0);
+  if (wB < 0.999 && wP < 0.999) {
+  nA = texture2D(tAn, uA).xyz * 2.0 - 1.0;
+#ifdef G_DA
+  vec3 nA2 = texture2D(tAn, uA2).xyz * 2.0 - 1.0; nA2.xy = nA2.xy * mat2(0.8, -0.6, 0.6, 0.8); nA = mix(nA, nA2, gm);
+#endif
+  }
+  if (wP > 0.001) {
+  nP = texture2D(tPn, uP).xyz * 2.0 - 1.0;
+  vec3 nP2 = texture2D(tPn, uP2).xyz * 2.0 - 1.0; nP2.xy = nP2.xy * mat2(0.8, 0.6, -0.6, 0.8); nP = mix(nP, nP2, gmP);
+  }
+  if (wB > 0.001 && wP < 0.999) nB = texture2D(tBn, uB).xyz * 2.0 - 1.0;` : `
   vec3 nA = texture2D(tAn, uA).xyz * 2.0 - 1.0, nP = texture2D(tPn, uP).xyz * 2.0 - 1.0;
 #ifdef G_DA
   vec3 nA2 = texture2D(tAn, uA2).xyz * 2.0 - 1.0; nA2.xy = nA2.xy * mat2(0.8, -0.6, 0.6, 0.8); nA = mix(nA, nA2, gm);
@@ -1499,11 +1618,11 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
 #ifdef G_DP
   vec3 nP2 = texture2D(tPn, uP2).xyz * 2.0 - 1.0; nP2.xy = nP2.xy * mat2(0.8, 0.6, -0.6, 0.8); nP = mix(nP, nP2, gm);
 #endif
-  vec3 nB = texture2D(tBn, uB).xyz * 2.0 - 1.0;
+  vec3 nB = texture2D(tBn, uB).xyz * 2.0 - 1.0;`) + `
   vec3 tn = mix(mix(nA, nB, wB), nP, wP); tn.xy *= uNS;` + (X.sap ? '\n  tn.xy *= 1.0 - wS * 0.85;' : '') + (X5.v5 && X5.glint ? `
-  // sastrugi: the wind's ripples on the snow, a metre and a half apart across its way, their crests wandering
-  // (in patches only, where the wind has scoured: elsewhere the snow lies smooth)
-  { float sph = gPw.y * 3.9 + sin(gPw.x * 0.9 + vLay.w * 5.0) * 1.1 + vLay.z * 9.0; vec2 sd = normalize(vec2(-0.34 + gwb * 0.94, 0.94 + gwb * 0.34)); tn.xy += mat2(1.0, 0.0, 0.0, -1.0) * sd * cos(sph) * 0.2 * gsk * smoothstep(0.38, 0.66, vLay.w + (vLay.z - 0.5) * 0.6); }` : '') + (X.wall ? `
+  // sastrugi: the wind's ripples on the snow, one and a half to two and a half metres apart across its way, two waves
+  // beating, their crests bent by the drift read; low, in the scoured patches only, faded where a pixel spans a ripple
+  if (gSa > 0.002) { float sph = gPw.y * 4.1 + gSp + sin(gPw.x * 0.9 + vLay.w * 5.0) * 1.1, sw = cos(sph) * 0.6 + cos(sph * 0.62 + gSp * 0.7 + 1.9) * 0.4; vec2 sd = normalize(vec2(-0.34 + gwb * 0.94, 0.94 + gwb * 0.34)); tn.xy += mat2(1.0, 0.0, 0.0, -1.0) * sd * sw * 0.075 * gSa * (1.0 - smoothstep(0.8, 1.6, fwidth(sph))); }` : '') + (X.wall ? `
 #ifdef G_WNRM
   if (steep > 0.001) { vec3 nW = texture2D(tWn, wbw.x > wbw.y ? uWx : uWz).xyz * 2.0 - 1.0; tn = mix(tn, nW, steep); }
 #endif
@@ -1513,11 +1632,14 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
   // the snow's relief raked by a low light from the moon's side: the scene's moon stands high over the hero, so its own
   // shading all but lost the crust and the drifts, and the snow read as a flat white sheet (the wind's ripples and the
   // scan's crust shaded as a grazing moon would show them)
+  // (held to a light hand, and faded off at a grazing look and with distance, where the camera of a cine sees the field
+  // edge-on: at 1.7 the crust and the ripples banded the far snow)
   { vec3 nR = normalize(gT * tn.x + gB * tn.y + gN * tn.z), Lr = vec3(-0.81, 0.4, 0.43);
-    diffuseColor.rgb *= clamp(1.0 + (dot(nR, Lr) - dot(gN, Lr)) * 1.7 * gsk, 0.6, 1.4); }` : '') + `
+    float rk = 1.05 * gsk * smoothstep(0.28, 0.6, gV.y) * (1.0 - smoothstep(22.0, 48.0, length(cameraPosition - vGW)));
+    diffuseColor.rgb *= clamp(1.0 + (dot(nR, Lr) - dot(gN, Lr)) * rk, 0.72, 1.28); }` : '') + `
 #endif`);
   };
-  m.customProgramCacheKey = () => 'groundPBR|' + type + (nrm ? '|n' : '') + '|q' + R.quality + (cfg.fake ? '|f' : '') + (cfg.hueB ? '|b' : '') + (cfg.edge ? '|e' : '');
+  m.customProgramCacheKey = () => 'groundPBR|' + type + (nrm ? '|n' : '') + '|q' + R.quality + (cfg.fake ? '|f' : '') + (cfg.hueB ? '|b' : '') + (cfg.edge ? '|e' : '') + (X5.win ? '|w' : '');
   return m;
 }
 
@@ -2843,20 +2965,38 @@ const PROP4 = {
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uSnow; uniform float uTime;')
         .replace('#include <map_fragment>', `#include <map_fragment>
   if (uSnow > 0.5) {
-    float rr = length(vMapUv - 0.5) * 2.0, fl = 0.85 + 0.15 * sin(uTime * 7.3 + rr * 9.0) * sin(uTime * 3.1);
-    float ra = opacity * (0.06 * (1.0 - smoothstep(0.38, 1.0, rr)) + 0.3 * fl * (1.0 - smoothstep(0.015, 0.07, abs(rr - 0.9))));
-    diffuseColor = vec4(diffuse * vec3(1.0, 0.8, 0.58) * ra, ra);
+    // (Act V: the rim only, thin and soft, a lantern's warm white, its strength wandering round it as the flame does; the
+    // fill is the child below, which only bright ground takes: here, on the dark ice and the wet flats, it laid a brown
+    // disc under her with a selection ring round it)
+    vec2 rq = vMapUv - 0.5; float rr = length(rq) * 2.0, an = atan(rq.y, rq.x);
+    float fl = 0.85 + 0.15 * sin(uTime * 7.3 + rr * 9.0) * sin(uTime * 3.1);
+    float br = 0.72 + 0.28 * sin(an * 9.0 + sin(an * 4.0 + uTime * 0.7) * 1.6 + uTime * 0.4) * sin(an * 5.0 - uTime * 0.23 + 1.3);
+    float ra = opacity * 0.19 * fl * br * (1.0 - smoothstep(0.004, 0.05, abs(rr - 0.9)));
+    diffuseColor = vec4(mix(diffuse, vec3(1.0, 0.9, 0.78), 0.65) * vec3(1.0, 0.92, 0.8) * ra, ra);
   }`);
     };
     mat.blendEquation = THREE.AddEquation; mat.blendSrc = THREE.OneMinusDstColorFactor; mat.blendDst = THREE.OneFactor;
     mat.customProgramCacheKey = () => 'ring5';
     const m = new THREE.Mesh(drapable(new THREE.PlaneGeometry(2, 2, 16, 16).rotateX(-Math.PI / 2), 0.05), mat);
     m.renderOrder = 2;
+    // (Act V's fill: lantern light warming what is bright under it, the snow, in proportion to it (dst x src added): the
+    // dark ice, the water and the wet flats take next to nothing of it)
+    const fm = new THREE.MeshBasicMaterial({ color: 0xffb060, transparent: true, opacity: 0.55, depthWrite: false, toneMapped: false, blending: THREE.CustomBlending });
+    fm.blendEquation = THREE.AddEquation; fm.blendSrc = THREE.DstColorFactor; fm.blendDst = THREE.OneFactor;
+    fm.onBeforeCompile = (sh) => {
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec2 vRq;').replace('#include <begin_vertex>', '#include <begin_vertex>\n  vRq = position.xz;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec2 vRq;').replace('#include <map_fragment>', `#include <map_fragment>
+  float rr = length(vRq), ra = opacity * 0.06 * (1.0 - smoothstep(0.3, 1.0, rr));
+  diffuseColor = vec4(mix(diffuse, vec3(1.0, 0.9, 0.78), 0.65) * ra, ra);`);
+    };
+    fm.customProgramCacheKey = () => 'ring5f';
+    const fill = new THREE.Mesh(drapable(new THREE.PlaneGeometry(2, 2, 16, 16).rotateX(-Math.PI / 2), 0.04), fm);
+    fill.renderOrder = 2; fill.visible = false;
     // (the blending follows the zone: additive elsewhere, as it always was; a GL state, no recompile)
-    m.onBeforeRender = () => { mat.blending = WIND.uSnow.value > 0.5 ? THREE.CustomBlending : THREE.AdditiveBlending; };
-    const g = new THREE.Group(); g.add(m);
-    g.userData.setColor = (c) => m.material.color.set(c);
-    g.userData.setOpacity = (a) => { m.material.opacity = a; };
+    m.onBeforeRender = () => { const s5 = WIND.uSnow.value > 0.5; mat.blending = s5 ? THREE.CustomBlending : THREE.AdditiveBlending; fill.visible = s5; };
+    const g = new THREE.Group(); g.add(m, fill);
+    g.userData.setColor = (c) => { m.material.color.set(c); fm.color.set(c); };
+    g.userData.setOpacity = (a) => { m.material.opacity = a; fm.opacity = a; };
     return g;
   },
   // a Lampless lantern's cone on the ground: length 1 along +z, half-angle o.arc. The lantern's light falls off along it and
@@ -3050,7 +3190,10 @@ float wyN(vec3 p) {
     diffuseColor.rgb *= 0.7 + 0.25 * h + 0.2 * h2;
     float h3 = wyN(vec3(vWyP.xz * 1.4, 3.3).xzy);
     // (drifts in patches, the stone and its ring of runes showing between: snowed all over, the disc read as a plain white plate)
-    float sn = smoothstep(0.5, 0.85, vWyN.y + (h - 0.5) * 0.3) * smoothstep(0.42, 0.72, h3 * 0.7 + h2 * 0.3) + smoothstep(0.55, 0.95, -vWyN.z) * smoothstep(0.4, 0.7, h2) * 0.3;
+    // (one soft cap, thicker to one side, the stone showing to the other: patches of it laid a cow's hide over the drum)
+    // (and no more than half: snowed over, the drum read as a plain white plate)
+    float wy = smoothstep(0.25, 0.85, wyN(vec3(vWyP.xz * 0.9, 1.7).xzy) * 0.8 + h3 * 0.2);
+    float sn = smoothstep(0.55, 0.9, vWyN.y + (h - 0.5) * 0.15) * (0.16 + 0.34 * wy) + smoothstep(0.55, 0.95, -vWyN.z) * smoothstep(0.4, 0.7, h2) * 0.22;
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.74, 0.78, 0.84) * (0.92 + 0.16 * h), clamp(sn, 0.0, 0.8));
   }`);
   });
