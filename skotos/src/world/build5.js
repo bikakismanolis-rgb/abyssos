@@ -42,9 +42,6 @@ function mats5() {
   MAT.roof5 = pl ? worldMat(pl, { scale: 1.3, vc: 0.144, rough: 0.85, snow: true, soft: true, frost: true }) : M.lam;
   MAT.cliff5 = cl ? worldMat(cl, { scale: 3.0, vc: 0.144, tri: true, rough: 0.9, snow: true, soft: true, tint: cl === 'rime/seaCliff' ? 0xd8dce0 : 0xb4b8bc }) : M.lam;
   MAT.icy5 = icyMat(); MAT.icyFall = icyMat(true);
-  // (the drifts: the snow layer itself, projected from above)
-  const sn = lay4('rime/snow', 'snow');
-  MAT.snow5 = sn ? worldMat(sn, { scale: 3.2, vc: 0.144, rough: 0.6, tint: 0xd4dae4 }) : M.lam;
   return M;
 }
 // The ice that bergs, ridges, icicles and the frozen fall are made of (the design's image 13): one world-projected material
@@ -164,7 +161,7 @@ const CODE5 = new Proxy({
   // a marker pole: a pole with a strip of ochre cloth at its head, three ice blocks at its foot
   // (its foot in a low mound of drifted snow, three small blocks of ice wedged round it)
   pole: () => ({ mat: 'lam', geo: bake([{ geo: G.cyl(0.06, 0.08, 2.6, 6), color: 0x5a4a3a, o: { y: 1.3 } }, { geo: G.box(0.07, 0.55, 0.02), color: 0xa8401c, o: { y: 2.2, x: 0.1, rz: 0.12 } }, { geo: G.box(0.06, 0.38, 0.02), color: 0x8a3014, o: { y: 2.24, x: 0.18, rz: 0.45 } }, { geo: G.box(0.3, 0.05, 0.05), color: 0x5a4a3a, o: { y: 2.45 } },
-    { geo: jitter(G.dome(0.62, 0.3, 9), 0.06, 599), color: 0xc4ccd6, o: { y: -0.02, sy: 0.55 } },
+    { geo: jitter(G.dome(0.62, 0.3, 9), 0.06, 599), color: 0xc4ccd6, o: { y: -0.24, sy: 0.55 } },
     ...[0, 1, 2].map((i) => ({ geo: jitter(G.box(0.24 - i * 0.04, 0.18, 0.16, 1, 1, 1), 0.04, 600 + i), color: 0x8ea4b4, o: { x: Math.sin(i * 2.1) * 0.3, z: Math.cos(i * 2.1) * 0.3, y: 0.12, ry: i * 1.3, rz: 0.3 - i * 0.2 }, jit: 0.1 }))]) }),
   // a heap of kelp and wrack: dark lumps, strands lying out from them
   kelp: () => {
@@ -194,36 +191,41 @@ const CODE5 = new Proxy({
     parts.push({ geo: jitter(G.box(0.7, 0.32, 1.1, 2, 1, 2), 0.05, 643), color: 0x4a3a2c, o: { y: 0.48, z: -0.15 }, snow: 0.45 });
     return { mat: 'lam', geo: bake(parts) };
   },
-  // a tent of hides on a ridge pole, its door to local +z, snow on its roof
+  // a tent: a cone of hides on a ring of poles crossed at the top (the herders' lavvu), its door to local +z, smoke-dark
+  // round the hole at its peak, snow banked round its foot. (A ridge tent's two flat sides read as boards from above)
   tent: () => {
-    const parts = [{ geo: G.box(0.06, 1.7, 0.06), color: WOODD, o: { y: 0.85, z: 1.1 } }, { geo: G.box(0.06, 1.7, 0.06), color: WOODD, o: { y: 0.85, z: -1.1 } }, { geo: G.cyl(0.035, 0.035, 2.5, 5), color: WOODD, o: { y: 1.7, rx: Math.PI / 2 } }];
-    // (each side sewn from six hides of different tones, overlapping, laced along their seams: one plain sheet read as a
-    // board)
-    const HIDE = [0x5a4a3a, 0x6c5642, 0x4a3c30, 0x76604a, 0x544438, 0x664e3a];
-    for (const s of [-1, 1]) {
-      const a = s * 0.62, ca = Math.cos(a), sa = Math.sin(a);
-      for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) {
-        const dy = (j - 0.5) * 0.94, dz = (i - 1) * 0.76, nk = (j * 0.014 + (i % 2) * 0.008) * s;
-        parts.push({ geo: jitter(G.box(0.045, 1.04, 0.84, 1, 2, 2), 0.035, 645 + s * 7 + i * 3 + j), color: HIDE[(i * 2 + j + (s > 0 ? 3 : 0)) % 6], o: { x: s * 0.62 - dy * sa + ca * nk, y: 0.86 + dy * ca + sa * nk, z: dz, rz: a }, snow: 0.3 });
+    const HIDE = [0x5a4a3a, 0x6c5642, 0x4a3c30, 0x76604a, 0x544438, 0x664e3a, 0x5e4c3c, 0x705a46, 0x4e4034], parts = [], n = 9, r = 1.55, hh = 2.5;
+    for (let i = 0; i < n; i++) {
+      // (each panel its own hide, its sides sagging a little between the poles; the one at +z the door, dark)
+      const t0 = Math.PI / 2 - Math.PI / n + (i * Math.PI * 2) / n, door = i === 0;
+      const g = new THREE.ConeGeometry(r, hh, 3, 3, true, t0, (Math.PI * 2) / n), pp = g.attributes.position;
+      for (let v = 0; v < pp.count; v++) {
+        let f = (Math.atan2(pp.getX(v), pp.getZ(v)) - t0) / ((Math.PI * 2) / n); f -= Math.floor(f + 1e-4);
+        const k = 1 - 0.07 * Math.sin(Math.min(1, f) * Math.PI) * (0.5 - pp.getY(v) / hh);
+        pp.setX(v, pp.getX(v) * k); pp.setZ(v, pp.getZ(v) * k);
       }
-      for (const dz of [-0.38, 0.38]) parts.push({ geo: G.box(0.06, 1.9, 0.025), color: 0x2a2018, o: { x: s * 0.62 + ca * 0.03 * s, y: 0.86 + sa * 0.03 * s, z: dz, rz: a } });
+      g.computeVertexNormals();
+      parts.push({ geo: g, color: door ? 0x2a2018 : HIDE[i], o: { y: hh / 2 }, snow: 0.35, jit: 0.08 });
     }
-    parts.push({ geo: G.box(0.05, 1.2, 1.1), color: 0x241c16, o: { y: 0.55, z: 1.12, ry: Math.PI / 2 } });
+    // the poles, through the peak and out above it
+    for (let i = 0; i < 7; i++) { const a = (i / 7) * Math.PI * 2 + 0.2, x = Math.sin(a) * r * 0.98, z = Math.cos(a) * r * 0.98; parts.push({ geo: G.segTo(-x * 1.28, hh * 1.28, -z * 1.28, 0.035, 0.025, 4), color: WOODD, o: { x, z } }); }
+    parts.push({ geo: G.cyl(0.2, 0.3, 0.3, 7), color: 0x1a1612, o: { y: hh - 0.17 } });
+    parts.push({ geo: jitter(G.torus(r + 0.05, 0.16, 4, 12), 0.05, 669), color: 0xc4ccd6, o: { y: 0.02, rx: Math.PI / 2, sy: 0.5 }, jit: 0.06 });
     return { mat: 'lam', geo: bake(parts) };
   },
-  // a drift of snow: a long low mound, softly lumped
-  drift: () => ({ mat: 'snow5', geo: bake([{ geo: jitter(G.dome(1.0, 0.28, 12), 0.08, 649), color: GREY, o: { sx: 1.9, sy: 0.55 } }]), shadow: false }),
   // a fur thrown down on the ice
   fur: () => ({ mat: 'lam', geo: bake([{ geo: jitter(G.cyl(0.75, 0.8, 0.05, 9), 0.08, 647), color: 0x3a2c22, o: { y: 0.02, sx: 1.2 } }, { geo: jitter(G.cyl(0.45, 0.5, 0.05, 7), 0.06, 648), color: 0x4e3c2e, o: { y: 0.05, x: 0.3, sx: 1.3 } }]), shadow: false }),
   // the keepers' old cairn-pole: stones stacked about a pole, a rag at its head
   cairnPole: () => ({ mat: 'lam', geo: bake([...[0, 1, 2, 3, 4].map((i) => ({ geo: jitter(G.dodeca(0.3 - i * 0.04), 0.07, 650 + i), color: i % 2 ? 0x5a5a5e : 0x48484c, o: { x: Math.sin(i * 2.4) * (i < 3 ? 0.26 : 0.1), z: Math.cos(i * 2.4) * (i < 3 ? 0.26 : 0.1), y: 0.15 + (i < 3 ? 0 : (i - 2) * 0.26) }, snow: 1.3 })), { geo: G.cyl(0.04, 0.05, 2.2, 5), color: 0x4a3a2a, o: { y: 1.1, rz: 0.06 } }, { geo: G.box(0.05, 0.4, 0.02), color: 0x6a2a18, o: { y: 1.9, x: 0.08, rz: 0.2 } }]) }),
-  // a floe: a broken plate of the sea ice, its outline ragged, riding low in the water
+  // a floe: a pancake of new ice riding low in the water, its middle grey and wet, its rim heaped up white where the plates
+  // knock together. (Fourteen pale sides read as paper stars on the black water, seven as paper hexagons)
   floe: () => {
-    // (fourteen sides, broken at two scales: with seven a floe read as a paper hexagon; its outline lumpy, never cusped: a
-    // folded sine gave every floe the points of a star)
-    const g = new THREE.CylinderGeometry(0.5, 0.55, 0.14, 14, 1), pp = g.attributes.position;
-    for (let i = 0; i < pp.count; i++) { const a = Math.atan2(pp.getZ(i), pp.getX(i)), k = 0.86 + 0.13 * Math.sin(a * 2 + 0.7) + 0.08 * Math.sin(a * 3 + 2.1) + 0.04 * Math.sin(a * 7 + 1.1); pp.setX(i, pp.getX(i) * k); pp.setZ(i, pp.getZ(i) * k * 0.8); }
-    return { geo: bake([{ geo: g, color: 0xffffff, o: { y: 0.0 } }]), shadow: false };
+    // (lumpy: an even ellipse with a white rim read as a ring or a plate)
+    const k = (x, z) => { const a = Math.atan2(z, x); return 0.86 + 0.12 * Math.sin(a * 2 + 0.7) + 0.06 * Math.sin(a * 3 + 2.1) + 0.03 * Math.sin(a * 5 + 1.1); };
+    const lump = (g) => { const pp = g.attributes.position; for (let i = 0; i < pp.count; i++) { const f = k(pp.getX(i), pp.getZ(i)); pp.setX(i, pp.getX(i) * f); pp.setZ(i, pp.getZ(i) * f * 0.86); } g.computeVertexNormals(); return g; };
+    const plate = lump(new THREE.CylinderGeometry(0.47, 0.5, 0.1, 18, 1));
+    const rim = new THREE.TorusGeometry(0.455, 0.055, 4, 18); rim.rotateX(Math.PI / 2); lump(rim);
+    return { mat: 'lam', geo: bake([{ geo: plate, color: 0x8a96a0, jit: 0.1 }, { geo: rim, color: 0xbcc6cc, o: { y: 0.04, sy: 0.6 }, jit: 0.16 }]), shadow: false };
   },
   // a slab of sea ice (pressure ridges, a berg's rubble): a thick plate, its edges broken
   slab: () => ({ geo: bake([{ geo: jitter(G.box(1.3, 0.3, 0.95, 3, 1, 2), 0.07, 631), color: 0xffffff, o: { y: 0.1 } }]), shadow: true }),
@@ -448,14 +450,13 @@ const PLACE = {
   tent(p, I) { I.add('c5:tent', p.x, p.z, p.r, p.s, 0); },
   fur(p, I) { I.add('c5:fur~ns', p.x, p.z, p.r, p.s, 0.01); },
   cairnPole(p, I) { I.add('c5:cairnPole', p.x, p.z, p.r, p.s, 0); },
-  // a drift: a low mound of snow the wind has heaped (its long side across the wind)
-  drift(p, I) { I.add('c5:drift~ns', p.x, p.z, p.r, p.s, -0.02, p.s * 0.5, p.s * 0.6); },
   // gear frozen into the ice: a cask or a crate tilted, half under
   gear(p, I) { fitInst(I, p.k === 'cask' ? 'rime:cask' : 'rime:crate', { ...p, tilt: 0.35 }, (p.k === 'cask' ? 0.9 : 0.75) * p.s, 'h', -0.3); },
   // ice rubble: two or three plates of the sea ice shoved up together
   iceRubble(p, I) { const rr = RNG(Math.round(p.x * 37 + p.z * 11)); for (let k = 0; k < 3; k++) { const a = p.r + k * 2.2, d = rr.range(0, 0.5) * p.s; I.add('icy:#slab~ns', p.x + Math.cos(a) * d, p.z + Math.sin(a) * d, a + rr.range(-0.4, 0.4), p.s * rr.range(0.35, 0.7), -0.04, p.s * rr.range(0.4, 0.8), p.s * rr.range(0.35, 0.6), rr.range(0.2, 0.9) * (k % 2 ? 1 : -1)); } },
   // a floe: a plate of broken ice floating at a hole's rim
-  floe(p, I) { I.add('icy:#floe~ns', p.x, p.z, p.r, p.s * 1.2, -0.1, p.s * 0.8, p.s * 1.2, (hash2(p.x, p.z) - 0.5) * 0.14); },
+  // (riding level and a little higher: tilted, an Icemaw hole's water closed over one side and left a white crescent)
+  floe(p, I) { I.add('c5:floe~ns', p.x, p.z, p.r, p.s * 1.2, -0.06, p.s * 0.8, p.s * 1.2, (hash2(p.x, p.z) - 0.5) * 0.05); },
   // the ropes from the camp to the ship: posts, and two sagging lines between them
   ropeLine(p, I, B) {
     const dx = p.x1 - p.x, dz = p.z1 - p.z, L2 = Math.hypot(dx, dz), parts = [], n = Math.max(2, Math.round(L2 / 4.5));
@@ -983,8 +984,10 @@ const PROP5 = {
     for (let k = 0; k < 6; k++) { const a = (k / 6) * Math.PI * 2 + rr.range(-0.2, 0.2); wood.push({ geo: G.cyl(0.07, 0.1, 1.05, 6), color: k % 2 ? 0x6a5a48 : 0x4a3e32, o: { x: Math.sin(a) * 0.2, y: 0.22, z: Math.cos(a) * 0.2, rx: Math.cos(a) * 0.9, rz: -Math.sin(a) * 0.9 } }); }
     g.add(solid5(wood));
     const iron = [];
-    for (let k = 0; k < 3; k++) { const a = (k / 3) * Math.PI * 2; iron.push({ geo: G.segTo(-Math.sin(a) * 0.62, 1.6, -Math.cos(a) * 0.62, 0.045, 0.035, 5), color: 0x1e1c1a, o: { x: Math.sin(a) * 0.66, z: Math.cos(a) * 0.66 } }); }
-    iron.push({ geo: G.cyl(0.018, 0.018, 0.42, 4), color: 0x1e1c1a, o: { y: 1.38 } }, { geo: G.lathe([[0, 0], [0.24, 0.03], [0.3, 0.17], [0.29, 0.32], [0.24, 0.38]], 10), color: 0x262220, o: { y: 0.84 } }, { geo: G.torus(0.25, 0.022, 4, 10), color: 0x1e1c1a, o: { y: 1.2, rx: Math.PI / 2 } });
+    // (no ring on the hook: seen from above, the ring over the pot and the three thin legs drew a black ankh on the snow; the
+    // legs stouter, the pot a cauldron with its lip catching the fire)
+    for (let k = 0; k < 3; k++) { const a = (k / 3) * Math.PI * 2; iron.push({ geo: G.segTo(-Math.sin(a) * 0.6, 1.55, -Math.cos(a) * 0.6, 0.065, 0.045, 6), color: 0x24201c, o: { x: Math.sin(a) * 0.68, z: Math.cos(a) * 0.68 } }); }
+    iron.push({ geo: G.cyl(0.022, 0.022, 0.36, 4), color: 0x1e1c1a, o: { y: 1.37 } }, { geo: G.lathe([[0, 0], [0.26, 0.03], [0.33, 0.17], [0.32, 0.3], [0.28, 0.36], [0.26, 0.34]], 12), color: 0x2a2622, o: { y: 0.84 } }, { geo: G.torus(0.275, 0.03, 4, 14), color: 0x5a4e44, o: { y: 1.2, rx: Math.PI / 2 } }, { geo: G.cyl(0.25, 0.25, 0.02, 12), color: 0x3a3a3c, o: { y: 1.15 } });
     g.add(solid5(iron, MAT.iron));
     const coal = glowMat(0x2a1a10), bed = new THREE.Mesh(jitter(G.dome(0.5, 0.2, 9), 0.05, 742), coal); bed.position.y = 0.02; g.add(bed);
     // (its light and glow kept to a fire's orange: on the snow, at the Field brazier's strength, the hearth and the snow

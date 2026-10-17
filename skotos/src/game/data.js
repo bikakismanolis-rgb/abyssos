@@ -12,16 +12,17 @@ export const DIFFS = [
 // (unlock 'any:<diff>': any act finished on that difficulty; 'actN:<diff>': that act)
 // Act V's hazards by difficulty (indexed like DIFFS): the tide's cycle (s), its phases (low, flood, high, ebb) and the
 // steps' spacing, the bell's lead (s); the wash-out and the plunge (% of max life); the ice's load per crack stage; the
-// Cold's gains; Revealed and Exposed; a Breathing-hole's freeze ring (s) and its Black Breath's period (s); the bosses'
-// cooldowns and their extra adds per call. Telegraphs never change.
-const H5 = (o) => Object.assign({ tide: 152, phases: [40, 36, 40, 36], stepT: 4.5, bell: 6, reveal: 1.25 }, o);
+// Cold's gains and Frostbite's bite (% of max life); Revealed and Exposed; a Breathing-hole's freeze ring (s) and its Black
+// Breath's period (s); the bosses' cooldowns and their extra adds per call; the act's creatures' blows (x DIFFS.dmg).
+// Telegraphs never change.
+const H5 = (o) => Object.assign({ tide: 152, phases: [40, 36, 40, 36], stepT: 4.5, bell: 6, reveal: 1.25, dmg: 1 }, o);
 export const HAZ5 = [
-  H5({ tide: 180, phases: [50, 40, 50, 40], stepT: 5, bell: 8, wash: 0, plunge: 6, load: 1.6, cold: 0.6, reveal: 1.35, ring: 6, breath: 7, bossCd: 1, adds: 0 }),
-  H5({ wash: 6, plunge: 10, load: 1.2, cold: 1, ring: 8, breath: 6, bossCd: 1, adds: 0 }),
-  H5({ wash: 6, plunge: 10, load: 1.2, cold: 1, ring: 8, breath: 6, bossCd: 1, adds: 0 }),
-  H5({ wash: 8, plunge: 12, load: 1.1, cold: 1.15, ring: 9, breath: 5.5, bossCd: 0.9, adds: 1 }),
-  H5({ wash: 10, plunge: 14, load: 1.0, cold: 1.3, ring: 10, breath: 5, bossCd: 0.85, adds: 1 }),
-  H5({ wash: 12, plunge: 16, load: 0.9, cold: 1.45, ring: 10, breath: 5, bossCd: 0.8, adds: 2 })
+  H5({ tide: 180, phases: [50, 40, 50, 40], stepT: 5, bell: 8, wash: 3, plunge: 4, load: 1.4, cold: 0.8, frost: 2.5, reveal: 1.25, dmg: 1.25, ring: 6, breath: 7, bossCd: 1, adds: 0 }),
+  H5({ wash: 6, plunge: 6, load: 1.2, cold: 1, frost: 5, ring: 8, breath: 6, bossCd: 1, adds: 0 }),
+  H5({ wash: 6, plunge: 6, load: 1.2, cold: 1, frost: 5, ring: 8, breath: 6, bossCd: 1, adds: 0 }),
+  H5({ wash: 8, plunge: 8, load: 1.1, cold: 1.15, frost: 6, ring: 9, breath: 5.5, bossCd: 0.9, adds: 1 }),
+  H5({ wash: 10, plunge: 10, load: 1.0, cold: 1.3, frost: 7, ring: 10, breath: 5, bossCd: 0.85, adds: 1 }),
+  H5({ wash: 12, plunge: 12, load: 0.9, cold: 1.45, frost: 8, ring: 10, breath: 5, bossCd: 0.8, adds: 2 })
 ];
 
 // ---------- classes ----------
@@ -131,10 +132,11 @@ export const MONSTERS = {
   // the act's bosses (radius before look.scale: the Tower's 0.7 is 2.8 m at x4, the Skotos's 0.8 is 2.56 m at x3.2).
   // Skerry, the Walking Tower: the crab with the Skerry Light on its back, a wake through its own flood (wakeSpeed); the
   // Skotos: anchored waist-deep at the ice edge (float: nothing pushes it), its shadow under the ice in the Night
-  // (underSpeed); its Hands and the Coil are nodes it moves (ai.js), none of them a boss. (Their life and blows are held to
-  // Karthax's against a hero of their level: no step up in hardness from the Ashen Forge)
-  tower: { model: 'tower', hp: 68, dmg: 2.3, speed: 2.4, wakeSpeed: 6.5, radius: 0.7, ai: 'tower', reach: 5.5, atk: 'smash', atkTime: 1.6, flesh: 'chitin', xp: 150, boss: true, big: true, swim: true, sfx: 'spider', dieSfx: 'towerBell', dieClip: 'settle', look: { scale: 4.0, rim: 0x9ad8ff, rimI: 0.35 } },
-  skotos: { model: 'skotos', hp: 100, dmg: 2.6, speed: 0, underSpeed: 4.0, radius: 0.8, ai: 'skotos', reach: 7, atk: 'smash', atkTime: 1.8, flesh: 'skotos', xp: 260, boss: true, anchored: true, float: true, dieSfx: 'skotosRoar', dieClip: 'sink', look: { scale: 3.2, rim: 0x6a4a9a, rimI: 0.6 } },
+  // (underSpeed); its Hands and the Coil are nodes it moves (ai.js), none of them a boss. (Their life and blows are set
+  // against the fixed Karthax by tools/balance-act.mjs: a step up from the Ashen Forge for every class, as the acts before
+  // stepped up, with no single blow much past his biggest)
+  tower: { model: 'tower', hp: 170, dmg: 2.2, speed: 2.4, wakeSpeed: 6.5, radius: 0.7, ai: 'tower', reach: 5.5, atk: 'smash', atkTime: 1.6, flesh: 'chitin', xp: 150, boss: true, big: true, swim: true, sfx: 'spider', dieSfx: 'towerBell', dieClip: 'settle', look: { scale: 4.0, rim: 0x9ad8ff, rimI: 0.35 } },
+  skotos: { model: 'skotos', hp: 170, dmg: 2.3, speed: 0, underSpeed: 4.0, radius: 0.8, ai: 'skotos', reach: 7, atk: 'smash', atkTime: 1.8, flesh: 'skotos', xp: 260, boss: true, anchored: true, float: true, dieSfx: 'skotosRoar', dieClip: 'sink', look: { scale: 3.2, rim: 0x6a4a9a, rimI: 0.6 } },
   skotosHand: { model: 'skotosHand', hp: 5, dmg: 0, speed: 0, radius: 0.8, ai: 'node', reach: 0, atk: 'cast', atkTime: 9, flesh: 'skotos', xp: 0, big: true, anchored: true, weight: 0, dieClip: 'sink', look: { rim: 0x8a6ac0, rimI: 0.5 } },
   skotosCoil: { model: 'skotosHand', hp: 4, dmg: 0, speed: 0, radius: 0.8, ai: 'node', reach: 0, atk: 'cast', atkTime: 9, flesh: 'skotos', xp: 0, big: true, anchored: true, weight: 0, dieClip: 'sink', look: { scale: 0.85, rim: 0xc0a0ff, rimI: 0.8 } },
   // the ranger's companion

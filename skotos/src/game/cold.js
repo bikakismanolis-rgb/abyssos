@@ -7,8 +7,8 @@
 // - Out: -3/s anywhere dry and out of a gust; -12/s in a warm pool (light.js warmAt: lamp light, a lit hole lamp, the
 //   camp's brazier); -8/s in burning ground; a beam: warmHero (-15 at once, then Warmed: 4 s with no build-up).
 // - What it does: 50 Chilled (-8% move and attack speed), 75 Freezing (-15%, no regeneration), 100 Frostbite: frozen in
-//   place 1 s with an ice tint (rootHero; a dodge breaks it), 5% of her life, then 70. In a boss fight Frostbite is a 50%
-//   slow for 2 s instead, and it waits while a red telegraph is under her.
+//   place 1 s with an ice tint (rootHero; a dodge breaks it), HAZ5.frost% of her life (5 on Warden, 2.5 on Wanderer), then
+//   70. In a boss fight Frostbite is a 50% slow for 2 s instead, and it waits while a red telegraph is under her.
 // - For the HUD (story's): COLD { v, state, warmT, k, dir }, bus 'cold' (state) on each change, 'frostbite'; FX.chill for
 //   the breath (fx.js walk5); the frost overlay reads COLD.v (fx.js frostVignette).
 import { G } from './state.js';
@@ -94,15 +94,16 @@ function settle() {
   FX.chill = clamp((COLD.v - 25) / 75, 0, 1);
   if (st !== COLD.state) { COLD.state = st; emit('cold', st); }
 }
-// at 100: frozen in place for 1 s with the ice on her (a dodge breaks it), 5% of her life, and the Cold back to 70. In a
-// boss fight: a 50% slow for 2 s instead, held while a red telegraph is under her (the boss's blow comes first)
+// at 100: frozen in place for 1 s with the ice on her (a dodge breaks it), HAZ5.frost% of her life (5% on Warden), and the
+// Cold back to 70. In a boss fight: a 50% slow for 2 s instead, held while a red telegraph is under her (the boss's blow
+// comes first)
 function frostbite(pl) {
   const boss = G.bossActor && !G.bossActor.dead;
   if (boss && redUnder(pl.x, pl.z)) { COLD.held = true; return; }
   COLD.held = false;
   if (boss) { pl.status.slow = Math.max(pl.status.slow, 2); pl.status.slowK = Math.max(pl.status.slowK, 0.5); COLD.fbT = 2; }
   else { rootHero(1.0, { tint: 0x9ad8ff }); COLD.fbT = 1; }
-  damage(null, pl, pl.hpMax * 0.05, { pure: true, frost: true });
+  damage(null, pl, pl.hpMax * (haz().frost ?? 5) / 100, { pure: true, frost: true });
   COLD.v = 70;
   freezeCrystals(pl.x, pl.z, 1.4, 22);
   Audio.sfx('frost', { x: pl.x, z: pl.z });

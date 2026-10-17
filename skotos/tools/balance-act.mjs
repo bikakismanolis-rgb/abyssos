@@ -5,6 +5,9 @@
 //   node tools/balance-act.mjs --zone ashfield --cls warden --lvl 23 --diff 1 --runs 3 [--packs 8] [--out f.jsonl]
 //   node tools/balance-act.mjs --boss ivar --cls mage --lvl 23 --diff 0 --runs 5
 //   node tools/balance-act.mjs --plan plan.json --out results.jsonl     (a list of jobs; jobs already in the output are skipped)
+//   node tools/balance-act.mjs --zone coast --cls mage --lvl 34 --runs 2 / --boss skotos ... (Act V: the coast and the
+//   Farthest Light with the story past their arrivals; the Walking Tower and the Skotos fought by their rules: an islet at
+//   high water, the Tower's light, Selna remembered, the Farthest Light given its fire, a dark cairn lit in the Night)
 //
 // A job: { id, zone, boss, cls, lvl, diff, packs, seed, gearK, skill, heat }. env BASE (default http://localhost:5199/), SIM (game
 // steps per frame, default 8), SKILL (the bot's chance to notice a telegraph, default 0.6), REACT (seconds before it does, 0.45),
@@ -25,10 +28,10 @@ const OUT = args.out || null;
 const GROUP = +(process.env.GROUP || 40);
 
 // the order the bosses fall in, where they live, and the story a normal hero has behind her when she meets them
-export const BOSSES = ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn', 'amaranthe', 'ivar', 'karthax'];
-export const ZONES = { forest: 1, crypt: 4, pass: 10, halls: 13, weep: 16, heart: 19, ashfield: 22, forge: 25 };
-export const BOSS_ZONE = { weaver: 'forest', barrowLord: 'crypt', stonewarden: 'pass', moltenKing: 'halls', silverhorn: 'weep', amaranthe: 'heart', ivar: 'ashfield', karthax: 'forge' };
-const ACT = { forest: 1, crypt: 1, pass: 2, halls: 2, weep: 3, heart: 3, ashfield: 4, forge: 4 };
+export const BOSSES = ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn', 'amaranthe', 'ivar', 'karthax', 'tower', 'skotos'];
+export const ZONES = { forest: 1, crypt: 4, pass: 10, halls: 13, weep: 16, heart: 19, ashfield: 22, forge: 25, coast: 28, farlight: 31 };
+export const BOSS_ZONE = { weaver: 'forest', barrowLord: 'crypt', stonewarden: 'pass', moltenKing: 'halls', silverhorn: 'weep', amaranthe: 'heart', ivar: 'ashfield', karthax: 'forge', tower: 'coast', skotos: 'farlight' };
+const ACT = { forest: 1, crypt: 1, pass: 2, halls: 2, weep: 3, heart: 3, ashfield: 4, forge: 4, coast: 5, farlight: 5 };
 
 function jobsFromArgs() {
   if (args.plan) return JSON.parse(fs.readFileSync(args.plan, 'utf8'));
@@ -59,8 +62,8 @@ async function installBot(cfg) {
     for (const id of PRIO[cls]) { if (!sk[id]) continue; while (pts > 0 && sk[id] < 5) { sk[id]++; pts--; } }
     return { sk, pts };
   }
-  const BOSS_LV = { weaver: 3, barrowLord: 7, stonewarden: 12, moltenKing: 16, silverhorn: 18, amaranthe: 22, ivar: 24, karthax: 28 };
-  const BEFORE = { forest: [], crypt: ['weaver'], pass: ['weaver', 'barrowLord'], halls: ['weaver', 'barrowLord', 'stonewarden'], weep: ['weaver', 'barrowLord', 'stonewarden', 'moltenKing'], heart: ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn'], ashfield: ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn', 'amaranthe'], forge: ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn', 'amaranthe', 'ivar'] };
+  const BOSS_LV = { weaver: 3, barrowLord: 7, stonewarden: 12, moltenKing: 16, silverhorn: 18, amaranthe: 22, ivar: 24, karthax: 28, tower: 30, skotos: 33 };
+  const BEFORE = { forest: [], crypt: ['weaver'], pass: ['weaver', 'barrowLord'], halls: ['weaver', 'barrowLord', 'stonewarden'], weep: ['weaver', 'barrowLord', 'stonewarden', 'moltenKing'], heart: ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn'], ashfield: ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn', 'amaranthe'], forge: ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn', 'amaranthe', 'ivar'], coast: ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn', 'amaranthe', 'ivar', 'karthax'], farlight: ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn', 'amaranthe', 'ivar', 'karthax', 'tower'] };
   // per slot: the best (by damage x toughness) of K drops round the item level a normal player wears there (job.ilvl, +-2;
   // default L-4..L), one of them an elite's, and the first-kill legendary of every boss already beaten (at that boss's
   // level: job.legLv, else BOSS_LV)
@@ -91,6 +94,10 @@ async function installBot(cfg) {
     return { equip, legs };
   }
 
+  const A4END = Object.fromEntries(['after3', 'fireTaken', 'ivar', 'plug', 'karthax', 'crownUnmade', 'giftsTaken', 'newFire'].map((f) => [f, true]));
+  const C5 = ['alkyone', 'coastCall', 'cradle', 'coal', 'alkField', 'coastSeen', 'hearth', 'rite', 'tamMet', 'glaukosMet'];
+  const F5 = [...C5, 'light_grey', 'mem_i1', 'light_wreck', 'mem_i2', 'light_fall', 'mem_i3', 'towerWake', 'towerDown', 'frozen', 'farSeen', 'alkShip'];
+  const ACT5 = { coast: { ...A4END, heat: 3, ...Object.fromEntries(C5.map((f) => [f, true])) }, farlight: { ...A4END, heat: 3, ...Object.fromEntries(F5.map((f) => [f, true])), lights5: ['grey', 'wreck', 'fall'] } };
   const ZFLAGS = {
     forest: { quest: 1, acts: 0, flags: {} },
     crypt: { quest: 3, acts: 0, flags: { weaver: true } },
@@ -101,13 +108,19 @@ async function installBot(cfg) {
     // a zone run clears the whole zone: the Anvil Gate and the Great Stair open (Ivar at rest, the slag plug melted), the
     // Forge's heat at its middle stage
     ashfield: { quest: 18, acts: 3, flags: { after3: true, fireTaken: true, ivar: true } },
-    forge: { quest: 20, acts: 3, flags: { after3: true, fireTaken: true, ivar: true, bellows0: true, heat: 1, plug: true } }
+    forge: { quest: 20, acts: 3, flags: { after3: true, fireTaken: true, ivar: true, bellows0: true, heat: 1, plug: true } },
+    // Act V: Act IV done (the new fire burning); the coast past its rite (q26), the Farthest Light past the Icebound Ship
+    // (q28): no arrival scene holds the clock
+    coast: { quest: 26, acts: 4, flags: ACT5.coast },
+    farlight: { quest: 28, acts: 4, flags: ACT5.farlight }
   };
   const BFLAGS = {
+    tower: { quest: 27, flags: { light_grey: true, mem_i1: true, light_wreck: true, mem_i2: true, light_fall: true, mem_i3: true, lights5: ['grey', 'wreck', 'fall'], towerWake: true } },
+    skotos: { quest: 29, flags: { hole0: true, hole1: true, hole2: true, ternSeen: true } },
     ivar: { quest: 19, flags: { ...Object.fromEntries(['l1', 'l2', 'l3', 'l4', 'l5'].flatMap((id) => [['lamp_' + id, true], ['mem_' + id, true]])), ivar: false, ivarDown: false } },
     karthax: { quest: 21, flags: { bellows0: true, bellows1: true, bellows2: true, heat: 3, plug: true, gifts: { throne: 'refused', forge: 'refused', unfading: 'refused' } } }
   };
-  const BOONS = ['ember', 'forge', 'amber'];
+  const BOONS = ['ember', 'forge', 'amber', 'lantern'];
 
   async function setupHero(job) {
     let h = G.hero;
@@ -122,8 +135,8 @@ async function installBot(cfg) {
     h.quest = bf?.quest ?? zf.quest;
     h.flags = Object.assign({ tickHint: true, helpSeen: true }, zf.flags, bf?.flags || {});
     if (job.zone === 'forge' && !job.boss && job.heat != null) h.flags.heat = job.heat;
-    for (let a = 1; a <= 3; a++) { h['act' + a] = a <= zf.acts ? 1 : -1; if (a <= zf.acts) h.flags['act' + a] = true; }
-    h.act4 = -1;
+    for (let a = 1; a <= 4; a++) { h['act' + a] = a <= zf.acts ? 1 : -1; if (a <= zf.acts) h.flags['act' + a] = true; }
+    h.act5 = -1; G.selnaBack = false;
     h.boons = BOONS.slice(0, zf.acts);
     h.seeds = {};
     h.inv = new Array(32).fill(null);
@@ -171,8 +184,11 @@ async function installBot(cfg) {
     const red = [], blue = [], st = B.st, pl = G.player;
     const fl = forge.flues() || [], flueT = new Map();
     for (const f of fl) { if (f.tele) flueT.set(f.tele, f); if (f.sheet) flueT.set(f.sheet, f); }
+    const breath = G.zone.seal?.tele;
     for (const t of fx.FX.teles) {
       if (!t.alive || t.t > t.dur + 0.05) continue;
+      // (a seal's Black Breath is not harm to step out of: the seal rule stands in it to shield the lamp)
+      if (t === breath) continue;
       const m = t.m, u = m.material.uniforms, col = u.uColor.value.getHex(), shape = u.uShape.value;
       if (OWN.has(col)) continue;
       let s = seen.get(t);
@@ -186,6 +202,10 @@ async function installBot(cfg) {
     }
     // standing fire and the like (the foe's): walked out of, not rolled out of
     for (const a of G.areas) if ((a.team === 'foe' || a.team === 'all') && a.dmg > 0 && a.t < a.dur) red.push({ k: 0, x: a.x, z: a.z, r: a.r, left: 99, soft: true });
+    // (Act V: thin ice webbed to its last stage before a break, which she can see, is stepped off the same way: noticed as
+    // a telegraph is, a cell at a time, again every 3 s)
+    const I = G.zone.ice, L = G.zone.L;
+    if (I && L?.ice && pl) { const cx = Math.floor(pl.x), cz = Math.floor(pl.z), ep = Math.floor(st.t / 3); for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) { const ix = cx + dx, iz = cz + dz; if (ix < 0 || iz < 0 || ix >= L.w || iz >= L.h) continue; const i = iz * L.w + ix; if (L.ice[i] && I.stage[i] === 3 && ((((i * 31 + ep) * 2654435761) >>> 0) / 4294967296) < st.skill) red.push({ k: 0, x: ix + 0.5, z: iz + 0.5, r: 0.75, left: 99, soft: true }); } }
     return { red, blue, pl };
   }
   const PAD = 0.75;
@@ -226,6 +246,8 @@ async function installBot(cfg) {
     let pool = G.actors.filter((a) => live(a) && (a.aggro || a.dormant || st.mode === 'boss' || (st.pack && a.packId === st.pack.id)) && Math.hypot(a.x - pl.x, a.z - pl.z) < 40);
     if (st.mode === 'pack') pool = pool.filter((a) => a.aggro || a.packId === st.pack?.id);
     if (b && !b.dead && b.mourners && b.ward > 0) { const m = b.mourners.filter((x) => live(x) && attackable(x)); if (m.length) pool = m; }
+    // (the Skotos: its Hands and its Coil while it is warded, under the ice or out of reach)
+    if (b && !b.dead && b.kind === 'skotos') { const m = G.actors.filter((x) => (x.kind === 'skotosHand' || x.kind === 'skotosCoil') && live(x) && attackable(x)); if (m.length && (b.ward > 0 || b.under || b.hidden || m.some((x) => x.kind === 'skotosCoil'))) pool = m; else pool = pool.filter((x) => x === b || Math.hypot(x.x - pl.x, x.z - pl.z) < 6); }
     pool = pool.filter((a) => !(st.skip.get(a) > st.t));
     let best = null, bs = 1e9, bestA = null, bsA = 1e9;
     for (const a of pool) {
@@ -350,6 +372,30 @@ async function installBot(cfg) {
         if (Math.hypot(off.x - pl.x, off.z - pl.z) < off.r - 0.3) { if (!pl.act) { off.use(); st.touches++; } return; }
         goal = { x: off.x, z: off.z, near: off.r - 0.6 };
       }
+    }
+    // Act V: the Walking Tower (an islet while the tide is in, its light on its flank when it is an Island), the Skotos
+    // (Selna's Remember, the Farthest Light given its fire, a dark cairn lit in the Night)
+    // a Breathing-hole's seal: its dark lamps lit while no foe stands at her side, else what came out of it fought
+    if (!goal && st.sealHole) {
+      const ho = st.sealHole, S = G.zone.seal, dark = (G.zone.act5?.lamps || []).filter((l) => l.hole === ho.id && !l.lit).sort((p, q) => Math.hypot(p.x - pl.x, p.z - pl.z) - Math.hypot(q.x - pl.x, q.z - pl.z));
+      // the Black Breath on a lamp (noticed as a telegraph is, after her reaction): between the hole and the lamp, to shield it
+      if (S?.tele && S.target && S.ho === ho) {
+        let s0 = seen.get(S.tele); if (s0 == null) { s0 = Math.random() < st.skill; seen.set(S.tele, s0); }
+        if (s0 && S.tele && (1.2 - S.teleT) >= st.react) { const it = S.target, dl = Math.hypot(it.x - ho.x, it.z - ho.z) || 1; goal = { x: it.x + (ho.x - it.x) / dl * 0.7, z: it.z + (ho.z - it.z) / dl * 0.7, near: 0.4 }; moveTo(st, pl, goal.x, goal.z); st.why = 'shield'; st.shields = (st.shields || 0) + (st.lastShield === S.tele ? 0 : 1); st.lastShield = S.tele; return; }
+      }
+      const add = G.actors.some((x) => live(x) && attackable(x) && Math.hypot(x.x - pl.x, x.z - pl.z) < 4 + x.radius);
+      if (dark.length && !add) { const it = dark[0]; if (Math.hypot(it.x - pl.x, it.z - pl.z) < 1.8) { if (!pl.act) { it.use(); st.touches++; } return; } goal = { x: it.x, z: it.z, near: 1.4 }; }
+    }
+    if (!goal && b && !b.dead && b.kind === 'tower') {
+      const T = b.tide, L = G.zone.L;
+      if (b.st === 'island' && b.lightIt && !b.lit) { const it = b.lightIt; if (Math.hypot(it.x - pl.x, it.z - pl.z) < 2.2) { if (!pl.act) { it.use(); st.touches++; } return; } goal = { x: it.x, z: it.z, near: 1.6 }; }
+      else if (b.phase === 0 && T && T.st !== 'low' && !(b.dazed > 0)) { const isl = L.spots.bayIslets.slice().sort((p, q) => Math.hypot(p.x - pl.x, p.z - pl.z) - Math.hypot(q.x - pl.x, q.z - pl.z))[0]; if (isl) goal = { x: isl.x, z: isl.z, near: 1.4, fight: true }; }
+    }
+    if (!goal && b && !b.dead && b.kind === 'skotos') {
+      const z = G.zone, A = z.act5;
+      if (z.remember) { const it = z.remember; if (Math.hypot(it.x - pl.x, it.z - pl.z) < 1.8) { if (!pl.act && (!b.nb || b.nb.st === 'down' || b.nb.st === 'up')) { it.use(); st.touches++; } return; } goal = { x: it.x, z: it.z + 1.0, near: 1.2 }; }
+      else if (z.giving && A?.farIt) { const it = A.farIt; if (Math.hypot(it.x - pl.x, it.z - pl.z) < 2.0) { if (!pl.act) { it.use(); st.touches++; } return; } goal = { x: it.x, z: it.z + 0.8, near: 1.2 }; }
+      else if (b.phase === 1 && (b.under || b.hidden)) { const cr = (A?.cairns || []).filter((q) => !q.lit).sort((p, q) => Math.hypot(p.x - pl.x, p.z - pl.z) - Math.hypot(q.x - pl.x, q.z - pl.z))[0]; if (cr) { if (Math.hypot(cr.x - pl.x, cr.z - pl.z) < 2.2) { if (!pl.act) { cr.use(); st.touches++; } return; } goal = { x: cr.x, z: cr.z + 1.4, near: 1.6 }; } }
     }
     if (!goal && b && !b.dead && b.cages) {
       const up = b.cages.filter((s) => !s.dead).sort((p, q) => Math.hypot(p.x - pl.x, p.z - pl.z) - Math.hypot(q.x - pl.x, q.z - pl.z));
@@ -480,6 +526,7 @@ async function installBot(cfg) {
     const e = st.src[k] ||= { n: 0, life: 0 }; e.n++; e.life += frac;
     const bb = G.zone.boss; if (bb && st.mode === 'boss') st.byPhase[bb.phase ?? 0] = (st.byPhase[bb.phase ?? 0] || 0) + frac;
   });
+  bus.on('lampSnuffed', (it) => { const st = B.st; if (st?.sealHole && it?.hole === st.sealHole.id) st.sealLost = (st.sealLost || 0) + 1; });
   bus.on('kill', (a) => { const st = B.st; if (st?.counting && a.team === 'foe') { st.kills++; if (a.elite) st.eliteKills++; } });
   // a death: counted, and she gets up where she fell a second later (game time: updatePlayer does not run for the dead, so
   // the bot's own tick cannot do it)
@@ -522,9 +569,31 @@ async function installBot(cfg) {
       const route = reach.slice(0, job.packs).map((q) => q.p);
       st.route = route.map((p) => ({ tag: p.tag, n: p.n, elite: p.elite || null, d: reach.find((q) => q.p === p).d }));
       if (job.walk) walkZone(st, z, map, route);
+      // the Farthest Light (Act V): what lies past a Breathing-hole is reached only once it is sealed, so the route is the
+      // packs within reach, then the next hole's seal (its three lamps lit, what comes out of it fought, a dark lamp lit
+      // again; Alkyone holds one after a minute), then the packs it opened, and so on (job.noSeal: the packs in reach only)
+      const seals = job.zone === 'farlight' && !job.walk && !job.noSeal ? L.spots.holes.slice().sort((p, q) => p.id - q.id) : null;
+      if (seals) {
+        const seen = new Set(route);
+        route.extend = () => {
+          const dd = bfs(map, L.start.x, L.start.z), more = z.packs.filter((p) => !seen.has(p)).map((p) => { const f = map.nearestFloor(p.x, p.z, 5); return { p, d: dd[Math.floor(f.z) * w + Math.floor(f.x)] }; }).filter((q) => q.d >= 0).sort((a, b) => a.d - b.d).map((q) => q.p);
+          for (const p of more) { seen.add(p); route.push(p); st.route.push({ tag: p.tag, n: p.n, elite: p.elite || null }); }
+          return more.length;
+        };
+      }
       let i = -1, wait = 0;
       const next = () => {
         i++;
+        if (i >= route.length && seals) {
+          route.extend();
+          const ho = i >= route.length && seals.find((h) => !G.hero.flags['hole' + h.id]);
+          if (ho) {
+            const p0 = ho.lamps[0], at = map.nearestFloor(p0.x + (p0.x - ho.x) * 0.3, p0.z + (p0.z - ho.z) * 0.3, 3);
+            pl.x = at.x; pl.z = at.z; pl.kx = pl.kz = 0;
+            st.sealHole = ho; st.sealLost = 0; st.pack = { tag: 'seal' + ho.id, n: 0, id: 'seal', spawned: true }; st.packT = 0; st.packStart = { ct: st.ct, taken: st.takenN, dealt: st.dealt, deaths: st.deaths, kills: st.kills, min: 1 }; st.fight = true; st.target = null;
+            i--; return;
+          }
+        }
         if (i >= route.length) { st.over = true; return; }
         const p = route[i], at = backFrom(map, d, p.x, p.z, 9) || map.nearestFloor(p.x, p.z + 7);
         pl.x = at.x; pl.z = at.z; pl.kx = pl.kz = 0;
@@ -535,13 +604,25 @@ async function installBot(cfg) {
         if (wait > 0) { wait -= dt; if (wait <= 0) next(); return; }
         if (i < 0) { next(); return; }
         st.packT += dt;
+        // a seal: done when the hole is (or after 5 minutes)
+        if (st.sealHole) {
+          const ho = st.sealHole;
+          if (G.hero.flags['hole' + ho.id] || st.packT > 300) {
+            const s = st.packStart;
+            st.packs.push({ tag: 'seal' + ho.id, n: 0, elite: null, t: +st.packT.toFixed(1), life: +(st.takenN - s.taken).toFixed(2), deaths: st.deaths - s.deaths, kills: st.kills - s.kills, timeout: st.packT > 300, lost: st.sealLost || 0 });
+            if (st.packT > 300) G.hero.flags['hole' + ho.id] = true;
+            st.sealHole = null; st.fight = false; wait = cfg.walk; IN.mx = IN.mz = 0;
+          }
+          if (st.t > cfg.zoneMax) st.over = true;
+          return;
+        }
         const p = st.pack, mine = G.actors.filter((a) => a.packId === p.id && live(a));
         const near = G.actors.some((a) => live(a) && a.aggro && Math.hypot(a.x - pl.x, a.z - pl.z) < 22);
         if ((p.spawned && !mine.length && !near) || st.packT > 150) {
           const s = st.packStart;
           st.packs.push({ tag: p.tag, n: p.n, elite: p.elite || null, t: +st.packT.toFixed(1), life: +(st.takenN - s.taken).toFixed(2), deaths: st.deaths - s.deaths, kills: st.kills - s.kills, timeout: st.packT > 150 });
           st.fight = false; wait = cfg.walk; IN.mx = IN.mz = 0;
-          if (i + 1 >= route.length) { st.over = true; }
+          if (i + 1 >= route.length && !seals) { st.over = true; }
         }
         if (st.t > cfg.zoneMax) st.over = true;
       };
@@ -563,6 +644,8 @@ async function installBot(cfg) {
         if (!st.counting && b.awake) { st.counting = true; st.bossLvl = b.level; st.bossHp = Math.round(b.hpMax); st.bossDmg = +b.dmg.toFixed(1); if (st.job.hpTrace) traceHp(st, b); }
         if (b.dead) { st.killed = true; st.over = true; }
         if (st.ct > cfg.bossMax || st.deaths >= cfg.maxDeaths) st.over = true;
+        // the Skotos waits under the ice edge until the Farthest Light is touched (story.js: it rises in a scene)
+        if (st.job.boss === 'skotos' && !st.rose && G.mode === 'play' && G.zone.act5?.farIt) { st.rose = true; G.zone.act5.farIt.use(); }
         // still asleep (the Hart before its time, Karthax under the slag): walk up to it
         if (!b.awake && !b.holdWake && Math.hypot(b.x - pl.x, b.z - pl.z) > 10 && !st.counting) { st.target = b; }
       };

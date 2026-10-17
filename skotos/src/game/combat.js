@@ -294,10 +294,12 @@ export function breakGuard(a, t = 3) {
   a.guardBreaks = (a.guardBreaks || 0) + 1;
 }
 // a Hull-louse: half its life gone, or an area blow, and it curls into a ball for 3 s (immobile, it takes a quarter); a
-// blow with knock 6 or more sends the ball rolling (a.bowl, ai.js louse: the hero's dodge-roll through it does too)
+// blow with knock 6 or more sends the ball rolling (a.bowl, ai.js louse: the hero's dodge-roll through it does too). (The
+// Warden's third swing counts as an area blow against shields, not here: else every third swing curled a louse and bowled
+// it away whole, and a swarm outlasted her)
 function curlHit(a, o, ux, uz, fromHero) {
   if (a.under || a.bowling || o.dot) return;
-  if (!(a.curled > 0) && (o.area || (!a.halfCurl && a.hp <= a.hpMax * 0.5))) curl(a);
+  if (!(a.curled > 0) && ((o.area && !o.swing) || (!a.halfCurl && a.hp <= a.hpMax * 0.5))) curl(a);
   if (a.curled > 0 && fromHero && (o.knock || 0) >= 6) a.bowl = { ux, uz };
 }
 export function curl(a, t = 3) {

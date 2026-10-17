@@ -108,7 +108,7 @@ function basicWarden(aim) {
     name: 'basic', anim, speed: attackSpeed(third ? 1.25 : 1.15), face: aim.dir, cut, trail: [impact - 0.15, impact + 0.12],
     events: [[impact, () => {
       const mult = skillMult(sk) * (third ? 1.5 : 1);
-      const n = arcHit(third ? 3.0 : 2.6, third ? Math.PI * 2 : Math.PI * 0.8, (f) => damage(pl, f, heroHit(mult, { area: third }), { knock: third ? 7 : 2.5, kx: f.x - pl.x, kz: f.z - pl.z, area: third }));
+      const n = arcHit(third ? 3.0 : 2.6, third ? Math.PI * 2 : Math.PI * 0.8, (f) => damage(pl, f, heroHit(mult, { area: third }), { knock: third ? 7 : 2.5, kx: f.x - pl.x, kz: f.z - pl.z, area: third, swing: true }));
       swingFx(n, third);
       if (third) {
         ring(pl.x, pl.z, 3, 0xffe0b0, 0.3);

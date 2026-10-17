@@ -8,7 +8,7 @@ import { Avatar } from '../gfx/anim.js';
 import { hasPerson, personModel } from '../gfx/people.js';
 import { hasCreature, creatureModel } from '../gfx/creatures.js';
 import { tex } from '../gfx/textures.js';
-import { MONSTERS, DIFFS, monsterHP, monsterDmg, AFFIXES, CLASSES, PACK_DORMANT, PACK_LINE } from './data.js';
+import { MONSTERS, DIFFS, HAZ5, monsterHP, monsterDmg, AFFIXES, CLASSES, PACK_DORMANT, PACK_LINE } from './data.js';
 import * as B from '../world/build.js';
 import { G, uid } from './state.js';
 import { rand, clamp } from '../core/util.js';
@@ -155,6 +155,8 @@ export function spawnMonster(id, x, z, o = {}) {
   const D = DIFFS[G.hero.diff];
   const lvl = o.level ?? monsterLevel(G.zone?.level ?? 1);
   let hp = monsterHP(lvl) * def.hp * D.hp, dmg = monsterDmg(lvl) * def.dmg * D.dmg;
+  // (Act V's zones: their creatures' blows by difficulty too, HAZ5.dmg, so the act steps up from the one before on each)
+  if (G.zone?.act5) dmg *= HAZ5[G.hero.diff]?.dmg ?? 1;
   let scale = def.look?.scale || 1;
   const look = {};
   if (o.elite === 'champion') { hp *= 3; dmg *= 1.25; scale = 1.1; }
