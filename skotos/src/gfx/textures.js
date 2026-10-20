@@ -308,6 +308,27 @@ const MAKERS = {
     });
     return finish(c);
   },
+  // Act V: driftwood, silvered: x 0-0.75 the weathered side grain running along v (tileable round its 0.75), cracks and a
+  // knot or two in it; the top-right quarter (u, v 0.75-1) a sawn end's rings and checks, for the timbers' cut ends
+  driftwood() {
+    const n = 256, c = canvas(n), r = RNG(707), knots = Array.from({ length: 5 }, () => [r.range(0, 192), r.range(0, 256), r.range(4, 9)]);
+    pixels(c, (u, v, x, y) => {
+      if (x >= 192) {
+        if (y >= 64) return [120, 116, 108];
+        const dx = x - 224, dy = y - 32, d = Math.hypot(dx, dy) / 32, a = Math.atan2(dy, dx);
+        const ring = 0.5 + 0.5 * Math.sin(d * 34 + tfbm(a / 6.283 + 0.5, d * 0.5, 4, 71, 2) * 5), chk = Math.abs(Math.sin(a * 3.5 + 1.3)) < 0.06 && d > 0.3 ? 0.55 : 1;
+        const k = (0.62 + 0.22 * ring) * chk * (d > 0.94 ? 0.55 : 1);
+        return [150 * k, 128 * k, 100 * k];
+      }
+      const uu = x / 192, g1 = tfbm(uu, v * 0.25, 12, 61, 3), g2 = tfbm(uu, v * 0.06, 24, 63, 2);
+      let k = 0.72 + 0.32 * g1 + 0.12 * Math.sin(uu * 6.283 * 14 + g2 * 9);
+      const crack = Math.abs(Math.sin(uu * 6.283 * 5 + tfbm(uu, v * 0.2, 6, 67, 2) * 7));
+      if (crack < 0.035 + 0.03 * g2) k *= 0.45;
+      for (const [kx, ky, kr] of knots) { const dd = Math.hypot(((x - kx + 288) % 192) - 96, (y - ky) * 0.6) / kr; if (dd < 1) k *= 0.55 + 0.45 * dd; }
+      return [168 * k, 164 * k, 156 * k];
+    });
+    return finish(c);
+  },
   wood() {
     const n = 128, c = canvas(n);
     pixels(c, (u, v) => {

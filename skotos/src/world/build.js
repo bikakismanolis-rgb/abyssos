@@ -1269,7 +1269,13 @@ function buildGround(L, group) {
       else if (thick && !tide) { wb = clamp(tv * 1.9 - 0.5 + (nz - 0.5) * 1.3 + (big - 0.5) * 0.6, 0, 0.9); wp *= 1 - wb; }
       // (left unclamped a little either side, so the shader's threshold meets a field that runs on through the edge: clamped
       // at 0 and 1 a corner away, its isoline broke at every corner into the triangles' teeth)
-      else { wb = clamp(tv * 1.7 - 0.15 + (nz - 0.5) * 0.9 + (big - 0.5) * 0.6, tB ? -0.6 : 0, tB ? 1.6 : 1); }
+      else {
+        // (Skerry Bay: tongues of drifted snow out over its sand along the wind, and the sand showing through the snow of its
+        // rim in patches: its snow, its sand and its water lay in rings, a target from every cine)
+        let tg = 0;
+        if (L.boss && L.type === 'coast') { const bd = Math.hypot(vx - L.boss.x, vz - L.boss.z); if (bd > 8 && bd < 24) { const u = (vx * 0.94 - vz * 0.34) * 0.11, v = (vx * 0.34 + vz * 0.94) * 0.32; tg = (fbm(u + 7.1, v - 3.3, (L.seed || 1) + 61, 3) - 0.5) * 2.6 * (1 - Math.abs(bd - 16) / 8); } }
+        wb = clamp(tv * 1.7 - 0.15 + (nz - 0.5) * 0.9 + (big - 0.5) * 0.6 + tg, tB ? -0.6 : 0, tB ? 1.6 : 1);
+      }
       k = fl > 0 || tide || thick ? 0.92 + nz * 0.16 : Math.max(0.5, 0.96 - Math.min(Math.max(y, 0), 14) * 0.025) + (nz - 0.5) * 0.12;
       if (y < -0.3) k *= 0.45;
       // (the ebb caves: dark under their overhangs, build5 caveArch)
