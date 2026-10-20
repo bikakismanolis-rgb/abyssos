@@ -47,9 +47,9 @@ export const SKILLS = {
     { id: 'nova', cost: 26, cd: 7, dmg: 1.6, icon: 'frost', lvl: 2, radius: 5.5, freeze: 2.2 },
     { id: 'chain', cost: 22, cd: 0.8, dmg: 1.7, icon: 'storm', lvl: 4, jumps: 4, range: 13 },
     { id: 'meteor', cost: 42, cd: 6, dmg: 6.0, icon: 'meteor', lvl: 6, radius: 3.6, range: 12, ground: true },
-    { id: 'frostorb', cost: 30, cd: 1.5, dmg: 0.5, icon: 'snow', lvl: 20, range: 14 },
+    { id: 'frostorb', cost: 30, cd: 1.5, dmg: 0.8, icon: 'snow', lvl: 20, range: 14 },
     { id: 'rift', cost: 38, cd: 10, dmg: 0.45, icon: 'rift', lvl: 30, radius: 5.5, dur: 2.4, range: 12, ground: true },
-    { id: 'beam', cost: 10, cd: 0, dmg: 0.42, icon: 'beam', lvl: 40, range: 16, dur: 2.6, drain: 20 }
+    { id: 'beam', cost: 10, cd: 0, dmg: 0.7, icon: 'beam', lvl: 40, range: 16, dur: 2.6, drain: 20 }
   ]
 };
 // two other ways to play each of the first four skills (skillsx.js): unlocked at rank 5 for a point, one at a time, chosen in town
