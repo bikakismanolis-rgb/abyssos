@@ -48,7 +48,7 @@ export const VARIANT_FN = {
         for (const f of foes(pl.x, pl.z, 6.5)) if (live(f)) pull(f, pl.x, pl.z, 26 * dt);
         if (tick <= 0) {
           tick = sk.tick;
-          const n = circleHit(pl.x, pl.z, sk.radius + 0.3, (f) => damage(pl, f, heroHit(mult * 0.85, { area: true }), { quiet: true, resMul: 0.3, area: true }));
+          const n = circleHit(pl.x, pl.z, sk.radius + 0.3, (f) => damage(pl, f, heroHit(mult * 0.7, { area: true }), { quiet: true, resMul: 0.3, area: true }));
           if (n) { Audio.sfx('hitFlesh', { vol: 0.45 }); G.hitstop = Math.max(G.hitstop, 0.02); }
         }
         // the wind spiralling in
@@ -589,16 +589,18 @@ export const NEW_FN = {
   // Dawnbreaker: three great blows, each a wave of light down the field; the third is three waves
   dawn(sk, aim, rank, mult) {
     const pl = p();
-    const wave = (da, m, big) => {
+    // (the third blow's three waves strike a foe once between them)
+    const wave = (da, m, big, hit) => {
       const a = pl.rot + da, x = pl.x + Math.sin(a) * 0.8, z = pl.z + Math.cos(a) * 0.8;
-      fire('radiant', pl, x, z, a, { y: 1, pierce: 99, life: sk.range / 19, r: big ? 1.8 : 1.4, dmg: heroHit(m, { area: true }), opts: { knock: big ? 5 : 3, area: true, breakGuard: big }, look: radiantLook });
+      const pr = fire('radiant', pl, x, z, a, { y: 1, pierce: 99, life: sk.range / 19, r: big ? 1.8 : 1.4, dmg: heroHit(m, { area: true }), opts: { knock: big ? 5 : 3, area: true, breakGuard: big }, look: radiantLook });
+      if (hit) pr.hit = hit;
     };
     const blow = (k) => () => {
       const big = k === 2;
-      if (big) { for (const da of [-0.35, 0, 0.35]) wave(da, mult * 1.1, true); } else wave(0, mult, false);
+      if (big) { const hit = new Set(); for (const da of [-0.35, 0, 0.35]) wave(da, mult * 1.1, true, hit); } else wave(0, mult, false);
       flash(pl.x + Math.sin(pl.rot), 1.2, pl.z + Math.cos(pl.rot), 0xfff0c0, big ? 4 : 2.5, 0.15);
       addLight({ x: pl.x, y: 2, z: pl.z, color: 0xffd070, intensity: big ? 50 : 25, range: 12, life: 0.4, fade: 0.4 });
-      arcHit(2.8, Math.PI * 0.9, (f) => damage(pl, f, heroHit(mult * 0.8), { knock: 3, kx: f.x - pl.x, kz: f.z - pl.z }));
+      arcHit(2.8, Math.PI * 0.9, (f) => damage(pl, f, heroHit(mult * 0.5), { knock: 3, kx: f.x - pl.x, kz: f.z - pl.z }));
       swingFx(1, big); if (big) { shake(0.45); Audio.sfx('beaconIgnite', { vol: 0.5 }); } else Audio.sfx('lampLight', { vol: 0.6 });
     };
     act({ name: 'dawn', anim: 'Sword_Heavy_Combo', speed: 2.4, face: aim.dir, cut: 0.92, trail: [0.12, 0.85], events: [[0.24, blow(0)], [0.47, blow(1)], [0.74, blow(2)]],
