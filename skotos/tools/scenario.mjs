@@ -705,7 +705,7 @@ const S = {
         const G = window.__G, h = G.hero, pl = G.player;
         for (const a of G.actors) if (a.dummy || (a.pet && !a.dead)) { a.dead = true; a.remove(); }
         G.actors = G.actors.filter((a) => !a.removed);
-        h.skills[e.id] = 5; h.vars[e.id] = 3; h.variant[e.id] = e.v; h.loadout[0] = e.id;
+        h.skills[e.id] = 5; h.vars[e.id] = 3; h.variant[e.id] = e.v; { const j = h.loadout.indexOf(e.id); if (j > 0) h.loadout[j] = h.loadout[0]; h.loadout[0] = e.id; }
         pl.res = G.stats.resMax; pl.cds.fill(0); pl.act = null; pl.twinT = 0; for (const k in pl.buffs) delete pl.buffs[k]; pl.shield = 0;
         const far = G.hero.cls === 'warden' ? 2.2 : 7, fx = pl.x + Math.sin(pl.rot) * far, fz = pl.z + Math.cos(pl.rot) * far;
         window.__dum = [];
