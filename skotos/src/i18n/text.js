@@ -193,7 +193,7 @@ export const TEXT = {
   'hud.level': ['Επ. {0}', 'Lv {0}'], 'hud.gold': ['{0} χρυσά', '{0} gold'], 'hud.potion': ['Φίλτρο', 'Potion'],
   'hud.inventory': ['Εξοπλισμός', 'Inventory'], 'hud.skills': ['Ικανότητες', 'Skills'], 'hud.map': ['Χάρτης', 'Map'], 'hud.menu': ['Μενού', 'Menu'],
   'hud.full': ['Η τσάντα σου είναι γεμάτη', 'Your bag is full'], 'hud.notReady': ['Δεν είναι έτοιμο', 'Not ready'], 'hud.noRes': ['Δεν έχεις αρκετή {0}', 'Not enough {0}'],
-  'hud.levelup': ['Επίπεδο {0}', 'Level {0}'], 'hud.levelupSub': ['+1 πόντος ικανότητας', '+1 skill point'], 'hud.newSkill': ['Νέα ικανότητα: {0}', 'New skill: {0}'],
+  'hud.levelup': ['Επίπεδο {0}', 'Level {0}'], 'hud.levelupSub': ['+1 πόντος', '+1 point'], 'hud.newSkill': ['Νέα ικανότητα: {0}', 'New skill: {0}'],
   'hud.massacre': ['Σφαγή ×{0}', 'Massacre ×{0}'], 'hud.crit': ['Κρίσιμο!', 'Critical!'], 'hud.immune': ['Άτρωτος', 'Immune'], 'hud.block': ['Απόκρουση', 'Blocked'],
   'hud.gotItem': ['{0}', '{0}'], 'hud.shrine': ['Βωμός: {0}', 'Shrine: {0}'], 'hud.discovered': ['Βρήκες σημείο πύλης', 'Waypoint discovered'],
   'hud.sap': ['Κεχριμπάρι', 'Amber'], 'hud.rooted': ['Ρίζωμα · αποφυγή!', 'Rooted · dodge!'],
