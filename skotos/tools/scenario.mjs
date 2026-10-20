@@ -722,7 +722,7 @@ const S = {
       const at = { leap: 0.6, quake: 0.75, meteor: 1.15, rain: 0.9, wolf: 1.2, cry: 0.45, nova: 0.3, dawn: 1.25, bulwark: 1.0, trap: 1.0, hawks: 2.0, rift: 1.2, beam: 0.9, frostorb: 0.8, charge: 0.25, vault: 0.3, multi: 0.3, pierce: 0.4, fireball: 0.5, chain: 0.3, whirl: 0.8 }[e.id] ?? 0.4;
       await pg.evaluate((s) => window.__wait(s), at); await shot();
       // what follows the cast (a channel, a storm, a trap) plays out, then the books
-      await pg.evaluate((s) => window.__wait(s), e.id === 'bulwark' ? 9 : e.id === 'hawks' ? 10 : e.id === 'wolf' ? 8 : 4);
+      await pg.evaluate((s) => window.__wait(s), e.id === 'bulwark' ? 11 : e.id === 'hawks' ? 10 : e.id === 'wolf' ? 8 : 4);
       res[e.n ? e.id + '.' + e.n : e.id] = await pg.evaluate(() => { const d = window.__dum; return { dealt: Math.round(d.reduce((s, a) => s + (a.hpMax - Math.max(0, a.hp)), 0)), hit: d.filter((a) => a.hp < a.hpMax).length, n: d.length }; });
     }
     return res;

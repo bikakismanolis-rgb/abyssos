@@ -27,9 +27,9 @@ export const SKILLS = {
     { id: 'cry', cost: 0, cd: 16, icon: 'horn', lvl: 4, buff: 7, gain: 40 },
     { id: 'quake', cost: 45, cd: 5, dmg: 4.2, icon: 'quake', lvl: 6, range: 11 },
     // the later skills (skillsx.js): one at 20, 30 and 40, for the loadout
-    { id: 'charge', cost: 0, cd: 6, dmg: 1.9, icon: 'charge', lvl: 20, range: 9, gain: 15, radius: 2.4 },
+    { id: 'charge', cost: 0, cd: 6, dmg: 2.2, icon: 'charge', lvl: 20, range: 9, gain: 15, radius: 2.4 },
     { id: 'bulwark', cost: 0, cd: 20, dmg: 2.2, icon: 'bulwark', lvl: 30, buff: 6, shield: 0.3, radius: 4.6 },
-    { id: 'dawn', cost: 50, cd: 9, dmg: 2.1, icon: 'sun', lvl: 40, range: 13 }
+    { id: 'dawn', cost: 50, cd: 9, dmg: 1.5, icon: 'sun', lvl: 40, range: 13 }
   ],
   ranger: [
     { id: 'bolt', basic: true, dmg: 1.0, icon: 'bolt', range: 14, gain: 4 },
