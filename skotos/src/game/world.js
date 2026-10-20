@@ -19,7 +19,8 @@ import { loadFolk, hasPerson } from '../gfx/people.js';
 import { loadCreatures, creatureCount } from '../gfx/creatures.js';
 import { setEmitters, setAmbient, clearFX, glowBurst, puff, sparks, ring, P, explosion, FX, sapBurst, fireStream, splash, teleCone, killTele } from '../gfx/fx.js';
 import { Actor, spawnMonster, spawnNpc, createPlayer, rollAffixes, monsterLevel, ghostly } from './actors.js';
-import { PACKS, DIFFS, MONSTERS, PACK_LEAD, packKinds, HAZ5, monsterDmg } from './data.js';
+import { PACKS, DIFFS, MONSTERS, PACK_LEAD, packKinds, HAZ5, monsterDmg, COOP } from './data.js';
+import { NET, heroes } from '../net/state.js';
 import { startDrips, stopDrips } from './sap.js';
 import { addLightPool, removeLightPool, cradlePoint, addBeam, removeBeam, getLightPool, getBeam, snuffLamp } from './light.js';
 import { resetTide, floodWave } from './tide.js';
@@ -110,6 +111,8 @@ function seedFor(id) {
 }
 
 // ---------- building ----------
+// (each zone built has its own number: a co-op guest builds the host's again when it changes, net/coop.js)
+let zoneEp = 0;
 function createZone(id, o = {}) {
   const seed = o.seed ?? seedFor(id);
   let L;
@@ -134,7 +137,7 @@ function createZone(id, o = {}) {
   if (ZONES[id]?.act === 5) act5Layout(id, L);
   const map = new GridMap(L.w, L.h, L.cells, L.low);
   const lvl = buildLevel(L, R.quality);
-  const z = { id, L, map, lvl, level: o.level ?? ZONES[id].level, actors: [], pickups: [], interact: [], packs: [], seed, tier: o.tier || 0, extra: [], emit4: [] };
+  const z = { id, L, map, lvl, level: o.level ?? ZONES[id].level, actors: [], pickups: [], interact: [], packs: [], seed, tier: o.tier || 0, extra: [], emit4: [], ep: ++zoneEp };
   if (id === 'coast') z.mode = coastMode(); else if (id === 'farlight') z.mode = skyMode();
   // breakables
   for (const p of lvl.breakables) {
@@ -305,16 +308,18 @@ export function disposeZone(z) {
 const tmp = [];
 export function updatePacks() {
   const z = G.zone, pl = G.player; if (!z || !pl) return;
-  const D = DIFFS[G.hero.diff];
+  // (co-op: a guest's monsters are the host's; on the host a pack wakes for whichever hero comes near)
+  if (NET.mode === 'guest') return;
+  const D = DIFFS[G.hero.diff], hs = heroes(), near = (x, zz, r) => hs.some((h) => Math.hypot(x - h.x, zz - h.z) <= r);
   for (const p of z.packs) {
     if (p.spawned) continue;
-    if (Math.hypot(p.x - pl.x, p.z - pl.z) > 32) continue;
+    if (!near(p.x, p.z, 32)) continue;
     p.spawned = true;
     spawnPack(z, p, D);
   }
   // Silverhorn rises only once the Long Sorrow is known (the bellow after the third Tear sets quest 13)
   const asleep = z.bossSpot?.kind === 'silverhorn' && G.hero.quest < 13;
-  if (z.bossSpot && !z.bossSpawned && !asleep && Math.hypot(z.bossSpot.x - pl.x, z.bossSpot.z - pl.z) < 30) spawnBoss(z);
+  if (z.bossSpot && !z.bossSpawned && !asleep && near(z.bossSpot.x, z.bossSpot.z, 30)) spawnBoss(z);
   // Act V: at high water the flood waves walk in from the sea's edge (tide.js keeps their clock: one each 25 s while the
   // water stands at 0.75 m or more, at most two alive; the pack is combat's)
   if (z.tide && PACKS.floodWave) {
@@ -351,9 +356,11 @@ export function spawnBoss(z) {
 }
 function spawnPack(z, p, D) {
   const tag = z.id === 'gate' ? 'gate' : p.tag;
-  let n = Math.round(p.n * (0.85 + D.elite * 0.15));
+  // co-op: bigger packs and more champions for a party (data.js COOP)
+  const ci = NET.mode === 'host' ? Math.min(4, NET.n) - 1 : 0;
+  let n = Math.round(p.n * (0.85 + D.elite * 0.15) * COOP.pack[ci]);
   let elite = p.elite;
-  if (!elite && Math.random() < 0.06 * D.elite) elite = 'champion';
+  if (!elite && Math.random() < 0.06 * D.elite * COOP.elite[ci]) elite = 'champion';
   const weights = PACKS[tag] || PACKS.goblins;
   const pick = () => rand.weighted(weights);
   // Act III packs are built round a lead creature (the den's bear, the grove's Rootwarden, the Mourners): it comes first
@@ -398,6 +405,11 @@ export function nearestInteract() {
     if (it.used) continue;
     const d = Math.hypot(it.x - pl.x, it.z - pl.z);
     if (d < it.r && d < bd) { bd = d; best = it; }
+  }
+  // co-op: a guest touches only its own things (chests, shrines, its stash) and the shops; the story is the host's
+  if (best && NET.mode === 'guest') {
+    if (!NET.h.canUse(best)) return null;
+    if (best.kind === 'npc') return (best.netUse ||= Object.assign(Object.create(best), { use: () => NET.h.guestUse(best) }));
   }
   return best;
 }

@@ -5,6 +5,7 @@ import { tex } from './textures.js';
 import { rand, clamp, lerp, TAU } from '../core/util.js';
 import { BED_DRY } from '../world/genlib.js';
 import { inBay } from '../world/gen5.js';
+import { mir } from '../net/state.js';
 
 // ---------- particles ----------
 const VS = `
@@ -144,7 +145,8 @@ export const P = (o) => (o.leaf ? FX.leaf : o.add === false ? FX.alpha : FX.add)
 const rr = (a, b) => a + Math.random() * (b - a);
 
 // ---------- one-shot effects ----------
-export function sparks(x, y, z, n = 10, color = 0xffc070, speed = 6, opts = {}) {
+export function sparks(...a) { return mir('sparks', sparks0, a); }
+function sparks0(x, y, z, n = 10, color = 0xffc070, speed = 6, opts = {}) {
   for (let i = 0; i < n; i++) {
     const a = Math.random() * TAU, e = rr(-0.2, 1.2), s = speed * rr(0.3, 1);
     P({ x, y, z, vx: Math.cos(a) * Math.cos(e) * s + (opts.dx || 0) * s * 0.6, vy: Math.sin(e) * s, vz: Math.sin(a) * Math.cos(e) * s + (opts.dz || 0) * s * 0.6, life: rr(0.2, 0.5), size: rr(0.08, 0.16), size1: 0.02, color, color1: opts.color1 ?? 0xff5010, grav: 14, drag: 2 });
@@ -156,17 +158,21 @@ export function blood(x, y, z, n = 10, dx = 0, dz = 0, color = 0x8a0a0a) {
     P({ add: false, x, y, z, vx: Math.cos(a) * s * 0.6 + dx * s, vy: rr(1, 4), vz: Math.sin(a) * s * 0.6 + dz * s, life: rr(0.35, 0.7), size: rr(0.1, 0.22), size1: 0.06, color, color1: 0x3a0404, alpha: 0.95, alpha1: 0.6, grav: 16, drag: 1 });
   }
 }
-export function puff(x, y, z, n = 8, color = 0x6a6a6a, size = 0.9, spread = 0.8, life = 1.2) {
+export function puff(...a) { return mir('puff', puff0, a); }
+function puff0(x, y, z, n = 8, color = 0x6a6a6a, size = 0.9, spread = 0.8, life = 1.2) {
   for (let i = 0; i < n; i++) P({ add: false, x: x + rr(-spread, spread) * 0.5, y: y + rr(0, 0.4), z: z + rr(-spread, spread) * 0.5, vx: rr(-spread, spread), vy: rr(0.3, 1.2), vz: rr(-spread, spread), life: rr(life * 0.6, life), size: size * rr(0.6, 1), size1: size * 2.2, color, alpha: 0.45, alpha1: 0, drag: 1.5 });
 }
-export function glowBurst(x, y, z, color, n = 20, speed = 4, size = 0.35, life = 0.6) {
+export function glowBurst(...a) { return mir('glowBurst', glowBurst0, a); }
+function glowBurst0(x, y, z, color, n = 20, speed = 4, size = 0.35, life = 0.6) {
   for (let i = 0; i < n; i++) {
     const a = Math.random() * TAU, e = rr(-1, 1), s = speed * rr(0.4, 1);
     P({ x, y, z, vx: Math.cos(a) * s, vy: e * s * 0.6 + 0.5, vz: Math.sin(a) * s, life: rr(life * 0.5, life), size, size1: 0.02, color, drag: 3 });
   }
 }
-export function flash(x, y, z, color = 0xffffff, size = 3, life = 0.15) { P({ x, y, z, life, size, size1: size * 1.5, color, alpha: 0.9 }); }
-export function hitFx(x, y, z, kind, dx, dz, crit) {
+export function flash(...a) { return mir('flash', flash0, a); }
+function flash0(x, y, z, color = 0xffffff, size = 3, life = 0.15) { P({ x, y, z, life, size, size1: size * 1.5, color, alpha: 0.9 }); }
+export function hitFx(...a) { return mir('hitFx', hitFx0, a); }
+function hitFx0(x, y, z, kind, dx, dz, crit) {
   const k = crit ? 1.6 : 1;
   if (kind === 'flesh') { blood(x, y, z, Math.round(9 * k), dx, dz); sparks(x, y, z, 4, 0xffe0b0, 4, { dx, dz }); }
   else if (kind === 'bone') { sparks(x, y, z, Math.round(8 * k), 0xf0e8d0, 5, { dx, dz, color1: 0x8a8070 }); puff(x, y, z, 2, 0xd8d0c0, 0.4, 0.4, 0.5); }
@@ -182,7 +188,8 @@ export function hitFx(x, y, z, kind, dx, dz, crit) {
   else sparks(x, y, z, Math.round(8 * k), 0xffd080, 5, { dx, dz });
   if (crit) flash(x, y, z, 0xfff0d0, 2.2, 0.12);
 }
-export function explosion(x, z, r = 3, color = 0xff7a20, opts = {}) {
+export function explosion(...a) { return mir('explosion', explosion0, a); }
+function explosion0(x, z, r = 3, color = 0xff7a20, opts = {}) {
   flash(x, 1, z, 0xfff0c0, r * 2.4, 0.2);
   glowBurst(x, 0.8, z, color, Math.round(30 + r * 10), r * 3, 0.5, 0.7);
   for (let i = 0; i < 14 + r * 4; i++) { const a = Math.random() * TAU, s = rr(1, r * 2.2); P({ x, y: 0.4, z, vx: Math.cos(a) * s, vy: rr(1, 4), vz: Math.sin(a) * s, life: rr(0.5, 1.0), size: rr(0.5, 1.0), size1: 1.8, color: opts.smoke ?? 0x3a3430, alpha: 0.6, add: false, drag: 2 }); }
@@ -193,7 +200,8 @@ export function explosion(x, z, r = 3, color = 0xff7a20, opts = {}) {
 }
 
 // amber bursting from a broken root or a dying tree-thing; leaves a sap stain
-export function sapBurst(x, z, s = 1) {
+export function sapBurst(...a) { return mir('sapBurst', sapBurst0, a); }
+function sapBurst0(x, z, s = 1) {
   glowBurst(x, 0.9 * s, z, 0xffb040, Math.round(18 * s), 3 * s, 0.22, 0.7);
   for (let i = 0; i < 10 * s; i++) { const a = Math.random() * TAU, sp = rr(1, 3.5) * s; P({ add: false, x, y: 0.8 * s, z, vx: Math.cos(a) * sp, vy: rr(2, 5), vz: Math.sin(a) * sp, life: rr(0.5, 0.9), size: rr(0.08, 0.16), size1: 0.08, color: 0xffa830, color1: 0xa05a10, alpha: 0.95, alpha1: 0.8, grav: 16, drag: 0.8 }); }
   decal(x, z, 'amber', 1.4 * s);
@@ -213,7 +221,8 @@ export function fireStream(from, to, n = 4) {
 // ---------- ground rings (shockwaves) ----------
 const ringGeo = new THREE.RingGeometry(0.85, 1, 48);
 ringGeo.rotateX(-Math.PI / 2);
-export function ring(x, z, r, color = 0xffffff, life = 0.5, y = 0.12) {
+export function ring(...a) { return mir('ring', ring0, a); }
+function ring0(x, z, r, color = 0xffffff, life = 0.5, y = 0.12) {
   const m = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
   m.position.set(x, y, z); m.scale.setScalar(0.2);
   FX.group.add(m);
@@ -233,7 +242,8 @@ function decalTexture() {
   return decalTex;
 }
 const decalGeo = new THREE.PlaneGeometry(1, 1); decalGeo.rotateX(-Math.PI / 2);
-export function decal(x, z, kind, s = 1, life = 14) {
+export function decal(...a) { return mir('decal', decal0, a); }
+function decal0(x, z, kind, s = 1, life = 14) {
   // (Act V: a stain on the tide's flats lies on the bed, under the water; none on open water)
   const bed = decalBed(x, z); if (bed === -9) return;
   if (FX.decals.length > 40) { const d = FX.decals.shift(); FX.group.remove(d.m); d.m.material.dispose(); }
@@ -290,15 +300,18 @@ function teleMat(color, shape, arc = 0.5) {
   return new THREE.ShaderMaterial({ uniforms: { uP: { value: 0 }, uColor: { value: new THREE.Color(color) }, uShape: { value: shape }, uArc: { value: arc }, uA: { value: 1 } }, vertexShader: TELE_VS, fragmentShader: TELE_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
 }
 // circle at x,z radius r, fills over dur seconds
-export function teleCircle(x, z, r, dur, color = 0xff3020) {
+export function teleCircle(...a) { return mir('teleCircle', teleCircle0, a); }
+function teleCircle0(x, z, r, dur, color = 0xff3020) {
   const m = new THREE.Mesh(teleGeo, teleMat(color, 0)); m.position.set(x, 0.06, z); m.scale.set(r, 1, r);
   return addTele(m, dur);
 }
-export function teleCone(x, z, rot, range, arc, dur, color = 0xff3020) {
+export function teleCone(...a) { return mir('teleCone', teleCone0, a); }
+function teleCone0(x, z, rot, range, arc, dur, color = 0xff3020) {
   const m = new THREE.Mesh(teleGeo, teleMat(color, 1, arc)); m.position.set(x, 0.06, z); m.scale.set(range, 1, range); m.rotation.y = rot + Math.PI;
   return addTele(m, dur);
 }
-export function teleLine(x, z, rot, len, width, dur, color = 0xff3020) {
+export function teleLine(...a) { return mir('teleLine', teleLine0, a); }
+function teleLine0(x, z, rot, len, width, dur, color = 0xff3020) {
   const g = new THREE.PlaneGeometry(2, 2); g.rotateX(-Math.PI / 2); g.translate(0, 0, -1);
   const m = new THREE.Mesh(g, teleMat(color, 2)); m.position.set(x, 0.06, z); m.scale.set(width / 2, 1, len / 2); m.rotation.y = rot + Math.PI;
   m.userData.ownGeo = true;
@@ -311,7 +324,8 @@ function addTele(m, dur) {
   FX.teles.push(t);
   return t;
 }
-export function killTele(t) { if (t) t.alive = false; }
+export function killTele(...a) { return mir('killTele', killTele0, a); }
+function killTele0(t) { if (t) t.alive = false; }
 
 // ---------- weapon trails ----------
 const TRAIL_VS = `attribute float aA; varying float vA; varying vec2 vUv; void main(){ vA = aA; vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`;
@@ -351,7 +365,8 @@ export class Trail {
 }
 
 // ---------- lightning ----------
-export function bolt(x0, y0, z0, x1, y1, z1, color = 0x9ad8ff, width = 1) {
+export function bolt(...a) { return mir('bolt', bolt0, a); }
+function bolt0(x0, y0, z0, x1, y1, z1, color = 0x9ad8ff, width = 1) {
   const n = Math.max(6, Math.ceil(Math.hypot(x1 - x0, y1 - y0, z1 - z0) * 3));
   let px = x0, py = y0, pz = z0;
   for (let i = 1; i <= n; i++) {
@@ -596,18 +611,21 @@ export function clearFX() {
 // ---------- Act V: water, ice, breath, footprints ----------
 const AMB5 = new Set(['coast', 'coastFrozen', 'farlight', 'blizzard']);
 // a splash where something goes into the water (s its size): spray thrown up, a foam burst, a ring on the surface
-export function splash(x, z, s = 1) {
+export function splash(...a) { return mir('splash', splash0, a); }
+function splash0(x, z, s = 1) {
   for (let i = 0; i < 14 * s; i++) { const a = rr(0, TAU), v = rr(1, 3) * s; P({ add: false, x, y: 0.25, z, vx: Math.cos(a) * v * 0.5, vy: rr(2.5, 5) * Math.sqrt(s), vz: Math.sin(a) * v * 0.5, grav: 9.8, life: rr(0.5, 0.9), size: rr(0.08, 0.16), size1: 0.05, color: 0xd8e6ee, alpha: 0.9, alpha1: 0.2 }); }
   P({ add: false, x, y: 0.3, z, vy: 0.4, life: 0.8, size: 0.8 * s, size1: 2.2 * s, color: 0xe8f0f4, alpha: 0.4, alpha1: 0 });
   ring(x, z, 1.6 * s, 0xa8c4d4, 0.7, 0.3);
 }
 // ice breaking: shards flung out and skittering, a puff of powder
-export function iceShards(x, z, n = 12) {
+export function iceShards(...a) { return mir('iceShards', iceShards0, a); }
+function iceShards0(x, z, n = 12) {
   for (let i = 0; i < n; i++) { const a = rr(0, TAU), v = rr(1.2, 3.5); P({ x, y: 0.1, z, vx: Math.cos(a) * v, vy: rr(1.5, 3.5), vz: Math.sin(a) * v, grav: 9.8, drag: 0.6, life: rr(0.6, 1.2), size: rr(0.08, 0.15), size1: 0.06, color: 0xe0f2ff, color1: 0x7ab4e0, alpha: 0.95, alpha1: 0.3 }); }
   P({ add: false, x, y: 0.2, z, vy: 0.3, life: 1.1, size: 0.9, size1: 2.4, color: 0xe4ecf2, alpha: 0.35, alpha1: 0 });
 }
 // a freeze front's crystals: glints round a circle of radius r rising a little and going out
-export function freezeCrystals(x, z, r = 2, n = 16) {
+export function freezeCrystals(...a) { return mir('freezeCrystals', freezeCrystals0, a); }
+function freezeCrystals0(x, z, r = 2, n = 16) {
   for (let i = 0; i < n; i++) { const a = rr(0, TAU), d = r * rr(0.85, 1.05); P({ x: x + Math.cos(a) * d, y: rr(0.05, 0.4), z: z + Math.sin(a) * d, vx: Math.cos(a) * 0.3, vy: rr(0.2, 0.7), vz: Math.sin(a) * 0.3, life: rr(0.7, 1.5), size: rr(0.06, 0.12), size1: 0.02, color: 0xf4fbff, color1: 0x8ad0ff, alpha: 1, alpha1: 0, drag: 0.8 }); }
 }
 // a breath in the cold, from (x, y, z) toward (dx, dz): a small cloud drifting out and up; k (0-1, Chilled and worse) thicker

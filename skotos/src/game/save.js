@@ -13,11 +13,13 @@ export function loadSave() {
 export function writeSave() {
   if (!G.save) return;
   G.save.settings = G.settings;
-  if (G.hero) {
-    G.hero.played = Date.now();
-    const i = G.save.heroes.findIndex((h) => h.id === G.hero.id);
-    if (i >= 0) G.save.heroes[i] = G.hero; else G.save.heroes.unshift(G.hero);
-    G.save.last = G.hero.id;
+  // (a co-op guest's G.hero is a view with the host's story over it: its own record is what is kept, net/coop.js)
+  const hero = G.hero?.__real || G.hero;
+  if (hero) {
+    hero.played = Date.now();
+    const i = G.save.heroes.findIndex((h) => h.id === hero.id);
+    if (i >= 0) G.save.heroes[i] = hero; else G.save.heroes.unshift(hero);
+    G.save.last = hero.id;
   }
   try { localStorage.setItem(KEY, JSON.stringify(G.save)); } catch (e) { /* private mode or full storage: keep playing */ }
 }
