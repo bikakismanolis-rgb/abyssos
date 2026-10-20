@@ -27,29 +27,26 @@ Read this first when picking the project up in a new session.
 - Assets: CC-BY 4.0 or CC0 only, credited everywhere; no rips of commercial games or films (the owner wants a Play Store release). Builders live in `tools/creatures/**` and `tools/pack-*.mjs`; sources are downloaded to `/tmp/claude-0/sf` and `/tmp/claude-0/ph` (not in the repo).
 - Commit messages end with the session's Co-Authored-By and Claude-Session lines; never put a model name in commits or code.
 
-## Act V: where it stopped
+## Where everything stopped (20 October, paused by the owner until next week)
 
-The published artifact is still Acts I-IV (version 12, with the Act IV difficulty fix). Act V is on the branch, unpublished.
+Four lines of work. The published artifact is **version 12** (Acts I-IV with the Act IV difficulty fix); nothing below is published yet.
 
-**The Act IV difficulty fix (16 October).** The owner found the last act far harder than the others. Measured with `tools/balance-act.mjs` (a bot that plays zones and bosses for every class and difficulty; 724 runs): the cliff was Karthax for the Ranger and the Mage and the Forge's Breath, plus four bugs (slag drips on Karthax's platform, affixes firing from untouchable foes, the waylamp checkpoint lost on Continue, dash hits wider than drawn). Fixed and published as version 12; Karthax now costs 0.34 / 0.41 / 0.56 lives a fight (Warden / Ranger / Mage) against 0.64 / 0.80 / 1.47 before (bot-corrected). Act V's bosses were tuned against the old Karthax (Tower dmg 2.3, Skotos 2.6) and must be re-measured with the same tool so Act V is a step up from the fixed Act IV; Act V's own checkpoints must adopt the fixed Continue rule.
+| line | branch | state |
+|---|---|---|
+| Act V (the Frozen Coast) | `claude/sleepy-tesla-4030vd` (this branch) | Stages A-C done and reviewed (`docs/act5-briefs/reports/`: integrate.md, stage-c-fixes.md). Look polish: rounds 1 and 2 done, round 3's fixer stopped during its final re-shoots (`reports/look-round3.md`; its work so far is committed). Left: gate G4 (every Act I-V scenario, soak5, check-act4/5, parity, the strict-CSP artifact, the memory report) and a final review. |
+| Progression (Mastery, 24 skill variants, 9 later skills, the 4-button loadout) | `claude/skotos-progression` (from `claude/skotos-live` = version 12) | Built by a parallel session; an independent review found 21 problems, all fixed and committed (`docs/progression/review/fixes.md`). The release check was stopped part way: re-run every shipped scenario plus progpanel, progress and skillsfx, build the artifact, run the strict-CSP check, list the files against version 12 (`docs/progression/release.md`), then publish it as **version 13** from that branch. Then port it onto the Act V branch (`docs/progression/README.md` says how). |
+| Co-op, up to 4 players | `claude/skotos-coop` (from 564162f of this branch) | Built and tested by a parallel session (`docs/coop/README.md`, `release.md`, `questions.md`). Left: merge it into this branch (resolve against stage C's later fixes and the look rounds), re-run its tests (`node tools/net/test-transport.mjs`, `node tools/coop.mjs …`), review it (above all the host's validation of what guests send), and publish with the `capabilities` object in its `release.md` (room topics s, w, i, f, c at `interact`, and `user` with the `profile` scope). |
+| The code graph | this branch: `graphify-out/`, `docs/GRAPH.md` | Built on 20 October; refresh with `graphify update .` after the merges. |
 
-- **Stage A, assets: done** (commit "Skotos: the Act V assets"). The frost people set, the rime pack, the creatures (crab, skotos, tentacle, icemaw, louse, skua; the Rime Bear reuses bear.glb); 7.6 MB raw, 93 MB phone GPU; credits complete. The Skotos is "Cloaked Figure" plus a code-built hood and arms (the design's squid sources failed the look gate).
-- **Stage B, foundation: done** (commit "Skotos: Act V foundation (stage B)"). Plumbing, the Anvil's Neck (parity over 2000 seeds), gen5/genlib with check-act5 clean, tide.js and ice.js (soaks pass), sea.js and build5.js, perf5 and shallowtele passing, every shipped scenario passing.
-- **Stage C, the act: nearly done, paused on 17 October (owner's request, to keep usage).** Done: C1 (Cold, beams, lamps, sap kinds, the vulnerability rule, the tide/ice hooks), C2 (all eight enemy kinds), C3 (both bosses: the Walking Tower and the Skotos, the Brokka/Elati cameo, BOONS[5], the legendaries), S1 (quests 24-31 and their text), S2 (HUD, panels, overlay, audio). The integrator (`reports/integrate.md`) has done every cross-lane join, re-tuned Act V against the fixed Act IV with `tools/balance-act.mjs`, made Act V's checkpoints survive Continue with a retry checkpoint near each boss, written the Act V scenarios and passed most of them, and played the whole act from an Act IV-end save to q31 as a Warden. Left: the rest of its regression queue and one last balance measurement on the final tree (its notes end there), then gate G4 (every Act I-V scenario, soaks, layout checks, the strict-CSP artifact, the memory report) and a review round.
-- **Look polish: round 1's fixer nearly done** (`reports/look-round1.md`; its final re-shoot chain was running). Rounds 2 and 3 (critic, fixer) are still to come.
-- **The working tree at the pause is committed** as "Skotos: Act V paused (stage C integration, look round 1)".
+The two parallel sessions are finished and idle: progression `session_01AQQxkmADsS4LmWLZPKr5CP`, co-op `session_01Vx2KGUsifJTJjaxdkfT6L6`.
 
-**To resume** (in this session, or in a new one after reading this file and the contract):
-1. `cd skotos && npm install`; start the shared dev server detached (the contract says how).
-2. Stage C: run `docs/act5-workflows/stage-c-act.js` with the Workflow tool (args `{ scratch: <a scratch folder>, repo: "/home/user/abyssos/skotos" }`). In the same session it can resume run `wf_b36e26fb-c11` (C1, S1, S2 and C2 replay from cache). In a new session, first edit it so the lanes skip C1, S1, S2 and C2 (their reports are in `docs/act5-briefs/reports/`; point the later steps there instead of the scratch folder) and start at C3.
-3. Look polish: `docs/act5-workflows/look-polish.js` (resume run `wf_abf08f0f-8bb` in the same session; fixer 1 resumes from its notes). In a new session, finish round 1 (its re-shoots, perf5 and shallowtele), then the critic's round 2.
-4. Stage D: a review workflow (bug finders plus verifiers), the full regression (every Act I-V scenario, soak5, check-act4/5, parity), the strict-CSP artifact check on desktop and phone, then publish to the same artifact URL, update README, HANDOFF and the contract, and ask the owner to try it on the phone.
+**Order to resume:** (1) finish the progression release check and publish version 13; (2) finish Act V's look round 3 if needed, merge the co-op branch and port the progression onto this branch, then gate G4 and a final review over all of it; (3) publish version 14 (Acts I-V, progression, co-op) with the co-op capabilities, and tell the owner how to invite a friend (Share, Contributor access, the Co-op code).
 
-Memory: the container restarted twice during the night run (four agents with headless browsers). Since then agents keep one browser at a time and use a private no-HMR dev server (`npx vite --config tools/vite.nohmr.mjs --port <n>`) for long runs; no restart happened after that.
+Lessons from these weeks: the container restarts every few hours (not from memory: the log showed 3 of 15 GB in use), so agents keep progress notes and the lead checkpoints often; agents can read the owner's latest message and have twice stopped their own task because of an unrelated one, so their prompts must say that such messages are not addressed to them; one headless browser at a time, and a private no-HMR dev server (`npx vite --config tools/vite.nohmr.mjs --port <n>`) for long runs.
 
 ## Open items
 
-- Act V (above).
+- Act V, progression and co-op: see "Where everything stopped" above.
 - Acts I-IV: none known. The owner confirmed on a real phone (version 11) that high quality no longer crashes and runs smoothly.
 
 ## Done in the last session
