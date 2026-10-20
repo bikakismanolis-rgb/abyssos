@@ -668,6 +668,27 @@ const S = {
     }
     return out;
   } },
+  // the progression panels (run at 844 390 for a phone): skills, a variant, the loadout, Mastery
+  progpanel: { q: 'auto=town&sim=2&q=1&lvl=' + (process.env.LVL || 50) + '&mlvl=' + (process.env.MLVL || 12) + '&cls=' + (process.env.CLS || 'warden'), run: async (pg, shot) => {
+    const P = () => pg.evaluate(() => { const h = window.__G.hero; return { pts: h.points, skills: h.skills, vars: h.vars, variant: h.variant, loadout: h.loadout, mast: h.mast }; });
+    await pg.evaluate(() => { window.__G.hero.gold = 99999; window.__D.openPanel('skills'); }); await pg.waitForTimeout(500); await shot();
+    const ids = await pg.evaluate(() => window.__G.hero.loadout.slice());
+    // rank the first skill to 5, learn both variants, choose the second
+    for (let k = 0; k < 4; k++) await pg.click(`[data-a="prank:${ids[0]}"]`).catch(() => {});
+    const V = await pg.evaluate(async (id) => (await import('/src/game/data.js')).VARIANTS[id], ids[0]);
+    await pg.click(`[data-a="pvar:${ids[0]}:1"]`); await pg.click(`[data-a="pvar:${ids[0]}:2"]`); await pg.waitForTimeout(200); await shot();
+    await pg.click(`[data-a="pvar:${ids[0]}:2"]`); await pg.waitForTimeout(200); await shot();
+    // a later skill on button 2
+    const late = await pg.evaluate(async () => (await import('/src/game/data.js')).SKILLS[window.__G.hero.cls].filter((s) => s.lvl >= 20).map((s) => s.id));
+    await pg.click(`[data-a="psel:${late[0]}"]`); await pg.click('[data-a="pslot:2"]'); await pg.waitForTimeout(200); await shot();
+    await pg.click('[data-a="ptab:1"]'); await pg.waitForTimeout(200); await shot();
+    await pg.click('[data-a="mup:might:5"]').catch(() => {}); await pg.click('[data-a="mup:vigor:1"]'); await pg.click('[data-a="mup:aim:1"]'); await pg.waitForTimeout(200); await shot();
+    const before = await P();
+    await pg.click('[data-a="respec"]'); await pg.click('[data-a="respec"]'); await pg.waitForTimeout(200); await shot();
+    const after = await P();
+    await pg.evaluate(() => window.__D.closePanel()); await pg.waitForTimeout(400); await shot();
+    return { V, late, before, after };
+  } },
   title: { q: 'sim=1&q=' + (process.env.Q || '1'), run: async (pg, shot) => {
     await pg.waitForTimeout(2500); await shot();
     await pg.mouse.click(640, 360); await pg.waitForTimeout(1500); await shot();

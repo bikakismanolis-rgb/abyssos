@@ -11,6 +11,7 @@ import { WIND } from '../world/build.js';
 import { initInput, pollInput, takeEvents, IN } from '../core/input.js';
 import { loadSave, writeSave } from './save.js';
 import { refreshStats } from './stats.js';
+import { migrateHero } from './progression.js';
 import { enterZone, updatePacks, updateAct4, nearestInteract, updatePortalFx, ZONES, zoneReady, zoneParts } from './world.js';
 import { updatePlayer } from './player.js';
 import { damage } from './combat.js';
@@ -68,6 +69,7 @@ export async function boot(q) {
   if (q.has('auto')) { // test hook: jump straight into a zone
     const h = (await import('./state.js')).newHero(q.get('cls') || 'warden', +(q.get('diff') || 1));
     if (q.has('lvl')) { h.level = +q.get('lvl'); h.points = h.level - 1; }
+    if (q.has('mlvl')) h.mlvl = +q.get('mlvl');
     await startHero(h, false, q.get('auto'));
   } else showTitle();
   requestAnimationFrame(loop);
@@ -84,6 +86,8 @@ async function starterGear(hero) {
 }
 async function startHero(hero, isNew, zone = 'town') {
   await starterGear(hero);
+  // saves from before the progression: a loadout, nothing learnt, the points kept spendable (progression.js)
+  migrateHero(hero);
   G.hero = hero; G.zones = {}; G.player = null; G.portal = null; G.gate = null;
   hideScreen(); removeTitleScene(); clearFX();
   refreshStats();

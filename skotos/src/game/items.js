@@ -52,7 +52,8 @@ function rollStats(item, n, cls) {
     pool.splice(pool.indexOf(pick), 1);
     if (pick === 'skill') {
       const c = itemClass(item) || cls;
-      const sk = rand.pick(SKILLS[c].filter((s) => !s.basic));
+      // (the later skills only on items deep enough to be worn when they are learnt)
+      const sk = rand.pick(SKILLS[c].filter((s) => !s.basic && (s.lvl < 20 || item.ilvl >= s.lvl - 4)));
       stats.skill = { id: sk.id, v: statValue('skill', item.ilvl) };
     } else stats[pick] = statValue(pick, item.ilvl);
   }

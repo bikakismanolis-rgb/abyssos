@@ -1,6 +1,6 @@
 // Damage, status effects, deaths, experience and drops.
 import { G, later, vibrate } from './state.js';
-import { DIFFS, monsterXP, xpToNext, MAX_LEVEL, SKILLS, CLASSES, BUFFS } from './data.js';
+import { DIFFS, monsterXP, xpToNext, mxpToNext, MAX_LEVEL, SKILLS, CLASSES, BUFFS } from './data.js';
 import { makeItem } from './items.js';
 import { refreshStats } from './stats.js';
 import { number } from '../ui/overlay.js';
@@ -36,6 +36,8 @@ export function heroHit(mult, o = {}) {
   if (p.buffs.cry > 0) d *= 1.3;
   if (p.buffs.shrineFury > 0) d *= 1.5;
   if (p.buffs.memory > 0) d *= 1 + BUFFS.memory.dmg;
+  // the Alpha wolf runs with her (skillsx.js)
+  if (p.buffs.alpha > 0) d *= 1.15;
   return d;
 }
 
@@ -94,7 +96,7 @@ export function damage(src, target, amount, o = {}) {
       if (s.lifeOnHit && !o.noLoh) healHero(s.lifeOnHit * (o.lohMul ?? 1), true);
       if (s.legs.has('vampiricMail')) healHero(amount * 0.02, true);
       if (s.legs.has('emberRing') && !o.burn) { target.status.burn = 3; target.status.burnDps = Math.max(target.status.burnDps, (amount * 0.6) / 3); }
-      if (o.res !== false && CLASSES[G.hero.cls].resOnHit && !o.noRes) p.res = Math.min(G.stats.resMax, p.res + CLASSES[G.hero.cls].resOnHit * (o.resMul ?? 1));
+      if (o.res !== false && CLASSES[G.hero.cls].resOnHit && !o.noRes) p.res = Math.min(G.stats.resMax, p.res + CLASSES[G.hero.cls].resOnHit * (o.resMul ?? 1) * (1 + s.furyGain / 100));
       if (target.affixes?.includes('vampiric')) { /* nothing on hero hit */ }
     }
   }
@@ -122,6 +124,8 @@ function hurtHero(src, amount, o) {
   if (!o.pure) amount *= 1 - red;
   if (p.buffs.cry > 0) amount *= 0.77;
   if (p.buffs.shrineShield > 0) amount *= 0.6;
+  // a Challenge (skillsx.js): a third less, and what is turned aside goes back at the one who struck
+  if (p.buffs.challenge > 0) { amount *= 0.65; if (src && src.team === 'foe' && !src.dead && !o.dot) damage(p, src, amount * 0.9 + s.thorns, { noFx: true, quiet: true, noLoh: true, noRes: true, crit: false }); }
   if (s.legs.has('stoneborn') && p.hp < p.hpMax * 0.5) amount *= 0.8;
   // Seen by the dead (a Lampless alarm, Ivar's lantern): +15%
   if (p.buffs.seen > 0) amount *= 1.15;
@@ -144,7 +148,7 @@ function hurtHero(src, amount, o) {
     // Act III: amber roots (capped), blows that throw the hero back, shrieks that break a channel
     if (o.root) rootHero(o.root);
     if (o.push && src) { const dx = o.kx ?? p.x - src.x, dz = o.kz ?? p.z - src.z, l = Math.hypot(dx, dz) || 1; p.kx += (dx / l) * o.push; p.kz += (dz / l) * o.push; }
-    if (o.interrupt && p.act && (p.act.name === 'whirl' || p.act.name === 'portal')) { p.act = null; p.avatar.anim.stop?.(0.15); }
+    if (o.interrupt && p.act && (p.act.name === 'whirl' || p.act.name === 'beam' || p.act.name === 'portal')) { p.act = null; p.avatar.anim.stop?.(0.15); }
     if (o.seen) seeHero(o.seen);
   }
   if (p.hp <= 0) { p.hp = 0; emit('heroDeath'); }
@@ -459,20 +463,38 @@ function act4Death(a, def) {
 
 export function gainXP(v) {
   const h = G.hero;
-  if (h.level >= MAX_LEVEL) return;
+  if (h.level >= MAX_LEVEL) return gainMastery(v);
   h.xp += v;
   while (h.level < MAX_LEVEL && h.xp >= xpToNext(h.level)) {
     h.xp -= xpToNext(h.level);
     h.level++; h.points++;
     refreshStats();
-    const p = G.player; p.hp = p.hpMax;
-    for (let i = 0; i < 40; i++) sparks(p.x + rand.range(-0.4, 0.4), rand.range(0, 3), p.z + rand.range(-0.4, 0.4), 1, 0xffe8a0, 1.2, { color1: 0xffa040 });
-    ring(p.x, p.z, 3.5, 0xffd070, 0.8);
-    flash(p.x, 1.5, p.z, 0xfff0c0, 6, 0.3);
-    addLight({ x: p.x, y: 2, z: p.z, color: 0xffd080, intensity: 50, range: 12, life: 1.2, fade: 1.2 });
-    Audio.sting('levelup');
+    levelFx();
     const newSkill = SKILLS[h.cls].find((sk) => sk.lvl === h.level);
     emit('levelUp', h.level, newSkill);
   }
+  // what is left over at the last level is the first of the Mastery
+  if (h.level >= MAX_LEVEL && h.xp > 0) { const x = h.xp; h.xp = 0; gainMastery(x); }
+}
+// after the last level: Mastery levels, each a point and a little longer than the last (data.js mxpToNext)
+function gainMastery(v) {
+  const h = G.hero;
+  h.mlvl ||= 0; h.mxp = (h.mxp || 0) + v;
+  while (h.mxp >= mxpToNext(h.mlvl)) {
+    h.mxp -= mxpToNext(h.mlvl);
+    h.mlvl++; h.points++;
+    levelFx(true);
+    emit('masteryUp', h.mlvl);
+  }
+}
+function levelFx(mastery) {
+  const p = G.player; p.hp = p.hpMax;
+  const c = mastery ? 0xb0d8ff : 0xffe8a0, c1 = mastery ? 0x6a8aff : 0xffa040;
+  for (let i = 0; i < 40; i++) sparks(p.x + rand.range(-0.4, 0.4), rand.range(0, 3), p.z + rand.range(-0.4, 0.4), 1, c, 1.2, { color1: c1 });
+  ring(p.x, p.z, 3.5, mastery ? 0x9ac8ff : 0xffd070, 0.8);
+  if (mastery) ring(p.x, p.z, 2.2, 0xffffff, 0.6);
+  flash(p.x, 1.5, p.z, mastery ? 0xe0f0ff : 0xfff0c0, 6, 0.3);
+  addLight({ x: p.x, y: 2, z: p.z, color: mastery ? 0xa0c8ff : 0xffd080, intensity: 50, range: 12, life: 1.2, fade: 1.2 });
+  Audio.sting('levelup');
 }
 export { clamp };
