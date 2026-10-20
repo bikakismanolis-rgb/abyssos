@@ -7,7 +7,9 @@
 2. **Variants for the later skills too?** Default: no. The first four skills of each class have two variants each (24
    in all); the three later skills (levels 20, 30, 40) do not. They could get them later.
 3. **What a variant costs.** Default: the skill at rank 5 and 1 point each; the first variant learnt takes effect at
-   once; switching between base and variants only in town (the loadout can be changed anywhere).
+   once; switching between base and variants only in town (the loadout can be changed anywhere, but out of town a skill
+   brought onto the buttons comes in on its whole cooldown: the skills panel pauses the game, and without this a hero
+   could swap a ready skill in mid-fight and use all seven in one boss fight).
 4. **Respec cost.** Default: 100 + 12 x level² + 400 x Mastery level gold (30 100 at level 50), only in town, refunding
    everything (ranks, variants, Mastery). The loadout is kept.
 5. **Mastery XP curve.** Default: Mastery level m needs xpToNext(49) x (1 + 0.06 m) (12 756 for the first, 19 644 for

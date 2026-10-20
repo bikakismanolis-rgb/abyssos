@@ -359,7 +359,8 @@ body:not(.desk) .sk .key { display: none; }
 .pg-tile .ic .vm, .sk .vmark { position: absolute; bottom: -3px; left: 50%; transform: translateX(-50%) rotate(45deg); width: 9px; height: 9px; background: #8ad0ff; border: 1px solid #e0f4ff; box-shadow: 0 0 8px #6ac0ff; }
 .sk .vmark { bottom: 5px; z-index: 3; width: 7px; height: 7px; }
 .pg-tile .ic .up { position: absolute; top: -5px; left: -7px; width: 17px; height: 17px; border-radius: 50%; background: var(--ember); color: #1a0f05; font: 900 13px/17px var(--display); text-align: center; font-style: normal; box-shadow: 0 0 8px var(--ember); }
-.pg-tile .nm { font: 700 11.5px/1.1 var(--display); color: var(--gold2); text-align: center; max-width: 100%; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; min-height: 25px; }
+/* (the names carry soft hyphens where a long word may break, text.js; a word still too long breaks anywhere rather than being cut) */
+.pg-tile .nm { font: 700 11.5px/1.2 var(--display); color: var(--gold2); text-align: center; max-width: 100%; overflow: hidden; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; min-height: 28px; }
 .pg-tile .tg { font: 700 10px var(--display); color: var(--ink3); }
 .pg-tile .tg.lk { color: #c89a70; }
 .pg-tile .tg.nw { color: #1a1004; background: var(--gold2); border-radius: 6px; padding: 0 5px; }
@@ -386,6 +387,7 @@ body:not(.desk) .sk .key { display: none; }
 .pg-put .chip { min-width: 46px; height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 0 10px; border-radius: 10px; }
 .pg-put .chip b { font: 800 15px var(--display); }
 .pg-put .chip .was svg { width: 15px; height: 15px; opacity: .55; }
+.pg-put .pg-swcd { flex-basis: 100%; font-size: 11.5px; }
 .pg-vs { margin-top: 10px; }
 .pg-vrow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
 .pg-v { display: flex; flex-direction: column; gap: 4px; padding: 8px; border-radius: 10px; border: 1px solid rgba(214, 178, 94, .2); background: #0f1115; min-width: 0; }
@@ -411,6 +413,8 @@ body:not(.desk) .sk .key { display: none; }
 .pg-mbar { height: 8px; border-radius: 4px; background: #0b0c10; border: 1px solid rgba(140, 180, 255, .35); overflow: hidden; margin-bottom: 3px; }
 .pg-mbar i { display: block; height: 100%; transform-origin: left; background: linear-gradient(90deg, #3a6ad8, #b8d8ff); box-shadow: 0 0 8px #6aa0ff; }
 .pg-mbar.off i { background: linear-gradient(90deg, #6a4cd8, #b29aff); box-shadow: none; opacity: .7; }
+.pg-rsw { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: none; }
+.pg-rsw .why { font: 600 11.5px var(--body); color: #e0a070; }
 .pg-rs { display: flex; align-items: center; gap: 6px; flex: none; }
 .pg-rs svg { width: 14px; height: 14px; }
 .pg-rs small { display: inline-flex; align-items: center; gap: 2px; opacity: .85; }
@@ -442,13 +446,16 @@ body:not(.desk) .sk .key { display: none; }
 #xpbar.mast i { background: linear-gradient(90deg, #3a6ad8, #cfe6ff); box-shadow: 0 0 6px #6aa0ff; }
 #levelup.mast .a { color: #dbeaff; text-shadow: 0 0 24px rgba(110, 160, 255, .9), 0 2px 4px #000; }
 .sk.empty svg { display: none; }
-@media (max-width: 760px) { .pg-mg { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+/* (six columns cut the longer Mastery names below about 860 px) */
+@media (max-width: 860px) { .pg-mg { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+/* a finger needs bigger +1/+5 buttons */
+@media (pointer: coarse) { .pg-m .mn .btn.sm { min-height: 36px; min-width: 40px; padding: 3px 6px; } }
 @media (max-height: 430px) {
   .pn.pg { height: 100%; }
   .pg-b { padding: 8px 10px; }
   .pg-slot { height: 44px; } .pg-slot svg { width: 24px; height: 24px; }
   .pg-tile { padding: 5px 2px 4px; } .pg-tile .ic { width: 38px; height: 38px; } .pg-tile .ic svg { width: 21px; height: 21px; }
-  .pg-tile .nm { font-size: 10.5px; min-height: 23px; }
+  .pg-tile .nm { font-size: 10.5px; min-height: 26px; }
   .pg-foot { display: none; }
   .pg-dh { grid-template-columns: 46px 1fr auto; gap: 10px; } .pg-dh .ic { width: 46px; height: 46px; } .pg-dh .ic svg { width: 26px; height: 26px; }
   .pg-dh h3 { font-size: 17px; }
@@ -459,3 +466,5 @@ body:not(.desk) .sk .key { display: none; }
   .pg-mt { margin-bottom: 8px; }
   .pg-m .ml { min-height: 0; }
 }
+/* the narrowest phones: a little smaller, so a two-word name keeps to two lines (after the max-height block, which it overrides) */
+@media (max-width: 700px) { .pg-tile .nm { font-size: 9.8px; letter-spacing: -.1px; } }

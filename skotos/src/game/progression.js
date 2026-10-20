@@ -23,14 +23,15 @@ export const MASTERY = [
 export const MASTERY_BY = Object.fromEntries(MASTERY.map((m) => [m.id, m]));
 export function masteryValue(m, r, L = G.hero?.level || 1) {
   const v = m.max * (1 - Math.exp(-r / m.k));
-  return m.per === 'lvl' ? Math.round(v * L) : v;
+  // (not rounded: at a low level a rank of Leech is a fraction of a life per hit, but never nothing; combat.js heals fractions)
+  return m.per === 'lvl' ? v * L : v;
 }
 // what the hero's Mastery adds to her stats (stats.js computeStats); a Warden's wellspring feeds her fury instead (combat.js)
 export function masteryStats(hero, s) {
   const M = hero.mast; if (!M) return;
   for (const id in M) { const m = MASTERY_BY[id]; if (m && M[id] > 0) s[m.stat === 'resRegen' && hero.cls === 'warden' ? 'furyGain' : m.stat] += masteryValue(m, M[id], hero.level); }
 }
-export const fmtMastery = (m, v) => (m.pct ? '+' + v.toFixed(m.dec ?? (v < 10 ? 1 : 0)) + '%' : '+' + Math.round(v));
+export const fmtMastery = (m, v) => (m.pct ? '+' + v.toFixed(m.dec ?? (v < 10 ? 1 : 0)) + '%' : (!v ? '+0' : '+' + (v < 1 ? v.toFixed(2) : v < 10 ? v.toFixed(1) : Math.round(v))));
 
 // ---------- points ----------
 // every point the hero has ever earned (what a respec gives back)
@@ -68,8 +69,8 @@ export function canUnlock(h, id, v) { return !!VARIANTS[id] && !hasVariant(h, id
 export function unlockVariant(h, id, v) {
   if (!canUnlock(h, id, v)) return false;
   h.vars[id] = (h.vars[id] || 0) | (1 << (v - 1)); h.points--;
-  // the first one learnt is taken up at once (it can be changed back in town)
-  if (!h.variant[id]) h.variant[id] = v;
+  // only the first one learnt is taken up at once (it can be changed back in town); a second is chosen in town
+  if (!h.variant[id] && bits(h.vars[id]) === 1) h.variant[id] = v;
   return true;
 }
 // choosing which way a skill is played: in town (or anywhere when free is set: a fresh unlock)

@@ -7,19 +7,19 @@ No asset (model, texture, sound, animation) changed: only code chunks whose hash
 Changed (it names the new entry chunks).
 
 ## Added (upload)
-- `assets/anim-DmMIes9I.js`
-- `assets/boot-Cmh2EVtn.js`
-- `assets/build-CSJX0hUa.js`
-- `assets/creatureview-BcNKD0gJ.js`
-- `assets/env-BXvibrya.js`
-- `assets/fx-2CDr9WV-.js`
-- `assets/gen-rFQMpMNV.js`
-- `assets/gen2-BhTl0aM8.js`
-- `assets/gen3-D2WDC-Dq.js`
-- `assets/gen4-u5KKYBnt.js`
-- `assets/index-CCD1NuZf.css`
-- `assets/index-CgkFSHk5.js`
-- `assets/kits-BzFBEuCz.js`
+- `assets/anim-Co8WR9rx.js`
+- `assets/boot-Z0BhjrH5.js`
+- `assets/build-BeOYbo7v.js`
+- `assets/creatureview-BUDJgJFL.js`
+- `assets/env-BR5kZ64i.js`
+- `assets/fx-D2BLx_mX.js`
+- `assets/gen-D4zQB5B1.js`
+- `assets/gen2-BvUvkEeh.js`
+- `assets/gen3-D2ta9RL_.js`
+- `assets/gen4-ROab9ICi.js`
+- `assets/index-wmnV3vkd.css`
+- `assets/index-B1VFxZBi.js`
+- `assets/kits-DXRhPeqj.js`
 
 ## Removed (set to null)
 - `assets/anim-bT-ijxBg.js`
@@ -38,9 +38,15 @@ Changed (it names the new entry chunks).
 
 Every file stays under 16 MB (the largest, `ash-*.js`, is 3.8 MB, unchanged).
 
+(Rebuilt after the review fixes, both sides from a clean build: v12 from `git archive c70d65d`, this branch from its
+working tree; the removed names are v12's as before, the added ones are the fixed branch's.)
+
 ## Checks
 - Strict CSP (HANDOFF's policy) served by `tools/csp-server.mjs`, Playwright on desktop (1280x720) and an
   isMobile/hasTouch context (844x390, DPR 2): title, new Warden, town, the skills panel at level 34, a skill cast.
   0 CSP violations, 0 console or page errors in both; models textured (not white).
 - Every shipped scenario passes (Acts I-IV, title, panels), and the new ones: `progpanel`, `progress`, `skillsfx`
   (each class).
+- After the review fixes: every scenario touched re-run (progpanel, progress, skillsfx x3, panels, combat, ranger, mage,
+  boons, karthax, ivar, ashfield, forge), all clean. The strict-CSP check was not repeated: the fixes add no resource,
+  fetch or URL (code and CSS only).

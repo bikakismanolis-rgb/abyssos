@@ -61,11 +61,11 @@ export const VARIANT_FN = {
   },
   // Ember Dance: the blade burns, and so does the ground behind her
   'whirl.ember'(sk, aim, rank, mult) {
-    const pl = p(); let tick = 0, snd = 0, drop = 0;
+    const pl = p(); let tick = 0, snd = 0, patch = null;
     act({
       name: 'whirl', anim: 'spin', dur: sk.dur + 0.15 * (rank - 1), move: 0.9, trail: [0, 99],
       update(dt) {
-        tick -= dt; snd -= dt; drop -= dt;
+        tick -= dt; snd -= dt;
         if (snd <= 0) { snd = 0.55; Audio.sfx('whirlwind', { vol: 0.6 }); Audio.sfx('fireCrackle', { vol: 0.4 }); }
         if (tick <= 0) {
           tick = sk.tick;
@@ -73,7 +73,10 @@ export const VARIANT_FN = {
           if (n) G.hitstop = Math.max(G.hitstop, 0.02);
           for (let k = 0; k < 6; k++) { const a = Math.random() * 6.28; P({ x: pl.x + Math.sin(a) * sk.radius * 0.9, y: 0.8, z: pl.z + Math.cos(a) * sk.radius * 0.9, vx: Math.cos(a) * 3, vy: 0.6, vz: -Math.sin(a) * 3, life: 0.3, size: 0.45, size1: 0.05, color: 0xffd070, color1: 0xff3000 }); }
         }
-        if (drop <= 0) { drop = 0.3; area('fire', pl.x, pl.z, 1.5, 2.6, { tick: 0.5, dmg: heroHit(mult * 0.3, { area: true }) }); }
+        // the burning ground: where she stands the patch under her burns on; a new one only once she has moved off it
+        // (a foe beside her stands in one patch, not in one for every 0.3 s she spins there); never light in a boss's dark
+        if (patch && patch.t <= patch.dur && Math.hypot(pl.x - patch.x, pl.z - patch.z) < 1.4) patch.dur = patch.t + 2.6;
+        else patch = area('fire', pl.x, pl.z, 1.5, 2.6, { tick: 0.5, dmg: heroHit(mult * 0.3, { area: true }), dim: true });
         pl.res -= dt * 4;
         if (pl.res < 0) { pl.res = 0; pl.act.dur = Math.min(pl.act.dur, pl.act.t + 0.05); }
       }
@@ -99,7 +102,7 @@ export const VARIANT_FN = {
       events: [[0.3, () => {
         pl.buffs.cry = sk.buff + rank;
         pl.res = Math.min(G.stats.resMax, pl.res + sk.gain);
-        const heal = pl.hpMax * (0.24 + 0.02 * rank), dur = 4; let given = 0;
+        const heal = pl.hpMax * 0.34, dur = 4; let given = 0;
         effect(pl.x, pl.z, 3, dur, {
           light: { color: 0xffd070, intensity: 14, range: 8, y: 1.5 },
           tick(a, dt) {
@@ -164,10 +167,10 @@ export const VARIANT_FN = {
   },
 
   // ===== Ranger =====
-  // Tight Volley: the bolts one after another down one line, each through three
+  // Tight Volley: the bolts one after another down one line, each through two
   'multi.volley'(sk, aim, rank, mult) {
     const pl = p(), n = sk.count + (rank >= 3 ? 1 : 0) + (rank >= 5 ? 1 : 0);
-    const volley = () => { for (let i = 0; i < n; i++) later(i * 0.05, () => { const o = handPoint(V); fire('bolt', pl, o.x, o.z, pl.rot + rand.range(-0.05, 0.05), { y: 1.25, pierce: 3, dmg: heroHit(mult * 0.6), opts: { knock: 1 }, look: goldBolt }); if (i % 2 === 0) Audio.sfx('arrowShoot', { vol: 0.6 }); }); };
+    const volley = () => { for (let i = 0; i < n; i++) later(i * 0.05, () => { const o = handPoint(V); fire('bolt', pl, o.x, o.z, pl.rot + rand.range(-0.05, 0.05), { y: 1.25, pierce: 2, dmg: heroHit(mult * 0.45), opts: { knock: 1 }, look: goldBolt }); if (i % 2 === 0) Audio.sfx('arrowShoot', { vol: 0.6 }); }); };
     act({ name: 'multi', anim: 'shoot', speed: 1.4, face: aim.dir, cut: 0.5, events: [[0.1, () => { volley(); if (G.stats.legs.has('windQuiver')) later(0.35, volley); }]] });
   },
   // Scatter Blast: three bolts that burst where they strike
@@ -187,7 +190,7 @@ export const VARIANT_FN = {
   'rain.fire'(sk, aim, rank, mult) {
     rainCore(sk, aim, rank, (x, z, dur) => {
       area('rain', x, z, sk.radius, dur, { tick: 0.25, delay: 0.35, dmg: heroHit(mult * 0.4, { area: true }), opts: { burn: heroHit(mult * 0.18), quiet: true }, look: fireRain });
-      later(0.4, () => area('fire', x, z, sk.radius * 0.85, dur + 1.2, { tick: 0.5, dmg: heroHit(mult * 0.16, { area: true }) }));
+      later(0.4, () => area('fire', x, z, sk.radius * 0.85, dur + 1.2, { tick: 0.5, dmg: heroHit(mult * 0.16, { area: true }), dim: true }));
     }, 0xffe0a0);
   },
   // Hail: ice instead of iron; what is under it at the end is frozen
@@ -202,9 +205,10 @@ export const VARIANT_FN = {
   'wolf.pack'(sk, aim, rank, mult) {
     wolfCore(sk, rank, G.stats.legs.has('wolfmother') ? 4 : 3, { hp: 0.3, m: mult * 0.5, life: 0.75, scale: 0.78, tint: 0x90d8ff });
   },
-  // The Alpha: one great wolf; while it runs with her, her blows land harder
+  // The Alpha: one great wolf; while it runs with her, her blows land harder (player.js ends the +15% with the last
+  // Alpha). It bites lighter than a spirit wolf: the +15% on her own blows is what it is worth
   'wolf.alpha'(sk, aim, rank, mult) {
-    wolfCore(sk, rank, G.stats.legs.has('wolfmother') ? 2 : 1, { hp: 1.3, m: mult * 1.7, life: 1, scale: 1.45, rim: 0xffe8a0, alpha: true });
+    wolfCore(sk, rank, G.stats.legs.has('wolfmother') ? 2 : 1, { hp: 1.3, m: mult * 0.6, life: 1, scale: 1.45, rim: 0xffe8a0, alpha: true });
   },
   // Splitting Shot: at the first foe it strikes, the bolt breaks into four
   'pierce.split'(sk, aim, rank, mult) {
@@ -252,18 +256,18 @@ export const VARIANT_FN = {
       events: [[0.22, () => {
         const o = staffTip(V); Audio.sfx('fireball', { pitch: 1.2 });
         fire('cinder', pl, o.x, o.z, pl.rot, { y: Math.max(1, o.y), homing: 6, onHit: (f, pr) => { pr.life = 0; }, look: cinderLook,
-          onEnd: (x, z) => { const r = (sk.radius + 0.15 * rank) * 0.85; explosion(x, z, r, 0xfff0c0, { shake: 0.22, smoke: 0x4a4440 }); Audio.sfx('explosion', { x, z, vol: 0.8 }); circleHit(x, z, r, (f) => damage(pl, f, heroHit(mult * 0.8, { area: true }), { knock: 3, kx: f.x - x, kz: f.z - z, burn: heroHit(mult * 0.3), area: true })); area('fire', x, z, 1.9, 3, { tick: 0.5, dmg: heroHit(mult * 0.14, { area: true }), look: paleFire, light: { color: 0xffe8b0, intensity: 12 } }); } });
+          onEnd: (x, z) => { const r = (sk.radius + 0.15 * rank) * 0.85; explosion(x, z, r, 0xfff0c0, { shake: 0.22, smoke: 0x4a4440 }); Audio.sfx('explosion', { x, z, vol: 0.8 }); circleHit(x, z, r, (f) => damage(pl, f, heroHit(mult * 0.8, { area: true }), { knock: 3, kx: f.x - x, kz: f.z - z, burn: heroHit(mult * 0.3), area: true })); area('fire', x, z, 1.9, 3, { tick: 0.5, dmg: heroHit(mult * 0.14, { area: true }), look: paleFire, light: { color: 0xffe8b0, intensity: 12 }, dim: true }); } });
       }]]
     });
   },
-  // Shatter: a shorter freeze, and what is still frozen after it bursts
+  // Shatter: a shorter freeze, and what is still frozen after it bursts (a boss, whose freeze is short, always does)
   'nova.shatter'(sk, aim, rank, mult) {
     const pl = p();
     novaCore(sk, mult * 0.6, sk.freeze * 0.6 + 0.2 * rank, 0xa0e0ff, (hits) => later(1.1, () => {
       for (const f of hits) {
         if (f.dead || !(f.status.freeze > 0 || f.boss)) continue;
         glowBurst(f.x, 1, f.z, 0xe8faff, 22, 5, 0.3, 0.5); sparks(f.x, 1, f.z, 14, 0xd0f0ff, 7, { color1: 0x4080ff });
-        damage(pl, f, heroHit(mult * 1.2, { area: true }), { area: true, quiet: true, crit: f.status.freeze > 0 ? true : undefined });
+        damage(pl, f, heroHit(mult * 0.6, { area: true }), { area: true, quiet: true });
         f.status.freeze = 0;
       }
       if (hits.length) Audio.sfx('break', { x: pl.x, z: pl.z, vol: 0.8 });
@@ -280,7 +284,7 @@ export const VARIANT_FN = {
           a.x = pl.x; a.z = pl.z; tick -= dt;
           for (let k = 0; k < 4; k++) { const an = Math.random() * 6.28, r = Math.sqrt(Math.random()) * a.r; P({ x: pl.x + Math.sin(an) * r, y: rand.range(1.5, 3.5), z: pl.z + Math.cos(an) * r, vx: Math.cos(an) * 3, vy: -3, vz: -Math.sin(an) * 3, life: 0.7, size: 0.16, size1: 0.08, color: 0xffffff, color1: 0xa0d0ff }); }
           if (Math.random() < 0.3) P({ add: false, x: pl.x + rand.range(-4, 4), y: 0.3, z: pl.z + rand.range(-4, 4), vy: 0.2, life: 1.2, size: 1.4, size1: 2.6, color: 0xd8e8f8, alpha: 0.12, alpha1: 0 });
-          if (tick <= 0) { tick = 0.4; circleHit(pl.x, pl.z, a.r, (f) => damage(pl, f, heroHit(mult * 0.2, { area: true }), { slow: { k: 0.5, t: 0.6 }, quiet: true, area: true, lohMul: 0.3 })); }
+          if (tick <= 0) { tick = 0.4; circleHit(pl.x, pl.z, a.r, (f) => damage(pl, f, heroHit(mult * 0.07, { area: true }), { slow: { k: 0.5, t: 0.6 }, quiet: true, area: true, lohMul: 0.3 })); }
         }
       });
     });
@@ -581,7 +585,8 @@ export const NEW_FN = {
             Audio.sfx('explosion', { vol: 0.8 }); Audio.sfx('shieldBlock', { pitch: 0.7 });
             circleHit(pl.x, pl.z, sk.radius, (f) => damage(pl, f, heroHit(mult * k, { area: true }), { knock: 6, kx: f.x - pl.x, kz: f.z - pl.z, stun: 0.6, area: true, breakGuard: true }));
           },
-          dispose() { R.scene.remove(dome); dome.geometry.dispose(); dome.material.dispose(); }
+          // (also when a waypoint clears it, with no burst: the ward does not go on without its dome)
+          dispose() { R.scene.remove(dome); dome.geometry.dispose(); dome.material.dispose(); pl.shield = 0; delete pl.buffs.bulwark; }
         });
       }]]
     });

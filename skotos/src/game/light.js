@@ -18,7 +18,8 @@ const ZONES = new Set(['ashfield', 'forge']);
 export const LIGHT = { force: false, base: 6, swell: 9, swellT: 8 };
 const S = { zone: null, pools: [], over: null, owner: null, dark: null, swellT: 0, halfT: 0, sipT: 0, streamT: 0, ring: null, ringR: 6, cradle: null, cradleAv: null, flame: null, range0: 15 };
 const V = new THREE.Vector3();
-// in a boss's darkness her own fire (a Mage's Meteor) lights only as it bursts: the braziers are the way through Ivar's dark
+// in a boss's darkness her own fire (a Mage's Meteor) lights only as it bursts, and the fires the variants leave behind
+// (area o.dim) not at all: the braziers are the way through Ivar's dark
 const FLARE = 0.5;
 
 export const lightOn = () => LIGHT.force || ZONES.has(G.zone?.id);
@@ -34,7 +35,8 @@ export function lightAt(x, z, pad = 0) {
   const pl = G.player, hr = heroLightR();
   if (pl && !pl.dead && hr > 0 && (pl.x - x) ** 2 + (pl.z - z) ** 2 < (hr + pad) ** 2) return true;
   if (lampAt(x, z, pad)) return true;
-  for (const a of G.areas) if (a.kind === 'fire' && a.t <= a.dur && !(S.over != null && a.team === 'hero' && a.t > FLARE) && (a.x - x) ** 2 + (a.z - z) ** 2 < (a.r + 1.5 + pad) ** 2) return true;
+  // (the fires the skills' variants leave, a.dim, never light it: Rain of Fire, Pale Cinder, Ember Dance)
+  for (const a of G.areas) if (a.kind === 'fire' && a.t <= a.dur && !(S.over != null && a.team === 'hero' && (a.t > FLARE || a.dim)) && (a.x - x) ** 2 + (a.z - z) ** 2 < (a.r + 1.5 + pad) ** 2) return true;
   return false;
 }
 // lit by a lamp, a brazier or a fire-pit (what blinds a landing Ashwing)

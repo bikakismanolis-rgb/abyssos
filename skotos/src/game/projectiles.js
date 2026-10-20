@@ -176,14 +176,16 @@ export function updateProjs(dt) {
 
 // ---------- areas: burning ground, arrow rain, webs, poison ----------
 export function area(kind, x, z, r, dur, o = {}) {
-  const a = { kind, x, z, r, dur, t: 0, tick: o.tick ?? 0.5, tickT: o.delay ?? 0, dmg: o.dmg || 0, team: o.team || 'hero', src: o.src, opts: o.opts || {}, vx: o.vx || 0, vz: o.vz || 0, hit: new Set(), onTick: o.onTick, onEnd: o.onEnd, look: o.look, dispose: o.dispose };
+  // o.dim: a hero fire that never counts as light in a boss's darkness (light.js lightAt)
+  const a = { kind, x, z, r, dur, t: 0, tick: o.tick ?? 0.5, tickT: o.delay ?? 0, dmg: o.dmg || 0, team: o.team || 'hero', src: o.src, opts: o.opts || {}, vx: o.vx || 0, vz: o.vz || 0, hit: new Set(), onTick: o.onTick, onEnd: o.onEnd, look: o.look, dispose: o.dispose, dim: !!o.dim };
+  // an area's own light (o.light) takes the place of its kind's: one light each, removed with it
   if (o.light) a.light = addLight({ x, y: o.light.y ?? 0.8, z, color: o.light.color, intensity: o.light.intensity ?? 12, range: o.light.range ?? r * 3, flicker: o.light.flicker ?? 0.3 });
-  if (kind === 'fire') a.light = addLight({ x, y: 0.6, z, color: 0xff6a10, intensity: 16, range: r * 3, flicker: 0.4 });
-  if (kind === 'tornado') a.light = addLight({ x, y: 1.2, z, color: 0xff7a20, intensity: 14, range: 6, flicker: 0.4 });
+  else if (kind === 'fire') a.light = addLight({ x, y: 0.6, z, color: 0xff6a10, intensity: 16, range: r * 3, flicker: 0.4 });
+  else if (kind === 'tornado') a.light = addLight({ x, y: 1.2, z, color: 0xff7a20, intensity: 14, range: 6, flicker: 0.4 });
   if (kind === 'poison') decal(x, z, 'goo', r * 2, dur);
   if (kind === 'web') decal(x, z, 'ecto', r * 2, dur);
-  if (kind === 'amberDust') a.light = addLight({ x, y: 0.8, z, color: 0xffc050, intensity: 8, range: r * 3, flicker: 0.3 });
-  if (kind === 'coldFire') a.light = addLight({ x, y: 0.6, z, color: 0x9ab8ff, intensity: 8, range: r * 3, flicker: 0.3 });
+  if (kind === 'amberDust' && !a.light) a.light = addLight({ x, y: 0.8, z, color: 0xffc050, intensity: 8, range: r * 3, flicker: 0.3 });
+  if (kind === 'coldFire' && !a.light) a.light = addLight({ x, y: 0.6, z, color: 0x9ab8ff, intensity: 8, range: r * 3, flicker: 0.3 });
   G.areas.push(a);
   return a;
 }
@@ -220,9 +222,9 @@ export function updateAreas(dt) {
       if (a.t > a.dur || a.done) { if (a.light) removeLight(a.light); G.areas.splice(i, 1); a.onEnd?.(a); a.dispose?.(a); }
       continue;
     }
-    if (a.look) a.look(a, dt);
     if (a.vx || a.vz) { a.x += a.vx * dt; a.z += a.vz * dt; if (a.light) { a.light.x = a.x; a.light.z = a.z; } }
-    // looks
+    // looks: its own (skillsx.js), else its kind's
+    if (a.look) a.look(a, dt);
     else if (a.kind === 'fire') { if (Math.random() < 0.7) P({ x: a.x + rand.range(-a.r, a.r) * 0.8, y: 0.1, z: a.z + rand.range(-a.r, a.r) * 0.8, vy: rand.range(1, 2.5), life: rand.range(0.3, 0.6), size: 0.5, size1: 0.1, color: 0xffb040, color1: 0xff2a00 }); }
     else if (a.kind === 'rain') {
       for (let k = 0; k < 2; k++) { const rx = a.x + rand.range(-a.r, a.r) * 0.85, rz = a.z + rand.range(-a.r, a.r) * 0.85; P({ x: rx, y: 6, z: rz - 1, vy: -26, vz: 4, life: 0.22, size: 0.18, size1: 0.12, color: 0xfff0d0, color1: 0xd0c0a0 }); if (Math.random() < 0.3) sparks(rx, 0.1, rz, 2, 0xe0d0b0, 2); }
