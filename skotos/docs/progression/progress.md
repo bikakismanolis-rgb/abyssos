@@ -25,7 +25,10 @@ Baseline balance: a worktree of v12 at /tmp/claude-0/base served on 5232, plan /
 - balance-act.mjs: job.mast / job.variant / job.loadout / job.mlvl; ready() reads the loadout.
 - Baseline balance (v12): /tmp/claude-0/bal/before.jsonl (48 jobs: Acts III-IV zones and bosses, 3 classes, 2 runs).
 
+- skillsfx run for all three classes; tuning committed (Maelstrom, Dawnbreaker, Charge, Volley, Scatter, Split, Trap,
+  Beam, Frozen Orb, Shower, Shatter); hawks and Bulwark's dome restyled.
+- Balance after (6 runs/job): README table; per job in balance-acts3-4.txt.
+
 ## Next
-- Look at every skillsfx shot per class, fix what looks wrong; tune numbers from the dummy damage table.
-- Balance after (plan-mast.json), compare; all shipped scenarios; new scenarios (levels past cap, Mastery past 50,
-  save migration); artifact + CSP check; README.md and release.md.
+- Full scenario suite (/tmp/claude-0/runall.sh -> /tmp/claude-0/all/log.txt), fix failures.
+- Artifact build, CSP check (desktop + mobile), release.md.
