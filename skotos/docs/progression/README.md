@@ -53,7 +53,29 @@ bonus(r) = max x (1 - e^(-r/k)): the first ranks are small, the tail endless but
 
 ## Balance before and after
 
-(filled in below from tools/balance-act.mjs)
+Measured with `tools/balance-act.mjs` (Warden difficulty, the bot's gear and skills as before): Acts III and IV, every
+zone (8 packs) and every boss, each class, at the levels a hero meets them (weep 17, heart 20, ashfield 23, forge 26;
+Silverhorn 18, Amaranthe 22, Ivar 24, Karthax 28), 6 runs each (seeds 1000 + r x 7919). *Before* is version 12; *after*
+is this branch with every point the four skills cannot take put into Mastery (Might and Vigor in turn: the most raw
+power a spare point buys; 0 points at 17, 3 at 20, 6 at 23, 9 at 26, 11 at 28). The later skills and the variants are
+sidegrades (tuned at the dummies, below), so the bot keeps today's four.
+
+| | zones: life lost / min | zones: clear time | bosses: life lost / min | bosses: kill time | deaths |
+|---|---|---|---|---|---|
+| before (v12) | 0.715 | 30.1 s | 0.490 | 31.7 s | 0 |
+| after | 0.609 (-15%) | 33.3 s (+11%) | 0.447 (-9%) | 30.0 s (-5%) | 0 |
+
+Per job (`balance-acts3-4.txt`) the swings are mostly noise of 6 runs (the Warden at 17, who has no spare point, moves
+as much as the others). The acts stay within the 20-30% the owner allowed; the large rewards are in the tail: at
+Mastery 100 (5 million XP of Shadow Gates past level 50) a hero who splits 149 points over the tracks has about +40%
+damage, +40% life, +5% crit, +45% crit damage and the rest besides.
+
+### The later skills and variants at the dummies
+`node tools/scenario.mjs skillsfx <out> 844 390` with `CLS=warden|ranger|mage` casts every skill and variant (rank 5,
+level 45, starter weapon) at a ring of seven sturdy dummies and reports the damage of one cast. Tuned so that a variant
+stays within about +-30% of its base in a pack (the pulling and freezing ones trade some for control), and a later skill
+is worth its cooldown and cost (Dawnbreaker about 2x an Earthsplitter for 50 Fury and a long swing; the Ray of Dawn
+about a Fireball's damage per mana, through a whole line).
 
 ## Code
 
