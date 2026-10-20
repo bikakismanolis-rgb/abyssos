@@ -119,7 +119,7 @@ export const TEXT = {
   'mast.fury': ['Μανία', 'Ferocity'], 'mast.fury.d': ['Ζημιά καίριου', 'Critical damage'],
   'mast.haste': ['Γοργότητα', 'Haste'], 'mast.haste.d': ['Ταχύτητα επίθεσης', 'Attack speed'],
   'mast.stride': ['Δρασκελιά', 'Stride'], 'mast.stride.d': ['Ταχύτητα κίνησης', 'Movement speed'],
-  'mast.focus': ['Συγκέντρωση', 'Focus'], 'mast.focus.d': ['Μείωση επαναφόρτισης', 'Cooldown reduction'],
+  'mast.focus': ['Εστίαση', 'Focus'], 'mast.focus.d': ['Μείωση επαναφόρτισης', 'Cooldown reduction'],
   'mast.well': ['Πηγή', 'Wellspring'], 'mast.well.d': ['Αναπλήρωση {0}', '{0} regeneration'], 'mast.well.f': ['Οργή ανά χτύπημα', 'Fury per hit'],
   'mast.iron': ['Σίδερο', 'Iron'], 'mast.iron.d': ['Θωράκιση', 'Armor'],
   'mast.leech': ['Βδέλλα', 'Leech'], 'mast.leech.d': ['Ζωή ανά χτύπημα', 'Life per hit'],
