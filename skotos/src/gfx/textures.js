@@ -94,19 +94,77 @@ export function runeLines(seed = 1, rows = 4) {
 
 // Act V: dressed stone in courses (the Farthest Light's shaft): 8 courses of 4 blocks to the tile, every other course half
 // a block on, each block its own tone and wear, dark mortar between, chips at the arrises (cached)
+// Act V: the Farthest Light's dressed stone, a 3.2 m tile (512 px): irregular ashlar, courses of 0.3 to 0.5 m and blocks of
+// 0.55 to 1.35 m laid broken-jointed, each block its own tone and grain, its arrises bevelled and chipped here and there, the
+// mortar thin and mid-grey, lichen and soot in its pores. masonryNormal() is the same blocks' relief (the mortar recessed,
+// the bevels and chips rolling off), from the same height field. (A regular grid of four blocks by eight courses with black
+// mortar read as cartoon brickwork, a chimney)
+function masonryField() {
+  if (cache.masonryF) return cache.masonryF;
+  const N = 512, r = RNG(4417), PX = N / 3.2;
+  // the courses: heights drawn and scaled to fill the tile exactly
+  const ch = []; let sum = 0;
+  while (sum < N - 30) { const hh = r.range(0.3, 0.52) * PX; ch.push(hh); sum += hh; }
+  const kk = N / sum, rows = []; let y0 = 0;
+  for (const hh of ch) { rows.push({ y0, y1: y0 + hh * kk }); y0 += hh * kk; }
+  rows[rows.length - 1].y1 = N;
+  // each course's blocks, broken-jointed: lengths drawn and scaled to fill the tile, the whole course slid a random amount
+  for (const row of rows) {
+    const bl = []; let s2 = 0;
+    while (s2 < N - 60) { const l = r.range(0.55, 1.35) * PX; bl.push(l); s2 += l; }
+    const k2 = N / s2, sh = r.range(0, N); row.x = []; let x = sh;
+    for (const l of bl) { row.x.push(x); x += l * k2; }
+    row.tone = bl.map(() => [r.range(0.78, 1.1), r.range(-0.035, 0.035)]);
+    row.chip = bl.map(() => r.range(0, 1));
+  }
+  const H = new Float32Array(N * N), C = new Float32Array(N * N * 3);
+  for (let py = 0; py < N; py++) {
+    let ri = 0; while (rows[ri].y1 <= py) ri++;
+    const row = rows[ri], ry = py - row.y0, rh = row.y1 - row.y0, nb = row.x.length;
+    for (let px = 0; px < N; px++) {
+      // the block: the last start at or before px (wrapping round the tile)
+      let bi = nb - 1, bx = 0, bw = 0;
+      for (let j = 0; j < nb; j++) {
+        const a = row.x[j], b = j + 1 < nb ? row.x[j + 1] : row.x[0] + N;
+        let q = px; while (q < a) q += N; while (q >= a + N) q -= N;
+        if (q < b) { bi = j; bx = q - a; bw = b - a; break; }
+      }
+      const u = px / N, v = py / N, n1 = tfbm(u, v, 16, 91, 4), n2 = tfbm(u, v, 64, 93, 2), n3 = tfbm(u, v, 6, 97, 3);
+      // distance to the block's edge in px, its arris worn and chipped by the noise; the bevel rolls off over ~5 px
+      const ex = Math.min(bx, bw - bx), ey = Math.min(ry, rh - ry), cut = 2.2 + (n2 - 0.5) * 3 + (row.chip[bi] > 0.7 ? Math.max(0, n1 - 0.55) * 22 : 0);
+      const e = Math.min(ex, ey) - cut;
+      const bev = e <= 0 ? 0 : smooth(Math.min(1, e / 5.5));
+      const [tk, hue] = row.tone[bi];
+      // the stone: a cold grey, each block its own tone, a grain and pitting in it; darker toward the foot of each block
+      // where the wet sits, a pale lip on top where the weather has washed it
+      let k = tk * (0.82 + 0.3 * n1) * (0.9 + 0.2 * n2) * (0.94 + 0.08 * (1 - ry / rh));
+      if (ey === ry && ry - cut < 7) k *= 1.06;
+      const lich = Math.max(0, n3 - 0.62) * 2.2 * (n2 > 0.5 ? 1 : 0.4);
+      let st = [150 * k * (1 + hue), 151 * k, 154 * k * (1 - hue)];
+      st = mix3(st, [96, 104, 92], Math.min(0.6, lich));
+      const mo = [104 + n2 * 14, 104 + n2 * 14, 106 + n2 * 14];
+      const col = mix3(mo, st, bev > 0 ? 0.55 + 0.45 * bev : 0);
+      const i = py * N + px;
+      C[i * 3] = col[0]; C[i * 3 + 1] = col[1]; C[i * 3 + 2] = col[2];
+      H[i] = bev * (0.85 + 0.15 * n1) + (n2 - 0.5) * 0.08;
+    }
+  }
+  return (cache.masonryF = { N, H, C });
+}
 export function masonry() {
   if (cache.masonry) return cache.masonry;
-  const c = canvas(256), r = RNG(4417), tone = Array.from({ length: 32 }, () => r.range(0.72, 1.08));
-  pixels(c, (u, v, x, y) => {
-    const row = Math.floor(v * 8), fu = u * 4 + (row % 2) * 0.5, col = Math.floor(fu) % 4, bu = fu - Math.floor(fu), bv = v * 8 - row;
-    const ed = Math.min(bu, 1 - bu) * 0.5, ev = Math.min(bv, 1 - bv), e = Math.min(ed * 2.2, ev);
-    const n = tfbm(u, v, 8, 91, 4), n2 = tfbm(u, v, 32, 93, 2);
-    const chip = smooth(Math.min(1, Math.max(0, (e - 0.035 - (n2 - 0.5) * 0.06) / 0.05)));
-    const k = tone[row * 4 + col] * (0.8 + 0.4 * n) * (0.9 + 0.2 * n2);
-    const st = [148 * k, 150 * k, 152 * k], mo = [46, 46, 48];
-    return mix3(mo, st, chip);
-  });
+  const { N, C } = masonryField(), c = canvas(N);
+  pixels(c, (u, v, x, y) => { const i = (y * N + x) * 3; return [C[i], C[i + 1], C[i + 2]]; });
   return (cache.masonry = finish(c));
+}
+export function masonryNormal() {
+  if (cache.masonryN) return cache.masonryN;
+  const { N, H } = masonryField(), c = canvas(N), at = (x, y) => H[(((y % N) + N) % N) * N + (((x % N) + N) % N)];
+  pixels(c, (u, v, x, y) => {
+    const dx = (at(x + 1, y) - at(x - 1, y)) * 2.2, dy = (at(x, y + 1) - at(x, y - 1)) * 2.2, l = Math.hypot(dx, dy, 1);
+    return [(-dx / l * 0.5 + 0.5) * 255, (dy / l * 0.5 + 0.5) * 255, (1 / l * 0.5 + 0.5) * 255];
+  });
+  return (cache.masonryN = finish(c, { srgb: false }));
 }
 
 const MAKERS = {
