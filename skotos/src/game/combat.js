@@ -489,6 +489,8 @@ function gainMastery(v) {
 }
 function levelFx(mastery) {
   const p = G.player; p.hp = p.hpMax;
+  // several at once (a great kill): one burst
+  const now = G.hero.stats.time; if (now - (levelFx.t ?? -9) < 0.5) return; levelFx.t = now;
   const c = mastery ? 0xb0d8ff : 0xffe8a0, c1 = mastery ? 0x6a8aff : 0xffa040;
   for (let i = 0; i < 40; i++) sparks(p.x + rand.range(-0.4, 0.4), rand.range(0, 3), p.z + rand.range(-0.4, 0.4), 1, c, 1.2, { color1: c1 });
   ring(p.x, p.z, 3.5, mastery ? 0x9ac8ff : 0xffd070, 0.8);
