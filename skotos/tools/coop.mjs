@@ -14,7 +14,8 @@ const results = []; let fails = 0;
 const ok = (c, m, v) => { results.push({ ok: !!c, m, v }); console.log((c ? 'ok   ' : 'FAIL ') + m + (v !== undefined ? '  ' + JSON.stringify(v) : '')); if (!c) fails++; };
 
 const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'] });
-const ctx = await browser.newContext({ viewport: { width: 844, height: 390 } });
+// (the phone: 844 x 390 landscape; the ui scenario as a touch phone)
+const ctx = await browser.newContext(name === 'ui' ? { viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : { viewport: { width: 844, height: 390 } });
 const pages = [];
 async function open(peer, q) {
   const pg = await ctx.newPage();
@@ -298,6 +299,42 @@ const SC = {
     console.log('     guests\' kills', gk.join(' '));
     // the guests' mixed classes in the HUD
     ok(await ev(guests[0], () => window.__NET.party().length) === 3, 'a guest\'s party list holds the other three');
+  },
+
+  // the lobby and the HUD on a phone (844 x 390, touch), drawn
+  async ui() {
+    const host = await open('host', 'auto=town&lvl=14&render=1');
+    await sleep(1500);
+    await ev(host, () => window.__D.openPanel('coop')); await sleep(800);
+    await shot(host, 'lobby-alone.png');
+    const code = await ev(host, async () => { const c = await window.__NET.hostGame(); return c; });
+    await sleep(600);
+    const g = await open('g1', 'auto=town&lvl=12&cls=mage&render=1');
+    await sleep(3500);
+    await ev(g, () => window.__D.openPanel('coop')); await sleep(1500);
+    await shot(g, 'lobby-list.png');
+    ok(await ev(g, (c) => window.__NET.S.hosts.some((h) => h.c === c), code), 'the guest sees the host in the lobby\'s list');
+    await ev(g, (c) => { document.querySelector(`[data-a="cjoin:${c}"]`)?.click(); }, code);
+    await until(host, () => window.__NET.S.roster.length === 1, null, 15000, 'roster');
+    await ev(host, () => window.__D.openPanel('coop')); await sleep(800);
+    await shot(host, 'lobby-host.png');
+    await ev(host, () => document.querySelector('[data-a="cstart"]')?.click());
+    const inz = await until(g, () => window.__NET.S.zoneKey && window.__NET.S.zoneKey === window.__G.zone.netKey, null, 60000, 'guest in');
+    ok(inz, 'joined from the list and started from the panel');
+    await ev(host, () => window.__D.closePanel()); await ev(g, () => window.__D.closePanel());
+    const hp = await hostPos(host); await place(g, hp.x + 2.5, hp.z + 1);
+    await sleep(2500);
+    await shot(host, 'hud-host.png'); await shot(g, 'hud-guest.png');
+    const plate = await ev(host, () => document.querySelectorAll('#plates .plate').length);
+    ok(plate === 1, 'the host sees the guest\'s name over its head', plate);
+    ok(await ev(g, () => !document.getElementById('party').hidden && document.querySelectorAll('#party .pm').length === 1), 'the guest\'s party frame shows the host');
+    // downed
+    await ev(g, async () => { const C = await import('/src/game/combat.js'), G = window.__G; C.damage({ team: 'foe', level: 10, x: G.player.x, z: G.player.z, def: {}, affixes: [] }, G.player, 1e7, { pure: true }); });
+    await sleep(2800);
+    await shot(g, 'downed-guest.png');
+    await place(host, hp.x + 2.6, hp.z + 1.2); await sleep(1200);
+    await shot(host, 'revive-host.png');
+    ok(await ev(host, () => !document.getElementById('revive').hidden), 'the host\'s revive ring shows by the downed guest');
   },
 
   // a boss of each act, the party moving from zone to zone with the host (the guest follows every change)
