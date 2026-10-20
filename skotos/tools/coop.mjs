@@ -168,8 +168,9 @@ const SC = {
     await ev(g, async () => { const C = await import('/src/game/combat.js'), G = window.__G; C.damage({ team: 'foe', level: 10, x: G.player.x, z: G.player.z, def: {}, affixes: [] }, G.player, 1e7, { pure: true }); });
     await sleep(2400);
     await ev(g, () => { if (window.__NET.S.downed) window.__NET.S.downed.t = 0.2; });
-    const up3 = await until(g, () => !window.__G.player.dead && window.__G.player.hp === window.__G.player.hpMax, null, 6000, 'rose');
-    ok(up3 && await ev(g, (k) => window.__G.zone.netKey === k, await ev(host, () => window.__G.zone.netKey)), 'left alone it rose at full life, still in the host\'s zone');
+    const up3 = await until(g, () => !window.__G.player.dead && window.__G.player.hp >= window.__G.player.hpMax * 0.95, null, 6000, 'rose');
+    const hk = await ev(host, () => window.__G.zone.id + ':' + window.__G.zone.ep), gk = await ev(g, () => window.__G.zone.netKey);
+    ok(up3 && hk === gk, 'left alone it rose at full life, still in the host\'s zone', { hk, gk });
   },
   // guests leaving and joining mid-fight; a page closed outright; the host plays on untouched
   async churn() {

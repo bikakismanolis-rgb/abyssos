@@ -524,10 +524,11 @@ async function guestEnter(Z) {
     S.pup.clear();
     const H = S.peers.get(S.hostPeer), at = H?.state ? { x: H.state.x + rand.range(-1.5, 1.5), z: H.state.z + 1.5 } : 'waypoint';
     const prev = { ...G.zones };
+    NET.mode = 'guest';
     enterZone(Z.id, { fresh: true, seed: Z.s | 0, level: Z.l | 0, tier: Z.ti | 0, at });
     // (the zones built before, the guest's own or the host's last, are let go)
     for (const k in prev) if (prev[k] !== G.zone) { disposeZone(prev[k]); if (G.zones[k] === prev[k]) delete G.zones[k]; }
-    G.zone.netKey = Z.k; S.zoneKey = Z.k; S.lastSnap = now();
+    G.zone.netKey = Z.k; S.zoneKey = Z.k; S.lastSnap = now(); NET.mode = 'guest'; emit('netMode');
     // the act's look again for the world as the host has it
     presenceAgain(G.zone);
   } catch (e) { console.error(e); }
