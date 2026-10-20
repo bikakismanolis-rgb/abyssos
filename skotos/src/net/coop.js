@@ -46,7 +46,7 @@ export const S = {
   rel: [], relSeq: 0, done: new Map(), clips: new Map(), worldSent: '', worldT: 0, iceT: 0, iceKey: '', snapT: 0, lobbyT: 0,
   // a guest: the world as the host has it, the zone loaded, puppets, the events not yet acked, the host's clip names
   real: null, world: null, wkey: '', zoneKey: null, loading: false, pup: new Map(), ev: [], evSeq: 0, relDone: 0, hclips: new Map(), lastSnap: 0, chunks: {},
-  downed: null, rv: null, fxOut: [], fxT: 0, stats: { snaps: 0, snapBytes: 0, rejected: 0, hits: 0 }
+  downed: null, rv: null, fxOut: [], fxT: 0, stats: { snaps: 0, snapBytes: 0, rejected: 0, hits: 0, why: {} }
 };
 const now = () => performance.now();
 const q = (v, k) => Math.round((+v || 0) * k);
@@ -56,6 +56,8 @@ const num = (v, lo, hi, d = 0) => (typeof v === 'number' && isFinite(v) ? clamp(
 export async function initNet(params) {
   try { S.T = await pickTransport(params, SUPABASE); } catch (e) { S.T = null; }
   S.avail = !!S.T; S.ready = true;
+  // (what the tests drive: tools/coop.mjs)
+  window.__NET = { S, NET, hostGame, joinGame, startGame, leaveGame, party, respawnNow };
   if (!S.T) { emit('netReady', false); return; }
   S.me = S.T.lobby?.me || S.T.me || null;
   // who hosts what, from the lobby
@@ -192,7 +194,7 @@ function readPeer(P) {
 }
 const pushSample = (buf, s) => { buf.push({ t: now(), x: s.x, z: s.z, r: s.r, y: s.y || 0 }); if (buf.length > 6) buf.shift(); };
 // (a zone's key: the same id built once more is another zone, a guest builds it again)
-export const myKey = () => (G.zone ? G.zone.id + ':' + (G.zone.ep || 0) : null);
+export const myKey = () => (G.zone ? G.zone.netKey || G.zone.id + ':' + (G.zone.ep || 0) : null);
 
 // ---------- presence ----------
 function lookOf() {
@@ -390,23 +392,24 @@ function takeEvents(P) {
     const seq = e[0] | 0; if (seq <= last) continue;
     if (seq !== last + 1 && last !== 0) break; // (a gap: wait for it, the guest sends everything unacked)
     last = seq;
-    try { guestEvent(P, e); } catch (err) { S.stats.rejected++; }
+    try { guestEvent(P, e); } catch (err) { reject('bad'); }
   }
   S.done.set(P.peer, last);
 }
+const reject = (why) => { S.stats.rejected++; S.stats.why[why] = (S.stats.why[why] || 0) + 1; };
 function guestEvent(P, e) {
   const type = e[1], me = P.actor;
   if (type === 'h') {
     const id = e[2] | 0, amt = e[3], crit = !!e[4], o = e[5] && typeof e[5] === 'object' ? e[5] : {};
     const a = G.actors.find((x) => x.id === id);
     if (!a || a.dead || a.removed || a.team !== 'foe' || a.prop) return;
-    if (Math.hypot(a.x - me.x, a.z - me.z) > 26 + (a.radius || 0.5)) { S.stats.rejected++; return; }
+    if (Math.hypot(a.x - me.x, a.z - me.z) > 26 + (a.radius || 0.5)) return reject('far');
     const lvl = clamp(P.lk?.l | 0, 1, MAX_LEVEL), cap = Math.max(60, Math.min(P.dmax || 0, (12 + lvl * 9) * 8) * 14);
-    if (!(typeof amt === 'number' && isFinite(amt) && amt > 0 && amt <= cap)) { S.stats.rejected++; return; }
+    if (!(typeof amt === 'number' && isFinite(amt) && amt > 0 && amt <= cap)) return reject('big');
     // the rate: what a second of its hits may come to
     const R0 = P.rate ||= { t: now(), sum: 0 };
     if (now() - R0.t > 1000) { R0.t = now(); R0.sum = 0; }
-    R0.sum += amt; if (R0.sum > cap * 12) { S.stats.rejected++; return; }
+    R0.sum += amt; if (R0.sum > cap * 12) return reject('rate');
     const opts = { crit, net: true };
     for (const k in OPT_NUM) if (typeof o[k] === 'number' && isFinite(o[k]) && o[k] > 0) opts[k] = Math.min(o[k], OPT_NUM[k] === 1e7 ? cap : OPT_NUM[k]);
     if (o.slow && typeof o.slow.k === 'number' && typeof o.slow.t === 'number') opts.slow = { k: clamp(o.slow.k, 0, 0.8), t: clamp(o.slow.t, 0, 5) };
@@ -521,7 +524,7 @@ async function guestEnter(Z) {
     enterZone(Z.id, { fresh: true, seed: Z.s | 0, level: Z.l | 0, tier: Z.ti | 0, at });
     // (the zones built before, the guest's own or the host's last, are let go)
     for (const k in prev) if (prev[k] !== G.zone) { disposeZone(prev[k]); if (G.zones[k] === prev[k]) delete G.zones[k]; }
-    S.zoneKey = Z.k; S.lastSnap = now();
+    G.zone.netKey = Z.k; S.zoneKey = Z.k; S.lastSnap = now();
     // the act's look again for the world as the host has it
     presenceAgain(G.zone);
   } catch (e) { console.error(e); }
