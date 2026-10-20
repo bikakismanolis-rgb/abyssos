@@ -598,13 +598,13 @@ function act4Zone(z) {
       it.use = () => emit('altar', it, z);
       z.interact.push(it); A.altars.push(it);
     }
-    // Ivar's three braziers on the rim of the Anvil Gate plaza: put out in his dark, lit again by a 1 s touch
+    // Ivar's three braziers on the rim of the Anvil Gate plaza: put out in his dark, lit again by a 0.7 s touch
     A.braziers = (S.braziers || []).map((b, i) => {
       const mesh = put(z, act4Prop('brazier'), b.x, b.z);
       const it = { kind: 'brazier', i, x: b.x, z: b.z, r: 2.3, lightR: 6, mesh, lit: false, prompt: 'brazier.light' };
       it.snuff = () => setBrazier(z, it, false);
       it.relight = () => setBrazier(z, it, true);
-      it.use = () => { if (!it.lit) touch(1, it, mesh.userData.fireY || 1.2, () => { setBrazier(z, it, true); Audio.sfx('lampLight', { x: it.x, z: it.z }); }); };
+      it.use = () => { if (!it.lit) touch(0.7, it, mesh.userData.fireY || 1.2, () => { setBrazier(z, it, true); Audio.sfx('lampLight', { x: it.x, z: it.z }); }); };
       z.interact.push(it); return it;
     });
     // the Last Lamp in the middle of the plaza: Ivar's lantern hangs there once he is at rest (a light, not a lamp to eat)
@@ -670,6 +670,8 @@ function act4Enter(z) {
     for (const it of A.braziers) setBrazier(z, it, dark ? it.lit : mode !== 'stars', true);
     for (const it of A.altars) { const st = F.gifts?.[it.id]; it.mesh.userData.setState(st || 'idle'); it.used = !!st || !!F.giftsTaken || !!F.crownUnmade; }
     setLastLamp(z, !!F.ivar);
+    // the place to wake: the last waylamp she lit or touched, if it burns (kept in the save; the zone is rebuilt on a Continue)
+    const ll = F.lastLamp && A.lamps.find((l) => l.id === F.lastLamp); if (ll?.lit) lampCheckpoint(z, ll);
     // the Lampless are released after the Unmaking: none walk the Graves any more
     if (F.crownUnmade) { z.packs = z.packs.filter((p) => p.tag !== 'lamplessPatrol'); for (const a of z.actors.slice()) if (a.kind === 'lampless' && !a.dead) release(z, a, false); }
   } else {
@@ -680,6 +682,8 @@ function act4Enter(z) {
     for (const it of A.bellows) setPit(z, it, k >= 0, true);
     if (A.mouth) { A.mouth.userData.setWhite(0); mouthHalo(A.mouth, k >= 0); }
     if (k >= 0) { startFlues(L.flues); setFlueHeat(k); } else stopFlues();
+    // once she has come up to the Anvil, she wakes on the Great Stair (until the crown is unmade)
+    if (F.anvilWake && !F.crownUnmade) forgeCheckpoint(z);
     // Isarn's lantern in Karthax's last fire walks on after a death and a respawn here (pools are cleared on leaving)
     const W = z.isarnWalk;
     if (W?.a && !W.a.removed && z.boss && !z.boss.dead) W.pool = addLightPool(W.a.x, W.a.z, 6, Infinity, 'isarn', { color: 0xfff0c8, intensity: 26 });
@@ -714,21 +718,26 @@ function setLamp(z, it, on) {
   const tag = 'lamp:' + it.id;
   removeLightPool(tag);
   if (on && G.zone === z) addLightPool(it.x, it.z, it.lightR, Infinity, tag, { color: LAMP_C, intensity: 24 });
-  // dark: light it (again); lit with its memory unseen: remember. Nothing to do once the Night Without Fires has come
-  it.used = !ash || (on && !(it.memory && !F['mem_' + it.id]));
-  it.prompt = on ? 'lamp.remember' : F['lamp_' + it.id] ? 'lamp.relight' : 'lamp.light';
+  // dark: light it (again); lit with its memory unseen: remember; lit: wake here. Nothing to do once the Night Without Fires
+  // has come
+  it.used = !ash;
+  it.prompt = on ? (it.memory && !F['mem_' + it.id] ? 'lamp.remember' : 'lamp.wake') : F['lamp_' + it.id] ? 'lamp.relight' : 'lamp.light';
 }
+// the place to wake if she falls: by the last lamp she lit or touched (G.hero.flags.lastLamp)
+function lampCheckpoint(z, it) { const r = it.spot.r || 0; z.checkpoint = z.map.nearestFloor(it.x + Math.sin(r) * 1.6, it.z + Math.cos(r) * 1.6, 3); G.hero.flags.lastLamp = it.id; }
 function lampUse(z, it) {
   const F = G.hero.flags;
-  if (it.lit) { if (it.memory && !F['mem_' + it.id]) emit('lamp', it, z); return; }
+  if (it.lit) {
+    lampCheckpoint(z, it); ring(it.x, it.z, 1.6, LAMP_C, 0.5);
+    if (it.memory && !F['mem_' + it.id]) emit('lamp', it, z); else emit('toast', t('lamp.lit'), 'quest');
+    return;
+  }
   const f = worldAt(it.mesh, it.mesh.userData.flameAt || { y: 2 });
   touch(F['lamp_' + it.id] ? 1 : 0.8, it, f.y, () => {
     const first = !F['lamp_' + it.id];
     F['lamp_' + it.id] = true;
     setLamp(z, it, true);
-    // the place to wake if she falls
-    const r = it.spot.r || 0;
-    z.checkpoint = z.map.nearestFloor(it.x + Math.sin(r) * 1.6, it.z + Math.cos(r) * 1.6, 3);
+    lampCheckpoint(z, it);
     glowBurst(f.x, f.y, f.z, 0xffd080, 26, 2.5, 0.3, 0.8); ring(it.x, it.z, it.lightR, LAMP_C, 0.9);
     Audio.sfx('lampLight', { x: it.x, z: it.z }); Audio.sting('lantern');
     emit('lampLit', it, first, z);
@@ -758,9 +767,10 @@ function setPit(z, it, on, quiet) {
   it.prompt = on ? 'bellows.use' : 'bellows.relight';
   setEmit(z, tag, on ? { x: p.x, y: 0.4, z: p.z, type: 'fire', s: 1 } : null, quiet);
 }
-// a touch that takes a moment (a waylamp, a brazier, a fire-pit): the Cradle's fire streams across; a blow breaks it
+// a touch that takes a moment (a waylamp, a brazier, a fire-pit): the Cradle's fire streams across; a blow breaks it. It
+// takes the place of a basic attack held down, not of a skill
 function touch(dur, it, y, done) {
-  const pl = G.player; if (!pl || pl.dead || pl.act) return;
+  const pl = G.player; if (!pl || pl.dead || (pl.act && pl.act.name !== 'basic')) return;
   pl.rot = angleTo(pl.x, pl.z, it.x, it.z);
   const c = new THREE.Vector3();
   pl.act = { name: 'touch', t: 0, dur, ev: [], clip: dur, move: 0, blows: pl.blows || 0, st: 0,
@@ -952,6 +962,8 @@ function tickFades(dt) {
 }
 
 // ---------- per frame (boot.js, with the packs): walks, fades, the bellows, the heat, the flues' glow, Karthax's arrival ----------
+// the Forge's place to wake by the Anvil: the Great Stair, 6 m past its last bridge (~23 m out, outside the arena)
+function forgeCheckpoint(z) { const b = z.L.bridges?.find((q) => q.stair); if (!b) return; const s = Math.sign(b.x - z.L.boss.x) || 1; z.checkpoint = z.map.nearestFloor(b.x + s * 6, b.z, 4); }
 const _fg = [0, 0, 0];
 export function updateAct4(dt) {
   tickWalks(dt); tickFades(dt);
@@ -978,13 +990,16 @@ export function updateAct4(dt) {
   // Karthax waits in the slag until the hero comes up to the Anvil (story.js plays his arrival)
   const b = z.boss;
   if (b && b.kind === 'karthax' && b.holdWake && !z.karthaxArrived && !b.dead && Math.hypot(b.x - pl.x, b.z - pl.z) < 13.5) { z.karthaxArrived = true; emit('karthaxArrive', z, b); }
-  // Isarn's lantern walks toward the Ash King in his last fire, a 6 m light, and stops 4 m short
+  // come up to the Anvil, she wakes on the Great Stair from now on, not back through the galleries (act4Enter keeps it)
+  const AN = z.L.boss;
+  if (AN && !z.checkpoint && F.plug && !F.crownUnmade && Math.hypot(pl.x - AN.x, pl.z - AN.z) < AN.r + 8) { F.anvilWake = true; forgeCheckpoint(z); }
+  // Isarn's lantern walks toward the Ash King in his last fire, a 6 m light, and stops 3 m short (it keeps up with him)
   const I = z.isarnWalk;
   if (I && I.a && !I.a.removed) {
     const t0 = b && !b.dead ? b : null;
     if (t0) {
       const d = Math.hypot(t0.x - I.a.x, t0.z - I.a.z);
-      if (d > 4.3 && !I.a.walking) { const s = Math.min(1.2 * dt, d - 4.2); I.a.x += ((t0.x - I.a.x) / d) * s; I.a.z += ((t0.z - I.a.z) / d) * s; I.a.home = I.a.rot = angleTo(I.a.x, I.a.z, t0.x, t0.z); if (!I.moving) { I.moving = true; I.a.avatar?.play('Walk_Loop', 0.8, { loop: true, fade: 0.3 }); } }
+      if (d > 3.1 && !I.a.walking) { const s = Math.min(2.0 * dt, d - 3.0); I.a.x += ((t0.x - I.a.x) / d) * s; I.a.z += ((t0.z - I.a.z) / d) * s; I.a.home = I.a.rot = angleTo(I.a.x, I.a.z, t0.x, t0.z); if (!I.moving) { I.moving = true; I.a.avatar?.play('Walk_Loop', 0.8, { loop: true, fade: 0.3 }); } }
       else if (I.moving) { I.moving = false; I.a.avatar?.anim.stop?.(0.3); }
       if (I.a.it) { I.a.it.x = I.a.x; I.a.it.z = I.a.z; }
     }

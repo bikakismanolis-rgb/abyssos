@@ -105,7 +105,7 @@ function basicWarden(aim) {
     name: 'basic', anim, speed: attackSpeed(third ? 1.25 : 1.15), face: aim.dir, cut, trail: [impact - 0.15, impact + 0.12],
     events: [[impact, () => {
       const mult = skillMult(sk) * (third ? 1.5 : 1);
-      const n = arcHit(third ? 3.0 : 2.6, third ? Math.PI * 2 : Math.PI * 0.8, (f) => damage(pl, f, heroHit(mult, { area: third }), { knock: third ? 7 : 2.5, kx: f.x - pl.x, kz: f.z - pl.z }));
+      const n = arcHit(third ? 3.0 : 2.6, third ? Math.PI * 2 : Math.PI * 0.8, (f) => damage(pl, f, heroHit(mult, { area: third }), { knock: third ? 7 : 2.5, kx: f.x - pl.x, kz: f.z - pl.z, area: third }));
       swingFx(n, third);
       if (third) {
         ring(pl.x, pl.z, 3, 0xffe0b0, 0.3);
@@ -264,7 +264,7 @@ const SKILL_FN = {
     const pl = p();
     const volley = () => {
       const o = handPoint(V), n = sk.count + (rank >= 3 ? 1 : 0) + (rank >= 5 ? 1 : 0), spread = 1.1;
-      for (let i = 0; i < n; i++) { const a = pl.rot - spread / 2 + (spread * i) / (n - 1); fire('bolt', pl, o.x, o.z, a, { y: 1.25, dmg: heroHit(mult, { area: true }), opts: { knock: 1.5 } }); }
+      for (let i = 0; i < n; i++) { const a = pl.rot - spread / 2 + (spread * i) / (n - 1); fire('bolt', pl, o.x, o.z, a, { y: 1.25, dmg: heroHit(mult, { area: true }), opts: { knock: 1.5, area: true } }); }
       Audio.sfx('arrowShoot');
     };
     act({ name: 'multi', anim: 'volley', speed: 1.7, face: aim.dir, cut: 0.42, events: [[0.15, () => { volley(); if (G.stats.legs.has('windQuiver')) later(0.22, volley); }]] });

@@ -152,8 +152,13 @@ on('respawn', (town) => {
   pl.dead = false; pl.hp = pl.hpMax; pl.res = G.hero.cls === 'warden' ? 0 : G.stats.resMax; pl.status = freshStatus();
   refreshHeroLook();
   if (town || G.zone.id === 'gate') { G.gate = null; travel('town', { at: 'waypoint' }); }
-  // Act IV: she wakes at the last waylamp she lit, if there is one
-  else travel(G.zone.id, { at: G.zone.checkpoint || (G.zone.L.spots.waypoint ? 'waypoint' : 'start') });
+  // Act IV: she wakes at the last waylamp she lit or touched (by the Anvil: on the Great Stair), if there is one; else at
+  // the nearer of the zone's two waypoints, once the second is known (the Field's Elati camp)
+  else {
+    const z = G.zone, S = z.L.spots; let at = z.checkpoint;
+    if (!at && S.camp2 && G.hero.wps.includes(z.id + '@2')) { const d1 = S.waypoint ? Math.hypot(pl.x - S.waypoint.x, pl.z - S.waypoint.z) : 1e9, d2 = Math.hypot(pl.x - S.camp2.x, pl.z - S.camp2.z); at = d2 < d1 ? 'waypoint2' : 'waypoint'; }
+    travel(z.id, { at: at || (S.waypoint ? 'waypoint' : 'start') });
+  }
 });
 on('heroDeath', () => {
   const pl = G.player; if (pl.dead) return;

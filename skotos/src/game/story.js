@@ -599,7 +599,8 @@ function endLampMemory(it, z, figs) {
   document.body.classList.remove('memory-ash');
   for (const a of figs) vanish(z, a, 1.4);
   F['mem_' + it.id] = true;
-  it.used = true;
+  // still a place to wake (world.js lampUse)
+  it.used = false; it.prompt = 'lamp.wake';
   grantBuff('memory');
   const p = G.player;
   if (p) { glowBurst(p.x, 1.2, p.z, 0xf0e8d8, 26, 3, 0.25, 0.8); ring(p.x, p.z, 2.6, 0xffe8c0, 0.6); }
