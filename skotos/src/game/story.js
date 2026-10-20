@@ -335,10 +335,10 @@ function dismiss(z, b) {
   for (const m of b.host || []) if (!m.dead && z?.actors.includes(m)) { puff(m.x, 1, m.z, 14, 0x6a6660, 1.4, 1.4, 1.4); release(z, m, false); }
 }
 // and Act V's: what the Tower brought up (its lice, the Drowned) and the Skotos's Hands, Coils and Icemaws go back into the
-// water (a pack's creatures stay: they were the sea's before the fight)
+// water (a pack's creatures stay: they were the sea's before the fight; so do the whale-oil casks, props of the place)
 function dismiss5(z, b) {
   for (const m of z?.actors.slice() || []) {
-    if (m === b || m.dead || m.team !== 'foe' || m.boss || m.packId != null || Math.hypot(m.x - b.x, m.z - b.z) > 40) continue;
+    if (m === b || m.dead || m.prop || m.team !== 'foe' || m.boss || m.packId != null || Math.hypot(m.x - b.x, m.z - b.z) > 40) continue;
     puff(m.x, 0.6, m.z, 10, 0xd8e8f0, 1.2, 1.2, 1); release(z, m, false);
   }
 }
@@ -1418,7 +1418,8 @@ function freezeScene(z) {
       later(2.2, () => emit('toast', t('q.freeze'), 'big'));
       // the morning: the coast built again from its seed, Skerry Bay frozen and the road north open (a white fade)
       const f = document.getElementById('fade');
-      later(3.4, () => { f?.classList.add('white'); emit('travel', 'coast', { at: { x: pl.x, z: pl.z } }); later(2.2, () => { f?.classList.remove('white'); setQuest(28); }); });
+      // (G.flags.freezeQ: the morning's own entry leaves q28 to the fade's end, where it is announced, enter5)
+      later(3.4, () => { f?.classList.add('white'); G.flags.freezeQ = true; emit('travel', 'coast', { at: { x: pl.x, z: pl.z } }); later(2.2, () => { f?.classList.remove('white'); G.flags.freezeQ = false; setQuest(28); }); });
     }
   });
 }
@@ -1446,8 +1447,8 @@ function farArrival(z) {
 on('sealDone', (k, z) => {
   const n = holesSealed(), ho = z.L.spots.holes.find((h) => h.id === k);
   emit('cine', {
-    x: ho.x, z: ho.z + 5, dur: 4.4, zoom: 1.1, pitch: 0.75,
-    steps: [[0.8, () => say('d.alk.s' + Math.min(3, n))]],
+    x: ho.x, z: ho.z + 5, dur: 4.8, zoom: 1.1, pitch: 0.75,
+    steps: [[0.3, () => emit('say', 'd.seal.ring')], [1.5, () => say('d.alk.s' + Math.min(3, n))]],
     end: () => {
       emit('toast', t('q.holeSealed', n), 'quest'); emit('quest');
       if (n === 2) later(3.4, () => skotosSay('d.skotos.law'));
@@ -1562,11 +1563,11 @@ function selnaBack(z, self) {
   later(1.4, () => { if (!on5()) return; say(self ? 'd.selna.self' : 'd.selna.p2'); emit('toast', t('q.selnaBack'), 'quest'); emit('quest'); Audio.mood({ forget: 0 }); people5(z); });
   later(3.2, () => { if (on5()) say('d.alk.j1'); });
 }
-// (ai.js, at the 30% floor in phase 2: forty seconds and she remembers herself, the third Remember)
-on('skotosFloor', (a) => {
-  if (a?.echo) return;
-  const z = G.zone, on5 = fightOn(z);
-  later(40, () => { if (on5() && !a.dead && !G.selnaBack) { dropRemember(z, z.remember); a.remembers = 3; emit('selnaRemembered', a, 2); selnaBack(z, true); } });
+// (ai.js, forty seconds of the fight at the 30% floor in phase 2, its own clock: she remembers herself, the third Remember)
+on('skotosSelf', (a) => {
+  const z = G.zone;
+  if (a?.echo || a?.kind !== 'skotos' || a.dead || z?.id !== 'farlight' || G.selnaBack || G.player?.dead) return;
+  dropRemember(z, z.remember); a.remembers = 3; emit('selnaRemembered', a, 2); selnaBack(z, true);
 });
 // phase 3, Wrap the Light (ai.js 'skotosWrap'): the keepers walk out onto the ice with their lamps (moving lamp light) and
 // relight the cairns; Brokka and Elati come up the road with their fires; the stair now takes Whitecliff's fire
@@ -1781,7 +1782,7 @@ function enter5(id, z) {
   if (F.coal && h.quest < 25) setQuest(25, true);
   if (F.rite && h.quest < 26) setQuest(26, true);
   if (F.towerWake && h.quest < 27) setQuest(27, true);
-  if (F.frozen && h.quest < 28) setQuest(28, true);
+  if (F.frozen && h.quest < 28 && !G.flags.freezeQ) setQuest(28, true);
   if (F.hole0 && F.hole1 && F.hole2 && h.quest < 29) setQuest(29, true);
   if (F.carved && h.quest < 30) setQuest(30, true);
   // the fight in progress is runtime only: a death or a quit before the naming, and her name is hidden again
@@ -1789,7 +1790,8 @@ function enter5(id, z) {
   if (!z) return;
   if (id === 'town') {
     if (!F.alkyone) later(2, () => hook5(z));
-    if (F.seaLit && !F.homeSeen) later(1.6, () => homeScene(z));
+    // (home is q30's: the first entry after the carving, not a visit between the answer and the climb)
+    if (F.carved && !F.homeSeen) later(1.6, () => homeScene(z));
     // the child was told but the act never closed (the game closed during the answer)
     if (F.toldChild && (h.act5 ?? -1) < 0) later(2, () => actComplete(5));
   }
@@ -1805,8 +1807,9 @@ function enter5(id, z) {
     // over: a death past the third Remember starts its Night again, a quit its first phase); the keepers back at the tower,
     // the Light dark and its stair taking no fire until the Skotos wraps it again
     if (F.skotosWake && !F.skotosDown) {
-      G.selnaBack = false; z.remember = null;
-      z.relit = false; z.giving = false; z.keepers = false;
+      G.selnaBack = false;
+      for (const it of z.interact.filter((i) => i.kind === 'remember')) dropRemember(z, it);
+      z.remember = null; z.relit = false; z.giving = false; z.keepers = false;
       for (const k in z.p5 || {}) z.p5[k].scene = false;
       for (const a of z.cameoNpcs || []) if (!a.removed) vanish(z, a, 0.1);
       z.cameoNpcs = []; z.cameo = false; z.follow = [];
