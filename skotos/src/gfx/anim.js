@@ -320,7 +320,8 @@ export class Avatar {
   setDissolve(v) { this.mat.userData.u.uDissolve.value = v; }
   setTint(color, amt) { this.mat.userData.u.uTint.value.set(color); this.mat.userData.u.uTintAmt.value = amt; }
   setRim(color, amt) { if (color != null) this.mat.userData.u.uRimColor.value.set(color); if (amt != null) this.mat.userData.u.uRim.value = amt; }
-  play(name, speed, o) { return this.anim.play(name, speed, o); }
+  // (the last clip asked for, counted: co-op sends it to the other pages, net/coop.js)
+  play(name, speed, o) { this.netClip = name; this.netSpd = speed ?? 1; this.netSeq = (this.netSeq || 0) + 1; return this.anim.play(name, speed, o); }
   update(dt, st) { this.anim.update(dt, st); }
   dispose() {
     this.group.parent?.remove(this.group);

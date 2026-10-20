@@ -14,6 +14,7 @@ import { tickTide } from './tide.js';
 import { tickIce } from './ice.js';
 import Audio from '../audio/audio.js';
 import { rand } from '../core/util.js';
+import { mir } from '../net/state.js';
 
 let boltGeo = null, arrowGeo = null, pinGeo = null, harpoonGeo = null, pmat = null;
 function meshFor(kind) {
@@ -66,11 +67,13 @@ const KIND = {
 };
 const PASS_WALLS = new Set(['spectral', 'firewave', 'phantomHart']);
 
-export function fire(kind, src, x, z, dir, o = {}) {
-  const K = KIND[kind];
+// (co-op: told to the fx mirror, net/state.js; o.team 'vis' is another page's, seen here and striking nothing)
+export function fire(...args) { return mir('fire', fire0, args); }
+function fire0(kind, src, x, z, dir, o = {}) {
+  const K = KIND[kind]; if (!K) return null;
   const sp = o.speed ?? K.speed;
   const p = {
-    kind, team: src.team === 'foe' ? 'foe' : 'hero', src, x, z, y: o.y ?? 1.2,
+    kind, team: o.team || (src.team === 'foe' ? 'foe' : 'hero'), src, x, z, net: !!o.net, y: o.y ?? 1.2,
     vx: Math.sin(dir) * sp, vz: Math.cos(dir) * sp, life: o.life ?? K.life, r: o.r ?? K.r,
     dmg: o.dmg || 0, opts: o.opts || {}, pierce: o.pierce || 0, hit: new Set(), homing: o.homing || 0, onHit: o.onHit, onEnd: o.onEnd, t: 0
   };
@@ -153,7 +156,8 @@ export function updateProjs(dt) {
     } else if (p.kind === 'bolt' && Math.random() < 0.5) P({ x: p.x, y: p.y, z: p.z, life: 0.15, size: 0.12, size1: 0.02, color: 0xffe8c0 });
     // hits
     let done = false;
-    if (p.team === 'hero') {
+    if (p.team === 'vis') { /* another page's: only seen */ }
+    else if (p.team === 'hero') {
       for (const f of foes(p.x, p.z, p.r)) {
         if (p.hit.has(f) || f.hidden) continue;
         p.hit.add(f);
@@ -177,7 +181,8 @@ export function updateProjs(dt) {
 }
 
 // ---------- areas: burning ground, arrow rain, webs, poison ----------
-export function area(kind, x, z, r, dur, o = {}) {
+export function area(...args) { return mir('area', area0, args); }
+function area0(kind, x, z, r, dur, o = {}) {
   const a = { kind, x, z, r, dur, t: 0, tick: o.tick ?? 0.5, tickT: o.delay ?? 0, dmg: o.dmg || 0, team: o.team || 'hero', src: o.src, opts: o.opts || {}, vx: o.vx || 0, vz: o.vz || 0, hit: new Set(), floats: !!o.floats };
   if (kind === 'fire') a.light = addLight({ x, y: 0.6, z, color: 0xff6a10, intensity: o.floats ? 22 : 16, range: r * 3, flicker: 0.4 });
   // burning whale oil (Act V): a dark slick under the flames (it burns on water too: the decal fades under the sea, fx.js)
@@ -212,7 +217,7 @@ export function updateAreas(dt) {
     } else if (a.kind === 'wave') {
       const front = 0.2 + a.r * Math.sqrt(Math.min(1, a.t / a.dur)), prev = a.prev ?? 0; a.prev = front;
       for (let k = 0; k < 10; k++) { const ang = Math.random() * 6.28; P({ x: a.x + Math.sin(ang) * front, y: rand.range(0.1, 1.2), z: a.z + Math.cos(ang) * front, vy: 0.6, life: 0.4, size: 0.22, size1: 0.04, color: 0xffe090, color1: 0xff9020 }); }
-      if (pl && !pl.dead && !a.done) {
+      if (pl && !pl.dead && !a.done && a.team !== 'vis') {
         const d = Math.hypot(pl.x - a.x, pl.z - a.z);
         if (d <= front + pl.radius && d >= prev - pl.radius - 0.4) { a.done = true; damage(a.src, pl, a.dmg, Object.assign({ kx: pl.x - a.x, kz: pl.z - a.z }, a.opts)); }
       }
@@ -234,7 +239,7 @@ export function updateAreas(dt) {
     // Act IV: the ash Ivar's Long Road leaves behind him, and his dead lanterns' cold fire: both only slow
     else if (a.kind === 'ash') { if (Math.random() < 0.5) P({ add: false, x: a.x + rand.range(-a.r, a.r) * 0.7, y: 0.15, z: a.z + rand.range(-a.r, a.r) * 0.7, vy: 0.3, life: 1.2, size: 0.6, size1: 1.3, color: 0x6a6660, alpha: 0.35, alpha1: 0 }); }
     else if (a.kind === 'coldFire') { if (Math.random() < 0.6) P({ x: a.x + rand.range(-a.r, a.r) * 0.7, y: 0.1, z: a.z + rand.range(-a.r, a.r) * 0.7, vy: rand.range(0.6, 1.4), life: 0.6, size: 0.35, size1: 0.05, color: 0xd0e4ff, color1: 0x4a70c0 }); }
-    if (a.tickT <= 0 && a.t <= a.dur) {
+    if (a.tickT <= 0 && a.t <= a.dur && a.team !== 'vis') {
       a.tickT += a.tick;
       if (a.team === 'hero') {
         for (const f of foes(a.x, a.z, a.r)) damage(a.src || pl, f, a.dmg, Object.assign({ quiet: a.kind !== 'rain', noFx: a.kind === 'fire', dot: a.kind === 'fire', lohMul: 0.2, area: true }, a.opts));
@@ -252,7 +257,7 @@ export function updateAreas(dt) {
       if (a.kind === 'frostOrb') {
         explosion(a.x, a.z, a.r, 0x9ad8ff, { smoke: 0x9ab8d0, shake: 0.12 });
         Audio.sfx('frost', { x: a.x, z: a.z });
-        if (pl && Math.hypot(pl.x - a.x, pl.z - a.z) < a.r) damage(a.src, pl, a.dmg, { freeze: 1.2 });
+        if (pl && a.team !== 'vis' && Math.hypot(pl.x - a.x, pl.z - a.z) < a.r) damage(a.src, pl, a.dmg, { freeze: 1.2 });
       }
       if (a.light) removeLight(a.light);
       G.areas.splice(i, 1);

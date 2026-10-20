@@ -30,6 +30,7 @@ import { t, has } from '../i18n/i18n.js';
 import { angleDiff, clamp } from '../core/util.js';
 import { TIDE } from './tide.js';
 import { tidal } from '../world/gen5.js';
+import { NET } from '../net/state.js';
 
 const BATCH = 0.25, WARN = 0.6, CHAIN = 0.3, MELT = 20, MELT_LAMP = 6, SLUSH = 8, DECAY = 0.25, NEAR = 30, RING = 2, UP = 0.1, FLOES = 32;
 // cell flags: in the loaded list, warning, a break waiting for its batch, a refreeze waiting, in the broken list, in the
@@ -98,12 +99,15 @@ function tick(dt) {
   const I = ICE;
   if (I) {
     I.clock += dt;
-    if (G.mode === 'play') weigh(z, I, dt);
-    decay(z, I, dt);
-    timers(z, I, dt);
-    melt(z, I, dt);
-    beamIce(z, I, dt);
-    if ((I.batchT -= dt) <= 0) { I.batchT = BATCH; batch(z, I); }
+    // (co-op: a guest's ice is the host's, net/coop.js netIce; its hero weighs on the host's)
+    if (NET.mode !== 'guest') {
+      if (G.mode === 'play') weigh(z, I, dt);
+      decay(z, I, dt);
+      timers(z, I, dt);
+      melt(z, I, dt);
+      beamIce(z, I, dt);
+      if ((I.batchT -= dt) <= 0) { I.batchT = BATCH; batch(z, I); }
+    }
     ringTick(z, I, dt);
     floeTick(z, I);
     // MOOD.ice: how much of the ground round her is thin ice (the ice song sings more often on it)
@@ -120,6 +124,8 @@ function tick(dt) {
 export function iceWeight(a) {
   if (!a || a.dead || a.removed || a.prop) return 0;
   if (a.hero) return airborne(a) ? 0 : 1;
+  // a guest's hero on the host (net/coop.js): its weight, off the ice while it rolls or leaps
+  if (a.remote) return a.iframes > 0 ? 0 : 1;
   const d = a.def || {};
   if (a.team === 'npc' || a.boss || d.float || d.ai === 'bat' || a.under || a.airborne || a.cling || a.hidden || a.dormant || (a.statue && !a.awake) || (a.flounder > 0)) return 0;
   if (d.weight != null) return d.weight;
@@ -141,7 +147,8 @@ function weigh(z, I, dt) {
       if (cx >= 0 && cz >= 0 && cx < w && cz < h && Math.hypot(cx + 0.5 - a.x, cz + 0.5 - a.z) <= r + 0.35) press(z, I, cz * w + cx, amt);
   };
   one(pl);
-  for (const a of z.actors) if (Math.abs(a.x - pl.x) < NEAR && Math.abs(a.z - pl.z) < NEAR) one(a);
+  const R0 = NET.mode === 'host' ? NET.remotes : null;
+  for (const a of z.actors) if ((Math.abs(a.x - pl.x) < NEAR && Math.abs(a.z - pl.z) < NEAR) || (R0?.length && R0.some((r) => Math.abs(a.x - r.x) < NEAR && Math.abs(a.z - r.z) < NEAR))) one(a);
 }
 function press(z, I, i, amt) {
   if (!z.L.ice[i] || I.stage[i] >= 4) return;
@@ -393,9 +400,47 @@ function plunge(z, I, pl) {
   emit('plunge', { x: x0, z: z0, to: at });
 }
 
+// ---------- co-op: the host's ice on a guest's page ----------
+// The host's stages as runs (start gap, length, stage; base 36, '.'-joined); the guest sets them, opening and closing its
+// map in one batch, and goes in where the ice breaks under its hero
+export function iceDigest(z) {
+  const I = z?.ice; if (!I) return null;
+  const st = I.stage, out = [], N = st.length;
+  let prev = 0, i = 0, h = 0;
+  while (i < N) { const v = st[i]; if (!v) { i++; continue; } let j = i + 1; while (j < N && st[j] === v) j++; out.push((i - prev).toString(36), (j - i).toString(36), v); h = (h * 31 + i * 7 + (j - i) * 3 + v) | 0; prev = j; i = j; }
+  return { d: out.join('.'), key: out.length + ':' + h };
+}
+export function netIce(z, d) {
+  const I = z?.ice; if (!I || typeof d !== 'string') return 0;
+  const L = z.L, N = L.w * L.h, w = L.w, want = new Uint8Array(N), p = d ? d.split('.') : [];
+  let at = 0;
+  for (let k = 0; k + 2 < p.length; k += 3) {
+    const gap = parseInt(p[k], 36), len = parseInt(p[k + 1], 36), v = +p[k + 2];
+    if (!(gap >= 0 && len > 0 && v >= 1 && v <= 5)) break;
+    at += gap; for (let j = at; j < Math.min(N, at + len); j++) want[j] = v; at += len;
+    if (at >= N) break;
+  }
+  const close = [], open = [], pl = G.player, hc = pl ? Math.floor(pl.z) * w + Math.floor(pl.x) : -1;
+  let changed = 0, under = false;
+  for (let i = 0; i < N; i++) {
+    if (!L.ice[i] || I.stage[i] === want[i]) continue;
+    const was = I.stage[i]; I.stage[i] = want[i]; changed++;
+    if (want[i] === 4) { close.push([i % w, (i - i % w) / w]); if (i === hc) under = true; if (close.length < 6) splash(i % w + 0.5, (i - i % w) / w + 0.5, 1); }
+    else if (was === 4) open.push([i % w, (i - i % w) / w]);
+  }
+  if (!changed) return 0;
+  I.dirty = true;
+  if (z.map.change(open, close)) emit('mapChanged');
+  if (close.length) Audio.sfx('iceBreak', { x: close[0][0] + 0.5, z: close[0][1] + 0.5 });
+  if (under && pl && !pl.dead && !airborne(pl)) plunge(z, I, pl);
+  return changed;
+}
+
 // ---------- what falls in ----------
 function fall(z, I, a) {
   const d = a.def || {};
+  // (a guest's hero is the guest's own: its plunge comes from the host's ice on its page)
+  if (a.remote || a.puppet) return;
   if (a.prop || a.pet || a.team === 'npc' || a.under || a.airborne || a.cling || d.float || d.ai === 'bat') return;
   const f = FALLS[a.kind]; if (f && f(a, Math.floor(a.z) * z.L.w + Math.floor(a.x), z)) return;
   if (a.boss) return;

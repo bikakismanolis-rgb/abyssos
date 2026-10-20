@@ -416,3 +416,41 @@ body:not(.desk) .sk .key { display: none; }
 .help { margin: 4px 0 12px; padding-left: 18px; line-height: 1.45; }
 .help li { margin: 5px 0; }
 .help b { color: var(--gold, #d8b46a); font-weight: 600; }
+
+/* ---------- co-op (ui/coopui.js) ---------- */
+#party { position: absolute; left: calc(10px + var(--sl)); top: calc(96px + var(--st)); display: flex; flex-direction: column; gap: 4px; pointer-events: none; width: 168px; }
+#party .ph { font: 700 10px var(--display); letter-spacing: 1.2px; color: #b8d0ff; text-shadow: 0 1px 3px #000; text-transform: uppercase; }
+#party .pm { display: grid; grid-template-columns: 18px 1fr auto; grid-template-rows: auto 5px; column-gap: 5px; align-items: center; background: rgba(8, 8, 12, .55); border: 1px solid rgba(160, 180, 220, .22); border-radius: 6px; padding: 3px 6px 4px; }
+#party .pm .ic { grid-row: 1 / 3; width: 16px; height: 16px; color: #d8c8a0; }
+#party .pm .ic svg { width: 16px; height: 16px; }
+#party .pm .nm { font: 600 11px var(--body, sans-serif); color: #eee6d8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#party .pm .lv { font: 700 10px var(--display); color: #c8b890; }
+#party .pm .b { grid-column: 2 / 4; height: 4px; background: rgba(60, 10, 10, .8); border-radius: 2px; overflow: hidden; }
+#party .pm .b i { display: block; height: 100%; background: linear-gradient(90deg, #a01818, #e04a3a); transform-origin: left; }
+#party .pm.dead { border-color: rgba(255, 90, 70, .6); animation: blink 1.2s infinite; }
+#party .pm.away { opacity: .55; }
+#plates { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+#plates .plate { position: absolute; left: 0; top: 0; font: 600 11px var(--body, sans-serif); color: #e8f0ff; text-shadow: 0 1px 3px #000, 0 0 6px #000; white-space: nowrap; }
+#plates .plate.dead { color: #ff9a80; }
+#downed { position: absolute; left: 50%; top: 34%; transform: translate(-50%, -50%); text-align: center; z-index: 30; background: rgba(10, 6, 6, .72); border: 1px solid rgba(255, 120, 90, .4); border-radius: 10px; padding: 14px 22px; }
+#downed .h { font: 800 22px var(--display); color: #ff8a70; letter-spacing: 2px; }
+#downed .s { margin: 6px 0 10px; color: #e8d8c8; font-size: 13px; }
+#revive { position: absolute; left: 50%; top: calc(54px + var(--st)); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; pointer-events: none; }
+#revive svg { width: 50px; height: 50px; transform: rotate(-90deg); }
+#revive circle { fill: rgba(8, 6, 4, .55); stroke-width: 4; }
+#revive .bg { stroke: rgba(255, 240, 200, .18); }
+#revive .fg { fill: none; stroke: #fff0c0; stroke-dasharray: 125.66; stroke-linecap: round; }
+#revive b { margin-top: 2px; font: 700 12px var(--display); color: #fff0c8; text-shadow: 0 1px 3px #000; }
+.coop .coop-join { display: flex; gap: 8px; margin: 10px 0; }
+.coop .coop-join input { flex: 1; min-width: 0; font: 700 20px var(--display); letter-spacing: 6px; text-transform: uppercase; text-align: center; background: rgba(0, 0, 0, .35); color: #f0e6d0; border: 1px solid rgba(220, 190, 120, .4); border-radius: 6px; padding: 6px; }
+.coop .coop-code { font: 800 40px var(--display); letter-spacing: 10px; text-align: center; color: var(--gold, #e8c070); margin: 4px 0; }
+.coop .coop-code.small { font-size: 22px; letter-spacing: 6px; }
+.coop .coop-h { display: grid; grid-template-columns: 22px 1fr; text-align: left; width: 100%; margin: 4px 0; cursor: pointer; }
+.coop .coop-h .mt { grid-column: 2; font-size: 11px; color: var(--ink2, #b8ac98); }
+.coop .coop-p { display: grid; grid-template-columns: 22px 1fr auto; gap: 6px; align-items: center; padding: 4px 0; border-bottom: 1px solid rgba(255, 255, 255, .06); }
+.coop .coop-p.me .nm { color: var(--gold, #e8c070); }
+.coop .coop-p .mt { font-size: 11px; color: var(--ink2, #b8ac98); }
+.coop .coop-p svg, .coop .coop-h svg { width: 18px; height: 18px; }
+.coop .coop-meter { font-size: 10px; margin-top: 8px; }
+.coop .bad { color: #ff8a70; }
+@media (max-height: 430px) { #party { top: calc(80px + var(--st)); transform: scale(.88); transform-origin: left top; } #downed { top: 30%; padding: 10px 16px; } }

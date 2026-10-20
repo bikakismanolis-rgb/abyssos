@@ -15,6 +15,7 @@
  *   6. music: themes + lookahead scheduler
  *   7. public API
  */
+import { MIRROR } from '../net/state.js';
 
 // ───────────────────────────── 1. utilities ─────────────────────────────
 
@@ -3108,6 +3109,8 @@ export const Audio = {
 
   /** One-shot effect. opts: { vol=1, pitch=1, x, z }. Unknown names are ignored. */
   sfx(name, opts) {
+    // (co-op: a sound in the world is told to the fx mirror, net/state.js)
+    if (opts && opts.x != null && MIRROR.rec && !MIRROR.d && !MIRROR.skip) MIRROR.rec('sfx', [name, opts]);
     try {
       const g = G;
       if (!g || !g.want) return;

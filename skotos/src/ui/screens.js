@@ -80,12 +80,15 @@ export function showTitle() {
   }
   mainMenu();
 }
+// (co-op becomes possible once the page has a room, a moment after the title: the menu is drawn again with it)
+on('netReady', (ok) => { TS.net = ok; if (ok && G.mode === 'title' && TS.menu && document.getElementById('m-new')) mainMenu(); });
 function mainMenu() {
   const heroes = G.save.heroes;
   const last = heroes.find((h) => h.id === G.save.last) || heroes[0];
   const slots = heroes.map((h) => `<div class="slot" data-id="${h.id}"><span style="color:${CLASSES[h.cls].color}">${ICON[h.cls === 'warden' ? 'shield' : h.cls === 'ranger' ? 'bolt' : 'flame']}</span><span class="nm">${t('menu.slot', t('class.' + h.cls), h.level, t('diff.' + DIFFS[h.diff].id))}</span><span class="dl" data-del="${h.id}">${TS.delSure === h.id ? t('menu.deleteSure') : t('menu.delete')}</span></div>`).join('');
   const s = screen(`<div class="logo">${t('game.title')}</div><div class="logo-rule"></div><div class="logo-sub">${t(sub5())}</div>
     <div class="menu">${last ? `<button class="btn" id="m-cont">${t('menu.continue')} · ${t('class.' + last.cls)} ${t('hud.level', last.level)}</button>` : ''}
+    ${last && TS.net ? `<button class="btn ghost" id="m-coop">${t('coop.title')}</button>` : ''}
     <button class="btn ${last ? 'ghost' : ''}" id="m-new">${t('menu.new')}</button>
     ${heroes.length > 1 ? `<div class="slots">${slots}</div>` : ''}
     <button class="btn ghost" id="m-set">${t('menu.settings')}</button>
@@ -94,6 +97,9 @@ function mainMenu() {
   // and the menu ignores touches for a moment after it appears, whatever brought it up
   const at = performance.now(), ready = () => performance.now() - at > 450;
   if (last) $('m-cont').onclick = () => { if (!ready()) return; Audio.sfx('click'); emit('startHero', last, false); };
+  // co-op: the hero taken up, then the lobby (ui/coopui.js)
+  if (last && TS.net) $('m-coop').onclick = () => { if (!ready()) return; Audio.sfx('click'); G.flags.coopOpen = true; emit('startHero', last, false); };
+  TS.menu = true;
   $('m-new').onclick = () => { if (!ready()) return; Audio.sfx('click'); showPick(); };
   $('m-set').onclick = () => { if (!ready()) return; Audio.sfx('click'); emit('openPanel', 'settings'); };
   $('m-help').onclick = () => { if (!ready()) return; Audio.sfx('click'); emit('openPanel', 'help'); };

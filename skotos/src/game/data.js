@@ -10,6 +10,21 @@ export const DIFFS = [
   { id: 'skotos', hp: 11, dmg: 5.4, xp: 6.5, gold: 5.4, loot: 4.6, elite: 2.1, leg: 4.6, color: '#4a5aa0', unlock: 'act5:ash' }
 ];
 // (unlock 'any:<diff>': any act finished on that difficulty; 'actN:<diff>': that act)
+// Co-op (net/coop.js), by the players in the zone (index: players - 1). The world: the monsters' life (a boss's apart),
+// their blows, the packs' size, the champion packs' odds. Each player's own rewards: XP, gold, the odds of an item from a
+// common monster (a boss drops one more item per extra player), magic find added to every roll (better rarity). Measured
+// with tools/balance-act.mjs (COOP=n): docs/coop/README.md
+export const COOP = {
+  hp: [1, 1.7, 2.35, 3.0],
+  boss: [1, 1.6, 2.2, 2.8],
+  dmg: [1, 1.05, 1.1, 1.15],
+  pack: [1, 1.25, 1.5, 1.75],
+  elite: [1, 1.35, 1.7, 2.0],
+  xp: [1, 1.3, 1.6, 1.9],
+  gold: [1, 1.25, 1.5, 1.75],
+  loot: [1, 1.3, 1.6, 1.9],
+  mf: [0, 25, 50, 75]
+};
 // Act V's hazards by difficulty (indexed like DIFFS): the tide's cycle (s), its phases (low, flood, high, ebb) and the
 // steps' spacing, the bell's lead (s); the wash-out and the plunge (% of max life); the ice's load per crack stage; the
 // Cold's gains and Frostbite's bite (% of max life); Revealed and Exposed; a Breathing-hole's freeze ring (s) and its Black
