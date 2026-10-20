@@ -17,11 +17,52 @@ const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable
 // (the phone: 844 x 390 landscape; the ui scenario as a touch phone)
 const ctx = await browser.newContext(name === 'ui' ? { viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : { viewport: { width: 844, height: 390 } });
 const pages = [];
+// the room scenario: every page's window.claude.use('room') is a faithful fake of the artifact's room (fakeroom.mjs,
+// in this process: its budget, sizes, coalescing and loss), reached through a binding; the game picks RoomTransport
+let HUB = null;
+if (name === 'room') {
+  const { Hub } = await import('./net/fakeroom.mjs');
+  HUB = new Hub({ loss: +(process.env.LOSS || 0.05), lag: 30, topics: { s: 'interact', w: 'interact', i: 'interact', f: 'interact', c: 'interact' } });
+  const state = new Map();
+  const plain = (ch) => JSON.parse(JSON.stringify({ peers: ch.peers, joined: ch.joined, left: ch.left, updated: ch.updated }));
+  await ctx.exposeBinding('__roomCall', async ({ page }, scope, method, args) => {
+    let st = state.get(page);
+    if (!st) { st = { hp: HUB.page({ by: 'u' + (state.size + 1) }), rooms: new Map() }; state.set(page, st); }
+    const api = scope === '' ? st.hp.room : st.rooms.get(scope);
+    if (!api) return { err: 'invalid_argument' };
+    const send = (fn, arg) => page.evaluate(fn, arg).catch(() => {});
+    try {
+      if (method === 'init') { api.onPeers((ch) => send(([s, c]) => window.__roomIn?.[s]?.peers(c), [scope, plain(ch)])); api.onConnection((v) => send(([s, v]) => window.__roomIn?.[s]?.conn(v), [scope, v])); return { ok: 1 }; }
+      if (method === 'on') { api.on(args[0], (m) => send(([s, m]) => window.__roomIn?.[s]?.msg(m), [scope, JSON.parse(JSON.stringify(m))])); return { ok: 1 }; }
+      if (method === 'join') { const r = await st.hp.room.join(args[0]); st.rooms.set(args[0], r); return { ok: 1 }; }
+      if (method === 'leave') { await api.leave(); st.rooms.delete(scope); return { ok: 1 }; }
+      await api[method](...args); return { ok: 1 };
+    } catch (e) { return { err: e.code || 'upstream_error' }; }
+  });
+  await ctx.addInitScript(() => {
+    const make = (scope) => {
+      const L = {}, P = [], C = []; let peers = Object.freeze([]), conn = false;
+      (window.__roomIn ||= {})[scope] = { msg(m) { for (const f of (L[m.topic] || []).slice()) f(m); }, peers(ch) { peers = ch.peers; for (const f of P.slice()) f(ch); }, conn(v) { conn = v; for (const f of C.slice()) f(v); } };
+      const call = (m, a) => window.__roomCall(scope, m, a).then((r) => { if (r?.err) throw Object.assign(new Error(r.err), { code: r.err }); });
+      call('init', []);
+      const subbed = new Set();
+      return Object.freeze({
+        name: scope, emit: (t, d) => call('emit', [t, d]), presence: (p) => call('presence', [p]), peers: () => peers, connected: () => conn,
+        on(t, f) { (L[t] ||= []).push(f); if (!subbed.has(t)) { subbed.add(t); call('on', [t]); } return () => { const i = L[t].indexOf(f); if (i >= 0) L[t].splice(i, 1); }; },
+        onPeers(f) { P.push(f); return () => { const i = P.indexOf(f); if (i >= 0) P.splice(i, 1); }; },
+        onConnection(f) { C.push(f); setTimeout(() => f(conn), 0); return () => { const i = C.indexOf(f); if (i >= 0) C.splice(i, 1); }; },
+        join: (n) => call('join', [n]).then(() => make(n)), leave: () => call('leave', [])
+      });
+    };
+    window.claude = Object.freeze({ use: async (n) => (n === 'room' ? make('') : null) });
+  });
+}
+const NETQ = name === 'room' ? '' : 'net=local&';
 async function open(peer, q) {
   const pg = await ctx.newPage();
   pg.on('pageerror', (e) => console.log('[' + peer + '] pageerror', e.message.slice(0, 300)));
   pg.on('console', (m) => { if (m.type() === 'error') console.log('[' + peer + '] console', m.text().slice(0, 300)); });
-  await pg.goto(BASE + '?net=local&peer=' + peer + '&slot=' + peer + '&q=0&' + (q.includes('render') ? '' : 'norender&') + q);
+  await pg.goto(BASE + '?' + NETQ + 'peer=' + peer + '&slot=' + peer + '&q=0&' + (q.includes('render') ? '' : 'norender&') + q);
   await pg.waitForFunction(() => window.__ready && window.__G?.zone && window.__G.mode === 'play' && window.__NET, null, { timeout: 240000 });
   // (a page that draws nothing still needs its frames: a tick of DOM)
   await pg.evaluate(() => { const d = document.createElement('div'); d.style.cssText = 'position:fixed;left:0;bottom:0;width:2px;height:2px;z-index:99;font-size:1px'; document.body.appendChild(d); let k = 0; setInterval(() => { d.textContent = k++ % 2 ? '.' : ':'; }, 20); window.__immortal = false; });
@@ -335,6 +376,32 @@ const SC = {
     await place(host, hp.x + 2.6, hp.z + 1.2); await sleep(1200);
     await shot(host, 'revive-host.png');
     ok(await ev(host, () => !document.getElementById('revive').hidden), 'the host\'s revive ring shows by the downed guest');
+  },
+
+  // the game over RoomTransport against the faithful fake room (its budget, 4 KiB, coalesced presence, 5% loss): join,
+  // a fight, every page under the room's budget, nothing the room refuses
+  async room() {
+    const { host, guests: [g, g2] } = await party('forest', 2, { lvl: 10, glvl: 10 });
+    ok(await ev(host, () => window.__NET.S.T.kind) === 'room' && await ev(g, () => window.__NET.S.T.kind) === 'room', 'the game picked the room transport');
+    const pk = await ev(host, () => { const z = window.__G.zone, p = window.__G.player; const list = z.packs.filter((q) => !q.spawned && q.n >= 3).sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z)); return list[0] && { x: list[0].x, z: list[0].z }; });
+    await ev(host, () => { window.__immortal = true; });
+    await place(host, pk.x + 2, pk.z); await place(g, pk.x - 1, pk.z); await place(g2, pk.x, pk.z + 1);
+    const hp0 = await ev(g, () => window.__G.player.hp);
+    const t0 = Date.now();
+    while (Date.now() - t0 < 20000) {
+      for (const pg of [g, g2]) await ev(pg, async () => { const C = await import('/src/game/combat.js'), G = window.__G; if (G.player.dead) return; G.player.hp = Math.max(G.player.hp, G.player.hpMax * 0.5); for (const a of window.__NET.S.pup.values()) if (!a.dead && a.team === 'foe' && Math.hypot(a.x - G.player.x, a.z - G.player.z) < 14) { C.damage(G.player, a, G.stats.wmax * G.stats.dmgMult * 3, { crit: false }); break; } });
+      await sleep(350);
+    }
+    const struck = await ev(g, (h0) => window.__G.player.hp < window.__G.player.hpMax || window.__G.hero.stats.kills > 0, hp0);
+    const kills = [await ev(g, () => window.__G.hero.stats.kills), await ev(g2, () => window.__G.hero.stats.kills)];
+    ok(kills[0] > 0 && kills[1] > 0, 'both guests fought and were paid for their kills through the room', kills);
+    console.log('     diag host', JSON.stringify(await ev(host, () => ({ kills: window.__G.hero.stats.kills, hits: window.__NET.S.stats.hits, why: window.__NET.S.stats.why, done: [...window.__NET.S.done], rel: window.__NET.S.rel.length, foes: window.__G.actors.filter((a) => a.team === 'foe' && !a.prop && !a.dead).length, peers: [...window.__NET.S.peers.values()].map((p) => [p.peer, p.ack, (p.ev || []).length]) }))), 'guest', JSON.stringify(await ev(g, () => ({ ev: window.__NET.S.ev.length, evSeq: window.__NET.S.evSeq, relDone: window.__NET.S.relDone, pups: window.__NET.S.pup.size, me: window.__NET.S.ch.me }))));
+    ok(struck, 'the host\'s monsters reached a guest through the room');
+    const L = HUB.log;
+    console.log('     room: emits ' + L.emits + ', delivered ' + L.delivered + ', lost ' + L.lost + ', presence sends ' + L.presSends + ', budget drops ' + L.budgetDrops + ', rejects ' + JSON.stringify(L.rejects));
+    ok(L.budgetDrops === 0, 'the room never dropped a send for budget');
+    ok(!Object.keys(L.rejects).length, 'the room never refused a call (sizes, topics, names)');
+    for (const [i, pg] of [host, g, g2].entries()) { const st = await stats(pg); console.log('     ' + (i ? 'guest ' + i : 'host   ') + ' sends/s ' + st.r.msgsOut.toFixed(1) + ' (peak ' + (st.peak || 0).toFixed(1) + '), bytes/s out ' + Math.round(st.r.bytesOut) + ', in ' + Math.round(st.r.bytesIn)); }
   },
 
   // a boss of each act, the party moving from zone to zone with the host (the guest follows every change)
