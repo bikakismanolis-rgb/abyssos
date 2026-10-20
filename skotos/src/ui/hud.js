@@ -1,8 +1,9 @@
 // In-game HUD: bars, skill buttons, minimap, toasts, boss bar, dialog box.
 import { G } from '../game/state.js';
-import { CLASSES, SKILLS, xpToNext, DODGE, POTION } from '../game/data.js';
+import { CLASSES, SKILLS, xpToNext, mxpToNext, MAX_LEVEL, DODGE, POTION } from '../game/data.js';
 import { skillUnlocked } from '../game/stats.js';
 import { canUse } from '../game/skills.js';
+import { slotSkill, variantOf } from '../game/progression.js';
 import { IN, bindButton } from '../core/input.js';
 import { on, emit } from './bus.js';
 import { ICON } from './icons.js';
@@ -27,7 +28,7 @@ export function buildHud() {
   app.appendChild(el(`<div id="vignette"></div>`));
   const hud = el(`<div id="hud" hidden>
     <div id="hurt"></div><div id="flue"></div>
-    <div id="hud-tl"><div id="portrait"><span id="pic"></span><div id="lvl">1</div></div>
+    <div id="hud-tl"><div id="portrait"><span id="pic"></span><div id="lvl">1</div><div id="mlvl" hidden></div></div>
       <div id="bars"><div class="bar hp"><i class="lag"></i><i class="fill"></i><i class="shield"></i><span></span></div><div class="bar res"><i class="fill"></i></div><div id="xpbar"><i></i></div><div id="buffs"></div>
         <div id="amber" hidden><span class="ic">${TEAR}</span><div class="ab"><i></i></div><b></b></div>
         <div id="cling" hidden><span class="ic">${TICK}</span><b></b></div></div></div>
@@ -73,9 +74,20 @@ export function setupHeroHud() {
   document.querySelector('.bar.res').style.setProperty('--rc2', res[1]);
   const sk = SKILLS[cls];
   $('b-attack').innerHTML = ICON[sk[0].icon] + '<span class="key">⟵</span>';
-  for (let i = 1; i <= 4; i++) $('b-s' + i).innerHTML = ICON[sk[i].icon] + `<div class="cd"></div><div class="cdn"></div><span class="key">${i}</span>`;
+  setupSkillButtons();
   $('b-dodge').innerHTML = ICON[DODGE[cls].kind === 'blink' ? 'blink' : 'roll'] + '<div class="cd"></div><span class="key">␣</span>';
 }
+
+// the four skill buttons, from the loadout (progression.js); a variant shows as a small mark on its button
+export function setupSkillButtons() {
+  for (let i = 1; i <= 4; i++) {
+    const s = slotSkill(i), b = $('b-s' + i), v = s && variantOf(s.id);
+    b.innerHTML = (s ? ICON[s.icon] : '') + `<div class="cd"></div><div class="cdn"></div><span class="key">${i}</span>${v ? `<i class="vmark"></i>` : ''}`;
+    b.dataset.sk = s?.id || '';
+    b.classList.toggle('empty', !s);
+  }
+}
+on('loadout', () => { if (G.hero) setupSkillButtons(); });
 
 // ---------- per frame ----------
 const lastReady = [true, true, true, true, true];
@@ -89,18 +101,25 @@ export function updateHud(dt) {
   hb.children[2].style.transform = `scaleX(${Math.min(1, (pl.shield || 0) / pl.hpMax)})`;
   hb.children[3].textContent = fmt(pl.hp) + ' / ' + fmt(pl.hpMax);
   document.querySelector('.bar.res .fill').style.transform = `scaleX(${Math.max(0, pl.res / G.stats.resMax)})`;
-  $('xpbar').firstChild.style.transform = `scaleX(${h.xp / xpToNext(h.level)})`;
+  // past the last level the bar fills toward the next Mastery level, in its own colour
+  const mast = h.level >= MAX_LEVEL;
+  $('xpbar').firstChild.style.transform = `scaleX(${mast ? (h.mxp || 0) / mxpToNext(h.mlvl || 0) : h.xp / xpToNext(h.level)})`;
+  if (mast !== S.mast) { S.mast = mast; $('xpbar').classList.toggle('mast', mast); }
   $('lvl').textContent = t('hud.level', h.level);
+  const ml = mast ? String(h.mlvl || 0) : '';
+  if (ml !== S.ml) { S.ml = ml; const m = $('mlvl'); m.hidden = !mast; m.innerHTML = ICON.mastery + `<b>${ml}</b>`; m.title = t('mast.rank', ml); }
   $('hurt').style.opacity = hpF < 0.3 ? (0.35 + Math.sin(performance.now() / 180) * 0.25) * (1 - hpF / 0.3) + (S.hurt || 0) : (S.hurt || 0);
   S.hurt = Math.max(0, (S.hurt || 0) - dt * 2);
   if (hpF < 0.25 && !pl.dead) { S.hb = (S.hb || 0) - dt; if (S.hb <= 0) { S.hb = 0.9; Audio.sfx('heartbeat', { vol: 0.8 }); } }
   // skills
   const sk = SKILLS[h.cls];
   for (let i = 1; i <= 4; i++) {
-    const b = $('b-s' + i), s = sk[i];
+    const b = $('b-s' + i), s = slotSkill(i);
+    if (!s) { b.classList.add('locked'); lastReady[i] = false; continue; }
+    if (b.dataset.sk !== s.id) setupSkillButtons();
     const unlocked = skillUnlocked(s);
     b.classList.toggle('locked', !unlocked);
-    const cd = pl.cds[i], p = s.cd ? Math.max(0, cd / (s.cd * (1 - G.stats.cdr / 100))) : 0;
+    const cd = pl.cds[sk.indexOf(s)] || 0, p = s.cd ? Math.max(0, cd / (s.cd * (1 - G.stats.cdr / 100))) : 0;
     b.children[1].style.setProperty('--p', (p * 100).toFixed(1) + '%');
     b.children[2].textContent = cd > 0.05 ? (cd < 1 ? cd.toFixed(1) : Math.ceil(cd)) : '';
     b.classList.toggle('nores', unlocked && (s.cost || 0) > pl.res);
@@ -123,7 +142,7 @@ export function updateHud(dt) {
   } else u.hidden = true;
   // buffs
   const bf = [];
-  for (const k in pl.buffs) if (pl.buffs[k] > 0 && k !== 'evergreen') bf.push(`<div class="bf${k === 'memory' ? ' mem' : k === 'seen' ? ' seen' : ''}"${k === 'seen' ? ` title="${t('hud.seen')}"` : ''}>${k === 'memory' ? TEAR : k === 'seen' ? EYE : ICON[{ cry: 'horn', shrineFury: 'flame', shrineSpeed: 'roll', shrineFortune: 'coin', shrineShield: 'shield' }[k] || 'star']}<b>${Math.ceil(pl.buffs[k])}</b></div>`);
+  for (const k in pl.buffs) if (pl.buffs[k] > 0 && k !== 'evergreen') bf.push(`<div class="bf${k === 'memory' ? ' mem' : k === 'seen' ? ' seen' : ''}"${k === 'seen' ? ` title="${t('hud.seen')}"` : ''}>${k === 'memory' ? TEAR : k === 'seen' ? EYE : ICON[{ cry: 'horn', shrineFury: 'flame', shrineSpeed: 'roll', shrineFortune: 'coin', shrineShield: 'shield', challenge: 'horn', bulwark: 'bulwark', alpha: 'wolf' }[k] || 'star']}<b>${Math.ceil(pl.buffs[k])}</b></div>`);
   const bh = bf.join('');
   if (bh !== S.bh) { $('buffs').innerHTML = bh; S.bh = bh; }
   // amber sap: the build-up toward an amber-lock, then the lock itself (a dodge breaks it)
@@ -289,8 +308,16 @@ on('zoneEnter', (id) => {
 on('levelUp', (lvl, sk) => {
   const lu = $('levelup');
   lu.querySelector('.a').textContent = t('hud.levelup', lvl);
-  lu.querySelector('.b').textContent = sk ? t('hud.newSkill', t('sk.' + sk.id)) : t('hud.levelupSub');
-  lu.classList.remove('on'); void lu.offsetWidth; lu.classList.add('on');
+  // a later skill is not on a button yet: say where it goes
+  const later = sk && !G.hero.loadout?.includes(sk.id);
+  lu.querySelector('.b').textContent = sk ? t(later ? 'hud.newSkillBtn' : 'hud.newSkill', t('sk.' + sk.id)) + (later ? ' · ' + t('hud.newSkillSub') : '') : t('hud.levelupSub');
+  lu.classList.remove('on', 'mast'); void lu.offsetWidth; lu.classList.add('on');
+});
+on('masteryUp', (m) => {
+  const lu = $('levelup');
+  lu.querySelector('.a').textContent = t('mast.up', m);
+  lu.querySelector('.b').textContent = t('mast.upSub');
+  lu.classList.remove('on', 'mast'); void lu.offsetWidth; lu.classList.add('on', 'mast');
 });
 on('hurt', (f) => { S.hurt = Math.min(0.7, (S.hurt || 0) + f * 3); });
 on('flueWarn', (k) => { S.flue = Math.max(S.flue, 0.25 + 0.55 * k); });

@@ -12,6 +12,7 @@ import { fmt, fmtK } from '../core/util.js';
 import { drawBigMap } from './hud.js';
 import Audio from '../audio/audio.js';
 import { CREDITS, MIT_ROCKETBOX } from './credits.js';
+import { renderSkills, skillsClick } from './progpanel.js';
 
 const $ = (id) => document.getElementById(id);
 const P = { name: null, sel: null, tab: 0, ctx: null, delSure: null };
@@ -30,7 +31,8 @@ export function initPanels() {
 }
 on('openPanel', (name, ctx) => open(name, ctx));
 export function open(name, ctx) {
-  P.name = name; P.sel = null; P.tab = 0; P.ctx = ctx || null;
+  P.name = name; P.sel = null; P.tab = 0; P.ctx = ctx || null; P.sure = false; P.msel = null;
+  if (name === 'skills' && ctx?.tab) P.tab = ctx.tab;
   G.panel = name;
   $('panel').hidden = false;
   render();
@@ -111,18 +113,8 @@ const R = {
     }
     return `<div class="pn">${head(t('hud.inventory'))}<div class="pn-b"><div class="inv"><div><div class="doll">${doll}</div>${stats}</div><div><div class="bag">${bag}</div>${tp}</div></div></div></div>`;
   },
-  skills() {
-    const h = G.hero, list = SKILLS[h.cls];
-    const rows = list.map((sk, i) => {
-      const r = skillRank(sk.id), un = skillUnlocked(sk);
-      const pips = sk.basic ? '' : `<div class="pips">${Array.from({ length: SKILL_MAX_RANK }, (_, j) => `<i class="${j < Math.max(r, un ? 1 : 0) ? 'on' : ''}"></i>`).join('')}</div>`;
-      const meta = [sk.dmg ? t('sk.dmg', Math.round(sk.dmg * (1 + 0.15 * Math.max(0, r - 1)) * 100)) : '', sk.cost ? t('sk.cost', sk.cost, t('res.' + CLASSES[h.cls].res)) : '', sk.cd ? t('sk.cd', sk.cd) : '', !un ? t('sk.unlock', sk.lvl) : ''].filter(Boolean).join(' · ');
-      const can = !sk.basic && un && h.points > 0 && r < SKILL_MAX_RANK;
-      return `<div class="skr ${un ? '' : 'lock'}"><div class="ic">${ICON[sk.icon]}</div><div><h4>${t('sk.' + sk.id)}${sk.basic ? '' : ` <span class="muted">· ${t('sk.rank', Math.max(r, un ? 1 : 0), SKILL_MAX_RANK)}</span>`}</h4><p>${t('sk.' + sk.id + '.d')}</p><div class="meta">${meta}</div>${pips}</div>${can ? `<button class="btn" data-a="rank:${sk.id}">${t('sk.up')}</button>` : '<span></span>'}</div>`;
-    }).join('');
-    const D = DODGE[h.cls];
-    return `<div class="pn narrow">${head(t('hud.skills'), false)}<div class="pn-b"><div class="row" style="justify-content:space-between;margin-bottom:8px"><b class="r-2" style="font-family:var(--display)">${t('sk.points', h.points)}</b><span class="muted">${t('sk.' + D.kind)} · ${t('sk.cd', D.cd)}</span></div><div class="skl">${rows}</div><p class="muted">${t('sk.help')}</p></div></div>`;
-  },
+  // ranks, variants, the loadout and the Mastery (progpanel.js)
+  skills() { return renderSkills(P, head); },
   vendor() {
     const h = G.hero;
     const tabs = `<div class="tabs"><button class="tab ${P.tab === 0 ? 'on' : ''}" data-a="tab:0">${t('item.sell')}</button><button class="tab ${P.tab === 1 ? 'on' : ''}" data-a="tab:1">${t('shop.gamble')}</button></div>`;
@@ -259,6 +251,7 @@ function onClick(e) {
   const [a, x, y] = b.dataset.a.split(':');
   const h = G.hero;
   Audio.sfx('click', { vol: 0.5 });
+  if (P.name === 'skills' && skillsClick(a, x, y, P)) { render(); return; }
   switch (a) {
     case 'close': close(); return;
     case 'inv': case 'eq': P.sel = P.sel === a + ':' + x ? null : a + ':' + x; if (a === 'inv' && h.inv[+x]) h.inv[+x].isNew = false; break;
@@ -272,7 +265,6 @@ function onClick(e) {
     case 'reforge': { const it = reforge(x, x === 'inv' ? +y : y); if (!it && h.gold < 1e9) emit('toast', t('shop.noGold')); if (x === 'eq') emit('heroLook'); break; }
     case 'st': fromStash(+x); break;
     case 'tostash': toStash(+x); break;
-    case 'rank': { h.skills[x] = Math.max(1, (h.skills[x] || 1)) + 1; h.points--; refreshStats(); Audio.sfx('equip'); break; }
     // (in a zone with two waypoints, either one can be the way across it)
     case 'wp': { close(); const [zid, n] = x.split('@'); if (zid !== G.zone.id || n || G.zone.L.spots.camp2) emit('travel', zid, { at: n ? 'waypoint' + n : 'waypoint' }); return; }
     case 'gates': open('gates'); return;

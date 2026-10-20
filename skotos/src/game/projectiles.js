@@ -17,6 +17,7 @@ let boltGeo = null, arrowGeo = null, pinGeo = null, pmat = null;
 function meshFor(kind) {
   pmat ||= new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x111111 });
   if (kind === 'fireArrow') kind = 'arrow';
+  if (kind === 'blast' || kind === 'siege') kind = 'bolt';
   if (kind === 'bolt' || kind === 'arrow' || kind === 'pin') {
     const g = kind === 'bolt' ? (boltGeo ||= staticGeo([{ geo: GEO.cyl(0.02, 0.02, 0.7, 4), color: 0x6a5038, o: { rx: Math.PI / 2 } }, { geo: GEO.cone(0.045, 0.14, 4), color: 0xc0c8d0, o: { rx: Math.PI / 2, z: 0.4 } }, { geo: GEO.box(0.12, 0.01, 0.12), color: 0xe0e0d8, o: { z: -0.3 } }]))
       : kind === 'pin' ? (pinGeo ||= staticGeo([{ geo: GEO.cyl(0.018, 0.018, 0.7, 4), color: 0x4a3a20, o: { rx: Math.PI / 2 } }, { geo: GEO.cone(0.045, 0.14, 4), color: 0xc09030, o: { rx: Math.PI / 2, z: 0.4 } }, { geo: GEO.box(0.14, 0.01, 0.16), color: 0x6ad040, o: { z: -0.28 } }, { geo: GEO.box(0.01, 0.14, 0.16), color: 0x6ad040, o: { z: -0.28 } }]))
@@ -54,7 +55,15 @@ const KIND = {
   pin: { speed: 18, r: 0.45, life: 1.4, color: 0x9aff70 },
   phantomHart: { speed: 20, r: 1.4, life: 1.4, color: 0xfff0d0, light: 0xffe0a0 },
   // Act IV: the Ash-Fallen bowmen's fire arrows leave a patch of fire where they land (the Cradle can drink it)
-  fireArrow: { speed: 16, r: 0.45, life: 1.4, color: 0xffa040, light: 0xff6a10, patch: { r: 1.5, dur: 3 } }
+  fireArrow: { speed: 16, r: 0.45, life: 1.4, color: 0xffa040, light: 0xff6a10, patch: { r: 1.5, dur: 3 } },
+  // the hero's later skills and variants (skillsx.js): o.look draws them, o.onTick runs every frame
+  shard: { speed: 16, r: 0.4, life: 0.5, color: 0xc8f0ff },
+  frostorb: { speed: 7, r: 0.9, life: 2, color: 0xa0e0ff, light: 0x80c8ff },
+  radiant: { speed: 19, r: 1.4, life: 0.7, color: 0xffe8a0, light: 0xffd070 },
+  spark: { speed: 6, r: 0.8, life: 2.4, color: 0xb0a0ff, light: 0x8a80ff },
+  cinder: { speed: 15, r: 0.55, life: 1.6, color: 0xfff0c0, light: 0xffe0a0 },
+  blast: { speed: 28, r: 0.45, life: 0.7, color: 0xffa040, light: 0xff7a20 },
+  siege: { speed: 20, r: 0.9, life: 1.1, color: 0xfff0c0, light: 0xffc060 }
 };
 const PASS_WALLS = new Set(['spectral', 'firewave', 'phantomHart']);
 
@@ -64,12 +73,12 @@ export function fire(kind, src, x, z, dir, o = {}) {
   const p = {
     kind, team: src.team === 'foe' ? 'foe' : 'hero', src, x, z, y: o.y ?? 1.2,
     vx: Math.sin(dir) * sp, vz: Math.cos(dir) * sp, life: o.life ?? K.life, r: o.r ?? K.r,
-    dmg: o.dmg || 0, opts: o.opts || {}, pierce: o.pierce || 0, hit: new Set(), homing: o.homing || 0, onHit: o.onHit, onEnd: o.onEnd, t: 0
+    dmg: o.dmg || 0, opts: o.opts || {}, pierce: o.pierce || 0, hit: new Set(), homing: o.homing || 0, onHit: o.onHit, onEnd: o.onEnd, onTick: o.onTick, look: o.look, t: 0
   };
   p.mesh = meshFor(kind);
   if (kind === 'phantomHart') p.av = ghost(o.model || 'silverhorn', o.scale || 1.15);
   if (p.mesh) { p.mesh.position.set(x, p.y, z); p.mesh.rotation.y = dir; R.scene.add(p.mesh); if (o.scale) p.mesh.scale.setScalar(o.scale); }
-  if (K.light) p.light = addLight({ x, y: p.y, z, color: K.light, intensity: kind === 'fireball' ? 22 : 12, range: 7 });
+  if (K.light) p.light = addLight({ x, y: p.y, z, color: K.light, intensity: kind === 'fireball' || kind === 'siege' ? 22 : 12, range: 7 });
   G.projs.push(p);
   return p;
 }
@@ -106,7 +115,9 @@ export function updateProjs(dt) {
     if (p.light) { p.light.x = p.x; p.light.y = p.y; p.light.z = p.z; }
     if (p.av) { p.av.group.position.set(p.x, 0, p.z); p.av.group.rotation.y = Math.atan2(p.vx, p.vz); p.av.update(dt, { speed: Math.hypot(p.vx, p.vz) }); p.av.setFlash(0.25 + Math.sin(p.t * 20) * 0.1); }
     // looks
-    if (p.kind === 'phantomHart') {
+    if (p.onTick) { p.onTick(p, dt); if (p.life <= 0) { endProj(p, i, false); continue; } }
+    if (p.look) p.look(p, dt);
+    else if (p.kind === 'phantomHart') {
       for (let k = 0; k < 3; k++) P({ x: p.x + rand.range(-0.8, 0.8), y: rand.range(0.3, 2.6), z: p.z + rand.range(-0.8, 0.8), vx: -p.vx * 0.08, vy: rand.range(0.2, 0.8), vz: -p.vz * 0.08, life: rand.range(0.4, 0.8), size: 0.3, size1: 0.05, color: 0xfff4d8, color1: 0xffb040 });
       if (Math.random() < 0.4) P({ add: false, x: p.x, y: 0.2, z: p.z, vy: 0.3, life: 1.2, size: 1.2, size1: 2.6, color: 0xd8d0c0, alpha: 0.18, alpha1: 0 });
     } else if (p.kind === 'pin') {
@@ -165,7 +176,8 @@ export function updateProjs(dt) {
 
 // ---------- areas: burning ground, arrow rain, webs, poison ----------
 export function area(kind, x, z, r, dur, o = {}) {
-  const a = { kind, x, z, r, dur, t: 0, tick: o.tick ?? 0.5, tickT: o.delay ?? 0, dmg: o.dmg || 0, team: o.team || 'hero', src: o.src, opts: o.opts || {}, vx: o.vx || 0, vz: o.vz || 0, hit: new Set() };
+  const a = { kind, x, z, r, dur, t: 0, tick: o.tick ?? 0.5, tickT: o.delay ?? 0, dmg: o.dmg || 0, team: o.team || 'hero', src: o.src, opts: o.opts || {}, vx: o.vx || 0, vz: o.vz || 0, hit: new Set(), onTick: o.onTick, onEnd: o.onEnd, look: o.look, dispose: o.dispose };
+  if (o.light) a.light = addLight({ x, y: o.light.y ?? 0.8, z, color: o.light.color, intensity: o.light.intensity ?? 12, range: o.light.range ?? r * 3, flicker: o.light.flicker ?? 0.3 });
   if (kind === 'fire') a.light = addLight({ x, y: 0.6, z, color: 0xff6a10, intensity: 16, range: r * 3, flicker: 0.4 });
   if (kind === 'tornado') a.light = addLight({ x, y: 1.2, z, color: 0xff7a20, intensity: 14, range: 6, flicker: 0.4 });
   if (kind === 'poison') decal(x, z, 'goo', r * 2, dur);
@@ -201,9 +213,17 @@ export function updateAreas(dt) {
       }
     }
     if (a.kind === 'amberDust' || a.kind === 'wave') { if (a.t > a.dur) { if (a.light) removeLight(a.light); G.areas.splice(i, 1); } continue; }
+    // a hero effect with its own rules (skillsx.js): it runs itself every frame, and ends when its time is up or it says so
+    if (a.kind === 'custom') {
+      a.onTick?.(a, dt);
+      if (a.light) { a.light.x = a.x; a.light.z = a.z; }
+      if (a.t > a.dur || a.done) { if (a.light) removeLight(a.light); G.areas.splice(i, 1); a.onEnd?.(a); a.dispose?.(a); }
+      continue;
+    }
+    if (a.look) a.look(a, dt);
     if (a.vx || a.vz) { a.x += a.vx * dt; a.z += a.vz * dt; if (a.light) { a.light.x = a.x; a.light.z = a.z; } }
     // looks
-    if (a.kind === 'fire') { if (Math.random() < 0.7) P({ x: a.x + rand.range(-a.r, a.r) * 0.8, y: 0.1, z: a.z + rand.range(-a.r, a.r) * 0.8, vy: rand.range(1, 2.5), life: rand.range(0.3, 0.6), size: 0.5, size1: 0.1, color: 0xffb040, color1: 0xff2a00 }); }
+    else if (a.kind === 'fire') { if (Math.random() < 0.7) P({ x: a.x + rand.range(-a.r, a.r) * 0.8, y: 0.1, z: a.z + rand.range(-a.r, a.r) * 0.8, vy: rand.range(1, 2.5), life: rand.range(0.3, 0.6), size: 0.5, size1: 0.1, color: 0xffb040, color1: 0xff2a00 }); }
     else if (a.kind === 'rain') {
       for (let k = 0; k < 2; k++) { const rx = a.x + rand.range(-a.r, a.r) * 0.85, rz = a.z + rand.range(-a.r, a.r) * 0.85; P({ x: rx, y: 6, z: rz - 1, vy: -26, vz: 4, life: 0.22, size: 0.18, size1: 0.12, color: 0xfff0d0, color1: 0xd0c0a0 }); if (Math.random() < 0.3) sparks(rx, 0.1, rz, 2, 0xe0d0b0, 2); }
     } else if (a.kind === 'poison') { if (Math.random() < 0.3) P({ add: false, x: a.x + rand.range(-a.r, a.r) * 0.7, y: 0.1, z: a.z + rand.range(-a.r, a.r) * 0.7, vy: 0.6, life: 1, size: 0.5, size1: 1.2, color: 0x6a9a20, alpha: 0.4 }); }
@@ -242,7 +262,7 @@ export function clearProjs() {
   for (let i = G.projs.length - 1; i >= 0; i--) { const p = G.projs[i]; if (p.mesh) R.scene.remove(p.mesh); if (p.light) removeLight(p.light); if (p.av) { p.av.dispose(); p.av = null; } }
   clearSap(); clearRemains(); clearLight();
   G.projs.length = 0;
-  for (const a of G.areas) if (a.light) removeLight(a.light);
+  for (const a of G.areas) { if (a.light) removeLight(a.light); a.dispose?.(a); }
   G.areas.length = 0;
 }
 export { hitFx, puff, ring, glowBurst, sparks, explosion };

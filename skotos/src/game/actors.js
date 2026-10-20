@@ -8,7 +8,7 @@ import { Avatar } from '../gfx/anim.js';
 import { hasPerson, personModel } from '../gfx/people.js';
 import { hasCreature, creatureModel } from '../gfx/creatures.js';
 import { tex } from '../gfx/textures.js';
-import { MONSTERS, DIFFS, monsterHP, monsterDmg, AFFIXES, CLASSES, PACK_DORMANT, PACK_LINE } from './data.js';
+import { MONSTERS, DIFFS, monsterHP, monsterDmg, AFFIXES, CLASSES, SKILLS, PACK_DORMANT, PACK_LINE } from './data.js';
 import * as B from '../world/build.js';
 import { G, uid } from './state.js';
 import { rand, clamp } from '../core/util.js';
@@ -415,7 +415,7 @@ export function createPlayer(hero, x, z) {
   const p = new Actor({ x, z, team: 'hero', kind: 'hero', radius: 0.45, speed: G.stats.speed, hp: G.stats.lifeMax, avatar: av, rot: Math.PI });
   p.hero = true;
   p.res = hero.cls === 'warden' ? 20 : 100;
-  p.cds = [0, 0, 0, 0, 0]; p.dodgeCd = 0; p.potionCd = 0; p.buffs = {};
+  p.cds = new Array(SKILLS[hero.cls].length).fill(0); p.dodgeCd = 0; p.potionCd = 0; p.buffs = {};
   p.act = null; p.comboStep = 0; p.comboT = 0;
   return p;
 }
