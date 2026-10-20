@@ -33,7 +33,7 @@ on('openPanel', (name, ctx) => open(name, ctx));
 export function open(name, ctx) {
   P.name = name; P.sel = null; P.tab = 0; P.ctx = ctx || null; P.sure = false; P.msel = null;
   if (name === 'skills' && ctx?.tab) P.tab = ctx.tab;
-  G.panel = name;
+  G.panel = name; render.key = null;
   $('panel').hidden = false;
   render();
 }
@@ -241,7 +241,11 @@ export function diffUnlocked(i) {
 }
 function render() {
   if (!P.name) return;
+  // the same panel and tab drawn again (a tap in it): it stays scrolled where it was
+  const key = P.name + ':' + P.tab, body = $('panel').querySelector('.pn-b'), top = key === render.key && body ? body.scrollTop : 0;
   $('panel').innerHTML = R[P.name]();
+  render.key = key;
+  if (top) { const b = $('panel').querySelector('.pn-b'); if (b) b.scrollTop = top; }
   if (P.name === 'map') drawBigMap($('bigmap'));
 }
 

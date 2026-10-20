@@ -405,7 +405,7 @@ const SKILL_FN = {
 export function dodge(ev) {
   const pl = p(), D = DODGE[G.hero.cls];
   if (pl.dodgeCd > 0) { Audio.sfx('denied', { vol: 0.4 }); return; }
-  if (pl.act && pl.act.name === 'leap') return;
+  if (pl.act && (pl.act.name === 'leap' || pl.act.name === 'vault' || pl.act.name === 'charge')) return;
   // dragged by the tongs, there is no rolling free
   if (pl.pull) return;
   pl.act = null;

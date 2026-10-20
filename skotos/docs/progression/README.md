@@ -12,16 +12,18 @@ gave nothing. This adds three things as one system, all paid for from one pool o
   as a tile (rank pips, the button it is on, a `+` when it can be improved, `Νέα` for a later skill not yet placed, the
   level a locked one opens at). Tap a tile for its detail on the right: the rank and an Upgrade button, what it does, its
   damage now and at the next rank, which button it is on (tap 1-4 to put it there: a skill already on another button
-  swaps places), and its variants.
+  swaps places; out of town a skill brought onto the buttons comes in on its whole cooldown, since the panel pauses the
+  game), and its variants.
 - **Variants** (`Παραλλαγές`): each of the first four skills of each class has two other versions that change how it is
-  played (24 in all). A variant needs the skill at rank 5 and costs 1 point. The first one learnt takes effect at once;
-  switching between the skill as it is and its variants is done in town. The button on the HUD shows a small blue
+  played (24 in all). A variant needs the skill at rank 5 and costs 1 point. The first one learnt takes effect at once
+  (only the first: a second is chosen in town); switching between the skill as it is and its variants is done in town. The button on the HUD shows a small blue
   diamond while a variant is in use.
 - **Later skills**: three more per class, at levels 20, 30 and 40 (ranks 1-5, like the others). A class now has seven
   skills for four buttons: the loadout is the choice.
 - **Mastery tab** (`Μαεστρία`): twelve tracks, each bought a rank at a time (+1 or +5). After level 50 experience goes on
   counting into Mastery levels, each a point and a little longer than the last; the HUD shows the Mastery level on the
-  portrait (a blue star) and the XP bar turns blue. A respec (`Ξέχνα ό,τι έμαθες`, town only, gold) gives every point back.
+  portrait (a blue star) and the XP bar turns blue. A respec (`Ξέχνα ό,τι έμαθες`, town only, gold) gives every point back;
+  when it cannot be had, the line under it says why (out of town, or the gold the hero has).
 
 ## Numbers
 
@@ -39,7 +41,7 @@ bonus(r) = max x (1 - e^(-r/k)): the first ranks are small, the tail endless but
 | Εστίαση / Focus | cooldown % (cap 40 with items) | 15 | 35 | 0.4 | 3.7 | 10.2 |
 | Πηγή / Wellspring | resource regen % (Warden: fury per hit %) | 50 | 30 | 1.6 | 14 | 37 |
 | Σίδερο / Iron | armour % | 80 | 40 | 2 | 18 | 51 |
-| Βδέλλα / Leech | life per hit (x level) | 2 x L | 30 | 3 at L50 | 28 at L50 | 74 at L50 |
+| Βδέλλα / Leech | life per hit (x level, not rounded: 0.13 at L2) | 2 x L | 30 | 3.3 at L50 | 28 at L50 | 74 at L50 |
 | Τύχη / Fortune | gold % | 150 | 30 | 4.9 | 43 | 110 |
 | Ανιχνευτής / Seeker | magic find % | 150 | 30 | 4.9 | 43 | 110 |
 
@@ -78,6 +80,14 @@ stays within about +-30% of its base in a pack (the pulling and freezing ones tr
 is worth its cooldown and cost (Dawnbreaker about 2x an Earthsplitter for 50 Fury and a long swing; the Ray of Dawn
 about a Fireball's damage per mana, through a whole line).
 
+After review the outliers were brought back (the reviewers' harness `meas.mjs`: the skill cast whenever ready for 16 s,
+rank 5, level 45, a ring of seven sturdy dummies and a lone boss-sized one): Ember Dance keeps one burning patch under
+her while she spins in place (a new one only once she has moved off it), Shatter bursts for 0.6x with no forced
+crit, Blizzard's storm ticks for 0.07x, Tight Volley's bolts are 0.45x and pierce two, Storm of Hawks dives for 0.4x
+(one cast about one Piercing Shot cycle on one foe), and the Alpha bites for 0.6x (its worth is the +15% on her own
+blows, which now lasts only while an Alpha runs with her). The fires the variants leave (Rain of Fire, Pale Cinder,
+Ember Dance: area `dim`) never count as light in a boss's darkness (light.js), so they do not unveil a Shrouded boss.
+
 ## Code
 
 - `src/game/data.js`: the later skills appended to `SKILLS` (indices 0-4 unchanged), `VARIANTS`, `LOADOUT`,
@@ -88,8 +98,11 @@ about a Fireball's damage per mana, through a whole line).
 - `src/game/skillsx.js` (new): `VARIANT_FN['skill.variant']` and `NEW_FN[skill]`, each called like a skill.
 - `src/game/skills.js`: a button (1-4) maps through the loadout; cooldowns are kept per skill by its index in `SKILLS`
   (`pl.cds` is as long as the class's list); the variant, else the base, else a later skill is called; helpers exported.
-- `src/game/projectiles.js`: `fire()` takes `onTick` and `look`; `area()` takes `look`, `light`, and the kind `'custom'`
-  runs `onTick` every frame and `onEnd`/`dispose` at its end (or a zone change).
+- `src/game/projectiles.js`: `fire()` takes `onTick` and `look`; `area()` takes `look`, `light` (in place of the kind's
+  own), `dim`, and the kind `'custom'` runs `onTick` every frame and `onEnd`/`dispose` at its end (or a zone change).
+- `src/game/player.js`: the Vault and the Charge cannot be cut short (like a leap); only a leap or the Vault holds her
+  off the ground; the Alpha's buff ends with the last Alpha. `src/game/light.js`: `dim` fires are never light in a boss's
+  darkness.
 - `src/game/combat.js`: XP past level 50 goes to `gainMastery`; `furyGain` (Warden's Wellspring); the Alpha's +15%; the
   Challenge's damage cut and reflection.
 - `src/game/ai.js`: `victim()` honours a taunt (`a.taunt`, game time).
@@ -126,14 +139,18 @@ merge them by hand in this order (`git diff c70d65d claude/skotos-progression --
    `victim()`. `combat.js`: the `mxpToNext` import, `gainXP`/`gainMastery`/`levelFx` (replace `gainXP`), `furyGain` in
    the fury gain, the Alpha line in `heroHit`, the Challenge line after `shrineShield` in `hurtHero`, and `beam` in the
    interrupt test. `projectiles.js`: the new `KIND`s, `onTick`/`look` in `fire()` and `updateProjs`, the `custom` area
-   branch, `look`/`light`/`dispose` in `area()`, and `dispose` in `clearProjs`.
+   branch, `look`/`light`/`dim`/`dispose` in `area()` (the kind's light only when there is no `o.light`), the looks
+   chain after the move line (`if (a.look) ... else if (a.kind === 'fire') ...`), and `dispose` in `clearProjs`.
+   `light.js`: `a.dim` in `lightAt`'s fire test. `player.js`: `vault`/`charge` in `busyHard`, the `pl.y` line before
+   the `pl.dead` test, the Alpha line after the buffs loop; `skills.js` `dodge()`: `vault`/`charge` beside `leap`.
 5. `hud.js`: imports, `#mlvl` in the portrait, `setupSkillButtons` (+ the `loadout` listener), the XP bar block, the
    skill loop reading `slotSkill`, the buff icons, `masteryUp`, the later-skill line in `levelUp`. Act V's own HUD changes
    (`HAZ5`) do not touch these lines.
 6. `panels.js`: the `renderSkills`/`skillsClick` import, `skills()` replaced, `open()`'s `P.sure`/`P.msel`/`ctx.tab`, the
-   `skillsClick` line at the top of `onClick`, and the old `rank` case removed. `screens.js`: the ✦ Mastery level on a
+   `skillsClick` line at the top of `onClick`, the old `rank` case removed, and `render()` keeping `.pn-b`'s scroll
+   (`render.key`, reset in `open()`). `screens.js`: the ✦ Mastery level on a
    hero's slot. `boot.js`: `migrateHero` import and call in `startHero`, `?mlvl=`. `icons.js`: the new icons.
-   `style.css`: the `.pg-*` block at the end. `text.js`: the block after `sk.roll` and `hud.levelupSub`.
+   `style.css`: the `.pg-*` block at the end. `text.js`: the block after `sk.roll` and `hud.levelupSub`, and the soft hyphens (`\u00ad`, where a long name breaks on a narrow tile) in `sk.quake`, `sk.pierce`, `sk.meteor`.
 7. `tools/balance-act.mjs`: `prog` import, `ready()` through the loadout, and the progression lines in `setupHero`.
    `tools/scenario.mjs`: the `progpanel`, `skillsfx`, `progress` scenarios.
 

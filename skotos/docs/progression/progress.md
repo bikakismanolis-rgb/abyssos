@@ -32,5 +32,10 @@ Baseline balance: a worktree of v12 at /tmp/claude-0/base served on 5232, plan /
 - Full scenario suite passes; old-save migration verified; artifact built; strict CSP clean on desktop and mobile;
   release.md written.
 
+- Review (three reviewers, 22 findings, all confirmed and fixed): area looks/lights (projectiles.js), the Vault/Charge
+  cut short (player.js), Bulwark and the Alpha across a waypoint or a death, the second variant's take-up, dim variant
+  fires in a boss's darkness (light.js), Ember Dance/Shatter/Blizzard/Volley/Hawks/Alpha re-tuned (README), the loadout
+  swap's cooldown out of town, Leech fractions, and the panel on phones (scroll kept, names, +5, respec reason, New tag).
+
 ## Next
 - Nothing open: waiting for the lead to merge. Owner decisions in questions.md.

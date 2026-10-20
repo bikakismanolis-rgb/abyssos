@@ -27,6 +27,8 @@ export function renderSkills(P, head) {
 function skills(P) {
   const h = G.hero, list = SKILLS[h.cls];
   if (!P.sel || !list.some((s) => s.id === P.sel)) P.sel = h.loadout[0] || list[1].id;
+  // a later skill looked at is no longer new (before its tile is drawn)
+  { const ss = list.find((s) => s.id === P.sel); if (!ss.basic && h.level >= ss.lvl && ss.lvl >= 20) h.flags['seen_' + ss.id] = true; }
   const slots = h.loadout.map((id, i) => {
     const sk = list.find((s) => s.id === id);
     return `<button class="pg-slot ${P.sel === id ? 'sel' : ''}" data-a="${sk ? 'psel:' + id : 'pslot:' + (i + 1)}"><span class="n">${i + 1}</span>${sk ? ICON[sk.icon] : ''}</button>`;
@@ -46,14 +48,13 @@ function skills(P) {
 function detail(P) {
   const h = G.hero, sk = SKILLS[h.cls].find((s) => s.id === P.sel), lock = !sk.basic && h.level < sk.lvl;
   const r = rankOf(h, sk.id), slot = h.loadout.indexOf(sk.id) + 1;
-  if (!sk.basic && !lock && sk.lvl >= 20) h.flags['seen_' + sk.id] = true;
   const dmgAt = (rr) => Math.round(sk.dmg * (1 + 0.15 * Math.max(0, rr - 1)) * 100);
   const meta = [sk.dmg ? t('sk.dmg', dmgAt(Math.max(1, r))) + (!sk.basic && r > 0 && r < SKILL_MAX_RANK ? ` <span class="nx">→ ${dmgAt(r + 1)}%</span>` : '') : '', sk.cost ? t('sk.cost', sk.cost, resName()) : '', sk.cd ? t('sk.cd', sk.cd) : ''].filter(Boolean).join(' · ');
   const rankBtn = sk.basic || lock ? '' : r >= SKILL_MAX_RANK ? `<span class="pg-max">${t('prog.max')}</span>` : `<button class="btn pg-up" data-a="prank:${sk.id}" ${canRank(h, sk.id) ? '' : 'disabled'}>${t('sk.up')} <small>· 1</small></button>`;
   const headRow = `<div class="pg-dh"><div class="ic">${ICON[sk.icon]}</div><div class="tx"><h3>${t('sk.' + sk.id)}</h3><div class="sub">${sk.basic ? t('prog.basic') : lock ? t('sk.unlock', sk.lvl) : t('sk.rank', r, SKILL_MAX_RANK) + ' ' + pips(r)}</div></div>${rankBtn}</div>`;
   const desc = `<p class="pg-d">${t('sk.' + sk.id + '.d')}</p><div class="meta">${meta}</div>`;
   // which button it is on; tap one to put it there
-  const put = sk.basic || lock ? '' : `<div class="pg-put"><span>${slot ? t('prog.onSlot', slot) : t('prog.put')}</span>${[1, 2, 3, 4].map((i) => { const o = SKILLS[h.cls].find((s) => s.id === h.loadout[i - 1]); return `<button class="chip ${slot === i ? 'on' : ''}" data-a="pslot:${i}"><b>${i}</b>${o && o.id !== sk.id ? `<span class="was">${ICON[o.icon]}</span>` : ''}</button>`; }).join('')}</div>`;
+  const put = sk.basic || lock ? '' : `<div class="pg-put"><span>${slot ? t('prog.onSlot', slot) : t('prog.put')}</span>${[1, 2, 3, 4].map((i) => { const o = SKILLS[h.cls].find((s) => s.id === h.loadout[i - 1]); return `<button class="chip ${slot === i ? 'on' : ''}" data-a="pslot:${i}"><b>${i}</b>${o && o.id !== sk.id ? `<span class="was">${ICON[o.icon]}</span>` : ''}</button>`; }).join('')}${!slot && sk.cd && !inTown() ? `<span class="muted pg-swcd">${t('prog.swapCd')}</span>` : ''}</div>`;
   return headRow + desc + put + variants(sk, r, lock);
 }
 function variants(sk, r, lock) {
@@ -78,7 +79,9 @@ function mastery(P) {
   const bar = mast ? `<div class="pg-mbar"><i style="transform:scaleX(${((h.mxp || 0) / need).toFixed(3)})"></i></div><span class="muted">${t('mast.xp', fmtK(h.mxp || 0), fmtK(need), (h.mlvl || 0) + 1)}</span>`
     : `<div class="pg-mbar off"><i style="transform:scaleX(${(h.level / MAX_LEVEL).toFixed(3)})"></i></div><span class="muted">${t('mast.before')}</span>`;
   const cost = respecCost(h), spent = pointsEarned(h) - h.points;
-  const rs = `<button class="btn ${P.sure ? 'red' : 'ghost'} sm pg-rs" data-a="respec" ${inTown() && spent > 0 && h.gold >= cost ? '' : 'disabled'} title="${t('prog.respec.d', fmt(cost))}">${ICON.reset}${P.sure ? t('prog.respecSure') : t('prog.respec')} <small>${ICON.coin}${fmtK(cost)}</small></button>`;
+  // (why it is greyed out, in words: a title is never seen on a phone)
+  const why = spent <= 0 ? '' : !inTown() ? t('prog.respecTown') : h.gold < cost ? t('prog.respecGold', fmt(h.gold)) : '';
+  const rs = `<div class="pg-rsw"><button class="btn ${P.sure ? 'red' : 'ghost'} sm pg-rs" data-a="respec" ${inTown() && spent > 0 && h.gold >= cost ? '' : 'disabled'} title="${t('prog.respec.d', fmt(cost))}">${ICON.reset}${P.sure ? t('prog.respecSure') : t('prog.respec')} <small>${ICON.coin}${fmtK(cost)}</small></button>${why ? `<span class="why">${why}</span>` : ''}</div>`;
   const crest = `<div class="pg-crest">${ICON.mastery}<b>${mast ? h.mlvl || 0 : '·'}</b></div>`;
   const top = `<div class="pg-mt">${crest}<div class="pg-mx"><h3>${mast ? t('mast.rank', h.mlvl || 0) : t('mast.title')}</h3>${bar}</div>${rs}</div><p class="pg-intro">${t('mast.intro')}</p>`;
   const tiles = MASTERY.map((m) => {
@@ -89,7 +92,7 @@ function mastery(P) {
       <div class="mh"><span class="ic">${ICON[m.icon] || ICON.star}</span><b>${t('mast.' + m.id)}</b><span class="rk">${r}</span></div>
       <div class="mv">${fmtMastery(m, v)}</div><div class="ml">${lab}</div>
       <div class="mf"><i></i></div>
-      <div class="mn"><span class="muted">${fmtMastery(m, nx)}</span><button class="btn sm" data-a="mup:${m.id}:1" ${h.points > 0 ? '' : 'disabled'}>+1</button>${h.points >= 5 ? `<button class="btn ghost sm" data-a="mup:${m.id}:5">+5</button>` : ''}</div></div>`;
+      <div class="mn"><span class="muted">${fmtMastery(m, nx)}</span><button class="btn sm" data-a="mup:${m.id}:1" ${h.points > 0 ? '' : 'disabled'}>+1</button><button class="btn ghost sm" data-a="mup:${m.id}:5" ${h.points >= 5 ? '' : 'disabled'}>+5</button></div></div>`;
   }).join('');
   return `${top}<div class="pg-mg">${tiles}</div>`;
 }
@@ -101,7 +104,17 @@ export function skillsClick(a, x, y, P) {
     case 'ptab': P.tab = +x; P.sure = false; return true;
     case 'psel': P.sel = x; return true;
     case 'prank': if (rankUp(h, x)) { refreshStats(); Audio.sfx('equip'); glow(); } else Audio.sfx('denied'); return true;
-    case 'pslot': { const sk = SKILLS[h.cls].find((s) => s.id === P.sel); if (sk && !sk.basic && h.level >= sk.lvl && setSlot(h, +x, sk.id)) { Audio.sfx('equip'); emit('loadout'); } else Audio.sfx('denied'); return true; }
+    case 'pslot': {
+      const sk = SKILLS[h.cls].find((s) => s.id === P.sel), was = h.loadout.includes(sk?.id);
+      if (sk && !sk.basic && h.level >= sk.lvl && setSlot(h, +x, sk.id)) {
+        // out of town a skill brought onto the buttons comes in on its whole cooldown: the panel pauses the game, and
+        // the four buttons stay the choice in a fight (one moved between two buttons keeps its own)
+        const pl = G.player, ci = SKILLS[h.cls].indexOf(sk);
+        if (!was && !inTown() && sk.cd && pl) pl.cds[ci] = Math.max(pl.cds[ci] || 0, sk.cd * (1 - G.stats.cdr / 100));
+        Audio.sfx('equip'); emit('loadout');
+      } else Audio.sfx('denied');
+      return true;
+    }
     case 'pvar': {
       const v = +y, own = !v || hasVariant(h, x, v);
       if (!own) { if (unlockVariant(h, x, v)) { Audio.sfx('equip'); Audio.sting?.('legendary'); emit('loadout'); } else Audio.sfx('denied'); return true; }

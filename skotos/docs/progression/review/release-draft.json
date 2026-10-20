@@ -1,0 +1,33 @@
+{
+  "changed": [
+    "assets/anim-Co8WR9rx.js",
+    "assets/boot-Z0BhjrH5.js",
+    "assets/build-BeOYbo7v.js",
+    "assets/creatureview-BUDJgJFL.js",
+    "assets/env-BR5kZ64i.js",
+    "assets/fx-D2BLx_mX.js",
+    "assets/gen-D4zQB5B1.js",
+    "assets/gen2-BvUvkEeh.js",
+    "assets/gen3-D2ta9RL_.js",
+    "assets/gen4-ROab9ICi.js",
+    "assets/index-B1VFxZBi.js",
+    "assets/index-wmnV3vkd.css",
+    "assets/kits-DXRhPeqj.js"
+  ],
+  "removed": [
+    "assets/anim-bT-ijxBg.js",
+    "assets/boot-Dhwa6kmL.js",
+    "assets/build-en7_4QIY.js",
+    "assets/creatureview-D2xHMyJZ.js",
+    "assets/env-D45tCXvO.js",
+    "assets/fx-BqK-F8gx.js",
+    "assets/gen-BelIWAV8.js",
+    "assets/gen2-Bcw74DQt.js",
+    "assets/gen3-CQuDbwBB.js",
+    "assets/gen4-B1TdwSM_.js",
+    "assets/index-C0elAw6K.css",
+    "assets/index-CnkZGems.js",
+    "assets/kits-3_FyslnY.js"
+  ],
+  "indexHtml": "/tmp/claude-0/-home-user-abyssos/848977a8-1632-5f97-b36d-9baf61edd253/scratchpad/prog/skotos/artifact/index.html"
+}

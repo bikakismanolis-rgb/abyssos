@@ -39,7 +39,7 @@ export const SKILLS = {
     { id: 'pierce', cost: 40, cd: 4, dmg: 5.0, icon: 'arrow', lvl: 6, range: 22 },
     { id: 'trap', cost: 25, cd: 7, dmg: 2.6, icon: 'trap', lvl: 20, radius: 3.2, range: 10, ground: true },
     { id: 'vault', cost: 15, cd: 5, dmg: 1.0, icon: 'vault', lvl: 30, count: 5, dist: 6.5 },
-    { id: 'hawks', cost: 35, cd: 16, dmg: 1.1, icon: 'hawk', lvl: 40, dur: 9, count: 3 }
+    { id: 'hawks', cost: 35, cd: 16, dmg: 0.4, icon: 'hawk', lvl: 40, dur: 9, count: 3 }
   ],
   mage: [
     { id: 'arcane', basic: true, dmg: 1.0, icon: 'orb', range: 14, gain: 3 },
