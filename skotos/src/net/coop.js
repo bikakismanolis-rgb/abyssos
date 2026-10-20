@@ -119,6 +119,8 @@ export async function leaveGame(why) {
   NET.remotes.length = 0;
   for (const [, a] of S.pup) killPuppet(a);
   S.pup.clear();
+  // (a host says so before it goes: its guests go home at once, not when the room notices)
+  if (role === 'host' && S.ch) { try { await S.ch.emit('c', { op: 'end' }); } catch (e) { /* gone */ } }
   const ch = S.ch; S.ch = null; S.role = null; S.code = null; S.started = false; S.status = 'idle'; S.hostPeer = null; S.peers.clear(); S.roster = []; S.downed = null; S.rv = null;
   NET.mode = null; NET.n = 1; MIRROR.rec = null;
   if (role === 'host') { rescale(); S.T?.lobby?.presence({ g: null }); }
