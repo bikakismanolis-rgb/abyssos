@@ -757,6 +757,8 @@ const S = {
       const G = window.__G, old = JSON.parse(JSON.stringify(G.hero));
       for (const k of ['loadout', 'vars', 'variant', 'mast', 'mlvl', 'mxp']) delete old[k];
       old.id = 'hold'; old.level = 50; old.xp = 4321; old.skills = { multi: 5, rain: 5, wolf: 3, pierce: 5, bolt: 1 }; old.points = 49 - 13; old.cls = 'ranger';
+      // (no more autosaves from this page over the planted save)
+      G.save = null;
       localStorage.setItem('skotos.save.v1', JSON.stringify({ heroes: [old], settings: { helpSeen: true }, last: 'hold' }));
     });
     await pg.goto((process.env.BASE || 'http://localhost:5199/') + '?sim=1&q=1');
