@@ -167,7 +167,7 @@ export const VARIANT_FN = {
   // Tight Volley: the bolts one after another down one line, each through three
   'multi.volley'(sk, aim, rank, mult) {
     const pl = p(), n = sk.count + (rank >= 3 ? 1 : 0) + (rank >= 5 ? 1 : 0);
-    const volley = () => { for (let i = 0; i < n; i++) later(i * 0.05, () => { const o = handPoint(V); fire('bolt', pl, o.x, o.z, pl.rot + rand.range(-0.05, 0.05), { y: 1.25, pierce: 3, dmg: heroHit(mult * 0.85), opts: { knock: 1 }, look: goldBolt }); if (i % 2 === 0) Audio.sfx('arrowShoot', { vol: 0.6 }); }); };
+    const volley = () => { for (let i = 0; i < n; i++) later(i * 0.05, () => { const o = handPoint(V); fire('bolt', pl, o.x, o.z, pl.rot + rand.range(-0.05, 0.05), { y: 1.25, pierce: 3, dmg: heroHit(mult * 0.6), opts: { knock: 1 }, look: goldBolt }); if (i % 2 === 0) Audio.sfx('arrowShoot', { vol: 0.6 }); }); };
     act({ name: 'multi', anim: 'shoot', speed: 1.4, face: aim.dir, cut: 0.5, events: [[0.1, () => { volley(); if (G.stats.legs.has('windQuiver')) later(0.35, volley); }]] });
   },
   // Scatter Blast: three bolts that burst where they strike
@@ -177,7 +177,7 @@ export const VARIANT_FN = {
       const o = handPoint(V), n = 3 + (rank >= 4 ? 1 : 0), spread = 0.8;
       for (let i = 0; i < n; i++) {
         const a = pl.rot - spread / 2 + (spread * i) / (n - 1);
-        fire('blast', pl, o.x, o.z, a, { y: 1.25, onHit: (f, pr) => { pr.life = 0; }, onEnd: (x, z) => { explosion(x, z, 1.9, 0xff8a30, { shake: 0.12 }); Audio.sfx('explosion', { x, z, vol: 0.5 }); circleHit(x, z, 2.1, (f) => damage(pl, f, heroHit(mult * 1.05, { area: true }), { knock: 3, kx: f.x - x, kz: f.z - z, area: true, quiet: true })); }, look: fireBolt });
+        fire('blast', pl, o.x, o.z, a, { y: 1.25, onHit: (f, pr) => { pr.life = 0; }, onEnd: (x, z) => { explosion(x, z, 1.9, 0xff8a30, { shake: 0.12 }); Audio.sfx('explosion', { x, z, vol: 0.5 }); circleHit(x, z, 2.1, (f) => damage(pl, f, heroHit(mult * 0.75, { area: true }), { knock: 3, kx: f.x - x, kz: f.z - z, area: true, quiet: true })); }, look: fireBolt });
       }
       Audio.sfx('arrowShoot');
     };
@@ -212,7 +212,7 @@ export const VARIANT_FN = {
       if (pr.split) return;
       pr.split = true;
       const base = Math.atan2(pr.vx, pr.vz);
-      for (let k = 0; k < 4; k++) { const a = base + (-0.6 + k * 0.4); fire('bolt', p(), f.x, f.z, a, { y: 1.25, dmg: heroHit(mult * 0.5), opts: { knock: 1.5 }, life: 0.45, look: goldBolt }).hit.add(f); }
+      for (let k = 0; k < 4; k++) { const a = base + (-0.6 + k * 0.4); fire('bolt', p(), f.x, f.z, a, { y: 1.25, dmg: heroHit(mult * 0.35), opts: { knock: 1.5 }, life: 0.45, look: goldBolt }).hit.add(f); }
       glowBurst(f.x, 1.25, f.z, 0xfff0c0, 16, 4, 0.25, 0.4); Audio.sfx('hitMetal', { x: f.x, z: f.z, vol: 0.6 });
     });
   },
@@ -705,7 +705,7 @@ export const NEW_FN = {
               b.m.rotation.x = b.dive ? 0.6 : 0;
               const flap = Math.sin(a.t * (b.dive ? 30 : 14) + b.a * 3) * (b.dive ? 0.2 : 0.6);
               b.m.children[0].rotation.z = 0.25 + flap; b.m.children[1].rotation.z = -0.25 - flap;
-              if (Math.random() < 0.5) P({ x: b.x, y: b.y, z: b.z, life: 0.3, size: 0.25, size1: 0.02, color: 0xc8f0ff, color1: 0x3070ff });
+              P({ x: b.x, y: b.y, z: b.z, life: 0.12, size: 0.9, size1: 0.4, color: 0x4a90d0, alpha: 0.35 }); if (Math.random() < 0.6) P({ x: b.x, y: b.y, z: b.z, life: 0.35, size: 0.2, size1: 0.02, color: 0xc8f0ff, color1: 0x3070ff });
             }
           },
           dispose() { for (const b of birds) { glowBurst(b.x, b.y, b.z, 0x9ad8ff, 10, 2, 0.25, 0.4); R.scene.remove(b.m); } }
@@ -818,11 +818,11 @@ function trapMesh() {
   R.scene.add(m); return m;
 }
 function hawkMesh() {
-  const mat = ADD(0xa8e0ff, 0.85), g = new THREE.Group();
+  const mat = ADD(0x3a86c8, 0.55), g = new THREE.Group();
   const wing = (s) => { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0.18, s * 0.75, 0.05, -0.1, 0, 0, -0.22], 3)); const m = new THREE.Mesh(geo, mat); return m; };
   g.add(wing(1), wing(-1));
-  const body = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.55, 5), ADD(0xe0f4ff, 0.9)); body.rotation.x = Math.PI / 2; g.add(body);
-  g.scale.setScalar(1.6); R.scene.add(g); return g;
+  const body = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.5, 5), ADD(0x9ad0ff, 0.7)); body.rotation.x = Math.PI / 2; g.add(body);
+  g.scale.setScalar(1.05); R.scene.add(g); return g;
 }
 function riftMesh() {
   const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.75, 1), new THREE.MeshBasicMaterial({ color: 0x0a0414 }));
