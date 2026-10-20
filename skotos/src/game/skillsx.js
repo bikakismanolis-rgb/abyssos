@@ -105,6 +105,7 @@ export const VARIANT_FN = {
           tick(a, dt) {
             a.x = pl.x; a.z = pl.z;
             const h = heal * dt / dur; healHero(h, true); given += h;
+            a.pulse = (a.pulse ?? 0) - dt; if (a.pulse <= 0) { a.pulse = 0.5; ring(pl.x, pl.z, 1.6, 0xffd070, 0.5); glowBurst(pl.x, 0.4, pl.z, 0xffe8a0, 8, 1.2, 0.3, 0.6); }
             if (Math.random() < 0.6) { const an = Math.random() * 6.28, r = rand.range(0.3, 1.1); P({ x: pl.x + Math.sin(an) * r, y: rand.range(0, 0.6), z: pl.z + Math.cos(an) * r, vy: rand.range(1.5, 3), life: 0.8, size: 0.2, size1: 0.02, color: 0xfff0b0, color1: 0xffa040 }); }
           },
           end() { if (given >= 1) number(pl.x, 2.4, pl.z, '+' + Math.round(given), 'heal'); }
