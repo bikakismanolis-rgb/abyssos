@@ -18,6 +18,8 @@ Read this first when picking the project up in a new session.
 
 ## How to work
 
+- **The code graph:** `graphify-out/` maps the code (modules, functions, calls, named communities); `docs/GRAPH.md` says how to install graphify and query it (`graphify query "..."`, `explain`, `path`, `affected`). Use it to find where something lives and what a change touches before reading files, and refresh it (`graphify update .`) with your commits.
+
 - `cd skotos && npm install` if needed; dev server `npx vite --port 5199 --strictPort`.
 - Scenarios (Playwright, headless swiftshader): `node tools/scenario.mjs <name> <outdir>`. Names: Act I `combat, ranger, mage, weaver, lord, ending, title, panels`; Act II `pass, stonewarden, halls, king, ending2, cast2, boons`; Act III `weep, hart, heart, amaranthe, echo, ending3, cast3`; Act IV `ashfield, ivar, forge, karthax, ending4, cast4, echo4`. Run the ones touched by a change, and the whole set before publishing.
 - Views: `?auto=<zone>&lvl=N&q=1` jumps into a zone; `?world=<zone>&at=...` world viewer; `?cview&only=...` creature viewer; `?viewer&only=p:<name>` people viewer. `tools/shot.mjs` takes screenshots. `tools/check-act3.mjs` and `tools/check-act4.mjs` check the generated layouts over many seeds.
