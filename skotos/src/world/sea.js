@@ -212,7 +212,7 @@ function seaMat(o = {}) {
     Object.assign(sh.uniforms, u);
     sh.defines = Object.assign(sh.defines || {}, hi ? { SEA_HI: '' } : {}, R.quality >= 2 ? { SEA_Q2: '' } : {}, o.low ? { SEA_LOW: '' } : {}, o.far ? { SEA_FAR: '' } : {});
     sh.vertexShader = sh.vertexShader.replace('#include <common>', `#include <common>
-attribute float aBed; attribute float aHold; attribute float aLead; attribute float aShore; attribute float aFrz; attribute float aBay; attribute float aLand; attribute float aGd; attribute float aDrop; attribute vec2 aG;
+attribute float aBed; attribute float aHold; attribute float aLead; attribute float aShore; attribute float aFrz; attribute float aBay; attribute float aLand; attribute float aGd; attribute float aDrop; attribute vec2 aG; attribute float aBedS;
 uniform float uLevel; uniform float uBayLevel; uniform float uFrzT;
 varying vec3 vWP; varying float vDep; varying float vLead; varying float vShore; varying float vSw; varying float vHold; varying float vFrz; varying float vLand; varying float vCr; varying float vGd; varying float vDrop; varying vec2 vG; varying float vBay;
 ${COMMON}
@@ -249,7 +249,8 @@ ${FREEZE}`)
 #ifndef SEA_FAR
   // (a hair over the floor at a dry corner: the waterline is drawn from the smooth bed (tBed), not where the surface between
   // the corners dips under the ground, which cut it into the triangles' sawtooth on the flats' stepped beds)
-  y = max(y, 0.012 * (1.0 - aHold));
+  // (only near the smooth waterline: a corner dry by more than a hand stays under the ground, its pixels rejected by depth)
+  y = max(y, 0.012 * (1.0 - aHold) * step(-0.15, mix(uLevel, uBayLevel, aBay) - aBedS));
   // (and at the lip of a drop, dry land's edge over the closed water, the surface meets the land at its own height: held a
   // hand over it, the edge hovered and showed slivers of the drop face in every notch of the jittered shore)
   y = mix(y, min(y, 0.015), step(0.5, aDrop) * (1.0 - step(0.2, aGd)));
@@ -286,7 +287,12 @@ ${FREEZE}`)
     vec2 sp = vWP.xz - Vv.xz * ((70.0 - y) / ry);
     // (softer the lower the eye: from a cine's camera the sheet sweeps tens of metres between two vertices, and its curtains'
     // thin bright edges crawled over the water as cyan worm-lines)
-    if (uAur * max(1.0 - uAurDark, uAurFront) > 0.02) vAur = aurora(sp, 0.55 + 0.4 * (1.0 - smoothstep(0.1, 0.45, ry)), 2.5 + dv * 0.05 / max(ry, 0.15)) * smoothstep(0.04, 0.3, Vv.y);
+    // (and hazier with distance: worked out a metre apart, a far curtain's thin edges aliased between the vertices into
+    // worm-lines however soft)
+    // (the sheet moves some 70 / the eye's height metres for each metre of water: from a cine's low eye that is ten or more
+    // between two vertices, and the blur must cover it)
+    float shm = 70.0 / max(cameraPosition.y - y, 1.0) * (1.0 - smoothstep(0.5, 0.85, ry));
+    if (uAur * max(1.0 - uAurDark, uAurFront) > 0.02) vAur = aurora(sp, min(1.0, 0.55 + 0.4 * (1.0 - smoothstep(0.15, 0.6, ry)) + smoothstep(18.0, 45.0, dv) * 0.35), 2.5 + dv * 0.05 / max(ry, 0.15) + shm * 1.6) * smoothstep(0.04, 0.3, Vv.y);
     if (uAurDark > 0.02) vAurK = auroraDark(sp);
   }
 #endif`);
@@ -307,16 +313,27 @@ ${FREEZE}`)
   // walkable (wading) or closed: one clear step. (Beds come in 0.15 m steps, so at slack water whole flats sit at exactly
   // 0.45: they are closed, and the step lies a little under it; the corners' mean beds put it near the cells' edge.) A still
   // noise moves the waterline, and the step a little, inside the cells, so neither traces the grid
-  float sn = shoreN(P), dw = dep + sn;
+  float sn = shoreN(P), dw = dep + sn, depD = dep;
 #if !defined(SEA_LOW) && !defined(SEA_FAR)
-  // the waterline from the smooth bed: the corners' beds blurred over a couple of metres and read between them (vG: the
-  // grid's own point, the corners' jitter taken off), so it curves across the flats' stepped beds instead of following
-  // the triangles; the closed step (deep) keeps the corners' own depth, which the walk grid shares
-  float depS = mix(uLevel, uBayLevel, vBay) - texture2D(tBed, (vG + 0.5) / uBedS).r;
-  dw = depS + sn;
+  // the waterline and the closed step from the smooth bed: the corners' beds blurred over a couple of metres and read
+  // between them (vG: the grid's own point, the corners' jitter taken off), so both curve across the flats' stepped beds
+  // instead of following the triangles (read from the corners, the closed step and its pale line zigzagged cell by cell
+  // at mid tide). The closed step reads the corners' own beds through a cubic B-spline (four bilinear taps, only near the
+  // step): its line curves smoothly across the cells, yet stays within a few centimetres of the beds the walk grid keeps
+  // (read bilinearly, the step ran in right angles cell by cell; from the blurred bed, a closed trough two cells wide
+  // across the Shallows blurred up to a wading film the walk grid would not let her into)
+  vec2 bS = texture2D(tBed, (vG + 0.5) / uBedS).rg;
+  float lvS = mix(uLevel, uBayLevel, vBay), depS = lvS - bS.r;
+  dw = depS + sn; depD = lvS - bS.g;
+  if (abs(depD - 0.4) < 0.25) {
+    vec2 f = fract(vG), ci = vG - f, f2 = f * f, f3 = f2 * f;
+    vec2 w0 = (1.0 - 3.0 * f + 3.0 * f2 - f3) / 6.0, w1 = (4.0 - 6.0 * f2 + 3.0 * f3) / 6.0, w2 = (1.0 + 3.0 * f + 3.0 * f2 - 3.0 * f3) / 6.0, w3 = f3 / 6.0;
+    vec2 g0 = w0 + w1, g1 = w2 + w3, h0 = (ci - 0.5 + w1 / g0) / uBedS, h1 = (ci + 1.5 + w3 / g1) / uBedS;
+    depD = lvS - (g0.y * (g0.x * texture2D(tBed, h0).g + g1.x * texture2D(tBed, vec2(h1.x, h0.y)).g) + g1.y * (g0.x * texture2D(tBed, vec2(h0.x, h1.y)).g + g1.x * texture2D(tBed, h1).g));
+  }
   if (depS + sn < -0.04) discard;
 #endif
-  float deep = smoothstep(0.37, 0.43, dep + sn * 0.4);
+  float deep = smoothstep(0.37, 0.43, depD + sn * 0.4);
 #ifndef SEA_LOW
   // (over a drop, the ground metres down, the water is the open sea's whatever its bed says)
   deep = max(deep, smoothstep(0.25, 0.9, vGd));
@@ -397,13 +414,16 @@ ${FREEZE}`)
   // the hero's lantern: it lights the shallows and glints on the water
   vec3 hd = uHeroP - vWP; float hl = length(hd); hd /= max(hl, 0.001);
   float ha = pow(clamp(1.0 - pow(hl / uHeroR, 4.0), 0.0, 1.0), 2.0) / max(pow(hl, 1.4), 0.5);
-  col += uHeroC * ha * (0.008 * (1.0 - deep) * max(hd.y, 0.0) + 0.0025 * deep + pow(max(dot(Rf, hd), 0.0), 140.0) * 0.016);
+  // (her lantern's glint off the ripple narrow and few: wide, it laid a field of flecks round her feet)
+  col += uHeroC * ha * (0.008 * (1.0 - deep) * max(hd.y, 0.0) + 0.0025 * deep + pow(max(dot(Rf, hd), 0.0), 260.0) * 0.011);
 #ifdef SEA_HI
   // the aurora in the water: the reflected ray meets a sheet of sky 70 m up (not under the black aurora, where it would
   // be all but black: it comes back with the returning front)
 #ifdef SEA_FAR
   vec2 sp = P + Rc.xz * ((70.0 - vWP.y) / max(Rc.y, 0.04)), spw = fwidth(sp);
-  if (uAur * max(1.0 - uAurDark, uAurFront) > 0.02) col += aurora(sp, 1.0, length(spw) + 6.0) * (0.1 + 0.65 * F) * mix(0.25, 1.0, deep) * smoothstep(0.04, 0.3, Rc.y);
+  // (blurred as the map's own water is, by how far the sheet moves from pixel to pixel: sharper, the far sea beside the
+  // map's east edge crawled with the curtains' thin edges as green worm-lines)
+  if (uAur * max(1.0 - uAurDark, uAurFront) > 0.02) col += aurora(sp, 1.0, length(spw) * 4.0 + 9.0) * (0.1 + 0.65 * F) * mix(0.25, 1.0, deep) * smoothstep(0.04, 0.3, Rc.y);
 #else
   // (broken by the ripple into streaks drawn out toward the eye, as a reflection on moving water is)
   // (the phones too: with the ripple's own reads in its place the aurora lay on the water in mould-like blots, and a line
@@ -475,8 +495,11 @@ ${FREEZE}`)
   // a cow-print frill along every shore and the ice's lip)
   {
     float lace = smoothstep(0.27, 0.37, vLand + (n2.b - 0.5) * 0.07 + sn * 0.25 + vSw * 0.03) * smoothstep(0.38, 0.62, n1.g * 0.5 + n2.a * 0.5);
-    float web = 1.0 - smoothstep(0.0, 0.1, vorT(P * 4.3 + (n1.ba - 0.5) * 0.8 + vec2(t * 0.03, -t * 0.02)).x);
-    foam = max(foam, lace * (0.45 + 0.55 * web) * 0.55);
+    // (its web read only along the shore: the open water has no use for the fetch)
+    if (lace > 0.001) {
+      float web = 1.0 - smoothstep(0.0, 0.1, vorT(P * 4.3 + (n1.ba - 0.5) * 0.8 + vec2(t * 0.03, -t * 0.02)).x);
+      foam = max(foam, lace * (0.45 + 0.55 * web) * 0.55);
+    }
   }
   if (uWake.w > 0.0) {
     vec2 d = P - uWake.xy; float ca = cos(uWake.z), sa = sin(uWake.z);
@@ -491,11 +514,11 @@ ${FREEZE}`)
   col = mix(col, vec3(0.5, 0.56, 0.58) * uAmbK + uSkyC * 0.3, clamp(foam, 0.0, 1.0) * 0.8);
   // the faint pale line along the edge of closed water (on the flats: where the bed drops away steeply, off a jetty or a
   // rock, the shore itself shows where the water closes, and a line there would only trace the cells' steps)
-  float fw = fwidth(dep) * 1.5 + 0.004, slope = fwidth(dep) / max(length(fwidth(P)), 1e-4);
+  float fw = fwidth(depD) * 1.5 + 0.004, slope = fwidth(dep) / max(length(fwidth(P)), 1e-4);
   // (broken into lengths: whole, it ruled the Landing's long straight step)
   // (and not where the step lies at the shore itself, the high flats against the low: there the shore shows it, and the
   // line along it read as a dashed map border; in long lengths, not dashes)
-  float edge = (1.0 - smoothstep(fw * 0.5, fw * 1.6, abs(dep + sn * 0.4 - 0.4))) * (0.75 + 0.25 * sin(t * 1.7 + P.x * 0.7 + P.y * 0.5)) * (1.0 - smoothstep(0.35, 0.8, slope)) * smoothstep(0.35, 0.6, n1.g + (n1.r - 0.5) * 0.4);
+  float edge = (1.0 - smoothstep(fw * 0.5, fw * 1.6, abs(depD + sn * 0.4 - 0.4))) * (0.75 + 0.25 * sin(t * 1.7 + P.x * 0.7 + P.y * 0.5)) * (1.0 - smoothstep(0.35, 0.8, slope)) * smoothstep(0.35, 0.6, n1.g + (n1.r - 0.5) * 0.4);
   col = mix(col, vec3(0.5, 0.62, 0.68) * uAmbK, edge * 0.45);
   float a = mix(mix(0.32, 0.62, smoothstep(0.0, 0.42, dw)), 0.95, deep);
   // (where the bed drops away steeply, off a rock, an islet or the bay's rim, the water is closed right up to the shore:
@@ -641,8 +664,14 @@ export function shoreJit(L) {
       const ax = t[0] === t[1] ? 1 : 0, sl = fbm(vx * 0.09 + 3, vz * 0.09 - 5, seed + 79, 2) - 0.5, qk = ax ? nz : nx;
       // (those held to 0.4 m wander on the quicker read: the slow one, held, only shifted a short islet's edge, still ruled)
       const held = (f === preds[0] && !thinRun) || f === preds[1];
+      // (the coast's land against the open sea, the Strand's, an islet's, the whale's shore: it leans out over the water by
+      // 0.1-0.85 m and never back from it, so the run curves while she still stops on the land's own side of its edge;
+      // held to 0.4 m either way, a twenty-metre shore still read ruled. Not across a strait of under three cells)
+      const sg = held && f === preds[0] && L.bed ? (t[0] ? -1 : 1) : 0;
       // (the quick read leads: led by the slow one, a run of ten metres sat at its cap all along, shifted but as ruled)
-      runs.push([k0, ax, held ? sl * 1.2 + qk * 1.3 : sl * 1.3 + qk * 2.0, f === preds[3] || f === preds[4] ? 0.55 : held ? 0.4 : 0.8]);
+      // (both sides walkable, the tide's shore and thin ice against the flats or the land: up to 1.25 m, so a run of ten or
+      // twenty metres reads as a curve; 0.8 still left it ruled, only tilted)
+      runs.push([k0, ax, held ? sl * 1.2 + qk * 1.3 : sl * 1.9 + qk * 1.6, f === preds[3] || f === preds[4] ? 0.55 : held ? 0.4 : 1.25, sg]);
     }
   }
   // the tide's long straight shores (the Landing's bands, the flats against the strand) wander up to 0.8 m off the cells'
@@ -650,10 +679,10 @@ export function shoreJit(L) {
   // moving half as far with them so nothing folds: within the 0.4 m a lone corner can take, a 20 m run still read as
   // ruled. (Not where the strip is narrow, nor at the pits' and the rock's edges: there the cells' line is where she can
   // stand)
-  for (const [k0, ax, a, cap] of runs) {
+  for (const [k0, ax, a, cap, sg] of runs) {
     const st = ax ? W : 1;
     if (edgeC[k0 - st] || edgeC[k0 + st]) continue;
-    const A = cap * Math.tanh(a / cap);
+    const A = sg && !edgeC[k0 + sg * 2 * st] && !edgeC[k0 + sg * 3 * st] ? sg * (0.1 + 0.75 * (0.5 + 0.5 * Math.tanh(a * 1.6))) : cap * Math.tanh(a / cap);
     out[k0 * 2 + ax] = A; out[(k0 - st) * 2 + ax] += A * 0.5; out[(k0 + st) * 2 + ax] += A * 0.5;
   }
   return (L.jit5 = out);
@@ -743,9 +772,10 @@ export function buildSea(L, group, quality = R.quality) {
     }
     // (the smoothed bed never above the corner's own where that is wet: the water a corner holds stays drawn)
     for (let k = 0; k < bedS.length; k++) if (raw[k] < bedS[k] && raw[k] < 1.2) bedS[k] = Math.min(bedS[k], raw[k] + 0.08);
-    const hd = new Uint16Array(W * H1);
-    for (let k = 0; k < hd.length; k++) hd[k] = THREE.DataUtils.toHalfFloat(bedS[k]);
-    const t = new THREE.DataTexture(hd, W, H1, THREE.RedFormat, THREE.HalfFloatType);
+    // (and the corners' own beds beside them, unblurred: the closed step may follow the smooth bed only so far from them)
+    const hd = new Uint16Array(W * H1 * 2);
+    for (let k = 0; k < bedS.length; k++) { hd[k * 2] = THREE.DataUtils.toHalfFloat(bedS[k]); hd[k * 2 + 1] = THREE.DataUtils.toHalfFloat(raw[k]); }
+    const t = new THREE.DataTexture(hd, W, H1, THREE.RGFormat, THREE.HalfFloatType);
     t.magFilter = t.minFilter = THREE.LinearFilter; t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; t.generateMipmaps = false; t.needsUpdate = true;
     L.bedTex5 = t;
   }
@@ -756,7 +786,7 @@ export function buildSea(L, group, quality = R.quality) {
   L.open5 = Float32Array.from(open);
   const hook = () => { SEA.uMap.value.set(w, h); SEA.seaL = L; if (L.bedTex5) { SEA.tBed.value = L.bedTex5; SEA.uBedS.value.set(W, h + 1); } };
   for (let cz0 = 0; cz0 < h; cz0 += CH) for (let cx0 = 0; cx0 < w; cx0 += CH) {
-    const vid = new Map(), pos = [], bed = [], hold = [], ld = [], sh = [], fr = [], by = [], lnd = [], gd = [], dp = [], gg = [], idx = [];
+    const vid = new Map(), pos = [], bed = [], hold = [], ld = [], sh = [], fr = [], by = [], lnd = [], gd = [], dp = [], gg = [], bs = [], idx = [];
     const vert = (vx, vz) => {
       const key = vz * W + vx;
       let k = vid.get(key);
@@ -785,7 +815,7 @@ export function buildSea(L, group, quality = R.quality) {
         if (L.hgt[key] < -0.2) drop = 1;
         else if (!fl && [[-1, 0], [1, 0], [0, -1], [0, 1]].some(([dx, dz]) => { const x = vx + dx, z = vz + dz; return x >= 0 && z >= 0 && x <= w && z <= h && L.hgt[z * W + x] < -0.2; })) drop = 1;
       }
-      dp.push(drop); gg.push(vx, vz);
+      dp.push(drop); gg.push(vx, vz); bs.push(bedS ? bedS[key] : 9);
       return k;
     };
     const quads = [];
@@ -820,6 +850,7 @@ export function buildSea(L, group, quality = R.quality) {
     geo.setAttribute('aGd', new THREE.Float32BufferAttribute(gd, 1));
     geo.setAttribute('aDrop', new THREE.Float32BufferAttribute(dp, 1));
     geo.setAttribute('aG', new THREE.Float32BufferAttribute(gg, 2));
+    geo.setAttribute('aBedS', new THREE.Float32BufferAttribute(bs, 1));
     geo.setIndex(idx);
     geo.computeBoundingBox(); geo.boundingBox.min.y = -0.2; geo.boundingBox.max.y = 0.6; geo.computeBoundingSphere();
     const m = new THREE.Mesh(geo, mat);
@@ -892,6 +923,7 @@ export function seaBeyond(L, group, o = {}) {
     geo.setAttribute('aBed', new THREE.Float32BufferAttribute(bed, 1));
     for (const a of ['aHold', 'aLead', 'aShore', 'aFrz', 'aBay', 'aLand', 'aGd', 'aDrop']) geo.setAttribute(a, new THREE.Float32BufferAttribute(z0s, 1));
     geo.setAttribute('aG', new THREE.Float32BufferAttribute(new Float32Array(z0s.length * 2), 2));
+    geo.setAttribute('aBedS', new THREE.Float32BufferAttribute(new Float32Array(z0s.length).fill(-4), 1));
     geo.computeVertexNormals(); geo.computeBoundingSphere();
     return geo;
   };
@@ -948,7 +980,8 @@ varying float vIAurK;`)
     vec3 Vv = cameraPosition - vIP; float dv = length(Vv); Vv /= dv;
     float ry = max(Vv.y, 0.04);
     vec2 sp = vIP.xz - Vv.xz * ((70.0 - vIP.y) / ry);
-    if (uAur * max(1.0 - uAurDark, uAurFront) > 0.02) vIAur = aurora(sp, 0.65 + 0.3 * (1.0 - smoothstep(0.1, 0.45, ry)), 2.5 + dv * 0.06 / max(ry, 0.15)) * smoothstep(0.04, 0.3, Vv.y);
+    float shm = 70.0 / max(cameraPosition.y - vIP.y, 1.0) * (1.0 - smoothstep(0.5, 0.85, ry));
+    if (uAur * max(1.0 - uAurDark, uAurFront) > 0.02) vIAur = aurora(sp, min(1.0, 0.65 + 0.3 * (1.0 - smoothstep(0.15, 0.6, ry)) + smoothstep(18.0, 45.0, dv) * 0.3), 2.5 + dv * 0.06 / max(ry, 0.15) + shm * 1.6) * smoothstep(0.04, 0.3, Vv.y);
     if (uAurDark > 0.02) vIAurK = auroraDark(sp);
   }
 #else

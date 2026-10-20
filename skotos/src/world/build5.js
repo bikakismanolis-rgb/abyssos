@@ -49,6 +49,9 @@ function mats5() {
   MAT.cliff5 = cl ? worldMat(cl, { scale: 3.0, vc: 0.144, tri: true, rough: 0.9, snow: true, soft: true, cap: true, tint: cl === 'rime/seaCliff' ? 0xb4b8be : 0xa0a4a8 }) : M.lam;
   // (icyB: the code-built ice, bergs, slabs, icicles, the fall, which carry their hollows' shade as vertex colour)
   MAT.icy5 = icyMat(); MAT.icyB = icyMat(false, true); MAT.icyFall = icyMat(true, true);
+  // (driftwood and cut timber: the silvered grain along each piece and the rings on its sawn ends, textures.js driftwood,
+  // tinted by its vertex colour; smooth round its section. Plain vertex colour, the logs read as PVC pipes)
+  MAT.drift5 ||= occlude(new THREE.MeshLambertMaterial({ map: tex('driftwood'), vertexColors: true }));
   return M;
 }
 // The ice that bergs, ridges, icicles and the frozen fall are made of (the design's image 13): one world-projected material
@@ -103,10 +106,10 @@ vec3 icyEm = vec3(0.0);`)
   ylk += (ystk - 0.5) * 0.22 * ysh;
   // old ice is white and opaque at its core: pale blue-white faces, blue-green only in the hollows, the cracks and
   // underneath; laid in strata that run level across it; snow on whatever faces the sky
-  float yao = clamp(0.4 + 0.45 * (yN.y * 0.5 + 0.5) + (yf.g - 0.5) * 0.16 + (yn.r - 0.5) * 0.24 - (1.0 - yAO) * 0.95, 0.0, 1.0);
+  float yao = clamp(0.42 + 0.45 * (yN.y * 0.5 + 0.5) + (yf.g - 0.5) * 0.16 + (yn.r - 0.5) * 0.24 - (1.0 - yAO) * 0.75, 0.0, 1.0);
   // (the sheer faces a deeper blue than the tops: lit alike, a pile of slabs read as sugar cubes)
   // (old ice is blue-white, not teal: a cyan prism read as glass; its sheer faces a grey blue)
-  vec3 ycol = mix(vec3(0.05, 0.1, 0.15), vec3(0.34, 0.41, 0.48), smoothstep(0.3, 0.95, yao)) * (0.72 + 0.4 * ylk);
+  vec3 ycol = mix(vec3(0.055, 0.1, 0.135), vec3(0.36, 0.415, 0.47), smoothstep(0.3, 0.95, yao)) * (0.72 + 0.4 * ylk);
   // (laid in strata of uneven thickness that run level across its faces, the seams between them dark; the band at the
   // waterline dark and grey where the sea has cut it)
   // (their spacing wandering with a slow read and bent across the face, the seams faint and only here and there: evenly
@@ -119,14 +122,15 @@ vec3 icyEm = vec3(0.0);`)
 #else
   // (the frozen fall: no strata, its flutes white-blue on their crowns, a deep blue in the folds between them)
   // (its crowns held under the snow's white: lit by her lantern they clipped to white)
-  ycol = mix(vec3(0.06, 0.16, 0.24), vec3(0.44, 0.54, 0.62), smoothstep(0.25, 0.9, yao + (yn.g - 0.5) * 0.3)) * (0.85 + 0.2 * ylk);
+  ycol = mix(vec3(0.035, 0.11, 0.18), vec3(0.36, 0.46, 0.54), smoothstep(0.3, 0.95, yao + (yn.g - 0.5) * 0.3)) * (0.85 + 0.2 * ylk);
 #endif
   // (cracks run up and down its sheer faces, deep blue in them)
   // (few: a noise's isoline everywhere drew worms)
   float ycr = (1.0 - smoothstep(0.0, 0.03, abs(ystk - 0.5))) * smoothstep(0.62, 0.8, yn.a);
   ycol = mix(ycol, vec3(0.04, 0.13, 0.18), ycr * 0.4 * (1.0 - smoothstep(0.55, 0.85, abs(yN.y))));
   // (a dusting, broken: a block snowed white all over its top read as a sugar cube)
-  float ysn = smoothstep(0.62, 0.9, yN.y + (yn.a - 0.5) * 0.5) * (0.45 + 0.4 * smoothstep(0.35, 0.65, yn.g));
+  // (only on what truly faces the sky: on a berg's fluted walls a lower ramp laid white blotches all over the ice)
+  float ysn = smoothstep(0.7, 0.92, yN.y + (yn.a - 0.5) * 0.3) * (0.45 + 0.4 * smoothstep(0.35, 0.65, yn.g));
   // (none on what rides at the water: a floe snowed over read as a white paper cut-out on the black water)
   ysn *= smoothstep(0.0, 0.3, vYW.y);
 #ifdef ICY_GLOW
@@ -136,7 +140,11 @@ vec3 icyEm = vec3(0.0);`)
   ycol = mix(ycol, vec3(0.6, 0.64, 0.7) * (0.84 + 0.14 * yn.g + 0.1 * yn.b) * mix(vec3(0.84, 0.9, 1.0), vec3(1.0), smoothstep(0.3, 0.7, yn.a)), ysn);
   diffuseColor.rgb *= ycol;
   float yF = pow(1.0 - clamp(dot(yN, yV), 0.0, 1.0), 3.0);
+#ifdef ICY_GLOW
+  icyEm = (uSkyC * (0.12 + yF * 0.55) + vec3(0.004, 0.016, 0.024) * (1.0 - yao)) * (1.0 - ysn);
+#else
   icyEm = (uSkyC * (0.25 + yF * 1.2) + vec3(0.006, 0.024, 0.032) * (1.0 - yao)) * (1.0 - ysn);
+#endif
 #ifdef ICY_GLOW
   // (a little cold light held inside, no more: brighter, the fall read as lit cellophane)
   icyEm += vec3(0.008, 0.026, 0.04) * (0.55 + 0.45 * yn.b) * (0.6 + 0.4 * yao) * (1.0 - ysn) * (0.7 + 0.3 * ystr);
@@ -181,22 +189,32 @@ function instDef(k, name, M, quality) {
 // water, glossier there. (As packed, the Dalaro read as a bone-white crumpled tarp far brighter than the flats round it,
 // and the rowboat as white plastic.) Cached per material
 const WETW = new Map();
+// (and the rime planks' grain laid over it in world space, a metre a tile, along the faces: close up the scan's own texture
+// was a low-resolution camouflage mush)
 function wetWood(mat) {
   if (WETW.has(mat)) return WETW.get(mat);
-  const m = mat.clone();
+  const m = mat.clone(), pl = ENV.layers['rime/planks'], u = { tPl: { value: pl?.d || null } };
   occlude(m, (sh) => {
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying float vWwY;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\n  vec4 wwp = vec4(transformed, 1.0);\n#ifdef USE_INSTANCING\n  wwp = instanceMatrix * wwp;\n#endif\n  vWwY = (modelMatrix * wwp).y;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vWwY;')
+    Object.assign(sh.uniforms, u);
+    if (pl) sh.defines = Object.assign(sh.defines || {}, { WW_PL: '' });
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying float vWwY; varying vec3 vWwP; varying vec3 vWwN;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n  vec4 wwp = vec4(transformed, 1.0); vec3 wwn = objectNormal;\n#ifdef USE_INSTANCING\n  wwp = instanceMatrix * wwp; wwn = mat3(instanceMatrix) * wwn;\n#endif\n  vWwY = (modelMatrix * wwp).y; vWwP = (modelMatrix * wwp).xyz; vWwN = normalize(mat3(modelMatrix) * wwn);');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler2D tPl; varying float vWwY; varying vec3 vWwP; varying vec3 vWwN;')
       .replace('#include <map_fragment>', `#include <map_fragment>
   {
     float l = dot(diffuseColor.rgb, vec3(0.3, 0.55, 0.15)), wet = 1.0 - smoothstep(0.5, 1.4, vWwY);
     diffuseColor.rgb = mix(vec3(l), diffuseColor.rgb, 0.5) * vec3(0.5, 0.45, 0.4);
+#ifdef WW_PL
+    vec3 an = abs(normalize(vWwN));
+    vec2 pq = an.y > max(an.x, an.z) ? vWwP.xz : an.x > an.z ? vec2(vWwP.z, vWwP.y * 3.0) : vec2(vWwP.x, vWwP.y * 3.0);
+    float pd = dot(texture2D(tPl, pq * 0.55).rgb, vec3(0.3, 0.55, 0.15));
+    diffuseColor.rgb *= mix(1.0, clamp(pd * 3.2, 0.55, 1.35), 0.55);
+#endif
     diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.42, 0.5, 0.4), wet * 0.85);
   }`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n  roughnessFactor = mix(roughnessFactor, 0.35, 1.0 - smoothstep(0.5, 1.4, vWwY));');
   });
-  m.customProgramCacheKey = () => 'wetwood|' + mat.uuid;
+  m.customProgramCacheKey = () => 'wetwood|' + mat.uuid + (pl ? '|p' : '');
   WETW.set(mat, m);
   return m;
 }
@@ -253,6 +271,25 @@ function plateGeo(seed) {
   geo.computeVertexNormals();
   return geo;
 }
+// a timber along local +x from the origin: l long, r0 to r1, its section six-sided and knocked about (flattened a little,
+// each side its own), the grain's uv along it a metre a tile and its two cut ends on the rings (drift5's texture); o.split:
+// one end splintered to a ragged point instead
+function timber(l, r0, r1, seed, o = {}) {
+  const rr = RNG(seed), g = new THREE.CylinderGeometry(r1, r0, l, 6, 2, false), P = g.attributes.position, N = g.attributes.normal, uv = g.attributes.uv;
+  const ph = rr.range(0, 6.28), J = new Map();
+  for (let i = 0; i < P.count; i++) {
+    const x = P.getX(i), y = P.getY(i), z = P.getZ(i), key = x.toFixed(3) + ',' + y.toFixed(3) + ',' + z.toFixed(3);
+    // (each position's knock drawn once, so a ring and its cap move together and no seam opens)
+    if (!J.has(key)) { const a = Math.atan2(z, x), tip = o.split && y > l / 2 - 1e-3; J.set(key, [0.86 + 0.14 * Math.sin(a * 2 + ph) + rr.range(-0.07, 0.07), rr.range(-0.02, 0.02) + (tip ? rr.range(0, 0.12) : 0), tip ? 0.35 + rr.range(0, 0.3) : 1]); }
+    const [k, dy, tipK] = J.get(key);
+    P.setXYZ(i, x * k * tipK, y + dy, z * k * 0.82 * tipK);
+    if (Math.abs(N.getY(i)) > 0.9) uv.setXY(i, 0.75 + uv.getX(i) * 0.25, 0.75 + uv.getY(i) * 0.25);
+    else uv.setXY(i, (uv.getX(i) * 0.75) * 0.999, uv.getY(i) * l + ph);
+  }
+  g.computeVertexNormals();
+  g.translate(0, l / 2, 0); g.rotateZ(-Math.PI / 2);
+  return g;
+}
 // code models shared by the instancer (each baked once)
 const CODE5_CACHE = {};
 const CODE5 = new Proxy({
@@ -276,10 +313,11 @@ const CODE5 = new Proxy({
     return { geo: bake(parts), shadow: false };
   },
   // firewood stacked against a wall: three courses of split logs, snow on the top
+  // (split and sawn: the grain along each, their ends dark rings, not cream pipe ends)
   firewood: () => {
     const rr = RNG(641), parts = [];
-    for (let j = 0; j < 3; j++) for (let k = 0; k < 6 - j * 2; k++) parts.push({ geo: G.cyl(0.085, 0.095, 0.95, 6), color: (k + j) % 2 ? 0x5a4636 : 0x46382c, o: { x: -0.5 + j * 0.17 + k * 0.2, y: 0.09 + j * 0.16, z: rr.range(-0.05, 0.05), rx: Math.PI / 2 }, jit: 0.15, snow: j === 2 ? 0.7 : 0 });
-    return { mat: 'lam', geo: bake(parts) };
+    for (let j = 0; j < 3; j++) for (let k = 0; k < 6 - j * 2; k++) parts.push({ geo: timber(0.95, 0.092, 0.088, 641 + j * 7 + k), color: (k + j) % 2 ? 0x8a7a68 : 0x7a6c5c, o: { x: -0.5 + j * 0.17 + k * 0.2, y: 0.09 + j * 0.16, z: -0.475 + rr.range(-0.05, 0.05), ry: -Math.PI / 2 }, snow: j === 2 ? 0.7 : 0 });
+    return { mat: 'drift5', geo: bake(parts, true) };
   },
   // a sledge: two runners turned up at the front, crossbars and slats, a load lashed under a hide
   sledge: () => {
@@ -293,24 +331,28 @@ const CODE5 = new Proxy({
   // a tent: a cone of hides on a ring of poles crossed at the top (the herders' lavvu), its door to local +z, smoke-dark
   // round the hole at its peak, snow banked round its foot. (A ridge tent's two flat sides read as boards from above)
   tent: () => {
-    const HIDE = [0x5a4a3a, 0x6c5642, 0x4a3c30, 0x76604a, 0x544438, 0x664e3a, 0x5e4c3c, 0x705a46, 0x4e4034], parts = [], n = 9, r = 1.55, hh = 2.5;
+    const HIDE = [0x5a4a3a, 0x6c5642, 0x4a3c30, 0x76604a, 0x544438, 0x664e3a, 0x5e4c3c, 0x705a46, 0x4e4034], parts = [], n = 9, r = 1.55, hh = 2.5, rr = RNG(667);
+    // (each panel its own hide, sagging between the poles and bellied a little low down, its seams dark along the poles, the
+    // smoke's soot darkening it toward the peak, its foot wet and dark: a smooth cone of one tan read as a paper party hat)
+    const pos = [], col = [], c = new THREE.Color(), soot = new THREE.Color(0x1c1814), seamC = new THREE.Color(0x2a2018);
+    const NS = 4, NH = 5, P = (f, t, t0) => { const a = t0 + f * ((Math.PI * 2) / n), rad = r * (1 - t) * (1 - 0.14 * Math.sin(f * Math.PI) * (0.35 + 0.65 * Math.sin(t * Math.PI * 0.9 + 0.2))); return [Math.sin(a) * rad, t * hh, Math.cos(a) * rad]; };
     for (let i = 0; i < n; i++) {
-      // (each panel its own hide, its sides sagging a little between the poles; the one at +z the door, dark)
-      const t0 = Math.PI / 2 - Math.PI / n + (i * Math.PI * 2) / n, door = i === 0;
-      const g = new THREE.ConeGeometry(r, hh, 3, 3, true, t0, (Math.PI * 2) / n), pp = g.attributes.position;
-      for (let v = 0; v < pp.count; v++) {
-        let f = (Math.atan2(pp.getX(v), pp.getZ(v)) - t0) / ((Math.PI * 2) / n); f -= Math.floor(f + 1e-4);
-        const k = 1 - 0.07 * Math.sin(Math.min(1, f) * Math.PI) * (0.5 - pp.getY(v) / hh);
-        pp.setX(v, pp.getX(v) * k); pp.setZ(v, pp.getZ(v) * k);
+      const t0 = Math.PI / 2 - Math.PI / n + (i * Math.PI * 2) / n, door = i === 0, base = new THREE.Color(door ? 0x2a2018 : HIDE[i]);
+      const cv = (f, t) => { c.copy(base).multiplyScalar(0.88 + 0.2 * Math.sin(f * 9.4 + i * 1.7) * Math.sin(t * 7 + i)); c.lerp(soot, smoothT(0.55, 0.95, t) * 0.7); c.lerp(seamC, Math.max(0, 1 - Math.min(f, 1 - f) * 9) * 0.6); if (t < 0.08) c.multiplyScalar(0.7); return c.clone(); };
+      for (let a = 0; a < NS; a++) for (let b = 0; b < NH; b++) {
+        const f0 = a / NS, f1 = (a + 1) / NS, ta = (b / NH) * 0.93, tb = ((b + 1) / NH) * 0.93;
+        const q = [[f0, ta], [f1, ta], [f1, tb], [f0, tb]].map(([f, t]) => ({ p: P(f, t, t0), c: cv(f, t) }));
+        for (const [u, v, w] of [[0, 1, 2], [0, 2, 3]]) { const A = q[u].p, B2 = q[v].p, C2 = q[w].p, nx = (B2[1] - A[1]) * (C2[2] - A[2]) - (B2[2] - A[2]) * (C2[1] - A[1]), nz = (B2[0] - A[0]) * (C2[1] - A[1]) - (B2[1] - A[1]) * (C2[0] - A[0]); const flip = nx * (A[0] + B2[0] + C2[0]) + nz * (A[2] + B2[2] + C2[2]) < 0; for (const k of flip ? [u, w, v] : [u, v, w]) { pos.push(...q[k].p); col.push(q[k].c.r, q[k].c.g, q[k].c.b); } }
       }
-      g.computeVertexNormals();
-      parts.push({ geo: g, color: door ? 0x2a2018 : HIDE[i], o: { y: hh / 2 }, snow: 0.35, jit: 0.08 });
     }
-    // the poles, through the peak and out above it
-    for (let i = 0; i < 7; i++) { const a = (i / 7) * Math.PI * 2 + 0.2, x = Math.sin(a) * r * 0.98, z = Math.cos(a) * r * 0.98; parts.push({ geo: G.segTo(-x * 1.28, hh * 1.28, -z * 1.28, 0.035, 0.025, 4), color: WOODD, o: { x, z } }); }
-    parts.push({ geo: G.cyl(0.2, 0.3, 0.3, 7), color: 0x1a1612, o: { y: hh - 0.17 } });
-    parts.push({ geo: jitter(G.torus(r + 0.05, 0.16, 4, 12), 0.05, 669), color: 0xc4ccd6, o: { y: 0.02, rx: Math.PI / 2, sy: 0.5 }, jit: 0.06 });
-    return { mat: 'lam', geo: bake(parts) };
+    const hide = new THREE.BufferGeometry(); hide.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); hide.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); hide.computeVertexNormals();
+    // the poles, through the peak and out above it, crossed there
+    for (let i = 0; i < 7; i++) { const a = (i / 7) * Math.PI * 2 + 0.2, x = Math.sin(a) * r * 0.98, z = Math.cos(a) * r * 0.98; parts.push({ geo: G.segTo(-x * 1.3, hh * 1.3, -z * 1.3, 0.035, 0.025, 4), color: WOODD, o: { x, z } }); }
+    parts.push({ geo: G.cyl(0.2, 0.3, 0.3, 7), color: 0x14100c, o: { y: hh - 0.17 } });
+    // snow banked on the windward skirt (local -x, -z), stones on the hem
+    parts.push({ geo: jitter(G.torus(r + 0.05, 0.18, 4, 12, Math.PI * 1.1), 0.05, 669), color: 0xc4ccd6, o: { y: 0.03, rx: Math.PI / 2, rz: 2.4, sy: 0.55 }, jit: 0.06 });
+    for (let k = 0; k < 8; k++) { const a = (k / 8) * Math.PI * 2 + rr.range(-0.2, 0.2); parts.push({ geo: jitter(G.dodeca(rr.range(0.1, 0.16)), 0.03, 680 + k), color: 0x4e4c4a, o: { x: Math.sin(a) * (r + 0.08), y: 0.04, z: Math.cos(a) * (r + 0.08), sy: 0.7 }, snow: 1.2 }); }
+    return { mat: 'lam', geo: withParts(hide, parts) };
   },
   // a fur thrown down on the ice
   fur: () => ({ mat: 'lam', geo: bake([{ geo: jitter(G.cyl(0.75, 0.8, 0.05, 9), 0.08, 647), color: 0x3a2c22, o: { y: 0.02, sx: 1.2 } }, { geo: jitter(G.cyl(0.45, 0.5, 0.05, 7), 0.06, 648), color: 0x4e3c2e, o: { y: 0.05, x: 0.3, sx: 1.3 } }]), shadow: false }),
@@ -348,40 +390,40 @@ const CODE5 = new Proxy({
   slab3: () => ({ geo: plateGeo(633), shadow: true }),
   // a clump of dry grass through the snow: thin blades standing up, leaning downwind (local +x), pale straw darkening to
   // the seed heads. (Dry stalks laid flat on the snow read as claw marks, tally marks scratched on it)
+  // (grey straw, winter-bleached, low: bright gold and knee-high they popped off the night snow like loot or a HUD glyph)
   grass: () => {
     const rr = RNG(681), parts = [];
     for (let i = 0; i < 9; i++) {
-      const a = rr.range(0, 6.28), d = rr.range(0, 0.13), h = rr.range(0.26, 0.52), lean = rr.range(0.12, 0.42), x = Math.cos(a) * d, z = Math.sin(a) * d, h1 = h * 0.64, h2 = h - h1, zz = rr.range(-0.05, 0.05);
-      parts.push({ geo: G.segTo(lean * h1 * 0.55, h1, zz, 0.022, 0.014, 3), color: rr.chance(0.5) ? 0xb8a070 : 0xa38c5e, o: { x, y: -0.03, z } });
-      parts.push({ geo: G.segTo(lean * h2 * 1.4, h2 * 0.8, zz * 0.6, 0.014, 0.004, 3), color: rr.chance(0.6) ? 0x5e4c34 : 0x7a6444, o: { x: x + lean * h1 * 0.55, y: h1 - 0.035, z: z + zz } });
+      const a = rr.range(0, 6.28), d = rr.range(0, 0.13), h = rr.range(0.15, 0.36), lean = rr.range(0.12, 0.42), x = Math.cos(a) * d, z = Math.sin(a) * d, h1 = h * 0.64, h2 = h - h1, zz = rr.range(-0.05, 0.05);
+      parts.push({ geo: G.segTo(lean * h1 * 0.55, h1, zz, 0.02, 0.013, 3), color: rr.chance(0.5) ? 0x8c8270 : 0x7a7262, o: { x, y: -0.03, z } });
+      parts.push({ geo: G.segTo(lean * h2 * 1.4, h2 * 0.8, zz * 0.6, 0.013, 0.004, 3), color: rr.chance(0.6) ? 0x6e6656 : 0x5a5446, o: { x: x + lean * h1 * 0.55, y: h1 - 0.035, z: z + zz } });
     }
     return { mat: 'lam', geo: bake(parts), shadow: false };
   },
-  // a log of driftwood lying along local x: a trunk bent at two knots, grey and silvered, a root flare with its stubs at
-  // one end, the other broken, a branch stub, snow lying along its top. (The pine driftwood scan, a gnarled root on its
-  // side, read as a flayed carcass on the snow, and stood up out of the water like a ghost)
+  // a log of driftwood lying along local x: a trunk bent at two knots, silvered grey, its grain along it and its sawn or
+  // broken ends showing, a root flare with its stubs at one end, a branch stub, snow lying along its top. (Round,
+  // smooth and plain-coloured, it read as PVC pipe; the pine driftwood scan, a gnarled root on its side, as a flayed
+  // carcass)
   log: () => {
     const rr = RNG(691), parts = [];
     let x = -1.1, z = 0, a = 0;
     for (let j = 0; j < 3; j++) {
       const l = 0.82 - j * 0.04; a += rr.range(-0.14, 0.14);
-      const dx = Math.cos(a) * l, dz = Math.sin(a) * l;
       // (the snow a thin line along its crown only: snowed over its whole top, from above it read as a white bone)
-      parts.push({ geo: G.segTo(dx, rr.range(-0.015, 0.015), dz, 0.15 - j * 0.022, 0.13 - j * 0.022, 7), color: j % 2 ? 0x625a4e : 0x5a5348, o: { x, y: 0.12, z }, jit: 0.16, snow: 0.22 });
-      x += dx; z += dz;
+      parts.push({ geo: timber(l + 0.04, 0.15 - j * 0.022, 0.13 - j * 0.022, 691 + j, { split: j === 2 }), color: j % 2 ? 0x8a867e : 0x7e7a72, o: { x, y: 0.12, z, ry: -a }, snow: 0.22 });
+      x += Math.cos(a) * l; z += Math.sin(a) * l;
     }
-    parts.push({ geo: G.cyl(0.2, 0.17, 0.22, 7), color: 0x4e463c, o: { x: -1.16, y: 0.13, rz: Math.PI / 2 }, jit: 0.2 });
-    parts.push({ geo: G.segTo(0.14, 0.2, 0.24, 0.045, 0.018, 4), color: 0x5a5246, o: { x: 0.1, y: 0.19, z: 0.04 } });
-    parts.push({ geo: G.cone(0.1, 0.16, 6), color: 0x8a8070, o: { x: x + 0.05, y: 0.12, z, rz: -Math.PI / 2 }, jit: 0.3 });
-    return { mat: 'lam', geo: bake(parts) };
+    parts.push({ geo: timber(0.24, 0.2, 0.17, 697), color: 0x6e6a62, o: { x: -1.22, y: 0.13 } });
+    parts.push({ geo: G.segTo(0.14, 0.2, 0.24, 0.045, 0.018, 4), color: 0x6a665e, o: { x: 0.1, y: 0.19, z: 0.04 } });
+    return { mat: 'drift5', geo: bake(parts, true) };
   },
   // the same, waterlogged on the flats: dark and wet, no snow, half under the sand
   logWet: () => {
     const rr = RNG(693), parts = [];
     let x = -1.0, z = 0, a = 0;
-    for (let j = 0; j < 3; j++) { const l = 0.78; a += rr.range(-0.14, 0.14); const dx = Math.cos(a) * l, dz = Math.sin(a) * l; parts.push({ geo: G.segTo(dx, 0, dz, 0.14 - j * 0.02, 0.12 - j * 0.02, 7), color: j % 2 ? 0x3e3a34 : 0x46403a, o: { x, y: 0.1, z }, jit: 0.1 }); x += dx; z += dz; }
-    parts.push({ geo: G.cone(0.22, 0.3, 7), color: 0x342e28, o: { x: -1.1, y: 0.11, rz: Math.PI / 2 }, jit: 0.2 });
-    return { mat: 'lam', geo: bake(parts), shadow: false };
+    for (let j = 0; j < 3; j++) { const l = 0.78; a += rr.range(-0.14, 0.14); parts.push({ geo: timber(l + 0.04, 0.14 - j * 0.02, 0.12 - j * 0.02, 693 + j, { split: j === 2 }), color: j % 2 ? 0x4a463e : 0x524c44, o: { x, y: 0.1, z, ry: -a } }); x += Math.cos(a) * l; z += Math.sin(a) * l; }
+    parts.push({ geo: timber(0.3, 0.22, 0.18, 699), color: 0x3e3a34, o: { x: -1.12, y: 0.11 } });
+    return { mat: 'drift5', geo: bake(parts, true), shadow: false };
   },
   // a stockfish card (two dried fish hung tail to tail)
   fish: () => ({ mat: 'lam', geo: bake([{ geo: G.box(0.1, 0.5, 0.02), color: FISH, o: { y: -0.25 }, jit: 0.2 }, { geo: G.box(0.06, 0.1, 0.022), color: 0x6a6458, o: { y: -0.52 } }]), shadow: false })
@@ -491,7 +533,23 @@ const PLACE = {
   stiltHut(p, I, B) { stiltHut(p, B, I); },
   rack(p, I, B) { rackCode(p, I, B); },
   jetty(p, I, B) { jettyCode(p, B); },
-  whale(p, I, B) { if (!fitInst(I, 'rime:whale', p, 15, 'l')) whaleCode(p, B); },
+  // (drawn back along its spine, and a little shorter if need be, so its skull ends 1.8 m short of a Name-stone at its head:
+  // laid where the layout centres it, Thaleia's stone stood inside its skull. The stone never moves)
+  whale(p, I, B, out, L) {
+    const parts = rime('whale'), zs = zSpan(parts);
+    if (!zs) { whaleCode(p, B); return; }
+    let len = 15, sh = 0;
+    const fx = Math.sin(p.r), fz = Math.cos(p.r), k0 = len / Math.max(zs[1] - zs[0], 0.01);
+    for (const st of L.spots?.stones || []) {
+      const dx = st.x - p.x, dz = st.z - p.z, along = dx * fx + dz * fz, lat = Math.abs(dx * fz - dz * fx);
+      if (lat > 3.6 || along < 0) continue;
+      const need = along - 1.8, head = zs[1] * k0;
+      if (head <= need) continue;
+      sh = Math.max(-2.2, need - head);
+      if (head + sh > need) len *= clamp((need - sh) / head, 0.75, 1);
+    }
+    fitInst(I, 'rime:whale', { ...p, x: p.x + fx * sh, z: p.z + fz * sh }, len, 'l');
+  },
   frozenFall(p, I, B, out, L) { fallCode(p, I, B, L, out); },
   // icicles on the cliff by the fall: hung where the rock face stands at their height (out from the prop along local +z)
   icicle(p, I, B, out, L) {
@@ -505,18 +563,31 @@ const PLACE = {
   },
   anchor(p, I, B) { if (!fitInst(I, 'rime:anchor', p, 2.2, 'l', -0.3)) anchorCode(p, B, true); },
   sunkenAnchor(p, I, B) { if (!fitInst(I, 'rime:sunkenAnchor', { ...p, tilt: (p.tilt || 0.4) + 0.25 }, 2.2, 'l', -0.62)) anchorCode(p, B, false); },
-  kelp(p, I) { if (!fitInst(I, 'rime:kelp', p, 1.6 * p.s, 'w', -0.05)) I.add('c5:kelp', p.x, p.z, p.r, p.s, 0.0); },
+  // (laid flat, a mat of wet strands spread on the sand: at its scan's own height the heap read as a tumbleweed)
+  kelp(p, I) {
+    const sz = size4(rime('kelp'));
+    if (!sz) { I.add('c5:kelp', p.x, p.z, p.r, p.s, 0.0); return; }
+    const k = (1.6 * p.s) / Math.max(0.01, sz.x, sz.z);
+    I.add('rime:kelp', p.x, p.z, p.r, k * 1.3, -0.04 - sz.y0 * k * 0.28, k * 0.28, k * 1.3);
+  },
   // (the wrack line's driftwood: a waterlogged log lying flat, half under the sand; it never stands up out of the water)
   driftwood(p, I) { I.add('c5:logWet', p.x, p.z, p.r, 0.7 + p.s * 0.45, -0.07, 0.85, 0.85 + p.s * 0.2); },
   barnacleRock(p, I) { if (!fitInst(I, 'rime:barnacleRock', p, 1.2 * p.s, 'w', -0.1)) rock5(I, 'cliff5', p, 1.2 * p.s, 0.55, -0.12, ROCKS, '~ns'); },
-  rockFace(p, I) {
+  rockFace(p, I, B, out, L) {
     // (the rime faces are geometry only, packed untextured: drawn in the sea-cliff stone. Each is a one-sided scan facing
     // its local +z: only where that faces the camera, south-ish; seen from behind it would show a scatter of slivers)
+    // (and only where the cliff behind it stands as high as the scan: by a low rib at the Landing or the den a 5 m face
+    // stood on the open floor, its broad top and open back one pale flat plane. There, a stack of the base set's rocks
+    // no taller than the rock behind)
+    const y = p.y ?? -0.3, fx = Math.sin(p.r || 0), fz = Math.cos(p.r || 0);
+    let hb = 99; for (const d of [0.9, 1.8, 2.8]) hb = Math.min(hb, groundY(L, p.x - fx * d, p.z - fz * d));
+    const tall = (name, want) => { const sz = size4(rime(name)); return !!sz && hb >= y + sz.y * (want / Math.max(0.01, sz.x, sz.z)) * 0.85; };
     const front = Math.cos(p.r || 0) > 0.35;
-    if (front && (fitInst(I, 'cliff5:rime/rockFace', p, 5 * p.s, 'w', p.y ?? -0.3) || fitInst(I, 'cliff5:rime/coastCliff', p, 6 * p.s, 'w', p.y ?? -0.3))) return;
-    const name = front && ENV.props.faceA ? (hash2(p.x, p.z) > 0.5 ? 'faceA' : 'cliffB') : null;
-    if (name) { const f = fit(name, 4.4 * p.s, 'w'); I.add('cliff5:' + name, p.x, p.z, p.r, f.k, (p.y ?? -0.3) - f.y0, f.k * 1.25, f.k); }
-    else rock5(I, 'cliff5', p, 3.4 * p.s, 1.4, p.y ?? -0.3);
+    if (front && ((tall('rockFace', 5 * p.s) && fitInst(I, 'cliff5:rime/rockFace', p, 5 * p.s, 'w', y)) || (tall('coastCliff', 6 * p.s) && fitInst(I, 'cliff5:rime/coastCliff', p, 6 * p.s, 'w', y)))) return;
+    const name = front && hb > y + 4.4 * p.s * 1.1 && ENV.props.faceA ? (hash2(p.x, p.z) > 0.5 ? 'faceA' : 'cliffB') : null;
+    if (name) { const f = fit(name, 4.4 * p.s, 'w'); I.add('cliff5:' + name, p.x, p.z, p.r, f.k, y - f.y0, f.k * 1.25, f.k); return; }
+    const want = 2.4 * p.s, hh = clamp(hb - y + 0.5, 0.9, want * 1.4);
+    rock5(I, 'cliff5', p, want, hh / want, y);
   },
   // a sea stack: three or four rocks of the base set stacked and narrowing, each its own shape (one boulder stretched
   // tall streaked its stone)
@@ -532,7 +603,8 @@ const PLACE = {
       y += f.sz.y * ky * 0.62;
     }
   },
-  shoreRock(p, I) { rock5(I, 'cliff5', p, 1.6 * p.s, 0.75, -0.08, ROCKS, p.s < 1 ? '~ns' : ''); },
+  // (the small ones the base set's stones, the big ones its rocks: four rock scans at one size read as one rock repeated)
+  shoreRock(p, I) { rock5(I, 'cliff5', p, 1.6 * p.s, p.s < 0.5 ? 0.6 : 0.75, -0.08 - (p.s < 0.5 ? 0.04 : 0), p.s < 0.5 ? STONES : ROCKS, p.s < 1 ? '~ns' : ''); },
   boulder(p, I) { rock5(I, 'cliff5', p, 2.3 * p.s, 0.75, -0.1); },
   skerryRock(p, I) { rock5(I, 'cliff5', p, 2.4 * p.s, 1.2, -0.2, ['boulder', 'rockA', 'rockB']); },
   // the wrecked hull in Skerry Bay: its ribs standing in an arc on one flank of the bowl, the keel along their feet
@@ -612,15 +684,16 @@ const PLACE = {
   stone(p, I) { rock5(I, 'cliff5', p, 0.6 * p.s, 0.6, -0.08 - 0.06 * p.s, STONES, p.s < 0.9 ? '~ns' : ''); },
   // dry grass through the snow: a few clumps together, standing up and leaning on the wind (out of the north-east, as the
   // drifts lie)
+  // (a few clumps huddled together, some half under the snow)
   tuft(p, I) {
-    const n = 2 + Math.floor(hash2(p.x * 3.1, p.z * 1.7) * 4);
+    const n = 1 + Math.floor(hash2(p.x * 3.1, p.z * 1.7) * 3);
     for (let k = 0; k < n; k++) {
-      const a = p.r + k * 2.4, d = k ? 0.18 + hash2(p.x + k, p.z - k) * 0.42 : 0, s = (0.7 + hash2(p.z + k, p.x) * 0.6) * (0.75 + p.s * 0.4);
-      I.add('c5:grass~ns', p.x + Math.cos(a) * d, p.z + Math.sin(a) * d, 2.75 + (hash2(p.x - k, p.z + k) - 0.5) * 0.7, s, 0);
+      const a = p.r + k * 2.4, d = k ? 0.12 + hash2(p.x + k, p.z - k) * 0.3 : 0, s = (0.7 + hash2(p.z + k, p.x) * 0.6) * (0.75 + p.s * 0.4);
+      I.add('c5:grass~ns', p.x + Math.cos(a) * d, p.z + Math.sin(a) * d, 2.75 + (hash2(p.x - k, p.z + k) - 0.5) * 0.7, s, -0.12 * hash2(p.x * 1.3 + k, p.z));
     }
   },
   // timber washed up long ago and drifted over: lying flat along its length, a third sunk in the snow
-  log(p, I) { I.add('c5:log', p.x, p.z, p.r, 0.75 + p.s * 0.5, -0.06, 0.9 + p.s * 0.3, 0.9 + p.s * 0.3); },
+  log(p, I) { I.add('c5:log', p.x, p.z, p.r, 0.75 + p.s * 0.5, -0.1, 0.9 + p.s * 0.3, 0.9 + p.s * 0.3); },
   crate(p, I) { if (!fitInst(I, 'rime:crate', p, 0.75 * p.s, 'h', -0.03)) { const f = fit('crate', 0.75 * p.s); if (f) I.add('env:crate', p.x, p.z, p.r, f.k, -0.03 - f.y0); } },
   cask5(p, I) { if (!fitInst(I, 'rime:cask', p, 0.9 * p.s, 'h', -0.03)) { const f = fit('barrel', 0.9 * p.s); if (f) I.add('env:barrel', p.x, p.z, p.r, f.k, -0.03 - f.y0); } },
   bucket(p, I) { const f = fit('bucket', 0.4 * p.s); if (f) I.add('env:bucket', p.x, p.z, p.r, f.k, -0.02 - f.y0); },
@@ -651,8 +724,10 @@ const PLACE = {
   },
   // an ebb cave's overhang: a shelf of the cliff out over the back half of the pool, icicles along its lip, the floor under
   // it dark (build.js darkens the ground in the caves)
-  caveArch(p, I) {
+  caveArch(p, I, B, out, L) {
     const f = fit('boulder', 1, 'w'), g = fit('rockA', 1, 'w');
+    // (scree down the ravine's walls behind it, toward the camera's side: its smooth facets read as a folded sheet)
+    for (let k = 0; k < 7; k++) { const x = p.x + (hash2(p.x + k, p.z * 1.3) - 0.5) * 6, z = p.z + 2.2 + hash2(p.z - k, p.x) * 5, y = groundY(L, x, z); rock5(I, 'cliff5', { x, z, r: k * 1.9 }, 0.5 + hash2(k, p.x) * 1.1, 0.7, y - 0.15, k % 2 ? STONES : ROCKS, '~ns'); }
     // (two great rocks over the back of the pool as its roof, their undersides in shadow, a third leaning in from a side)
     if (f) { I.add('cliff5:boulder', p.x, p.z + 1.6, 0.3, 5.2 * f.k, 2.3 - f.sz.y0 * 1.5 * f.k, 1.5 * f.k, 3.6 * f.k); I.add('cliff5:boulder', p.x + 1.2, p.z + 1.1, 2.1, 3.6 * f.k, 2.9 - f.sz.y0 * 1.2 * f.k, 1.2 * f.k, 2.8 * f.k); }
     if (g) I.add('cliff5:rockA', p.x - 1.4, p.z + 0.9, 4.0, 2.8 * g.k, 2.2 - g.sz.y0 * 1.3 * g.k, 1.3 * g.k, 2.2 * g.k);
@@ -662,6 +737,13 @@ const PLACE = {
   },
   fx(p, I, B, out) { out.emitters.push({ x: p.x, y: p.y, z: p.z, type: p.fx, s: p.s || 1, color: p.color }); }
 };
+// a scan's extent along its own z (min, max), or null
+const ZSPAN = new Map();
+function zSpan(parts) {
+  if (!parts) return null;
+  if (!ZSPAN.has(parts)) { let a = 1e9, b = -1e9; for (const q of parts) { const P = q.geo.attributes.position; for (let i = 0; i < P.count; i++) { const z = P.getZ(i); if (z < a) a = z; if (z > b) b = z; } } ZSPAN.set(parts, [a, b]); }
+  return ZSPAN.get(parts);
+}
 // the rime scan (by its key) fitted to a size: 'l' longest side, 'w' widest, 'h' height; tilt from the prop
 function fitInst(I, type, p, want, by = 'l', y = 0) {
   const name = type.slice(type.indexOf(':') + 1).replace('rime/', ''), parts = rime(name), sz = size4(parts);
@@ -687,6 +769,17 @@ function bedAt(L, x, z) {
   return b != null && b < BED_DRY - 1 ? b : 0.6;
 }
 function boat5(p, I, B, out, kind, scan, len) {
+  // (a boat whose hold keeps a Name-stone, the sailor's: the code hull, its planks and frames gone round the stone, so the
+  // stone stands in the boat broken open about it; the scan's whole hull stood through the stone)
+  const fx = Math.sin(p.r), fz = Math.cos(p.r), hl = len / 2;
+  const st = (COAST_L?.spots?.stones || []).find((q) => { const dx = q.x - p.x, dz = q.z - p.z; return Math.abs(dx * fx + dz * fz) < hl + 0.6 && Math.abs(dx * fz - dz * fx) < 1.9; });
+  if (st && !p.ice) {
+    const K = { keel: [8.4, 2.6, 1.0], row: [4.6, 1.5, 0.6], broken: [7.0, 2.4, 0.9] }[kind], u0 = ((st.x - p.x) * fx + (st.z - p.z) * fz) / (K[0] / 2), du = 1.45 / (K[0] / 2);
+    // (its keel only under what is left of it)
+    const za = u0 < 0 ? (u0 + du) * K[0] / 2 : -K[0] * 0.48, zb = u0 < 0 ? K[0] * 0.48 : (u0 - du) * K[0] / 2;
+    const geo = withParts(hullGeo(K[0], K[1], K[2], { seg: 16, strakes: 6, fine: 2.4, weed: true, seed: 53, cut: (u) => Math.abs(u - u0) < du }), zb - za > 0.3 ? [{ geo: G.box(0.12, 0.14, zb - za), color: TAR, o: { y: 0.02, z: (za + zb) / 2 } }] : []);
+    B.put('planks5', geo, TRS(p.x, -0.08, p.z, p.r, p.tilt || 0)); drip(out, p, 1.2); return;
+  }
   // (the broken boat is always the code hull, its planks gone toward one end and its ribs showing: the scan read as a
   // pill with a white cut end)
   if (kind !== 'broken' && fitInst(I, 'rime:' + scan, p, len, 'l', p.ice ? -0.45 : -0.12)) { if (!p.ice) drip(out, p, 1.2); return; }
@@ -757,7 +850,9 @@ function jettyCode(p, B) {
   for (const s of [-1, 1]) {
     parts.push({ geo: G.box(0.16, 0.34, len), color: TAR, o: { x: (s * wd) / 2, y: -0.16, z: len / 2 } });
     // (piles down into the channel under it, weed and wet black on them below the high water)
-    for (let z = 0.6; z < len; z += 1.6) parts.push({ geo: G.cyl(0.11, 0.13, 1.6, 6), color: TAR, o: { x: (s * (wd + 0.2)) / 2, y: -0.55, z } }, { geo: G.cyl(0.135, 0.15, 0.7, 6), color: 0x1c2618, o: { x: (s * (wd + 0.2)) / 2, y: -1.0, z }, jit: 0.3 });
+    // (and standing up past the deck as mooring posts, every other one tall: flush with the planks, at low water the deck
+    // lay on the mud like boards dropped there)
+    for (let z = 0.6, j = 0; z < len; z += 1.6, j++) { const tl = j % 2 ? 0.95 : 0.45; parts.push({ geo: G.cyl(0.11, 0.13, 1.6 + tl, 6), color: TAR, o: { x: (s * (wd + 0.2)) / 2, y: -1.35 + (1.6 + tl) / 2, z } }, { geo: G.cyl(0.135, 0.15, 0.7, 6), color: 0x1c2618, o: { x: (s * (wd + 0.2)) / 2, y: -1.0, z }, jit: 0.3 }); }
     for (let z = 1.4; z < len; z += 1.6) parts.push({ geo: G.cyl(0.1, 0.12, 1.4, 6), color: TAR, o: { x: s * 0.2, y: -0.7, z } });
   }
   parts.push({ geo: G.cyl(0.13, 0.15, 0.9, 6), color: WOODD, o: { x: wd / 2 - 0.2, y: 0.42, z: len - 0.3 } }, { geo: G.torus(0.16, 0.035, 4, 8), color: 0x6a5a40, o: { x: wd / 2 - 0.2, y: 0.5, z: len - 0.3, rx: Math.PI / 2 } });
@@ -815,8 +910,9 @@ function fallCode(p, I, B, L, out) {
   // there, the rest drapes ending in a point above it; dark blue-green in the folds where they meet the rock and each
   // other (their vertex colour, icyFall's hollows))
   for (let k = 0; k < 18; k++) {
-    const lx = -4.4 + k * 0.52 + rr.range(-0.1, 0.1), w0 = rr.range(0.22, 0.42) * (k % 5 === 2 ? 1.4 : 1), q0 = rr.range(0.22, 0.5), ph = rr.range(0, 9);
-    const full = rr.next() < 0.6, hk = top * rr.range(0.78, 0.98), yb = full ? 0.12 : hk * rr.range(0.25, 0.65);
+    // (wide enough to run into one another: one curtain fluted into its columns, not a row of separate pipes)
+    const lx = -4.4 + k * 0.52 + rr.range(-0.22, 0.22), w0 = rr.range(0.34, 0.62) * (rr.next() < 0.25 ? 1.4 : 1), q0 = rr.range(0.18, 0.5), ph = rr.range(0, 9);
+    const full = rr.next() < 0.6, hk = top * rr.range(0.78, 0.98), yb = full ? 0.38 : hk * rr.range(0.25, 0.65);
     let d0 = 3; while (d0 > -3 && gy(lx, d0) < 0.12) d0 -= 0.1;
     // the rock's face up the column's line, then the hanging profile (the furthest out above), smoothed
     const ys = []; for (let y = yb; y < hk; y += 0.3) ys.push(y);
@@ -824,7 +920,8 @@ function fallCode(p, I, B, L, out) {
     let dh = rk.map((_, j) => Math.max(...rk.slice(j)));
     for (let it = 0; it < 2; it++) dh = dh.map((d, j) => (dh[Math.max(0, j - 1)] + 2 * d + dh[Math.min(dh.length - 1, j + 1)]) / 4);
     const rows = [];
-    if (full) rows.push({ y: 0.03, d: Math.max(d0, dh[0] ?? d0) + 0.9 + rr.range(0, 0.4), w: w0 * 1.9, q: 0.08 });
+    // (its foot a rounded mound of ice spreading over the floor, not a flat fan)
+    if (full) { const df = Math.max(d0, dh[0] ?? d0); rows.push({ y: 0.02, d: df + 0.75 + rr.range(0, 0.35), w: w0 * 1.6, q: 0.05 }, { y: 0.2, d: df + 0.42, w: w0 * 1.5, q: q0 * 0.8 }); }
     else rows.push({ y: yb - 0.5 - rr.range(0, 0.4), d: (dh[0] ?? d0) + 0.08, w: 0.02, q: 0.02 });
     ys.forEach((y, j) => {
       const t = (y - yb) / Math.max(0.5, hk - yb), bul = 1 + 0.18 * Math.sin(j * 0.55 + ph) + 0.1 * Math.sin(j * 1.7 + ph * 1.7);
@@ -916,7 +1013,7 @@ function slabGeo(rx, rz, h, rr, sink = 0.8) {
     const f = 1 - (m / M) * 0.9, row = [];
     for (let i = 0; i < N; i++) {
       const [c, sn, k] = out[i], [d] = wall(i, 1), L = lean(1), x0 = c * (rx * k * L * f * (m ? 1 : 1.04) + d * f), z0 = sn * (rz * k * L * f * (m ? 1 : 1.04) + d * f);
-      const drift = (fbm(x0 * 0.28 + off, z0 * 0.28, 9, 3) - 0.5) * R * 0.09 + (fbm(x0 * 0.9, z0 * 0.9 + off, 11, 2) - 0.5) * 0.22;
+      const drift = (fbm(x0 * 0.28 + off, z0 * 0.28, 9, 3) - 0.5) * R * 0.16 + (fbm(x0 * 0.9, z0 * 0.9 + off, 11, 2) - 0.5) * 0.3;
       row.push(P(x0, topY[i] + (m === 0 ? -0.2 : 0.06 + 0.035 * R * Math.sqrt(m / M) + drift), z0, 1));
     }
     C.push(row);
@@ -928,7 +1025,8 @@ function slabGeo(rx, rz, h, rr, sink = 0.8) {
   for (let i = 0; i < N; i++) { const w0 = W[rows][i], w1 = W[rows][(i + 1) % N], c0 = C[0][i], c1 = C[0][(i + 1) % N]; T(w0, c0, w1, 'o'); T(w1, c0, c1, 'o'); }
   // the skirt: snow banked against its foot and out over the floor
   const j0 = clamp(Math.round((rows * (sink + 0.35)) / (top + sink)), 1, rows - 1), S = [];
-  for (let i = 0; i < N; i++) { const [c, sn, k] = out[i], e = 1.12 + 0.1 * fbm(i * 0.5, off, 13, 2); S.push(P(c * rx * k * e, 0.03, sn * rz * k * e, 0.92)); }
+  // (its width wandering round the foot, a drift here and almost none there: an even ring read as a white ruff)
+  for (let i = 0; i < N; i++) { const [c, sn, k] = out[i], e = 1.02 + 0.22 * clamp((fbm(i * 0.31, off, 13, 2) - 0.35) * 2.2, 0, 1); S.push(P(c * rx * k * e, 0.03, sn * rz * k * e, 0.92)); }
   for (let i = 0; i < N; i++) { const a = W[j0][i], b = W[j0][(i + 1) % N], c = S[i], d = S[(i + 1) % N]; T(a, b, c, 'u'); T(b, d, c, 'u'); }
   // wound to face their way
   const idx = [];
@@ -1155,14 +1253,18 @@ function shaftMat(H) {
 // a tower scan's stone weathered for the coast: greyed and darkened (the farLight scan's pale render read as birch bark),
 // mottled by the weather at a metre's scale, snow on its ledges and rime on its north side (cached per material)
 const WEATHER = new Map();
-function weathered(mat) {
+// top, mg (optional, in the scan's own units): a tower's cut top and a metre. Below the top, what faces up or across is a
+// slit's sill or jamb, not a ledge: no snow there and dark inside (snowed, the slits read as white paper cut-outs)
+function weathered(mat, top = null, mg = 1) {
   if (!mat || mat.transparent || /glow/i.test(mat.name)) return mat;
   if (WEATHER.has(mat)) return WEATHER.get(mat);
-  const m = mat.clone();
+  const m = mat.clone(), tw = top != null, u = { uTwTop: { value: top ?? 0 }, uTwM: { value: mg } };
   occlude(m, (sh) => {
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vTwN; varying vec3 vTwP;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\n  vTwN = normalize(mat3(modelMatrix) * objectNormal); vTwP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vTwN; varying vec3 vTwP;\nfloat twH(vec3 p) { return fract(sin(dot(floor(p), vec3(12.9898, 78.233, 37.719))) * 43758.5453); }')
+    Object.assign(sh.uniforms, u);
+    if (tw) sh.defines = Object.assign(sh.defines || {}, { TW_TOP: '' });
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vTwN; varying vec3 vTwP; varying vec3 vTwA; varying float vTwO;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n  vTwN = normalize(mat3(modelMatrix) * objectNormal); vTwP = (modelMatrix * vec4(transformed, 1.0)).xyz; vTwA = (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz; vTwO = transformed.y;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uTwTop; uniform float uTwM;\nvarying vec3 vTwN; varying vec3 vTwP; varying vec3 vTwA; varying float vTwO;\nfloat twH(vec3 p) { return fract(sin(dot(floor(p), vec3(12.9898, 78.233, 37.719))) * 43758.5453); }')
       .replace('#include <map_fragment>', `#include <map_fragment>
   {
     float l = dot(diffuseColor.rgb, vec3(0.3, 0.55, 0.15));
@@ -1170,20 +1272,27 @@ function weathered(mat) {
     float mot = mix(twH(q), twH(q + 0.5), 0.5) * 0.5 + twH(vTwP * 0.35) * 0.5;
     diffuseColor.rgb = mix(vec3(l), diffuseColor.rgb, 0.4) * vec3(0.66, 0.68, 0.72) * (0.78 + 0.34 * mot);
     float sn = smoothstep(0.55, 0.85, vTwN.y + (mot - 0.5) * 0.3) + smoothstep(0.55, 0.95, -vTwN.z) * smoothstep(0.35, 0.7, mot) * 0.4;
+#ifdef TW_TOP
+    // (the outer wall faces out from the tower's axis; a face that does not, below the cut top, is inside an opening)
+    float hiT = smoothstep(uTwTop - uTwM * 1.6, uTwTop - uTwM * 0.6, vTwO);
+    float outw = dot(normalize(vTwN.xz + 1e-4), normalize(vTwP.xz - vTwA.xz + 1e-4)) * (1.0 - abs(vTwN.y));
+    float rec = (1.0 - hiT) * (1.0 - smoothstep(0.3, 0.65, outw));
+    sn *= (1.0 - rec) * mix(0.25, 1.0, hiT);
+    diffuseColor.rgb *= 1.0 - 0.62 * rec;
+#endif
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.74, 0.78, 0.84), clamp(sn, 0.0, 0.85));
   }`);
   });
-  m.customProgramCacheKey = () => 'weather|' + mat.uuid;
+  m.customProgramCacheKey = () => 'weather|' + mat.uuid + (tw ? '|t' : '');
   WEATHER.set(mat, m);
   return m;
 }
 // a rime tower scan fitted to height h: { mesh group, top (y of its cut top) } or null
 function rimeTower(name, h) {
   const parts = rime(name), sz = size4(parts); if (!sz) return null;
-  const k = h / Math.max(0.01, sz.y), g = new THREE.Group();
-  for (const p of parts) { const m = new THREE.Mesh(shared(p.geo), weathered(p.mat)); m.castShadow = true; m.receiveShadow = true; g.add(m); }
+  const k = h / Math.max(0.01, sz.y), g = new THREE.Group(), top = ENV.extras['rime/' + name]?.top;
+  for (const p of parts) { const m = new THREE.Mesh(shared(p.geo), weathered(p.mat, top ?? sz.y0 + sz.y, 1 / k)); m.castShadow = true; m.receiveShadow = true; g.add(m); }
   g.scale.setScalar(k); g.position.y = -sz.y0 * k;
-  const top = ENV.extras['rime/' + name]?.top;
   return { group: g, top: top != null ? (top - sz.y0) * k : h, r: (Math.max(sz.x, sz.z) * k) / 2 };
 }
 // the lantern room: a corbelled stone gallery and its parapet, the glass ring with the iron fire-cage inside, an iron cap
@@ -1228,7 +1337,11 @@ const strip = (g) => { const o = new THREE.BufferGeometry(), src = g.index ? g.t
 function bellMesh(s = 1, cracked = false, mat = MAT.iron) {
   const g = new THREE.Group(), pivot = new THREE.Group(); g.add(pivot);
   const pts = [[0, 0.02], [0.2, 0.0], [0.22, 0.06], [0.18, 0.2], [0.14, 0.36], [0.1, 0.42], [0, 0.44]].map(([a, b]) => [a * s * 2, (b - 0.44) * s * 2]);
-  const bell = solid5([{ geo: G.lathe(pts, 12), color: cracked ? 0x4a5a48 : 0x7a5a30, o: {} }, { geo: G.ball(0.07 * s, 6, 4), color: IRON, o: { y: -0.8 * s } }, ...(cracked ? [{ geo: G.box(0.02, 0.35 * s, 0.02), color: 0x101010, o: { x: 0.28 * s, y: -0.55 * s, rz: 0.3 } }] : [])], mat);
+  // (a smooth lathe, its bronze gone green with verdigris, the mouth dark inside: faceted and orange it read as a toy)
+  const lp = [[0, 0.02], [0.21, 0.0], [0.225, 0.03], [0.21, 0.08], [0.18, 0.17], [0.155, 0.28], [0.14, 0.36], [0.115, 0.415], [0.06, 0.44], [0, 0.445]].map(([a, b]) => [a * s * 2, (b - 0.44) * s * 2]);
+  const bell = new THREE.Mesh(bake([{ geo: G.lathe(lp, 24), color: cracked ? 0x4a5a48 : 0x5a6a50, o: {} }, { geo: G.cone(0.2 * s * 2, 0.3 * s * 2, 16), color: 0x0a0a0a, o: { y: -0.58 * s } }, { geo: G.ball(0.07 * s, 8, 6), color: IRON, o: { y: -0.8 * s } }, ...(cracked ? [{ geo: G.box(0.02, 0.35 * s, 0.02), color: 0x101010, o: { x: 0.28 * s, y: -0.55 * s, rz: 0.3 } }] : [])]), MAT.bell5 ||= new THREE.MeshLambertMaterial({ vertexColors: true }));
+  bell.castShadow = true;
+  void mat; void pts;
   pivot.add(bell);
   let t0 = -99, amp = 0;
   bell.onBeforeRender = () => { const t = R.time - t0; pivot.rotation.z = amp * Math.exp(-t * 1.1) * Math.sin(t * 6.5); };

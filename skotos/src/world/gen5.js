@@ -644,7 +644,23 @@ function heights(L, K, frame, type, bergH) {
       // (where the camera's line caps it low, the cap itself is broken into lumps: at one height all along, a rib by the
       // Landing's jetty ran as one straight snowed roof, a slab)
       const cp = Math.max(0.3, cap(vx, vz)), f = fbm(vx * 0.45, vz * 0.45, seed + 53), lump = 1 - 0.55 * clamp((4.5 - cp) / 2.5, 0, 1) * clamp((f - 0.35) / 0.3, 0, 1);
-      y = Math.min(Math.max(y, 0) + 0.3, Math.max(0.3, cp * lump), 1.0 + 1.3 * d);
+      // (both caps grow with the cells' distance alone, so wherever the floor's edge runs straight they laid a plane ruled
+      // along it: the map's west rim above the Landing ran across every cine of the camp as two straight pale blades. Notched
+      // and lowered in patches a few cells long, never raised: the camera's rule holds)
+      // (broad, a few cells across: notched cell by cell, the facets stood up as shards before any camera set low)
+      // (not on rock with floor due north of it within ten cells, the camera's own side: no cine looks at it, but the camp's
+      // low cine stands its lens in that hill, and lowered to the lens's height its top stood edge-on across the frame)
+      const kN = cp >= 99 ? 12 : (cp + 0.2) / 1.3;
+      const gate = smooth(clamp((kN - 8.5) / 2.5, 0, 1));
+      const crag = clamp(fbm(vx * 0.19 + 3.7, vz * 0.19 - 1.3, seed + 57, 3) - 0.28, 0, 0.5) * 0.7 * gate;
+      // (and ledges a cell or two across taken out of the slope: lowered in broad patches only, the slope stayed one plane,
+      // its snow-lit band bounded by two grid columns, and the west rim's blades stood in every camp cine as before)
+      const led = 1.3 * clamp((fbm(vx * 0.6 + 11.3, vz * 0.6 - 7.1, seed + 59, 2) - 0.36) / 0.28, 0, 1) * gate;
+      y = Math.min(Math.max(y, 0) + 0.3, Math.max(0.3, cp * lump * (1 - crag)), (1.0 + 1.3 * d) * (1 - crag * 0.85) - led);
+      // (the map's own west and east edges fall away behind the crest: there the rock ended in the grid's straight column,
+      // and seen along it from a low camp cine its snowed top stood against the dark as two long pale blades)
+      const ex = Math.min(vx, w - vx);
+      if (ex < 2) y = Math.max(0.3, y - (ex === 0 ? 4.5 : 2) * (0.75 + 0.5 * fbm(vx * 0.3, vz * 0.3, seed + 61, 2)));
     }
     H[vz * W + vx] = y;
   }
@@ -951,12 +967,17 @@ function dress5Coast(L, K, blk, res, seed) {
     // (on dry ground only: one left on the flats stood in the sea at high water, its load a white box afloat)
     if (i >= 0 && L.cells[i] && !blk[i] && L.bed[i] >= BED_DRY && clear(x, z, 1.4)) P({ t: 'sledge', x, z, r: b.r + rng.range(-0.3, 0.3), s: 1 });
   }
-  // every islet ringed with low rocks at its edge (they block nothing: the refuge stays a refuge)
+  // every islet's edge with low rocks in two or three clusters, a big one with its lesser ones round it, gaps between (they
+  // block nothing: the refuge stays a refuge). (A ring of one size, evenly spaced, round each of the bay's islets read as
+  // one rock repeated round a target)
   for (const isl of L.refuges) {
-    const n = Math.round(isl.r * 2.2);
-    for (let k = 0; k < n; k++) {
-      const a = (k / n) * Math.PI * 2 + rng.range(-0.25, 0.25), d = isl.r - rng.range(0.2, 0.6), x = isl.x + Math.sin(a) * d, z = isl.z + Math.cos(a) * d, i = at(x, z), s = rng.range(0.45, 0.85);
-      if (i >= 0 && L.cells[i] && !blk[i] && clear(x, z, 1.2) && !sp.chests.some((c) => Math.hypot(c.x - x, c.z - z) < 1.3)) P({ t: 'shoreRock', x, z, r: rng.range(0, 6.28), s });
+    const nc = 2 + (rng.next() < 0.5 ? 1 : 0), a0 = rng.range(0, 6.28);
+    for (let c = 0; c < nc; c++) {
+      const ac = a0 + (c / nc) * Math.PI * 2 + rng.range(-0.5, 0.5), m = 2 + rng.int(0, 2);
+      for (let k = 0; k <= m; k++) {
+        const a = ac + (k ? rng.range(-0.45, 0.45) : 0), d = isl.r - (k ? rng.range(0.1, 0.9) : rng.range(0.3, 0.6)), x = isl.x + Math.sin(a) * d, z = isl.z + Math.cos(a) * d, i = at(x, z), s = k ? rng.range(0.22, 0.5) : rng.range(0.85, 1.3);
+        if (i >= 0 && L.cells[i] && !blk[i] && clear(x, z, 1.2) && !sp.chests.some((q) => Math.hypot(q.x - x, q.z - z) < 1.3)) P({ t: 'shoreRock', x, z, r: rng.range(0, 6.28), s });
+      }
     }
   }
   // the Icemaw holes: a few broken plates of the shelf driven to their downwind lips (floeDrift)
