@@ -1362,6 +1362,7 @@ function buildGround(L, group) {
     geo.setIndex(keep);
   }
   const cfg = GROUND[L.type] || (act5 ? ground5(L.type) : act4 ? ground4(L.type) : GROUND.forest);
+  if (act5) cfg.frozen = L.mode === 'frozen';
   // (Act V: the ice windows' centres, the corner each 2 x 2 window's cells share: the ground cuts the round hole, G_WIN)
   if (act5 && L.window) { const wins = []; for (let z = 0; z < h - 1; z++) for (let x = 0; x < w - 1; x++) if (L.window[z * w + x] && L.window[z * w + x + 1] && L.window[(z + 1) * w + x] && L.window[(z + 1) * w + x + 1] && !(x > 0 && L.window[z * w + x - 1]) && !(z > 0 && L.window[(z - 1) * w + x])) wins.push(x + 1, z + 1); cfg.wins = wins.slice(0, 16); }
   if (ENV.ready && ENV.layers[cfg.A]) {
@@ -1425,6 +1426,8 @@ function groundMat(cfg, type) {
   if (X5.win) uni.uWin = { value: Array.from({ length: 8 }, (_, i) => new THREE.Vector2(cfg.wins[i * 2] ?? -99, cfg.wins[i * 2 + 1] ?? -99)) };
   X5.any = X5.glint || X5.wet || X5.aur || X5.edge || X5.win;
   if (X5.any) { noiseTex(); Object.assign(uni, SEA_U({ uWetLevel: SEA.uWetLevel, uLevel: SEA.uLevel, uBayLevel: SEA.uBayLevel }), SEA_LIT); }
+  // (the flats frozen: 1 on the coast after the Freeze, the Freeze's own progress on the tide's)
+  if (X5.wet) uni.uFzG = cfg.frozen ? { value: 1 } : SEA.uFreezeAll;
   if (X5.hueB) uni.uHueB = { value: new THREE.Vector3(...cfg.hueB) };
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, uni);
@@ -1447,7 +1450,7 @@ uniform sampler2D tA; uniform sampler2D tB; uniform sampler2D tP; uniform sample
 uniform vec3 uS; uniform vec3 uR; uniform float uNS;
 varying vec4 vLay; varying vec2 vGP; varying vec3 vGN;
 float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\nvarying float vSap;' : '') + (X.sat ? '\nuniform float uSat;' : '') + (cfg.hueA ? '\nuniform vec3 uHueA;' : '') + (X.dry ? '\nuniform sampler2D tD; uniform vec3 uDryTint; uniform float uAut;' : '') + (X.wall ? '\nuniform sampler2D tW; uniform sampler2D tWn; uniform float uWS; varying float vGY;' : '')
-      + (X5.hueB ? '\nuniform vec3 uHueB;' : '') + (X5.win ? '\nuniform vec2 uWin[8];' : '') + (X5.wet ? '\nvarying float vBed; varying float vBay; varying float vBedW; uniform float uWetLevel; uniform float uLevel; uniform float uBayLevel;' : '') + (X5.edge ? '\nvarying float vWat;' : '')
+      + (X5.hueB ? '\nuniform vec3 uHueB;' : '') + (X5.win ? '\nuniform vec2 uWin[8];' : '') + (X5.wet ? '\nvarying float vBed; varying float vBay; varying float vBedW; uniform float uWetLevel; uniform float uLevel; uniform float uBayLevel; uniform float uFzG;' : '') + (X5.edge ? '\nvarying float vWat;' : '')
       + (X5.any ? SEA_GLSL() + '\nvarying vec3 vGW; uniform vec3 uMoonD; uniform vec3 uMoonC; uniform vec3 uHeroP; uniform vec3 uHeroC;\nvec3 gEm = vec3(0.0);' : '') + (X5.aur ? '\nvarying vec3 vGAur; varying float vGAurK;' : ''))
       .replace('#include <map_fragment>', (X5.win ? `
   // the ice windows: the ground runs over their cells and leaves a round hole of clear ice (the pane, sea.js, the same
@@ -1556,10 +1559,19 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
     gPool = smoothstep(0.6, 0.7, gR.r * 0.6 + gR.g * 0.4 + (0.55 - bw) * 0.22) * (1.0 - smoothstep(0.85, 1.25, vBedW));
     gc *= mix(1.0, (0.88 + 0.16 * rip) * mix(1.0, 0.78, smoothstep(0.45, 0.75, gR.a)), wB);
     gc = mix(gc, gc * vec3(0.5, 0.56, 0.6), gPool * wB * 0.75);
+    // frozen: the sand set hard and grey-white with rime, thickest in the ripples' troughs and patchy, the ebb's pools glazed
+    // over with pale ice and cracked across (on the tide's coast the Freeze brings it; after it, always). The Freeze
+    // otherwise changed only the water, and the flats read as the tide night's wet mud
+    if (uFzG > 0.001) {
+      float fz = uFzG * wB, hoar = smoothstep(0.3, 0.7, gR.b * 0.6 + gR.g * 0.4);
+      gc = mix(gc, vec3(0.52, 0.56, 0.62) * (0.86 + 0.18 * gR.r), fz * (0.26 + 0.12 * (1.0 - rip) + 0.32 * hoar));
+      float ck = 1.0 - smoothstep(0.0, 0.04, vorT(vGW.xz * 0.8 + gR.ba * 2.0).x);
+      gc = mix(gc, mix(vec3(0.3, 0.36, 0.42), vec3(0.62, 0.68, 0.74), ck * 0.8), gPool * fz * 0.9);
+    }
   }
   // wet sand: dark and glossy where the tide has been within the last 20 s (and under the water now); its edge wanders
   // inside the cells with the water's own (sea.js shoreN); toward the land it ends with the shore's own layer
-  float gWet = vBedW < 2.0 ? smoothstep(-0.03, 0.06, mix(uWetLevel, uBayLevel, vBay) - vBedW + shoreN(vGW.xz)) * (1.0 - wP * 0.6) * smoothstep(0.2, 0.55, wB) : 0.0;
+  float gWet = vBedW < 2.0 ? smoothstep(-0.03, 0.06, mix(uWetLevel, uBayLevel, vBay) - vBedW + shoreN(vGW.xz)) * (1.0 - wP * 0.6) * smoothstep(0.2, 0.55, wB) * (1.0 - uFzG * 0.85) : 0.0;
   gc *= mix(vec3(1.0), vec3(0.46, 0.5, 0.54) + 0.08 * vBay, gWet);` : '') + (X5.any ? `
   vec3 gV = normalize(cameraPosition - vGW);` : '') + (X5.wet ? `
   gEm += uMoonC * pow(max(dot(reflect(-gV, vec3(0.0, 1.0, 0.0)), uMoonD), 0.0), 18.0) * max(gWet, gPool * wB) * 0.05;` : '') + (X5.glint ? `
@@ -1579,8 +1591,11 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
     gSa = gsk * smoothstep(0.6, 0.74, vLay.w + (vLay.z - 0.5) * 0.5 + (gS.r - 0.5) * 0.35);
     gSp = (gS.g - 0.5) * 7.0 + (gS.r - 0.5) * 5.0;
   }
-  // the snow glitters: a few 4 cm cells, each with its own tilt, catch the moon or the lantern toward the eye
-  if (gsk > 0.002) {
+  // the snow glitters: a few 4 cm cells, each with its own tilt, catch the moon or the lantern toward the eye` + (X5.wet ? `
+  // (and the frozen flats' hoarfrost)
+  float gGl = max(gsk, uFzG * wB * 0.85);` : `
+  float gGl = gsk;`) + `
+  if (gGl > 0.002) {
     vec3 g3 = floor(vGW * 25.0);
     vec2 gq = g3.xz + g3.y * vec2(0.131, 0.217);
     float gs = sH(gq) * smoothstep(0.55, 0.85, normalize(vGN).y);
@@ -1588,7 +1603,7 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
       vec3 mn = normalize(vec3(sH(gq + 1.7) - 0.5, 0.75, sH(gq + 5.3) - 0.5)), rr = reflect(-gV, mn);
       vec3 hd = uHeroP - vGW; float hl = length(hd);
       float sp = pow(max(dot(rr, uMoonD), 0.0), 90.0) * min(dot(uMoonC, vec3(0.4)), 1.2) + pow(max(dot(rr, hd / hl), 0.0), 90.0) * min(dot(uHeroC, vec3(0.012)), 1.0) / (1.0 + hl * hl * 0.02);
-      gEm += vec3(0.85, 0.92, 1.0) * sp * 2.2 * (1.0 - wB) * (1.0 - wP * 0.8);
+      gEm += vec3(0.85, 0.92, 1.0) * sp * 2.2 * gGl * (1.0 - wP * 0.8);
     }
   }` : '') + (X5.aur ? `
   // the aurora's light drifting over the ground in slow green ribbons (from the vertices); under the black aurora its dark
