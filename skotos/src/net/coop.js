@@ -386,7 +386,8 @@ export function rescale() {
 export const coopK = () => { const i = clamp(NET.n, 1, 4) - 1; return { i, xp: COOP.xp[i], gold: COOP.gold[i], loot: COOP.loot[i], mf: COOP.mf[i], pack: COOP.pack[i], elite: COOP.elite[i], hp: COOP.hp[i], boss: COOP.boss[i], dmg: COOP.dmg[i] }; };
 
 // a guest's events: its blows on the host's monsters, a revive. Each is checked: what it strikes is here and alive,
-// within reach of the guest's stand-in; the blow no bigger than its weapon can make and the guest under a rate
+// within reach of the guest's stand-in; the blow no bigger than its weapon can make (14x), and a second's blows no more
+// than 30 such (a big skill across a crowd, crits and all, stays well under it; a flood does not)
 const OPT_NUM = { stun: 3, freeze: 4, chill: 5, fear: 4, knock: 40, burn: 1e7, root: 2 };
 function takeEvents(P) {
   let last = S.done.get(P.peer) || 0;
@@ -413,7 +414,7 @@ function guestEvent(P, e) {
     // the rate: what a second of its hits may come to
     const R0 = P.rate ||= { t: now(), sum: 0 };
     if (now() - R0.t > 1000) { R0.t = now(); R0.sum = 0; }
-    R0.sum += amt; if (R0.sum > cap * 12) return reject('rate');
+    R0.sum += amt; if (R0.sum > cap * 30) return reject('rate');
     const opts = { crit, net: true };
     for (const k in OPT_NUM) if (typeof o[k] === 'number' && isFinite(o[k]) && o[k] > 0) opts[k] = Math.min(o[k], OPT_NUM[k] === 1e7 ? cap : OPT_NUM[k]);
     if (o.slow && typeof o.slow.k === 'number' && typeof o.slow.t === 'number') opts.slow = { k: clamp(o.slow.k, 0, 0.8), t: clamp(o.slow.t, 0, 5) };
