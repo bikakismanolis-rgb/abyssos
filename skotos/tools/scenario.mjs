@@ -689,6 +689,44 @@ const S = {
     await pg.evaluate(() => window.__D.closePanel()); await pg.waitForTimeout(400); await shot();
     return { V, late, before, after };
   } },
+  // every skill, variant and later skill of a class, cast at a ring of sturdy dummies (one shot each, at its peak), with the
+  // damage each cast did to them: CLS=warden|ranger|mage, ONLY=id[.variant],... to pick
+  skillsfx: { q: 'auto=forest&sim=4&q=1&lvl=45&cls=' + (process.env.CLS || 'warden'), run: async (pg, shot) => {
+    const list = await pg.evaluate(async (only) => {
+      const D = await import('/src/game/data.js'), G = window.__G, out = [];
+      for (const sk of D.SKILLS[G.hero.cls]) { if (sk.basic) continue; out.push({ id: sk.id, v: 0 }); (D.VARIANTS[sk.id] || []).forEach((n, i) => out.push({ id: sk.id, v: i + 1, n })); }
+      window.__wait = (sec) => new Promise((ok) => { const t0 = G.hero.stats.time, w0 = performance.now(); const f = () => (G.hero.stats.time - t0 >= sec || performance.now() - w0 > 60000 ? ok() : setTimeout(f, 20)); f(); });
+      return only ? out.filter((e) => only.split(',').includes(e.n ? e.id + '.' + e.n : e.id)) : out;
+    }, process.env.ONLY || '');
+    await pg.evaluate(() => { window.__immortal = true; const G = window.__G; for (const p of G.zone.packs) p.spawned = true; for (const a of G.actors) if (a.team === 'foe') { a.dead = true; a.remove(); } });
+    const res = {}, errs = [];
+    for (const e of list) {
+      await pg.evaluate((e) => {
+        const G = window.__G, h = G.hero, pl = G.player;
+        for (const a of G.actors) if (a.dummy || (a.pet && !a.dead)) { a.dead = true; a.remove(); }
+        G.actors = G.actors.filter((a) => !a.removed);
+        h.skills[e.id] = 5; h.vars[e.id] = 3; h.variant[e.id] = e.v; h.loadout[0] = e.id;
+        pl.res = G.stats.resMax; pl.cds.fill(0); pl.act = null; pl.twinT = 0; for (const k in pl.buffs) delete pl.buffs[k]; pl.shield = 0;
+        const far = G.hero.cls === 'warden' ? 3.2 : 7, fx = pl.x + Math.sin(pl.rot) * far, fz = pl.z + Math.cos(pl.rot) * far;
+        window.__dum = [];
+        for (let i = 0; i < 7; i++) {
+          const a = i * 0.9, r = i ? 2.2 : 0, x = fx + Math.sin(a) * r, z = fz + Math.cos(a) * r;
+          if (!G.zone.map.walkable(x, z)) continue;
+          const m = window.__D.spawnMonster(i % 3 ? 'goblin' : 'skeleton', x, z, { level: 45 }); m.hp = m.hpMax = 1e7; m.dummy = true; m.status.stun = 99;
+          G.actors.push(m); window.__dum.push(m);
+        }
+        window.__D.emit('loadout');
+      }, e);
+      await pg.evaluate(() => window.__wait(0.3));
+      await pg.evaluate(() => { const G = window.__G, d = window.__dum[0]; window.__D.IN.events.push({ t: 'skill', i: 1, aim: d ? { x: d.x, z: d.z } : null }); });
+      const at = { leap: 0.6, quake: 0.75, meteor: 1.15, rain: 0.9, wolf: 1.2, cry: 0.45, nova: 0.3, dawn: 1.25, bulwark: 1.0, trap: 1.0, hawks: 2.0, rift: 1.2, beam: 0.9, frostorb: 0.8, charge: 0.25, vault: 0.3, multi: 0.3, pierce: 0.4, fireball: 0.5, chain: 0.3, whirl: 0.8 }[e.id] ?? 0.4;
+      await pg.evaluate((s) => window.__wait(s), at); await shot();
+      // what follows the cast (a channel, a storm, a trap) plays out, then the books
+      await pg.evaluate((s) => window.__wait(s), e.id === 'bulwark' ? 9 : e.id === 'hawks' ? 10 : e.id === 'wolf' ? 8 : 4);
+      res[e.n ? e.id + '.' + e.n : e.id] = await pg.evaluate(() => { const d = window.__dum; return { dealt: Math.round(d.reduce((s, a) => s + (a.hpMax - Math.max(0, a.hp)), 0)), hit: d.filter((a) => a.hp < a.hpMax).length, n: d.length }; });
+    }
+    return res;
+  } },
   title: { q: 'sim=1&q=' + (process.env.Q || '1'), run: async (pg, shot) => {
     await pg.waitForTimeout(2500); await shot();
     await pg.mouse.click(640, 360); await pg.waitForTimeout(1500); await shot();

@@ -17,6 +17,15 @@ Baseline balance: a worktree of v12 at /tmp/claude-0/base served on 5232, plan /
 - New code in new files where possible (src/game/mastery.js, src/game/skillsx.js) to ease porting onto the Act V branch.
 
 ## Done
-(see git log)
+- data.js (new skills, VARIANTS, LOADOUT, mxpToNext), progression.js (rules, Mastery, migrate), skillsx.js (24 variants,
+  9 later skills), skills.js (slots, per-skill cooldowns, dispatch), projectiles.js (onTick/look hooks, 'custom' areas),
+  combat.js (Mastery XP, challenge/alpha), ai.js (taunt), hud.js (loadout buttons, Mastery badge/bar), progpanel.js +
+  CSS (the new skills panel), text.js (all strings), boot.js (migrate, ?mlvl=).
+- Scenarios: `progpanel` (panels at 844x390), `skillsfx` (every skill/variant at dummies: CLS=..., ONLY=...).
+- balance-act.mjs: job.mast / job.variant / job.loadout / job.mlvl; ready() reads the loadout.
+- Baseline balance (v12): /tmp/claude-0/bal/before.jsonl (48 jobs: Acts III-IV zones and bosses, 3 classes, 2 runs).
 
 ## Next
+- Look at every skillsfx shot per class, fix what looks wrong; tune numbers from the dummy damage table.
+- Balance after (plan-mast.json), compare; all shipped scenarios; new scenarios (levels past cap, Mastery past 50,
+  save migration); artifact + CSP check; README.md and release.md.
