@@ -35,7 +35,7 @@ import { t } from '../i18n/i18n.js';
 import { clamp, rand } from '../core/util.js';
 
 export const VER = 1;
-const SNAP_HZ = 10, SNAP_MAX = 3900, REL_MAX = 1700, FX_MAX = 900, NEAR = 40, CHUNK = 3300, HOST_LOST = 8000, DOWNED = 30, REVIVE = 2.5, LAG = 130;
+const SNAP_HZ = 10, SNAP_MAX = 3900, REL_MAX = 1700, FX_MAX = 900, NEAR = 40, CHUNK = 3300, HOST_LOST = 25000, HOST_GONE = 10000, DOWNED = 30, REVIVE = 2.5, LAG = 130;
 const CODE_CH = 'abcdefghjkmnpqrstuvwxyz23456789';
 const KINDS = Object.keys(MONSTERS), KIDX = new Map(KINDS.map((k, i) => [k, i]));
 // what a page sees of the session (the lobby panel and the HUD read it)
@@ -106,7 +106,7 @@ export async function joinGame(code) {
   if (!S.T || S.role || !G.hero || !/^[a-z0-9]{4}$/.test(code)) return false;
   S.status = 'connecting'; emit('netLobby');
   try { S.ch = await S.T.join('skotos-' + code); } catch (e) { S.status = 'error'; S.err = e?.code || e?.message; emit('netLobby'); return false; }
-  S.role = 'guest'; S.code = code; S.status = 'waiting'; S.hostPeer = null; S.lastSnap = now(); S.joinT = now();
+  S.role = 'guest'; S.code = code; S.status = 'waiting'; S.hostPeer = null; S.hostGone = 0; S.lastSnap = now(); S.joinT = now();
   S.ev.length = 0; S.evSeq = 0; S.relDone = 0; S.hclips.clear(); S.world = null; S.wkey = ''; S.zoneKey = null; S.chunks = {};
   wire(); guestPresence(true);
   emit('netLobby');
@@ -161,7 +161,7 @@ function peersChanged() {
     P.pres = p.presence || {}; P.by = p.by;
     readPeer(P);
   }
-  for (const [k, P] of S.peers) if (!seen.has(k)) { if (P.actor) dropRemote(P.actor); S.peers.delete(k); S.done.delete(k); if (S.role === 'host') emit('toast', t('coop.left', nameOf(P)), 'quest'); if (k === S.hostPeer) leaveGame('coop.hostLeft'); }
+  for (const [k, P] of S.peers) if (!seen.has(k)) { if (P.actor) dropRemote(P.actor); S.peers.delete(k); S.done.delete(k); if (S.role === 'host') emit('toast', t('coop.left', nameOf(P)), 'quest'); if (k === S.hostPeer) S.hostGone = now(); }
   if (S.role === 'host') {
     const guests = [...S.peers.values()].filter((P) => P.role === 'guest' && P.code === S.code && P.v === VER).sort((a, b) => a.joined - b.joined);
     const roster = guests.slice(0, 3).map((P) => P.peer);
@@ -170,6 +170,7 @@ function peersChanged() {
   } else if (S.role === 'guest') {
     const h = [...S.peers.values()].find((P) => P.role === 'host' && P.code === S.code);
     if (h && !S.hostPeer) S.hostPeer = h.peer;
+    if (h && h.peer === S.hostPeer) S.hostGone = 0;
     if (h && h.v !== VER) { leaveGame('coop.version'); return; }
     // (not in the host's roster once it has one: the game is full)
     if (h && h.roster && !h.roster.includes(S.ch.me) && now() - S.joinT > 4000) { leaveGame('coop.full'); return; }
@@ -469,6 +470,8 @@ on('say', (key) => { if (S.role === 'host' && S.roster.length && typeof key === 
 function guestTick(dt) {
   if (!G.hero) return;
   const H = S.hostPeer && S.peers.get(S.hostPeer);
+  // the host gone from the room (a page that closed; a moment's reconnect is not that): home
+  if (S.hostGone && now() - S.hostGone > HOST_GONE) { leaveGame('coop.hostLeft'); return; }
   // the host gone quiet: home
   if (S.zoneKey && now() - S.lastSnap > HOST_LOST && (!H || H.zk === S.zoneKey)) { leaveGame('coop.lost'); return; }
   if (S.role === 'guest' && !S.hostPeer && now() - S.joinT > 10000) { leaveGame('coop.noHost'); return; }

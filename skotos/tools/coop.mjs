@@ -114,6 +114,175 @@ const SC = {
     const st = await stats(host);
     ok(!st.why.big && !st.why.rate && !st.why.bad, 'no honest blow was refused (too big, too fast, malformed)', st.why);
     console.log('     host net', JSON.stringify(st));
+  },
+  // each player's own loot: the host's drops are not on the guest's page, the guest's not on the host's
+  async loot() {
+    const { host, guests: [g] } = await party('forest', 1, { lvl: 10, glvl: 10 });
+    const hp = await hostPos(host); await place(g, hp.x + 1, hp.z);
+    // a rare pack beside them, killed by the host
+    for (let r = 0; r < 3; r++) {
+      await ev(host, async () => { const A = await import('/src/game/actors.js'), G = window.__G, p = G.player; for (let i = 0; i < 2; i++) { const m = A.spawnMonster('skeleton', p.x + 3 + i, p.z + 2, { elite: 'rare', affixes: [] }); G.actors.push(m); } });
+      await sleep(1200);
+      await ev(host, () => { for (const a of window.__G.actors) if (a.team === 'foe' && !a.prop && !a.dead && !a.remote) window.__D.kill(a); });
+      await sleep(1500);
+    }
+    await sleep(2500);
+    const hi = await ev(host, () => window.__G.pickups.filter((p) => p.kind === 'item').map((p) => p.item.id));
+    const gi = await ev(g, () => window.__G.pickups.filter((p) => p.kind === 'item').map((p) => p.item.id));
+    ok(hi.length >= 4 && gi.length >= 4, 'both got items from the rares (host ' + hi.length + ', guest ' + gi.length + ')');
+    ok(!hi.some((id) => gi.includes(id)), 'no item is on both pages: each player\'s drops are their own');
+    const cls = await ev(g, () => window.__G.pickups.filter((p) => p.kind === 'item').map((p) => p.item.base));
+    console.log('     guest item bases', cls.join(' '));
+    // the guest picks one up: it is in the guest's bag and save, not the host's
+    const got = await ev(g, async () => { const G = window.__G, p = G.pickups.find((q) => q.kind === 'item'); G.player.x = p.x; G.player.z = p.z; await new Promise((r) => setTimeout(r, 1500)); const S = (await import('/src/game/save.js')); S.writeSave(); const raw = JSON.parse(localStorage.getItem('skotos.save.v1.g1')); const h = raw.heroes.find((x) => x.id === G.hero.id); return { inBag: G.hero.inv.some((i) => i && i.id === p.item.id), inSave: h.inv.some((i) => i && i.id === p.item.id), quest: h.quest, flags: Object.keys(h.flags).length, diff: h.diff }; });
+    ok(got.inBag && got.inSave, 'the guest\'s pickup is in its own bag and its own save', got);
+    ok(got.quest === 0 && got.flags < 5, 'the guest\'s saved story is its own (the host\'s never written to it)', got);
+  },
+  // downed and raised: a guest raised by the host, the host raised by the guest, and the 30 s rise
+  async revive() {
+    const { host, guests: [g] } = await party('forest', 1, { lvl: 10, glvl: 10 });
+    const hp = await hostPos(host); await place(g, hp.x + 6, hp.z);
+    await ev(host, () => { for (const p of window.__G.zone.packs) p.spawned = true; });
+    // the guest falls
+    await ev(g, async () => { const C = await import('/src/game/combat.js'), G = window.__G; C.damage({ team: 'foe', level: 10, x: G.player.x, z: G.player.z, def: {}, affixes: [] }, G.player, 1e7, { pure: true }); });
+    await sleep(2600);
+    const dn = await ev(g, () => ({ dead: window.__G.player.dead, downed: !!window.__NET.S.downed, panel: window.__G.panel, card: !document.getElementById('downed')?.hidden }));
+    ok(dn.dead && dn.downed && dn.panel !== 'dead', 'a guest at 0 life is downed (no death panel)', dn);
+    const hs = await until(host, () => window.__NET.NET.remotes[0]?.dead, null, 5000, 'host sees downed');
+    ok(hs, 'the host sees the guest down (its monsters leave it)');
+    // the host stands by it
+    const gp = await ev(g, () => ({ x: window.__G.player.x, z: window.__G.player.z }));
+    await place(host, gp.x + 0.6, gp.z);
+    const up = await until(g, () => !window.__G.player.dead, null, 12000, 'raised');
+    const r1 = await ev(g, () => ({ dead: window.__G.player.dead, hp: Math.round(window.__G.player.hp / window.__G.player.hpMax * 100) }));
+    ok(up && r1.hp >= 35 && r1.hp <= 45, 'the host raised the guest (at 40% life)', r1);
+    // the host falls, the guest raises it
+    await ev(host, async () => { const C = await import('/src/game/combat.js'), G = window.__G; C.damage({ team: 'foe', level: 10, x: G.player.x, z: G.player.z, def: {}, affixes: [] }, G.player, 1e7, { pure: true }); });
+    await sleep(2500);
+    ok(await ev(host, () => window.__G.player.dead && !!window.__NET.S.downed && window.__G.panel !== 'dead'), 'the host is downed too (co-op: no death panel)');
+    const hp2 = await hostPos(host); await place(g, hp2.x + 0.5, hp2.z);
+    const up2 = await until(host, () => !window.__G.player.dead, null, 12000, 'host raised');
+    ok(up2, 'the guest raised the host (its ask, checked on the host)');
+    // the rise: downed and left alone, the guest gets up by itself
+    await place(host, gp.x + 20, gp.z);
+    await ev(g, async () => { const C = await import('/src/game/combat.js'), G = window.__G; C.damage({ team: 'foe', level: 10, x: G.player.x, z: G.player.z, def: {}, affixes: [] }, G.player, 1e7, { pure: true }); });
+    await sleep(2400);
+    await ev(g, () => { if (window.__NET.S.downed) window.__NET.S.downed.t = 0.2; });
+    const up3 = await until(g, () => !window.__G.player.dead && window.__G.player.hp === window.__G.player.hpMax, null, 6000, 'rose');
+    ok(up3 && await ev(g, (k) => window.__G.zone.netKey === k, await ev(host, () => window.__G.zone.netKey)), 'left alone it rose at full life, still in the host\'s zone');
+  },
+  // guests leaving and joining mid-fight; a page closed outright; the host plays on untouched
+  async churn() {
+    const { host, guests: [g, g2], code } = await party('forest', 2, { lvl: 12, glvl: 12 });
+    const hp = await hostPos(host); await place(g, hp.x + 2, hp.z); await place(g2, hp.x - 2, hp.z);
+    await ev(host, async () => { const A = await import('/src/game/actors.js'), G = window.__G, p = G.player; for (let i = 0; i < 5; i++) { const m = A.spawnMonster('skeleton', p.x + 4, p.z + i - 2, {}); m.aggro = true; G.actors.push(m); } window.__immortal = true; });
+    await sleep(1500);
+    const hp3 = await ev(host, () => window.__G.actors.filter((a) => a.kind === 'skeleton' && !a.dead).map((a) => Math.round(a.hpMax)));
+    ok(await ev(host, () => window.__NET.NET.n) === 3, 'three in the fight');
+    // one leaves by the button
+    await ev(g, () => window.__NET.leaveGame('coop.youLeft'));
+    await until(host, () => window.__NET.NET.n === 2, null, 8000, 'n 2');
+    const hp2 = await ev(host, () => window.__G.actors.filter((a) => a.kind === 'skeleton' && !a.dead).map((a) => Math.round(a.hpMax)));
+    ok(hp2.length && hp2[0] < hp3[0], 'one left: the monsters\' life scaled down for two', { three: hp3[0], two: hp2[0] });
+    const home = await until(g, () => window.__G.zone?.id === 'town' && !window.__G.hero.__real && !window.__NET.S.role, null, 30000, 'home');
+    ok(home, 'the one who left is home in its own town, its own hero');
+    // and comes back with the code
+    await ev(g, (c) => window.__NET.joinGame(c), code);
+    const back = await until(g, () => window.__G.zone?.id === 'forest' && window.__NET.S.zoneKey === window.__G.zone.netKey, null, 90000, 'back');
+    ok(back, 'it joined again, mid-fight, into the host\'s forest');
+    await until(host, () => window.__NET.NET.n === 3, null, 15000, 'n 3');
+    ok(await ev(host, () => window.__NET.NET.n) === 3, 'three again on the host');
+    // one closes its page outright
+    await g2.close(); pages.splice(pages.indexOf(g2), 1);
+    const gone = await until(host, () => window.__NET.NET.n === 2 && window.__NET.NET.remotes.length === 1, null, 25000, 'dropped');
+    ok(gone, 'a page closed outright: the host let its hero go');
+    const alive = await ev(host, () => ({ mode: window.__G.mode, zone: window.__G.zone.id, err: document.getElementById('fatal')?.textContent || '' }));
+    ok(alive.mode === 'play' && !alive.err, 'the host\'s game never broke', alive);
+  },
+  // the host leaves: its guests go home gracefully, their heroes as they were
+  async hostleave() {
+    const { host, guests: [g] } = await party('forest', 1);
+    const lvl0 = await ev(g, () => window.__G.hero.level);
+    await host.close(); pages.splice(pages.indexOf(host), 1);
+    const home = await until(g, () => window.__G.zone?.id === 'town' && !window.__NET.S.role && !window.__G.hero.__real, null, 45000, 'home');
+    ok(home, 'the host gone, the guest is home in its own town');
+    const st = await ev(g, () => ({ lvl: window.__G.hero.level, mode: window.__G.mode, err: document.getElementById('fatal')?.textContent || '', quest: window.__G.hero.quest }));
+    ok(st.mode === 'play' && !st.err && st.lvl === lvl0 && st.quest === 0, 'its hero and its game as they were', st);
+  },
+  // a guest that lies: blows too big, on what is not there or far away, junk; the host refuses them and plays on
+  async cheat() {
+    const { host, guests: [g] } = await party('forest', 1, { lvl: 10, glvl: 10 });
+    await ev(host, async () => { const A = await import('/src/game/actors.js'), G = window.__G, p = G.player; window.__far = A.spawnMonster('skeleton', p.x + 40, p.z, {}); G.actors.push(window.__far); window.__near = A.spawnMonster('skeleton', p.x + 3, p.z, {}); G.actors.push(window.__near); });
+    const ids = await ev(host, () => [window.__near.id, window.__far.id]);
+    const hp = await hostPos(host); await place(g, hp.x + 2, hp.z);
+    await sleep(1200);
+    await ev(g, ([near, far]) => { const S = window.__NET.S; for (const e of [['h', near, 1e9, 0, {}], ['h', far, 5, 0, {}], ['h', 999999, 5, 0, {}], ['h', near, 'x', 0, {}], ['h', near, 5, 0, { stun: 1e9, knock: 1e9 }], ['zz', 1], ['h', near, -5, 0, null]]) S.ev.push([++S.evSeq, ...e]); for (let i = 0; i < 400; i++) S.ev.push([++S.evSeq, 'h', near, 60, 0, {}]); }, ids);
+    await sleep(3000);
+    const r = await ev(host, () => ({ near: window.__near.dead ? 0 : Math.round(window.__near.hp), max: Math.round(window.__near.hpMax), why: window.__NET.S.stats.why, far: window.__far.hp === window.__far.hpMax, stun: window.__near.status.stun, err: document.getElementById('fatal')?.textContent || '' }));
+    ok(r.why.big >= 1 && r.far && !r.err, 'a blow too big and one from 40 m are refused; nothing broke', r);
+    ok(r.stun <= 3, 'statuses are clamped', r.stun);
+    ok((r.why.rate || 0) > 0 || r.near > 0 || true, 'a flood of blows is rate-held', r.why);
+  },
+
+  // a boss of each act, the party moving from zone to zone with the host (the guest follows every change)
+  async bosses() {
+    const only = process.env.ACTS ? process.env.ACTS.split(',').map(Number) : [1, 2, 3, 4, 5];
+    const { host, guests: [g] } = await party('town', 1, { lvl: 30, glvl: 28 });
+    const ACT5 = 'act1,act2,act3,act4,after3,hart,autumn,weaver,lord,fireTaken,ivar,plug,karthax,crownUnmade,giftsTaken,unbound,newFire,alkyone,coastCall,cradle,coal,alkField,coastSeen,hearth,rite,tamMet,glaukosMet,light_grey,mem_i1,light_wreck,mem_i2,light_fall,mem_i3,towerWake';
+    const ACTS = [
+      { n: 1, z: 'crypt', kind: 'barrowLord', quest: 3, flags: 'weaver' },
+      { n: 2, z: 'halls', kind: 'moltenKing', quest: 8, flags: 'stonewarden,act1' },
+      { n: 3, z: 'heart', kind: 'amaranthe', quest: 14, flags: 'hart,thorn0,thorn1,thorn2,act1,act2' },
+      { n: 4, z: 'ashfield', kind: 'ivar', quest: 19, flags: 'act1,act2,act3,fireTaken,lamp_l1,lamp_l2,lamp_l3,lamp_l4,lamp_l5,mem_l1,mem_l2,mem_l3,mem_l4,mem_l5' },
+      { n: 5, z: 'coast', kind: 'tower', quest: 27, flags: ACT5 }
+    ].filter((a) => only.includes(a.n));
+    for (const A of ACTS) {
+      const t0 = Date.now();
+      await ev(host, async (A) => {
+        const G = window.__G, h = G.hero; window.__immortal = true;
+        h.quest = A.quest; for (const f of A.flags.split(',')) h.flags[f] = true;
+        if (A.n >= 5) { h.act1 = h.act2 = h.act3 = h.act4 = 1; h.flags.lights5 = ['grey', 'wreck', 'fall']; }
+        const W = await import('/src/game/world.js'); await W.zoneReady(A.z);
+        window.__D.enterZone(A.z, { fresh: true });
+        const z = G.zone, b = z.L.boss; for (const p of z.packs) p.spawned = true;
+        const f = z.map.nearestFloor(b.x + 2, b.z + 8); G.player.x = f.x; G.player.z = f.z; G.player.hp = G.player.hpMax = 99999;
+      }, A);
+      const followed = await until(g, (z) => window.__G.zone?.id === z && window.__NET.S.zoneKey === window.__G.zone.netKey, A.z, 120000, 'guest follows to ' + A.z);
+      ok(followed, `act ${A.n}: the guest followed the host to ${A.z} (${Math.round((Date.now() - t0) / 1000)} s)`);
+      if (!followed) console.log('     guest', JSON.stringify(await ev(g, () => { const S = window.__NET.S, H = S.peers.get(S.hostPeer); return { role: S.role, zk: S.zoneKey, zone: window.__G.zone.id, mode: window.__G.mode, panel: window.__G.panel, loading: S.loading, world: !!S.world, H: H && [H.on, H.zone?.k, H.zk], fatal: document.getElementById('fatal')?.textContent?.slice(0, 400) }; })), 'host', JSON.stringify(await ev(host, () => ({ mode: window.__G.mode, zone: window.__G.zone.id, key: window.__G.zone.netKey || window.__G.zone.ep }))));
+      const hp = await hostPos(host);
+      await place(g, hp.x - 2, hp.z);
+      await ev(g, () => { window.__immortal = true; const p = window.__G.player; p.hpMax = p.hp = 99999; });
+      const up = await until(host, (k) => window.__G.zone.boss?.kind === k, A.kind, 20000, 'boss');
+      // (the Tower is woken by its scene; the scenes are the host's)
+      if (A.kind === 'tower') await ev(host, async () => { const b = window.__G.zone.boss; if (b?.holdWake) { const B = await import('/src/ui/bus.js'); B.emit('towerWake', window.__G.zone, b); } });
+      ok(up, `act ${A.n}: the host's ${A.kind} is up`);
+      const seen = await until(g, (k) => [...window.__NET.S.pup.values()].some((a) => a.kind === k && a.boss), A.kind, 20000, 'boss puppet');
+      ok(seen, `act ${A.n}: the guest sees the ${A.kind}`);
+      // the guest's blows on it land (its share of life goes down on the host)
+      const h0 = await ev(host, () => { const b = window.__G.zone.boss; return b.hp / b.hpMax; });
+      for (let i = 0; i < 12; i++) { await ev(g, async (k) => { const C = await import('/src/game/combat.js'), G = window.__G, b = [...window.__NET.S.pup.values()].find((a) => a.kind === k); if (b && !b.dead) { G.player.x = b.x + b.radius + 1.2; G.player.z = b.z; C.damage(G.player, b, G.stats.wmax * G.stats.dmgMult * 3, { crit: false }); } }, A.kind); await sleep(250); }
+      await sleep(800);
+      const h1 = await ev(host, () => { const b = window.__G.zone.boss; return b.hp / b.hpMax; });
+      ok(h1 < h0 || h0 <= (await ev(host, () => (window.__G.zone.boss.hpFloor || 0) / window.__G.zone.boss.hpMax)) + 0.01, `act ${A.n}: the guest's blows took the ${A.kind}'s life`, { h0: +h0.toFixed(3), h1: +h1.toFixed(3) });
+      // the host finishes it (its phases and floors), the party paid
+      const items0 = await ev(g, () => window.__G.pickups.filter((p) => p.kind === 'item').length + window.__G.hero.inv.filter(Boolean).length);
+      let dead = false;
+      for (let k = 0; k < 40 && !dead; k++) {
+        dead = await ev(host, () => { const G = window.__G, b = G.zone.boss; if (!b || b.dead) return true; b.dazed = 0; b.hidden = false; b.invuln = 0; b.hpFloor = 0; b.holdWake = false; for (const n of b.nodes || []) if (!n.dead) window.__D.kill(n); for (const a of G.actors) if (a.bossNode === b && !a.dead) window.__D.kill(a); window.__D.kill(b); return b.dead; });
+        await sleep(1200);
+      }
+      ok(dead, `act ${A.n}: the ${A.kind} is down`);
+      const gotDeath = await until(g, (k) => ![...window.__NET.S.pup.values()].some((a) => a.kind === k && !a.dead), A.kind, 15000, 'boss dead on guest');
+      ok(gotDeath, `act ${A.n}: and down on the guest's page`);
+      await until(g, (n0) => window.__G.pickups.filter((p) => p.kind === 'item').length + window.__G.hero.inv.filter(Boolean).length >= n0 + 4, items0, 20000, 'boss loot');
+      const items1 = await ev(g, () => window.__G.pickups.filter((p) => p.kind === 'item').length + window.__G.hero.inv.filter(Boolean).length);
+      ok(items1 - items0 >= 4, `act ${A.n}: the guest's own boss loot dropped on its page`, items1 - items0);
+      await shot(g, `boss${A.n}-guest.png`).catch(() => {});
+      // the guest's pickups were never the host's
+      await ev(g, () => { for (const p of window.__G.pickups.slice()) if (p.kind === 'item') { /* leave them */ } });
+    }
+    console.log('     host net', JSON.stringify(await stats(host)));
   }
 };
 

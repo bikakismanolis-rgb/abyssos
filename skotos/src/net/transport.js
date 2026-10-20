@@ -146,7 +146,7 @@ export function RoomTransport(room, o = {}) {
 function diffNull(a, b) { const o = {}; for (const k in a) if (!(k in b)) o[k] = null; return o; }
 
 // ---------- pages of one browser (the tests) ----------
-// Each page is one peer. A heartbeat each second carries the presence, a peer silent for 4 s is gone. o.drop: the share
+// Each page is one peer. A heartbeat each second carries the presence, a peer silent for 12 s is gone (a page loading a zone stalls). o.drop: the share
 // of messages lost (a room drops), o.lag: ms each message waits; the room's budget and sizes apply as on the real one
 export function LocalTransport(o = {}) {
   if (typeof BroadcastChannel === 'undefined') return null;
@@ -186,7 +186,7 @@ export function LocalTransport(o = {}) {
     const hb = setInterval(() => {
       post({ t: 'hb', p: ch.mine(), from: me, by: o.by || null });
       const t = Date.now(); let gone = false;
-      for (const [k, p] of peers) if (t - p.seen > 4000) { peers.delete(k); gone = true; }
+      for (const [k, p] of peers) if (t - p.seen > (o.gone || 12000)) { peers.delete(k); gone = true; }
       if (gone) publish([]);
     }, 1000);
     setTimeout(() => { ch._conn(true); post({ t: 'hi', p: ch.mine(), from: me, by: o.by || null }); publish([]); }, o.lag || 0);
