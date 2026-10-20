@@ -707,10 +707,10 @@ const S = {
         G.actors = G.actors.filter((a) => !a.removed);
         h.skills[e.id] = 5; h.vars[e.id] = 3; h.variant[e.id] = e.v; h.loadout[0] = e.id;
         pl.res = G.stats.resMax; pl.cds.fill(0); pl.act = null; pl.twinT = 0; for (const k in pl.buffs) delete pl.buffs[k]; pl.shield = 0;
-        const far = G.hero.cls === 'warden' ? 3.2 : 7, fx = pl.x + Math.sin(pl.rot) * far, fz = pl.z + Math.cos(pl.rot) * far;
+        const far = G.hero.cls === 'warden' ? 2.2 : 7, fx = pl.x + Math.sin(pl.rot) * far, fz = pl.z + Math.cos(pl.rot) * far;
         window.__dum = [];
         for (let i = 0; i < 7; i++) {
-          const a = i * 0.9, r = i ? 2.2 : 0, x = fx + Math.sin(a) * r, z = fz + Math.cos(a) * r;
+          const a = i * 0.9, r = i ? (G.hero.cls === 'warden' ? 1.6 : 2.2) : 0, x = fx + Math.sin(a) * r, z = fz + Math.cos(a) * r;
           if (!G.zone.map.walkable(x, z)) continue;
           const m = window.__D.spawnMonster(i % 3 ? 'goblin' : 'skeleton', x, z, { level: 45 }); m.hp = m.hpMax = 1e7; m.dummy = true; m.status.stun = 99;
           G.actors.push(m); window.__dum.push(m);
@@ -726,6 +726,47 @@ const S = {
       res[e.n ? e.id + '.' + e.n : e.id] = await pg.evaluate(() => { const d = window.__dum; return { dealt: Math.round(d.reduce((s, a) => s + (a.hpMax - Math.max(0, a.hp)), 0)), hit: d.filter((a) => a.hp < a.hpMax).length, n: d.length }; });
     }
     return res;
+  } },
+  // levels past the old skill cap, Mastery past 50, and a save from before the progression taken up from the title
+  progress: { q: 'auto=town&sim=2&q=1&lvl=1&cls=' + (process.env.CLS || 'ranger'), run: async (pg, shot) => {
+    const r = {};
+    r.climb = await pg.evaluate(async () => {
+      const C = await import('/src/game/combat.js'), D = await import('/src/game/data.js'), P = await import('/src/game/progression.js'), B = await import('/src/ui/bus.js');
+      const G = window.__G, h = G.hero, ev = { lv: 0, m: 0, sk: [] };
+      B.on('levelUp', (l, sk) => { ev.lv++; if (sk) ev.sk.push(l + ':' + sk.id); }); B.on('masteryUp', () => ev.m++);
+      const at = {};
+      while (h.level < 50) { C.gainXP(D.xpToNext(h.level) * 0.6); if ([17, 20, 30, 40, 50].includes(h.level) && !at[h.level]) at[h.level] = { pts: h.points, earned: P.pointsEarned(h) }; }
+      for (let i = 0; i < 25; i++) C.gainXP(D.mxpToNext(h.mlvl) * 0.55);
+      return { level: h.level, mlvl: h.mlvl, mxp: Math.round(h.mxp), xp: h.xp, points: h.points, earned: P.pointsEarned(h), ev, at };
+    });
+    await pg.waitForTimeout(800); await shot();
+    // spend everything: every rank, every variant, the rest in Mastery
+    r.spend = await pg.evaluate(async () => {
+      const P = await import('/src/game/progression.js'), D = await import('/src/game/data.js'), G = window.__G, h = G.hero;
+      for (const sk of D.SKILLS[h.cls]) while (P.rankUp(h, sk.id));
+      for (const id in D.VARIANTS) if (D.SKILLS[h.cls].some((s) => s.id === id)) { P.unlockVariant(h, id, 1); P.unlockVariant(h, id, 2); }
+      const left = h.points, ids = P.MASTERY.map((m) => m.id); let k = 0;
+      while (h.points > 0) P.masterUp(h, ids[k++ % ids.length]);
+      window.__D.refreshStats();
+      return { left, spent: P.pointsSpent(h), earned: P.pointsEarned(h), dps: Math.round(G.stats.dps), life: G.stats.lifeMax, crit: G.stats.critC };
+    });
+    await pg.evaluate(() => window.__D.openPanel('skills', { tab: 1 })); await pg.waitForTimeout(400); await shot();
+    await pg.evaluate(() => window.__D.closePanel());
+    // an old save: a level 50 hero with the old cap's points left over and no loadout; the title's Continue takes it up
+    await pg.evaluate(() => {
+      const G = window.__G, old = JSON.parse(JSON.stringify(G.hero));
+      for (const k of ['loadout', 'vars', 'variant', 'mast', 'mlvl', 'mxp']) delete old[k];
+      old.id = 'hold'; old.level = 50; old.xp = 4321; old.skills = { multi: 5, rain: 5, wolf: 3, pierce: 5, bolt: 1 }; old.points = 49 - 13; old.cls = 'ranger';
+      localStorage.setItem('skotos.save.v1', JSON.stringify({ heroes: [old], settings: { helpSeen: true }, last: 'hold' }));
+    });
+    await pg.goto((process.env.BASE || 'http://localhost:5199/') + '?sim=1&q=1');
+    await pg.waitForFunction(() => window.__ready, null, { timeout: 180000 });
+    await pg.waitForTimeout(1500); await pg.mouse.click(300, 200); await pg.waitForTimeout(1200);
+    await pg.click('#m-cont'); await pg.waitForFunction(() => window.__G?.mode === 'play' && window.__G.player, null, { timeout: 180000 });
+    await pg.waitForTimeout(1500);
+    r.migrated = await pg.evaluate(() => { const h = window.__G.hero; return { level: h.level, xp: h.xp, points: h.points, skills: h.skills, loadout: h.loadout, mlvl: h.mlvl, mast: h.mast }; });
+    await pg.evaluate(() => window.__D.openPanel('skills')); await pg.waitForTimeout(400); await shot();
+    return r;
   } },
   title: { q: 'sim=1&q=' + (process.env.Q || '1'), run: async (pg, shot) => {
     await pg.waitForTimeout(2500); await shot();
