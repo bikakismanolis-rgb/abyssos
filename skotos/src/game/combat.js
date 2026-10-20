@@ -132,8 +132,8 @@ function hurtHero(src, amount, o) {
   number(p.x, 2.2, p.z, amount, 'hurt');
   emit('hurt', amount / p.hpMax);
   if (!o.dot) {
-    // blows that reached her life, counted (a touch that takes a moment is broken by a blow, not by a burn: world.js)
-    p.blows = (p.blows || 0) + 1;
+    // blows that reached her life, counted (a touch that takes a moment is broken by a blow, not by a burn or a chip: world.js)
+    if (amount >= p.hpMax * 0.04) p.blows = (p.blows || 0) + 1;
     if (amount > p.hpMax * 0.08) { shake(0.25); vibrate(40); Audio.sfx('playerHurt', { vol: 0.8 }); }
     if (src && s.thorns && !src.dead && src.team === 'foe') damage(p, src, s.thorns, { noFx: true, quiet: true, noLoh: true, noRes: true });
     if (src?.affixes?.includes('vampiric')) { src.hp = Math.min(src.hpMax, src.hp + amount * 2); }
@@ -176,8 +176,9 @@ export function freeHero(crack = true) {
 
 // ---------- Act IV: the dead in the dark, the shield line, the Seen and the Clinging ----------
 // what a blow is worth against an Act IV rule (1 = full): a Lampless struck unaware from outside its cone takes double;
-// a guarding Ash-Fallen takes 15% from the front unless the blow is an area one, and a breaking blow (a stun, a freeze, a
-// hard knock, o.breakGuard) drops its shield for 3 s; the Shrouded take 30% outside light, and a blow in light reveals them
+// a guarding Ash-Fallen takes 25% from the front unless the blow is an area one (the hero's says "Blocked"), and a breaking
+// blow (a stun, a freeze, a hard knock, o.breakGuard) drops its shield for 3 s; the Shrouded take 30% outside light, and a
+// blow in light (reaching the body) reveals them
 function act4Hit(src, a, o, fromHero) {
   let k = 1;
   const def = a.def, pl = G.player;
@@ -199,11 +200,12 @@ function act4Hit(src, a, o, fromHero) {
         if (!o.quiet) Audio.sfx('shieldBlock', { x: a.x, z: a.z, vol: 0.8 });
         if (a.state !== 'attack' && a.state !== 'wind') a.avatar?.play('blockHit', 1.3);
         a.blocks = (a.blocks || 0) + 1;
+        if (fromHero && !(a.blockTxt > 0)) { a.blockTxt = 0.8; number(a.x, 2.6, a.z, t('hud.block'), 'text', '#c8d0e0'); }
       }
     }
   }
   if ((def.shroud || a.shrouded) && !(a.unshroud > 0) && lightOn()) {
-    if (lightAt(a.x, a.z)) a.revealed = 3;
+    if (lightAt(a.x, a.z, a.radius * 0.5)) a.revealed = 3;
     else if (!(a.revealed > 0)) {
       k *= 0.3;
       if (!o.dot && !(a.shroudTxt > 0)) { a.shroudTxt = 0.8; number(a.x, 2.7 * (a.scale || 1), a.z, tx('hud.shrouded', 'Σκιασμένος', 'Shrouded'), 'text', '#9aa8c0'); }
