@@ -538,6 +538,8 @@ const PLACE = {
     c.scale.setScalar(0.32); c.position.copy(s.position); c.renderOrder = 1.5; out.group.add(c);
     const ph = hash2(p.x, p.z) * 9;
     s.onBeforeRender = () => { const k = 0.82 + 0.12 * Math.sin(R.time * 2.3 + ph) + 0.06 * Math.sin(R.time * 7.1 + ph * 2); s.material.opacity = 0.8 * k; s.scale.setScalar(1.3 * (0.94 + 0.08 * k)); };
+    // (and a few warm motes rising out of the hole over it, slow, so the window reads as lit from below at a glance)
+    out.emitters.push({ x: p.x, y: 0.08, z: p.z, type: 'motes', s: 0.55, color: 0xffc070, color1: 0xa04a10 });
   },
   // the camp's fire on the ice: an iron basket on three splayed legs, stones round its feet, a real fire in it (its flames,
   // embers, smoke and light: fireLife). (The Field's brazier without its scan, the cinder pack being away, was a glowing
@@ -1268,14 +1270,16 @@ const PROP5 = {
     // (and no pale walls at all: the pane's frosted round rim hides the shaft's square edges, and its walls are the deep
     // ice's dark, the light fading down them: lit, they stood as a square glass skylight)
     for (const [x, z, w, dd] of [[0, -1.02, 2.1, 0.06], [0, 1.02, 2.1, 0.06], [-1.02, 0, 0.06, 2.1], [1.02, 0, 0.06, 2.1]]) {
-      parts.push({ geo: G.box(w, 0.6, dd), color: 0x2a3640, o: { x, y: -0.31, z } });
-      parts.push({ geo: G.box(w, d - 0.6, dd), color: 0x10161c, o: { x, y: -0.6 - (d - 0.6) / 2 - 0.01, z } });
+      parts.push({ geo: G.box(w, 0.6, dd), color: 0x1a242c, o: { x, y: -0.31, z } });
+      parts.push({ geo: G.box(w, d - 0.6, dd), color: 0x080c10, o: { x, y: -0.6 - (d - 0.6) / 2 - 0.01, z } });
     }
-    parts.push({ geo: G.box(2, 0.1, 2), color: 0x0c1014, o: { y: -d - 0.05 } });
+    parts.push({ geo: G.box(2, 0.1, 2), color: 0x05080a, o: { y: -d - 0.05 } });
     // (the window's cells lie square to the grid whatever way the prop is turned: this part takes the turn off again)
     const inner = new THREE.Group(); g.add(inner);
     inner.updateMatrixWorld = function (f) { this.rotation.y = -g.rotation.y; THREE.Object3D.prototype.updateMatrixWorld.call(this, f); };
-    const m = new THREE.Mesh(bake(parts), MAT.icy5); m.receiveShadow = true; inner.add(m);
+    // (in their own colours: the shared ice material takes no vertex colour, and the pit's walls showed through the pane as
+    // pale blue ice, a lit puddle)
+    const m = new THREE.Mesh(bake(parts), MAT.pit5 ||= new THREE.MeshLambertMaterial({ vertexColors: true })); m.receiveShadow = true; inner.add(m);
     if (!o.drowned) { const c = halo(0x8ac0e0, 0.8); c.material.opacity = 0.45; c.position.y = -d + 0.5; g.add(c); }
     g.userData.figureY = -d;
     return g;
