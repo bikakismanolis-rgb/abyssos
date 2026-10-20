@@ -400,7 +400,7 @@ function emit(e, dt, cx, cz) {
     case 'lowmist': while (e.acc > 0.3) { e.acc -= 0.3; P({ add: false, x: e.x + rr(-4, 4) * s, y: rr(0.7, 1.3), z: e.z + rr(-4, 4) * s, vx: rr(-0.15, 0.15), vy: 0.02, vz: rr(-0.15, 0.15), life: rr(5, 8), size: 2.2, size1: 3.4, color: 0xd8ccb0, alpha: 0.12, alpha1: 0, drag: 0.1 }); } break;
     case 'motes': {
       const r = e.autumn ? 1 - FX.autumn : 1; if (r <= 0) break;
-      while (e.acc > 0.35 / r) { e.acc -= 0.35 / r; P({ x: e.x + rr(-0.6, 0.6) * s, y: e.y + rr(-0.5, 0.5), z: e.z + rr(-0.6, 0.6) * s, vx: rr(-0.1, 0.1), vy: rr(0.02, 0.15), vz: rr(-0.1, 0.1), life: rr(2, 4), size: 0.07, size1: 0.03, color: e.color || 0xe0f080, color1: 0x80a020, alpha: 0.9, alpha1: 0 }); }
+      while (e.acc > 0.35 / r) { e.acc -= 0.35 / r; P({ x: e.x + rr(-0.6, 0.6) * s, y: e.y + rr(-0.5, 0.5), z: e.z + rr(-0.6, 0.6) * s, vx: rr(-0.1, 0.1), vy: rr(0.02, 0.15), vz: rr(-0.1, 0.1), life: rr(2, 4), size: 0.07, size1: 0.03, color: e.color || 0xe0f080, color1: e.color1 || 0x80a020, alpha: 0.9, alpha1: 0 }); }
       break;
     }
     case 'amberglow': {
