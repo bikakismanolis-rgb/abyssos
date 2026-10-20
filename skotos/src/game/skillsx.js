@@ -263,7 +263,7 @@ export const VARIANT_FN = {
       for (const f of hits) {
         if (f.dead || !(f.status.freeze > 0 || f.boss)) continue;
         glowBurst(f.x, 1, f.z, 0xe8faff, 22, 5, 0.3, 0.5); sparks(f.x, 1, f.z, 14, 0xd0f0ff, 7, { color1: 0x4080ff });
-        damage(pl, f, heroHit(mult * 1.5, { area: true }), { area: true, quiet: true, crit: f.status.freeze > 0 ? true : undefined });
+        damage(pl, f, heroHit(mult * 1.2, { area: true }), { area: true, quiet: true, crit: f.status.freeze > 0 ? true : undefined });
         f.status.freeze = 0;
       }
       if (hits.length) Audio.sfx('break', { x: pl.x, z: pl.z, vol: 0.8 });
@@ -336,7 +336,7 @@ export const VARIANT_FN = {
         const n = 5 + (rank >= 4 ? 1 : 0);
         for (let i = 0; i < n; i++) {
           const a = (i / n) * 6.28 + rand.range(-0.4, 0.4), r = i === 0 ? 0 : rand.range(1.2, sk.radius + 0.8), mx = x + Math.sin(a) * r, mz = z + Math.cos(a) * r;
-          meteorFall(mx, mz, 0.55 + i * 0.22, 0.7, () => { explosion(mx, mz, 1.9, 0xff5a10, { shake: 0.25 }); Audio.sfx('explosion', { x: mx, z: mz, vol: 0.6 }); circleHit(mx, mz, 2.0, (f) => damage(pl, f, heroHit(mult * 0.42, { area: true }), { knock: 3, kx: f.x - mx, kz: f.z - mz, burn: heroHit(mult * 0.1), area: true })); });
+          meteorFall(mx, mz, 0.55 + i * 0.22, 0.7, () => { explosion(mx, mz, 1.9, 0xff5a10, { shake: 0.25 }); Audio.sfx('explosion', { x: mx, z: mz, vol: 0.6 }); circleHit(mx, mz, 2.0, (f) => damage(pl, f, heroHit(mult * 0.55, { area: true }), { knock: 3, kx: f.x - mx, kz: f.z - mz, burn: heroHit(mult * 0.1), area: true })); });
         }
       }]]
     });
