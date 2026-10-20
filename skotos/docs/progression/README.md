@@ -67,8 +67,9 @@ sidegrades (tuned at the dummies, below), so the bot keeps today's four.
 
 Per job (`balance-acts3-4.txt`) the swings are mostly noise of 6 runs (the Warden at 17, who has no spare point, moves
 as much as the others). The acts stay within the 20-30% the owner allowed; the large rewards are in the tail: at
-Mastery 100 (5 million XP of Shadow Gates past level 50) a hero who splits 149 points over the tracks has about +40%
-damage, +40% life, +5% crit, +45% crit damage and the rest besides.
+Mastery 100 (5 million XP of Shadow Gates past level 50) a hero who spreads the 113 points left after the skills evenly over
+the twelve tracks has +21% damage, +21% life, +3% crit, +25% crit damage and the rest besides; one who puts them into
+Might and Vigor alone has +76% of each.
 
 ### The later skills and variants at the dummies
 `node tools/scenario.mjs skillsfx <out> 844 390` with `CLS=warden|ranger|mage` casts every skill and variant (rank 5,
