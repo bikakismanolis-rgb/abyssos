@@ -1,7 +1,9 @@
 // Local saves: every hero and the settings, in one localStorage entry.
 import { G } from './state.js';
 
-const KEY = 'skotos.save.v1';
+// (?slot=name: a save of its own, for tests that run several heroes in one browser: tools/coop.mjs)
+const SLOT = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('slot') : null;
+const KEY = 'skotos.save.v1' + (SLOT && /^[a-z0-9]{1,12}$/.test(SLOT) ? '.' + SLOT : '');
 export function loadSave() {
   let s = null;
   try { s = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { s = null; }
