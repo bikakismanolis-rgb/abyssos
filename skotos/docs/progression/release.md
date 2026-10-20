@@ -39,4 +39,8 @@ Changed (it names the new entry chunks).
 Every file stays under 16 MB (the largest, `ash-*.js`, is 3.8 MB, unchanged).
 
 ## Checks
-- Strict CSP (HANDOFF's policy) served by `tools/csp-server.mjs`: see the result below.
+- Strict CSP (HANDOFF's policy) served by `tools/csp-server.mjs`, Playwright on desktop (1280x720) and an
+  isMobile/hasTouch context (844x390, DPR 2): title, new Warden, town, the skills panel at level 34, a skill cast.
+  0 CSP violations, 0 console or page errors in both; models textured (not white).
+- Every shipped scenario passes (Acts I-IV, title, panels), and the new ones: `progpanel`, `progress`, `skillsfx`
+  (each class).
