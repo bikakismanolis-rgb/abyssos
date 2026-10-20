@@ -213,7 +213,7 @@ const SC = {
   // a guest that lies: blows too big, on what is not there or far away, junk; the host refuses them and plays on
   async cheat() {
     const { host, guests: [g] } = await party('forest', 1, { lvl: 10, glvl: 10 });
-    await ev(host, async () => { const A = await import('/src/game/actors.js'), G = window.__G, p = G.player; window.__far = A.spawnMonster('skeleton', p.x + 40, p.z, {}); G.actors.push(window.__far); window.__near = A.spawnMonster('skeleton', p.x + 3, p.z, {}); G.actors.push(window.__near); });
+    await ev(host, async () => { const A = await import('/src/game/actors.js'), G = window.__G, p = G.player; window.__far = A.spawnMonster('skeleton', p.x + 40, p.z, {}); G.actors.push(window.__far); window.__near = A.spawnMonster('skeleton', p.x + 3, p.z, {}); window.__near.hp = window.__near.hpMax = 1e7; G.actors.push(window.__near); });
     const ids = await ev(host, () => [window.__near.id, window.__far.id]);
     const hp = await hostPos(host); await place(g, hp.x + 2, hp.z);
     await sleep(1200);
@@ -222,7 +222,82 @@ const SC = {
     const r = await ev(host, () => ({ near: window.__near.dead ? 0 : Math.round(window.__near.hp), max: Math.round(window.__near.hpMax), why: window.__NET.S.stats.why, far: window.__far.hp === window.__far.hpMax, stun: window.__near.status.stun, err: document.getElementById('fatal')?.textContent || '' }));
     ok(r.why.big >= 1 && r.far && !r.err, 'a blow too big and one from 40 m are refused; nothing broke', r);
     ok(r.stun <= 3, 'statuses are clamped', r.stun);
-    ok((r.why.rate || 0) > 0 || r.near > 0 || true, 'a flood of blows is rate-held', r.why);
+    ok((r.why.rate || 0) > 0 && r.near > 1e7 - 400 * 60, 'a flood of 400 blows in a moment is rate-held', { why: r.why, lost: 1e7 - r.near });
+  },
+
+  // Act V: the host's tide on the guest's coast (its clock and a boss's hold), the host's ice breaking under the guest
+  async act5() {
+    const A4 = 'act1,act2,act3,act4,after3,hart,autumn,weaver,lord,fireTaken,ivar,plug,karthax,crownUnmade,giftsTaken,unbound,newFire';
+    const { host, guests: [g] } = await party('coast', 1, { lvl: 30, glvl: 30, hq: '&quest=26&flags=' + A4 + ',alkyone,coastCall,cradle,coal,alkField,coastSeen,hearth,rite' });
+    ok(await ev(g, () => !!window.__G.zone.tide), 'the guest\'s coast has its tide');
+    // the host's clock jumped into the flood: the guest's follows within a snapshot or two, then the water rises on both
+    await ev(host, () => { window.__G.zone.tide.t = 60; });
+    await sleep(2500);
+    const t1 = await ev(host, () => window.__G.zone.tide.t), t2 = await ev(g, () => window.__G.zone.tide.t);
+    ok(Math.abs(t1 - t2) < 1.2, 'the guest\'s tide clock is the host\'s', { host: +t1.toFixed(2), guest: +t2.toFixed(2) });
+    await sleep(9000);
+    const h1 = await ev(host, () => ({ h: window.__G.zone.tide.h, ph: window.__G.zone.tide.phase })), h2 = await ev(g, () => ({ h: window.__G.zone.tide.h, ph: window.__G.zone.tide.phase }));
+    ok(h1.ph === h2.ph && Math.abs(h1.h - h2.h) <= 0.16, 'the water stands the same on both (flood)', { host: h1, guest: h2 });
+    // a boss's hold on the water (the Tower's forced flood) reaches the guest
+    await ev(host, () => { window.__G.zone.tide.force = { h: 1.2, rate: 0.5 }; });
+    await sleep(1500);
+    const f2 = await ev(g, () => window.__G.zone.tide.force);
+    ok(f2 && Math.abs(f2.h - 1.2) < 0.02, 'a boss\'s hold on the tide reaches the guest', f2);
+    await ev(host, () => { window.__G.zone.tide.force = null; });
+    // the Farthest Light: the ice
+    await ev(host, async () => { const G = window.__G, h = G.hero; Object.assign(h.flags, { towerWake: true, towerDown: true, frozen: true, farSeen: true, alkShip: true, light_grey: true, light_wreck: true, light_fall: true, mem_i1: true, mem_i2: true, mem_i3: true }); h.quest = 28; const W = await import('/src/game/world.js'); await W.zoneReady('farlight'); window.__D.enterZone('farlight', { fresh: true }); });
+    const there = await until(g, () => window.__G.zone?.id === 'farlight' && window.__NET.S.zoneKey === window.__G.zone.netKey, null, 120000, 'farlight');
+    ok(there, 'the guest followed onto the ice');
+    // a thin-ice cell near the host, the guest on it
+    const cell = await ev(host, () => { const G = window.__G, L = G.zone.L, p = G.player; let best = null, bd = 1e9; for (let i = 0; i < L.ice.length; i++) { if (!L.ice[i] || L.thick?.[i] || !G.zone.map.walkable(i % L.w + 0.5, Math.floor(i / L.w) + 0.5)) continue; const x = i % L.w + 0.5, z = Math.floor(i / L.w) + 0.5, d = Math.hypot(x - p.x, z - p.z); if (d < bd && d > 4) { bd = d; best = { i, x, z }; } } return best; });
+    ok(!!cell, 'a cell of thin ice', cell);
+    await place(host, cell.x + 6, cell.z);
+    await ev(g, ([x, z]) => { const G = window.__G; G.player.x = x; G.player.z = z; G.player.hp = G.player.hpMax; window.__immortal = true; }, [cell.x, cell.z]);
+    await sleep(1500);
+    const pl0 = await ev(g, async () => (await import('/src/game/ice.js')).ICE_LOG.plunges.length);
+    await ev(host, async ([x, z]) => { const I = await import('/src/game/ice.js'); I.breakAt(x, z, 1.6, { lamp: false }); }, [cell.x, cell.z]);
+    await sleep(2500);
+    const after = await ev(g, async (i) => { const I = await import('/src/game/ice.js'), G = window.__G; return { stage: G.zone.ice.stage[i], plunges: I.ICE_LOG.plunges.length, walk: G.zone.map.walkable(i % G.zone.L.w + 0.5, Math.floor(i / G.zone.L.w) + 0.5) }; }, cell.i);
+    const hst = await ev(host, (i) => window.__G.zone.ice.stage[i], cell.i);
+    ok(hst === 4 && after.stage === 4 && !after.walk, 'the host\'s break is open water on the guest\'s page too', { host: hst, guest: after });
+    ok(after.plunges > pl0, 'and the guest standing on it went in (its own plunge, on its page)', { before: pl0, after: after.plunges });
+    // the guest's weight is on the host's ice
+    const load = await ev(host, async ([x, z]) => { const G = window.__G; const r = window.__NET.NET.remotes[0]; return r ? { at: [r.x.toFixed(1), r.z.toFixed(1)] } : null; }, [cell.x, cell.z]);
+    ok(!!load, 'the host has the guest on its ice', load);
+    console.log('     host net', JSON.stringify(await stats(host)));
+  },
+
+  // four heroes in a fight: the scaling table applied, every page well inside the room's budget
+  async four() {
+    const { host, guests } = await party('forest', 3, { lvl: 14, glvl: 13 });
+    const hp = await hostPos(host);
+    for (const [i, g] of guests.entries()) await place(g, hp.x + 2 * (i + 1), hp.z + 1);
+    await sleep(1500);
+    const sc = await ev(host, async () => { const A = await import('/src/game/actors.js'), D = await import('/src/game/data.js'), G = window.__G, p = G.player; const m = A.spawnMonster('skeleton', p.x + 5, p.z, {}); G.actors.push(m); const base = D.monsterHP(m.level) * D.MONSTERS.skeleton.hp * D.DIFFS[G.hero.diff].hp; return { n: window.__NET.NET.n, k: +(m.hpMax / base).toFixed(3), want: D.COOP.hp[3] }; });
+    ok(sc.n === 4 && Math.abs(sc.k - sc.want) < 0.01, 'four players: a monster has the table\'s life (x' + sc.want + ')', sc);
+    // a pack, bigger for four (the table's x1.75)
+    const pk = await ev(host, () => { const z = window.__G.zone, p = window.__G.player; const list = z.packs.filter((q) => !q.spawned && q.n >= 4 && !q.elite).sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z)); return list[0] && { x: list[0].x, z: list[0].z, n: list[0].n, id: list[0].id }; });
+    await ev(host, () => { window.__immortal = true; });
+    for (const g of guests) await ev(g, () => { window.__immortal = true; });
+    await place(host, pk.x + 1, pk.z); for (const [i, g] of guests.entries()) await place(g, pk.x - 1 - i, pk.z + 1);
+    await sleep(2500);
+    const cnt = await ev(host, (id) => window.__G.actors.filter((a) => a.packId === id).length, pk.id);
+    ok(cnt >= Math.round(pk.n * 1.75 * 0.85) - 1, 'the pack came bigger for four', { listed: pk.n, spawned: cnt });
+    // fight for a while: everyone's blows, every page's sends counted
+    const t0 = Date.now();
+    while (Date.now() - t0 < 15000) {
+      for (const g of guests) await ev(g, async () => { const C = await import('/src/game/combat.js'), G = window.__G; G.player.hp = G.player.hpMax; for (const a of window.__NET.S.pup.values()) if (!a.dead && a.team === 'foe' && Math.hypot(a.x - G.player.x, a.z - G.player.z) < 14) { C.damage(G.player, a, G.stats.wmax * G.stats.dmgMult * 0.4, { crit: false }); break; } });
+      await sleep(400);
+    }
+    const all = [];
+    for (const [i, pg] of [host, ...guests].entries()) { const st = await stats(pg); all.push(st); console.log('     ' + (i ? 'guest ' + i : 'host   ') + ' sends/s ' + st.r.msgsOut.toFixed(1) + ' (peak ' + st.peak.toFixed(1) + '), bytes/s out ' + Math.round(st.r.bytesOut) + ', in ' + Math.round(st.r.bytesIn) + ', drops ' + st.tx.drops + ', too big ' + st.tx.big); }
+    ok(all.every((s) => s.peak <= 20), 'every page under 20 sends a second (the room allows ~40)', all.map((s) => +s.peak.toFixed(1)));
+    ok(all.every((s) => s.tx.big === 0), 'no message or presence ever over 4 KiB');
+    ok(all[0].snaps > 0 && all[0].snapBytes / all[0].snaps < 3900, 'the host\'s snapshots average ' + Math.round(all[0].snapBytes / all[0].snaps) + ' bytes');
+    const gk = []; for (const g of guests) gk.push(await ev(g, () => window.__G.hero.stats.kills));
+    console.log('     guests\' kills', gk.join(' '));
+    // the guests' mixed classes in the HUD
+    ok(await ev(guests[0], () => window.__NET.party().length) === 3, 'a guest\'s party list holds the other three');
   },
 
   // a boss of each act, the party moving from zone to zone with the host (the guest follows every change)
