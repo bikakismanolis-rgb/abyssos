@@ -458,7 +458,7 @@ on('dialog', (d) => {
 // the Lady's voice in the still trees, and the Ash King's whispers, read differently from a spoken line; what the scene
 // tells (the First Autumn's wind, the fire leaving the beacon, the Unmaking) is told without quotes
 // (Act V: the fourth fire going out, the coal, the coast and the rite, the Freeze, the ice, the naming, the carving, home)
-const NARR = /^d\.(leave|k|u|field|forge|answer\.0|ivar\.lamp|altar\.(took|refused)|out|coal|kindle|coast|landing|rite|wake|freeze|far|lit|rise|relight|naming|carve|home|answer5|stone)\b/;
+const NARR = /^d\.(leave|k|u|field|forge|answer\.0|ivar\.lamp|altar\.(took|refused)|out|coal|kindle|coast|landing|rite|wake|freeze|far|lit|rise|relight|naming|carve|home|answer5|stone|seal)\b/;
 function sayClass(k) {
   // (Isarn's shout in the cages phase is his, not the Ash King's, whatever its key)
   if (k === 'd.karthax.hint') return 'quest';

@@ -1132,8 +1132,10 @@ function act5Enter(z) {
     if (z.seal) endSeal(z, false);
     for (const it of z.act5.lamps) { it.held = false; it.mesh.userData.setHeld?.(false); light5(z, it, false); }
     for (const ho of z.L.spots.holes) if (F['hole' + ho.id]) freezeWave(ho.id, ho.x, ho.z, ho.leadR, 0);
-    // the cairns burn once the sea is lit (in the fight the Skotos puts them out, and the keepers light them again)
-    for (const it of z.act5.cairns) light5(z, it, !!F.seaLit || (!!z.boss && !z.boss.dead && !z.boss.holdWake && !!it.lit));
+    // the cairns burn once the sea is lit (in a fight, its echo's too, they stay as the fight left them: the Skotos puts
+    // them out, the keepers or she light them again, and an entry or a respawn lights none for her)
+    const fight = !!z.boss && !z.boss.dead && !z.boss.holdWake;
+    for (const it of z.act5.cairns) light5(z, it, fight ? !!it.lit : !!F.seaLit);
   }
   // the place to wake, as the save keeps it (the zone is built again on a Continue)
   if (F.cp5?.[z.id]) checkpoint5(z, F.cp5[z.id]);
@@ -1227,13 +1229,15 @@ function want5(z) {
   if (z.id === 'town') {
     const s = N.wayfarer;
     if (F.alkyone && !F.coal) at('alkyone', 'alkyone', { x: s.x + 1.9, z: s.z - 0.7, r: Math.PI * 0.85 });
-    if (F.seaLit) at('child', 'child', { x: s.x - 1.5, z: s.z + 0.9, r: Math.PI * 0.6 });
+    // (the child waits once there is a name to tell him: after the carving, q30; before it he would bark a name not told yet)
+    if (F.carved) at('child', 'child', { x: s.x - 1.5, z: s.z + 0.9, r: Math.PI * 0.6 });
   } else if (z.id === 'ashfield') {
     const ll = S.lastLamp;
     if (ll && F.coal && !F.coastSeen && hasPerson('alkyone')) at('alkyone', 'alkyone', { ...z.map.nearestFloor(ll.x - 1.6, ll.z + 1.4, 2), r: Math.PI * 0.6 });
   } else if (z.id === 'coast') {
     if (F.coastSeen && (!F.towerWake || F.carved)) at('alkyone', 'alkyone', N.alkyone);
-    else if (F.towerWake && !F.frozen) at('alkyone', 'alkyone', N.rock);
+    // (at the bay's shore rock from the Tower's waking, and after the Freeze until she has gone ahead to the Icebound Ship)
+    else if (F.towerWake && (!F.frozen || !F.farSeen)) at('alkyone', 'alkyone', N.rock);
     if (F.hearth) {
       if (!F.frozen || F.carved) at('tamarisk', 'tamarisk', N.tamarisk);
       at('glaukos', 'glaukos', N.glaukos);
@@ -1663,7 +1667,7 @@ export function townPresence(z) {
   const want = G.hero.quest === 22 && !!F.crownUnmade && !F.newFire, cur = z.interact.find((i) => i.kind === 'beacon');
   if (want && !cur) z.interact.push({ kind: 'beacon', x: s.x + 1.2, z: s.z - 0.8, r: 3, prompt: 'beacon.light', use: () => emit('lightBeacon', z) });
   if (!want && cur) z.interact.splice(z.interact.indexOf(cur), 1);
-  // Act V: Alkyone at the beacon (q24), a coal to take from it once the fourth fire has gone out, the child after the sea is lit
+  // Act V: Alkyone at the beacon (q24), a coal to take from it once the fourth fire has gone out, the child after the carving
   const cw = !!F.coastCall && !!F.cradle && !F.coal, coal = z.interact.find((i) => i.kind === 'coal');
   if (cw && !coal) { const p = z.map.nearestFloor(b.x - 1.2, b.z + 4.4, 2); z.interact.push({ kind: 'coal', x: p.x, z: p.z, r: 2.2, prompt: 'coal.take', use: () => emit('coal', z) }); }
   if (!cw && coal) z.interact.splice(z.interact.indexOf(coal), 1);

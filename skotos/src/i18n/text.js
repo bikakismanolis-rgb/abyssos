@@ -888,7 +888,6 @@ export const TEXT = {
   'hud.seared': ['Πυρωμένο!', 'Seared!'], 'hud.blinded': ['Τυφλωμένο!', 'Blinded!'], 'hud.floundering': ['Βουλιάζει!', 'Floundering!'], 'hud.overturned': ['Αναποδογύρισε!', 'Overturned!'],
   'hud.hooked': ['Γαντζώθηκες!', 'Hooked!'], 'hud.dragged': ['Σε σέρνει!', 'Dragged!'], 'hud.grabbed': ['Σε άρπαξε!', 'Grabbed!'],
   'hud.plunge': ['Στο νερό!', 'Into the water!'], 'hud.drowned': ['Πνίγηκε', 'Drowned'],
-  'hud.bowl': ['Κύλησε πάνω τους όταν κουλουριαστούν', 'Roll into them when they curl up'],
   'hud.cold': ['Ψύχος', 'Cold'], 'hud.chilled': ['Ρίγος', 'Chilled'], 'hud.freezing': ['Ξεπαγιάζεις', 'Freezing'], 'hud.frostbite': ['Κρυοπάγημα', 'Frostbite'], 'hud.warmed': ['Ζεστάθηκες', 'Warmed'],
   'boon.h5': ['Τα φώτα της θάλασσας', 'The lights of the sea'],
   'boon.einar': ['Ο Φάρος του Έιναρ', 'Einar\'s Light'], 'boon.einar.d': ['+15% ζημιά σε ελίτ και αφεντικά, +5% πιθανότητα κρίσιμου', '+15% damage to elites and bosses, +5% critical chance'], 'boon.einar.du': ['+18% ζημιά σε ελίτ και αφεντικά, +6% πιθανότητα κρίσιμου', '+18% damage to elites and bosses, +6% critical chance'],
