@@ -4,6 +4,9 @@
 //
 //   node tools/balance-act.mjs --zone ashfield --cls warden --lvl 23 --diff 1 --runs 3 [--packs 8] [--out f.jsonl]
 //   node tools/balance-act.mjs --boss ivar --cls mage --lvl 23 --diff 0 --runs 5
+//   node tools/balance-act.mjs --zone forest --cls warden --lvl 8 --coop 2 --runs 3   (co-op: a party of N such heroes, as one
+//   bot: the world scaled as the host scales it for N (data.js COOP: life, packs, blows), the bot's damage x N (the party's)
+//   and its life x N (the monsters' blows spread over N heroes); deaths and seconds are then the party's per hero)
 //   node tools/balance-act.mjs --plan plan.json --out results.jsonl     (a list of jobs; jobs already in the output are skipped)
 //   node tools/balance-act.mjs --zone coast --cls mage --lvl 34 --runs 2 / --boss skotos ... (Act V: the coast and the
 //   Farthest Light with the story past their arrivals; the Walking Tower and the Skotos fought by their rules: an islet at
@@ -37,7 +40,7 @@ function jobsFromArgs() {
   if (args.plan) return JSON.parse(fs.readFileSync(args.plan, 'utf8'));
   const boss = args.boss || null, zone = boss ? BOSS_ZONE[boss] : args.zone || 'forest';
   const out = [];
-  for (let r = 0; r < +(args.runs || 1); r++) out.push({ id: `${boss || zone}-${args.cls || 'warden'}-L${args.lvl || ZONES[zone] + 1}-d${args.diff ?? 1}-r${r}`, zone, boss, cls: args.cls || 'warden', lvl: +(args.lvl || ZONES[zone] + 1), diff: +(args.diff ?? 1), packs: +(args.packs || 8), seed: 1000 + r * 7919, gearK: +(args.gearK || 4), ...(args.heat != null ? { heat: +args.heat } : {}) });
+  for (let r = 0; r < +(args.runs || 1); r++) out.push({ id: `${boss || zone}-${args.cls || 'warden'}-L${args.lvl || ZONES[zone] + 1}-d${args.diff ?? 1}${args.coop > 1 ? '-c' + args.coop : ''}-r${r}`, zone, boss, cls: args.cls || 'warden', lvl: +(args.lvl || ZONES[zone] + 1), diff: +(args.diff ?? 1), packs: +(args.packs || 8), seed: 1000 + r * 7919, gearK: +(args.gearK || 4), ...(args.heat != null ? { heat: +args.heat } : {}), ...(args.coop > 1 ? { coop: +args.coop } : {}) });
   return out;
 }
 
@@ -543,8 +546,15 @@ async function installBot(cfg) {
   }, 120);
 
   // ---------- a job ----------
+  // co-op (job.coop): the world scaled for the party; the bot carries the party's damage and the share of the blows
+  const NS = await import('/src/net/state.js');
+  if (!B.coopTrap) {
+    B.coopTrap = true; let sv = G.stats;
+    Object.defineProperty(G, 'stats', { configurable: true, get: () => sv, set: (v) => { sv = v; const n = B.coopN || 1; if (v && n > 1) { v.dmgMult *= n; v.lifeMax = Math.round(v.lifeMax * n); } } });
+  }
   B.run = async (job) => {
     B.done = null; B.err = null; B.st = null;
+    B.coopN = job.coop || 1; NS.NET.mode = B.coopN > 1 ? 'host' : null; NS.NET.n = B.coopN;
     const g = await setupHero(job);
     await world.zoneReady(job.zone);
     G.timers.length = 0; G.cine = null; G.mode = 'play'; document.getElementById('letterbox')?.classList.remove('on');
