@@ -29,6 +29,8 @@ Baseline balance: a worktree of v12 at /tmp/claude-0/base served on 5232, plan /
   Beam, Frozen Orb, Shower, Shatter); hawks and Bulwark's dome restyled.
 - Balance after (6 runs/job): README table; per job in balance-acts3-4.txt.
 
+- Full scenario suite passes; old-save migration verified; artifact built; strict CSP clean on desktop and mobile;
+  release.md written.
+
 ## Next
-- Full scenario suite (/tmp/claude-0/runall.sh -> /tmp/claude-0/all/log.txt), fix failures.
-- Artifact build, CSP check (desktop + mobile), release.md.
+- Nothing open: waiting for the lead to merge. Owner decisions in questions.md.
