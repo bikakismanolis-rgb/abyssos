@@ -569,7 +569,7 @@ export const NEW_FN = {
           tick(a, dt) {
             a.x = pl.x; a.z = pl.z; spin += dt;
             dome.position.set(pl.x, 0, pl.z); dome.rotation.y = spin * 0.8;
-            dome.material.opacity = 0.16 + 0.05 * Math.sin(spin * 6) + 0.25 * Math.min(1, (pl.shield || 0) / start);
+            dome.material.opacity = 0.1 + 0.04 * Math.sin(spin * 6) + 0.16 * Math.min(1, (pl.shield || 0) / start);
             for (let k = 0; k < 2; k++) { const an = spin * 3 + k * 3.14, r = 1.2; P({ x: pl.x + Math.sin(an) * r, y: 0.3 + (spin * 1.3 + k) % 1.8, z: pl.z + Math.cos(an) * r, life: 0.4, size: 0.25, size1: 0.04, color: 0xfff0c0, color1: 0xffa040 }); }
             if (!(pl.shield > 0) && a.t > 0.2) a.done = true;
           },
@@ -802,7 +802,7 @@ export const NEW_FN = {
 // ---------- the later skills' meshes and looks (code-built) ----------
 const ADD = (color, opacity = 1) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
 function domeMesh() {
-  const m = new THREE.Mesh(new THREE.SphereGeometry(1.35, 20, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), ADD(0xffc860, 0.3));
+  const m = new THREE.Mesh(new THREE.SphereGeometry(1.35, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), ADD(0xc88a30, 0.2));
   m.material.wireframe = true; R.scene.add(m); return m;
 }
 let jawGeo = null;
