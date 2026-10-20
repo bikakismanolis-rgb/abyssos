@@ -23,11 +23,11 @@ Per players in the zone (index = players - 1). The world is the host's, scaled a
 | players | 1 | 2 | 3 | 4 |
 |---|---|---|---|---|
 | monster life (`hp`) | ×1 | ×1.7 | ×2.35 | ×3.0 |
-| boss life (`boss`) | ×1 | ×1.6 | ×2.2 | ×2.8 |
-| monster blows (`dmg`) | ×1 | ×1.05 | ×1.1 | ×1.15 |
+| boss life (`boss`) | ×1 | ×1.6 | ×2.3 | ×3.0 |
+| monster blows (`dmg`) | ×1 | ×1.2 | ×1.35 | ×1.5 |
 | pack size (`pack`) | ×1 | ×1.25 | ×1.5 | ×1.75 |
 | champion pack odds (`elite`) | ×1 | ×1.35 | ×1.7 | ×2.0 |
-| each player's XP (`xp`) | ×1 | ×1.3 | ×1.6 | ×1.9 |
+| each player's XP (`xp`) | ×1 | ×1.2 | ×1.4 | ×1.6 |
 | each player's gold (`gold`) | ×1 | ×1.25 | ×1.5 | ×1.75 |
 | item odds from a common monster (`loot`) | ×1 | ×1.3 | ×1.6 | ×1.9 |
 | magic find added to every roll (`mf`, rarity) | +0 | +25 | +50 | +75 |
@@ -35,7 +35,21 @@ Per players in the zone (index = players - 1). The world is the host's, scaled a
 
 Rewards: every player within 50 m of a kill (anywhere in the zone for a boss) gets the full kill's XP, their own gold piles and their own item rolls (the host rolls a guest's items with the guest's class and magic find, `makeItem({ cls, mf })`, and sends them; they drop on the guest's page only, and a host's drops on the host's only). Chests, breakables and shrines are each page's own too.
 
-Measured with `tools/balance-act.mjs --coop N` (a party of N equal heroes as one bot: the world scaled as for N, the bot's damage ×N, its life ×N for the blows shared out): see "Balance" below.
+### Balance (measured)
+
+`tools/balance-act.mjs --coop N` plays a party of N equal heroes as one bot: the world scaled as the host scales it for N, the bot's damage ×N (the party's), its life ×N (the monsters' blows shared out over N heroes). Its seconds and deaths are then the party's, per hero. Two rounds, 66 runs (`docs/coop/balance/`):
+
+- **Round 1** (Warden difficulty, the first table: blows ×1.05-1.15, XP ×1.3-1.9): eight packs of the Old Forest (Warden, Mage, level 8) and of the Field of Ash (Ranger, 24), the Weaver and Ivar: the party cleared at the solo pace (0.7-1.2× the seconds) and took about half as much damage a minute per hero. Too safe: the blows went up to ×1.2 / ×1.35 / ×1.5 (a hero's share of the blows near solo again: pack × blows ÷ players = 0.75 for two, 0.66 for four, and a boss's target takes about what it takes alone, the fight being shorter), and XP down a little (×1.2 / ×1.4 / ×1.6: per minute a pair still earns about 1.4× the XP of one, a party of four about 2×).
+- **Round 2** (Nightmare, the table as now but for boss life at 3-4 players), 3 runs each, median seconds of combat / damage taken a minute (in life bars: 1 = all of a life) / deaths in all three runs:
+
+| fight | solo | two | four |
+|---|---|---|---|
+| Field of Ash, 8 packs (Ranger 25) | 45 s / 3.1 / 0 | 48 s / 2.6 / 0 | 50 s / 1.4 / 0 |
+| Deepstone Halls, 8 packs (Warden 14) | 106 s / 3.2 / 0 | 130 s / 2.3 / 0 | 125 s / 2.1 / 2 |
+| Ivar (Mage 25) | 41 s / 1.6 / 0 | 29 s / 0.7 / 0 | 32 s / 0.6 / 0 |
+| the Molten King (Warden 14) | 286 s / 3.4 / 15 | 355 s / 1.8 / 0 (one run out of time) | 150 s / 1.3 / 0 |
+
+So with company the packs take as long as alone (bigger and tougher), the damage each hero takes is a little lower (more so with four: someone always draws the blows), and each player's rewards are 1.4-2× a minute. Bosses with four went a little fast: their life at three and four players went up to ×2.3 and ×3.0.
 
 ## The transports
 
@@ -54,7 +68,7 @@ Topics (all in the game room; the lobby uses presence only): `s` snapshot (host)
 - **Presence, each page.** A guest's presence is its hero: `h` [x, z, rot, speed, life, max life, flags (down, in the air, dodging), y] (positions in 1/20 m), `c2` its last clip [name, speed, count], `lk` its look (class, level, weapon base and rarity, off-hand), `zk` the zone it has built, `mf`/`gf`/`dm` (its magic find, gold find and weapon damage, for the host's loot rolls and checks), `ak` the host's last reliable event it has seen, `ev` its events the host has not acked (its blows `[seq, 'h', monster id, amount, crit, statuses]`, a revive `[seq, 'rv', peer]`), `nd: 'w'` while it has no world. The host's presence: `r: 'h'`, the code, its look, its zone (`{ id, seed, level, tier, diff, key }`), the roster (the three guests it took), `on` once started. In the lobby a host shows `g: { c: code, cls, l, z, n, d, v, on }`.
 - **Snapshot `s`, host, 10 a second while a guest is in its zone.** `k` the zone key, `h` the host's hero (as a presence `h`, plus its clip by number), `w` the tide [clock, a boss's hold level and rate, gust], `ak` each guest's last event done, `r` the reliable events not yet acked by every guest (`[seq, to, type, ...]`: `h` a monster's blow on a guest, `k` a kill's XP and gold for a guest, `it` an item rolled for a guest, `rv` raised, `wp` the party wiped, `cd` a clip name's number, `say` a line of the story), `f` what the host saw near the guests (fx calls, positional sounds, projectiles, areas, sap pools, telegraphs and their kills, most important first), `a` the monsters near any guest, nearest first: `[id, kind, x, z, rot, life 0-255, flags, clip, clip count, speed, y, level, clip speed]` (flags: dead, hidden, aggro, frozen, stunned, champion, rare, minion, struck, dormant, airborne, statue, pet, boss, drowned). Everything fits under 3.9 KB; what does not fit (the farthest) waits for a later one.
 - **World `w`, ice `i`** go in chunks of 3.3 KB (`{ id, i, n, s }`). The world (flags, quest, difficulty, waypoints, acts, the clip dictionary) is sent when it changes, when a guest asks, and every 12 s; the ice (the stage of every thin-ice cell, as runs) when it changes (at most twice a second) and every 3 s.
-- **Reliability.** Snapshots, fx and the world's periodic sends are unreliable and repeated. Reliable events ride in every snapshot until every guest has acked them (`ak` in its presence; in order, a gap waits); a guest's events ride in its presence until the host acks them. Nothing reliable is ever more than one message behind its re-send.
+- **Reliability.** Snapshots, fx and the world's periodic sends are unreliable and repeated. Reliable events ride in every snapshot until every guest has acked them (`ak` in its presence; taken in order; one the host let go, past 30 s, is passed over); a guest's events ride in its presence, oldest first, until the host acks them. Nothing reliable is ever more than one message behind its re-send.
 - **Guests' blows, checked.** The host lands a guest's blow only on a live monster of its own within 26 m of the guest's stand-in, no bigger than its weapon could make (14× its weapon's top damage, its claim capped by its level), within a rate (12 such blows' worth a second), with statuses clamped (stun 3 s, freeze 4 s, knock 40...). A blow refused is counted (`S.stats.why`); a malformed event is skipped. Items the host sends a guest are rebuilt field by field before they enter the guest's save.
 - **Puppets.** On a guest the host's monsters are puppets: built with the game's own `spawnMonster` (the right model, elite look, the mound of a monster lying in wait), moved by interpolation 130 ms behind, their clips played as the host's avatars played them (`Avatar.play` counts its clips), their life from the host. Anything foe on a guest's page that is not the host's (a story scene's, a pack) is removed. A guest's blow shows its number at once and moves the bar; the life the host sends wins.
 - **The mirror.** On the host every look-only call (`fx.js`'s explosions, rings, glows, sparks, decals, splashes, ice shards, bolts, telegraphs; positional sounds; `fire`, `area`, `addSapPool`) is told to `MIRROR.rec` (net/state.js) and sent in the snapshot; a guest's hero's own (recorded while `updatePlayer` runs) go on `f`. A monster's projectile or area played on a guest is real there (it can hurt that guest only: the host's copy never hurts a stand-in); a hero's is only seen (`team: 'vis'`).

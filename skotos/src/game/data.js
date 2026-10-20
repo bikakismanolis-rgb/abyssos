@@ -16,7 +16,7 @@ export const DIFFS = [
 // with tools/balance-act.mjs (COOP=n): docs/coop/README.md
 export const COOP = {
   hp: [1, 1.7, 2.35, 3.0],
-  boss: [1, 1.6, 2.2, 2.8],
+  boss: [1, 1.6, 2.3, 3.0],
   dmg: [1, 1.2, 1.35, 1.5],
   pack: [1, 1.25, 1.5, 1.75],
   elite: [1, 1.35, 1.7, 2.0],

@@ -393,8 +393,8 @@ function takeEvents(P) {
   const ev = P.ev || [];
   for (const e of ev) {
     if (!Array.isArray(e)) continue;
+    // (oldest first, every one not yet acked: a gap is what the guest no longer holds, so it is passed over)
     const seq = e[0] | 0; if (seq <= last) continue;
-    if (seq !== last + 1 && last !== 0) break; // (a gap: wait for it, the guest sends everything unacked)
     last = seq;
     try { guestEvent(P, e); } catch (err) { reject('bad'); }
   }
@@ -543,8 +543,8 @@ function onSnap(o) {
   // the reliable events first (a clip's number may be given in the same snapshot)
   if (Array.isArray(o.r)) for (const e of o.r) {
     if (!Array.isArray(e)) continue;
+    // (in order; the host sends all it still holds from the oldest any guest lacks: a gap is what it let go)
     const seq = e[0] | 0; if (seq <= S.relDone) continue;
-    if (seq !== S.relDone + 1 && S.relDone !== 0) break;
     S.relDone = seq;
     if (e[1] && e[1] !== S.ch.me) continue;
     try { relEvent(e.slice(2)); } catch (err) { console.error(err); }
