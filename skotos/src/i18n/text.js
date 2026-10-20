@@ -903,6 +903,7 @@ export const TEXT = {
   // ---------- co-op (net/coop.js, ui/coopui.js) ----------
   'coop.title': ['Συντροφιά', 'Co-op'],
   'coop.badge': ['Συντροφιά', 'Party'],
+  'coop.stale': ['η σύνδεση αργεί…', 'the link is slow…'],
   'coop.intro': ['Παίξτε μαζί, ως τέσσερις. Όσοι περισσότεροι, τόσο πιο πολλοί και πιο δυνατοί οι εχθροί, και τόσο πλουσιότερα τα λάφυρα. Ο καθένας φέρνει τον ήρωά του και κρατά ό,τι κερδίσει.', 'Play together, up to four. The more of you, the more and the stronger the foes, and the richer the spoils. Each brings their own hero and keeps what they earn.'],
   'coop.host': ['Άνοιξε παιχνίδι', 'Host a game'],
   'coop.join': ['Μπες', 'Join'],
