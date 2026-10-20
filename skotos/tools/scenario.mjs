@@ -695,7 +695,7 @@ const S = {
     const list = await pg.evaluate(async (only) => {
       const D = await import('/src/game/data.js'), G = window.__G, out = [];
       for (const sk of D.SKILLS[G.hero.cls]) { if (sk.basic) continue; out.push({ id: sk.id, v: 0 }); (D.VARIANTS[sk.id] || []).forEach((n, i) => out.push({ id: sk.id, v: i + 1, n })); }
-      window.__wait = (sec) => new Promise((ok) => { const t0 = G.hero.stats.time, w0 = performance.now(); const f = () => (G.hero.stats.time - t0 >= sec || performance.now() - w0 > 60000 ? ok() : setTimeout(f, 20)); f(); });
+      window.__wait = (sec) => new Promise((ok) => { const t0 = G.hero.stats.time, w0 = performance.now(); const f = () => (G.hero.stats.time - t0 >= sec || performance.now() - w0 > 400000 ? ok() : setTimeout(f, 20)); f(); });
       return only ? out.filter((e) => only.split(',').includes(e.n ? e.id + '.' + e.n : e.id)) : out;
     }, process.env.ONLY || '');
     await pg.evaluate(() => { window.__immortal = true; const G = window.__G; for (const p of G.zone.packs) p.spawned = true; for (const a of G.actors) if (a.team === 'foe') { a.dead = true; a.remove(); } });
