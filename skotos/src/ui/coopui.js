@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { G } from '../game/state.js';
 import { NET } from '../net/state.js';
-import { S, hostGame, joinGame, leaveGame, startGame, party, nameOf, respawnNow } from '../net/coop.js';
+import { S, hostGame, joinGame, leaveGame, startGame, party, nameOf, respawnNow, stale } from '../net/coop.js';
 import { EXTRA, open as openPanel, renderPanel } from './panels.js';
 import { DIFFS } from '../game/data.js';
 import { R } from '../gfx/gfx.js';
@@ -102,8 +102,9 @@ function frame() {
     const key = P.map((p) => p.peer + p.name + p.cls + p.lvl + p.here).join('|') + S.code + S.role;
     if (key !== partyKey) {
       partyKey = key;
-      pe.innerHTML = `<div class="ph">${t('coop.badge')} · ${esc((S.code || '').toUpperCase())} · ${1 + P.filter((p) => p.here).length}/4</div>` + P.map((p) => `<div class="pm${p.here ? '' : ' away'}" data-p="${esc(p.peer)}"><span class="ic">${clsIcon(p.cls)}</span><span class="nm">${esc(p.name)}</span><span class="lv">${p.lvl}</span><div class="b"><i></i></div></div>`).join('');
+      pe.innerHTML = `<div class="ph">${t('coop.badge')} · ${esc((S.code || '').toUpperCase())} · ${1 + P.filter((p) => p.here).length}/4<span class="st"> · ${t('coop.stale')}</span></div>` + P.map((p) => `<div class="pm${p.here ? '' : ' away'}" data-p="${esc(p.peer)}"><span class="ic">${clsIcon(p.cls)}</span><span class="nm">${esc(p.name)}</span><span class="lv">${p.lvl}</span><div class="b"><i></i></div></div>`).join('');
     }
+    pe.classList.toggle('stale', stale());
     for (const p of P) {
       const el = pe.querySelector(`[data-p="${CSS.escape(p.peer)}"]`); if (!el) continue;
       el.querySelector('i').style.transform = `scaleX(${Math.max(0, Math.min(1, p.hp / Math.max(1, p.hpMax)))})`;

@@ -31,7 +31,7 @@ import * as FX from '../gfx/fx.js';
 import { R } from '../gfx/gfx.js';
 import Audio from '../audio/audio.js';
 import { on, emit } from '../ui/bus.js';
-import { t } from '../i18n/i18n.js';
+import { t, has } from '../i18n/i18n.js';
 import { clamp, rand } from '../core/util.js';
 
 export const VER = 1;
@@ -256,8 +256,9 @@ export function netTick(dt) {
 function hostTick(dt) {
   const pl = G.player, z = G.zone; if (!pl || !z) return;
   MIRROR.rec = recFx;
-  hostPresence(false); lobbyPresence(false);
   const key = myKey();
+  // (a new zone is told at once: the guests follow)
+  hostPresence(key !== S.lastKey); lobbyPresence(key !== S.lastKey); S.lastKey = key;
   // the guests here: their stand-ins, their events
   let n = 1;
   for (const pr of S.roster) {
@@ -609,7 +610,7 @@ function relEvent(e) {
   if (type === 'it') { const it = cleanItem(e[3]); if (it) dropItem((e[1] | 0) / 10, (e[2] | 0) / 10, it); return; }
   if (type === 'rv') { if (pl?.dead) revived(); return; }
   if (type === 'wp') { if (pl?.dead) respawnSelf(); return; }
-  if (type === 'say') { if (typeof e[1] === 'string' && e[1].length < 64) { S.saying = true; try { emit('say', e[1]); } finally { S.saying = false; } } }
+  if (type === 'say') { if (typeof e[1] === 'string' && e[1].length < 64 && has(e[1])) { S.saying = true; try { emit('say', e[1]); } finally { S.saying = false; } } }
 }
 // an item the host rolled: only what an item is made of, so a bad page cannot put anything else in this save
 function cleanItem(it) {
@@ -773,6 +774,8 @@ function remotesTick(dt) {
   }
 }
 // the party as the HUD shows it: [{ peer, name, cls, lvl, hp, hpMax, dead, host, here, me }]
+// the link is down or the host silent a moment (the HUD shows it)
+export const stale = () => !!S.role && (!S.ch?.connected() || (S.role === 'guest' && S.zoneKey && now() - S.lastSnap > 2500));
 export function party() {
   if (!S.role) return [];
   const out = [];

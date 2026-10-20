@@ -429,6 +429,8 @@ body:not(.desk) .sk .key { display: none; }
 #party .pm .b i { display: block; height: 100%; background: linear-gradient(90deg, #a01818, #e04a3a); transform-origin: left; }
 #party .pm.dead { border-color: rgba(255, 90, 70, .6); animation: blink 1.2s infinite; }
 #party .pm.away { opacity: .55; }
+#party .ph .st { display: none; color: #ffb090; }
+#party.stale .ph .st { display: inline; animation: blink 1.2s infinite; }
 #plates { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 #plates .plate { position: absolute; left: 0; top: 0; font: 600 11px var(--body, sans-serif); color: #e8f0ff; text-shadow: 0 1px 3px #000, 0 0 6px #000; white-space: nowrap; }
 #plates .plate.dead { color: #ff9a80; }

@@ -283,9 +283,9 @@ function tick(dt, noDraw) {
   if (G.mode !== 'play' && G.mode !== 'cine') { render(); return; }
   pollInput();
   const pl = G.player;
-  // (co-op: the world never waits for one player's panel; their own hero just stands)
-  const paused = !NET.mode && (panelOpen() || dialogOpen());
-  if (NET.mode && (panelOpen() || dialogOpen())) for (const ev of takeEvents()) if (ev.t === 'key') emit('key', ev.k);
+  // (co-op, with company: the world never waits for one player's panel; their own hero just stands)
+  const party = NET.mode && NET.n > 1, paused = !party && (panelOpen() || dialogOpen());
+  if (party && (panelOpen() || dialogOpen())) for (const ev of takeEvents()) if (ev.t === 'key') emit('key', ev.k);
   // keys still work over a panel or a dialog (Escape closes it); taps and skills aimed at the world are dropped
   if (paused) for (const ev of takeEvents()) if (ev.t === 'key') emit('key', ev.k);
   let gdt = dt;
@@ -293,7 +293,7 @@ function tick(dt, noDraw) {
   if (G.slowT > 0) { G.slowT -= dt; gdt *= G.slow; }
   if (G.mode === 'cine') cineTick(dt);
   if (!paused) {
-    if (G.mode === 'play') { MIRROR.hero = true; try { updatePlayer(NET.mode && (panelOpen() || dialogOpen()) ? 0 : gdt); } finally { MIRROR.hero = false; } }
+    if (G.mode === 'play') { MIRROR.hero = true; try { updatePlayer(party && (panelOpen() || dialogOpen()) ? 0 : gdt); } finally { MIRROR.hero = false; } }
     else { pl.avatar.update(gdt, { speed: 0 }); }
     updateActors(gdt);
     updatePacks(); updateAct(gdt);
