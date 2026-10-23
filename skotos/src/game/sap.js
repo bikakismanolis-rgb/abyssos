@@ -20,6 +20,7 @@ import { heroHit, kill } from './combat.js';
 import { emit, on } from '../ui/bus.js';
 import Audio from '../audio/audio.js';
 import { rand } from '../core/util.js';
+import { mir } from '../net/state.js';
 
 export const SAP_CAP = 24;
 const pools = [];
@@ -84,7 +85,8 @@ export const sapPools = () => pools;
 
 // ---------- pools ----------
 // a fresh pool: r metres for dur seconds (owner tags a charge's own trail); kind 'amber', 'brine' or 'slush'
-export function addSapPool(x, z, r = 1.8, dur = 6, owner = null, kind = 'amber') { return add(x, z, 0, r, dur, owner, kind); }
+export function addSapPool(...args) { return mir('sap', addSapPool0, args); }
+function addSapPool0(x, z, r = 1.8, dur = 6, owner = null, kind = 'amber') { return add(x, z, 0, r, dur, owner, kind); }
 // a ring of sap between r0 and r1 (the Flood leaves the outer chamber set in amber)
 export function addSapRing(x, z, r0, r1, dur = 6) { return add(x, z, r0, r1, dur, null, 'amber'); }
 function add(x, z, r0, r, dur, owner, kind) {

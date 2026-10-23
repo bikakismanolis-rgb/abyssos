@@ -15,6 +15,8 @@ import Audio from '../audio/audio.js';
 import { CREDITS, MIT_ROCKETBOX } from './credits.js';
 
 const $ = (id) => document.getElementById(id);
+// panels other modules add: { name: { render(P), click(a, x, y, el, P) -> true when done } } (the co-op lobby, ui/coopui.js)
+export const EXTRA = {};
 const P = { name: null, sel: null, tab: 0, ctx: null, delSure: null };
 const ICON_OF = { sword: 'sword', axe: 'sword', mace: 'sword', crossbow: 'bolt', staff: 'flame', shield: 'shield', quiver: 'bolt', orb: 'orb', helm: 'skull', chest: 'shield', gloves: 'hand', boots: 'roll', amulet: 'star', ring: 'orb' };
 // the Act IV blessing reads as it counts: half again for a hero the crown never held (Unbound)
@@ -191,6 +193,7 @@ const R = {
       <button class="btn" data-a="close">${t('pause.resume')}</button>
       ${inTown ? '' : `<button class="btn ghost" data-a="portal">${t('pause.town')}</button>`}
       <button class="btn ghost" data-a="map">${t('hud.map')}</button>
+      ${EXTRA.coop?.avail?.() ? `<button class="btn ghost" data-a="coop">${t('coop.title')}</button>` : ''}
       <button class="btn ghost" data-a="settings">${t('menu.settings')}</button>
       <button class="btn ghost" data-a="help">${t('help.title')}</button>
       <button class="btn ghost" data-a="quit">${t('pause.quit')}</button></div></div></div>`;
@@ -266,7 +269,7 @@ export function diffUnlocked(i) {
 }
 function render() {
   if (!P.name) return;
-  $('panel').innerHTML = R[P.name]();
+  $('panel').innerHTML = R[P.name] ? R[P.name]() : EXTRA[P.name]?.render(P) || '';
   if (P.name === 'map') drawBigMap($('bigmap'));
 }
 
@@ -298,12 +301,14 @@ function onClick(e) {
     case 'diff': {
       const i = +x;
       if (G.zone.id !== 'town') { emit('toast', t('wp.diffNote')); break; }
+      if (G.hero.__real) { emit('toast', t('coop.hostLeads')); break; }
       if (!diffUnlocked(i)) { const [a, id] = DIFFS[i].unlock.split(':'); emit('toast', t(a === 'any' ? 'pick.locked' : 'pick.locked' + a.slice(3), t('diff.' + id))); break; }
       if (h.diff !== i) { h.diff = i; emit('diffChanged'); }
       break;
     }
     case 'portal': close(); emit('townPortal'); return;
     case 'map': open('map'); return;
+    case 'coop': open('coop'); return;
     case 'settings': open('settings'); return;
     case 'help': open('help'); return;
     case 'credits': open('credits'); return;
@@ -316,6 +321,7 @@ function onClick(e) {
     case 'gift': { const id = P.ctx?.id; close(); if (id) emit('altarChoice', id, x); return; }
     case 'respawn': close(); emit('respawn', false); return;
     case 'respawnTown': close(); emit('respawn', true); return;
+    default: if (EXTRA[P.name]?.click?.(a, x, y, b, P)) return;
   }
   render();
 }

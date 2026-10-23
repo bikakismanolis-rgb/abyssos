@@ -45,6 +45,8 @@ export function initInput() {
   window.addEventListener('mousemove', (e) => { IN.mouse.x = e.clientX; IN.mouse.y = e.clientY; IN.mouse.on = true; });
   window.addEventListener('keydown', (e) => {
     if (e.repeat) return;
+    // (typing in a field, the co-op code: the keys are the field's, but Escape)
+    if (e.target?.tagName === 'INPUT' && e.key !== 'Escape') return;
     const k = e.key.toLowerCase();
     IN.keys.add(k);
     if (!IN.enabled) { IN.events.push({ t: 'key', k }); return; }

@@ -1,6 +1,6 @@
 // Damage, status effects, deaths, experience and drops.
 import { G, later, vibrate } from './state.js';
-import { DIFFS, monsterXP, xpToNext, MAX_LEVEL, SKILLS, CLASSES, BUFFS, HAZ5, LEG_FROM } from './data.js';
+import { DIFFS, monsterXP, xpToNext, MAX_LEVEL, SKILLS, CLASSES, BUFFS, HAZ5, LEG_FROM, COOP } from './data.js';
 import { makeItem } from './items.js';
 import { refreshStats } from './stats.js';
 import { number } from '../ui/overlay.js';
@@ -20,6 +20,7 @@ import { coldAdd, coldMul } from './cold.js';
 import { staticGeo, makeCharMat } from '../gfx/rig.js';
 import { slagParts } from '../gfx/models.js';
 import { R as RR } from '../gfx/gfx.js';
+import { NET } from '../net/state.js';
 
 const HIT_SFX = { flesh: 'hitFlesh', bone: 'hitBone', spirit: 'hitSpirit', chitin: 'hitChitin', ash: 'hitFlesh', stone: 'hitBone', magma: 'hitFlesh', wood: 'woodHit', drowned: 'hitFlesh', skotos: 'hitSpirit' };
 const DIE_SFX = { goblin: 'goblinDie', wolf: 'wolfDie', spider: 'spiderDie', orc: 'orcDie', troll: 'trollRoar', skeleton: 'skeletonDie', wraith: 'wraithDie', hound: 'wolfDie', bat: 'batDie', worm: 'wormDie', dwarf: 'dwarfDie', golem: 'golemDie', moth: 'mothDie', bear: 'bearRoar', hart: 'hartBellow' };
@@ -43,14 +44,18 @@ export function heroHit(mult, o = {}) {
 export function damage(src, target, amount, o = {}) {
   if (!target || target.dead || target.removed) return 0;
   if (target.team === 'hero' && target.hero) return hurtHero(src, amount, o);
+  // co-op: a guest's stand-in on the host (the blow is the guest's to take, net/coop.js)
+  if (target.remote) return NET.mode === 'host' ? NET.h.hurtRemote(src, target, amount, o) : 0;
   if (target.team === 'npc') return 0;
   // stepped into the trees, gone into mist, wheeling high above, or clinging to the hero's back: nothing to hit
   if (target.hidden || target.airborne || target.cling) return 0;
   // a keeper's statue in Karthax's cage: only his own hammer breaks it (ai.js)
   if (target.keeper) { if (!o.dot && !(target.immT > 0)) { target.immT = 0.6; number(target.x, 3, target.z, tx('hud.cage', 'Μόνο η φωτιά που τα έφτιαξε', 'Only the fire that made them'), 'text', '#ffb070'); } return 0; }
   const fromHero = src && (src.hero || src.team === 'hero');
-  let crit = false;
-  if (fromHero) {
+  // (a guest's blow on the host comes with its crit and its own bonuses already in: o.net)
+  const own = fromHero && !src.remote && !o.net;
+  let crit = !!(o.net && o.crit);
+  if (own) {
     const s = G.stats;
     if (o.crit ?? (!o.dot && heroCrit())) { crit = true; amount *= 1 + s.critD / 100; }
     if (target.elite || target.boss) { amount *= 1 + s.eliteDmg / 100; if (s.legs.has('kingslayer')) amount *= 1.3; }
@@ -59,18 +64,23 @@ export function damage(src, target, amount, o = {}) {
   }
   // invulnerable, or held by a Mourner's lament-bond
   if (target.invuln > 0 || target.bondT > 0) { if (!o.dot) number(target.x, 2.2, target.z, t('hud.immune'), 'text', target.bondT > 0 ? '#ffe8a0' : '#9ab8ff'); return 0; }
-  if (target.armored) amount *= 0.72;
-  if (target.ward > 0) amount *= 0.5;
-  const blocked = actHit(src, target, o, fromHero);
-  amount *= blocked;
-  // rooted in bark, a resistance: some states take less (more is the vulnerability rule's, actHit)
-  if (target.dmgTaken != null && target.dmgTaken < 1) amount *= target.dmgTaken;
-  if (target.resist != null) amount *= target.resist;
-  if (target.prop) amount = target.hp;
-  amount = Math.max(1, Math.round(amount));
-  target.hp -= amount;
-  // a boss phase that a single burst may not skip
-  if (target.hpFloor) target.hp = Math.max(target.hp, target.hpFloor);
+  let blocked = 1;
+  // co-op, on a guest: the host's monster takes the blow on the host (its guard, ward and vulnerabilities are counted there)
+  if (target.puppet) amount = NET.h.hitPuppet(src, target, amount, o, crit);
+  else {
+    if (target.armored) amount *= 0.72;
+    if (target.ward > 0) amount *= 0.5;
+    blocked = actHit(src, target, o, fromHero);
+    amount *= blocked;
+    // rooted in bark, a resistance: some states take less (more is the vulnerability rule's, actHit)
+    if (target.dmgTaken != null && target.dmgTaken < 1) amount *= target.dmgTaken;
+    if (target.resist != null) amount *= target.resist;
+    if (target.prop) amount = target.hp;
+    amount = Math.max(1, Math.round(amount));
+    target.hp -= amount;
+    // a boss phase that a single burst may not skip
+    if (target.hpFloor) target.hp = Math.max(target.hp, target.hpFloor);
+  }
   target.hpShow = 3;
   target.aggro = true;
   if (!o.dot) {
@@ -95,7 +105,7 @@ export function damage(src, target, amount, o = {}) {
     if (o.slow) { target.status.slow = Math.max(target.status.slow, o.slow.t); target.status.slowK = Math.max(target.status.slowK, o.slow.k); }
     if (o.fear && !target.boss) target.status.fear = Math.max(target.status.fear, o.fear);
     if (o.burn) { target.status.burn = 3; target.status.burnDps = Math.max(target.status.burnDps, o.burn / 3); }
-    if (fromHero) {
+    if (own) {
       const s = G.stats, p = G.player;
       if (s.lifeOnHit && !o.noLoh) healHero(s.lifeOnHit * (o.lohMul ?? 1), true);
       if (s.legs.has('vampiricMail')) healHero(amount * 0.02, true);
@@ -105,7 +115,7 @@ export function damage(src, target, amount, o = {}) {
     }
   }
   number(target.x, (target.boss ? 3.2 : target.def.big ? 3.4 : 2.0) * (target.scale || 1), target.z, amount, o.dot ? 'dot' : crit ? 'crit' : 'hit');
-  if (target.hp <= 0) kill(target, src, o);
+  if (target.hp <= 0 && !target.puppet) kill(target, src, o);
   return amount;
 }
 
@@ -485,9 +495,11 @@ export function kill(a, src, o = {}) {
   if (o.overkill || (src?.hero && Math.random() < 0.15)) { puff(a.x, 0.8, a.z, 4, 0x2a1a14, 0.6, 0.6, 0.6); }
   if (a.team !== 'foe') return;
   const hero = G.hero, D = DIFFS[hero.diff], s = G.stats;
+  // co-op: each player's rewards grow with the party (data.js COOP); the guests' own are rolled and sent (net/coop.js)
+  const CK = COOP_K();
   // experience
   const em = a.boss ? 1 : a.elite === 'rare' ? 5 : a.elite === 'champion' ? 3 : a.minion ? 1.5 : 1;
-  gainXP(monsterXP(a.level) * def.xp * D.xp * em);
+  gainXP(monsterXP(a.level) * def.xp * D.xp * em * CK.xp);
   hero.stats.kills++;
   if (a.elite) hero.stats.elites++;
   // massacre counter
@@ -496,13 +508,14 @@ export function kill(a, src, o = {}) {
   const L = a.level, dx = a.dropAt?.x ?? a.x, dz = a.dropAt?.z ?? a.z;
   const goldChance = a.boss ? 1 : a.elite ? 1 : 0.32;
   const piles = a.boss ? 6 : a.elite ? 2 : 1;
-  for (let i = 0; i < piles; i++) if (Math.random() < goldChance) dropGold(dx, dz, Math.round((3 + L * 1.6) * rand.range(0.6, 1.4) * D.gold * (1 + (s.gold + (G.player.buffs.shrineFortune > 0 ? 100 : 0)) / 100) * (a.boss ? 3 : 1)));
-  const mf = s.mf + (G.player.buffs.shrineFortune > 0 ? 100 : 0);
+  for (let i = 0; i < piles; i++) if (Math.random() < goldChance) dropGold(dx, dz, Math.round((3 + L * 1.6) * rand.range(0.6, 1.4) * D.gold * (1 + (s.gold + (G.player.buffs.shrineFortune > 0 ? 100 : 0)) / 100) * (a.boss ? 3 : 1) * CK.gold));
+  const mf = s.mf + (G.player.buffs.shrineFortune > 0 ? 100 : 0) + CK.mf;
   let items = 0;
-  if (a.boss) items = 4 + Math.floor(D.loot);
+  if (a.boss) items = 4 + Math.floor(D.loot) + CK.i;
   else if (a.elite === 'rare') items = rand.int(2, 3);
   else if (a.elite === 'champion') items = Math.random() < 0.7 ? 1 : 0;
-  else if (Math.random() < 0.085 * D.loot) items = 1;
+  else if (Math.random() < 0.085 * D.loot * CK.loot) items = 1;
+  if (NET.mode === 'host') NET.h.reward(a, dx, dz);
   for (let i = 0; i < items; i++) {
     const firstBoss = a.boss && i === 0 && !hero.flags['legFrom_' + a.kind];
     const it = makeItem(L, { elite: !!a.elite, boss: a.boss, mf, legMul: D.leg, rar: firstBoss ? 3 : (a.boss && i === 1 ? 2 : undefined), leg: firstBoss ? LEG_FROM[a.kind] : undefined });
@@ -563,6 +576,9 @@ function act4Death(a, def) {
   addRemains(a);
 }
 
+// the party's reward factors (solo: none)
+const SOLO = { i: 0, xp: 1, gold: 1, loot: 1, mf: 0 };
+function COOP_K() { if (!NET.mode || NET.n < 2) return SOLO; const i = Math.min(4, NET.n) - 1; return { i, xp: COOP.xp[i], gold: COOP.gold[i], loot: COOP.loot[i], mf: COOP.mf[i] }; }
 export function gainXP(v) {
   const h = G.hero;
   if (h.level >= MAX_LEVEL) return;
