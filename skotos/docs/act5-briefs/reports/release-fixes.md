@@ -31,3 +31,5 @@ the flaky `holes` and `tower` scenarios, and runtime errors only the on-screen `
   shader (its own comment already said its layers and lights were spared; they were not). sea.js: the same for the
   water's dry-pixel discard. Frame 1062 -> 959 ms against the start tree (ab2, 9 rounds); shots unchanged (pixels the
   branch skips are discarded anyway).
+- 17:47-18:08 perf5 (QS 1, 21 cycles): coast 1.075, coastLow 0.968, farlight 0.962: PASS (field 879 ms, coast 946).
+- 18:09 cp5 x5, holes x10, tower x10 queued, one browser at a time.
