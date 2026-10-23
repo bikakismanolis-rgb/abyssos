@@ -179,7 +179,8 @@ async function BOT5(o) {
       // past the Bell's 9.5 m if she can, and not far from where she stands; walked to by the map's own way, not a line.
       // (Baited 7-10 m from where the Tower stood and walked to in a line, she was caught on the land or the thick beside it,
       // dodging its sweeps, and a phase could end on its clock with no Overturn)
-      if (b.phase === 1 && b.st === 'fight' && !(b.dazed > 0)) {
+      // (the whole phase but its Overturn and a daze: while it turned or hauled itself back she went to strike it, and stayed)
+      if (b.phase === 1 && b.st !== 'over' && !(b.dazed > 0)) {
         if ((B.webT = (B.webT || 0) - dt) <= 0) {
           B.webT = 0.25; B.webPt = null; let bd = 1e9;
           for (let r = 3; r <= 12; r++) for (let k = 0; k < 24; k++) {
