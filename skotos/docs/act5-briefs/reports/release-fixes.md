@@ -77,23 +77,39 @@ the end).
   second put its lamp out and relight it, shield the rest.
 - 10 of 10 pass (seals 11.6-16 s; one shield, one lamp lost and relit; the hole2 checkpoint 0 m after a Continue).
 
-### tower (the bot was wrong; the game's fail-safe is by design)
+### tower (the bot was wrong, and the game had one bug in two places)
+**Game (ai.js towerHaul).** The Walking Tower's hauls ended only within 0.7 m of their target. When `seek` could make no
+way there (a target its body could not reach), it stood still: once 40 s in the ice phase's opening haul (state `haul`,
+the hero 2.8 m off), and once on the crawl home (`back`), where the first Island starts only on arrival, the flask comes
+only with an Island, so there was no Island, no light and no Blinded until the 60 s fail-safe let it die. A haul that
+gains under half a metre in 3 s is now let go: onto the thick, back to the fight (its `thickSeek` goes straight to the
+thick); home, the Island settles where it stands, as every later Island does.
+
+**Bot (test).**
 The ice phase holds 30 s (`lockT`), then lets go whether or not the Tower was overturned. An Overturn needs a Shell Rush
 (3.5-16 m, every 7 s) to cross webbed thin ice (stage 2: two Rushes, or one Hammer Claw), or any thin ice from the
 fourth Rush on. A probe logging the bot every game second showed the failing runs spend the phase on land or thick ice
 3-5 m from the Tower, dodging its sweeps (every 2 s within 7.2 m); the Rushes then never cross thin ice (one run: 40
 Rushes, 4 hints, no Overturn). The bot (BOT5, test code) now:
-- baits on thin, unwebbed ice 8-20 m from the Tower, scored for its distance from the thick ice (the Tower keeps to the
-  thick in this phase, so it cannot close to sweep range), a bonus past the Bell's 9.5 m, a cost past the Rush's 14 m
-  and for how far she must walk; re-picked when the Tower comes within 7.5 m or goes past 16;
+- baits on thin, unwebbed ice 8-15 m from the Tower (20 if nothing nearer can be walked to), scored for its distance from
+  the thick ice (the Tower keeps to the thick in this phase, so it cannot close to sweep range), a bonus past the Bell's
+  9.5 m and a cost for how far she must walk; re-picked when the Tower comes within 7.5 m or goes past 16;
 - where a Hammer Claw has webbed the ice 3-12 m off, stands 3 m beyond that patch (at least 7.5 m from the Tower), so the
   next Rush runs through it;
-- walks to the bait by the map's own way (`GridMap.stepToward`), not in a straight line;
+- keeps to the bait for the whole ice phase except the Overturn and a daze (while the Tower turned or hauled, it went to
+  strike it and stayed in its sweeps);
+- takes the best bait it can walk to, within the Rush's 15 m and at most 6 cells from the thick (further, the thick cell
+  nearest her lay beyond the 14 m the Tower looks, and it stood still);
+- walks to every goal but a dodge by the map's own way (`GridMap.stepToward`), not in a straight line (in a line it once
+  stood 22 m from the Tower across water for a whole phase), and never more than 18 m out of the arena (the Tower lets
+  its water go when she is 24 m out);
 - under a ringed telegraph with a calm (the Bell: ring 9 m, calm 4.5 m, 1.3 s), steps out of the ring when that is
   nearer than the calm and the way out is walkable (shared with the Skotos bot).
 The test's Bell check read her distance at its next 500 ms poll (one "Bell rung" at 15.9 m); the bot now records it the
-frame the Bell rings, and the check is that the Bell never caught her (in its calm or out of its ring each time) rather
-than "at least one Bell taken in the calm", which the far bait rarely sets up.
+frame the Bell rings, and the check passes if she took one Bell in its calm (the old check) or no Bell caught her (in its
+calm or out of its ring each time). Also: after a death the test waited for ever for the bot's promise (the death
+panel stops the bot's clock); it stops the bot first. And when no Overturn comes it prints the bot's ice phase, a line
+a game second (time, state, distance, the ice under her and its stage, her bait, a telegraph on her, the Rushes so far).
 
 ## Progress
 - 14:40 started; npm install, graphify; private no-HMR dev server on :5401.
