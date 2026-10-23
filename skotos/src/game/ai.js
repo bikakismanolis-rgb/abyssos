@@ -329,6 +329,8 @@ function hitHero(a, pl, mult = 1, o = {}) {
 }
 // pets draw aggro too: pick the nearest of hero and pets
 function victim(a, pl) {
+  // a War Cry's Challenge or an Iron Bulwark holds them to her (skillsx.js)
+  if (a.taunt > G.hero.stats.time) return pl;
   let best = pl, bd = Math.hypot(pl.x - a.x, pl.z - a.z);
   for (const b of G.actors) if (b.pet && !b.dead) { const d = Math.hypot(b.x - a.x, b.z - a.z); if (d < bd - 1.5) { bd = d; best = b; } }
   return best;

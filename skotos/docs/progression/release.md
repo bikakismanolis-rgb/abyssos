@@ -1,0 +1,52 @@
+# Progression: the artifact files changed against version 12
+
+Built with `npm run build:artifact` on `claude/skotos-progression` and on v12 (c70d65d); `artifact/assets/` compared by name.
+No asset (model, texture, sound, animation) changed: only code chunks whose hash moved. Publish `artifact/index.html` with this `files` map: the added files uploaded, the removed ones set to null, everything else kept.
+
+## index.html
+Changed (it names the new entry chunks).
+
+## Added (upload)
+- `assets/anim-Co8WR9rx.js`
+- `assets/boot-Z0BhjrH5.js`
+- `assets/build-BeOYbo7v.js`
+- `assets/creatureview-BUDJgJFL.js`
+- `assets/env-BR5kZ64i.js`
+- `assets/fx-D2BLx_mX.js`
+- `assets/gen-D4zQB5B1.js`
+- `assets/gen2-BvUvkEeh.js`
+- `assets/gen3-D2ta9RL_.js`
+- `assets/gen4-ROab9ICi.js`
+- `assets/index-wmnV3vkd.css`
+- `assets/index-B1VFxZBi.js`
+- `assets/kits-DXRhPeqj.js`
+
+## Removed (set to null)
+- `assets/anim-bT-ijxBg.js`
+- `assets/boot-Dhwa6kmL.js`
+- `assets/build-en7_4QIY.js`
+- `assets/creatureview-D2xHMyJZ.js`
+- `assets/env-D45tCXvO.js`
+- `assets/fx-BqK-F8gx.js`
+- `assets/gen-BelIWAV8.js`
+- `assets/gen2-Bcw74DQt.js`
+- `assets/gen3-CQuDbwBB.js`
+- `assets/gen4-B1TdwSM_.js`
+- `assets/index-C0elAw6K.css`
+- `assets/index-CnkZGems.js`
+- `assets/kits-3_FyslnY.js`
+
+Every file stays under 16 MB (the largest, `ash-*.js`, is 3.8 MB, unchanged).
+
+(Rebuilt after the review fixes, both sides from a clean build: v12 from `git archive c70d65d`, this branch from its
+working tree; the removed names are v12's as before, the added ones are the fixed branch's.)
+
+## Checks
+- Strict CSP (HANDOFF's policy) served by `tools/csp-server.mjs`, Playwright on desktop (1280x720) and an
+  isMobile/hasTouch context (844x390, DPR 2): title, new Warden, town, the skills panel at level 34, a skill cast.
+  0 CSP violations, 0 console or page errors in both; models textured (not white).
+- Every shipped scenario passes (Acts I-IV, title, panels), and the new ones: `progpanel`, `progress`, `skillsfx`
+  (each class).
+- After the review fixes: every scenario touched re-run (progpanel, progress, skillsfx x3, panels, combat, ranger, mage,
+  boons, karthax, ivar, ashfield, forge), all clean. The strict-CSP check was not repeated: the fixes add no resource,
+  fetch or URL (code and CSS only).

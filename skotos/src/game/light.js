@@ -26,7 +26,8 @@ import { clamp, damp, rand, angleDiff } from '../core/util.js';
 export const LIGHT = { force: false, base: 6, swell: 9, swellT: 8 };
 const S = { zone: null, pools: [], beams: [], over: null, owner: null, dark: null, swellT: 0, halfT: 0, sipT: 0, streamT: 0, ring: null, ringR: 6, cradle: null, cradleAv: null, flame: null, range0: 15, litT: 0, ice: 0 };
 const V = new THREE.Vector3();
-// in a boss's darkness her own fire (a Mage's Meteor) lights only as it bursts: the braziers are the way through Ivar's dark
+// in a boss's darkness her own fire (a Mage's Meteor) lights only as it bursts, and the fires the variants leave behind
+// (area o.dim) not at all: the braziers are the way through Ivar's dark
 const FLARE = 0.5;
 
 // the zone's kind of light: 'ember', 'sea' or null (ZONES is read at run time only: world.js imports this file)
@@ -60,9 +61,10 @@ export function lampAt(x, z, pad = 0) {
   for (const it of G.zone?.interact || []) if (it.lit && it.lightR && (it.x - x) ** 2 + (it.z - z) ** 2 < (it.lightR + pad) ** 2) return it;
   return null;
 }
-// burning ground at (x, z), pad metres past its edge (in a boss's dark the hero's own fire lights only as it bursts)
+// burning ground at (x, z), pad metres past its edge (in a boss's dark the hero's own fire lights only as it bursts, and
+// the fires the skills' variants leave, a.dim, never: Rain of Fire, Pale Cinder, Ember Dance)
 export function fireAt(x, z, pad = 0) {
-  for (const a of G.areas) if (a.kind === 'fire' && a.t <= a.dur && !(S.over != null && a.team === 'hero' && a.t > FLARE) && (a.x - x) ** 2 + (a.z - z) ** 2 < (a.r + pad) ** 2) return a;
+  for (const a of G.areas) if (a.kind === 'fire' && a.t <= a.dur && !(S.over != null && a.team === 'hero' && (a.t > FLARE || a.dim)) && (a.x - x) ** 2 + (a.z - z) ** 2 < (a.r + pad) ** 2) return a;
   return null;
 }
 // lamp light (Act V): what holds the ice, keeps the Sunken from waking with the tide, and keeps the Icemaw, the Hands and

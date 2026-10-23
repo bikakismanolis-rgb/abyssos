@@ -85,7 +85,7 @@ on('netReady', (ok) => { TS.net = ok; if (ok && G.mode === 'title' && TS.menu &&
 function mainMenu() {
   const heroes = G.save.heroes;
   const last = heroes.find((h) => h.id === G.save.last) || heroes[0];
-  const slots = heroes.map((h) => `<div class="slot" data-id="${h.id}"><span style="color:${CLASSES[h.cls].color}">${ICON[h.cls === 'warden' ? 'shield' : h.cls === 'ranger' ? 'bolt' : 'flame']}</span><span class="nm">${t('menu.slot', t('class.' + h.cls), h.level, t('diff.' + DIFFS[h.diff].id))}</span><span class="dl" data-del="${h.id}">${TS.delSure === h.id ? t('menu.deleteSure') : t('menu.delete')}</span></div>`).join('');
+  const slots = heroes.map((h) => `<div class="slot" data-id="${h.id}"><span style="color:${CLASSES[h.cls].color}">${ICON[h.cls === 'warden' ? 'shield' : h.cls === 'ranger' ? 'bolt' : 'flame']}</span><span class="nm">${t('menu.slot', t('class.' + h.cls), h.level + (h.mlvl ? ' ✦' + h.mlvl : ''), t('diff.' + DIFFS[h.diff].id))}</span><span class="dl" data-del="${h.id}">${TS.delSure === h.id ? t('menu.deleteSure') : t('menu.delete')}</span></div>`).join('');
   const s = screen(`<div class="logo">${t('game.title')}</div><div class="logo-rule"></div><div class="logo-sub">${t(sub5())}</div>
     <div class="menu">${last ? `<button class="btn" id="m-cont">${t('menu.continue')} · ${t('class.' + last.cls)} ${t('hud.level', last.level)}</button>` : ''}
     ${last && TS.net ? `<button class="btn ghost" id="m-coop">${t('coop.title')}</button>` : ''}
