@@ -145,7 +145,7 @@ function hurtHero(src, amount, o) {
   if (p.buffs.cry > 0) amount *= 0.77;
   if (p.buffs.shrineShield > 0) amount *= 0.6;
   // a Challenge (skillsx.js): a third less, and what is turned aside goes back at the one who struck
-  if (p.buffs.challenge > 0) { amount *= 0.65; if (src && src.team === 'foe' && !src.dead && !o.dot) damage(p, src, amount * 0.9 + s.thorns, { noFx: true, quiet: true, noLoh: true, noRes: true, crit: false }); }
+  if (p.buffs.challenge > 0) { amount *= 0.65; if (src && src.team === 'foe' && src.status && !src.dead && !o.dot) damage(p, src, amount * 0.9 + s.thorns, { noFx: true, quiet: true, noLoh: true, noRes: true, crit: false }); }
   if (s.legs.has('stoneborn') && p.hp < p.hpMax * 0.5) amount *= 0.8;
   // Seen by the dead (a Lampless alarm, Ivar's lantern): +15%
   if (p.buffs.seen > 0) amount *= 1.15;

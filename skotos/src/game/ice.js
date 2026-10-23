@@ -30,7 +30,7 @@ import { t, has } from '../i18n/i18n.js';
 import { angleDiff, clamp } from '../core/util.js';
 import { TIDE } from './tide.js';
 import { tidal } from '../world/gen5.js';
-import { NET } from '../net/state.js';
+import { NET, MIRROR } from '../net/state.js';
 
 const BATCH = 0.25, WARN = 0.6, CHAIN = 0.3, MELT = 20, MELT_LAMP = 6, SLUSH = 8, DECAY = 0.25, NEAR = 30, RING = 2, UP = 0.1, FLOES = 32;
 // cell flags: in the loaded list, warning, a break waiting for its batch, a refreeze waiting, in the broken list, in the
@@ -554,19 +554,31 @@ function crackCells(z, I, list, stages, o = {}) {
   if (n && I.sndT < I.clock) { I.sndT = I.clock + 0.12; Audio.sfx(['iceCreak', 'iceCrack1', 'iceCrack2'][top - 1] || 'iceCrack2', { x: cx / n + 0.5, z: cz / n + 0.5 }); }
   return n;
 }
+// (co-op, on a guest: what its own hero does to the ice, MIRROR.hero, is done on the host's, which is the only one that
+// cracks: net/coop.js; the guest's ice follows the host's)
+const toHost = () => NET.mode === 'guest' && MIRROR.hero && NET.h.iceOp;
 export function crackAt(x, z, r, stages = 1, o = {}) {
   const zn = G.zone, I = zn?.L?.ice && zn.ice; if (!I) return 0;
+  if (toHost()) return NET.h.iceOp('c', x, z, r, stages);
   return crackCells(zn, I, cellsIn(zn.L, x, z, r), stages, o);
 }
 // along a line w wide (Earthsplitter, the Black Wave, the Black Breath)
 export function crackLine(x0, z0, x1, z1, w = 2, stages = 1, o = {}) {
   const zn = G.zone, I = zn?.L?.ice && zn.ice; if (!I) return 0;
+  if (toHost()) return NET.h.iceOp('l', x0, z0, x1, z1, w, stages);
   const L = zn.L, dx = x1 - x0, dz = z1 - z0, l2 = dx * dx + dz * dz || 1, out = [];
   for (let cz = Math.floor(Math.min(z0, z1) - w); cz <= Math.floor(Math.max(z0, z1) + w); cz++) for (let cx = Math.floor(Math.min(x0, x1) - w); cx <= Math.floor(Math.max(x0, x1) + w); cx++) {
     if (cx < 0 || cz < 0 || cx >= L.w || cz >= L.h) continue;
     const px = cx + 0.5, pz = cz + 0.5, u = clamp(((px - x0) * dx + (pz - z0) * dz) / l2, 0, 1);
     if (Math.hypot(x0 + dx * u - px, z0 + dz * u - pz) <= w / 2) out.push(cz * L.w + cx);
   }
+  return crackCells(zn, I, out, stages, o);
+}
+// in a ring from r0 to r1 round (x, z) (the Ring of Earth: the ground under her is left as it was)
+export function crackRing(x, z, r0, r1, stages = 1, o = {}) {
+  const zn = G.zone, I = zn?.L?.ice && zn.ice; if (!I) return 0;
+  if (toHost()) return NET.h.iceOp('r', x, z, r0, r1, stages);
+  const w = zn.L.w, out = cellsIn(zn.L, x, z, r1).filter((i) => Math.hypot(i % w + 0.5 - x, (i - i % w) / w + 0.5 - z) >= r0);
   return crackCells(zn, I, out, stages, o);
 }
 // in a cone from (x, z) facing rot, len long, arc its half-angle (as teleCone and ai.js inCone take it)
@@ -590,6 +602,7 @@ export function breakAt(x, z, r, o = {}) {
 // Frost Nova, a beam: stages 1-3 back to 0, broken cells to slush in the next batch
 export function refreezeAt(x, z, r) {
   const zn = G.zone, I = zn?.L?.ice && zn.ice; if (!I) return 0;
+  if (toHost()) return NET.h.iceOp('f', x, z, r);
   let n = 0;
   for (const i of cellsIn(zn.L, x, z, r)) {
     if (!zn.L.ice[i]) continue;
