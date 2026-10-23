@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 import { watchBrowser, fatalFail } from './fatal.mjs';
-const [, , name = 'combat', out = '/tmp', W = '1280', H = '720'] = process.argv;
+const [, , name = 'combat', out = '/tmp', W = process.env.W || '1280', H = process.env.H || '720'] = process.argv;
 const logs = [];
 // Act IV: a dialog advances on Enter (the key finishes the line, then moves on), whatever the frame rate; what is said is
 // recorded for the report
