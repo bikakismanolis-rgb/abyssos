@@ -303,6 +303,31 @@ export function disposeZone(z) {
   for (const t of TICKS) if (gone.has(t.obj)) TICKS.delete(t);
   z.ice?.tex?.dispose?.();
 }
+// what the story has opened since a zone was built, laid on it from the flags (a co-op guest's zone: the host's story moves
+// on while it stands there, net/coop.js), quietly (the host's own sounds and dust come through the mirror), only where it
+// is still shut: the Heartwood's thorn walls, the Root Gate, the slag on the Great Stair, the Anvil Gate, the skerry while
+// the Tower walks, a Breathing-hole sealed (its lead thick ice, its three lamps one marker-light). The cells come from this
+// page's own layout, never from a peer. (The skerry shut again under the dead Tower: ai.js skerryClose)
+export function storyOpenings(z) {
+  const F = G.hero.flags, L = z?.L; if (!L) return 0;
+  let n = 0;
+  const open = (cells) => { const k = cells ? z.map.open(cells) : 0; n += k; return k; };
+  if (z.id === 'heart') (L.thorns || []).forEach((t, i) => { if ((F.autumn || F['thorn' + i]) && open(t.cells)) z.act3?.thorns?.[i]?.userData.wither(); });
+  if (z.id === 'weep' && F.hart && open(L.spots.rootGate?.cells)) z.act3?.gate?.userData.setOpen(true);
+  if (z.id === 'forge' && F.plug && open(L.plug?.cells)) z.act4?.plug?.userData.melt?.();
+  if (z.id === 'ashfield' && F.ivar && open(L.gate?.cells)) z.act4?.gate?.userData.setOpen(true);
+  if (z.id === 'coast' && F.towerWake && !F.towerDown) open(L.spots.skerry?.cells);
+  if (z.id === 'farlight' && z.act5) for (const ho of L.spots.holes) {
+    const A = z.act5; if (!F['hole' + ho.id] || !A.lamps.some((it) => it.hole === ho.id)) continue;
+    for (const it of A.lamps.filter((l) => l.hole === ho.id)) { light5(z, it, false); const i = z.interact.indexOf(it); if (i >= 0) z.interact.splice(i, 1); showExtra(z, it.mesh, false); }
+    A.lamps = A.lamps.filter((it) => it.hole !== ho.id);
+    const m = marker5(z, ho); A.markers.push(m); if (G.zone === z) R.scene.add(m);
+    light5(z, m.userData.it, true);
+    if (G.zone === z) { freezeCells(ho.lead); freezeWave(ho.id, ho.x, ho.z, ho.leadR, 0); }
+  }
+  if (n) emit('mapChanged');
+  return n;
+}
 
 // ---------- packs ----------
 const tmp = [];

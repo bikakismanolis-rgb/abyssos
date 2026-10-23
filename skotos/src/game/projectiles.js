@@ -94,7 +94,8 @@ function endProj(p, i, hitWall) {
   const pa = KIND[p.kind].patch;
   if (pa && G.zone) { const f = G.zone.map.walkable(p.x, p.z) ? p : G.zone.map.nearestFloor(p.x, p.z, 2); area('fire', f.x, f.z, pa.r, pa.dur, { team: p.team, src: p.src, dmg: p.dmg * 0.22, tick: 0.5 }); }
   const po = KIND[p.kind].pool;
-  if (po && G.zone) { addSapPool(p.x, p.z, p.poolR ?? po.r, p.poolDur ?? po.dur, p.src, po.kind); splash(p.x, p.z, 1); }
+  // (a co-op copy of the host's leaves none: the host's own pool comes through the mirror)
+  if (po && G.zone && !p.net) { addSapPool(p.x, p.z, p.poolR ?? po.r, p.poolDur ?? po.dur, p.src, po.kind); splash(p.x, p.z, 1); }
 }
 
 export function updateProjs(dt) {
