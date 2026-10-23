@@ -218,9 +218,10 @@ async function BOT5(o) {
     }
     if (!goal && tgt) { const d = Math.hypot(tgt.x - pl.x, tgt.z - pl.z), want = ranged ? 8 : tgt.radius + 1.0; if (d > want + 0.8) goal = { x: tgt.x, z: tgt.z }; else if (ranged && d < want - 3) goal = { x: pl.x * 2 - tgt.x, z: pl.z * 2 - tgt.z }; }
     const u = under(pl.x, pl.z);
-    if (u) { const c = u.r > 0 && calmIn(u.c, u.r > 14); if (c) goal = { x: c.x, z: c.z }; else { const l = Math.hypot(u.x, u.z) || 1; goal = { x: pl.x + (u.x / l) * 4, z: pl.z + (u.z / l) * 4 }; } }
+    // (into a calm, or out of its ring if that is nearer: from the Tower's bait, 9 m off, the Bell's calm was 5 m away)
+    if (u) { const c = u.r > 0 && calmIn(u.c, u.r > 14), du = Math.hypot(u.x, u.z), cc = c && Math.hypot(pl.x - c.x, pl.z - c.z) - c.r + 0.3; if (c && !(u.r > 0 && u.r + 0.6 - du < cc && u.r <= 14)) goal = { x: c.x, z: c.z }; else { const l = Math.hypot(u.x, u.z) || 1; goal = { x: pl.x + (u.x / l) * 4, z: pl.z + (u.z / l) * 4 }; } }
     // (the Tower's Bell: how far she stood from it the frame it rang; looked at from Node, she had walked on)
-    if (o.kind === 'tower' && b) { const n = window.__act5.AI_LOG['tower:bellRung'] || 0; if (n > (B.bellN ??= n)) (B.bellD ||= []).push(+Math.hypot(b.x - pl.x, b.z - pl.z).toFixed(1)); B.bellN = n; }
+    if (o.kind === 'tower' && b) { const n = window.__act5.AI_LOG['tower:bellRung'] || 0; if (n > (B.bellN ??= n)) { const d = Math.hypot(b.x - pl.x, b.z - pl.z); (B.bellD ||= []).push(+d.toFixed(1)); if (d > 4.5 && d < 9 + pl.radius * 0.5) B.bellHit = (B.bellHit || 0) + 1; } B.bellN = n; }
     // (a bait is walked to by the map's own way; a dodge or a chase straight)
     const wv = goal?.way && !u && z.map.stepToward(B.wayP ||= {}, pl.x, pl.z, goal.x, goal.z, way, 24);
     if (wv) keys(wv.x, wv.z); else if (goal) keys(goal.x - pl.x, goal.z - pl.z); else keys(0, 0);
@@ -1265,8 +1266,9 @@ const S = {
     await shot();
     const [lo, hi] = (process.env.TTK || '60,300').split(',').map(Number);
     const ttk = bot?.t ?? null, inBand = ttk != null && ttk >= lo && ttk <= hi;
+    // (the Bell never caught her: in its calm or out of its ring each time it rang, read the frame it rang)
     if (bot?.bellD) seen.bellD = bot.bellD;
-    const bellIn = !seen.bellD || seen.bellD.some((d) => d <= 4.5);
+    const bellIn = bot ? !bot.bellHit : !seen.bellD || seen.bellD.some((d) => d <= 4.5);
     // (its windows, seen between two looks or told by its tally: at SIMK 4 a 3.5 s Beached lasts under a second)
     const lg = home.log, win = { beached: !!seen.beached || !!seen.stranded || lg['tower:beached'] > 0 || lg['tower:stranded'] > 0, overturned: !!seen.overturned || lg['tower:overturned'] > 0, blinded: !!seen.blinded || lg['tower:lit'] > 0 };
     const pass = !seen.died && !!bot?.done && win.beached && win.overturned && win.blinded && (bot.near ?? 99) <= 1.5 && bellIn && home.towerDown && home.at != null && home.at <= 2.5 && home.closed > 0 && !home.heroIn && inBand && (!process.env.TTK0 || +process.env.DIFF !== 0 || ttk >= 0.6 * +process.env.TTK0);
