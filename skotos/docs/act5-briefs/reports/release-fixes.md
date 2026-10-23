@@ -101,8 +101,7 @@ Rushes, 4 hints, no Overturn). The bot (BOT5, test code) now:
 - takes the best bait it can walk to, within the Rush's 15 m and at most 6 cells from the thick (further, the thick cell
   nearest her lay beyond the 14 m the Tower looks, and it stood still);
 - walks to every goal but a dodge by the map's own way (`GridMap.stepToward`), not in a straight line (in a line it once
-  stood 22 m from the Tower across water for a whole phase), and never more than 18 m out of the arena (the Tower lets
-  its water go when she is 24 m out);
+  stood 22 m from the Tower across water for a whole phase),;
 - under a ringed telegraph with a calm (the Bell: ring 9 m, calm 4.5 m, 1.3 s), steps out of the ring when that is
   nearer than the calm and the way out is walkable (shared with the Skotos bot).
 The test's Bell check read her distance at its next 500 ms poll (one "Bell rung" at 15.9 m); the bot now records it the

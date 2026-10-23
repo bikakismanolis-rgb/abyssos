@@ -230,8 +230,6 @@ async function BOT5(o) {
     if (o.kind === 'tower' && b.phase === 1 && (B.logT = (B.logT || 0) - dt) <= 0) { B.logT = 1; const f = (v) => +v.toFixed(1); (B.log ||= []).push([f(B.t), b.st, f(Math.hypot(b.x - pl.x, b.z - pl.z)), I.iceAt(pl.x, pl.z), I.stageAt(pl.x, pl.z), B.webPt ? 'web' : B.icePt ? 'bait' : '-', goal ? f(Math.hypot(goal.x - pl.x, goal.z - pl.z)) : null, !!u, b.rushes || 0, f(pl.x), f(pl.z), f(b.x), f(b.z)]); }
     // (the Tower's Bell: how far she stood from it the frame it rang; looked at from Node, she had walked on)
     if (o.kind === 'tower' && b) { const n = window.__act5.AI_LOG['tower:bellRung'] || 0; if (n > (B.bellN ??= n)) { const d = Math.hypot(b.x - pl.x, b.z - pl.z); (B.bellD ||= []).push(+d.toFixed(1)); if (d > 4.5 && d < 9 + pl.radius * 0.5) B.bellHit = (B.bellHit || 0) + 1; } B.bellN = n; }
-    // (and never out of the bay: a way round the water took her past where the Tower lets its water go, 24 m beyond it)
-    if (o.kind === 'tower' && Lz.boss && Math.hypot(pl.x - Lz.boss.x, pl.z - Lz.boss.z) > (Lz.boss.r || 18) + 18) goal = { x: Lz.boss.x, z: Lz.boss.z };
     // (every goal but a dodge walked to by the map's own way, the Tower's: in a line, she stood 22 m off it across the water
     // a whole phase; a dodge straight)
     const wv = goal && !u && (goal.way || o.kind === 'tower') && Math.hypot(goal.x - pl.x, goal.z - pl.z) > 1.5 && z.map.stepToward(B.wayP ||= {}, pl.x, pl.z, goal.x, goal.z, way, 24);
