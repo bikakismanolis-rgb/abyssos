@@ -2,6 +2,7 @@
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+import { watchBrowser, fatalFail } from './fatal.mjs';
 const [, , name = 'combat', out = '/tmp', W = '1280', H = '720'] = process.argv;
 const logs = [];
 // Act IV: a dialog advances on Enter (the key finishes the line, then moves on), whatever the frame rate; what is said is
@@ -940,6 +941,12 @@ const S = {
     r.migrated = await pg.evaluate(() => { const h = window.__G.hero; return { level: h.level, xp: h.xp, points: h.points, skills: h.skills, loadout: h.loadout, mlvl: h.mlvl, mast: h.mast }; });
     await pg.evaluate(() => window.__D.openPanel('skills')); await pg.waitForTimeout(400); await shot();
     return r;
+  } },
+  // the runner's own check: a game timer that throws lands in #fatal, and the run must report pass: false with it
+  fatalcheck: { q: 'auto=town&sim=2&q=0&norender', run: async (pg) => {
+    await pg.evaluate(() => window.__G.timers.push({ t: 0.05, fn() { throw new Error('fatalcheck: a thrown timer'); } }));
+    await pg.waitForTimeout(1500);
+    return { pass: true, note: 'must come out pass: false with the fatal text' };
   } },
   title: { q: 'sim=1&q=' + (process.env.Q || '1'), run: async (pg, shot) => {
     await pg.waitForTimeout(2500); await shot();
@@ -1975,7 +1982,9 @@ const S = {
 const sc = S[name];
 // (a scenario run in a child process of its own, as the soaks: this runner's browser is never opened beside it)
 if (sc.child) { let res; try { res = await sc.child(out); } catch (e) { res = { error: e.message }; } console.log(name, JSON.stringify(res)); process.exit(0); }
-const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+// (every page's #fatal text fails the run: tools/fatal.mjs)
+const FATAL = [];
+const browser = watchBrowser(await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] }), FATAL);
 const page = await browser.newPage({ viewport: { width: +W, height: +H } });
 page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') { const t = m.text(); if (!t.includes('ERR_CERT')) logs.push(m.type() + ': ' + t); } });
 page.on('pageerror', (e) => logs.push('pageerror: ' + e.message + ' ' + (e.stack || '').split('\n').slice(0, 3).join(' | ')));
@@ -1993,6 +2002,8 @@ const shot = async (pg = page) => { await pg.evaluate(() => new Promise((ok) => 
 shot.dir = out;
 let res;
 try { res = await sc.run(page, shot); } catch (e) { logs.push('scenario error: ' + e.message); }
+await page.waitForTimeout(250).catch(() => {});
+res = fatalFail(res, FATAL);
 console.log(name, JSON.stringify(res));
 if (logs.length) console.log(logs.slice(0, 30).join('\n'));
 await browser.close();

@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 import fs from 'node:fs';
 const require = createRequire(import.meta.url);
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+import { watchFatal } from './fatal.mjs';
 const [, , name = 'join', out = '/tmp/coop'] = process.argv;
 const BASE = process.env.BASE || 'http://localhost:5311/';
 fs.mkdirSync(out, { recursive: true });
@@ -17,6 +18,9 @@ const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable
 // (the phone: 844 x 390 landscape; the ui scenario as a touch phone)
 const ctx = await browser.newContext(name === 'ui' ? { viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : { viewport: { width: 844, height: 390 } });
 const pages = [];
+// every page's #fatal text (tools/fatal.mjs) fails the run
+const FATAL = [];
+await watchFatal(ctx, FATAL);
 // the room scenario: every page's window.claude.use('room') is a faithful fake of the artifact's room (fakeroom.mjs,
 // in this process: its budget, sizes, coalescing and loss), reached through a binding; the game picks RoomTransport
 let HUB = null;
@@ -471,6 +475,8 @@ try {
   await SC[name]();
 } catch (e) { ok(false, 'scenario threw: ' + (e.stack || e).toString().slice(0, 600)); }
 fs.writeFileSync(out + '/' + name + '.json', JSON.stringify({ name, fails, results }, null, 1));
+await sleep(250);
+ok(!FATAL.length, 'no #fatal on any page', FATAL.length ? FATAL.slice(0, 6) : undefined);
 console.log(fails ? fails + ' FAILED' : 'all passed');
 await browser.close();
 process.exit(fails ? 1 : 0);

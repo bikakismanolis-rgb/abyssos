@@ -16,13 +16,16 @@ import { createRequire } from 'node:module';
 import { writeFileSync } from 'node:fs';
 const require = createRequire(import.meta.url);
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+import { watchBrowser } from './fatal.mjs';
 const [, , which = 'all', out = '/tmp'] = process.argv;
 const BASE = process.env.BASE || 'http://localhost:5199/', DIFF = +(process.env.DIFF ?? 1), SIM = +(process.env.SIM || 30), SEED = process.env.SEED ? '&seed=' + process.env.SEED : '';
 // (the story past each zone's arrival scene, so no scene holds the clock: the coast at q26 after the rite, the Farthest
 // Light at q28 with the Icebound Ship's talk had)
 const STORY = ['alkyone', 'coastCall', 'cradle', 'coal', 'alkField', 'coastSeen', 'hearth', 'rite', 'tamMet', 'glaukosMet'];
 const FLAGS = { coast: '&quest=26&flags=' + STORY.join(','), farlight: '&quest=28&flags=' + [...STORY, 'towerWake', 'towerDown', 'frozen', 'farSeen', 'alkShip'].join(',') };
-const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+// (every page's #fatal text fails the soak it was in: tools/fatal.mjs)
+const FATAL = [];
+const browser = watchBrowser(await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] }), FATAL);
 
 async function open(q, vw = 960, vh = 540) {
   const page = await browser.newPage({ viewport: { width: vw, height: vh } });
@@ -317,6 +320,7 @@ if (which === 'ice' || which === 'all') { report.iceCoast = await iceSoak('coast
 if (which === 'ice-coast') report.iceCoast = await iceSoak('coast');
 if (which === 'ice-farlight') report.iceFarlight = await iceSoak('farlight');
 if (which === 'perf' || which === 'all') report.perf = await perf();
+if (FATAL.length) for (const v of Object.values(report)) if (v.res) { v.res.pass = false; v.res.fatal = FATAL.slice(0, 6); }
 writeFileSync(`${out}/soak5-${which}${process.env.SEED ? '-' + process.env.SEED : ''}.json`, JSON.stringify(report, null, 1));
 for (const [k, v] of Object.entries(report)) {
   if (k === 'perf') { console.log('perf', JSON.stringify(v)); continue; }
