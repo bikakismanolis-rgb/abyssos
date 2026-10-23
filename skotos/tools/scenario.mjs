@@ -133,6 +133,10 @@ async function BOT5(o) {
   const B = window.BOT = { t: 0, deaths: 0, hurt: 0, potions: 0, low: 1, phases: [], done: false, kind: o.kind, cls, L, life: G.player.hpMax, stop: false };
   Bus.on('hurt', (f) => { B.hurt += f; });
   const pl = G.player, z = G.zone, Lz = z.L, ranged = cls !== 'warden';
+  // (the Tower: how far each cell lies from the thick ice it keeps to in its ice phase, in cells)
+  let dThick = null;
+  if (o.kind === 'tower' && Lz.thick) { const W = Lz.w, H = Lz.h, q = []; dThick = new Float32Array(W * H).fill(99); for (let i = 0; i < W * H; i++) if (Lz.thick[i]) { dThick[i] = 0; q.push(i); } for (let h = 0; h < q.length; h++) { const i = q[h], x = i % W, y = (i - x) / W; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy, n = ny * W + nx; if (nx >= 0 && ny >= 0 && nx < W && ny < H && dThick[n] > dThick[i] + 1) { dThick[n] = dThick[i] + 1; q.push(n); } } } }
+  const way = { x: 0, z: 0 };
   const keys = (dx, dz) => { IN.keys.clear(); const l = Math.hypot(dx, dz); if (l < 0.35) return; const r = Math.round(Math.atan2(dx, dz) / (Math.PI / 4)), ux = Math.round(Math.sin(r * Math.PI / 4)), uz = Math.round(Math.cos(r * Math.PI / 4)); if (ux > 0) IN.keys.add('d'); if (ux < 0) IN.keys.add('a'); if (uz > 0) IN.keys.add('s'); if (uz < 0) IN.keys.add('w'); };
   const calm = (t) => { const c = t.m.material.uniforms.uColor.value; return c.b > c.r; };
   const _v = { x: 0, z: 0, r: 0 };
@@ -169,20 +173,32 @@ async function BOT5(o) {
     if (o.kind === 'tower') {
       if (b.phase === 0 && T && T.st !== 'low') { const isl = Lz.spots.bayIslets.slice().sort((p, q) => Math.hypot(p.x - pl.x, p.z - pl.z) - Math.hypot(q.x - pl.x, q.z - pl.z))[0]; goal = { x: isl.x, z: isl.z }; if (b.dazed > 0 && Math.hypot(b.x - isl.x, b.z - isl.z) < 6) goal = null; }
       if (b.st === 'island' && b.lightIt) { goal = { x: b.lightIt.x, z: b.lightIt.z }; if (Math.hypot(goal.x - pl.x, goal.z - pl.z) < 2.5 && !pl.act) b.lightIt.use(); }
-      // the bait: where a Hammer Claw has webbed the thin ice (stage 2) 3-12 m off, she stands 3 m beyond it, so the next Shell
-      // Rush runs through it and goes under; else on unwebbed thin ice 7-10 m off, kept 18 s (the Rushes crack one lane, the
-      // Hammer Claw webs it). (Baiting only the lane, a phase could end on its clock with no Overturn)
+      // the bait (the hint's own play: thin ice between them, she behind it). Where a Hammer Claw has webbed the thin ice
+      // (stage 2), she stands 3 m beyond it so the next Shell Rush runs through it; else on unwebbed thin ice 8-14 m off,
+      // as far from the thick as she can find (the Tower keeps to the thick in this phase, so it cannot close to its sweep),
+      // past the Bell's 9.5 m if she can, and not far from where she stands; walked to by the map's own way, not a line.
+      // (Baited 7-10 m from where the Tower stood and walked to in a line, she was caught on the land or the thick beside it,
+      // dodging its sweeps, and a phase could end on its clock with no Overturn)
       if (b.phase === 1 && b.st === 'fight' && !(b.dazed > 0)) {
         if ((B.webT = (B.webT || 0) - dt) <= 0) {
           B.webT = 0.25; B.webPt = null; let bd = 1e9;
           for (let r = 3; r <= 12; r++) for (let k = 0; k < 24; k++) {
             const g = k * 0.2618, x = b.x + Math.sin(g) * r, zz = b.z + Math.cos(g) * r;
             if (I.iceAt(x, zz) !== 'thin' || I.stageAt(x, zz) < 2) continue;
-            for (const e of [3, 2.5, 3.5, 2, 4]) { const px = x + Math.sin(g) * e, pz = zz + Math.cos(g) * e, s2 = I.iceAt(px, pz); if (!z.map.walkable(px, pz) || s2 === 'water' || (s2 === 'thin' && I.stageAt(px, pz) >= 2)) continue; const sc = Math.hypot(px - pl.x, pz - pl.z) + Math.abs(r - 7); if (sc < bd) { bd = sc; B.webPt = { x: px, z: pz }; } break; }
+            for (const e of [3, 2.5, 3.5, 2, 4]) { const px = x + Math.sin(g) * e, pz = zz + Math.cos(g) * e, s2 = I.iceAt(px, pz); if (r + e < 7.5 || !z.map.walkable(px, pz) || s2 === 'water' || (s2 === 'thin' && I.stageAt(px, pz) >= 2)) continue; const sc = Math.hypot(px - pl.x, pz - pl.z) + Math.abs(r - 7); if (sc < bd) { bd = sc; B.webPt = { x: px, z: pz }; } break; }
           }
         }
-        if (!B.webPt && (!B.icePt || Math.hypot(B.icePt.x - b.x, B.icePt.z - b.z) > 12 || (B.icePtT -= dt) <= 0 || I.iceAt(B.icePt.x, B.icePt.z) !== 'thin')) { B.icePtT = 18; B.icePt = null; for (let r = 7; r < 10 && !B.icePt; r++) for (let k = 0; k < 16; k++) { const g = k * 0.39, x = b.x + Math.sin(g) * r, zz = b.z + Math.cos(g) * r; if (I.iceAt(x, zz) === 'thin' && I.stageAt(x, zz) < 2 && z.map.walkable(x, zz)) { B.icePt = { x, z: zz }; break; } } }
-        goal = B.webPt || B.icePt || goal;
+        const dI = B.icePt && Math.hypot(B.icePt.x - b.x, B.icePt.z - b.z);
+        if (!B.webPt && (!B.icePt || dI < 7.5 || dI > 16 || (B.icePtT -= dt) <= 0 || I.iceAt(B.icePt.x, B.icePt.z) !== 'thin')) {
+          B.icePtT = 12; B.icePt = null; let best = -1e9;
+          for (let r = 8; r <= 14; r++) for (let k = 0; k < 24; k++) {
+            const g = k * 0.2618, x = b.x + Math.sin(g) * r, zz = b.z + Math.cos(g) * r, i = Math.floor(zz) * Lz.w + Math.floor(x);
+            if (I.iceAt(x, zz) !== 'thin' || I.stageAt(x, zz) >= 2 || !z.map.walkable(x, zz)) continue;
+            const sc = Math.min(dThick ? dThick[i] : 0, 9) + (r >= 9.6 ? 2 : 0) - Math.hypot(x - pl.x, zz - pl.z) * 0.15;
+            if (sc > best) { best = sc; B.icePt = { x, z: zz }; }
+          }
+        }
+        if (B.webPt || B.icePt) { goal = B.webPt || B.icePt; goal.way = true; }
       }
     } else if (o.kind === 'skotos') {
       if (z.remember && !pl.act) { goal = { x: z.remember.x, z: z.remember.z + 1.0 }; if (Math.hypot(goal.x - pl.x, goal.z - pl.z) < 1.6 && (!b.nb || b.nb.st === 'down' || b.nb.st === 'up')) z.remember.use(); }
@@ -200,7 +216,9 @@ async function BOT5(o) {
     if (!goal && tgt) { const d = Math.hypot(tgt.x - pl.x, tgt.z - pl.z), want = ranged ? 8 : tgt.radius + 1.0; if (d > want + 0.8) goal = { x: tgt.x, z: tgt.z }; else if (ranged && d < want - 3) goal = { x: pl.x * 2 - tgt.x, z: pl.z * 2 - tgt.z }; }
     const u = under(pl.x, pl.z);
     if (u) { const c = u.r > 0 && calmIn(u.c, u.r > 14); if (c) goal = { x: c.x, z: c.z }; else { const l = Math.hypot(u.x, u.z) || 1; goal = { x: pl.x + (u.x / l) * 4, z: pl.z + (u.z / l) * 4 }; } }
-    if (goal) keys(goal.x - pl.x, goal.z - pl.z); else keys(0, 0);
+    // (a bait is walked to by the map's own way; a dodge or a chase straight)
+    const wv = goal?.way && !u && z.map.stepToward(B.wayP ||= {}, pl.x, pl.z, goal.x, goal.z, way, 24);
+    if (wv) keys(wv.x, wv.z); else if (goal) keys(goal.x - pl.x, goal.z - pl.z); else keys(0, 0);
     B.near = Math.min(B.near ?? 99, tgt === b && b ? Math.hypot(b.x - pl.x, b.z - pl.z) - b.radius : 99);
     if ((skT -= dt) <= 0 && tgt && !pl.pull && !(pl.act && pl.act.name === 'touch')) {
       skT = 0.2;
