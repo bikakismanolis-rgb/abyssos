@@ -219,7 +219,7 @@ async function BOT5(o) {
     if (!goal && tgt) { const d = Math.hypot(tgt.x - pl.x, tgt.z - pl.z), want = ranged ? 8 : tgt.radius + 1.0; if (d > want + 0.8) goal = { x: tgt.x, z: tgt.z }; else if (ranged && d < want - 3) goal = { x: pl.x * 2 - tgt.x, z: pl.z * 2 - tgt.z }; }
     const u = under(pl.x, pl.z);
     // (into a calm, or out of its ring if that is nearer: from the Tower's bait, 9 m off, the Bell's calm was 5 m away)
-    if (u) { const c = u.r > 0 && calmIn(u.c, u.r > 14), du = Math.hypot(u.x, u.z), cc = c && Math.hypot(pl.x - c.x, pl.z - c.z) - c.r + 0.3; if (c && !(u.r > 0 && u.r + 0.6 - du < cc && u.r <= 14)) goal = { x: c.x, z: c.z }; else { const l = Math.hypot(u.x, u.z) || 1; goal = { x: pl.x + (u.x / l) * 4, z: pl.z + (u.z / l) * 4 }; } }
+    if (u) { const c = u.r > 0 && calmIn(u.c, u.r > 14), du = Math.hypot(u.x, u.z), cc = c && Math.hypot(pl.x - c.x, pl.z - c.z) - c.r + 0.3, ok = (k) => z.map.walkable(pl.x + (u.x / (du || 1)) * k, pl.z + (u.z / (du || 1)) * k), out = u.r + 0.6 - du; if (c && !(u.r > 0 && out < cc && u.r <= 14 && ok(out * 0.5) && ok(out + 0.4))) goal = { x: c.x, z: c.z }; else { const l = Math.hypot(u.x, u.z) || 1; goal = { x: pl.x + (u.x / l) * 4, z: pl.z + (u.z / l) * 4 }; } }
     // (the Tower's Bell: how far she stood from it the frame it rang; looked at from Node, she had walked on)
     if (o.kind === 'tower' && b) { const n = window.__act5.AI_LOG['tower:bellRung'] || 0; if (n > (B.bellN ??= n)) { const d = Math.hypot(b.x - pl.x, b.z - pl.z); (B.bellD ||= []).push(+d.toFixed(1)); if (d > 4.5 && d < 9 + pl.radius * 0.5) B.bellHit = (B.bellHit || 0) + 1; } B.bellN = n; }
     // (a bait is walked to by the map's own way; a dodge or a chase straight)
