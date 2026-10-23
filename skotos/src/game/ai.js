@@ -3645,6 +3645,12 @@ function towerHaul(a, dt) {
     if (a.st === 'back') { islandStart(a); return 0; }
     a.st = 'fight'; a.cd = Math.max(a.cd, 0.6); return 0;
   }
+  // (a haul onto the thick that gains under half a metre in 3 s is let go: the fight's own way back, thickSeek, goes
+  // straight to the thick. Held, a target its body could not reach left it standing still for the rest of the phase)
+  if (a.st === 'haul') {
+    if (h !== a.haulW?.h || d < a.haulW.d - 0.5) a.haulW = { h, d, t: 0 };
+    else if ((a.haulW.t += dt) > 3) { a.haul = null; a.haulW = null; a.st = 'fight'; a.cd = Math.max(a.cd, 0.6); return 0; }
+  }
   return seek(a, h.x, h.z, a.speed * 1.1, dt);
 }
 // the thick cell nearest (x, z) within 14 m (north of the bowl's middle if north: the turn)
