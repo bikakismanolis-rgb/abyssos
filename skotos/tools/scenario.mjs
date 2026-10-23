@@ -1258,18 +1258,18 @@ const S = {
           if (!a.dead) { const w = window.__sealLive ||= {}, k = a.kind + (a.hidden ? ':h' : '') + (a.airborne ? ':air' : '') + (a.invuln > 0 ? ':inv' : ''); w[k] = (w[k] || 0) + 1; }
         }
         // the Black Breath, every frame (its warning is 1.2 s of play, a third of a second at this speed: looks from here
-        // missed it): she shields the lamp it turns on (twice, before any is lost), else steps away and lets it go out;
-        // each counted by what the Breath did once it landed
-        const B = window.__breath ||= { shielded: 0, lost: 0, relit: 0, tele: null, it: null, shield: false };
+        // missed it): over the three holes she shields the first, steps away from the second and lets its lamp go out,
+        // and shields the rest; each counted (per hole, B; over all, A) by what the Breath did once it landed
+        const B = window.__breath ||= { shielded: 0, lost: 0, relit: 0, tele: null, it: null, shield: false }, A = window.__breathAll ||= { shielded: 0, lost: 0 };
         if (S && pl && S.tele && S.target && B.tele !== S.tele) {
           const it = S.target, ho = S.ho, m = z.map;
-          B.tele = S.tele; B.it = it; B.shield = B.shielded < 2 && !B.lost;
+          B.tele = S.tele; B.it = it; B.shield = !A.shielded || A.lost > 0;
           let f = null;
           if (B.shield) { const dl = Math.hypot(it.x - ho.x, it.z - ho.z) || 1; for (const k of [0.7, 0.4, 1.1, 0.15, 1.6]) { const x = it.x + (ho.x - it.x) / dl * k, zz = it.z + (ho.z - it.z) / dl * k; if (m.walkable(x, zz)) { f = { x, z: zz }; break; } } f ||= m.nearestFloor(it.x, it.z, 1.5); }
           else f = m.nearestFloor(ho.x - (it.x - ho.x) * 0.9, ho.z - (it.z - ho.z) * 0.9, 3);
           pl.x = f.x; pl.z = f.z; pl.act = null; pl.kx = pl.kz = 0;
         } else if (B.tele && (!S || S.tele !== B.tele)) {
-          if (S) { if (B.shield && B.it.lit) B.shielded++; else if (!B.shield && !B.it.lit) B.lost++; }
+          if (S) { if (B.shield && B.it.lit) { B.shielded++; A.shielded++; } else if (!B.shield && !B.it.lit) { B.lost++; A.lost++; } }
           B.tele = null;
         } else if (window.__relight && S && pl && !S.tele && !pl.act) {
           // a lamp out (the Breath, the Ice Singer, a Skua) lit again at once, as the Breath is met: from the Node side
