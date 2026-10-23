@@ -863,7 +863,7 @@ const S = {
   } },
   // every skill, variant and later skill of a class, cast at a ring of sturdy dummies (one shot each, at its peak), with the
   // damage each cast did to them: CLS=warden|ranger|mage, ONLY=id[.variant],... to pick
-  skillsfx: { q: 'auto=forest&sim=4&q=1&lvl=45&cls=' + (process.env.CLS || 'warden'), run: async (pg, shot) => {
+  skillsfx: { q: 'auto=forest&sim=4&q=1&norender&lvl=45&cls=' + (process.env.CLS || 'warden'), run: async (pg, shot) => {
     const list = await pg.evaluate(async (only) => {
       const D = await import('/src/game/data.js'), G = window.__G, out = [];
       for (const sk of D.SKILLS[G.hero.cls]) { if (sk.basic) continue; out.push({ id: sk.id, v: 0 }); (D.VARIANTS[sk.id] || []).forEach((n, i) => out.push({ id: sk.id, v: i + 1, n })); }
