@@ -76,7 +76,7 @@ run on its own page against the host's monsters (puppets), as the base skills di
   blows even without it (see below); it now reads the guest's claimed crit damage (`cd`) and Mastery level (`lk.ml`).
 - **Pulls** (`pu`, new): the Maelstrom, Seismic Leap, Challenge and Void Rift pull puppets, which the host owns. The guest
   sums each monster's pull and sends it five times a second (at most 12 monsters a send); the host refuses one on a boss,
-  an anchored, dormant, clinging or prop monster, caps each at 8 (the Rift's 0.2 s) and 60 a second.
+  an anchored, dormant, clinging or prop monster, caps each at 8 (the Rift's 0.2 s) and 80 a second (a guest sends at most 60).
 - **Taunts** (`ta`, new): a Challenge or a Bulwark holds the host's monster to that guest's stand-in (`a.tauntBy`;
   ai.js `targetOf` honours it), at most 12 s, 40 a second.
 - **The ice** (`ic`, new): the host's is the only ice that cracks, so a guest's crack, line, ring or refreeze is done

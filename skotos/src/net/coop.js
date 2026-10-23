@@ -447,7 +447,7 @@ function guestEvent(P, e) {
     const a = foeNear(e[2], me); if (!a) return;
     const ix = e[3], iz = e[4]; if (!nums([ix, iz], 2)) return reject('bad');
     if (a.boss || a.prop || a.keeper || a.def.anchored || a.dormant || a.cling) return reject('pull');
-    if (over(P, 'pu', 60)) return reject('rate');
+    if (over(P, 'pu', 80)) return reject('rate');
     // (no more than the strongest pull, the Rift's, over the 0.2 s a guest sums them for)
     const m = Math.hypot(ix, iz), k = m > 8 ? 8 / m : 1;
     a.kx += ix * k; a.kz += iz * k;
