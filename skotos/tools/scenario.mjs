@@ -237,7 +237,9 @@ async function BOT5(o) {
     const wv = goal && !u && (goal.way || o.kind === 'tower') && Math.hypot(goal.x - pl.x, goal.z - pl.z) > 1.5 && z.map.stepToward(B.wayP ||= {}, pl.x, pl.z, goal.x, goal.z, way, 24);
     if (wv) keys(wv.x, wv.z); else if (goal) keys(goal.x - pl.x, goal.z - pl.z); else keys(0, 0);
     B.near = Math.min(B.near ?? 99, tgt === b && b ? Math.hypot(b.x - pl.x, b.z - pl.z) - b.radius : 99);
-    if ((skT -= dt) <= 0 && tgt && !pl.pull && !(pl.act && pl.act.name === 'touch')) {
+    // (no blow struck from inside the Tower's telegraphs: its swing held her where she stood, and the Bell caught her a step
+    // short of its calm)
+    if ((skT -= dt) <= 0 && tgt && !pl.pull && !(pl.act && pl.act.name === 'touch') && !(u && o.kind === 'tower')) {
       skT = 0.2;
       const d = Math.hypot(tgt.x - pl.x, tgt.z - pl.z), aim = { x: tgt.x, z: tgt.z };
       let used = false;
