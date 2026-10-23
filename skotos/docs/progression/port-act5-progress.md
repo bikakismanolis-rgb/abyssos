@@ -15,14 +15,20 @@ Dev server for the runs: `npx vite --config tools/vite.nohmr.mjs --port 5321` (B
 - [x] Text: every key the progression reads exists in Greek and English (scratch check).
 - [x] migrateHero: a skill on two buttons, a variant never learnt (found writing `save13`).
 
+- [x] `coop.mjs prog` passes (four players on the Farthest Light): taunt, pull, ring crack, refreeze on the host; VIS on
+      every page and ended; 20 s heavy load under budget (peak 10-13 sends/s); nothing refused; host lands what guests sent.
+      A boss's darkness check added (a guest's fire on the host is a hero fire: light only as it bursts) after the fix.
+- [x] The blow cap: measured (scratch cap.mjs) and made Mastery-aware (claimed crit damage and Mastery level).
+- [x] test-transport passes; graphify updated (3480 nodes), crackAt/refreezeAt/crackLine callers checked with `affected`.
+
 ## In progress
-- [ ] `node tools/coop.mjs prog` (four players, Farthest Light): first run showed guests never cast (the blessing panel
-      the host's story opens on a guest); scenario now closes panels before casting. Re-running.
-- [ ] `save13` scenario (v13 hero, Act V hero on Skotos, odd books) written, not yet run.
+- [ ] Balance: Act IV (Field L34, Ivar L35, Forge L37, Karthax L38) and Act V (coast 42, Tower 43, farlight 45, Skotos 46),
+      Warden difficulty, 3 classes, without and with Mastery: n 3 done (scratch bal/r1.jsonl, sum.mjs), n 6 running.
+      n 3: Mastery takes 30-46% off Act IV's damage and next to nothing off Act V's (its hazards are % of life), so Act V's
+      step over Act IV grows with Mastery; my Act IV profile is not the integrator's (my Warden's Act IV zones 3.78 lives
+      against its 1.60), so the change Mastery makes is what is compared, not my absolute ratios.
+- [ ] Regression (scratch reg/run.sh, list1 then list2) queued behind the balance.
 
 ## Next
-- [ ] the anti-cheat cap against an endgame hero with Mastery (crit damage is not in the claimed `dm`)
-- [ ] progpanel at 844x390 TOUCH=1, skillsfx per class, progress
-- [ ] Act I-V scenarios, every co-op scenario, test-transport
-- [ ] balance of Act V with Mastery (balance-act.mjs), against integrate.md's curve
-- [ ] port-act5.md; graphify update
+- [ ] progpanel at 844x390 TOUCH=1 (in list1): look at the shots
+- [ ] port-act5.md: fill the results; graphify update; final commit
