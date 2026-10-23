@@ -29,7 +29,9 @@ Read this first when picking the project up in a new session.
 
 ## Where everything stopped (20 October, paused by the owner until next week)
 
-Four lines of work. The published artifact is **version 12** (Acts I-IV with the Act IV difficulty fix); nothing below is published yet.
+Update 23 October: **version 13 is live** (Acts I-IV + the progression, built from `claude/skotos-progression` ff37476; the artifact is now shared as "anyone with the link"). Co-op is merged into this branch (ca88dd3). Two parallel sessions run: `session_01Ftg7XpSegCpD4grBzQhAjM` ports the progression onto this line (branch `claude/skotos-act5-prog`), `session_01XPr7CfHtdojZCrndmM1fiP` fixes perf5 at the coast, the Act V checkpoint after Continue, the flaky holes/tower scenarios and makes the test tools fail on the on-screen `#fatal` box (branch `claude/skotos-act5-fixes`). Then: merge both, gate G4, final review, publish version 14 with the co-op capabilities.
+
+The table below is the state of 20 October.
 
 | line | branch | state |
 |---|---|---|
