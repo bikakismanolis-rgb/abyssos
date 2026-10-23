@@ -129,4 +129,38 @@ RESULTS_TESTS
 
 ## Balance
 
-RESULTS_BALANCE
+`tools/balance-act.mjs` (the integrator's bot), Warden difficulty, the three classes, gear 4 levels behind, 6 runs a cell
+on paired seeds (1000 + r x 7919): Act IV at the Field L34, Ivar L35, the Forge L37, Karthax L38, and Act V at the
+integrator's profile (the coast L42, the Tower L43, the Farthest Light L45, the Skotos L46), each without Mastery and
+with every point the four skills cannot take in Might and Vigor (17-21 points in Act IV, 25-29 in Act V; Mastery
+levels start at 50, so a hero there has none). Lives of damage a run (the integrator's measure): zones the sum of two
+runs, bosses the mean of two, the act the four. The plan, the summary script and all 288 runs are in
+`docs/progression/balance5/` (`node sum.mjs runs.jsonl`).
+
+| class | Mastery | Act IV zones / bosses / act | Act V zones / bosses / act | V over IV: zones / bosses / act | deaths IV / V | kill s IV / V | biggest hit IV / V |
+|---|---|---|---|---|---|---|---|
+| warden | no | 2.22 / 0.36 / 2.95 | 1.32 / 0.30 / 1.93 | x0.59 / x0.84 / **x0.65** | 0 / 0 | 43 / 114 | 6.5% / 5.6% |
+| warden | yes | 1.72 / 0.36 / 2.43 | 1.13 / 0.26 / 1.64 | x0.66 / x0.72 / **x0.67** | 0 / 0 | 54 / 116 | 4.0% / 4.4% |
+| ranger | no | 0.72 / 0.43 / 1.57 | 0.92 / 0.34 / 1.61 | x1.29 / x0.80 / **x1.02** | 0 / 0 | 25 / 70 | 7.3% / 10.3% |
+| ranger | yes | 0.47 / 0.20 / 0.86 | 0.93 / 0.35 / 1.63 | x2.00 / x1.74 / **x1.88** | 0 / 0 | 22 / 65 | 6.0% / 9.0% |
+| mage | no | 0.35 / 0.49 / 1.33 | 0.77 / 0.35 / 1.46 | x2.18 / x0.71 / **x1.10** | 0 / 0 | 27 / 62 | 8.8% / 11.2% |
+| mage | yes | 0.46 / 0.32 / 1.10 | 0.85 / 0.27 / 1.38 | x1.83 / x0.83 / **x1.25** | 0 / 0 | 25 / 61 | 8.8% / 9.3% |
+
+What it says:
+- **Mastery helps Act IV at least as much as Act V**, for every class: Act IV takes 17-45% less damage with it, Act V
+  0-15% less. Act V's damage is more of the kind Mastery does not touch: the plunges, Frostbite and the wash-outs are a
+  share of her life (HAZ5), so Vigor's life buys nothing against them.
+- **So Act V stays a step up from Act IV** (the ratio holds or grows: Warden x0.65 -> x0.67, Ranger x1.02 -> x1.88, Mage
+  x1.10 -> x1.25), and nothing is trivialised: no death in 288 runs, the biggest blow 4-11% of her life, the bosses' kill
+  times within a few seconds of the runs without Mastery.
+- **My Act IV is not the integrator's**: its Warden took 1.60 lives in Act IV's two zones, mine 2.22 (the integrator's
+  Act IV levels and plan, int/bal/mkplan5.mjs, are not in the repo; I put Act IV at L34-38, inside the "about 32-38" of
+  act4-balance/sim.md). So the comparison is the change Mastery makes to each act, not my absolute ratios. Carried over
+  onto the integrator's own steps (x1.19 / x1.42 / x1.31 without Mastery), the step with Mastery comes to about x1.2 for
+  the Warden, x1.4 for the Mage and x2.6 for the Ranger.
+- **The Ranger** is the one to watch: with Mastery her Act IV gets much easier (zones 0.72 -> 0.47, bosses 0.43 -> 0.20
+  lives) and her Act V not at all (1.61 -> 1.63). That is a steeper step (Act II over Act I was up to x1.94 on Warden,
+  x2.58 on Wanderer) but no cliff (no deaths, the biggest hit 9-10%). Nothing was re-tuned: the brief asks that Act V stay
+  a step up, and it does; whether the Ranger's step should be softened is the lead's call.
+- Wanderer and the higher difficulties were not measured with Mastery (the integrator found Wanderer's cells swing 2x
+  between batches of 6).
