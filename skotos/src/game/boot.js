@@ -28,6 +28,9 @@ import { DIFFS, BOONS } from './data.js';
 import Audio from '../audio/audio.js';
 import { offerBoons } from './story.js';
 import { clamp, rand } from '../core/util.js';
+import { NET, MIRROR } from '../net/state.js';
+import { initNet, netTick, leaveGame } from '../net/coop.js';
+import { initCoopUi } from '../ui/coopui.js';
 
 function fatal(msg) {
   let el = document.getElementById('fatal');
@@ -49,7 +52,7 @@ export async function boot(q) {
   initGfx(G.settings.quality, { mobile, lost: (hidden) => { if (!hidden) G.settings.quality = Math.max(0, G.settings.quality - 1); writeSave(); G.mode = 'lost'; } });
   initFX(G.settings.quality);
   initInput(); G.input = IN;
-  initOverlay(); buildHud(); initPanels();
+  initOverlay(); buildHud(); initPanels(); initCoopUi();
   const fade = document.createElement('div'); fade.id = 'fade'; document.getElementById('app').appendChild(fade);
   const scr = document.createElement('div'); scr.id = 'screen'; scr.hidden = true; document.getElementById('app').appendChild(scr);
   const parts = 5 + creatureCount('act1');
@@ -63,6 +66,8 @@ export async function boot(q) {
   preloadModels(['goblin', 'skeleton', 'warg', 'spider'].filter((m) => !hasCreature(m)));
   buildTitleScene();
   B?.done();
+  // co-op: a room to play in, if this page has one (the artifact's, a test's, Supabase's); none: the game as ever
+  initNet(q);
   window.__ready = true; window.__G = G; window.__R = R;
   window.__D = { emit, enterZone, refreshStats, openPanel, closePanel, IN, spawnMonster, t, kill: (a) => damage(G.player, a, 1e9, { crit: false }) };
   if (q.has('auto')) { // test hook: jump straight into a zone
@@ -155,6 +160,7 @@ function fadeBar(f) {
 on('travel', travel);
 on('townPortal', () => {
   const pl = G.player; if (!pl || pl.dead || G.zone.id === 'town') return;
+  if (NET.mode === 'guest') { emit('toast', t('coop.hostLeads')); return; }
   pl.act = { name: 'portal', t: 0, dur: 1.4, ev: [], clip: 1.4, move: 0, update(dt) { for (let i = 0; i < 3; i++) P({ x: pl.x + rand.range(-0.7, 0.7), y: rand.range(0, 2.2), z: pl.z + rand.range(-0.7, 0.7), vy: 1.5, life: 0.6, size: 0.15, size1: 0.02, color: 0x8ab8ff }); }, end() { G.portal = G.zone.id === 'gate' ? null : { zone: G.zone.id, x: pl.x, z: pl.z }; if (G.zone.id === 'gate') G.gate = null; travel('town', { at: 'waypoint' }); } };
   pl.avatar.play('channel', 1);
   Audio.sfx('summon');
@@ -163,6 +169,8 @@ on('respawn', (town) => {
   const pl = G.player;
   pl.dead = false; pl.hp = pl.hpMax; pl.res = G.hero.cls === 'warden' ? 0 : G.stats.resMax; pl.status = freshStatus();
   refreshHeroLook();
+  // (co-op: a guest gets up in the host's zone, net/coop.js puts it there)
+  if (town === 'net') return;
   if (town || G.zone.id === 'gate') { G.gate = null; travel('town', { at: 'waypoint' }); }
   // Act IV: she wakes at the last waylamp she lit or touched (by the Anvil: on the Great Stair), if there is one; else at
   // the nearer of the zone's two waypoints, once the second is known (the Field's Elati camp)
@@ -178,10 +186,13 @@ on('heroDeath', () => {
   pl.avatar.play(Math.random() < 0.5 ? 'die' : 'dieFwd', 1);
   Audio.sfx('playerDie'); Audio.sting('death');
   G.hero.stats.deaths++;
+  // (co-op: the world goes on; downed, an ally can bring her back: net/coop.js)
+  if (NET.mode && NET.n > 1) { NET.h.downed(); return; }
   G.slow = 0.35; G.slowT = 1.2;
   setTimeout(() => openPanel('dead'), 1800);
 });
 on('quit', () => {
+  if (NET.mode) leaveGame();
   writeSave();
   location.reload();
 });
@@ -272,7 +283,9 @@ function tick(dt, noDraw) {
   if (G.mode !== 'play' && G.mode !== 'cine') { render(); return; }
   pollInput();
   const pl = G.player;
-  const paused = panelOpen() || dialogOpen();
+  // (co-op, with company: the world never waits for one player's panel; their own hero just stands)
+  const party = NET.mode && NET.n > 1, paused = !party && (panelOpen() || dialogOpen());
+  if (party && (panelOpen() || dialogOpen())) for (const ev of takeEvents()) if (ev.t === 'key') emit('key', ev.k);
   // keys still work over a panel or a dialog (Escape closes it); taps and skills aimed at the world are dropped
   if (paused) for (const ev of takeEvents()) if (ev.t === 'key') emit('key', ev.k);
   let gdt = dt;
@@ -280,7 +293,7 @@ function tick(dt, noDraw) {
   if (G.slowT > 0) { G.slowT -= dt; gdt *= G.slow; }
   if (G.mode === 'cine') cineTick(dt);
   if (!paused) {
-    if (G.mode === 'play') updatePlayer(gdt);
+    if (G.mode === 'play') { MIRROR.hero = true; try { updatePlayer(party && (panelOpen() || dialogOpen()) ? 0 : gdt); } finally { MIRROR.hero = false; } }
     else { pl.avatar.update(gdt, { speed: 0 }); }
     updateActors(gdt);
     updatePacks(); updateAct(gdt);
@@ -289,6 +302,7 @@ function tick(dt, noDraw) {
     comboTick(dt);
     G.hero.stats.time += dt;
   }
+  netTick(dt);
   dialogTick(dt);
   G.focus = G.mode === 'play' && !pl.dead ? nearestInteract() : null;
   updateShadows();
