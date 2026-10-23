@@ -133,9 +133,6 @@ async function BOT5(o) {
   const B = window.BOT = { t: 0, deaths: 0, hurt: 0, potions: 0, low: 1, phases: [], done: false, kind: o.kind, cls, L, life: G.player.hpMax, stop: false };
   Bus.on('hurt', (f) => { B.hurt += f; });
   const pl = G.player, z = G.zone, Lz = z.L, ranged = cls !== 'warden';
-  // (the Tower: how far each cell lies from the thick ice it keeps to in its ice phase, in cells)
-  let dThick = null;
-  if (o.kind === 'tower' && Lz.thick) { const W = Lz.w, H = Lz.h, q = []; dThick = new Float32Array(W * H).fill(99); for (let i = 0; i < W * H; i++) if (Lz.thick[i]) { dThick[i] = 0; q.push(i); } for (let h = 0; h < q.length; h++) { const i = q[h], x = i % W, y = (i - x) / W; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy, n = ny * W + nx; if (nx >= 0 && ny >= 0 && nx < W && ny < H && dThick[n] > dThick[i] + 1) { dThick[n] = dThick[i] + 1; q.push(n); } } } }
   const keys = (dx, dz) => { IN.keys.clear(); const l = Math.hypot(dx, dz); if (l < 0.35) return; const r = Math.round(Math.atan2(dx, dz) / (Math.PI / 4)), ux = Math.round(Math.sin(r * Math.PI / 4)), uz = Math.round(Math.cos(r * Math.PI / 4)); if (ux > 0) IN.keys.add('d'); if (ux < 0) IN.keys.add('a'); if (uz > 0) IN.keys.add('s'); if (uz < 0) IN.keys.add('w'); };
   const calm = (t) => { const c = t.m.material.uniforms.uColor.value; return c.b > c.r; };
   const _v = { x: 0, z: 0, r: 0 };
@@ -172,21 +169,20 @@ async function BOT5(o) {
     if (o.kind === 'tower') {
       if (b.phase === 0 && T && T.st !== 'low') { const isl = Lz.spots.bayIslets.slice().sort((p, q) => Math.hypot(p.x - pl.x, p.z - pl.z) - Math.hypot(q.x - pl.x, q.z - pl.z))[0]; goal = { x: isl.x, z: isl.z }; if (b.dazed > 0 && Math.hypot(b.x - isl.x, b.z - isl.z) < 6) goal = null; }
       if (b.st === 'island' && b.lightIt) { goal = { x: b.lightIt.x, z: b.lightIt.z }; if (Math.hypot(goal.x - pl.x, goal.z - pl.z) < 2.5 && !pl.act) b.lightIt.use(); }
-      // (the bait on thin ice as far from the thick as the Shell Rush's 16 m lets her stand, up to 11 cells: the Tower keeps
-      // to the thick in this phase, so there the Rush is all it has for her. Baited 7-10 m from where it stood, it walked up
-      // the thick to her, rang the Bell, she ran into its calm beside it, and a phase could pass with no Overturn)
+      // the bait: where a Hammer Claw has webbed the thin ice (stage 2) 3-12 m off, she stands 3 m beyond it, so the next Shell
+      // Rush runs through it and goes under; else on unwebbed thin ice 7-10 m off, kept 18 s (the Rushes crack one lane, the
+      // Hammer Claw webs it). (Baiting only the lane, a phase could end on its clock with no Overturn)
       if (b.phase === 1 && b.st === 'fight' && !(b.dazed > 0)) {
-        const dI = B.icePt && Math.hypot(B.icePt.x - b.x, B.icePt.z - b.z);
-        if (!B.icePt || dI > 15.5 || (B.icePtT -= dt) <= 0 || I.iceAt(B.icePt.x, B.icePt.z) !== 'thin') {
-          B.icePtT = 18; B.icePt = null; let best = -1;
-          for (let r = 6; r <= 15; r++) for (let k = 0; k < 24; k++) {
-            const g = k * 0.2618, x = b.x + Math.sin(g) * r, zz = b.z + Math.cos(g) * r, i = Math.floor(zz) * Lz.w + Math.floor(x);
-            if (I.iceAt(x, zz) !== 'thin' || I.stageAt(x, zz) >= 2 || !z.map.walkable(x, zz)) continue;
-            const sc = Math.min(dThick ? dThick[i] : 0, 11) - r * 0.01;
-            if (sc > best) { best = sc; B.icePt = { x, z: zz }; }
+        if ((B.webT = (B.webT || 0) - dt) <= 0) {
+          B.webT = 0.25; B.webPt = null; let bd = 1e9;
+          for (let r = 3; r <= 12; r++) for (let k = 0; k < 24; k++) {
+            const g = k * 0.2618, x = b.x + Math.sin(g) * r, zz = b.z + Math.cos(g) * r;
+            if (I.iceAt(x, zz) !== 'thin' || I.stageAt(x, zz) < 2) continue;
+            for (const e of [3, 2.5, 3.5, 2, 4]) { const px = x + Math.sin(g) * e, pz = zz + Math.cos(g) * e, s2 = I.iceAt(px, pz); if (!z.map.walkable(px, pz) || s2 === 'water' || (s2 === 'thin' && I.stageAt(px, pz) >= 2)) continue; const sc = Math.hypot(px - pl.x, pz - pl.z) + Math.abs(r - 7); if (sc < bd) { bd = sc; B.webPt = { x: px, z: pz }; } break; }
           }
         }
-        if (B.icePt) goal = B.icePt;
+        if (!B.webPt && (!B.icePt || Math.hypot(B.icePt.x - b.x, B.icePt.z - b.z) > 12 || (B.icePtT -= dt) <= 0 || I.iceAt(B.icePt.x, B.icePt.z) !== 'thin')) { B.icePtT = 18; B.icePt = null; for (let r = 7; r < 10 && !B.icePt; r++) for (let k = 0; k < 16; k++) { const g = k * 0.39, x = b.x + Math.sin(g) * r, zz = b.z + Math.cos(g) * r; if (I.iceAt(x, zz) === 'thin' && I.stageAt(x, zz) < 2 && z.map.walkable(x, zz)) { B.icePt = { x, z: zz }; break; } } }
+        goal = B.webPt || B.icePt || goal;
       }
     } else if (o.kind === 'skotos') {
       if (z.remember && !pl.act) { goal = { x: z.remember.x, z: z.remember.z + 1.0 }; if (Math.hypot(goal.x - pl.x, goal.z - pl.z) < 1.6 && (!b.nb || b.nb.st === 'down' || b.nb.st === 'up')) z.remember.use(); }
