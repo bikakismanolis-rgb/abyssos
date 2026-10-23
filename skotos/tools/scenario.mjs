@@ -1260,7 +1260,8 @@ const S = {
       last = s;
       if (s.done || s.dead) break;
     }
-    const bot = await pg.evaluate(() => window.__botP);
+    // (after a death the game holds on its panel and the bot's clock with it: stopped first, or this waited for ever)
+    const bot = await pg.evaluate(() => { if (window.BOT) window.BOT.stop = true; return window.__botP; });
     await pg.waitForTimeout(1500); await shot();
     // the crawl home and the island
     await A5.until(pg, () => { const b = window.__G.zone.boss; return !b || b.settled || window.__G.hero.flags.towerDown; }, 60000);
