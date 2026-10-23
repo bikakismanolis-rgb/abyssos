@@ -6,7 +6,7 @@
 // 2. LocalTransport (BroadcastChannel, as the browser tests use it) and 3. SupabaseTransport against a fake
 //    supabase-js client: the same channel shape.
 import { Hub } from './fakeroom.mjs';
-import { RoomTransport, LocalTransport, SupabaseTransport, bytesOf, BUDGET } from '../../src/net/transport.js';
+import { RoomTransport, LocalTransport, SupabaseTransport, pickTransport, bytesOf, BUDGET } from '../../src/net/transport.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let fails = 0;
@@ -119,7 +119,16 @@ async function supaTest() {
   ok(heard?.data?.n === 3 && heard.peer === 'sa', 'a broadcast arrives with its sender');
   ca.presence({ h: [4] }); ca.pump(); await sleep(40);
   ok(JSON.stringify(cb.peers().find((p) => p.peer === 'sa')?.presence?.h) === '[4]', 'tracked presence arrives');
-  await ca.leave(); await sleep(30);
+  // (Realtime does not stamp the sender: any client can name itself in a broadcast. So the game never takes Supabase
+  // until the server stamps senders, release.md step 5: a forged host cannot reach a guest's game)
+  const evil = fakeSupabase(bus).channel('skotos:skotos-g-sup', { config: { presence: { key: 'evil' } } }); evil.subscribe(() => {});
+  let forged = null; cb.on('c', (m) => { forged = m; });
+  await sleep(20); evil.send({ type: 'broadcast', event: 'c', payload: { f: 'sa', d: { op: 'end' } } }); await sleep(30);
+  ok(forged?.peer === 'sa', 'Realtime itself does not vouch for a sender (a forged one is heard as named)');
+  const cfg = { url: 'https://x.supabase.co', anonKey: 'k', createClient: () => fakeSupabase({}) };
+  ok(await pickTransport(new URLSearchParams(''), cfg) === null, 'so the game takes no Supabase transport while the server stamps no senders');
+  ok(!!(await pickTransport(new URLSearchParams(''), Object.assign({ stamped: true }, cfg))), 'and takes one once it does (cfg.stamped)');
+  await evil.unsubscribe(); await ca.leave(); await sleep(30);
   ok(cb.peers().length === 1, 'a channel removed is gone for the other');
 }
 

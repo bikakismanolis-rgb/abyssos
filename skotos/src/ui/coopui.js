@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { G } from '../game/state.js';
 import { NET } from '../net/state.js';
-import { S, hostGame, joinGame, leaveGame, startGame, party, nameOf, respawnNow, stale } from '../net/coop.js';
+import { S, VER, hostGame, joinGame, leaveGame, startGame, party, nameOf, respawnNow, stale } from '../net/coop.js';
 import { EXTRA, open as openPanel, renderPanel } from './panels.js';
 import { DIFFS } from '../game/data.js';
 import { R } from '../gfx/gfx.js';
@@ -55,7 +55,7 @@ function render() {
   if (!S.ready) body = `<p class="muted">${t('coop.looking')}</p>`;
   else if (!S.avail) body = `<p>${t('coop.none')}</p><p class="muted">${t('coop.noneHow')}</p>`;
   else if (!S.role) {
-    const hosts = S.hosts.filter((h) => h.v === 1).map((h) => `<button class="slot coop-h" data-a="cjoin:${esc(h.c)}"><span>${clsIcon(h.cls)}</span><span class="nm">${esc(S.names[h.by] || t('class.' + (h.cls || 'warden')) + ' ' + (h.l | 0))}</span><span class="mt">${esc(t('zone.' + (h.z || 'town')))} · ${Math.min(4, h.n | 0)}/4 · ${esc(t('diff.' + (DIFFS[h.d | 0]?.id || 'warden')))}${h.on ? '' : ' · ' + t('coop.lobbyWait')}</span></button>`).join('');
+    const hosts = S.hosts.map((h, i) => [h, i]).filter(([h]) => h.v === VER).map(([h, i]) => `<button class="slot coop-h" data-a="cjoin:${esc(h.c)}:${i}"><span>${clsIcon(h.cls)}</span><span class="nm">${esc(S.names[h.by] || t('class.' + (h.cls || 'warden')) + ' ' + (h.l | 0))}</span><span class="mt">${esc(t('zone.' + (h.z || 'town')))} · ${Math.min(4, h.n | 0)}/4 · ${esc(t('diff.' + (DIFFS[h.d | 0]?.id || 'warden')))}${h.on ? '' : ' · ' + t('coop.lobbyWait')}</span></button>`).join('');
     body = `<p>${t('coop.intro')}</p>
       <button class="btn" data-a="chost" style="width:100%">${t('coop.host')}</button>
       <div class="coop-join"><input id="coop-code" maxlength="4" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${t('coop.codePh')}" value="${esc(UI.code)}"><button class="btn ghost" data-a="cjoin">${t('coop.join')}</button></div>
@@ -77,14 +77,15 @@ function render() {
   }
   return `<div class="pn narrow coop">${head}<div class="pn-b">${body}</div></div>`;
 }
-function doJoin(code) {
+// (peer: the host picked from the list, the one this game's host must be)
+function doJoin(code, peer) {
   code = String(code || '').toLowerCase();
   if (!/^[a-z0-9]{4}$/.test(code)) { emit('toast', t('coop.badCode')); return; }
-  joinGame(code).then((ok) => { if (!ok) emit('toast', t('coop.error')); renderPanel(); });
+  joinGame(code, peer).then((ok) => { if (!ok) emit('toast', t('coop.error')); renderPanel(); });
 }
-function click(a, x) {
+function click(a, x, y) {
   if (a === 'chost') { hostGame().then(() => renderPanel()); return true; }
-  if (a === 'cjoin') { doJoin(x || UI.code || $('coop-code')?.value); return true; }
+  if (a === 'cjoin') { const h = x && y != null ? S.hosts[+y] : null; doJoin(x || UI.code || $('coop-code')?.value, h && h.c === x ? h.peer : null); return true; }
   if (a === 'cstart') { startGame(); renderPanel(); return true; }
   if (a === 'cleave') { leaveGame(S.role === 'host' ? null : 'coop.youLeft'); renderPanel(); return true; }
   return false;

@@ -20,8 +20,9 @@ import { SUPABASE } from './netcfg.js';
 import { enterZone, zoneReady, disposeZone, act3Presence, act4Presence, act5Presence, townFires, ZONES } from '../game/world.js';
 import { spawnMonster, Actor, heroAvatar, freshStatus, frozenLook, restoreRim } from '../game/actors.js';
 import { damage, gainXP, healHero } from '../game/combat.js';
-import { MONSTERS, DIFFS, monsterXP, COOP, BASES, LEGENDARIES, MAX_LEVEL, CLASSES } from '../game/data.js';
-import { makeItem } from '../game/items.js';
+import { MONSTERS, DIFFS, monsterXP, COOP, BASES, MAX_LEVEL, CLASSES } from '../game/data.js';
+import { makeItem, cleanItem, MAX_ILVL } from '../game/items.js';
+import { refreshStats } from '../game/stats.js';
 import { dropGold, dropItem, dropGlobe } from '../game/pickups.js';
 import { fire, area } from '../game/projectiles.js';
 import { addSapPool } from '../game/sap.js';
@@ -34,30 +35,36 @@ import { on, emit } from '../ui/bus.js';
 import { t, has } from '../i18n/i18n.js';
 import { clamp, rand } from '../core/util.js';
 
-export const VER = 1;
-const SNAP_HZ = 10, SNAP_MAX = 3900, REL_MAX = 1700, FX_MAX = 900, NEAR = 40, CHUNK = 3300, HOST_LOST = 25000, HOST_GONE = 10000, DOWNED = 30, REVIVE = 2.5, LAG = 130;
+export const VER = 2;
+const SNAP_HZ = 10, SNAP_MAX = 3900, REL_MAX = 1700, REL_Q = 200, FX_MAX = 900, FX_RATE = 600, NEAR = 40, CHUNK = 3300, HOST_LOST = 25000, HOST_GONE = 10000, STALL = 6000, DOWNED = 30, REVIVE = 2.5, LAG = 130;
 const CODE_CH = 'abcdefghjkmnpqrstuvwxyz23456789';
 const KINDS = Object.keys(MONSTERS), KIDX = new Map(KINDS.map((k, i) => [k, i]));
 // what a page sees of the session (the lobby panel and the HUD read it)
 export const S = {
   T: null, ready: false, avail: false, role: null, code: null, ch: null, started: false, status: 'idle', err: null,
   hostPeer: null, peers: new Map(), roster: [], hosts: [], names: {}, me: null,
-  // the host: reliable events, their acks, the guests' events done, the clip names given out; the world and ice versions
-  rel: [], relSeq: 0, done: new Map(), clips: new Map(), worldSent: '', worldT: 0, iceT: 0, iceKey: '', snapT: 0, lobbyT: 0,
-  // a guest: the world as the host has it, the zone loaded, puppets, the events not yet acked, the host's clip names
-  real: null, world: null, wkey: '', zoneKey: null, loading: false, pup: new Map(), ev: [], evSeq: 0, relDone: 0, hclips: new Map(), lastSnap: 0, chunks: {},
-  downed: null, rv: null, fxOut: [], fxT: 0, stats: { snaps: 0, snapBytes: 0, rejected: 0, hits: 0, why: {} }
+  // the host: each guest's reliable events (one count for all), their acks, the guests' events done, the raises given,
+  // the clip names given out; the world and ice versions
+  rel: new Map(), relSeq: 0, done: new Map(), rvT: new Map(), clips: new Map(), worldSent: '', worldT: 0, iceT: 0, iceKey: '', snapT: 0, lobbyT: 0,
+  // a guest: the world as the host has it, the zone loaded, puppets (and what each was, for its kill's reward), the events
+  // not yet acked, the host's clip names; the kills paid, the kills a second and the items they may bring
+  real: null, world: null, wkey: '', zoneKey: null, loading: false, pup: new Map(), pupInfo: new Map(), ev: [], evSeq: 0, relDone: 0, hclips: new Map(), lastSnap: 0, chunks: {},
+  paid: new Set(), killB: { tok: 40, t: 0 }, owed: 0,
+  downed: null, rv: null, fxOut: [], fxT: 0, fxIn: new Map(), stats: { snaps: 0, snapBytes: 0, rejected: 0, hits: 0, why: {} }
 };
 const now = () => performance.now();
 const q = (v, k) => Math.round((+v || 0) * k);
 const num = (v, lo, hi, d = 0) => (typeof v === 'number' && isFinite(v) ? clamp(v, lo, hi) : d);
+const fin = (v) => typeof v === 'number' && isFinite(v);
+// (a key a page sent, looked up only among a table's own entries: 'constructor' is no zone, class or base)
+const own = (o, k) => typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k);
 
 // ---------- start-up: is there anything to play with? ----------
 export async function initNet(params) {
   try { S.T = await pickTransport(params, SUPABASE); } catch (e) { S.T = null; }
   S.avail = !!S.T; S.ready = true;
   // (what the tests drive: tools/coop.mjs)
-  window.__NET = { S, NET, hostGame, joinGame, startGame, leaveGame, party, respawnNow };
+  window.__NET = { S, NET, hostGame, joinGame, startGame, leaveGame, party, respawnNow, relTo };
   if (!S.T) { emit('netReady', false); return; }
   S.me = S.T.lobby?.me || S.T.me || null;
   // who hosts what, from the lobby
@@ -68,8 +75,13 @@ export async function initNet(params) {
 }
 function lobbyHosts() {
   const L = S.T?.lobby; if (!L) return;
-  S.hosts = L.peers().filter((p) => !p.isMe && p.presence?.g && typeof p.presence.g.c === 'string').map((p) => ({ peer: p.peer, by: p.by, ...p.presence.g })).filter((h) => /^[a-z0-9]{4}$/.test(h.c)).slice(0, 20);
+  S.hosts = L.peers().filter((p) => !p.isMe && p.presence?.g && typeof p.presence.g.c === 'string' && /^[a-z0-9]{4}$/.test(p.presence.g.c)).map(listing).slice(0, 20);
   emit('netLobby');
+}
+// a listing: the fields a listing has, checked; who it is (the peer, the person) only as the room stamped them
+function listing(p) {
+  const g = p.presence.g;
+  return { c: g.c, cls: own(CLASSES, g.cls) ? g.cls : 'warden', l: num(g.l, 0, MAX_LEVEL) | 0, z: own(ZONES, g.z) ? g.z : 'town', n: num(g.n, 1, 4, 1) | 0, d: num(g.d, 0, DIFFS.length - 1) | 0, v: g.v | 0, on: g.on ? 1 : 0, peer: p.peer, by: p.by ?? null };
 }
 // names through the artifact's `user` capability (profiles), where there is one; else the class and level
 let users = null;
@@ -84,7 +96,7 @@ export function nameOf(p) {
   const n = p?.by && S.names[p.by];
   if (n) return n;
   const lk = p?.lk || p?.presence?.lk || p?.look;
-  return lk ? t('class.' + (CLASSES[lk.c] ? lk.c : 'warden')) + ' ' + (lk.l | 0) : '…';
+  return lk ? t('class.' + (own(CLASSES, lk.c) ? lk.c : 'warden')) + ' ' + (lk.l | 0) : '…';
 }
 
 // ---------- hosting, joining, leaving ----------
@@ -95,19 +107,21 @@ export async function hostGame() {
   const code = newCode();
   try { S.ch = await S.T.join('skotos-' + code); } catch (e) { S.status = 'error'; S.err = e?.code || e?.message; emit('netLobby'); return false; }
   S.role = 'host'; S.code = code; S.started = false; S.status = 'open'; NET.mode = 'host';
-  S.rel.length = 0; S.relSeq = 0; S.done.clear(); S.clips.clear(); S.worldSent = '';
+  S.rel.clear(); S.relSeq = 0; S.done.clear(); S.rvT.clear(); S.clips.clear(); S.worldSent = '';
   wire(); hostPresence(true); lobbyPresence(true);
   emit('netLobby'); emit('netMode');
   return code;
 }
 export function startGame() { if (S.role !== 'host') return; S.started = true; hostPresence(true); lobbyPresence(true); emit('netLobby'); emit('toast', t('coop.started'), 'quest'); }
-export async function joinGame(code) {
+// (peer: the host picked from the list; only that peer is taken as this game's host)
+export async function joinGame(code, peer) {
   code = String(code || '').toLowerCase().trim();
   if (!S.T || S.role || !G.hero || !/^[a-z0-9]{4}$/.test(code)) return false;
   S.status = 'connecting'; emit('netLobby');
   try { S.ch = await S.T.join('skotos-' + code); } catch (e) { S.status = 'error'; S.err = e?.code || e?.message; emit('netLobby'); return false; }
-  S.role = 'guest'; S.code = code; S.status = 'waiting'; S.hostPeer = null; S.hostGone = 0; S.lastSnap = now(); S.joinT = now();
+  S.role = 'guest'; S.code = code; S.status = 'waiting'; S.hostPeer = null; S.wantHost = typeof peer === 'string' && peer ? peer : null; S.hostGone = 0; S.lastSnap = now(); S.joinT = now();
   S.ev.length = 0; S.evSeq = 0; S.relDone = 0; S.hclips.clear(); S.world = null; S.wkey = ''; S.zoneKey = null; S.chunks = {};
+  S.paid.clear(); S.pupInfo.clear(); S.owed = 0; S.killB = { tok: 40, t: now() };
   wire(); guestPresence(true);
   emit('netLobby');
   return true;
@@ -132,7 +146,10 @@ export async function leaveGame(why) {
 function goHome() {
   if (S.real) { G.hero = S.real; S.real = null; }
   const pl = G.player;
-  if (pl?.dead) { pl.dead = false; pl.hp = pl.hpMax; pl.status = freshStatus(); }
+  if (pl?.dead) { pl.dead = false; pl.hp = pl.hpMax; }
+  // (nothing of the host's world outlasts the game: its statuses, Seen, a push or a pull; the hero's own stats again)
+  if (pl) { pl.status = freshStatus(); if (pl.buffs) pl.buffs.seen = 0; pl.kx = pl.kz = 0; pl.pull = null; }
+  if (G.hero) refreshStats();
   for (const k of Object.keys(G.zones)) if (G.zones[k] !== G.zone) { disposeZone(G.zones[k]); delete G.zones[k]; }
   const z0 = G.zone;
   NET.mode = null;
@@ -147,10 +164,12 @@ function wire() {
   ch.on('s', (m) => { if (S.role === 'guest' && m.peer === S.hostPeer) onSnap(m.data); });
   ch.on('w', (m) => { if (S.role === 'guest' && m.peer === S.hostPeer) chunk(m.data, onWorld); });
   ch.on('i', (m) => { if (S.role === 'guest' && m.peer === S.hostPeer) chunk(m.data, onIce); });
-  ch.on('f', (m) => { if (S.peers.get(m.peer)?.zk === myKey()) replayFx(m.data, m.peer); });
+  ch.on('f', (m) => { if (S.peers.get(m.peer)?.zk === myKey() && fxFrom(m.peer)) replayFx(m.data, m.peer); });
   ch.on('c', (m) => { if (S.role === 'guest' && m.peer === S.hostPeer && m.data?.op === 'end') leaveGame('coop.hostLeft'); });
   ch.onConnection((c) => { if (!c && S.role) S.lostT = now(); else S.lostT = 0; emit('netLobby'); });
 }
+// the look of a hero's skills is taken from the party only: on the host its guests, on a guest the host and its guests
+const fxFrom = (pr) => (S.role === 'host' ? S.roster.includes(pr) : pr === S.hostPeer || !!S.peers.get(S.hostPeer)?.roster?.includes(pr));
 // who is in the room: a host keeps the first three guests of its version (the roster); a guest finds its host
 function peersChanged() {
   const ch = S.ch; if (!ch) return;
@@ -159,7 +178,7 @@ function peersChanged() {
     if (p.isMe) continue;
     seen.add(p.peer);
     let P = S.peers.get(p.peer);
-    if (!P) S.peers.set(p.peer, (P = { peer: p.peer, by: p.by, buf: [], seq: -1, actor: null, joined: now() }));
+    if (!P) S.peers.set(p.peer, (P = { peer: p.peer, by: p.by, buf: [], seq: -1, actor: null, joined: now(), hbT: now() }));
     P.pres = p.presence || {}; P.by = p.by;
     readPeer(P);
   }
@@ -170,9 +189,11 @@ function peersChanged() {
     for (const pr of roster) if (!S.roster.includes(pr)) { const P = S.peers.get(pr); emit('toast', t('coop.joined', nameOf(P)), 'quest'); Audio.sfx('waypoint', { vol: 0.5 }); }
     if (roster.join() !== S.roster.join()) { S.roster = roster; hostPresence(true); }
   } else if (S.role === 'guest') {
-    const h = [...S.peers.values()].find((P) => P.role === 'host' && P.code === S.code);
-    if (h && !S.hostPeer) S.hostPeer = h.peer;
-    if (h && h.peer === S.hostPeer) S.hostGone = 0;
+    // (the host: the peer picked from the list, else the one peer that hosts this code; while two claim it, neither)
+    const hs = [...S.peers.values()].filter((P) => P.role === 'host' && P.code === S.code && (!S.wantHost || P.peer === S.wantHost));
+    if (!S.hostPeer && hs.length === 1) S.hostPeer = hs[0].peer;
+    const h = hs.find((P) => P.peer === S.hostPeer);
+    if (h) S.hostGone = 0;
     if (h && h.v !== VER) { leaveGame('coop.version'); return; }
     // (not in the host's roster once it has one: the game is full)
     if (h && h.roster && !h.roster.includes(S.ch.me) && now() - S.joinT > 4000) { leaveGame('coop.full'); return; }
@@ -186,14 +207,35 @@ function readPeer(P) {
   P.roster = Array.isArray(p.ro) ? p.ro.filter((x) => typeof x === 'string').slice(0, 3) : null;
   P.zone = p.z && typeof p.z === 'object' ? p.z : null; P.on = !!p.on;
   P.mf = num(p.mf, 0, 400); P.gf = num(p.gf, 0, 400); P.dmax = num(p.dm, 0, 1e7);
+  if (p.hb !== P.hb) { P.hb = p.hb; P.hbT = now(); }
   if (Array.isArray(p.h)) {
-    const h = p.h; P.state = { x: num(h[0], -10, 1e4) / 20, z: num(h[1], -10, 1e4) / 20, r: num(h[2], -1e3, 1e3) / 100, sp: num(h[3], 0, 400) / 10, hp: num(h[4], 0, 1e8), hpMax: Math.max(1, num(h[5], 1, 1e8)), fl: h[6] | 0, y: num(h[7], -100, 400) / 20 };
+    const h = p.h, st = { x: num(h[0], -10, 1e4) / 20, z: num(h[1], -10, 1e4) / 20, r: num(h[2], -1e3, 1e3) / 100, sp: num(h[3], 0, 400) / 10, hp: num(h[4], 0, 1e8), hpMax: Math.max(1, num(h[5], 1, 1e8)), fl: h[6] | 0, y: num(h[7], -100, 400) / 20 };
+    if (S.role === 'host') heldMove(P, st);
+    P.state = st;
     pushSample(P.buf, P.state);
   }
   if (Array.isArray(p.c2) && typeof p.c2[0] === 'string' && p.c2[0].length < 48) P.clip = { name: p.c2[0], spd: num(p.c2[1], 0.05, 5, 1), seq: p.c2[2] | 0 };
   P.ack = p.ak | 0;
   P.ev = Array.isArray(p.ev) ? p.ev : [];
   P.need = p.nd || null;
+}
+// (on the host a guest's hero goes only where a hero can go: a run, and a dodge, blink or leap's worth banked, since its
+// last sample, onto the map; entering the zone and rising after a fall are the only jumps. Its reach, its kills' rewards,
+// the packs and bosses it wakes and its weight on the ice follow where it can really be)
+const MOVE_V = 10, MOVE_BANK = 14, MOVE_REFILL = 5;
+function heldMove(P, st) {
+  const t = now(), o = P.state, z = G.zone;
+  const jump = !o || P.zk !== myKey() || P.mzk !== P.zk || ((o.fl & 1) && !(st.fl & 1));
+  const dt = Math.min(2, Math.max(0, (t - (P.moveT ?? t)) / 1000));
+  P.mzk = P.zk; P.moveT = t;
+  if (jump) { P.moveB = MOVE_BANK; return; }
+  P.moveB = Math.min(MOVE_BANK, (P.moveB ?? MOVE_BANK) + dt * MOVE_REFILL);
+  // (a run's worth for at most half a second: a page that stood still, sending little, banks no more than a dodge's)
+  const d = Math.hypot(st.x - o.x, st.z - o.z), free = MOVE_V * Math.min(dt, 0.5);
+  // (held back, it is on its way there; arrived, it stands on the floor)
+  if (d > free && d - free > P.moveB) { const k = (free + P.moveB) / d; P.moveB = 0; st.x = o.x + (st.x - o.x) * k; st.z = o.z + (st.z - o.z) * k; return; }
+  if (d > free) P.moveB -= d - free;
+  if (z?.map) { const f = z.map.nearestFloor(st.x, st.z); st.x = f.x; st.z = f.z; }
 }
 const pushSample = (buf, s) => { buf.push({ t: now(), x: s.x, z: s.z, r: s.r, y: s.y || 0 }); if (buf.length > 6) buf.shift(); };
 // (a zone's key: the same id built once more is another zone, a guest builds it again)
@@ -225,7 +267,7 @@ function lobbyPresence(force) {
 function guestPresence() {
   if (!S.ch || !G.hero) return;
   const h = S.real || G.hero, pl = G.player, s = G.stats;
-  const p = { h: null, c2: null, nd: null, ev: null, r: 'g', c: S.code, v: VER, lk: { c: h.cls, l: h.level, w: h.equip.weapon ? [h.equip.weapon.base, h.equip.weapon.rar | 0, h.equip.weapon.leg || 0] : 0, o: h.equip.offhand ? [h.equip.offhand.rar | 0, h.equip.offhand.leg || 0] : 0 }, zk: S.zoneKey, ak: S.relDone, mf: Math.round(s?.mf || 0), gf: Math.round(s?.gold || 0), dm: Math.round((s?.wmax || 1) * (s?.dmgMult || 1)) };
+  const p = { h: null, c2: null, nd: null, ev: null, r: 'g', c: S.code, v: VER, hb: Math.floor(now() / 1000) & 1023, lk: { c: h.cls, l: h.level, w: h.equip.weapon ? [h.equip.weapon.base, h.equip.weapon.rar | 0, h.equip.weapon.leg || 0] : 0, o: h.equip.offhand ? [h.equip.offhand.rar | 0, h.equip.offhand.leg || 0] : 0 }, zk: S.zoneKey, ak: S.relDone, mf: Math.round(s?.mf || 0), gf: Math.round(s?.gold || 0), dm: Math.round((s?.wmax || 1) * (s?.dmgMult || 1)) };
   if (pl && S.zoneKey && S.zoneKey === myKey()) { p.h = heroState(); const av = pl.avatar; if (av?.netSeq) p.c2 = [av.netClip, Math.round((av.netSpd || 1) * 100) / 100, av.netSeq]; }
   if (!S.world) p.nd = 'w';
   // the events the host has not acked, oldest first, as many as fit
@@ -263,7 +305,8 @@ function hostTick(dt) {
   let n = 1;
   for (const pr of S.roster) {
     const P = S.peers.get(pr); if (!P) continue;
-    const here = S.started && P.zk === key && P.state;
+    // (a guest whose page has stopped, a hidden tab, a locked phone, is not here until it beats again)
+    const here = S.started && P.zk === key && P.state && now() - (P.hbT || 0) < STALL;
     if (here) {
       n++;
       if (!P.actor) P.actor = addRemote(P);
@@ -272,6 +315,7 @@ function hostTick(dt) {
   }
   for (const P of S.peers.values()) if (P.actor && !S.roster.includes(P.peer)) { dropRemote(P.actor); P.actor = null; }
   if (n !== NET.n) { NET.n = n; rescale(); }
+  standByTick(dt);
   // the world, when it changed or someone asks for it
   const wk = worldKey();
   const asked = [...S.peers.values()].some((P) => P.need === 'w' && S.roster.includes(P.peer));
@@ -282,10 +326,13 @@ function hostTick(dt) {
   // the snapshot
   if (S.roster.length && S.started && now() - S.snapT >= 1000 / SNAP_HZ) { S.snapT = now(); sendSnap(); }
   if (!S.roster.length || !S.started) S.fxHost = [];
-  // the reliable events every guest has seen are let go (and none kept past 30 s)
-  const acks = S.roster.map((pr) => S.peers.get(pr)?.ack ?? 0), lo = acks.length ? Math.min(...acks) : S.relSeq;
+  // each guest's reliable events it has seen are let go (and none kept past 30 s); a guest gone, its queue with it
   const tooOld = now() - 30000;
-  while (S.rel.length && (S.rel[0].seq <= lo || S.rel[0].t < tooOld)) S.rel.shift();
+  for (const [pr, q] of S.rel) {
+    if (!S.roster.includes(pr)) { S.rel.delete(pr); continue; }
+    const ack = S.peers.get(pr)?.ack ?? 0;
+    while (q.length && (q[0].seq <= ack || q[0].t < tooOld)) q.shift();
+  }
   // a wipe: every hero down for 3 s, the host gets up at its checkpoint and its guests by it
   const all = pl.dead && NET.remotes.length > 0 && NET.remotes.every((r) => r.dead);
   if (all) { S.wipeT = (S.wipeT || 0) + dt; if (S.wipeT > 3) { S.wipeT = 0; relTo('', ['wp']); if (S.downed) respawnSelf(); } } else S.wipeT = 0;
@@ -309,8 +356,17 @@ function chunk(m, fn) {
   for (const k in S.chunks) if (now() - S.chunks[k].t > 10000) delete S.chunks[k];
   if (c.got === m.n) { delete S.chunks[m.id]; try { fn(JSON.parse(c.parts.join(''))); } catch (e) { /* torn */ } }
 }
-// a reliable event: kept and sent in every snapshot until each guest it is for has acked it
-function relTo(to, data) { S.rel.push({ seq: ++S.relSeq, to: to || '', d: data, t: now() }); if (S.rel.length > 400) S.rel.splice(0, 100); }
+// a reliable event: kept in the queue of each guest it is for (to, or every guest) and sent in every snapshot until that
+// guest has acked it. Each guest has its own queue and share of the bytes, so one that stops acking holds back only its
+// own; one count numbers them all, so a guest's own run only ever rises
+function relTo(to, data) {
+  const seq = ++S.relSeq, t = now();
+  for (const pr of to ? [to] : S.roster) {
+    let q = S.rel.get(pr); if (!q) S.rel.set(pr, (q = []));
+    q.push({ seq, d: data, t });
+    if (q.length > REL_Q) q.splice(0, q.length - REL_Q);
+  }
+}
 // the clip names the host's avatars play, given numbers (sent once each, reliably)
 function clipIdx(name) {
   if (!name) return -1;
@@ -332,11 +388,15 @@ function sendSnap() {
   // acks of each guest's events
   o.ak = {}; for (const P of gs) o.ak[P.peer] = S.done.get(P.peer) || 0;
   let b = bytesOf(o) + 20;
-  // the reliable events still owed (oldest first)
-  const lo = Math.min(...gs.map((P) => P.ack || 0)), r = [];
-  let rb = 0;
-  for (const e of S.rel) { if (e.seq <= lo) continue; const x = [e.seq, e.to, ...e.d], n = bytesOf(x) + 1; if (rb + n > REL_MAX) break; r.push(x); rb += n; }
-  if (r.length) { o.r = r; b += rb + 6; }
+  // the reliable events each guest still lacks, oldest first: its share of the bytes, then what the others left
+  const W = gs.map((P) => { const q = S.rel.get(P.peer) || []; let i = 0; while (i < q.length && q[i].seq <= (P.ack || 0)) i++; return { P, q, i, out: [] }; });
+  // (an event no snapshot could carry is let go, not left to hold back the ones after it)
+  const fill = (w, cap) => { while (w.i < w.q.length) { const e = w.q[w.i], x = [e.seq, ...e.d], n = bytesOf(x) + 1; if (n > REL_MAX) { w.q.splice(w.i, 1); continue; } if (n > cap) break; w.out.push(x); w.i++; cap -= n; } return cap; };
+  let spare = 0;
+  for (const w of W) spare += fill(w, REL_MAX / W.length);
+  for (const w of W) spare = fill(w, spare);
+  const r = {}; for (const w of W) if (w.out.length) r[w.P.peer] = w.out;
+  if (Object.keys(r).length) { o.r = r; b += bytesOf(r) + 6; }
   // what the host saw happen near them
   const f = packFx(S.fxHost || [], FX_MAX, gs);
   S.fxHost = [];
@@ -414,7 +474,8 @@ function guestEvent(P, e) {
     // the rate: what a second of its hits may come to
     const R0 = P.rate ||= { t: now(), sum: 0 };
     if (now() - R0.t > 1000) { R0.t = now(); R0.sum = 0; }
-    R0.sum += amt; if (R0.sum > cap * 30) return reject('rate');
+    // (a burn counts with the blow that lights it)
+    R0.sum += amt + (fin(o.burn) && o.burn > 0 ? Math.min(o.burn, cap) : 0); if (R0.sum > cap * 30) return reject('rate');
     const opts = { crit, net: true };
     for (const k in OPT_NUM) if (typeof o[k] === 'number' && isFinite(o[k]) && o[k] > 0) opts[k] = Math.min(o[k], OPT_NUM[k] === 1e7 ? cap : OPT_NUM[k]);
     if (o.slow && typeof o.slow.k === 'number' && typeof o.slow.t === 'number') opts.slow = { k: clamp(o.slow.k, 0, 0.8), t: clamp(o.slow.t, 0, 5) };
@@ -423,10 +484,27 @@ function guestEvent(P, e) {
     S.stats.hits++;
     damage(me, a, amt, opts);
   } else if (type === 'rv') {
-    // a revive: the reviver (this guest) stands by the downed one
+    // a revive: the reviver (this guest) has stood by another hero, down a moment, as long as a raise takes (the host's
+    // own count of its stand-in beside it), and that hero was not raised a moment ago
     const who = e[2];
-    if (who === S.ch.me) { if (G.player?.dead && Math.hypot(G.player.x - me.x, G.player.z - me.z) < 3.5) revived(); }
-    else { const T0 = S.peers.get(who); if (T0?.actor && T0.actor.dead && Math.hypot(T0.actor.x - me.x, T0.actor.z - me.z) < 3.5) relTo(who, ['rv']); }
+    if (typeof who !== 'string' || who === P.peer) return reject('rv');
+    const T0 = who === S.ch.me ? G.player : S.peers.get(who)?.actor, downT = who === S.ch.me ? S.downed?.at : T0?.downT;
+    if (!T0?.dead || !(now() - (downT ?? now()) > 1000) || !(P.near?.peer === who && P.near.t >= REVIVE - 0.5) || now() - (S.rvT.get(who) ?? -1e9) < 4000) return reject('rv');
+    S.rvT.set(who, now());
+    if (who === S.ch.me) revived(); else relTo(who, ['rv']);
+  }
+}
+// (on the host: how long each guest's stand-in has stood by a downed hero, the host's or another guest's)
+function standByTick(dt) {
+  for (const pr of S.roster) {
+    const P = S.peers.get(pr), me = P?.actor; if (!P) continue;
+    let who = null;
+    if (me && !me.dead) {
+      const pl = G.player;
+      if (pl?.dead && Math.hypot(pl.x - me.x, pl.z - me.z) < 3.5) who = S.ch.me;
+      else for (const Q of S.peers.values()) if (Q !== P && Q.actor?.dead && Math.hypot(Q.actor.x - me.x, Q.actor.z - me.z) < 3.5) { who = Q.peer; break; }
+    }
+    if (!who) P.near = null; else if (P.near?.peer === who) P.near.t += dt; else P.near = { peer: who, t: 0 };
   }
 }
 // a host's monster strikes a guest's stand-in: the blow goes to the guest (its armour, block and dodge take it there)
@@ -450,7 +528,7 @@ NET.h.reward = (a, dx, dz) => {
     const P = S.peers.get(pr); if (!P?.actor) continue;
     // (near enough to have been in it: 50 m, a boss anywhere in the zone)
     if (!a.boss && Math.hypot(P.actor.x - a.x, P.actor.z - a.z) > 50) continue;
-    const cls = CLASSES[P.lk?.c] ? P.lk.c : 'warden', mf = Math.min(P.mf || 0, 400) + K.mf, gf = Math.min(P.gf || 0, 400);
+    const cls = own(CLASSES, P.lk?.c) ? P.lk.c : 'warden', mf = Math.min(P.mf || 0, 400) + K.mf, gf = Math.min(P.gf || 0, 400);
     const xp = Math.round(monsterXP(L) * def.xp * D.xp * em * K.xp);
     const gold = [], piles = a.boss ? 6 : a.elite ? 2 : 1, gc = a.boss || a.elite ? 1 : 0.32;
     for (let i = 0; i < piles; i++) if (Math.random() < gc) gold.push(Math.round((3 + L * 1.6) * rand.range(0.6, 1.4) * D.gold * (1 + gf / 100) * (a.boss ? 3 : 1) * K.gold));
@@ -500,14 +578,15 @@ function onWorld(w) {
   const real = S.real || G.hero, own = real.flags || {};
   // (the blessings' multipliers stay the guest's own: Unbound, Remembered)
   const flags = Object.assign({}, w.flags, { unbound: own.unbound, remembered: own.remembered });
-  const W = { flags, quest: num(w.quest, 0, 99), diff: clamp(w.diff | 0, 0, DIFFS.length - 1), wps: Array.isArray(w.wps) ? w.wps.slice(0, 40) : ['town'], act1: a[0] ?? -1, act2: a[1] ?? -1, act3: a[2] ?? -1, act4: a[3] ?? -1, act5: a[4] ?? -1, gateBest: w.gb | 0, seeds: {} };
+  const act = (v) => num(v, -1, DIFFS.length - 1, -1) | 0;
+  const W = { flags, quest: num(w.quest, 0, 99), diff: clamp(w.diff | 0, 0, DIFFS.length - 1), wps: Array.isArray(w.wps) ? w.wps.filter((z) => typeof z === 'string' && z.length < 24).slice(0, 40) : ['town'], act1: act(a[0]), act2: act(a[1]), act3: act(a[2]), act4: act(a[3]), act5: act(a[4]), gateBest: num(w.gb, 0, 999) | 0, seeds: {} };
   const key = JSON.stringify(W);
   if (key === S.wkey) return;
   const first = !S.world;
   S.wkey = key;
   if (S.world) Object.assign(S.world, W); else S.world = W;
-  G.gate = w.gate ? { tier: w.gate.tier | 0, progress: 0, guardian: null, start: performance.now(), done: false } : null;
-  if (!S.real) { S.real = G.hero; G.hero = viewHero(S.real, S.world); }
+  G.gate = w.gate ? { tier: num(w.gate.tier, 0, 999) | 0, progress: 0, guardian: null, start: performance.now(), done: false } : null;
+  if (!S.real) { S.real = G.hero; G.hero = viewHero(S.real, S.world); refreshStats(); }
   // what the story has lit and moved, laid on the zone again
   if (!first && G.zone && S.zoneKey === myKey()) presenceAgain(G.zone);
 }
@@ -518,7 +597,7 @@ function presenceAgain(z) {
   } catch (e) { console.error(e); }
 }
 async function guestEnter(Z) {
-  if (typeof Z.id !== 'string' || !ZONES[Z.id]) return;
+  if (!own(ZONES, Z.id)) return;
   S.loading = true;
   const fade = document.getElementById('fade'); fade?.classList.add('on');
   try {
@@ -529,7 +608,9 @@ async function guestEnter(Z) {
     const H = S.peers.get(S.hostPeer), at = H?.state ? { x: H.state.x + rand.range(-1.5, 1.5), z: H.state.z + 1.5 } : 'waypoint';
     const prev = { ...G.zones };
     NET.mode = 'guest';
-    enterZone(Z.id, { fresh: true, seed: Z.s | 0, level: Z.l | 0, tier: Z.ti | 0, at });
+    // (the zone's own level; only a Shadow Gate's is the host's, within what an item may be: chests, urns and the drops on
+    // this page roll at it)
+    enterZone(Z.id, { fresh: true, seed: Z.s | 0, level: Z.id === 'gate' ? clamp(Z.l | 0, 1, MAX_ILVL - 3) : ZONES[Z.id].level, tier: clamp(Z.ti | 0, 0, 999), at });
     // (the zones built before, the guest's own or the host's last, are let go)
     for (const k in prev) if (prev[k] !== G.zone) { disposeZone(prev[k]); if (G.zones[k] === prev[k]) delete G.zones[k]; }
     G.zone.netKey = Z.k; S.zoneKey = Z.k; S.lastSnap = now(); NET.mode = 'guest'; emit('netMode');
@@ -541,14 +622,14 @@ async function guestEnter(Z) {
 function onSnap(o) {
   if (!o || typeof o !== 'object') return;
   S.lastSnap = now();
-  // the reliable events first (a clip's number may be given in the same snapshot)
-  if (Array.isArray(o.r)) for (const e of o.r) {
+  // this guest's own reliable events first (a clip's number may be given in the same snapshot)
+  const mine = o.r && typeof o.r === 'object' && own(o.r, S.ch.me) && Array.isArray(o.r[S.ch.me]) ? o.r[S.ch.me] : [];
+  for (const e of mine) {
     if (!Array.isArray(e)) continue;
-    // (in order; the host sends all it still holds from the oldest any guest lacks: a gap is what it let go)
+    // (in order; the host sends all it still holds from the oldest this guest lacks: a gap is what it let go)
     const seq = e[0] | 0; if (seq <= S.relDone) continue;
     S.relDone = seq;
-    if (e[1] && e[1] !== S.ch.me) continue;
-    try { relEvent(e.slice(2)); } catch (err) { console.error(err); }
+    try { relEvent(e.slice(1)); } catch (err) { console.error(err); }
   }
   // the host's acks: those events can go
   const ak = o.ak?.[S.ch.me] | 0;
@@ -577,59 +658,78 @@ function worldState(w) {
     // (the clock: put right when it has drifted half a second; a boss's hold as the host has it)
     if (Math.abs((T.t || 0) - ht) > 0.5) T.t = ht;
     const fh = w[1];
-    if (typeof fh === 'number' && fh >= 0) T.force = { h: fh / 100, rate: Math.max(0.01, (w[2] || 0) / 1000) };
+    if (fin(fh) && fh >= 0) T.force = { h: Math.min(fh, 1000) / 100, rate: num(w[2], 10, 1e4, 10) / 1000 };
     else if (T.force) T.force = null;
   }
   if (z?.gust && !!w[3] !== !!z.gust.on) { z.gust.on = !!w[3]; emit('gust', z.gust.on); }
 }
+// what the host may lay on this guest's hero, at most (the game's own sizes): hurtHero halves a freeze, roots stop at
+// 1.2 s; a stun does nothing to a hero, so it is not taken
+const HURT_MAX = { freeze: 4, seen: 6, root: 1.2, push: 40, cold: 100, poison: 1e8, burn: 1e8 };
+function hurtOpts(oo) {
+  const o = {}; if (!oo || typeof oo !== 'object') return o;
+  // (the rest are marks: a burn's tick, a blow armour does not take, a shriek, the sea's)
+  for (const k of HURT_KEYS) { const v = oo[k]; if (k === 'stun' || k === 'kx' || k === 'kz' || !fin(v) || v <= 0) continue; o[k] = own(HURT_MAX, k) ? Math.min(v, HURT_MAX[k]) : true; }
+  if (oo.slow && fin(oo.slow.k) && fin(oo.slow.t)) o.slow = { k: clamp(oo.slow.k, 0, 0.9), t: clamp(oo.slow.t, 0, 6) };
+  // (a push's way, as a direction)
+  if (fin(oo.kx) && fin(oo.kz)) { const l = Math.hypot(oo.kx, oo.kz); if (l > 1e-6) { o.kx = oo.kx / l; o.kz = oo.kz / l; } }
+  return o;
+}
+// the highest level anything in the host's zone can be (its monsters, the items they drop): the game's own top, or a
+// Shadow Gate's level; never a number the host made up
+const zoneTop = () => { const z = G.zone; return Math.min(MAX_ILVL, Math.max(MAX_LEVEL, z?.id === 'gate' ? z.level | 0 : 0) + 3); };
+// what a kill can pay this guest at most: XP, a gold pile, the piles and items (data.js COOP, combat.js kill), from what
+// the puppet was (its kind, level and rank as the guest saw them; one it never saw is taken as a rare of the zone's top)
+const XP_TOP = Math.max(...Object.values(MONSTERS).filter((m) => !m.boss).map((m) => m.xp));
+function killPay(id) {
+  const I = S.pupInfo.get(id), D = DIFFS[clamp(S.world?.diff | 0, 0, DIFFS.length - 1)], L = clamp(I ? I.level : zoneTop(), 1, zoneTop());
+  const boss = !!I?.boss, elite = I ? I.elite : 'rare';
+  const em = boss ? 1 : elite === 'rare' ? 5 : elite === 'champion' ? 3 : I?.minion ? 1.5 : 1, gf = Math.min((G.stats?.gold || 0) + 1, 401);
+  return { xp: monsterXP(L) * (I ? MONSTERS[I.kind].xp : XP_TOP) * D.xp * em * COOP.xp[3], gold: (3 + L * 1.6) * 1.4 * D.gold * (1 + gf / 100) * (boss ? 3 : 1) * COOP.gold[3], piles: boss ? 6 : elite ? 2 : 1, items: boss ? 4 + Math.floor(D.loot) + 3 : elite === 'rare' ? 3 : 1 };
+}
+// (kills paid a second: 40 at once, 8 a second after)
+function killOk() { const B = S.killB, t = now(); B.tok = Math.min(40, B.tok + (t - B.t) / 1000 * 8); B.t = t; if (B.tok < 1) return false; B.tok--; return true; }
 function relEvent(e) {
   const type = e[0], pl = G.player;
-  if (type === 'cd') { if (typeof e[2] === 'string') S.hclips.set(e[1] | 0, e[2]); return; }
+  if (type === 'cd') { if (typeof e[2] === 'string' && (S.hclips.size < 1024 || S.hclips.has(e[1] | 0))) S.hclips.set(e[1] | 0, e[2].slice(0, 47)); return; }
   if (type === 'h') {
     // a blow from one of the host's monsters
     if (!pl || pl.dead) return;
-    const src = S.pup.get(e[1] | 0) || { team: 'foe', level: e[3] | 0, x: pl.x, z: pl.z, def: {}, dead: false, affixes: [] };
-    const o = {}; const oo = e[4] || {};
-    for (const k of HURT_KEYS) if (typeof oo[k] === 'number') o[k] = oo[k];
-    if (oo.slow && typeof oo.slow.k === 'number') o.slow = { k: clamp(oo.slow.k, 0, 0.9), t: clamp(oo.slow.t, 0, 6) };
+    const src = S.pup.get(e[1] | 0) || { team: 'foe', level: clamp(e[3] | 0, 1, zoneTop()), x: pl.x, z: pl.z, def: {}, dead: false, affixes: [] };
+    const o = hurtOpts(e[4]);
     if (o.kx == null) { o.kx = pl.x - src.x; o.kz = pl.z - src.z; }
     damage(src, pl, num(e[2], 0, 1e8), o);
     return;
   }
   if (type === 'k') {
-    // a kill near this guest: its own share
-    const x = (e[2] | 0) / 10, z = (e[3] | 0) / 10, xp = num(e[4], 0, 1e9);
+    // a kill near this guest: its own share, each kill paid once, no more than such a kill can pay
+    const id = e[1] | 0;
+    if (S.paid.has(id) || !killOk()) return;
+    S.paid.add(id); if (S.paid.size > 5000) S.paid.delete(S.paid.values().next().value);
+    const K = killPay(id), m = G.zone?.map;
+    const x = clamp((e[2] | 0) / 10, 0, m?.w ?? 1e3), z = clamp((e[3] | 0) / 10, 0, m?.h ?? 1e3), xp = Math.min(num(e[4], 0, 1e9), K.xp);
     const h = S.real || G.hero;
     if (xp > 0) gainXP(xp);
     h.stats.kills++; if (e[8]) h.stats.elites++;
     const c = G.combo; c.n = c.t > 0 ? c.n + 1 : 1; c.t = 1.4;
-    if (Array.isArray(e[5])) for (const g of e[5].slice(0, 8)) if (g > 0) dropGold(x, z, Math.min(Math.round(g), 1e7));
+    if (Array.isArray(e[5])) for (const g of e[5].slice(0, K.piles)) if (fin(g) && g >= 1) dropGold(x, z, Math.round(Math.min(g, K.gold)));
     if (e[7]) dropGlobe(x + rand.range(-0.5, 0.5), z + rand.range(-0.5, 0.5));
     if (G.stats?.legs?.has('beaconAmulet')) healHero(pl.hpMax * 0.05, true);
+    S.owed = Math.min(40, S.owed + K.items);
     return;
   }
-  if (type === 'it') { const it = cleanItem(e[3]); if (it) dropItem((e[1] | 0) / 10, (e[2] | 0) / 10, it); return; }
+  if (type === 'it') {
+    // an item rolled for this guest: only after a kill that could bring it, rebuilt as an item is, at most the zone's level
+    if (S.owed < 1) return;
+    const it = cleanItem(e[3], { maxIlvl: zoneTop() }); if (!it) return;
+    S.owed--; it.isNew = true;
+    const m = G.zone?.map;
+    dropItem(clamp((e[1] | 0) / 10, 0, m?.w ?? 1e3), clamp((e[2] | 0) / 10, 0, m?.h ?? 1e3), it);
+    return;
+  }
   if (type === 'rv') { if (pl?.dead) revived(); return; }
   if (type === 'wp') { if (pl?.dead) respawnSelf(); return; }
   if (type === 'say') { if (typeof e[1] === 'string' && e[1].length < 64 && has(e[1])) { S.saying = true; try { emit('say', e[1]); } finally { S.saying = false; } } }
-}
-// an item the host rolled: only what an item is made of, so a bad page cannot put anything else in this save
-function cleanItem(it) {
-  if (!it || typeof it !== 'object' || !BASES[it.base]) return null;
-  const out = { id: String(it.id || Date.now().toString(36)).slice(0, 40), base: it.base, rar: clamp(it.rar | 0, 0, 3), ilvl: clamp(it.ilvl | 0, 1, 99), stats: {} };
-  if (Array.isArray(it.dmg)) out.dmg = [num(it.dmg[0], 0, 1e6), num(it.dmg[1], 0, 1e6)];
-  if (typeof it.spd === 'number') out.spd = num(it.spd, 0.1, 5, 1);
-  if (typeof it.armor === 'number') out.armor = num(it.armor, 0, 1e6);
-  if (typeof it.block === 'number') out.block = num(it.block, 0, 100);
-  if (it.leg && LEGENDARIES.some((l) => l.id === it.leg)) out.leg = it.leg;
-  if (it.stats && typeof it.stats === 'object') for (const k in it.stats) {
-    const v = it.stats[k];
-    if (k === 'skill' && v && typeof v.id === 'string') out.stats.skill = { id: v.id.slice(0, 24), v: num(v.v, 0, 10) };
-    else if (typeof v === 'number' && isFinite(v) && /^[a-zA-Z]{1,16}$/.test(k)) out.stats[k] = v;
-  }
-  for (const k of Object.keys(it)) if (!(k in out) && /^[a-zA-Z]{1,16}$/.test(k) && (typeof it[k] === 'number' || typeof it[k] === 'string' && it[k].length < 40 || typeof it[k] === 'boolean')) out[k] = it[k];
-  out.isNew = true;
-  return out;
 }
 // a blow by this guest's hero on a puppet: shown here at once, sent to the host to land (its life comes back from it)
 NET.h.hitPuppet = (src, tg, amount, o, crit) => {
@@ -655,16 +755,17 @@ function puppetEntry(e) {
   if (!a) {
     if (fl & 1) return; // (seen first dead: nothing to show)
     try {
-      a = spawnMonster(kind, x, z, { level: e[11] | 0 || G.zone.level, elite: fl & 64 ? 'rare' : fl & 32 ? 'champion' : null, minion: !!(fl & 128), affixes: [], dormant: !!(fl & 512) });
+      a = spawnMonster(kind, x, z, { level: clamp(e[11] | 0 || G.zone.level, 1, zoneTop()), elite: fl & 64 ? 'rare' : fl & 32 ? 'champion' : null, minion: !!(fl & 128), affixes: [], dormant: !!(fl & 512) });
     } catch (err) { console.error(err); return; }
     a.puppet = true; a.netId = id; a.rot = rot; a.buf = []; a.seen = now(); a.clipSeq = -1;
+    S.pupInfo.set(id, { kind, level: a.level, boss: !!a.boss || !!(fl & 8192), elite: a.elite, minion: a.minion }); if (S.pupInfo.size > 3000) S.pupInfo.delete(S.pupInfo.keys().next().value);
     if (fl & 4096) { a.team = 'hero'; a.pet = true; }
     if (a.avatar) R.scene.add(a.avatar.group);
     G.actors.push(a); S.pup.set(id, a);
   }
   a.seen = now();
   a.buf.push({ t: now(), x, z, r: rot, y: (e[10] | 0) / 10 }); if (a.buf.length > 6) a.buf.shift();
-  a.netSp = (e[9] | 0) / 10;
+  a.netSp = num(e[9], 0, 300) / 10;
   // (its life as the host has it; a blow of this page's shown a moment before it lands keeps the bar where it is)
   const hp = clamp((e[5] | 0) / 255, 0, 1) * a.hpMax;
   if (!(a.predT && now() - a.predT < 350 && hp > a.hp)) a.hp = Math.max(fl & 1 ? 0 : 1, hp);
@@ -724,8 +825,8 @@ function killPuppet(a) { if (!a) return; a.dead = true; a.remove(); const i = G.
 
 // ---------- the other heroes: an actor each, from their presence (and the host's from its snapshot) ----------
 function lookHero(lk) {
-  const cls = CLASSES[lk?.c] ? lk.c : 'warden';
-  const w = Array.isArray(lk?.w) && BASES[lk.w[0]] ? { base: lk.w[0], rar: clamp(lk.w[1] | 0, 0, 3), leg: typeof lk.w[2] === 'string' ? lk.w[2] : null } : null;
+  const cls = own(CLASSES, lk?.c) ? lk.c : 'warden';
+  const w = Array.isArray(lk?.w) && own(BASES, lk.w[0]) ? { base: lk.w[0], rar: clamp(lk.w[1] | 0, 0, 3), leg: typeof lk.w[2] === 'string' ? lk.w[2] : null } : null;
   const o = Array.isArray(lk?.o) ? { base: 'shield', rar: clamp(lk.o[0] | 0, 0, 3), leg: typeof lk.o[1] === 'string' ? lk.o[1] : null } : null;
   return { cls, equip: { weapon: w, offhand: cls === 'warden' ? o : null } };
 }
@@ -763,7 +864,7 @@ function remotesTick(dt) {
     if (p) { a.x = p.x; a.z = p.z; a.rot = p.r; a.y = p.y; }
     a.hp = P.state.hp; a.hpMax = P.state.hpMax; a.level = P.lk?.l | 0 || a.level;
     const dead = !!(P.state.fl & 1);
-    if (dead && !a.dead) { a.dead = true; a.avatar?.play('die', 1); }
+    if (dead && !a.dead) { a.dead = true; a.downT = now(); a.avatar?.play('die', 1); }
     else if (!dead && a.dead) { a.dead = false; a.avatar?.anim.stop?.(0.2); }
     a.iframes = P.state.fl & 8 ? 0.2 : 0; a.y = a.y || 0;
     a.flash = Math.max(0, (a.flash || 0) - dt * 4);
@@ -791,7 +892,7 @@ export function party() {
 
 // ---------- downed and revived ----------
 // called by boot.js on the hero's death in co-op, instead of the death panel
-NET.h.downed = () => { S.downed = { t: DOWNED }; emit('netDowned', true); };
+NET.h.downed = () => { S.downed = { t: DOWNED, at: now() }; emit('netDowned', true); };
 export function respawnNow() { if (S.downed) respawnSelf(); }
 function downedTick(dt) {
   const d = S.downed; if (!d) return;
@@ -898,9 +999,14 @@ function packFx(list, cap, gs) {
 const TELES = new Map();
 function replayFx(list, from) {
   if (!Array.isArray(list) || !G.zone) return;
+  // (each sender's calls a second are held to what a fight makes: 120 a message, FX_RATE a second)
+  const B = S.fxIn.get(from) || { tok: FX_RATE, t: now() }, t = now();
+  B.tok = Math.min(FX_RATE, B.tok + (t - B.t) / 1000 * FX_RATE); B.t = t; S.fxIn.set(from, B);
+  if (S.fxIn.size > 16) for (const k of S.fxIn.keys()) if (k !== from && !S.peers.has(k)) S.fxIn.delete(k);
+  const n = Math.min(list.length, 120, Math.floor(B.tok)); B.tok -= n;
   MIRROR.skip = true;
   try {
-    for (const e of list.slice(0, 120)) {
+    for (const e of list.slice(0, n)) {
       if (!Array.isArray(e)) continue;
       const name = FXN[e[0] | 0], a = e.slice(1); if (!name) continue;
       try { replayOne(name, a, from); } catch (err) { /* a bad entry is skipped */ }
@@ -908,30 +1014,65 @@ function replayFx(list, from) {
   } finally { MIRROR.skip = false; }
 }
 const nums = (a, n) => { for (let i = 0; i < n; i++) if (typeof a[i] !== 'number' || !isFinite(a[i])) return false; return true; };
+// what each look-only call may be, argument by argument, held to the game's own sizes before it is played (a peer's
+// numbers never set how long a loop runs or a mesh lives): X Z a position on the map, Y a height, N a count, R a radius,
+// E an explosion's, T a time, C a colour, S a speed, O a size, Q a stain's, F a spread, H a flash's, M a splash's scale,
+// D a stain's life, A an angle, G an arc, L a length, W a width, U a direction, K a short name, B yes or no, o options
+const FXS = { explosion: 'XZECo', ring: 'XZRCTY', glowBurst: 'XYZCNSOT', sparks: 'XYZNCSo', puff: 'XYZNCOFT', flash: 'XYZCHT', hitFx: 'XYZKUUB', decal: 'XZKQD', splash: 'XZM', iceShards: 'XZN', freezeCrystals: 'XZRN', bolt: 'XYZXYZCO', teleCircle: 'XZRTC', teleCone: 'XZARGTC', teleLine: 'XZALWTC', sapBurst: 'XZM' };
+const FXR = { Y: [-5, 30], N: [0, 80], R: [0, 30], E: [0, 15], T: [0, 6], S: [0, 30], O: [0, 5], Q: [0, 10], F: [0, 10], H: [0, 20], M: [0, 3], D: [0, 30], A: [-1e3, 1e3], G: [0, 3.15], L: [0, 60], W: [0, 20], U: [-2, 2] };
+const kindOk = (k) => typeof k === 'string' && k.length > 0 && k.length <= 24 && !(k in Object.prototype);
+function fxArgs(spec, a) {
+  const out = [], m = G.zone.map;
+  for (let i = 0; i < spec.length; i++) {
+    const c = spec[i], v = a[i];
+    if (c === 'X' || c === 'Z') { if (!fin(v)) return null; out.push(clamp(v, -20, (c === 'X' ? m.w : m.h) + 20)); }
+    else if (c === 'C') out.push(v === undefined ? undefined : fin(v) ? v & 0xffffff : 0xffffff);
+    else if (c === 'K') out.push(kindOk(v) ? v : undefined);
+    else if (c === 'B') out.push(!!v);
+    else if (c === 'o') { const r = {}; if (v && typeof v === 'object') { if (fin(v.shake)) r.shake = clamp(v.shake, 0, 1); if (fin(v.smoke)) r.smoke = v.smoke & 0xffffff; if (fin(v.dx)) r.dx = clamp(v.dx, -1, 1); if (fin(v.dz)) r.dz = clamp(v.dz, -1, 1); if (fin(v.color1)) r.color1 = v.color1 & 0xffffff; } out.push(r); }
+    else out.push(fin(v) ? clamp(v, FXR[c][0], FXR[c][1]) : undefined);
+  }
+  return out;
+}
+// a projectile's or an area's options, field by field (what hurts this page's hero only from the host's own monsters)
+function shotOpts(o, real) {
+  const r = {}; if (!o || typeof o !== 'object') return r;
+  const put = (k, lo, hi) => { if (fin(o[k])) r[k] = clamp(o[k], lo, hi); };
+  put('speed', 0, 60); put('y', -2, 20); put('life', 0, 8); put('r', 0, 4); put('pierce', 0, 20); put('homing', 0, 10); put('scale', 0.1, 5);
+  if (real) { put('dmg', 0, 1e8); r.opts = hurtOpts(o.opts); }
+  return r;
+}
 function replayOne(name, a, from) {
-  const fromHost = from === S.hostPeer && S.role === 'guest';
+  const fromHost = from === S.hostPeer && S.role === 'guest', m = G.zone.map, px = (v) => clamp(v, -20, m.w + 20), pz = (v) => clamp(v, -20, m.h + 20);
   if (name === 'fire') {
-    const [kind, foe, sid, x, z, dir, o] = a; if (!nums([x, z, dir], 3) || typeof kind !== 'string') return;
+    const [kind, foe, sid, x, z, dir] = a; if (!nums([x, z, dir], 3) || !kindOk(kind)) return;
     const real = foe && fromHost;
-    const src = real ? (S.pup.get(sid) || { team: 'foe', id: 0, level: G.zone.level, x, z, def: {}, affixes: [], dead: false }) : { team: 'vis', x, z };
-    const oo = Object.assign({}, o || {}, { team: real ? 'foe' : 'vis', net: true });
+    const src = real ? (S.pup.get(sid) || { team: 'foe', id: 0, level: clamp(G.zone.level, 1, zoneTop()), x, z, def: {}, affixes: [], dead: false }) : { team: 'vis', x, z };
+    const oo = Object.assign(shotOpts(a[6], real), { team: real ? 'foe' : 'vis', net: true });
     if (!real) oo.dmg = 0;
-    fire(kind, src, x, z, dir, oo);
+    fire(kind, src, px(x), pz(z), clamp(dir, -1e3, 1e3), oo);
     return;
   }
   if (name === 'area') {
-    const [kind, x, z, r, dur, foe, sid, dmg, tick, opts, vx, vz, floats] = a; if (!nums([x, z, r, dur], 4) || typeof kind !== 'string') return;
+    const [kind, x, z, r, dur, foe, sid, dmg, tick, opts, vx, vz, floats] = a; if (!nums([x, z, r, dur], 4) || !kindOk(kind)) return;
     const real = foe && fromHost;
-    area(kind, x, z, clamp(r, 0.1, 30), clamp(dur, 0, 30), { team: real ? 'foe' : 'vis', src: real ? S.pup.get(sid) || { team: 'foe', level: G.zone.level, x, z, def: {} } : null, dmg: real ? dmg : 0, tick, opts, vx, vz, floats: !!floats, net: true });
+    area(kind, px(x), pz(z), clamp(r, 0.1, 30), clamp(dur, 0, 20), { team: real ? 'foe' : 'vis', src: real ? S.pup.get(sid) || { team: 'foe', level: clamp(G.zone.level, 1, zoneTop()), x, z, def: {} } : null, dmg: real ? num(dmg, 0, 1e8) : 0, tick: fin(tick) ? clamp(tick, 0.1, 5) : undefined, opts: real ? hurtOpts(opts) : {}, vx: num(vx, -20, 20), vz: num(vz, -20, 20), floats: !!floats, net: true });
     return;
   }
-  if (name === 'sap') { if (fromHost && nums(a, 4)) addSapPool(a[0], a[1], clamp(a[2], 0.2, 12), clamp(a[3], 0, 30), { team: 'foe' }, a[4]); return; }
-  if (name === 'sfx') { if (typeof a[0] === 'string' && nums(a.slice(1), 2)) Audio.sfx(a[0], { x: a[1], z: a[2], vol: a[3], pitch: a[4] }); return; }
+  if (name === 'sap') { if (fromHost && nums(a, 4)) addSapPool(px(a[0]), pz(a[1]), clamp(a[2], 0.2, 12), clamp(a[3], 0, 30), { team: 'foe' }, kindOk(a[4]) ? a[4] : undefined); return; }
+  if (name === 'sfx') { if (kindOk(a[0]) && nums(a.slice(1), 2)) Audio.sfx(a[0], { x: px(a[1]), z: pz(a[2]), vol: num(a[3], 0, 2, 1), pitch: num(a[4], 0.25, 4, 1) }); return; }
   if (name === 'killTele') { const tl = TELES.get(a[0]); if (tl) { tl.alive = false; TELES.delete(a[0]); } return; }
-  const fn = FX[name]; if (typeof fn !== 'function') return;
-  if (name.startsWith('tele')) {
-    const id = a.pop(); const tl = fn(...a); if (tl && id) { TELES.set(id, tl); if (TELES.size > 200) TELES.delete(TELES.keys().next().value); }
+  const fn = FX[name], spec = FXS[name]; if (typeof fn !== 'function' || !spec) return;
+  // (the rings and telegraphs a page holds at once, each its own mesh, are held too)
+  if ((name === 'ring' || name === 'explosion' || name === 'splash') && FX.FX.rings.length > 96) return;
+  if (name.startsWith('tele') && FX.FX.teles.length > 128) return;
+  // (a telegraph's own number rides last)
+  const tele = name.startsWith('tele'), args = fxArgs(spec, tele ? a.slice(0, -1) : a); if (!args) return;
+  // (a bolt no longer than a chain's longest jump)
+  if (name === 'bolt') { const L = Math.hypot(args[3] - args[0], args[4] - args[1], args[5] - args[2]); if (L > 40) { const k = 40 / L; for (let i = 3; i < 6; i++) args[i] = args[i - 3] + (args[i] - args[i - 3]) * k; } }
+  if (tele) {
+    const id = a[a.length - 1]; const tl = fn(...args); if (tl && id) { TELES.set(id, tl); if (TELES.size > 200) TELES.delete(TELES.keys().next().value); }
     return;
   }
-  fn(...a);
+  fn(...args);
 }
