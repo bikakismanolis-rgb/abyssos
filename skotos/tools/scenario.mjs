@@ -190,13 +190,14 @@ async function BOT5(o) {
         }
         const dI = B.icePt && Math.hypot(B.icePt.x - b.x, B.icePt.z - b.z);
         if (!B.webPt && (!B.icePt || dI < 7.5 || dI > 16 || (B.icePtT -= dt) <= 0 || I.iceAt(B.icePt.x, B.icePt.z) !== 'thin')) {
-          // (out to 20 m, past the Rush's reach at a cost: hauled back onto the thick far from any thin ice, it comes over the
-          // thick toward her; the old bait kept if nothing is found)
+          // (within 15 m, the Rush's reach; out to 20 m only if nothing nearer can be walked to: hauled back onto the thick far
+          // from any thin ice, it comes over the thick toward her. Up to 6 cells from the thick: further, the thick cell
+          // nearest her lay past the 14 m it looks, and it stood still. The old bait kept if nothing is found)
           B.icePtT = 12; let pick = null;
           for (let r = 8; r <= 20; r++) for (let k = 0; k < 24; k++) {
             const g = k * 0.2618, x = b.x + Math.sin(g) * r, zz = b.z + Math.cos(g) * r, i = Math.floor(zz) * Lz.w + Math.floor(x);
             if (I.iceAt(x, zz) !== 'thin' || I.stageAt(x, zz) >= 2 || !z.map.walkable(x, zz)) continue;
-            const sc = Math.min(dThick ? dThick[i] : 0, 9) + (r >= 9.6 ? 2 : 0) - Math.max(0, r - 14) * 0.8 - Math.hypot(x - pl.x, zz - pl.z) * 0.15;
+            const sc = Math.min(dThick ? dThick[i] : 0, 6) + (r >= 9.6 ? 2 : 0) - (r > 15 ? 20 : 0) - Math.hypot(x - pl.x, zz - pl.z) * 0.15;
             (B.cands ||= []).push([sc, x, zz]);
           }
           // (the best she can walk to: a patch of thin ice cut off by water or rock held her against its edge a whole phase)
