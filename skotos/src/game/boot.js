@@ -297,12 +297,23 @@ function tick(dt, noDraw) {
   if (G.slowT > 0) { G.slowT -= dt; gdt *= G.slow; }
   if (G.mode === 'cine') cineTick(dt);
   if (!paused) {
+    // (co-op: what her hero does is told to the others, the timers it sets going included: net/coop.js)
+    const t0 = G.timers.length;
     if (G.mode === 'play') { MIRROR.hero = true; try { updatePlayer(party && (panelOpen() || dialogOpen()) ? 0 : gdt); } finally { MIRROR.hero = false; } }
     else { pl.avatar.update(gdt, { speed: 0 }); }
+    for (let i = t0; i < G.timers.length; i++) G.timers[i].h = true;
     updateActors(gdt);
     updatePacks(); updateAct(gdt);
     updateProjs(gdt); updateAreas(gdt); updatePickups(gdt);
-    for (let i = G.timers.length - 1; i >= 0; i--) { const tm = G.timers[i]; tm.t -= gdt; if (tm.t <= 0) { G.timers.splice(i, 1); try { tm.fn(); } catch (e) { fatal(e.stack || e); } } }
+    for (let i = G.timers.length - 1; i >= 0; i--) {
+      const tm = G.timers[i]; tm.t -= gdt; if (tm.t <= 0) {
+        G.timers.splice(i, 1);
+        const n0 = G.timers.length;
+        MIRROR.hero = !!tm.h;
+        try { tm.fn(); } catch (e) { fatal(e.stack || e); } finally { MIRROR.hero = false; }
+        if (tm.h) for (let k = n0; k < G.timers.length; k++) G.timers[k].h = true;
+      }
+    }
     comboTick(dt);
     G.hero.stats.time += dt;
   }

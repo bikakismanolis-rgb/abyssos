@@ -11,6 +11,9 @@ import { R, shake, addLight, removeLight, kick } from '../gfx/gfx.js';
 import { number } from '../ui/overlay.js';
 import Audio from '../audio/audio.js';
 import { rand, angleTo, angleDiff, clamp } from '../core/util.js';
+import { emit } from '../ui/bus.js';
+import { crackAt, crackLine, crackRing, refreezeAt } from './ice.js';
+import { NET } from '../net/state.js';
 
 const V = new THREE.Vector3();
 const p = () => G.player;
@@ -20,7 +23,15 @@ function pull(f, x, z, k) {
   if (f.boss || f.prop || f.keeper || f.def.anchored || f.dormant || f.cling) return;
   const dx = x - f.x, dz = z - f.z, d = Math.hypot(dx, dz); if (d < 0.7) return;
   const s = k / (f.def.big ? 2.5 : 1) * Math.min(1, d / 2);
+  // (co-op, on a guest: the host's monster is pulled on the host, net/coop.js)
+  if (f.puppet) { NET.h.pullPuppet?.(f, (dx / d) * s, (dz / d) * s); return; }
   f.kx += (dx / d) * s; f.kz += (dz / d) * s;
+}
+// held to her for dur s (ai.js victim, and on a co-op host targetOf); on a guest the host holds its monster to her
+function taunt(f, dur) {
+  if (f.prop || f.keeper) return;
+  if (f.puppet) { NET.h.tauntPuppet?.(f, dur); return; }
+  f.aggro = true; f.status.fear = 0; f.taunt = G.hero.stats.time + dur; f.tauntBy = p();
 }
 // the foes nearest (x, z), up to n, not in skip
 function nearest(x, z, r, n, skip) {
@@ -28,8 +39,14 @@ function nearest(x, z, r, n, skip) {
   for (const f of foes(x, z, r)) if (live(f) && !skip?.has(f)) out.push([f, (f.x - x) ** 2 + (f.z - z) ** 2]);
   return out.sort((a, b) => a[1] - b[1]).slice(0, n).map((e) => e[0]);
 }
-// a hero effect that runs itself (projectiles.js 'custom'): o.tick(a, dt), o.end(a), o.dispose(a)
-const effect = (x, z, r, dur, o) => area('custom', x, z, r, dur, { onTick: o.tick, onEnd: o.end, dispose: o.dispose, light: o.light });
+// a hero effect that runs itself (projectiles.js 'custom'): o.tick(a, dt), o.end(a), o.dispose(a). o.follow: it goes
+// about with her, and ends with no burst when she goes down (a co-op hero downed, who does not leave the zone)
+function effect(x, z, r, dur, o) {
+  const pl = p();
+  const tick = o.follow ? (a, dt) => { if (pl.dead || G.player !== pl) { a.done = true; a.quiet = true; return; } o.tick?.(a, dt); } : o.tick;
+  // (o.vis: [name, ...numbers], what the other pages of a co-op party draw of it: VIS below, net/coop.js)
+  return area('custom', x, z, r, dur, { onTick: tick, onEnd: o.end && ((a) => { if (!a.quiet) o.end(a); }), dispose: o.dispose, light: o.light, vis: o.vis });
+}
 const cdr = () => 1 - G.stats.cdr / 100;
 
 // ======================================================================================================================
@@ -74,9 +91,10 @@ export const VARIANT_FN = {
           for (let k = 0; k < 6; k++) { const a = Math.random() * 6.28; P({ x: pl.x + Math.sin(a) * sk.radius * 0.9, y: 0.8, z: pl.z + Math.cos(a) * sk.radius * 0.9, vx: Math.cos(a) * 3, vy: 0.6, vz: -Math.sin(a) * 3, life: 0.3, size: 0.45, size1: 0.05, color: 0xffd070, color1: 0xff3000 }); }
         }
         // the burning ground: where she stands the patch under her burns on; a new one only once she has moved off it
-        // (a foe beside her stands in one patch, not in one for every 0.3 s she spins there); never light in a boss's dark
+        // (a foe beside her stands in one patch, not in one for every 0.3 s she spins there); never light in a boss's dark,
+        // never warmth against the Cold (Act V: a spin would hold it off for good); it melts the ice under it like any fire
         if (patch && patch.t <= patch.dur && Math.hypot(pl.x - patch.x, pl.z - patch.z) < 1.4) patch.dur = patch.t + 2.6;
-        else patch = area('fire', pl.x, pl.z, 1.5, 2.6, { tick: 0.5, dmg: heroHit(mult * 0.3, { area: true }), dim: true });
+        else patch = area('fire', pl.x, pl.z, 1.5, 2.6, { tick: 0.5, dmg: heroHit(mult * 0.3, { area: true }), dim: true, nowarm: true });
         pl.res -= dt * 4;
         if (pl.res < 0) { pl.res = 0; pl.act.dur = Math.min(pl.act.dur, pl.act.t + 0.05); }
       }
@@ -104,6 +122,7 @@ export const VARIANT_FN = {
         pl.res = Math.min(G.stats.resMax, pl.res + sk.gain);
         const heal = pl.hpMax * 0.34, dur = 4; let given = 0;
         effect(pl.x, pl.z, 3, dur, {
+          follow: true, vis: ['rally'],
           light: { color: 0xffd070, intensity: 14, range: 8, y: 1.5 },
           tick(a, dt) {
             a.x = pl.x; a.z = pl.z;
@@ -129,7 +148,7 @@ export const VARIANT_FN = {
       events: [[0.25, () => {
         pl.buffs.challenge = sk.buff + rank;
         pl.res = Math.min(G.stats.resMax, pl.res + sk.gain * 1.5);
-        circleHit(pl.x, pl.z, 10, (f) => { if (f.prop || f.keeper) return; f.aggro = true; f.status.fear = 0; f.taunt = G.hero.stats.time + pl.buffs.challenge; pull(f, pl.x, pl.z, 5); });
+        circleHit(pl.x, pl.z, 10, (f) => { if (f.prop || f.keeper) return; taunt(f, pl.buffs.challenge); pull(f, pl.x, pl.z, 5); });
         ring(pl.x, pl.z, 10, 0xff3a20, 0.7); ring(pl.x, pl.z, 6, 0xc0c8d0, 0.5);
         for (let i = 0; i < 36; i++) { const a = (i / 36) * 6.28; P({ x: pl.x + Math.sin(a) * 1.2, y: 0.4, z: pl.z + Math.cos(a) * 1.2, vx: Math.sin(a) * 14, vy: 0.5, vz: Math.cos(a) * 14, life: 0.5, size: 0.4, size1: 0.1, color: 0xff6040, color1: 0x601010, drag: 2.5 }); }
         addLight({ x: pl.x, y: 2, z: pl.z, color: 0xff3020, intensity: 40, range: 12, life: 0.6, fade: 0.6 });
@@ -160,6 +179,8 @@ export const VARIANT_FN = {
           }
           puff(x0, 0.3, z0, 4, 0x4a4038, 1.2, r, 0.7);
           Audio.sfx('stoneCrack', { vol: 0.6 });
+          // Act V: each ring cracks the thin ice it opens (+1 stage), never the ground she stands on
+          crackRing(x0, z0, r - 0.5, r + 0.5, 1, { src: 'quake' });
           circleHit(x0, z0, r + 0.9, (f) => { if (hit.has(f)) return; hit.add(f); damage(pl, f, heroHit(mult * 0.9, { area: true }), { knock: 3, kx: f.x - x0, kz: f.z - z0, stun: 0.8, area: true, breakGuard: true }); });
         }));
       }]]
@@ -244,7 +265,7 @@ export const VARIANT_FN = {
       name: 'fireball', anim: 'cast', speed: 1.6, face: aim.dir, cut: 0.45,
       events: [[0.22, () => {
         const o = staffTip(V); Audio.sfx('fireball');
-        for (const da of [-0.28, 0, 0.28]) fire('fireball', pl, o.x, o.z, pl.rot + da, { y: Math.max(1, o.y), scale: 0.7, onHit: (f, pr) => { pr.life = 0; }, onEnd: (x, z) => fireBoom(x, z, (sk.radius + 0.15 * rank) * 0.72, mult * 0.55, true) });
+        for (const da of [-0.28, 0, 0.28]) fire('fireball', pl, o.x, o.z, pl.rot + da, { y: Math.max(1, o.y), scale: 0.7, onHit: (f, pr) => { pr.life = 0; }, onEnd: (x, z) => fireBoom(x, z, (sk.radius + 0.15 * rank) * 0.72, mult * 0.55, true, 1.1) });
       }]]
     });
   },
@@ -256,7 +277,7 @@ export const VARIANT_FN = {
       events: [[0.22, () => {
         const o = staffTip(V); Audio.sfx('fireball', { pitch: 1.2 });
         fire('cinder', pl, o.x, o.z, pl.rot, { y: Math.max(1, o.y), homing: 6, onHit: (f, pr) => { pr.life = 0; }, look: cinderLook,
-          onEnd: (x, z) => { const r = (sk.radius + 0.15 * rank) * 0.85; explosion(x, z, r, 0xfff0c0, { shake: 0.22, smoke: 0x4a4440 }); Audio.sfx('explosion', { x, z, vol: 0.8 }); circleHit(x, z, r, (f) => damage(pl, f, heroHit(mult * 0.8, { area: true }), { knock: 3, kx: f.x - x, kz: f.z - z, burn: heroHit(mult * 0.3), area: true })); area('fire', x, z, 1.9, 3, { tick: 0.5, dmg: heroHit(mult * 0.14, { area: true }), look: paleFire, light: { color: 0xffe8b0, intensity: 12 }, dim: true }); } });
+          onEnd: (x, z) => { const r = (sk.radius + 0.15 * rank) * 0.85; explosion(x, z, r, 0xfff0c0, { shake: 0.22, smoke: 0x4a4440 }); crackAt(x, z, 1.5, 1, { src: 'fireball' }); Audio.sfx('explosion', { x, z, vol: 0.8 }); circleHit(x, z, r, (f) => damage(pl, f, heroHit(mult * 0.8, { area: true }), { knock: 3, kx: f.x - x, kz: f.z - z, burn: heroHit(mult * 0.3), area: true })); area('fire', x, z, 1.9, 3, { tick: 0.5, dmg: heroHit(mult * 0.14, { area: true }), look: paleFire, light: { color: 0xffe8b0, intensity: 12 }, dim: true }); } });
       }]]
     });
   },
@@ -279,6 +300,7 @@ export const VARIANT_FN = {
     novaCore(sk, mult * 0.5, 0, 0xd0e8ff, () => {
       let tick = 0;
       effect(pl.x, pl.z, sk.radius, 4 + 0.3 * rank, {
+        follow: true, vis: ['blizzard'],
         light: { color: 0x9ac8ff, intensity: 10, range: 10, y: 2 },
         tick(a, dt) {
           a.x = pl.x; a.z = pl.z; tick -= dt;
@@ -340,7 +362,7 @@ export const VARIANT_FN = {
         const n = 5 + (rank >= 4 ? 1 : 0);
         for (let i = 0; i < n; i++) {
           const a = (i / n) * 6.28 + rand.range(-0.4, 0.4), r = i === 0 ? 0 : rand.range(1.2, sk.radius + 0.8), mx = x + Math.sin(a) * r, mz = z + Math.cos(a) * r;
-          meteorFall(mx, mz, 0.55 + i * 0.22, 0.7, () => { explosion(mx, mz, 1.9, 0xff5a10, { shake: 0.25 }); Audio.sfx('explosion', { x: mx, z: mz, vol: 0.6 }); circleHit(mx, mz, 2.0, (f) => damage(pl, f, heroHit(mult * 0.55, { area: true }), { knock: 3, kx: f.x - mx, kz: f.z - mz, burn: heroHit(mult * 0.1), area: true })); });
+          meteorFall(mx, mz, 0.55 + i * 0.22, 0.7, () => { explosion(mx, mz, 1.9, 0xff5a10, { shake: 0.25 }); crackAt(mx, mz, 2, 1, { src: 'meteor' }); Audio.sfx('explosion', { x: mx, z: mz, vol: 0.6 }); circleHit(mx, mz, 2.0, (f) => damage(pl, f, heroHit(mult * 0.55, { area: true }), { knock: 3, kx: f.x - mx, kz: f.z - mz, burn: heroHit(mult * 0.1), area: true })); });
         }
       }]]
     });
@@ -355,12 +377,14 @@ export const VARIANT_FN = {
         Audio.sfx('meteorFall', { x, z, pitch: 1.2 });
         meteorFall(x, z, 0.95, 1.4, () => {
           explosion(x, z, r, 0x9ad8ff, { shake: 0.7, smoke: 0xb0c8e0 });
+          // Act V: a stone of ice is a stone still: it breaks thin ice wide open as a Meteor does (+2 stages, r 3.5)
+          crackAt(x, z, 3.5, 2, { src: 'meteor' });
           for (let i = 0; i < 26; i++) { const a = Math.random() * 6.28, s = rand.range(3, 9); P({ x, y: 0.5, z, vx: Math.cos(a) * s, vy: rand.range(2, 6), vz: Math.sin(a) * s, life: 0.7, size: rand.range(0.15, 0.3), size1: 0.05, color: 0xffffff, color1: 0x80c0ff, grav: 12 }); }
           Audio.sfx('explosion', { x, z }); Audio.sfx('frost', { x, z });
           G.hitstop = 0.08;
           circleHit(x, z, r, (f) => damage(pl, f, heroHit(mult * 0.85, { area: true }), { knock: 4, kx: f.x - x, kz: f.z - z, freeze: 2 + 0.2 * rank, area: true }));
           let tick = 0;
-          effect(x, z, r * 0.8, 3 + rank * 0.3, { light: { color: 0x9ac8ff, intensity: 10 }, tick(a, dt) {
+          effect(x, z, r * 0.8, 3 + rank * 0.3, { light: { color: 0x9ac8ff, intensity: 10 }, vis: ['comet'], tick(a, dt) {
             tick -= dt; if (Math.random() < 0.6) P({ x: x + rand.range(-a.r, a.r) * 0.8, y: 0.1, z: z + rand.range(-a.r, a.r) * 0.8, vy: rand.range(0.4, 1.2), life: 0.6, size: 0.3, size1: 0.05, color: 0xe0f4ff, color1: 0x4a8aff });
             if (tick <= 0) { tick = 0.5; circleHit(x, z, a.r, (f) => damage(pl, f, heroHit(mult * 0.1, { area: true }), { chill: 0.8, quiet: true, area: true, dot: true })); }
           } });
@@ -391,6 +415,8 @@ function leapCore(sk, aim, mult, o) {
     },
     events: [[0.56, () => {
       pl.y = 0;
+      // Act V: her landing cracks thin ice round it (+1 stage), as wide as the fall
+      crackAt(tx, tz, 3 * R0 / sk.radius, 1, { src: 'leap' });
       if (o.seismic) for (const f of foes(tx, tz, R0 * 2)) if (live(f)) pull(f, tx, tz, 9);
       const n = circleHit(tx, tz, R0, (f) => damage(pl, f, heroHit(mult * o.m, { area: true }), { knock: o.seismic ? 0 : 5, kx: f.x - tx, kz: f.z - tz, stun: o.seismic ? 1.8 : 1.0, area: true, breakGuard: true }));
       explosion(tx, tz, R0 * 0.8, o.seismic ? 0xffa060 : 0x9ad8ff, { smoke: 0x5a4a3a, shake: o.seismic ? 0.8 : 0.4 });
@@ -409,6 +435,8 @@ function quakeLines(dir, offs, len, m) {
     events: [[0.45, () => {
       Audio.sfx('slam'); shake(0.5); G.hitstop = 0.06;
       const x0 = pl.x, z0 = pl.z;
+      // Act V: every fissure cracks thin ice along it (+1 stage)
+      for (const da of offs) crackLine(x0 + Math.sin(dir + da) * 1.2, z0 + Math.cos(dir + da) * 1.2, x0 + Math.sin(dir + da) * (1.2 + len), z0 + Math.cos(dir + da) * (1.2 + len), 2, 1, { src: 'quake' });
       for (const da of offs) for (let i = 0; i < len; i++) later(i * 0.035, () => {
         const a = dir + da, x = x0 + Math.sin(a) * (1.2 + i), z = z0 + Math.cos(a) * (1.2 + i);
         if (!G.zone.map.walkable(x, z)) return;
@@ -429,6 +457,8 @@ function rainCore(sk, aim, rank, drop, tele) {
       Audio.sfx('arrowShoot'); for (let i = 0; i < 8; i++) P({ x: pl.x, y: 1.6, z: pl.z, vx: rand.range(-1, 1), vy: 14, vz: rand.range(-1, 1), life: 0.4, size: 0.15, size1: 0.05, color: 0xfff0d0 });
       teleCircle(x, z, sk.radius, 0.35, tele);
       drop(x, z, sk.dur + 0.2 * (rank - 1));
+      // Act V: +1 stage under the rain, once a cast (the Ranger cracks from range, whatever falls)
+      later(0.4, () => crackAt(x, z, 3.5, 1, { src: 'rain' }));
     }]]
   });
 }
@@ -464,9 +494,11 @@ function pierceCore(sk, aim, m, onHit) {
     }]]
   });
 }
-function fireBoom(x, z, r, m, small) {
+// (crack: the thin ice it breaks round it, Act V; the Trident's three each a smaller one than a Fireball's 1.5)
+function fireBoom(x, z, r, m, small, crack = 0) {
   const pl = p();
   explosion(x, z, r, 0xff7a20, { shake: small ? 0.12 : 0.3 });
+  if (crack) crackAt(x, z, crack, 1, { src: 'fireball' });
   Audio.sfx('explosion', { x, z, vol: small ? 0.6 : 1 });
   circleHit(x, z, r, (f) => damage(pl, f, heroHit(m, { area: true }), { knock: small ? 2 : 4, kx: f.x - x, kz: f.z - z, burn: heroHit(m * 0.3), area: true }));
 }
@@ -481,6 +513,10 @@ function novaCore(sk, m, freeze, color, then) {
       addLight({ x: pl.x, y: 1.5, z: pl.z, color: 0x80c8ff, intensity: 45, range: r * 2.5, life: 0.5, fade: 0.5 });
       Audio.sfx('frost'); shake(0.2);
       circleHit(pl.x, pl.z, r, (f) => { damage(pl, f, heroHit(m, { area: true }), freeze ? { freeze, area: true } : { chill: 2, area: true }); hits.push(f); glowBurst(f.x, 1, f.z, 0xb0e8ff, 6, 2, 0.25, 0.5); });
+      // Act V: the wave builds with frost as the Nova does (cracks heal, holes freeze to slush; an Icemaw under one is held:
+      // ai.js), the wave only: Blizzard's storm that goes with her never does
+      if (refreezeAt(pl.x, pl.z, r)) Audio.sfx('refreeze', { x: pl.x, z: pl.z, vol: 0.7 });
+      emit('frostNova', pl.x, pl.z, r);
       then(hits);
     }]]
   });
@@ -563,12 +599,13 @@ export const NEW_FN = {
         const amount = pl.hpMax * (sk.shield + 0.04 * (rank - 1)), dur = sk.buff + 0.5 * rank;
         pl.shield = Math.max(pl.shield || 0, amount);
         pl.buffs.bulwark = dur;
-        circleHit(pl.x, pl.z, 9, (f) => { if (f.prop || f.keeper) return; f.aggro = true; f.status.fear = 0; f.taunt = G.hero.stats.time + dur; });
+        circleHit(pl.x, pl.z, 9, (f) => taunt(f, dur));
         ring(pl.x, pl.z, 9, 0xffd070, 0.6);
         Audio.sfx('shieldBlock'); Audio.sfx('anvil', { vol: 0.6 }); shake(0.25);
         let spin = 0;
         const dome = domeMesh(), start = amount;
         effect(pl.x, pl.z, sk.radius, dur, {
+          follow: true, vis: ['bulwark'],
           light: { color: 0xffd070, intensity: 10, range: 6, y: 1.2 },
           tick(a, dt) {
             a.x = pl.x; a.z = pl.z; spin += dt;
@@ -639,6 +676,7 @@ export const NEW_FN = {
             circleHit(tx, tz, sk.radius, (f) => damage(pl, f, heroHit(mult, { area: true }), { stun: 1.3 + 0.1 * rank, burn: heroHit(mult * 0.35), area: true, breakGuard: true }));
           };
           effect(tx, tz, sk.radius, 4.6, {
+            vis: ['trap'],
             tick(a) {
               if (!armed && a.t > 0.5) { armed = true; ring(tx, tz, 1.6, 0xffe0a0, 0.3); }
               if (sprung) { if (a.t > a.springT + 0.5) a.done = true; return; }
@@ -687,6 +725,7 @@ export const NEW_FN = {
         for (let i = 0; i < n; i++) { const m = hawkMesh(); birds.push({ m, a: (i / n) * 6.28, cd: 0.4 + i * 0.3, dive: null, x: pl.x, y: 3, z: pl.z }); }
         glowBurst(pl.x, 2.5, pl.z, 0x9ad8ff, 30, 4, 0.3, 0.6);
         effect(pl.x, pl.z, 11, sk.dur + rank * 0.6, {
+          follow: true, vis: ['hawks', n],
           tick(a, dt) {
             a.x = pl.x; a.z = pl.z;
             for (const b of birds) {
@@ -744,7 +783,7 @@ export const NEW_FN = {
         Audio.sfx('blink', { x, z, pitch: 0.6 }); Audio.sfx('wraithWail', { x, z, vol: 0.3, pitch: 0.6 });
         let tick = 0; const core = riftMesh(); core.position.set(x, 1.1, z);
         effect(x, z, r, sk.dur + 0.15 * rank, {
-          light: { color: 0x8a50ff, intensity: 18, range: 10, y: 1.2 },
+          light: { color: 0x8a50ff, intensity: 18, range: 10, y: 1.2 }, vis: ['rift'],
           tick(a, dt) {
             tick -= dt; core.rotation.y += dt * 3; core.rotation.z += dt * 1.3;
             core.scale.setScalar(Math.min(1, a.t * 4) * (1 + 0.08 * Math.sin(a.t * 12)));
@@ -799,12 +838,88 @@ export const NEW_FN = {
     });
     Audio.sfx('lampLight'); addLight({ x: pl.x, y: 2, z: pl.z, color: 0xffd070, intensity: 30, range: 10, life: 0.3, fade: 0.3 });
     const glow = addLight({ x: pl.x, y: 1.5, z: pl.z, color: 0xffe0a0, intensity: 22, range: 8 });
-    effect(pl.x, pl.z, 1, 99, {
+    effect(pl.x, pl.z, 1, sk.dur + 0.2 * rank + 0.3, {
+      follow: true, vis: ['beam', sk.range],
       tick(a) { const o = staffTip(V); glow.x = o.x + Math.sin(pl.rot) * len * 0.6; glow.y = o.y; glow.z = o.z + Math.cos(pl.rot) * len * 0.6; if (pl.act !== me) a.done = true; },
       dispose() { R.scene.remove(beam); removeLight(glow); }
     });
   }
 };
+
+// ---------- co-op: what the other pages of a party draw (net/coop.js) ----------
+// the looks a shot or an area is drawn with, by name: the mirror sends the name and the page that replays it the look
+export const LOOKS = { goldBolt, fireBolt, siegeLook, cinderLook, sparkLook, fireRain, hailRain, paleFire, radiantLook, shardLook, orbLook, caltrops };
+// an effect of another hero's, drawn here: its look only (particles and meshes; what it does to foes, its bursts and rings
+// are the mirror's). VIS[name](a, args, who) for an area a (x, z, r, dur), who the hero it goes about with (an actor with
+// x, z, rot, y), or null: { tick(a, dt), dispose(a), light }
+export const VIS = {
+  rally: (a, args, who) => ({ light: { color: 0xffd070, intensity: 14, range: 8, y: 1.5 }, tick(a) {
+    a.x = who.x; a.z = who.z;
+    if (Math.random() < 0.6) { const an = Math.random() * 6.28, r = rand.range(0.3, 1.1); P({ x: who.x + Math.sin(an) * r, y: rand.range(0, 0.6), z: who.z + Math.cos(an) * r, vy: rand.range(1.5, 3), life: 0.8, size: 0.2, size1: 0.02, color: 0xfff0b0, color1: 0xffa040 }); }
+  } }),
+  blizzard: (a, args, who) => ({ light: { color: 0x9ac8ff, intensity: 10, range: 10, y: 2 }, tick(a) {
+    a.x = who.x; a.z = who.z;
+    for (let k = 0; k < 3; k++) { const an = Math.random() * 6.28, r = Math.sqrt(Math.random()) * a.r; P({ x: who.x + Math.sin(an) * r, y: rand.range(1.5, 3.5), z: who.z + Math.cos(an) * r, vx: Math.cos(an) * 3, vy: -3, vz: -Math.sin(an) * 3, life: 0.7, size: 0.16, size1: 0.08, color: 0xffffff, color1: 0xa0d0ff }); }
+    if (Math.random() < 0.3) P({ add: false, x: who.x + rand.range(-4, 4), y: 0.3, z: who.z + rand.range(-4, 4), vy: 0.2, life: 1.2, size: 1.4, size1: 2.6, color: 0xd8e8f8, alpha: 0.12, alpha1: 0 });
+  } }),
+  comet: () => ({ light: { color: 0x9ac8ff, intensity: 10 }, tick(a) { if (Math.random() < 0.6) P({ x: a.x + rand.range(-a.r, a.r) * 0.8, y: 0.1, z: a.z + rand.range(-a.r, a.r) * 0.8, vy: rand.range(0.4, 1.2), life: 0.6, size: 0.3, size1: 0.05, color: 0xe0f4ff, color1: 0x4a8aff }); } }),
+  bulwark: (a, args, who) => {
+    const dome = domeMesh(); let spin = 0;
+    return { light: { color: 0xffd070, intensity: 10, range: 6, y: 1.2 }, tick(a, dt) {
+      a.x = who.x; a.z = who.z; spin += dt;
+      dome.position.set(who.x, who.y || 0, who.z); dome.rotation.y = spin * 0.8; dome.material.opacity = 0.18 + 0.04 * Math.sin(spin * 6);
+      for (let k = 0; k < 2; k++) { const an = spin * 3 + k * 3.14; P({ x: who.x + Math.sin(an) * 1.2, y: 0.3 + (spin * 1.3 + k) % 1.8, z: who.z + Math.cos(an) * 1.2, life: 0.4, size: 0.25, size1: 0.04, color: 0xfff0c0, color1: 0xffa040 }); }
+    }, dispose() { R.scene.remove(dome); dome.geometry.dispose(); dome.material.dispose(); } };
+  },
+  trap: (a) => {
+    const jaw = trapMesh(); jaw.position.set(a.x, 0.05, a.z); jaw.rotation.y = Math.random() * 6.28;
+    return { tick(a) { if (Math.random() < 0.15) P({ x: a.x + rand.range(-0.4, 0.4), y: 0.15, z: a.z + rand.range(-0.4, 0.4), life: 0.3, size: 0.1, size1: 0.02, color: 0xfff0d0 }); }, dispose() { R.scene.remove(jaw); } };
+  },
+  // (the hawks wheel over the hero and stoop on what is near as hers do; where they strike is the mirror's sparks)
+  hawks: (a, args, who) => {
+    const n = clamp(args[0] | 0, 1, 6), birds = [];
+    for (let i = 0; i < n; i++) birds.push({ m: hawkMesh(), a: (i / n) * 6.28, cd: 0.4 + i * 0.3, dive: null, x: who.x, y: 3, z: who.z });
+    return { tick(a, dt) {
+      a.x = who.x; a.z = who.z;
+      for (const b of birds) {
+        b.a += dt * 1.6; b.cd -= dt;
+        if (b.dive) { const d = b.dive; d.t += dt; const u = Math.min(1, d.t / 0.32); b.x = d.sx + (d.f.x - d.sx) * u; b.z = d.sz + (d.f.z - d.sz) * u; b.y = d.sy + (1 - d.sy) * u; if (u >= 1) { b.dive = null; b.cd = 0.7; } }
+        else {
+          const tx = who.x + Math.sin(b.a) * 2.6, tz = who.z + Math.cos(b.a) * 2.6, k = Math.min(1, dt * 6);
+          b.x += (tx - b.x) * k; b.z += (tz - b.z) * k; b.y += (3.2 + Math.sin(b.a * 2) * 0.3 - b.y) * k;
+          if (b.cd <= 0) { const f = foes(who.x, who.z, 11).find(live); if (f) b.dive = { f, t: 0, sx: b.x, sy: b.y, sz: b.z }; else b.cd = 0.3; }
+        }
+        const nx = b.dive ? b.dive.f.x - b.x : Math.cos(b.a), nz = b.dive ? b.dive.f.z - b.z : -Math.sin(b.a);
+        b.m.position.set(b.x, b.y, b.z); b.m.rotation.y = Math.atan2(nx, nz); b.m.rotation.x = b.dive ? 0.6 : 0;
+        const flap = Math.sin(a.t * (b.dive ? 30 : 14) + b.a * 3) * (b.dive ? 0.2 : 0.6);
+        b.m.children[0].rotation.z = 0.25 + flap; b.m.children[1].rotation.z = -0.25 - flap;
+        P({ x: b.x, y: b.y, z: b.z, life: 0.12, size: 0.9, size1: 0.4, color: 0x4a90d0, alpha: 0.35 });
+      }
+    }, dispose() { for (const b of birds) R.scene.remove(b.m); } };
+  },
+  rift: (a) => {
+    const core = riftMesh(); core.position.set(a.x, 1.1, a.z);
+    return { light: { color: 0x8a50ff, intensity: 18, range: 10, y: 1.2 }, tick(a, dt) {
+      core.rotation.y += dt * 3; core.rotation.z += dt * 1.3; core.scale.setScalar(Math.min(1, a.t * 4) * (1 + 0.08 * Math.sin(a.t * 12)));
+      for (let k = 0; k < 4; k++) { const an = Math.random() * 6.28, rr = rand.range(1.5, a.r); P({ x: a.x + Math.sin(an) * rr, y: rand.range(0.2, 2), z: a.z + Math.cos(an) * rr, vx: -Math.sin(an) * rr * 2 + Math.cos(an) * 4, vy: 0, vz: -Math.cos(an) * rr * 2 - Math.sin(an) * 4, life: 0.45, size: 0.3, size1: 0.02, color: 0xc0a0ff, color1: 0x3a10a0, drag: 0.5 }); }
+    }, dispose() { R.scene.remove(core); core.geometry.dispose(); core.material.dispose(); } };
+  },
+  // (the beam from the hero's hands along where she faces, as far as the walls let it)
+  beam: (a, args, who) => {
+    const beam = beamMesh(), range = clamp(+args[0] || 16, 2, 20);
+    return { light: { color: 0xffe0a0, intensity: 22, range: 8, y: 1.5 }, tick(a, dt) {
+      const dx = Math.sin(who.rot), dz = Math.cos(who.rot), ox = who.x + dx * 0.5, oz = who.z + dz * 0.5, oy = (who.y || 0) + 1.4;
+      const len = range * (G.zone?.map ? G.zone.map.castT(ox, oz, ox + dx * range, oz + dz * range, 0.2) : 1);
+      a.x = ox + dx * len * 0.6; a.z = oz + dz * len * 0.6;
+      beam.position.set(ox, oy, oz); beam.rotation.y = who.rot; beam.scale.set(1 + 0.15 * Math.sin(a.t * 40), 1, len);
+      beam.children[0].material.opacity = 0.32 + 0.1 * Math.sin(a.t * 23);
+      for (let k = 0; k < 2; k++) { const u = Math.random(); P({ x: ox + dx * len * u, y: oy + rand.range(-0.15, 0.15), z: oz + dz * len * u, vy: rand.range(0.2, 1), life: 0.25, size: 0.25, size1: 0.02, color: 0xfff4d0, color1: 0xffa040 }); }
+      P({ x: ox + dx * len, y: oy, z: oz + dz * len, life: 0.12, size: 1.5, size1: 0.6, color: 0xfff0c0, alpha: 0.8 });
+    }, dispose() { R.scene.remove(beam); } };
+  }
+};
+// which of them go about with their hero (a page that has no actor for that hero draws them not at all)
+export const VIS_FOLLOW = new Set(['rally', 'blizzard', 'bulwark', 'hawks', 'beam']);
 
 // ---------- the later skills' meshes and looks (code-built) ----------
 const ADD = (color, opacity = 1) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });

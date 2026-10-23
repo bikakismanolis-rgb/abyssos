@@ -899,6 +899,85 @@ const S = {
     }
     return res;
   } },
+  // Act V with the progression: every skill and variant of a class (CLS) cast on the Farthest Light's thin ice, each time on
+  // ice reset to stage 0 round her: the stages it adds in 3 s (less what her own weight adds standing there as long), the
+  // stage under her after it, and for the Novas the stage-2 cells round her they heal; then the Cold under Ember Dance
+  // against the plain Whirlwind (a fire that follows her never warms her) and a downed hero's following effects
+  skills5: { q: 'auto=farlight&sim=4&q=0&norender&lvl=45&cls=' + (process.env.CLS || 'warden') + '&' + A5.url('alkShip'), run: async (pg) => {
+    await A5.tick(pg);
+    const list = await pg.evaluate(async () => {
+      const D = await import('/src/game/data.js'), G = window.__G, out = [];
+      for (const sk of D.SKILLS[G.hero.cls]) { if (sk.basic) continue; out.push({ id: sk.id, v: 0 }); (D.VARIANTS[sk.id] || []).forEach((n, i) => out.push({ id: sk.id, v: i + 1, n })); }
+      window.__wait = (sec) => new Promise((ok) => { const t0 = G.hero.stats.time, w0 = performance.now(); const f = () => (G.hero.stats.time - t0 >= sec || performance.now() - w0 > 400000 ? ok() : setTimeout(f, 20)); f(); });
+      window.__immortal = true;
+      for (const p of G.zone.packs || []) p.spawned = true;
+      for (const a of G.actors) if (a.team === 'foe' && !a.boss) { a.dead = true; a.remove(); }
+      G.actors = G.actors.filter((a) => !a.removed);
+      // a spot of thin ice 9 m round, out of lamp light, and a heading along it
+      const L = G.zone.L, I = G.zone.ice, LT = await import('/src/game/light.js'), w = L.w;
+      const thin = (x, z) => { const ix = Math.floor(x), iz = Math.floor(z); return ix >= 0 && iz >= 0 && ix < w && iz < L.h && L.ice[iz * w + ix] && !L.thick?.[iz * w + ix] && !LT.lampLightAt(x, z); };
+      let best = null;
+      for (let i = 0; i < L.ice.length && !best; i += 3) {
+        if (!L.ice[i]) continue;
+        const x = i % w + 0.5, z = (i - i % w) / w + 0.5;
+        let ok = thin(x, z);
+        for (let k = 0; k < 16 && ok; k++) for (const r of [3, 6, 9]) if (!thin(x + Math.sin(k * 0.39) * r, z + Math.cos(k * 0.39) * r)) { ok = false; break; }
+        if (ok) best = { x, z };
+      }
+      window.__spot = best;
+      window.__reset = (st = 0) => { const S = window.__spot; for (let cz = Math.floor(S.z - 14); cz <= S.z + 14; cz++) for (let cx = Math.floor(S.x - 14); cx <= S.x + 14; cx++) { const i = cz * w + cx; if (cx < 0 || cz < 0 || cx >= w || cz >= L.h || !L.ice[i]) continue; I.stage[i] = Math.hypot(cx + 0.5 - S.x, cz + 0.5 - S.z) < 6 ? st : 0; I.load[i] = 0; I.fl[i] = 0; } I.dirty = true; I.live.length = 0; I.hit.length = 0; I.reo.length = 0; };
+      window.__sum = () => { const S = window.__spot; let n = 0, hi = 0; for (let cz = Math.floor(S.z - 14); cz <= S.z + 14; cz++) for (let cx = Math.floor(S.x - 14); cx <= S.x + 14; cx++) { const i = cz * w + cx; if (cx < 0 || cz < 0 || cx >= w || cz >= L.h || !L.ice[i]) continue; const s = I.stage[i]; if (s >= 1 && s <= 4) { n += s; hi++; } } return { stages: n, cells: hi }; };
+      return out;
+    });
+    const spot = await pg.evaluate(() => window.__spot);
+    if (!spot) return { pass: false, error: 'no thin-ice spot' };
+    const place = async (e) => { await pg.evaluate((e) => {
+      const G = window.__G, h = G.hero, pl = G.player, S = window.__spot;
+      for (const a of G.actors) if (a.pet && !a.dead) { a.dead = true; a.remove(); }
+      for (const a of G.areas) if (a.team === 'hero') { if (a.kind === 'custom') a.done = true; else a.t = a.dur + 1; }
+      for (const a of G.actors) if (a.dummy) { a.dead = true; a.remove(); }
+      G.actors = G.actors.filter((a) => !a.removed);
+      // (a sturdy dummy 6 m ahead, that the shots land on and the bolts are aimed at)
+      const m = window.__D.spawnMonster('skeleton', S.x, S.z + 6, { level: 45 }); m.hp = m.hpMax = 1e8; m.dummy = true; m.status.stun = 99; G.actors.push(m);
+      if (e) { h.skills[e.id] = 5; h.vars[e.id] = 3; h.variant[e.id] = e.v; const j = h.loadout.indexOf(e.id); if (j > 0) h.loadout[j] = h.loadout[0]; h.loadout[0] = e.id; window.__D.emit('loadout'); }
+      pl.x = S.x; pl.z = S.z; pl.rot = 0; pl.y = 0; pl.res = G.stats.resMax; pl.cds.fill(0); pl.act = null; pl.twinT = 0; for (const k in pl.buffs) delete pl.buffs[k]; pl.shield = 0; pl.inWater = null;
+    }, e);
+    await pg.evaluate((pre) => window.__wait(0.15).then(() => window.__reset(pre)), e?.pre || 0); };
+    const res = {};
+    await place(null); await pg.evaluate(() => window.__wait(3)); const base = await pg.evaluate(() => window.__sum());
+    for (const e of list) {
+      e.pre = e.id === 'nova' ? 2 : 0;
+      await place(e);
+      const s0 = await pg.evaluate(() => window.__sum());
+      await pg.evaluate(() => { const S = window.__spot; window.__D.IN.events.push({ t: 'skill', i: 1, aim: { x: S.x, z: S.z + 6 } }); });
+      await pg.evaluate(() => window.__wait(3));
+      const r = await pg.evaluate(() => { const G = window.__G, pl = G.player, I = (async () => 0)(); return { sum: window.__sum(), under: (G.zone.ice.stage[Math.floor(pl.z) * G.zone.L.w + Math.floor(pl.x)] || 0), moved: +Math.hypot(pl.x - window.__spot.x, pl.z - window.__spot.z).toFixed(1) }; });
+      res[e.n ? e.id + '.' + e.n : e.id] = e.pre ? { healed: s0.cells - r.sum.cells, under: r.under } : { added: r.sum.stages - base.stages, cells: r.sum.cells, under: r.under, moved: r.moved };
+    }
+    // the Cold (Warden only): 3 s of each spin from Cold 50 on dry ice, no gust
+    let cold = null;
+    if (await pg.evaluate(() => window.__G.hero.cls === 'warden')) {
+      cold = {};
+      for (const v of [0, 2]) {
+        await place({ id: 'whirl', v });
+        cold[v ? 'ember' : 'whirl'] = await pg.evaluate(async () => {
+          const C = await import('/src/game/cold.js'), G = window.__G; if (G.zone.gust) G.zone.gust.on = false;
+          C.COLD.v = 50; window.__D.IN.events.push({ t: 'skill', i: 1, aim: null });
+          await window.__wait(2.5); return +C.COLD.v.toFixed(1);
+        });
+      }
+    }
+    // a downed hero: what follows her ends with no burst (Bulwark for the Warden, Hawks for the Ranger, Blizzard for the Mage)
+    const fol = { warden: { id: 'bulwark', v: 0 }, ranger: { id: 'hawks', v: 0 }, mage: { id: 'nova', v: 2 } }[await pg.evaluate(() => window.__G.hero.cls)];
+    await place(fol);
+    await pg.evaluate(() => window.__D.IN.events.push({ t: 'skill', i: 1, aim: null }));
+    await pg.evaluate(() => window.__wait(1.2));
+    const down = await pg.evaluate(async () => { const G = window.__G, pl = G.player, n0 = G.areas.filter((a) => a.kind === 'custom').length; window.__immortal = false; pl.dead = true; await window.__wait(0.5); const n1 = G.areas.filter((a) => a.kind === 'custom').length; pl.dead = false; window.__immortal = true; return { before: n0, after: n1, shield: pl.shield || 0 }; });
+    const cracks = Object.entries(res).filter(([k, v]) => v.added != null);
+    const zero = cracks.filter(([k, v]) => v.added <= 0).map(([k]) => k), selfBreak = Object.entries(res).filter(([k, v]) => v.under >= 4).map(([k]) => k);
+    const novas = Object.entries(res).filter(([k, v]) => v.healed != null && v.healed < 20).map(([k]) => k);
+    return { pass: !selfBreak.length && !novas.length && (!cold || cold.ember >= cold.whirl - 3) && down.after === 0, spot, base, res, cold, down, selfBreak, novasWeak: novas, noCrack: zero };
+  } },
   // levels past the old skill cap, Mastery past 50, and a save from before the progression taken up from the title
   progress: { q: 'auto=town&sim=2&q=1&lvl=1&cls=' + (process.env.CLS || 'ranger'), run: async (pg, shot) => {
     const r = {};

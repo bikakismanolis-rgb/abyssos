@@ -14,7 +14,7 @@ import { tickTide } from './tide.js';
 import { tickIce } from './ice.js';
 import Audio from '../audio/audio.js';
 import { rand } from '../core/util.js';
-import { mir } from '../net/state.js';
+import { mir, MIRROR } from '../net/state.js';
 
 let boltGeo = null, arrowGeo = null, pinGeo = null, harpoonGeo = null, pmat = null;
 function meshFor(kind) {
@@ -110,6 +110,8 @@ export function updateProjs(dt) {
   const map = G.zone?.map, pl = G.player;
   for (let i = G.projs.length - 1; i >= 0; i--) {
     const p = G.projs[i], K = KIND[p.kind];
+    // (co-op: what this page's hero's own shots do as they fly and land is hers, told to the others: net/coop.js)
+    MIRROR.hero = p.team === 'hero'; MIRROR.skip = p.team === 'vis';
     p.t += dt; p.life -= dt;
     if (p.homing && p.team === 'hero') {
       let best = null, bd = 64;
@@ -189,13 +191,16 @@ export function updateProjs(dt) {
     }
     if (done || p.life <= 0) endProj(p, i, false);
   }
+  MIRROR.hero = false; MIRROR.skip = false;
 }
 
 // ---------- areas: burning ground, arrow rain, webs, poison ----------
 export function area(...args) { return mir('area', area0, args); }
+// (co-op: a hero effect the others draw, VIS in skillsx.js, has ended here: theirs ends too, net/coop.js)
+const visEnd = (...args) => mir('visEnd', () => null, args);
 function area0(kind, x, z, r, dur, o = {}) {
   // o.dim: a hero fire that never counts as light in a boss's darkness (light.js fireAt)
-  const a = { kind, x, z, r, dur, t: 0, tick: o.tick ?? 0.5, tickT: o.delay ?? 0, dmg: o.dmg || 0, team: o.team || 'hero', src: o.src, opts: o.opts || {}, vx: o.vx || 0, vz: o.vz || 0, hit: new Set(), floats: !!o.floats, onTick: o.onTick, onEnd: o.onEnd, look: o.look, dispose: o.dispose, dim: !!o.dim };
+  const a = { kind, x, z, r, dur, t: 0, tick: o.tick ?? 0.5, tickT: o.delay ?? 0, dmg: o.dmg || 0, team: o.team || 'hero', src: o.src, opts: o.opts || {}, vx: o.vx || 0, vz: o.vz || 0, hit: new Set(), floats: !!o.floats, onTick: o.onTick, onEnd: o.onEnd, look: o.look, dispose: o.dispose, dim: !!o.dim, nowarm: !!o.nowarm, vis: o.vis };
   // an area's own light (o.light) takes the place of its kind's: one light each, removed with it
   if (o.light) a.light = addLight({ x, y: o.light.y ?? 0.8, z, color: o.light.color, intensity: o.light.intensity ?? 12, range: o.light.range ?? r * 3, flicker: o.light.flicker ?? 0.3 });
   else if (kind === 'fire') a.light = addLight({ x, y: 0.6, z, color: 0xff6a10, intensity: o.floats ? 22 : 16, range: r * 3, flicker: 0.4 });
@@ -219,6 +224,8 @@ export function updateAreas(dt) {
   tickTide(dt); tickIce(dt);
   for (let i = G.areas.length - 1; i >= 0; i--) {
     const a = G.areas[i];
+    // (co-op: as her shots, her areas' own work is hers to show the others)
+    MIRROR.hero = a.team === 'hero'; MIRROR.skip = a.team === 'vis';
     a.t += dt; a.tickT -= dt;
     // Act III areas with their own rules: glittering moth dust slows everyone in it; the Song of Sorrow is a ring that rolls outward
     if (a.kind === 'amberDust') {
@@ -241,7 +248,7 @@ export function updateAreas(dt) {
     if (a.kind === 'custom') {
       a.onTick?.(a, dt);
       if (a.light) { a.light.x = a.x; a.light.z = a.z; }
-      if (a.t > a.dur || a.done) { if (a.light) removeLight(a.light); G.areas.splice(i, 1); a.onEnd?.(a); a.dispose?.(a); }
+      if (a.t > a.dur || a.done) { if (a.light) removeLight(a.light); G.areas.splice(i, 1); a.onEnd?.(a); a.dispose?.(a); if (a.nid) visEnd(a.nid); }
       continue;
     }
     if (a.vx || a.vz) { a.x += a.vx * dt; a.z += a.vz * dt; if (a.light) { a.light.x = a.x; a.light.z = a.z; } }
@@ -285,6 +292,7 @@ export function updateAreas(dt) {
       G.areas.splice(i, 1);
     }
   }
+  MIRROR.hero = false; MIRROR.skip = false;
 }
 export function clearProjs() {
   for (let i = G.projs.length - 1; i >= 0; i--) { const p = G.projs[i]; if (p.mesh) R.scene.remove(p.mesh); if (p.light) removeLight(p.light); if (p.av) { p.av.dispose(); p.av = null; } }
