@@ -1257,6 +1257,21 @@ const S = {
           D.kill(a);
           if (!a.dead) { const w = window.__sealLive ||= {}, k = a.kind + (a.hidden ? ':h' : '') + (a.airborne ? ':air' : '') + (a.invuln > 0 ? ':inv' : ''); w[k] = (w[k] || 0) + 1; }
         }
+        // the Black Breath, every frame (its warning is 1.2 s of play, a third of a second at this speed: looks from here
+        // missed it): she shields the lamp it turns on (twice, before any is lost), else steps away and lets it go out;
+        // each counted by what the Breath did once it landed
+        const B = window.__breath ||= { shielded: 0, lost: 0, tele: null, it: null, shield: false };
+        if (S && pl && S.tele && S.target && B.tele !== S.tele) {
+          const it = S.target, ho = S.ho, m = z.map;
+          B.tele = S.tele; B.it = it; B.shield = B.shielded < 2 && !B.lost;
+          let f = null;
+          if (B.shield) { const dl = Math.hypot(it.x - ho.x, it.z - ho.z) || 1; for (const k of [0.7, 0.4, 1.1, 0.15, 1.6]) { const x = it.x + (ho.x - it.x) / dl * k, zz = it.z + (ho.z - it.z) / dl * k; if (m.walkable(x, zz)) { f = { x, z: zz }; break; } } f ||= m.nearestFloor(it.x, it.z, 1.5); }
+          else f = m.nearestFloor(ho.x - (it.x - ho.x) * 0.9, ho.z - (it.z - ho.z) * 0.9, 3);
+          pl.x = f.x; pl.z = f.z; pl.act = null; pl.kx = pl.kz = 0;
+        } else if (B.tele && (!S || S.tele !== B.tele)) {
+          if (S) { if (B.shield && B.it.lit) B.shielded++; else if (!B.shield && !B.it.lit) B.lost++; }
+          B.tele = null;
+        }
         requestAnimationFrame(f);
       };
       requestAnimationFrame(f);
@@ -1275,31 +1290,26 @@ const S = {
       if (k === order[0]) await shot();
       // the run: she shields a lamp the Breath turns on (the first), lets the next go out and lights it again, kills what
       // comes, keeps the others lit
-      let shielded = 0, lost = 0, relit = 0, failsafe = false;
+      let relit = 0, failsafe = false, shot1 = false;
+      await pg.evaluate(() => { window.__breath = null; });
       for (const w0 = Date.now(); Date.now() - w0 < 20 * 60000;) {
-        const s = await pg.evaluate(([k, shielded, lost]) => {
-          const G = window.__G, z = G.zone, S = z.seal, pl = G.player;
+        const s = await pg.evaluate((k) => {
+          const G = window.__G, z = G.zone, S = z.seal, pl = G.player, B = window.__breath;
           if (!S || S.ho.id !== k) return { done: !!G.hero.flags['hole' + k] };
-          const ho = S.ho;
-          if (S.tele && S.target) {
-            const it = S.target;
-            // (between the hole and the lamp: the first point on that line she can stand on, from the lamp in)
-            if (shielded < 2 && !lost) { const dl = Math.hypot(it.x - ho.x, it.z - ho.z) || 1; let f = null; for (const k of [0.7, 0.4, 1.1, 0.15, 1.6]) { const x = it.x + (ho.x - it.x) / dl * k, zz = it.z + (ho.z - it.z) / dl * k; if (z.map.walkable(x, zz)) { f = { x, z: zz }; break; } } f ||= z.map.nearestFloor(it.x, it.z, 1.5); pl.x = f.x; pl.z = f.z; return { shield: it.i, ring: S.ring }; }
-            const f = z.map.nearestFloor(ho.x - (it.x - ho.x) * 0.9, ho.z - (it.z - ho.z) * 0.9, 3); pl.x = f.x; pl.z = f.z;
-            return { away: it.i, ring: S.ring };
-          }
+          // (the Breath is the page's own, above: no lamp lit again under its warning)
+          if (S.tele) return { tele: true, shielded: B?.shielded || 0 };
           const dark = z.act5.lamps.find((l) => l.hole === k && !l.lit);
           if (dark && !pl.act) { const f = z.map.nearestFloor(dark.x, dark.z + 1.2, 2); pl.x = f.x; pl.z = f.z; dark.use(); return { relight: dark.i, ring: S.ring, lost: S.lost }; }
-          return { ring: +S.ring.toFixed(2), lost: S.lost, t: +S.t.toFixed(1), held: !!S.held };
-        }, [k, shielded, lost]);
+          return { ring: +S.ring.toFixed(2), lost: S.lost, t: +S.t.toFixed(1), held: !!S.held, shielded: B?.shielded || 0 };
+        }, k);
         if (s.done) break;
-        if (s.shield != null) { await pg.waitForTimeout(1400); const ok = await pg.evaluate((i) => !!window.__G.zone.act5.lamps.find((l) => l.i === i && l.hole === window.__G.zone.seal?.ho.id)?.lit, s.shield); if (ok) shielded++; if (shielded === 1 && k === order[0]) await shot(); }
-        if (s.away != null) { await pg.waitForTimeout(1400); lost++; }
+        if (s.shielded && !shot1 && k === order[0]) { shot1 = true; await shot(); }
         if (s.relight != null) { await pg.waitForTimeout(1200); relit++; }
         if (s.held) failsafe = true;
         await pg.waitForTimeout(300);
       }
       const t1 = await pg.evaluate(() => window.__G.hero.stats.time);
+      const { shielded, lost } = await pg.evaluate(() => ({ shielded: window.__breath?.shielded || 0, lost: window.__breath?.lost || 0 }));
       // (the fail-safe seen as it is said, if it came and went between two looks)
       if (!failsafe && r.forced) failsafe = await pg.evaluate(() => (window.__says || []).includes('d.alk.s0'));
       Object.assign(r, { secs: +(t1 - t0).toFixed(1), shielded, lost, relit, failsafe, sealed: await pg.evaluate((k) => !!window.__G.hero.flags['hole' + k], k) });
