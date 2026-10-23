@@ -61,11 +61,12 @@ export function lampAt(x, z, pad = 0) {
   for (const it of G.zone?.interact || []) if (it.lit && it.lightR && (it.x - x) ** 2 + (it.z - z) ** 2 < (it.lightR + pad) ** 2) return it;
   return null;
 }
-// burning ground at (x, z), pad metres past its edge (in a boss's dark the hero's own fire lights only as it bursts, and
+// burning ground at (x, z), pad metres past its edge (in a boss's dark a hero's fire, hers or a co-op companion's drawn
+// here, team 'vis', lights only as it bursts, and
 // the fires the skills' variants leave, a.dim, never: Rain of Fire, Pale Cinder, Ember Dance)
 // warm: asked for the Cold (cold.js), which a fire that follows her about (a.nowarm: Ember Dance) never answers
 export function fireAt(x, z, pad = 0, warm = false) {
-  for (const a of G.areas) if (a.kind === 'fire' && a.t <= a.dur && !(warm && a.nowarm) && !(S.over != null && a.team === 'hero' && (a.t > FLARE || a.dim)) && (a.x - x) ** 2 + (a.z - z) ** 2 < (a.r + pad) ** 2) return a;
+  for (const a of G.areas) if (a.kind === 'fire' && a.t <= a.dur && !(warm && a.nowarm) && !(S.over != null && (a.team === 'hero' || a.team === 'vis') && (a.t > FLARE || a.dim)) && (a.x - x) ** 2 + (a.z - z) ** 2 < (a.r + pad) ** 2) return a;
   return null;
 }
 // lamp light (Act V): what holds the ice, keeps the Sunken from waking with the tide, and keeps the Icemaw, the Hands and
