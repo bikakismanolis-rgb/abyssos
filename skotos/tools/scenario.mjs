@@ -2,6 +2,7 @@
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+import { watchFatal, fatalAll } from './fatal.mjs';
 const [, , name = 'combat', out = '/tmp', W = '1280', H = '720'] = process.argv;
 const logs = [];
 // Act IV: a dialog advances on Enter (the key finishes the line, then moves on), whatever the frame rate; what is said is
@@ -1874,6 +1875,7 @@ const sc = S[name];
 // (a scenario run in a child process of its own, as the soaks: this runner's browser is never opened beside it)
 if (sc.child) { let res; try { res = await sc.child(out); } catch (e) { res = { error: e.message }; } console.log(name, JSON.stringify(res)); process.exit(0); }
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const FATAL = watchFatal(browser);
 const page = await browser.newPage({ viewport: { width: +W, height: +H } });
 page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') { const t = m.text(); if (!t.includes('ERR_CERT')) logs.push(m.type() + ': ' + t); } });
 page.on('pageerror', (e) => logs.push('pageerror: ' + e.message + ' ' + (e.stack || '').split('\n').slice(0, 3).join(' | ')));
@@ -1891,6 +1893,11 @@ const shot = async (pg = page) => { await pg.evaluate(() => new Promise((ok) => 
 shot.dir = out;
 let res;
 try { res = await sc.run(page, shot); } catch (e) { logs.push('scenario error: ' + e.message); }
+// (a runtime error on the game's #fatal box fails the scenario, whatever it checked)
+const fatal = await fatalAll(browser, FATAL);
+if (fatal.length) res = { ...(res && typeof res === 'object' ? res : { res }), pass: false, fatal: fatal.slice(0, 10) };
 console.log(name, JSON.stringify(res));
+if (fatal.length) console.log('FATAL ' + fatal.slice(0, 10).join('\nFATAL '));
 if (logs.length) console.log(logs.slice(0, 30).join('\n'));
 await browser.close();
+if (fatal.length) process.exitCode = 1;
