@@ -42,6 +42,59 @@ hidden), phone q1: the Dalaro at high, mid and low water, the closed step at 0.9
 water, three cine cameras (pitch 0.3/0.95, 0.2/1.25, 0.3/1.0). Differences are at the level of the same tree against
 itself (the sea-light's beam turns by real time), nothing in the water's line, colour or glints.
 
+## 2. The Act V checkpoint after Continue (cp5)
+
+**Cause: the test, three ways; the game was right.** How the game keeps it: Act IV keeps its lamp in `flags.lastLamp`
+and sets `z.checkpoint` again when the zone is built; Act V keeps `flags.cp5[zone]` (checkpoint5, world.js) and
+act5Enter calls checkpoint5 on every entry, so a Continue (which builds the zone again) and a respawn both restore it.
+That holds on every run below. What failed was cp5 itself:
+1. To log when `towerWake` and `cp5` were set, it redefined both flags as **non-enumerable** accessors. JSON.stringify
+   skips those, so the save written before the Continue lost the Tower's waking and the checkpoint. The game then woke the
+   Tower again 2.5 s after the hero came back to the coast (story.js enter5: three lights, three memories, no towerWake),
+   which set the rock checkpoint again: the test passed when that came before its death and found her at the waypoint
+   when the death came first. The watch is now installed after `A5.state` (which deletes every flag) and is enumerable.
+2. `die()` turned immortality off to kill her and never on again. After the respawn a coast monster could kill her a
+   second time; that death's panel, opening 1.8 s later, paused the game while the test waited (600 s) for the Tower to
+   wake (seen twice in a row; integrate.md's "Tower awake wait ran out" was probably this). Immortal again at the respawn.
+3. It measured where she woke 0.8 s after the fade lifted; once a Sunken had hooked her 4 m by then (shot: "Hooked!").
+   It now reads her position the frame the fade lifts.
+
+**Verified:** cp5 x6 after fixes 1-2 (5 pass, the sixth is fix 3's case), then x4 more with all three (see the table at
+the end).
+
+## 3. Flaky scenarios
+
+### holes (the test was wrong)
+- The Black Breath's warning lasts 1.2 s of play, about 0.3 s of real time at sim 4; the test looked every 300 ms plus
+  an evaluate round trip, so it often never saw a Breath to shield (the old 1-in-3). Now the page meets it every frame
+  (the same rAF hook that already cut down what climbs out of the hole) and counts each by what it did when it landed.
+- With the shields landing, runs failed on time instead (93-257 s against the 90 s ceiling): a lamp the Ice Singer or a
+  Skua put out was relit from Node after a look and a fixed 1.2 s wait (game seconds with the ring stalled), and the
+  first lighting's `A5.use` waited up to 15 s real for a touch that a Breath step had broken (a probe found 147 s of seal
+  time gone before the run loop began). The page now relights a seal's dark lamps every frame from its first lamp.
+- Each seal then takes 12-16 s and meets about one Breath, so the per-hole plan ("shield twice, then let one go") never
+  let one go and "some lamp relit" failed. The plan now runs over the three holes: shield the first Breath, let the
+  second put its lamp out and relight it, shield the rest.
+- 10 of 10 pass (seals 11.6-16 s; one shield, one lamp lost and relit; the hole2 checkpoint 0 m after a Continue).
+
+### tower (the bot was wrong; the game's fail-safe is by design)
+The ice phase holds 30 s (`lockT`), then lets go whether or not the Tower was overturned. An Overturn needs a Shell Rush
+(3.5-16 m, every 7 s) to cross webbed thin ice (stage 2: two Rushes, or one Hammer Claw), or any thin ice from the
+fourth Rush on. A probe logging the bot every game second showed the failing runs spend the phase on land or thick ice
+3-5 m from the Tower, dodging its sweeps (every 2 s within 7.2 m); the Rushes then never cross thin ice (one run: 40
+Rushes, 4 hints, no Overturn). The bot (BOT5, test code) now:
+- baits on thin, unwebbed ice 8-20 m from the Tower, scored for its distance from the thick ice (the Tower keeps to the
+  thick in this phase, so it cannot close to sweep range), a bonus past the Bell's 9.5 m, a cost past the Rush's 14 m
+  and for how far she must walk; re-picked when the Tower comes within 7.5 m or goes past 16;
+- where a Hammer Claw has webbed the ice 3-12 m off, stands 3 m beyond that patch (at least 7.5 m from the Tower), so the
+  next Rush runs through it;
+- walks to the bait by the map's own way (`GridMap.stepToward`), not in a straight line;
+- under a ringed telegraph with a calm (the Bell: ring 9 m, calm 4.5 m, 1.3 s), steps out of the ring when that is
+  nearer than the calm and the way out is walkable (shared with the Skotos bot).
+The test's Bell check read her distance at its next 500 ms poll (one "Bell rung" at 15.9 m); the bot now records it the
+frame the Bell rings, and the check is that the Bell never caught her (in its calm or out of its ring each time) rather
+than "at least one Bell taken in the calm", which the far bait rarely sets up.
+
 ## Progress
 - 14:40 started; npm install, graphify; private no-HMR dev server on :5401.
 - 14:55 `tools/fatal.mjs` (the shared #fatal check) wired into scenario.mjs, soak5.mjs and coop.mjs; checked with a
