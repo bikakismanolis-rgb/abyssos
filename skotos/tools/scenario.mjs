@@ -1260,7 +1260,7 @@ const S = {
         // the Black Breath, every frame (its warning is 1.2 s of play, a third of a second at this speed: looks from here
         // missed it): she shields the lamp it turns on (twice, before any is lost), else steps away and lets it go out;
         // each counted by what the Breath did once it landed
-        const B = window.__breath ||= { shielded: 0, lost: 0, tele: null, it: null, shield: false };
+        const B = window.__breath ||= { shielded: 0, lost: 0, relit: 0, tele: null, it: null, shield: false };
         if (S && pl && S.tele && S.target && B.tele !== S.tele) {
           const it = S.target, ho = S.ho, m = z.map;
           B.tele = S.tele; B.it = it; B.shield = B.shielded < 2 && !B.lost;
@@ -1271,6 +1271,11 @@ const S = {
         } else if (B.tele && (!S || S.tele !== B.tele)) {
           if (S) { if (B.shield && B.it.lit) B.shielded++; else if (!B.shield && !B.it.lit) B.lost++; }
           B.tele = null;
+        } else if (window.__relight && S && pl && !S.tele && !pl.act) {
+          // a lamp out (the Breath, the Ice Singer, a Skua) lit again at once, as the Breath is met: from the Node side
+          // each took a look and a wait, game seconds at this speed with the ring stalled
+          const dark = z.act5.lamps.find((l) => l.hole === S.ho.id && !l.lit);
+          if (dark) { const q = z.map.nearestFloor(dark.x, dark.z + 1.2, 2); pl.x = q.x; pl.z = q.z; pl.kx = pl.kz = 0; dark.use(); B.relit++; }
         }
         requestAnimationFrame(f);
       };
@@ -1290,26 +1295,22 @@ const S = {
       if (k === order[0]) await shot();
       // the run: she shields a lamp the Breath turns on (the first), lets the next go out and lights it again, kills what
       // comes, keeps the others lit
-      let relit = 0, failsafe = false, shot1 = false;
-      await pg.evaluate(() => { window.__breath = null; });
+      let failsafe = false, shot1 = false;
+      await pg.evaluate(() => { window.__breath = null; window.__relight = true; });
       for (const w0 = Date.now(); Date.now() - w0 < 20 * 60000;) {
         const s = await pg.evaluate((k) => {
           const G = window.__G, z = G.zone, S = z.seal, pl = G.player, B = window.__breath;
           if (!S || S.ho.id !== k) return { done: !!G.hero.flags['hole' + k] };
-          // (the Breath is the page's own, above: no lamp lit again under its warning)
-          if (S.tele) return { tele: true, shielded: B?.shielded || 0 };
-          const dark = z.act5.lamps.find((l) => l.hole === k && !l.lit);
-          if (dark && !pl.act) { const f = z.map.nearestFloor(dark.x, dark.z + 1.2, 2); pl.x = f.x; pl.z = f.z; dark.use(); return { relight: dark.i, ring: S.ring, lost: S.lost }; }
+          // (the Breath and the relighting are the page's own, above)
           return { ring: +S.ring.toFixed(2), lost: S.lost, t: +S.t.toFixed(1), held: !!S.held, shielded: B?.shielded || 0 };
         }, k);
         if (s.done) break;
         if (s.shielded && !shot1 && k === order[0]) { shot1 = true; await shot(); }
-        if (s.relight != null) { await pg.waitForTimeout(1200); relit++; }
         if (s.held) failsafe = true;
         await pg.waitForTimeout(300);
       }
-      const t1 = await pg.evaluate(() => window.__G.hero.stats.time);
-      const { shielded, lost } = await pg.evaluate(() => ({ shielded: window.__breath?.shielded || 0, lost: window.__breath?.lost || 0 }));
+      const t1 = await pg.evaluate(() => { window.__relight = false; return window.__G.hero.stats.time; });
+      const { shielded, lost, relit } = await pg.evaluate(() => ({ shielded: window.__breath?.shielded || 0, lost: window.__breath?.lost || 0, relit: window.__breath?.relit || 0 }));
       // (the fail-safe seen as it is said, if it came and went between two looks)
       if (!failsafe && r.forced) failsafe = await pg.evaluate(() => (window.__says || []).includes('d.alk.s0'));
       Object.assign(r, { secs: +(t1 - t0).toFixed(1), shielded, lost, relit, failsafe, sealed: await pg.evaluate((k) => !!window.__G.hero.flags['hole' + k], k) });
@@ -1561,11 +1562,12 @@ const S = {
       await A5.until(pg, () => window.__G.panel === 'dead', 30000);
       // (and immortal again as soon as she is up: left mortal, a monster on the coast could kill her a second time, and
       // that death's panel, opening a moment later, held the game while the test waited for the Tower to wake)
+      // (where she wakes is read as the fade lifts: a Sunken's hook could pull her metres in the moment after)
       await pg.evaluate(() => { window.__D.closePanel(); window.__D.emit('respawn', false); window.__immortal = true; });
-      await pg.waitForFunction(() => !window.__G.player.dead && !document.getElementById('fade').classList.contains('on'), null, { timeout: 240000 });
+      await pg.waitForFunction(() => { const ok = !window.__G.player.dead && !document.getElementById('fade').classList.contains('on'); if (ok) window.__woke = { x: window.__G.player.x, z: window.__G.player.z }; return ok; }, null, { timeout: 240000 });
       await pg.waitForTimeout(800);
     };
-    const where = (k) => pg.evaluate((k) => { const G = window.__G, z = G.zone, S = z.L.spots, p = k === 'rock' ? S.npcs.rock : /^hole/.test(k) ? S.holes.find((h) => 'hole' + h.id === k)?.alk : z.act5.lights.find((l) => l.id === k), pl = G.player; return { zone: z.id, key: G.hero.flags.cp5?.[z.id], cp: !!z.checkpoint, d: p ? +Math.hypot(pl.x - p.x, pl.z - p.z).toFixed(1) : null }; }, k);
+    const where = (k) => pg.evaluate((k) => { const G = window.__G, z = G.zone, S = z.L.spots, p = k === 'rock' ? S.npcs.rock : /^hole/.test(k) ? S.holes.find((h) => 'hole' + h.id === k)?.alk : z.act5.lights.find((l) => l.id === k), pl = window.__woke || G.player; window.__woke = null; return { zone: z.id, key: G.hero.flags.cp5?.[z.id], cp: !!z.checkpoint, d: p ? +Math.hypot(pl.x - p.x, pl.z - p.z).toFixed(1) : null }; }, k);
     // a sea-light lit (its memory seen), then a Continue: the coast built again, and a death there
     await A5.state(pg, 'rite', { quest: 26, zone: 'coast', at: 'waypoint' });
     await A5.use(pg, "z.act5.lights.find((l) => l.id === 'grey')");
