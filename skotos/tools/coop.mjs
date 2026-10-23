@@ -1,7 +1,7 @@
 // Co-op scenarios: node tools/coop.mjs <name> <outdir>   (BASE=http://localhost:<port>/, a private no-HMR server)
 // One headless browser, two to four pages in one context (LocalTransport: BroadcastChannel), each with its own save
 // (?slot=). Every page is ?net=local&norender: the game runs, nothing is drawn (but for the screenshots).
-// Names: join, pack, boss1..boss5, loot, revive, churn, hostleave, cheat, world, act5, scaling, four, ui
+// Names: join, pack, boss1..boss5, loot, revive, churn, hostleave, cheat, world, act5, scaling, four, ui, ux, access
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 const require = createRequire(import.meta.url);
@@ -15,49 +15,72 @@ const ok = (c, m, v) => { results.push({ ok: !!c, m, v }); console.log((c ? 'ok 
 
 const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'] });
 // (the phone: 844 x 390 landscape; the ui scenario as a touch phone)
-const ctx = await browser.newContext(name === 'ui' ? { viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : { viewport: { width: 844, height: 390 } });
+const ctx = await browser.newContext(name === 'ui' || name === 'ux' ? { viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : { viewport: { width: 844, height: 390 } });
 const pages = [];
-// the room scenario: every page's window.claude.use('room') is a faithful fake of the artifact's room (fakeroom.mjs,
-// in this process: its budget, sizes, coalescing and loss), reached through a binding; the game picks RoomTransport
+// the room and access scenarios: every page's window.claude.use('room') is a faithful fake of the artifact's room
+// (fakeroom.mjs, in this process: its budget, sizes, coalescing and loss), reached through a binding; the game picks
+// RoomTransport. A page's address gives its part: by=<its user id>, acc=view a Viewer or Commenter (admitted, its sends
+// refused), ng=1 a view the room cannot connect (not_granted); window.__roomEnd(code) ends the room for a page (revoked),
+// window.__roomViewer(v) makes its sends refused from then on. use('user'): profiles 'Name-<id>', canEdit() false,
+// can('data.write') true but for a Viewer
 let HUB = null;
-if (name === 'room') {
+if (name === 'room' || name === 'access') {
   const { Hub } = await import('./net/fakeroom.mjs');
-  HUB = new Hub({ loss: +(process.env.LOSS || 0.05), lag: 30, topics: { s: 'interact', w: 'interact', i: 'interact', f: 'interact', c: 'interact' } });
+  HUB = new Hub({ loss: name === 'room' ? +(process.env.LOSS || 0.05) : 0, lag: 30, topics: { s: 'interact', w: 'interact', i: 'interact', f: 'interact', c: 'interact' } });
   const state = new Map();
   const plain = (ch) => JSON.parse(JSON.stringify({ peers: ch.peers, joined: ch.joined, left: ch.left, updated: ch.updated }));
-  await ctx.exposeBinding('__roomCall', async ({ page }, scope, method, args) => {
+  const stOf = (page) => {
     let st = state.get(page);
-    if (!st) { st = { hp: HUB.page({ by: 'u' + (state.size + 1) }), rooms: new Map() }; state.set(page, st); }
+    if (!st) { const q = new URL(page.url()).searchParams; st = { hp: HUB.page({ by: q.get('by') || 'u' + (state.size + 1), viewer: q.get('acc') === 'view' }), rooms: new Map() }; state.set(page, st); }
+    return st;
+  };
+  await ctx.exposeBinding('__roomEnd', ({ page }, code) => { stOf(page).hp.end(code); return 1; });
+  await ctx.exposeBinding('__roomViewer', ({ page }, v) => { stOf(page).hp.viewer = !!v; return 1; });
+  await ctx.exposeBinding('__roomsOf', ({ page }) => { const pid = stOf(page).hp.pid; return [...HUB.rooms.values()].filter((R) => R.name && R.members.has(pid)).map((R) => R.name); });
+  await ctx.exposeBinding('__roomCall', async ({ page }, scope, method, args) => {
+    const st = stOf(page);
     const api = scope === '' ? st.hp.room : st.rooms.get(scope);
     if (!api) return { err: 'invalid_argument' };
     const send = (fn, arg) => page.evaluate(fn, arg).catch(() => {});
+    const err = (e) => send(([s, c]) => window.__roomIn?.[s]?.err(c), [scope, e.code]);
     try {
-      if (method === 'init') { api.onPeers((ch) => send(([s, c]) => window.__roomIn?.[s]?.peers(c), [scope, plain(ch)])); api.onConnection((v) => send(([s, v]) => window.__roomIn?.[s]?.conn(v), [scope, v])); return { ok: 1 }; }
-      if (method === 'on') { api.on(args[0], (m) => send(([s, m]) => window.__roomIn?.[s]?.msg(m), [scope, JSON.parse(JSON.stringify(m))])); return { ok: 1 }; }
+      if (method === 'init') { api.onPeers((ch) => send(([s, c]) => window.__roomIn?.[s]?.peers(c), [scope, plain(ch)]), err); api.onConnection((v) => send(([s, v]) => window.__roomIn?.[s]?.conn(v), [scope, v]), err); return { ok: 1 }; }
+      if (method === 'on') { api.on(args[0], (m) => send(([s, m]) => window.__roomIn?.[s]?.msg(m), [scope, JSON.parse(JSON.stringify(m))]), err); return { ok: 1 }; }
       if (method === 'join') { const r = await st.hp.room.join(args[0]); st.rooms.set(args[0], r); return { ok: 1 }; }
       if (method === 'leave') { await api.leave(); st.rooms.delete(scope); return { ok: 1 }; }
       await api[method](...args); return { ok: 1 };
     } catch (e) { return { err: e.code || 'upstream_error' }; }
   });
   await ctx.addInitScript(() => {
+    const q = new URLSearchParams(location.search), ng = q.get('ng') === '1', viewer = q.get('acc') === 'view';
+    const user = ng ? null : Object.freeze({ profiles: async (ids) => Object.fromEntries([].concat(ids).map((id) => [id, { id, name: 'Name-' + id, avatarUrl: '', color: '#888', email: null, isMe: false, guest: false }])), canEdit: async () => false, can: async (n) => (n === 'data.write' ? !viewer : false), id: async () => q.get('by') });
+    if (ng) {
+      // (a view the platform cannot connect: every call not_granted, every listener's onError once)
+      const no = () => Promise.reject(Object.assign(new Error('not_granted'), { code: 'not_granted' }));
+      const lst = (f, e) => { setTimeout(() => e?.({ code: 'not_granted', message: 'not_granted' }), 0); return () => {}; };
+      const R = Object.freeze({ name: '', emit: no, presence: no, join: no, peers: () => Object.freeze([]), connected: () => false, on: lst, onPeers: lst, onConnection: (f, e) => { setTimeout(() => f(false), 0); return lst(f, e); }, leave: () => Promise.resolve() });
+      window.claude = Object.freeze({ use: async (n) => (n === 'room' ? R : n === 'user' ? user : null) });
+      return;
+    }
     const make = (scope) => {
-      const L = {}, P = [], C = []; let peers = Object.freeze([]), conn = false;
-      (window.__roomIn ||= {})[scope] = { msg(m) { for (const f of (L[m.topic] || []).slice()) f(m); }, peers(ch) { peers = ch.peers; for (const f of P.slice()) f(ch); }, conn(v) { conn = v; for (const f of C.slice()) f(v); } };
+      const L = {}, P = [], C = [], E = []; let peers = Object.freeze([]), conn = false;
+      (window.__roomIn ||= {})[scope] = { msg(m) { for (const f of (L[m.topic] || []).slice()) f(m); }, peers(ch) { peers = ch.peers; for (const f of P.slice()) f(ch); }, conn(v) { conn = v; for (const f of C.slice()) f(v); },
+        err(code) { conn = false; peers = Object.freeze(peers.filter((p) => p.isMe)); for (const f of E.splice(0)) f({ code, message: code }); } };
       const call = (m, a) => window.__roomCall(scope, m, a).then((r) => { if (r?.err) throw Object.assign(new Error(r.err), { code: r.err }); });
       call('init', []);
       const subbed = new Set();
       return Object.freeze({
         name: scope, emit: (t, d) => call('emit', [t, d]), presence: (p) => call('presence', [p]), peers: () => peers, connected: () => conn,
-        on(t, f) { (L[t] ||= []).push(f); if (!subbed.has(t)) { subbed.add(t); call('on', [t]); } return () => { const i = L[t].indexOf(f); if (i >= 0) L[t].splice(i, 1); }; },
-        onPeers(f) { P.push(f); return () => { const i = P.indexOf(f); if (i >= 0) P.splice(i, 1); }; },
-        onConnection(f) { C.push(f); setTimeout(() => f(conn), 0); return () => { const i = C.indexOf(f); if (i >= 0) C.splice(i, 1); }; },
+        on(t, f, e) { if (e) E.push(e); (L[t] ||= []).push(f); if (!subbed.has(t)) { subbed.add(t); call('on', [t]); } return () => { const i = L[t].indexOf(f); if (i >= 0) L[t].splice(i, 1); }; },
+        onPeers(f, e) { if (e) E.push(e); P.push(f); return () => { const i = P.indexOf(f); if (i >= 0) P.splice(i, 1); }; },
+        onConnection(f, e) { if (e) E.push(e); C.push(f); setTimeout(() => f(conn), 0); return () => { const i = C.indexOf(f); if (i >= 0) C.splice(i, 1); }; },
         join: (n) => call('join', [n]).then(() => make(n)), leave: () => call('leave', [])
       });
     };
-    window.claude = Object.freeze({ use: async (n) => (n === 'room' ? make('') : null) });
+    window.claude = Object.freeze({ use: async (n) => (n === 'room' ? make('') : n === 'user' ? user : null) });
   });
 }
-const NETQ = name === 'room' ? '' : 'net=local&';
+const NETQ = name === 'room' || name === 'access' ? '' : 'net=local&';
 async function open(peer, q) {
   const pg = await ctx.newPage();
   pg.on('pageerror', (e) => console.log('[' + peer + '] pageerror', e.message.slice(0, 300)));
@@ -726,6 +749,168 @@ const SC = {
 
   // the game over RoomTransport against the faithful fake room (its budget, 4 KiB, coalesced presence, 5% loss): join,
   // a fight, every page under the room's budget, nothing the room refuses
+  // the player's side (LocalTransport, a touch phone): a mistyped code leaves the hero where it was; a guest waiting for a
+  // host that has not started keeps its own world, story and Shadow Gate, and the party frame says it waits; a listing
+  // of four is refused at once; the open panel is not drawn again on every presence; a double tap on Host opens one
+  // room; three names over three heroes side by side; the kill counter and the revive ring clear of the frames and the
+  // Bellows' ring; the downed card under the panels, gone when the game ends (a guest up at home, a host by the death
+  // panel); the Greek downed words
+  async ux() {
+    const watch = (pg) => ev(pg, async () => {
+      const B = await import('/src/ui/bus.js'), I = await import('/src/i18n/i18n.js'); window.__t = I.t; window.__toasts = []; B.on('toast', (m) => window.__toasts.push(m));
+      // (kept alive unless a test means it to fall)
+      setInterval(() => { const p = window.__G.player; if (p && !p.dead && !window.__mortal) p.hp = p.hpMax; }, 50);
+    });
+    const toasted = (pg, k) => ev(pg, (k) => window.__toasts.includes(window.__t(k)), k);
+    // a mistyped code, from its own Shadow Gate
+    const g = await open('g1', 'auto=town&lvl=12&cls=ranger&quest=10&diff=1&render=1'); await watch(g);
+    await ev(g, () => window.__D.emit('startGate', 2));
+    await until(g, () => window.__G.zone.id === 'gate' && window.__G.mode === 'play', null, 60000, 'own gate');
+    await sleep(1200);
+    const at = await ev(g, () => { const G = window.__G; G.gate.progress = 0.6; window.__z0 = G.zone; window.__g0 = G.gate; return { x: G.player.x, z: G.player.z }; });
+    await ev(g, () => window.__NET.joinGame('zzzz'));
+    await until(g, () => !window.__NET.S.role, null, 16000, 'no host');
+    const af = await ev(g, () => { const G = window.__G; return { zone: G.zone === window.__z0, gate: G.gate === window.__g0 && G.gate.progress, x: G.player.x, z: G.player.z, mode: window.__NET.NET.mode }; });
+    ok(af.zone && af.gate === 0.6 && Math.hypot(af.x - at.x, af.z - at.z) < 3 && !af.mode, 'a mistyped code: the hero is still in its own Shadow Gate, its run as it was', af);
+    ok(await toasted(g, 'coop.noHost') && !(await toasted(g, 'coop.youLeft')), 'and is told no host has that code, not that it is back');
+    // waiting for a host that has not started
+    const host = await open('host', 'auto=town&lvl=14&quest=2&diff=0&render=1'); await watch(host);
+    const code = await ev(host, () => { window.__G.gate = { tier: 5, progress: 0, guardian: null, start: 0, done: false }; return window.__NET.hostGame(); });
+    await ev(g, (c) => window.__NET.joinGame(c), code);
+    await until(g, () => !!window.__NET.S.world && !!window.__NET.S.hostPeer, null, 15000, 'world');
+    await sleep(1500);
+    const w = await ev(g, () => { const G = window.__G, pe = document.getElementById('party'); return { world: !!window.__NET.S.world, view: !!G.hero.__real, quest: G.hero.quest, diff: G.hero.diff, gate: G.gate === window.__g0, zone: G.zone === window.__z0, mode: window.__NET.NET.mode, frame: !pe.hidden && pe.querySelector('.pw')?.textContent === window.__t('coop.waitStart') }; });
+    ok(w.world && !w.view && w.quest === 10 && w.diff === 1 && w.gate && w.zone && !w.mode, 'the host\'s world came but a guest waiting plays its own: its quest, difficulty and Shadow Gate', w);
+    ok(w.frame, 'its party frame shows, with the code and that it waits for the host to start');
+    await ev(g, () => { const h = window.__G.hero; h.quest = 11; h.flags.uxWait = true; });
+    await ev(g, () => window.__D.openPanel('coop')); await sleep(400);
+    await ev(g, () => document.querySelector('[data-a="cleave"]').click()); await sleep(800);
+    const lw = await ev(g, () => { const G = window.__G; return { role: window.__NET.S.role, zone: G.zone === window.__z0, gate: G.gate === window.__g0, quest: G.hero.quest, flag: !!G.hero.flags.uxWait, saved: JSON.parse(localStorage.getItem(Object.keys(localStorage).find((k) => /skotos/i.test(k) && /g1/.test(k)) || 'null') || 'null') }; });
+    ok(!lw.role && lw.zone && lw.gate && lw.quest === 11 && lw.flag, 'leaving while waiting: still in its gate, what its story did meanwhile kept', { ...lw, saved: undefined });
+    ok(await toasted(g, 'coop.leftWait') && !(await toasted(g, 'coop.youLeft')), 'told it left the party, not that it is back');
+    // a game its listing shows full: refused at once, its button disabled
+    const full = await ev(g, async () => { const N = window.__NET; N.S.hosts = [{ c: 'fu11', cls: 'warden', l: 5, z: 'town', n: 4, d: 0, v: 2, on: 1, peer: 'pz', by: null }]; window.__D.openPanel('coop'); const r = await N.joinGame('fu11'); return { r, err: N.S.err, role: N.S.role, disabled: document.querySelector('[data-a^="cjoin:fu11:"]')?.disabled }; });
+    ok(full.r === false && full.err === 'full' && !full.role && full.disabled, 'a listing of four: its button disabled, joining it refused at once (full)', full);
+    await ev(g, () => window.__D.closePanel());
+    // the open panel with a guest walking: the same body, its scroll kept, the meter set in place
+    await ev(host, () => window.__NET.startGame());
+    await ev(g, (c) => window.__NET.joinGame(c), code);
+    ok(await until(g, () => window.__NET.S.zoneKey && window.__NET.S.zoneKey === window.__G.zone.netKey, null, 60000, 'g in'), 'the guest came into the host\'s town');
+    const hp = await hostPos(host); await place(g, hp.x + 2, hp.z + 1);
+    await ev(g, () => { let k = 0; window.__walk = setInterval(() => { const p = window.__G.player, f = window.__G.zone.map.nearestFloor(p.x + Math.sin(k / 6) * 0.3, p.z + Math.cos(k / 6) * 0.3); p.x = f.x; p.z = f.z; k++; }, 50); });
+    await ev(host, () => window.__D.openPanel('coop')); await sleep(600);
+    const p0 = await ev(host, () => { const b = document.querySelector('#panel .pn-b'); window.__pb = b; b.scrollTop = 40; window.__renders = 0; new MutationObserver(() => window.__renders++).observe(document.getElementById('panel'), { childList: true }); return { top: b.scrollTop, h: b.scrollHeight, c: b.clientHeight, meter: document.querySelector('#panel .coop-meter')?.textContent }; });
+    await sleep(3500);
+    const p1 = await ev(host, () => { const b = document.querySelector('#panel .pn-b'); return { same: b === window.__pb, top: b.scrollTop, renders: window.__renders, meter: document.querySelector('#panel .coop-meter')?.textContent }; });
+    ok(p1.same && p1.renders === 0 && p1.top === p0.top, 'the host\'s open panel, the guest walking: not drawn again, its scroll kept', { p0, p1 });
+    ok(!!p1.meter && p1.meter !== p0.meter, 'its meter set in place', [p0.meter, p1.meter]);
+    await ev(g, () => clearInterval(window.__walk));
+    await ev(host, () => window.__D.closePanel());
+    // three guests side by side, on one screen line: three names, none over another
+    const g2 = await open('g2', 'auto=town&lvl=12&cls=mage&render=1'); await watch(g2);
+    const g3 = await open('g3', 'auto=town&lvl=12&cls=warden&render=1'); await watch(g3);
+    for (const pg of [g2, g3]) await ev(pg, (c) => window.__NET.joinGame(c), code);
+    for (const pg of [g2, g3]) await until(pg, () => window.__NET.S.zoneKey && window.__NET.S.zoneKey === window.__G.zone.netKey, null, 60000, 'in');
+    await until(host, () => window.__NET.NET.n === 4, null, 20000, 'n 4');
+    for (const [i, pg] of [g, g2, g3].entries()) await place(pg, hp.x - 1 + i, hp.z + 2);
+    await place(host, hp.x, hp.z - 2);
+    await sleep(2000);
+    const pl = await ev(host, () => [...document.querySelectorAll('#plates .plate')].filter((e) => e.style.display !== 'none').map((e) => { const r = e.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom, getComputedStyle(e).backgroundColor]; }));
+    const over = pl.some((a, i) => pl.some((b, j) => j > i && a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]));
+    ok(pl.length === 3 && !over, 'three plates over three heroes side by side, none over another', pl.map((r) => r.slice(0, 4).map(Math.round)));
+    ok(pl.every((r) => r[4] !== 'rgba(0, 0, 0, 0)'), 'each on its own background', pl[0]?.[4]);
+    await shot(host, 'ux-plates.png');
+    // the kill counter right of the party frames; the revive ring below a Bellows' ring
+    const hud = await ev(host, () => {
+      const m = document.getElementById('massacre'), pe = document.getElementById('party'), ring = document.getElementById('ring'), rv = document.getElementById('revive');
+      const pr = pe.getBoundingClientRect(), ml = m.getBoundingClientRect().left;
+      ring.hidden = false; rv.hidden = false; const a = ring.getBoundingClientRect(), b = rv.getBoundingClientRect(); ring.hidden = true; rv.hidden = true;
+      return { partyRight: pr.right, massLeft: ml, ringBottom: a.bottom, reviveTop: b.top };
+    });
+    ok(hud.massLeft >= hud.partyRight, 'the kill counter stands right of the party frames', hud);
+    ok(hud.reviveTop >= hud.ringBottom - 2, 'the revive ring stands below a Bellows\' ring', hud);
+    // downed: the card under an open panel; the words neutral
+    await ev(g2, async () => { window.__mortal = true; const C = await import('/src/game/combat.js'), G = window.__G; C.damage({ team: 'foe', level: 10, x: G.player.x, z: G.player.z, def: {}, affixes: [] }, G.player, 1e7, { pure: true }); });
+    await until(g2, () => !!window.__NET.S.downed, null, 5000, 'downed');
+    await sleep(800);
+    const dn = await ev(g2, () => ({ h: document.querySelector('#downed .h')?.textContent, shown: !document.getElementById('downed').hidden, word: window.__t('coop.downedTag') }));
+    ok(dn.shown && dn.h === 'ΕΚΤΟΣ ΜΑΧΗΣ' && dn.word === 'εκτός μάχης', 'the downed card and tag in neutral Greek', dn);
+    await until(host, () => [...document.querySelectorAll('#plates .plate')].some((e) => e.textContent.includes('εκτός μάχης')), null, 5000, 'tag');
+    ok(await ev(host, () => [...document.querySelectorAll('#plates .plate')].some((e) => e.textContent.includes('εκτός μάχης'))), 'the host\'s plate over it says so too');
+    const under = await ev(g2, () => { window.__D.openPanel('inventory'); const r = document.getElementById('downed').getBoundingClientRect(); const pts = [[r.left + 8, r.top + 8], [(r.left + r.right) / 2, (r.top + r.bottom) / 2], [r.right - 8, r.bottom - 8]]; return pts.map(([x, y]) => document.elementFromPoint(x, y)?.closest('#downed') ? 'card' : 'panel'); });
+    ok(under.every((x) => x === 'panel'), 'with a panel open, the card is under it: its taps are the panel\'s', under);
+    await ev(g2, () => window.__D.closePanel());
+    // the host down too (a guest by it), then the host closes the game: the guest up at home, the host by the death panel
+    await ev(host, async () => { window.__mortal = true; const C = await import('/src/game/combat.js'), G = window.__G; C.damage({ team: 'foe', level: 10, x: G.player.x, z: G.player.z, def: {}, affixes: [] }, G.player, 1e7, { pure: true }); });
+    await until(host, () => !!window.__NET.S.downed, null, 5000, 'host downed');
+    await ev(host, () => window.__NET.leaveGame(null));
+    await until(g2, () => !window.__NET.S.role && window.__G.zone.id === 'town', null, 15000, 'g2 home');
+    await sleep(800);
+    const ge = await ev(g2, () => ({ dead: window.__G.player.dead, card: !document.getElementById('downed').hidden, role: window.__NET.S.role }));
+    ok(!ge.dead && !ge.card && !ge.role, 'the game closed: the downed guest is up at home, no card left', ge);
+    const he = await ev(host, () => ({ dead: window.__G.player.dead, panel: window.__G.panel, card: !document.getElementById('downed').hidden, ring: !document.getElementById('revive').hidden }));
+    ok(he.dead && he.panel === 'dead' && !he.card && !he.ring, 'the downed host alone: the death panel, no card', he);
+    await ev(host, () => { document.querySelector('#panel [data-a="respawn"]')?.click(); });
+    ok(await until(host, () => !window.__G.player.dead && window.__G.mode === 'play', null, 15000, 'host up'), 'and it rises from it');
+    // a double tap on Host: one room, the button disabled while it connects
+    await ev(host, () => window.__D.openPanel('coop')); await sleep(300);
+    const dt = await ev(host, async () => { const N = window.__NET; const n0 = N.S.T.rooms.size; document.querySelector('[data-a="chost"]').click(); const dis = document.querySelector('[data-a="chost"]')?.disabled; document.querySelector('[data-a="chost"]')?.click(); const again = await N.hostGame(); await new Promise((r) => setTimeout(r, 600)); return { n0, dis, again, rooms: [...N.S.T.rooms.keys()], code: N.S.code, role: N.S.role }; });
+    ok(dt.dis && dt.again === null && dt.rooms.length === 1 && dt.rooms[0] === 'skotos-' + dt.code && dt.role === 'host', 'a double tap on Host: the button disabled while it connects, one room', dt);
+  },
+  // who may play together on the room (the fake room): a Viewer or Commenter and a view the room cannot connect are told
+  // why and play alone; the hosts listed by name; a double tap on Host joins one room; a host whose sends are refused
+  // ends its game; a grant withdrawn mid-game ends it for that page (a guest home, a host alone)
+  async access() {
+    const watch = (pg) => ev(pg, async () => { const B = await import('/src/ui/bus.js'), I = await import('/src/i18n/i18n.js'); window.__t = I.t; window.__toasts = []; B.on('toast', (m) => window.__toasts.push(m)); setInterval(() => { const p = window.__G.player; if (p && !p.dead) p.hp = p.hpMax; }, 50); });
+    const toasted = (pg, k) => ev(pg, (k) => window.__toasts.includes(window.__t(k)), k);
+    const h = await open('alice', 'by=alice&auto=town&lvl=12&cls=warden'); await watch(h);
+    const code = await ev(h, () => window.__NET.hostGame());
+    // a Viewer: admitted, told it plays alone, nothing to tap that fails
+    const v = await open('vic', 'by=vic&acc=view&auto=town&lvl=8&cls=mage'); await watch(v);
+    await until(v, () => window.__NET.S.send === false, null, 8000, 'viewer');
+    const vv = await ev(v, async (c) => { const N = window.__NET; window.__D.openPanel('coop'); const txt = document.querySelector('#panel .pn-b').textContent; const r = { send: N.S.send, told: txt.includes(window.__t('coop.noSend')), host: !!document.querySelector('[data-a="chost"]'), join: !!document.querySelector('[data-a="cjoin"]'), hud: !document.getElementById('h-coop').hidden }; window.__D.openPanel('pause'); r.pause = !!document.querySelector('#panel [data-a="coop"]'); window.__D.closePanel(); r.hg = await N.hostGame(); r.jg = await N.joinGame(c); r.mode = window.__G.mode; return r; }, code);
+    ok(vv.told && !vv.host && !vv.join && vv.hg === false && vv.jg === false, 'a Viewer: the panel says why it plays alone, no Host or Join, both refused', vv);
+    ok(!vv.hud && vv.pause && vv.mode === 'play', 'no party button on its HUD; Co-op in the pause menu (to say why); the game plays on', vv);
+    // a view the room cannot connect (signed out, a public link)
+    const n = await open('nat', 'ng=1&auto=town&lvl=8&cls=ranger'); await watch(n);
+    await until(n, () => window.__NET.S.dead === 'not_granted', null, 8000, 'ng');
+    const nn = await ev(n, async () => { const N = window.__NET; window.__D.openPanel('coop'); const txt = document.querySelector('#panel .pn-b').textContent; window.__D.closePanel(); return { dead: N.S.dead, told: txt.includes(window.__t('coop.notGranted')), host: txt.includes(window.__t('coop.host')), hud: !document.getElementById('h-coop').hidden, hg: await N.hostGame(), mode: window.__G.mode }; });
+    ok(nn.dead === 'not_granted' && nn.told && !nn.host && !nn.hud && nn.hg === false && nn.mode === 'play', 'not_granted: told why, no Host, no party button, the game plays on', nn);
+    // the hosts listed by name, one there before the page and one after
+    const c = await open('carol', 'by=carol&auto=town&lvl=12&cls=ranger'); await watch(c);
+    await until(c, () => window.__NET.S.names.alice === 'Name-alice', null, 8000, 'alice named');
+    const b = await open('bob', 'by=bob&auto=town&lvl=12&cls=warden'); await watch(b);
+    // (a double tap on Host: one room; the second tap finds the button disabled)
+    const dt = await ev(b, async () => { window.__D.openPanel('coop'); await new Promise((r) => setTimeout(r, 200)); document.querySelector('[data-a="chost"]').click(); const dis = document.querySelector('[data-a="chost"]')?.disabled; document.querySelector('[data-a="chost"]')?.click(); await new Promise((r) => setTimeout(r, 1500)); window.__D.closePanel(); return { dis, rooms: await window.__roomsOf(), code: window.__NET.S.code }; });
+    ok(dt.dis && dt.rooms.length === 1 && dt.rooms[0] === 'skotos-' + dt.code, 'a double tap on Host: the room holds this page in one game room only', dt);
+    await until(c, () => window.__NET.S.names.bob === 'Name-bob', null, 8000, 'bob named');
+    const list = await ev(c, () => { window.__D.openPanel('coop'); const l = [...document.querySelectorAll('.coop-h .nm')].map((e) => e.textContent); window.__D.closePanel(); return l; });
+    ok(list.includes('Name-alice') && list.includes('Name-bob'), 'the games waiting listed by their hosts\' names (one hosting before the page, one after)', list);
+    // a host whose sends the room refuses ends its game; its guest, waiting, is told the host has gone
+    await ev(b, () => window.__roomViewer(true));
+    await ev(c, (code) => window.__NET.joinGame(code), dt.code);
+    ok(await until(b, () => !window.__NET.S.role, null, 15000, 'b ends'), 'a host whose sends are refused (not_permitted: its world for the guest) ends its game');
+    ok(await toasted(b, 'coop.noSend') && await ev(b, () => window.__NET.S.send === false), 'and is told why', await ev(b, () => window.__toasts));
+    ok(await until(c, () => !window.__NET.S.role, null, 20000, 'c leaves'), 'its guest, waiting, leaves');
+    ok(await toasted(c, 'coop.hostGone') && await ev(c, () => window.__G.zone.id === 'town' && !window.__G.hero.__real), 'told the host has gone, still in its own world', await ev(c, () => window.__toasts));
+    // a grant withdrawn mid-game: the guest goes home, told why; then the host, alone
+    await ev(c, (code) => window.__NET.joinGame(code), code);
+    await until(h, () => window.__NET.S.roster.length === 1, null, 10000, 'h roster');
+    await ev(h, () => window.__NET.startGame());
+    ok(await until(c, () => window.__NET.S.zoneKey && window.__NET.S.zoneKey === window.__G.zone.netKey, null, 60000, 'c in'), 'a guest in alice\'s game');
+    await ev(c, () => window.__roomEnd('revoked'));
+    ok(await until(c, () => !window.__NET.S.role && window.__NET.S.dead === 'revoked' && !window.__G.hero.__real, null, 8000, 'c revoked'), 'revoked on the guest: out of the game, its own hero');
+    ok(await toasted(c, 'coop.revoked'), 'and told why');
+    ok(await until(c, () => window.__G.zone.id === 'town' && window.__G.mode === 'play' && !window.__NET.NET.mode, null, 20000, 'c home'), 'home in its own town, playing');
+    const cp = await ev(c, async () => { window.__D.openPanel('coop'); const txt = document.querySelector('#panel .pn-b').textContent; window.__D.closePanel(); await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); return { told: txt.includes(window.__t('coop.revoked')), hud: !document.getElementById('h-coop').hidden }; });
+    ok(cp.told && !cp.hud, 'its panel says why after; no party button', cp);
+    ok(await until(h, () => window.__NET.NET.n === 1 && !window.__NET.NET.remotes.length, null, 20000, 'h alone'), 'the host plays on, the guest gone');
+    await ev(h, () => window.__roomEnd('revoked'));
+    ok(await until(h, () => !window.__NET.S.role && window.__NET.S.dead === 'revoked', null, 8000, 'h revoked'), 'revoked on the host: its game ended');
+    await sleep(600);
+    const hh = await ev(h, () => ({ party: !document.getElementById('party').hidden, mode: window.__G.mode, net: window.__NET.NET.mode, told: window.__toasts.includes(window.__t('coop.revoked')) }));
+    ok(!hh.party && hh.mode === 'play' && !hh.net && hh.told, 'no party frame or blinking link left, told why, the game plays on alone', hh);
+  },
   async room() {
     const { host, guests: [g, g2] } = await party('forest', 2, { lvl: 10, glvl: 10 });
     ok(await ev(host, () => window.__NET.S.T.kind) === 'room' && await ev(g, () => window.__NET.S.T.kind) === 'room', 'the game picked the room transport');

@@ -8,6 +8,8 @@
 //   ch.onPeers(fn)              fn({ peers, joined, left, updated }) when the room changes
 //   ch.connected(), ch.onConnection(fn), ch.leave()
 //   ch.presenceDue()            true when a presence given now would go at once (a page builds its own no oftener)
+//   ch.onError(fn)              fn(code, how): a send the room refused ('send': not_permitted, or a terminal code) or the
+//                               room ended for this page ('room': what its listeners heard)
 //   ch.meter                    what went out and came in: { tx: { msgs, bytes, drops }, rx: { msgs, bytes }, rate() }
 // A transport: { kind, lobby: Channel | null, join(name) -> Promise<Channel> }. Three of them:
 // - RoomTransport (claude.ai artifact `room`): the lobby is the room itself, a game is room.join(name). The room's own
@@ -18,6 +20,9 @@
 // Nothing a peer sends is trusted (coop.js validates); a transport only moves JSON and counts it.
 
 export const MAX_MSG = 4096, MAX_PRES = 4096, BUDGET = 32, BURST = 64, PRES_HZ = 10;
+// (the room's codes that end it for the page load: its grant withdrawn or never given, the capability gone; any other
+// code is upstream_error, passing)
+export const TERMINAL = new Set(['revoked', 'not_granted', 'capability_disabled', 'capability_removed', 'transform_error']);
 export const TOPIC = /^[a-z][a-z0-9_.-]{0,47}$/, ROOM = /^[a-z0-9][a-z0-9_.-]{0,47}$/;
 const enc = typeof TextEncoder !== 'undefined' ? new TextEncoder() : null;
 export const bytesOf = (v) => { const s = JSON.stringify(v ?? null); return enc ? enc.encode(s).length : s.length; };
@@ -51,7 +56,7 @@ export function makeBucket(rate = BUDGET, burst = BURST) {
 // The channel every transport builds on: budget, size limits, presence coalescing, the meter. A wire supplies
 // send(topic, data), sendPresence(obj), leave(), and calls ch._hear(msg), ch._peers(list), ch._conn(bool)
 export function makeChannel(name, wire, o = {}) {
-  const meter = makeMeter(), bucket = o.bucket || makeBucket(o.rate, o.burst), H = {}, PH = [], CH = [];
+  const meter = makeMeter(), bucket = o.bucket || makeBucket(o.rate, o.burst), H = {}, PH = [], CH = [], EH = [];
   let mine = {}, mineB = 2, dirty = false, presT = 0, list = [], conn = false, left = false, queue = [], retry = 0;
   const gap = 1000 / (o.presHz || PRES_HZ);
   const ch = {
@@ -63,7 +68,7 @@ export function makeChannel(name, wire, o = {}) {
       if (!conn) { meter.tx.drops++; return Promise.resolve(false); }
       if (!bucket.take()) { if (eo.must && queue.length < 32) { queue.push([topic, data, b]); return Promise.resolve(true); } meter.tx.drops++; return Promise.resolve(false); }
       meter.out(b);
-      return Promise.resolve(wire.send(topic, data)).then(() => true, () => { meter.tx.drops++; return false; });
+      return Promise.resolve(wire.send(topic, data)).then(() => true, (e) => { meter.tx.drops++; ch._err(e, 'send'); return false; });
     },
     on(topic, fn) { (H[topic] ||= []).push(fn); return () => { const l = H[topic]; const i = l ? l.indexOf(fn) : -1; if (i >= 0) l.splice(i, 1); }; },
     presence(patch) {
@@ -78,18 +83,19 @@ export function makeChannel(name, wire, o = {}) {
     mine: () => mine,
     peers: () => list,
     onPeers(fn) { PH.push(fn); return () => { const i = PH.indexOf(fn); if (i >= 0) PH.splice(i, 1); }; },
+    onError(fn) { EH.push(fn); return () => { const i = EH.indexOf(fn); if (i >= 0) EH.splice(i, 1); }; },
     connected: () => conn && !left,
     onConnection(fn) { CH.push(fn); Promise.resolve().then(() => fn(ch.connected())); return () => { const i = CH.indexOf(fn); if (i >= 0) CH.splice(i, 1); }; },
-    leave() { if (left) return Promise.resolve(); left = true; clearTimeout(retry); retry = 0; for (const k in H) H[k].length = 0; PH.length = 0; return Promise.resolve(wire.leave()).catch(() => {}); },
+    leave() { if (left) return Promise.resolve(); left = true; clearTimeout(retry); retry = 0; for (const k in H) H[k].length = 0; PH.length = 0; EH.length = 0; return Promise.resolve(wire.leave()).catch(() => {}); },
     // (called each frame by the game, and on every presence change: the coalesced send and the queued musts. What the
     // rate or the budget holds back is tried again on a timer, so a channel nobody pumps, the lobby, still sends its last)
     pump() {
       if (left || !conn) return;
-      while (queue.length && bucket.level >= 1) { const [t, d, b] = queue.shift(); bucket.take(); meter.out(b); Promise.resolve(wire.send(t, d)).catch(() => { meter.tx.drops++; }); }
+      while (queue.length && bucket.level >= 1) { const [t, d, b] = queue.shift(); bucket.take(); meter.out(b); Promise.resolve(wire.send(t, d)).catch((e) => { meter.tx.drops++; ch._err(e, 'send'); }); }
       const t = now(), wait = gap - (t - presT);
       if (dirty && wait <= 0 && bucket.take()) {
         dirty = false; presT = t; meter.out(mineB);
-        Promise.resolve(wire.sendPresence(mine)).catch(() => { meter.tx.drops++; dirty = true; });
+        Promise.resolve(wire.sendPresence(mine)).catch((e) => { meter.tx.drops++; dirty = true; ch._err(e, 'send'); });
       }
       if ((dirty || queue.length) && !retry) retry = setTimeout(() => { retry = 0; ch.pump(); }, Math.max(1, dirty && wait > 0 ? wait : 1000 / (o.rate || BUDGET)));
     },
@@ -102,6 +108,15 @@ export function makeChannel(name, wire, o = {}) {
       list = next;
       for (const p of updated) if (!p.isMe) meter.heard(p.peer, p.presence);
       if (joined.length || lft.length || updated.length) for (const fn of PH.slice()) { try { fn({ peers: list, joined, left: lft, updated }); } catch (e) { console.error(e); } }
+    },
+    // (a refusal that means something to the game: a send this view may not make, the room ended; what passes is not told)
+    _err(e, how) {
+      const code = typeof e === 'string' ? e : e?.code;
+      if (left || !(how === 'room' || code === 'not_permitted' || TERMINAL.has(code))) return;
+      // (a room ends once: every listener of it hears the one code)
+      if (how === 'room') { if (ch.ended) return; ch.ended = code || 'upstream_error'; }
+      ch.error = code || 'upstream_error';
+      for (const fn of EH.slice()) { try { fn(ch.error, how); } catch (err) { console.error(err); } }
     },
     _conn(v) { if (conn === v) return; conn = v; if (v) { dirty = true; ch.pump(); } for (const fn of CH.slice()) { try { fn(ch.connected()); } catch (e) { console.error(e); } } }
   };
@@ -116,6 +131,8 @@ export function RoomTransport(room, o = {}) {
   const meOf = (r) => r.peers().find((p) => p.isMe && p.sameTab)?.peer || null;
   // (one bucket for the page: the room's budget is the lobby's, shared by every named room)
   const bucket = makeBucket(o.rate, o.burst);
+  // (a terminal code, heard anywhere, ends the room for the page: told once)
+  const DH = [], dead = (e) => { const code = e?.code || e; if (!TERMINAL.has(code) || T.dead) return; T.dead = code; for (const fn of DH.slice()) { try { fn(code); } catch (err) { console.error(err); } } };
   const wrap = (r, name) => {
     let me = meOf(r);
     const wire = {
@@ -130,7 +147,8 @@ export function RoomTransport(room, o = {}) {
     const memo = new Map();
     const cached = (p) => { const c = memo.get(p.peer); if (c && c.src === p) return c.v; const v = map(p); memo.set(p.peer, { src: p, v }); return v; };
     const offs = [];
-    const onErr = (e) => { ch._conn(false); ch.error = e?.code || 'upstream_error'; };
+    const onErr = (e) => { ch._conn(false); ch._err(e?.code || 'upstream_error', 'room'); };
+    ch.onError((code) => dead(code));
     offs.push(r.onPeers((c) => { if (!me) me = meOf(r); const next = c.peers.map(cached), up = c.updated.map(cached); for (const p of c.left) memo.delete(p.peer); ch._peers(next, { updated: up }); }, onErr));
     offs.push(r.onConnection((v) => ch._conn(!!v), onErr));
     // the topics are subscribed as the game asks for them (room.on per topic)
@@ -144,11 +162,18 @@ export function RoomTransport(room, o = {}) {
     ch.leave = () => { for (const f of offs) try { f(); } catch (e) { /* gone */ } for (const k in subs) try { subs[k](); } catch (e) { /* gone */ } return leave0(); };
     return ch;
   };
-  const T = { kind: 'room', lobby: wrap(room, 'lobby'), rooms: new Map() };
+  const T = { kind: 'room', lobby: null, rooms: new Map(), dead: null, onDead(fn) { DH.push(fn); } };
+  T.lobby = wrap(room, 'lobby');
+  // (a name being joined is joined once: a second ask while the first is on its way gets the same channel)
+  const pending = new Map();
   T.join = (name) => {
     if (!ROOM.test(name)) return Promise.reject(new Error('invalid_argument'));
+    if (T.dead) return Promise.reject(Object.assign(new Error(T.dead), { code: T.dead }));
     if (T.rooms.has(name)) return Promise.resolve(T.rooms.get(name));
-    return room.join(name).then((r) => { const ch = wrap(r, name); const l0 = ch.leave; ch.leave = () => { T.rooms.delete(name); return l0(); }; T.rooms.set(name, ch); return ch; });
+    if (pending.has(name)) return pending.get(name);
+    const p = Promise.resolve(room.join(name)).then((r) => { const ch = wrap(r, name); const l0 = ch.leave; ch.leave = () => { T.rooms.delete(name); return l0(); }; T.rooms.set(name, ch); return ch; }, (e) => { dead(e); throw e; }).finally(() => pending.delete(name));
+    pending.set(name, p);
+    return p;
   };
   return T;
 }
