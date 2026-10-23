@@ -1559,7 +1559,9 @@ const S = {
     const die = async () => {
       await pg.evaluate(() => { const G = window.__G; window.__immortal = false; G.player.hp = 0; window.__D.emit('heroDeath'); });
       await A5.until(pg, () => window.__G.panel === 'dead', 30000);
-      await pg.evaluate(() => { window.__D.closePanel(); window.__D.emit('respawn', false); });
+      // (and immortal again as soon as she is up: left mortal, a monster on the coast could kill her a second time, and
+      // that death's panel, opening a moment later, held the game while the test waited for the Tower to wake)
+      await pg.evaluate(() => { window.__D.closePanel(); window.__D.emit('respawn', false); window.__immortal = true; });
       await pg.waitForFunction(() => !window.__G.player.dead && !document.getElementById('fade').classList.contains('on'), null, { timeout: 240000 });
       await pg.waitForTimeout(800);
     };
