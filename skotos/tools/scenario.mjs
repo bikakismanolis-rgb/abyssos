@@ -1270,11 +1270,12 @@ const S = {
     await shot();
     const [lo, hi] = (process.env.TTK || '60,300').split(',').map(Number);
     const ttk = bot?.t ?? null, inBand = ttk != null && ttk >= lo && ttk <= hi;
-    // (the Bell never caught her: in its calm or out of its ring each time it rang, read the frame it rang)
+    // (the Bell read: she took one in its calm, or it never caught her, in the calm or out of the ring each time; read the
+    // frame it rang)
     if (bot?.bellD) seen.bellD = bot.bellD;
     if (bot?.log && !(seen.overturned || (home.log || {})['tower:overturned'] > 0)) console.log('tower ice phase ' + JSON.stringify(bot.log));
     if (bot) delete bot.log;
-    const bellIn = bot ? !bot.bellHit : !seen.bellD || seen.bellD.some((d) => d <= 4.5);
+    const bellIn = !seen.bellD || seen.bellD.some((d) => d <= 4.5) || (bot && !bot.bellHit);
     // (its windows, seen between two looks or told by its tally: at SIMK 4 a 3.5 s Beached lasts under a second)
     const lg = home.log, win = { beached: !!seen.beached || !!seen.stranded || lg['tower:beached'] > 0 || lg['tower:stranded'] > 0, overturned: !!seen.overturned || lg['tower:overturned'] > 0, blinded: !!seen.blinded || lg['tower:lit'] > 0 };
     const pass = !seen.died && !!bot?.done && win.beached && win.overturned && win.blinded && (bot.near ?? 99) <= 1.5 && bellIn && home.towerDown && home.at != null && home.at <= 2.5 && home.closed > 0 && !home.heroIn && inBand && (!process.env.TTK0 || +process.env.DIFF !== 0 || ttk >= 0.6 * +process.env.TTK0);
