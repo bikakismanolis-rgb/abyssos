@@ -927,7 +927,7 @@ function recFx(name, args, ret) {
     const [kind, x, z, r, dur, o = {}] = args;
     // (a hero effect of its own kind is sent only for its look: VIS, by name; its end comes as 'visEnd')
     if (kind === 'custom' && !(Array.isArray(o.vis) && VIS[o.vis[0]])) return;
-    a = [kind, R2(x), R2(z), R2(r), R2(dur), o.team === 'foe' ? 1 : 0, o.src?.id | 0, R2(o.dmg), o.tick, optsOf(o.opts), R2(o.vx), R2(o.vz), o.floats ? 1 : 0, LOOK_ID.get(o.look) || 0];
+    a = [kind, R2(x), R2(z), R2(r), R2(dur), o.team === 'foe' ? 1 : 0, o.src?.id | 0, R2(o.dmg), o.tick, optsOf(o.opts), R2(o.vx), R2(o.vz), (o.floats ? 1 : 0) | (o.dim ? 2 : 0) | (o.nowarm ? 4 : 0), LOOK_ID.get(o.look) || 0];
     if (kind === 'custom') { a.push(o.vis.slice(0, 4).map((v) => (typeof v === 'number' ? R2(v) : String(v).slice(0, 12)))); if (ret) { ret.nid = ++teleN; a.push(ret.nid); } }
   } else if (name === 'sap') { const [x, z, r, dur, owner, kind] = args; if (owner?.team !== 'foe') return; a = [R2(x), R2(z), R2(r), R2(dur), kind || 'amber']; }
   else if (name === 'sfx') { const [sn, o] = args; if (!o || o.x == null) return; a = [sn, R2(o.x), R2(o.z), o.vol != null ? R2(o.vol) : 1, o.pitch != null ? R2(o.pitch) : 1]; }
@@ -996,7 +996,7 @@ function replayOne(name, a, from) {
       return;
     }
     const real = foe && fromHost;
-    area(kind, x, z, clamp(r, 0.1, 30), clamp(dur, 0, 30), { team: real ? 'foe' : 'vis', src: real ? S.pup.get(sid) || { team: 'foe', level: G.zone.level, x, z, def: {} } : null, dmg: real ? dmg : 0, tick, opts, vx, vz, floats: !!floats, net: true, look: typeof lk === 'string' && Object.hasOwn(LOOKS, lk) ? LOOKS[lk] : undefined });
+    area(kind, x, z, clamp(r, 0.1, 30), clamp(dur, 0, 30), { team: real ? 'foe' : 'vis', src: real ? S.pup.get(sid) || { team: 'foe', level: G.zone.level, x, z, def: {} } : null, dmg: real ? dmg : 0, tick, opts, vx, vz, floats: !!(floats & 1), dim: !!(floats & 2), nowarm: !!(floats & 4), net: true, look: typeof lk === 'string' && Object.hasOwn(LOOKS, lk) ? LOOKS[lk] : undefined });
     return;
   }
   if (name === 'sap') { if (fromHost && nums(a, 4)) addSapPool(a[0], a[1], clamp(a[2], 0.2, 12), clamp(a[3], 0, 30), { team: 'foe' }, a[4]); return; }

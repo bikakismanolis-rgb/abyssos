@@ -366,6 +366,13 @@ const SC = {
     await sleep(1500);
     const vis = await Promise.all(all.map((pg) => ev(pg, () => window.__G.areas.filter((a) => a.kind === 'custom' && a.team === 'vis').length)));
     ok(vis[0] >= 2 && vis[1] >= 1 && vis[2] >= 2 && vis[3] >= 1, 'each page draws the others\' Bulwarks and Hawks', vis);
+    // --- a boss's darkness on the host: a guest's fire there (Rain of Fire's, dim) is drawn but is no light past its flare ---
+    await ev(host, async () => { (await import('/src/game/light.js')).setHeroLight(2.5, null); });
+    await ev(gR, () => { window.__G.player.cds.fill(0); });
+    await cast(gR, 2, spot.x - 4, spot.z + 2);
+    await sleep(3200);
+    const dark = await ev(host, async ([x, z]) => { const L = await import('/src/game/light.js'), G = window.__G; const f = G.areas.filter((a) => a.kind === 'fire' && a.team === 'vis' && Math.hypot(a.x - x, a.z - z) < 4); const r = { fires: f.length, dim: f.filter((a) => a.dim).length, lit: f.some((a) => L.lightAt(a.x, a.z)) }; L.setHeroLight(null); return r; }, [spot.x - 4, spot.z + 2]);
+    ok(dark.fires > 0 && dark.dim === dark.fires && !dark.lit, 'in a boss\'s darkness a guest\'s fire is drawn on the host, and is no light there', dark);
     // --- 20 s of every page casting its four in turn (cooldowns as they are, resources full) ---
     await spawnPack();
     await ev(host, () => { for (const a of window.__G.actors) if (a.test) a.status.stun = 99; });
