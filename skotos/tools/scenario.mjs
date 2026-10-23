@@ -216,6 +216,8 @@ async function BOT5(o) {
     if (!goal && tgt) { const d = Math.hypot(tgt.x - pl.x, tgt.z - pl.z), want = ranged ? 8 : tgt.radius + 1.0; if (d > want + 0.8) goal = { x: tgt.x, z: tgt.z }; else if (ranged && d < want - 3) goal = { x: pl.x * 2 - tgt.x, z: pl.z * 2 - tgt.z }; }
     const u = under(pl.x, pl.z);
     if (u) { const c = u.r > 0 && calmIn(u.c, u.r > 14); if (c) goal = { x: c.x, z: c.z }; else { const l = Math.hypot(u.x, u.z) || 1; goal = { x: pl.x + (u.x / l) * 4, z: pl.z + (u.z / l) * 4 }; } }
+    // (the Tower's Bell: how far she stood from it the frame it rang; looked at from Node, she had walked on)
+    if (o.kind === 'tower' && b) { const n = window.__act5.AI_LOG['tower:bellRung'] || 0; if (n > (B.bellN ??= n)) (B.bellD ||= []).push(+Math.hypot(b.x - pl.x, b.z - pl.z).toFixed(1)); B.bellN = n; }
     // (a bait is walked to by the map's own way; a dodge or a chase straight)
     const wv = goal?.way && !u && z.map.stepToward(B.wayP ||= {}, pl.x, pl.z, goal.x, goal.z, way, 24);
     if (wv) keys(wv.x, wv.z); else if (goal) keys(goal.x - pl.x, goal.z - pl.z); else keys(0, 0);
@@ -1260,6 +1262,7 @@ const S = {
     await shot();
     const [lo, hi] = (process.env.TTK || '60,300').split(',').map(Number);
     const ttk = bot?.t ?? null, inBand = ttk != null && ttk >= lo && ttk <= hi;
+    if (bot?.bellD) seen.bellD = bot.bellD;
     const bellIn = !seen.bellD || seen.bellD.some((d) => d <= 4.5);
     // (its windows, seen between two looks or told by its tally: at SIMK 4 a 3.5 s Beached lasts under a second)
     const lg = home.log, win = { beached: !!seen.beached || !!seen.stranded || lg['tower:beached'] > 0 || lg['tower:stranded'] > 0, overturned: !!seen.overturned || lg['tower:overturned'] > 0, blinded: !!seen.blinded || lg['tower:lit'] > 0 };
