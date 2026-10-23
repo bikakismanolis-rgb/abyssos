@@ -16,6 +16,7 @@ import { createRequire } from 'node:module';
 import { writeFileSync } from 'node:fs';
 const require = createRequire(import.meta.url);
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+import { watchFatal, fatalAll } from './fatal.mjs';
 const [, , which = 'all', out = '/tmp'] = process.argv;
 const BASE = process.env.BASE || 'http://localhost:5199/', DIFF = +(process.env.DIFF ?? 1), SIM = +(process.env.SIM || 30), SEED = process.env.SEED ? '&seed=' + process.env.SEED : '';
 // (the story past each zone's arrival scene, so no scene holds the clock: the coast at q26 after the rite, the Farthest
@@ -23,6 +24,7 @@ const BASE = process.env.BASE || 'http://localhost:5199/', DIFF = +(process.env.
 const STORY = ['alkyone', 'coastCall', 'cradle', 'coal', 'alkField', 'coastSeen', 'hearth', 'rite', 'tamMet', 'glaukosMet'];
 const FLAGS = { coast: '&quest=26&flags=' + STORY.join(','), farlight: '&quest=28&flags=' + [...STORY, 'towerWake', 'towerDown', 'frozen', 'farSeen', 'alkShip'].join(',') };
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const FATAL = watchFatal(browser);
 
 async function open(q, vw = 960, vh = 540) {
   const page = await browser.newPage({ viewport: { width: vw, height: vh } });
@@ -317,6 +319,9 @@ if (which === 'ice' || which === 'all') { report.iceCoast = await iceSoak('coast
 if (which === 'ice-coast') report.iceCoast = await iceSoak('coast');
 if (which === 'ice-farlight') report.iceFarlight = await iceSoak('farlight');
 if (which === 'perf' || which === 'all') report.perf = await perf();
+// (a runtime error on the game's #fatal box fails the soak)
+const fatal = await fatalAll(browser, FATAL);
+if (fatal.length) report.fatal = { res: { pass: false, fatal: fatal.slice(0, 10) }, logs: [] };
 writeFileSync(`${out}/soak5-${which}${process.env.SEED ? '-' + process.env.SEED : ''}.json`, JSON.stringify(report, null, 1));
 for (const [k, v] of Object.entries(report)) {
   if (k === 'perf') { console.log('perf', JSON.stringify(v)); continue; }
