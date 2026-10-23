@@ -138,7 +138,44 @@ chosen variant never learnt (the skill as it is).
 
 ## Tests
 
-RESULTS_TESTS
+Against a private no-HMR server (`npx vite --config tools/vite.nohmr.mjs --port 5321`), one headless browser at a time,
+every run failing on any `#fatal` text (tools/fatal.mjs). `npx vite build` is clean.
+
+**New for the port**
+- `fatalcheck` (a timer that throws): reports `pass: false` with the fatal text, as it must.
+- `skills5` (every skill and variant of a class on the Farthest Light's thin ice): passes for all three classes. Stages
+  each cast adds in 3 s: Leap 37, Seismic 60, Twin 20 (each); Earthsplitter 32, Shatterfan 60, Ring of Earth 72
+  (±0.5 m rings); Rain 37, Rain of Fire 66 (its fire melts), Hail 37; Fireball 7, Trident 4 (one bolt on the dummy),
+  Pale Cinder 17; Meteor 74, Shower 75, Comet 74. The three Novas heal the same 96 cells. Nothing breaks the ice under
+  her. Cold after 2.5 s of either Warden spin from 50: 42.4 both. A downed hero's following effect ends with no burst.
+- `save13`: passes (a version-13 Ranger at Mastery 12 with her later skills on buttons; an Act V Warden on «Σκότος»
+  with no progression fields, 19 points back; a hero with a skill on two buttons and an unknown one).
+- `node tools/coop.mjs prog` (four players on the Farthest Light, above): all passed, twice.
+- `progpanel` on desktop and at 844 x 390 touch (`TOUCH=1 W=844 H=390`): both tabs fit, the Mastery tracks past the
+  first two rows under a scroll.
+
+**The progression's own**: `progress`, `progpanel`, `skillsfx` for each class: pass (`skillsfx` now `&norender`: at full
+render its 21 casts took over an hour).
+
+**Acts I-V** (HANDOFF's lists and the brief's): combat, ranger, mage, weaver, lord, ending, title, panels, gate, pass,
+stonewarden, halls, king, ending2, cast2, boons, weep, hart, heart, amaranthe, echo, ending3, cast3, ashfield, ivar,
+forge, karthax, ending4, cast4, echo4, hook5, catch5, coast, tower, freeze, cast5, echo5, cameo, diff6: ran to the end,
+no page error, no fatal, every `pass` true. The rest, each run on this branch and on its base (ca88dd3, a worktree with
+its own tools and server) to tell the port's from the line's:
+
+| scenario | this branch | base ca88dd3 | reading |
+|---|---|---|---|
+| tide | fail, then pass | pass | the coast's seed decides (coop/README.md says the same) |
+| ice | far landing in 3 of 4 zone runs, then 3 passes | 2 passes, then a far landing | flaky on both: one plunge in 10-77 lands past 3 m; the soak breaks the ice itself, no skill is cast |
+| shallowtele | 11.3, 7.8, then 14, 13.2, 13.3 | 13.2, 13.3, 16.3, 18.2 | a contrast measure in the world viewer (no hero) round its 12 threshold; nothing the port touches |
+| skotos | fail | fail | an "unplanned death" at t 0 with no blow (the death panel open, the hero not dead): the line's own |
+| ending5 | a screenshot timeout | the same | the line's own |
+| holes, cp5 | fail | (known flaky on this line, being fixed elsewhere) | not chased |
+
+**Co-op**: `node tools/net/test-transport.mjs` passes; `coop.mjs` join, pack, loot, churn, hostleave, cheat, act5, four,
+bosses, room, ui, prog: all passed; revive failed once (a guest killed at once was given the death panel, not downed) and
+passed on its next run, as it does on the base.
+
 
 ## Balance
 
