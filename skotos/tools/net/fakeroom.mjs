@@ -8,7 +8,11 @@
 //   once) and presence waits
 // - peers() a frozen snapshot, onPeers at most once a frame with joined/left/updated; join(name) -> NamedRoom (at most 16,
 //   name ^[a-z0-9][a-z0-9_.-]{0,47}$), its send budget the lobby's; leave()
-// - topics not opened at publish are admin-only: emits on them reject not_permitted for a non-admin page
+// - topics not opened at publish are admin-only: emits on them reject not_permitted for a non-admin page; a Viewer or
+//   Commenter (o.viewer) is admitted, sets presence and joins, but every emit rejects not_permitted
+// - the terminal codes (contract 0.2.89): page.end(code) (revoked, not_granted, capability_disabled, ...) and a page made
+//   with o.ng (a view the platform cannot connect: not_granted at once): every listener's onError hears it once, every
+//   call rejects with it after, connected() is false, peers() decays to just this page
 const TOPIC = /^[a-z][a-z0-9_.-]{0,47}$/, NAME = /^[a-z0-9][a-z0-9_.-]{0,47}$/;
 const bytes = (v) => Buffer.byteLength(JSON.stringify(v ?? null));
 const err = (code, message = code) => Object.assign(new Error(message), { code });
@@ -27,24 +31,26 @@ function reject(hub, code) { hub.log.rejects[code] = (hub.log.rejects[code] || 0
 
 function makePage(hub, o) {
   const pid = 'k' + (++hub.n).toString(36).padStart(4, '0') + Math.random().toString(36).slice(2, 8);
-  const page = { pid, by: o.by ?? null, admin: !!o.admin, connected: true, tok: hub.burst, t0: Date.now(), reported: false, joined: new Map() };
+  const page = { pid, by: o.by ?? null, admin: !!o.admin, viewer: !!o.viewer, connected: !o.ng, dead: null, tok: hub.burst, t0: Date.now(), reported: false, joined: new Map(), scopes: [] };
   const take = () => { const t = Date.now(); page.tok = Math.min(hub.burst, page.tok + (t - page.t0) / 1000 * hub.rate); page.t0 = t; if (page.tok < 1) return false; page.tok--; return true; };
   const scope = (name) => {
-    const R = hub.room(name), H = {}, PH = [], CH = [];
+    const R = hub.room(name), H = {}, PH = [], CH = [], EH = [];
     const me = { peer: pid, by: page.by, kind: 'viewer', guest: !!o.guest, presence: Object.freeze({}), updatedAt: Date.now(), page };
     let snap = Object.freeze([]), pending = null, presWant = null, presT = 0, presTimer = null, gone = false;
     const cachedView = (m) => { let v = m.views.get(page); if (!v) m.views.set(page, (v = view(m))); return v; };
     const view = (m) => Object.freeze({ peer: m.peer, by: m.by, isMe: m.page === page, sameTab: m.page === page, kind: m.kind, guest: m.guest, presence: m.presence, updatedAt: m.updatedAt });
     const S = {
-      me, H, PH, CH,
+      me, H, PH, CH, EH,
       // (the frame-batched delivery of room changes)
       note(kind, m) {
+        if (page.dead) return;
         pending ||= { joined: new Map(), left: new Map(), updated: new Map() };
         if (kind === 'left') { if (pending.joined.has(m.peer)) pending.joined.delete(m.peer); else pending.left.set(m.peer, m); pending.updated.delete(m.peer); }
         else if (kind === 'joined') pending.joined.set(m.peer, m);
         else if (!pending.joined.has(m.peer)) pending.updated.set(m.peer, m);
         if (!pending.t) pending.t = later(() => S.flush(), 16);
       },
+      decay() { pending = null; snap = Object.freeze([view(me)]); },
       flush() {
         const p = pending; pending = null; if (gone || !p) return;
         snap = Object.freeze([...R.members.values()].map(cachedView));
@@ -58,11 +64,12 @@ function makePage(hub, o) {
     const api = {
       name,
       emit(topic, data) {
+        if (page.dead) return reject(hub, page.dead);
         if (gone) return reject(hub, 'invalid_argument');
         if (typeof topic !== 'string' || !TOPIC.test(topic)) return reject(hub, 'invalid_argument');
         let b; try { b = bytes(data); } catch (e) { return reject(hub, 'invalid_argument'); }
         if (b > 4096) return reject(hub, 'invalid_argument');
-        if (hub.topics && !hub.topics[topic] && !page.admin) return reject(hub, 'not_permitted');
+        if ((hub.topics && !hub.topics[topic] && !page.admin) || (page.viewer && !page.admin)) return reject(hub, 'not_permitted');
         if (!page.connected) return Promise.resolve();
         hub.log.emits++;
         if (!take()) { hub.log.budgetDrops++; if (!page.reported) { page.reported = true; } return Promise.resolve(); }
@@ -76,9 +83,12 @@ function makePage(hub, o) {
       on(topic, fn, onError) {
         if (typeof fn !== 'function') throw new TypeError('handler');
         if (!TOPIC.test(topic)) { Promise.resolve().then(() => onError?.({ code: 'invalid_argument', message: 'topic' })); return () => {}; }
+        if (page.dead) { later(() => onError?.({ code: page.dead, message: page.dead }), 0); return () => {}; }
+        if (onError) EH.push(onError);
         (H[topic] ||= []).push(fn); return () => { const i = H[topic].indexOf(fn); if (i >= 0) H[topic].splice(i, 1); };
       },
       presence(patch) {
+        if (page.dead) return reject(hub, page.dead);
         if (gone) return reject(hub, 'invalid_argument');
         const next = Object.assign({}, presWant || me.presence);
         for (const k in patch) { if (patch[k] === null) delete next[k]; else next[k] = patch[k]; }
@@ -98,12 +108,12 @@ function makePage(hub, o) {
         return Promise.resolve();
       },
       peers: () => snap,
-      onPeers(fn, onError) { PH.push(fn); if (!S.first) { S.first = true; } later(() => { snap = Object.freeze([...R.members.values()].map(cachedView)); fn({ peers: snap, joined: snap, left: Object.freeze([]), updated: Object.freeze([]) }); }, 0); return () => { const i = PH.indexOf(fn); if (i >= 0) PH.splice(i, 1); }; },
+      onPeers(fn, onError) { if (page.dead) { later(() => onError?.({ code: page.dead, message: page.dead }), 0); return () => {}; } if (onError) EH.push(onError); PH.push(fn); if (!S.first) { S.first = true; } later(() => { snap = Object.freeze([...R.members.values()].map(cachedView)); fn({ peers: snap, joined: snap, left: Object.freeze([]), updated: Object.freeze([]) }); }, 0); return () => { const i = PH.indexOf(fn); if (i >= 0) PH.splice(i, 1); }; },
       connected: () => page.connected && !gone,
-      onConnection(fn, onError) { CH.push(fn); later(() => fn(page.connected), 0); return () => { const i = CH.indexOf(fn); if (i >= 0) CH.splice(i, 1); }; },
+      onConnection(fn, onError) { if (page.dead) { later(() => { fn(false); onError?.({ code: page.dead, message: page.dead }); }, 0); return () => {}; } if (onError) EH.push(onError); CH.push(fn); later(() => fn(page.connected), 0); return () => { const i = CH.indexOf(fn); if (i >= 0) CH.splice(i, 1); }; },
       leave() { if (gone) return Promise.resolve(); gone = true; R.members.delete(pid); page.joined.delete(name); for (const m of R.members.values()) later(() => m.scope && m.scope.note('left', me), hub.lag); return Promise.resolve(); }
     };
-    me.scope = S;
+    me.scope = S; page.scopes.push(S);
     R.members.set(pid, me);
     for (const m of R.members.values()) if (m.page !== page) later(() => m.scope && m.scope.note('joined', me), hub.lag);
     snap = Object.freeze([...R.members.values()].map(cachedView));
@@ -113,6 +123,7 @@ function makePage(hub, o) {
   const room = Object.freeze({
     ...lobby,
     join(name) {
+      if (page.dead) return reject(hub, page.dead);
       if (typeof name !== 'string' || !NAME.test(name)) return reject(hub, 'invalid_argument');
       if (page.joined.has(name)) return Promise.resolve(page.joined.get(name));
       if (page.joined.size >= 16) return reject(hub, 'limit_reached');
@@ -125,5 +136,12 @@ function makePage(hub, o) {
   page.room = room;
   // (the test's levers: a dropped and restored connection)
   page.setConnected = (v) => { page.connected = v; for (const R of hub.rooms.values()) { const m = R.members.get(pid); if (m) for (const fn of m.scope.CH.slice()) fn(v); } };
+  // (a terminal code: once on every listener's onError, the page out of every room, every call rejected with it)
+  page.end = (code) => {
+    if (page.dead) return; page.dead = code; page.connected = false;
+    for (const R of hub.rooms.values()) { const m0 = R.members.get(pid); if (!m0) continue; R.members.delete(pid); for (const m of R.members.values()) later(() => m.scope && m.scope.note('left', m0), hub.lag); }
+    for (const S of page.scopes) { S.decay(); const l = S.EH.splice(0); later(() => { for (const fn of l) fn({ code, message: code }); for (const fn of S.CH.slice()) fn(false); }, 0); }
+  };
+  if (o.ng) later(() => page.end('not_granted'), 0);
   return page;
 }

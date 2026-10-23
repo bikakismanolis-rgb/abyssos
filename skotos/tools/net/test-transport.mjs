@@ -5,6 +5,9 @@
 //    budget (no budget drops at the platform), never send what the room would reject, and say what it dropped.
 // 2. LocalTransport (BroadcastChannel, as the browser tests use it) and 3. SupabaseTransport against a fake
 //    supabase-js client: the same channel shape.
+// 4. The room's refusals and ends (contract 0.2.89): a Viewer's sends refused not_permitted and told, a view the room
+//    cannot connect (not_granted) and a grant withdrawn mid-game (revoked) told once as the room's end, a name joined
+//    twice at once joined once.
 import { Hub } from './fakeroom.mjs';
 import { RoomTransport, LocalTransport, SupabaseTransport, pickTransport, bytesOf, BUDGET } from '../../src/net/transport.js';
 
@@ -68,6 +71,39 @@ async function roomTest() {
   const p5 = hub.page({ by: 'u5' }), r5 = await p5.room.join('skotos-g-ab12');
   let code = null; await r5.emit('secret', 1).catch((e) => { code = e.code; });
   ok(code === 'not_permitted', 'an unopened topic: not_permitted (why the README lists the topics to open)');
+}
+
+async function endsTest() {
+  const hub = new Hub({ lag: 10, topics: { s: 'interact', w: 'interact', i: 'interact', f: 'interact', c: 'interact' } });
+  // a Viewer (or Commenter): admitted, its sends refused, and the game told
+  const vw = RoomTransport(hub.page({ by: 'uv', viewer: true }).room), seen = [];
+  vw.lobby.onError((code, how) => seen.push(code + ':' + how));
+  await sleep(60);
+  const sent = await vw.lobby.emit('c', { op: 'hi' });
+  ok(sent === false && seen.join() === 'not_permitted:send', 'a Viewer\'s send is refused and told: not_permitted (send) ' + seen);
+  ok(!vw.dead, 'and that is not the room\'s end for it');
+  // a view the room cannot connect: not_granted, once, as the room's end; a join refused with it
+  const ngp = hub.page({ ng: true }), ng = RoomTransport(ngp.room), dead = [];
+  ng.onDead((c) => dead.push(c));
+  await sleep(60);
+  ok(ng.dead === 'not_granted' && dead.join() === 'not_granted', 'not_granted heard as the room\'s end, once: ' + dead);
+  let jc = null; await ng.join('skotos-ng12').catch((e) => { jc = e.code; });
+  ok(jc === 'not_granted' && !ng.lobby.connected(), 'a join after it is refused with it, the lobby not connected');
+  // a grant withdrawn mid-game: the game's channel hears it, the transport ends once
+  const hp = hub.page({ by: 'uh' }), H = RoomTransport(hp.room), gp = RoomTransport(hub.page({ by: 'ug' }).room);
+  const hc = await H.join('skotos-rv12'), gc = await gp.join('skotos-rv12'), hd = [], he = [];
+  H.onDead((c) => hd.push(c)); hc.onError((c, how) => he.push(c + ':' + how));
+  await sleep(80);
+  ok(gc.peers().length === 2, 'two in the game room');
+  hp.end('revoked'); await sleep(80);
+  ok(H.dead === 'revoked' && hd.join() === 'revoked', 'revoked: the room\'s end, told once: ' + hd);
+  ok(he.includes('revoked:room') && !hc.connected(), 'the game\'s channel heard it and is not connected: ' + he);
+  ok(gc.peers().length === 1, 'the other page sees it gone');
+  ok((await hc.emit('s', { x: 1 })) === false, 'its sends go nowhere after');
+  // a name joined twice at once is one join, one channel
+  const T2 = RoomTransport(hub.page({ by: 'u2' }).room);
+  const [a, b] = await Promise.all([T2.join('skotos-tw12'), T2.join('skotos-tw12')]);
+  ok(a === b && hub.rooms.get('skotos-tw12').members.size === 1, 'two joins of one name in flight: one channel, one membership');
 }
 
 async function localTest() {
@@ -185,6 +221,7 @@ async function supaTest() {
 }
 
 await roomTest();
+await endsTest();
 await localTest();
 await supaTest();
 console.log(fails ? fails + ' FAILED' : 'all passed');

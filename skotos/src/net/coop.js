@@ -15,7 +15,7 @@
 //   host is gone goes home to its own town, its hero as it left it.
 import { G, later } from '../game/state.js';
 import { NET, MIRROR, heroes } from './state.js';
-import { pickTransport, bytesOf, MAX_MSG } from './transport.js';
+import { pickTransport, bytesOf, MAX_MSG, TERMINAL } from './transport.js';
 import { SUPABASE } from './netcfg.js';
 import { enterZone, zoneReady, disposeZone, act3Presence, act4Presence, act5Presence, townFires, storyOpenings, light5, ZONES } from '../game/world.js';
 import { skerryClose } from '../game/ai.js';
@@ -37,12 +37,15 @@ import { t, has } from '../i18n/i18n.js';
 import { clamp, rand } from '../core/util.js';
 
 export const VER = 2;
-const SNAP_HZ = 10, SNAP_MAX = 3900, REL_MAX = 1700, REL_Q = 200, FX_MAX = 900, FX_MIN = 500, FX_RATE = 600, NEAR = 40, NEAREST = 10, OVERDUE = 1000, CHUNK = 3300, HOST_LOST = 25000, HOST_GONE = 10000, STALL = 6000, DOWNED = 30, REVIVE = 2.5, LAG = 130;
+const SNAP_HZ = 10, SNAP_MAX = 3900, REL_MAX = 1700, REL_Q = 200, FX_MAX = 900, FX_MIN = 500, FX_RATE = 600, NEAR = 40, NEAREST = 10, OVERDUE = 1000, CHUNK = 3300, HOST_LOST = 25000, HOST_GONE = 10000, STALL = 6000, DOWNED = 30, REVIVE = 2.5, LAG = 130, WAIT_MAX = 300000, NO_WORLD = 15000;
 const CODE_CH = 'abcdefghjkmnpqrstuvwxyz23456789';
 const KINDS = Object.keys(MONSTERS), KIDX = new Map(KINDS.map((k, i) => [k, i]));
 // what a page sees of the session (the lobby panel and the HUD read it)
 export const S = {
   T: null, ready: false, avail: false, role: null, code: null, ch: null, started: false, status: 'idle', err: null,
+  // may this view send on the game's topics (true, false: it plays alone; null: not told yet; sure: the room's own
+  // answer, not advice); the room's end for this page (a terminal code: the game plays on alone)
+  send: null, sendSure: false, dead: null,
   hostPeer: null, peers: new Map(), roster: [], hosts: [], names: {}, me: null,
   // the host: each guest's reliable events (one count for all), their acks, the guests' events done, the raises given,
   // the clip names given out; the world and ice versions
@@ -51,7 +54,7 @@ export const S = {
   landing: null,
   // a guest: the world as the host has it, the zone loaded, puppets (and what each was, for its kill's reward), the events
   // not yet acked, the host's clip names; the kills paid, the kills a second and the items they may bring
-  real: null, world: null, wkey: '', zoneKey: null, loading: false, pup: new Map(), pupInfo: new Map(), ev: [], evSeq: 0, relDone: 0, hclips: new Map(), lastSnap: 0, chunks: {},
+  real: null, world: null, wkey: '', wgate: null, zoneKey: null, loading: false, pup: new Map(), pupInfo: new Map(), ev: [], evSeq: 0, relDone: 0, hclips: new Map(), lastSnap: 0, chunks: {},
   paid: new Set(), killB: { tok: 40, t: 0 }, owed: 0,
   downed: null, rv: null, fxOut: [], fxT: 0, fxIn: new Map(), stats: { snaps: 0, snapBytes: 0, rejected: 0, hits: 0, why: {} }
 };
@@ -70,11 +73,39 @@ export async function initNet(params) {
   window.__NET = { S, NET, hostGame, joinGame, startGame, leaveGame, party, respawnNow, relTo };
   if (!S.T) { emit('netReady', false); return; }
   S.me = S.T.lobby?.me || S.T.me || null;
-  // who hosts what, from the lobby
-  S.T.lobby?.onPeers(() => lobbyHosts());
+  // the room ended for this page (never granted, withdrawn, switched off): the game plays on alone and says why
+  S.T.onDead?.(netDead);
+  if (S.T.dead) netDead(S.T.dead);
+  // (a moment the lobby refused: this view may not send on the game's topics)
+  S.T.lobby?.onError?.((code, how) => { if (how === 'send' && code === 'not_permitted') { S.send = false; S.sendSure = true; emit('netLobby'); } });
+  // who hosts what, from the lobby, and their names
+  S.T.lobby?.onPeers(() => { lobbyHosts(); resolveNames(); });
   lobbyHosts();
   resolveNames();
+  sendRights();
   emit('netReady', true);
+}
+// may this view host and join? Contributors and Editors may; Viewers and Commenters, whom the room admits but does not
+// let send on the game's topics, play alone (questions.md 5). The user capability advises at once (canEdit(): Editor
+// and up; can('data.write'): the interact level); the room's own answer is a moment on the lobby (no page listens to
+// 'c' there), refused not_permitted for a view that may not send
+async function sendRights() {
+  userNs().then(async (u) => {
+    if (!u) return;
+    try { const v = (await u.canEdit?.()) === true ? true : await u.can?.('data.write'); if (!S.sendSure && (v === true || v === false)) { S.send = v; emit('netLobby'); } } catch (e) { /* advice only */ }
+  });
+  const L = S.T?.lobby; if (!L) return;
+  // (an emit while not connected is dropped unheard: the lobby first)
+  if (!L.connected()) await new Promise((res) => { const off = L.onConnection((v) => { if (v) { off?.(); res(); } }); });
+  if (S.dead) return;
+  if (await L.emit('c', { op: 'hi' })) { S.send = true; S.sendSure = true; emit('netLobby'); }
+}
+// the room's end for this page: a game in play is left (a guest goes home, a host plays on alone), the list let go
+function netDead(code) {
+  if (S.dead) return;
+  S.dead = code; S.send = false; S.sendSure = true; S.hosts = [];
+  if (S.role) leaveGame(code === 'revoked' ? 'coop.revoked' : code === 'not_granted' ? 'coop.notGranted' : 'coop.off');
+  emit('netLobby'); emit('netMode');
 }
 function lobbyHosts() {
   const L = S.T?.lobby; if (!L) return;
@@ -86,14 +117,20 @@ function listing(p) {
   const g = p.presence.g;
   return { c: g.c, cls: own(CLASSES, g.cls) ? g.cls : 'warden', l: num(g.l, 0, MAX_LEVEL) | 0, z: own(ZONES, g.z) ? g.z : 'town', n: num(g.n, 1, 4, 1) | 0, d: num(g.d, 0, DIFFS.length - 1) | 0, v: g.v | 0, on: g.on ? 1 : 0, peer: p.peer, by: p.by ?? null };
 }
-// names through the artifact's `user` capability (profiles), where there is one; else the class and level
-let users = null;
+// names through the artifact's `user` capability (profiles), where there is one; else the class and level. Asked as
+// peers arrive, in the lobby (the hosts listed) as in the game, each id once (one not resolved is remembered as '')
+let usersP = null;
+const userNs = () => (usersP ||= Promise.resolve().then(() => window.claude?.use?.('user')).then((u) => u || null, () => null));
+const naming = new Set();
 async function resolveNames() {
-  if (users === null) { users = false; try { users = (await window.claude?.use?.('user')) || false; } catch (e) { users = false; } }
-  if (!users?.profiles) return;
-  const ids = new Set(); for (const ch of [S.T?.lobby, S.ch]) for (const p of ch?.peers() || []) if (p.by && !(p.by in S.names)) ids.add(p.by);
+  const ids = new Set(); for (const ch of [S.T?.lobby, S.ch]) for (const p of ch?.peers() || []) if (p.by && !(p.by in S.names) && !naming.has(p.by)) ids.add(p.by);
   if (!ids.size) return;
-  try { const ps = await users.profiles([...ids]); for (const id of ids) S.names[id] = (ps?.[id]?.name || '').slice(0, 24); emit('netLobby'); } catch (e) { /* names are a nicety */ }
+  for (const id of ids) naming.add(id);
+  try {
+    const u = await userNs(), ps = u?.profiles ? await u.profiles([...ids]) : null;
+    for (const id of ids) S.names[id] = String(ps?.[id]?.name || '').slice(0, 24);
+    if (ps) emit('netLobby');
+  } catch (e) { for (const id of ids) S.names[id] = ''; } finally { for (const id of ids) naming.delete(id); }
 }
 export function nameOf(p) {
   const n = p?.by && S.names[p.by];
@@ -104,12 +141,15 @@ export function nameOf(p) {
 
 // ---------- hosting, joining, leaving ----------
 const newCode = () => Array.from({ length: 4 }, () => CODE_CH[(Math.random() * CODE_CH.length) | 0]).join('');
+// (null: nothing done, a try already on its way or a game in play; false: it failed, S.err says why)
 export async function hostGame() {
-  if (!S.T || S.role || !G.hero || !G.zone) return false;
-  S.status = 'connecting'; emit('netLobby');
+  if (!S.T || S.role || S.status === 'connecting' || !G.hero || !G.zone) return null;
+  if (!canPlay()) { S.status = 'error'; S.err = S.dead || 'not_permitted'; emit('netLobby'); return false; }
+  S.status = 'connecting'; S.err = null; emit('netLobby');
   const code = newCode();
-  try { S.ch = await S.T.join('skotos-' + code); } catch (e) { S.status = 'error'; S.err = e?.code || e?.message; emit('netLobby'); return false; }
-  S.role = 'host'; S.code = code; S.started = false; S.status = 'open'; NET.mode = 'host';
+  const ch = await roomOf('skotos-' + code); if (!ch) return false;
+  if (S.role) { if (ch !== S.ch) ch.leave(); return null; }
+  S.ch = ch; S.role = 'host'; S.code = code; S.started = false; S.status = 'open'; NET.mode = 'host';
   S.rel.clear(); S.relSeq = 0; S.done.clear(); S.rvT.clear(); S.clips.clear(); S.worldSent = '';
   wire(); hostPresence(true); lobbyPresence(true);
   emit('netLobby'); emit('netMode');
@@ -119,41 +159,69 @@ export function startGame() { if (S.role !== 'host') return; S.started = true; h
 // (peer: the host picked from the list; only that peer is taken as this game's host)
 export async function joinGame(code, peer) {
   code = String(code || '').toLowerCase().trim();
-  if (!S.T || S.role || !G.hero || !/^[a-z0-9]{4}$/.test(code)) return false;
-  S.status = 'connecting'; emit('netLobby');
-  try { S.ch = await S.T.join('skotos-' + code); } catch (e) { S.status = 'error'; S.err = e?.code || e?.message; emit('netLobby'); return false; }
-  S.role = 'guest'; S.code = code; S.status = 'waiting'; S.hostPeer = null; S.wantHost = typeof peer === 'string' && peer ? peer : null; S.hostGone = 0; S.lastSnap = now(); S.joinT = now();
-  S.ev.length = 0; S.evSeq = 0; S.relDone = 0; S.hclips.clear(); S.world = null; S.wkey = ''; S.zoneKey = null; S.chunks = {};
+  if (!S.T || S.role || S.status === 'connecting' || !G.hero) return null;
+  if (!/^[a-z0-9]{4}$/.test(code)) return false;
+  if (!canPlay()) { S.status = 'error'; S.err = S.dead || 'not_permitted'; emit('netLobby'); return false; }
+  peer = typeof peer === 'string' && peer ? peer : null;
+  // (a game its listing shows full is said so at once: the listing picked, or the one listing of that code)
+  const ls = S.hosts.filter((h) => h.c === code), L = peer ? ls.find((h) => h.peer === peer) : ls.length === 1 ? ls[0] : null;
+  if (L && L.n >= 4) { S.status = 'error'; S.err = 'full'; emit('netLobby'); return false; }
+  S.status = 'connecting'; S.err = null; emit('netLobby');
+  const ch = await roomOf('skotos-' + code); if (!ch) return false;
+  if (S.role) { if (ch !== S.ch) ch.leave(); return null; }
+  S.ch = ch;
+  S.role = 'guest'; S.code = code; S.status = 'waiting'; S.hostPeer = null; S.wantHost = peer; S.hostGone = 0; S.lastSnap = now(); S.joinT = now(); S.onT = 0;
+  S.ev.length = 0; S.evSeq = 0; S.relDone = 0; S.hclips.clear(); S.world = null; S.wkey = ''; S.wgate = null; S.zoneKey = null; S.chunks = {};
   S.paid.clear(); S.pupInfo.clear(); S.owed = 0; S.killB = { tok: 40, t: now() };
   wire(); guestPresence(true);
   emit('netLobby');
   return true;
 }
+// a game its view may host or join: the room is there, has not ended for this page, and lets it send
+export const canPlay = () => !!S.T && !S.dead && S.send !== false;
+// the game's room joined (null: it failed, S.status and S.err say why; one the room refused for good is told)
+async function roomOf(name) {
+  try { return await S.T.join(name); } catch (e) {
+    S.status = 'error'; S.err = e?.code || e?.message || 'upstream_error';
+    // (not_permitted: this view cannot use the game's rooms; a terminal code: the room has ended for the page)
+    if (S.err === 'not_permitted') { S.send = false; S.sendSure = true; }
+    emit('netLobby'); return null;
+  }
+}
+// (a guest that never came into the host's world has not left its own: told so, not that it is back)
+const WAITING = { 'coop.youLeft': 'coop.leftWait', 'coop.hostLeft': 'coop.hostGone', 'coop.lost': 'coop.lostWait' };
 export async function leaveGame(why) {
   const role = S.role; if (!role) return;
   // (down when the game ends: the card and the ring go; a guest gets up at home, a host as alone, by the death panel)
   const down = !!S.downed;
   if (down) emit('netDowned', false);
   if (S.rv) emit('netRevive', 0);
-  if (role === 'guest') goHome(why);
+  const entered = role === 'guest' && (!!S.zoneKey || NET.mode === 'guest');
+  if (role === 'guest' && !entered && WAITING[why]) why = WAITING[why];
+  if (role === 'guest') goHome(entered);
   for (const r of NET.remotes) dropRemote(r);
   NET.remotes.length = 0;
   for (const [, a] of S.pup) killPuppet(a);
   S.pup.clear();
-  // (a host says so before it goes: its guests go home at once, not when the room notices)
-  if (role === 'host' && S.ch) { try { await S.ch.emit('c', { op: 'end' }); } catch (e) { /* gone */ } }
+  // (the game is over for this page before anything is awaited: what the room says meanwhile is not this game's)
   const ch = S.ch; S.ch = null; S.role = null; S.code = null; S.started = false; S.status = 'idle'; S.hostPeer = null; S.peers.clear(); S.roster = []; S.downed = null; S.rv = null;
   NET.mode = null; NET.n = 1; MIRROR.rec = null;
   if (role === 'host') { rescale(); S.T?.lobby?.presence({ g: null }); if (down && G.player?.dead) emit('openPanel', 'dead'); }
+  // (a host says so before it goes: its guests go home at once, not when the room notices)
+  if (role === 'host' && ch) { try { await ch.emit('c', { op: 'end' }); } catch (e) { /* gone */ } }
   try { await ch?.leave(); } catch (e) { /* gone */ }
   emit('netLobby'); emit('netMode');
   if (why) emit('toast', t(why), 'quest');
 }
-// a guest back in its own world: its own hero record, its own town (the host's zones it held are dropped)
-function goHome() {
+// a guest back in its own world: its own hero record, its own town (the host's zones it held are dropped). One that
+// never came into the host's world stays where it is, as it was (its zone, its own Shadow Gate)
+function goHome(entered) {
+  if (!entered) { if (S.real) { G.hero = S.real; S.real = null; refreshStats(); } NET.mode = null; writeSave(); return; }
   // (what fell for it in the host's zone comes home with it)
   carryLoot();
   if (S.real) { G.hero = S.real; S.real = null; }
+  // (the host's Shadow Gate is not this page's run)
+  G.gate = null;
   const pl = G.player;
   if (pl?.dead) { pl.dead = false; pl.hp = pl.hpMax; }
   // (nothing of the host's world outlasts the game: its statuses, Seen, a push or a pull; the hero's own stats again)
@@ -184,6 +252,13 @@ function wire() {
   ch.on('f', (m) => { if (S.peers.get(m.peer)?.zk === myKey() && fxFrom(m.peer)) replayFx(m.data, m.peer); });
   ch.on('c', (m) => { if (S.role === 'guest' && m.peer === S.hostPeer && m.data?.op === 'end') leaveGame('coop.hostLeft'); });
   ch.onConnection((c) => { if (!c && S.role) S.lostT = now(); else S.lostT = 0; emit('netLobby'); });
+  // (a send of the game's the room refused: this view may not send, it plays alone; the game's room ended (it could not
+  // be joined again after a reconnect): a guest goes home, a host plays on alone. A terminal code is netDead's)
+  ch.onError?.((code, how) => {
+    if (S.ch !== ch || TERMINAL.has(code)) return;
+    if (how === 'send' && code === 'not_permitted') { S.send = false; S.sendSure = true; leaveGame('coop.noSend'); }
+    else if (how === 'room') leaveGame(S.role === 'host' ? 'coop.lostHost' : 'coop.lost');
+  });
 }
 // the look of a hero's skills is taken from the party only: on the host its guests, on a guest the host and its guests
 const fxFrom = (pr) => (S.role === 'host' ? S.roster.includes(pr) : pr === S.hostPeer || !!S.peers.get(S.hostPeer)?.roster?.includes(pr));
@@ -218,8 +293,10 @@ function peersChanged(c) {
     // (not in the host's roster once it has one: the game is full)
     if (h && h.roster && !h.roster.includes(S.ch.me) && now() - S.joinT > 4000) { leaveGame('coop.full'); return; }
   }
-  emit('netLobby');
+  // (the lobby panel is told only when what it shows has changed, not on every presence)
+  const k = lobbyKey(); if (k !== S.lobbyK) { S.lobbyK = k; emit('netLobby'); }
 }
+const lobbyKey = () => [S.role, S.code, S.hostPeer, S.started, S.zoneKey, S.roster.join(), S.peers.get(S.hostPeer)?.on ? 1 : 0, ...party().map((p) => p.peer + p.name + p.cls + p.lvl + (p.dead ? 1 : 0) + (p.here ? 1 : 0) + (p.host ? 1 : 0))].join('|');
 function readPeer(P, moved) {
   const p = P.pres;
   P.role = p.r === 'h' ? 'host' : p.r === 'g' ? 'guest' : null; P.code = p.c; P.v = p.v | 0;
@@ -623,6 +700,11 @@ function guestTick(dt) {
   // the host gone quiet: home
   if (S.zoneKey && now() - S.lastSnap > HOST_LOST && (!H || H.zk === S.zoneKey)) { leaveGame('coop.lost'); return; }
   if (S.role === 'guest' && !S.hostPeer && now() - S.joinT > 10000) { leaveGame('coop.noHost'); return; }
+  // (waiting has an end: a host that never starts; one started whose world never comes, a host that cannot send it)
+  if (!S.zoneKey) {
+    if (now() - S.joinT > WAIT_MAX) { leaveGame('coop.waitLong'); return; }
+    if (H?.on && !S.world) { S.onT ||= now(); if (now() - S.onT > NO_WORLD) { leaveGame('coop.noWorld'); return; } }
+  }
   // the host's zone: built here from its seed with the host's world (once the world has come)
   if (H?.on && H.zone && S.world && !S.loading && H.zone.k !== S.zoneKey) guestEnter(H.zone);
   if (S.zoneKey && S.zoneKey === myKey()) { MIRROR.rec = recGuestFx; puppetsTick(dt); }
@@ -651,11 +733,13 @@ function onWorld(w) {
   const first = !S.world;
   S.wkey = key;
   if (S.world) Object.assign(S.world, W); else S.world = W;
-  G.gate = w.gate ? { tier: num(w.gate.tier, 0, 999) | 0, progress: 0, guardian: null, start: performance.now(), done: false } : null;
-  if (!S.real) { S.real = G.hero; G.hero = viewHero(S.real, S.world); refreshStats(); }
+  // (kept until this guest is in the host's world: one still waiting plays its own, its story and its Shadow Gate)
+  S.wgate = w.gate ? num(w.gate.tier, 0, 999) | 0 : null;
+  if (S.zoneKey) G.gate = gateOf(S.wgate);
   // what the story has lit and moved, laid on the zone again
   if (!first && G.zone && S.zoneKey === myKey()) presenceAgain(G.zone);
 }
+const gateOf = (tier) => (tier == null ? null : { tier, progress: 0, guardian: null, start: performance.now(), done: false });
 function presenceAgain(z) {
   try {
     // what the host's story has opened since this zone was built here (walls, gates, the plug, the skerry, a sealed hole),
@@ -681,8 +765,13 @@ async function guestEnter(Z) {
     carryLoot();
     // where the host stands in that zone, as its presence says (the snapshot's place is the zone before's): at its side
     const H = S.peers.get(S.hostPeer), Zh = H?.zone?.k === Z.k ? H.zone : Z;
-    const at = fin(Zh.x) && fin(Zh.y) ? { x: num(Zh.x, -10, 1e4) / 20 + rand.range(-1.5, 1.5), z: num(Zh.y, -10, 1e4) / 20 + 1.5 } : 'waypoint';
+    // (spread in depth too: a party that came in on one line has its names on one line)
+    const at = fin(Zh.x) && fin(Zh.y) ? { x: num(Zh.x, -10, 1e4) / 20 + rand.range(-1.5, 1.5), z: num(Zh.y, -10, 1e4) / 20 + 1.5 + rand.range(-1, 1) } : 'waypoint';
     if (H) { H.state = null; H.buf.length = 0; }
+    // the host's world on this page from now on (the zone is built with its difficulty and flags): G.hero a view of the
+    // guest's own record with the host's story over it, the host's Shadow Gate
+    if (!S.real) { S.real = G.hero; G.hero = viewHero(S.real, S.world); refreshStats(); }
+    G.gate = gateOf(S.wgate);
     const prev = { ...G.zones };
     NET.mode = 'guest';
     // (the zone's own level; only a Shadow Gate's is the host's, within what an item may be: chests, urns and the drops on
@@ -1024,7 +1113,7 @@ function reviveTick(dt) {
   if (!tgt) { if (S.rv) emit('netRevive', 0); S.rv = null; return; }
   if (!S.rv || S.rv.peer !== tgt.peer) S.rv = { peer: tgt.peer, t: 0 };
   S.rv.t += dt;
-  emit('netRevive', S.rv.t / REVIVE);
+  emit('netRevive', S.rv.t / REVIVE, nameOf(tgt));
   if (Math.random() < 0.4) FX.P({ x: tgt.actor.x + rand.range(-0.5, 0.5), y: rand.range(0.2, 1.6), z: tgt.actor.z + rand.range(-0.5, 0.5), vy: 1, life: 0.6, size: 0.12, size1: 0.02, color: 0xfff0c0 });
   if (S.rv.t >= REVIVE) {
     const who = tgt.peer; S.rv = null; emit('netRevive', 0);

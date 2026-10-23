@@ -430,19 +430,26 @@ body:not(.desk) .sk .key { display: none; }
 #party .pm.dead { border-color: rgba(255, 90, 70, .6); animation: blink 1.2s infinite; }
 #party .pm.away { opacity: .55; }
 #party .ph .st { display: none; color: #ffb090; }
+#party .pw { font: italic 600 11px var(--body, sans-serif); color: #d8e4ff; text-shadow: 0 1px 3px #000; }
 #party.stale .ph .st { display: inline; animation: blink 1.2s infinite; }
 #plates { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
-#plates .plate { position: absolute; left: 0; top: 0; font: 600 11px var(--body, sans-serif); color: #e8f0ff; text-shadow: 0 1px 3px #000, 0 0 6px #000; white-space: nowrap; }
+#plates .plate { position: absolute; left: 0; top: 0; font: 600 11px/15px var(--body, sans-serif); color: #e8f0ff; text-shadow: 0 1px 2px #000; white-space: nowrap; background: rgba(8, 8, 12, .6); padding: 0 6px 1px; border-radius: 7px; }
 #plates .plate.dead { color: #ff9a80; }
-#downed { position: absolute; left: 50%; top: 34%; transform: translate(-50%, -50%); text-align: center; z-index: 30; background: rgba(10, 6, 6, .72); border: 1px solid rgba(255, 120, 90, .4); border-radius: 10px; padding: 14px 22px; }
+/* (under the panels and the fade, over the HUD; only its button takes a touch) */
+#downed { position: absolute; left: 50%; top: 34%; transform: translate(-50%, -50%); text-align: center; z-index: 5; pointer-events: none; background: rgba(10, 6, 6, .72); border: 1px solid rgba(255, 120, 90, .4); border-radius: 10px; padding: 14px 22px; }
 #downed .h { font: 800 22px var(--display); color: #ff8a70; letter-spacing: 2px; }
 #downed .s { margin: 6px 0 10px; color: #e8d8c8; font-size: 13px; }
+#downed button { pointer-events: auto; }
 #revive { position: absolute; left: 50%; top: calc(54px + var(--st)); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; pointer-events: none; }
 #revive svg { width: 50px; height: 50px; transform: rotate(-90deg); }
 #revive circle { fill: rgba(8, 6, 4, .55); stroke-width: 4; }
 #revive .bg { stroke: rgba(255, 240, 200, .18); }
 #revive .fg { fill: none; stroke: #fff0c0; stroke-dasharray: 125.66; stroke-linecap: round; }
-#revive b { margin-top: 2px; font: 700 12px var(--display); color: #fff0c8; text-shadow: 0 1px 3px #000; }
+#revive b { margin-top: 2px; font: 700 12px var(--display); color: #fff0c8; text-shadow: 0 1px 3px #000; max-width: 40vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* (a Bellows' ring in its place: the revive below it) */
+#ring:not([hidden]) ~ #revive { top: calc(140px + var(--st)); }
+/* (the party's frames down the left: the kill counter to their right) */
+#hud.party #massacre { left: calc(190px + var(--sl)); }
 .coop .coop-join { display: flex; gap: 8px; margin: 10px 0; }
 .coop .coop-join input { flex: 1; min-width: 0; font: 700 20px var(--display); letter-spacing: 6px; text-transform: uppercase; text-align: center; background: rgba(0, 0, 0, .35); color: #f0e6d0; border: 1px solid rgba(220, 190, 120, .4); border-radius: 6px; padding: 6px; }
 .coop .coop-code { font: 800 40px var(--display); letter-spacing: 10px; text-align: center; color: var(--gold, #e8c070); margin: 4px 0; }
