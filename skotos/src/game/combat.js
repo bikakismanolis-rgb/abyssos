@@ -494,6 +494,8 @@ export function kill(a, src, o = {}) {
   else if (def.flesh === 'spirit') { decal(a.x, a.z, 'ecto', 1.4); glowBurst(a.x, 1.2, a.z, 0x7ae0ff, 24, 3, 0.3, 0.9); }
   if (o.overkill || (src?.hero && Math.random() < 0.15)) { puff(a.x, 0.8, a.z, 4, 0x2a1a14, 0.6, 0.6, 0.6); }
   if (a.team !== 'foe') return;
+  // (a co-op host is paid as its guests are: within 50 m of the kill, a boss anywhere in the zone; theirs go to them)
+  if (NET.mode === 'host' && !a.boss && Math.hypot(G.player.x - a.x, G.player.z - a.z) > 50) { NET.h.reward(a, a.dropAt?.x ?? a.x, a.dropAt?.z ?? a.z); killed(a, def); return; }
   const hero = G.hero, D = DIFFS[hero.diff], s = G.stats;
   // co-op: each player's rewards grow with the party (data.js COOP); the guests' own are rolled and sent (net/coop.js)
   const CK = COOP_K();
@@ -530,6 +532,10 @@ export function kill(a, src, o = {}) {
     for (const f of foes(a.x, a.z, 3)) damage(G.player, f, G.stats.wmax * G.stats.dmgMult * 1.5, { freeze: 1, quiet: true });
   }
   if (s.legs.has('barrowCrown') && !a.boss && Math.random() < 0.12) emit('raiseAlly', a);
+  killed(a, def);
+}
+// what a monster's death does whoever is paid for it: its affixes' last blows, and the story hears of it
+function killed(a, def) {
   // affixes
   if (def.deathFire) later(0.25, () => { explosion(a.x, a.z, 1.6, 0xff7a20, { smoke: 0x2a2220, shake: 0.05 }); area('fire', a.x, a.z, 1.3, 3.5, { team: 'foe', src: a, dmg: a.dmg * 0.3, tick: 0.5 }); });
   if (a.affixes.includes('molten')) later(0.6, () => { explosion(a.x, a.z, 3, 0xff6a20); const p = G.player; if (Math.hypot(p.x - a.x, p.z - a.z) < 3.2) damage(a, p, a.dmg * 2.2, { burn: a.dmg }); });

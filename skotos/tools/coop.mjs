@@ -1,7 +1,7 @@
 // Co-op scenarios: node tools/coop.mjs <name> <outdir>   (BASE=http://localhost:<port>/, a private no-HMR server)
 // One headless browser, two to four pages in one context (LocalTransport: BroadcastChannel), each with its own save
 // (?slot=). Every page is ?net=local&norender: the game runs, nothing is drawn (but for the screenshots).
-// Names: join, pack, boss1..boss5, loot, revive, churn, hostleave, act5, scaling, four, ui
+// Names: join, pack, boss1..boss5, loot, revive, churn, hostleave, cheat, world, act5, scaling, four, ui
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 const require = createRequire(import.meta.url);
@@ -122,7 +122,9 @@ const SC = {
     // the nearest pack to both
     const pk = await ev(host, () => { const z = window.__G.zone, p = window.__G.player; const list = z.packs.filter((q) => !q.spawned).sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z)); return list[0] && { x: list[0].x, z: list[0].z }; });
     await place(host, pk.x + 12, pk.z); await place(g, pk.x + 3, pk.z);
-    await ev(host, () => { window.__immortal = true; });
+    // (the host stays where it is, 12 m off; the monsters' deaths on the host are counted, its own share being only of those
+    // within 50 m of it)
+    await ev(host, async () => { window.__immortal = true; const p = window.__G.player; p.hpMax = p.hp = 99999; const B = await import('/src/ui/bus.js'); window.__kills = 0; B.on('kill', () => window.__kills++); });
     const spawned = await until(host, () => window.__G.actors.some((a) => a.team === 'foe' && !a.prop && !a.dead), null, 15000, 'pack');
     ok(spawned, 'a pack woke for the guest (the host is 12 m off)');
     const pups = await until(g, () => [...window.__NET.S.pup.values()].filter((a) => !a.dead).length > 0, null, 10000, 'puppets');
@@ -135,7 +137,7 @@ const SC = {
     // the guest strikes back: its blows (through the game's own damage) land on the host's monsters
     const xp0 = await ev(g, () => window.__G.hero.xp + window.__G.hero.level * 1e6);
     const gold0 = await ev(g, () => window.__G.hero.gold);
-    const k0 = await ev(host, () => window.__G.hero.stats.kills);
+    const k0 = await ev(host, () => window.__kills);
     for (let i = 0; i < 40; i++) {
       await ev(g, () => { const G = window.__G; G.player.hp = G.player.hpMax; for (const a of window.__NET.S.pup.values()) if (!a.dead && a.team === 'foe') { G.player.x = a.x + 1.2; G.player.z = a.z; window.__D.emit; window.__dmg ||= null; } });
       await ev(g, async () => { const C = await import('/src/game/combat.js'); const G = window.__G; for (const a of window.__NET.S.pup.values()) if (!a.dead && a.team === 'foe' && Math.hypot(a.x - G.player.x, a.z - G.player.z) < 20) C.damage(G.player, a, G.stats.wmax * G.stats.dmgMult * 2.5, { crit: false }); });
@@ -143,7 +145,7 @@ const SC = {
       const left = await ev(host, () => window.__G.actors.filter((a) => a.team === 'foe' && !a.prop && !a.dead && !a.remote).length);
       if (!left) break;
     }
-    const k1 = await ev(host, () => window.__G.hero.stats.kills);
+    const k1 = await ev(host, () => window.__kills);
     ok(k1 > k0, 'the guest\'s blows killed the host\'s monsters', { k0, k1 });
     await sleep(1500);
     const xp1 = await ev(g, () => window.__G.hero.xp + window.__G.hero.level * 1e6), gk = await ev(g, () => window.__G.hero.stats.kills);
@@ -428,6 +430,188 @@ const SC = {
     ok(!(await fatal(g)), 'no error on the guest\'s page', await fatal(g));
   },
 
+  // the world kept in step while the host's story and the party move (no place(): the guests come to the host's side): a
+  // guest's page that stops, the pools, the puppet's bar, the 50 m rule, a zone kept and what fell carried along, the scaling
+  // in a zone left behind, the thorn walls and the slag opened with the guest there, the skerry, the Tower's clock with only a
+  // guest in the bay, the ice's gusts and fires and a sealed hole, and downed when the game ends
+  async world() {
+    const fatal = (pg) => ev(pg, () => document.getElementById('fatal')?.textContent || '');
+    const at = (pg) => ev(pg, () => ({ x: window.__G.player.x, z: window.__G.player.z }));
+    const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+    const tough = (pg) => ev(pg, () => { const p = window.__G.player; p.hpMax = p.hp = 99999; });
+    const inZone = (pg, z, ms = 120000) => until(pg, (z) => window.__G.zone?.id === z && window.__NET.S.zoneKey === window.__G.zone.netKey, z, ms, 'guest in ' + z);
+    // (the host takes a waypoint once its last arrival is over: a guest entering a zone it kept can be there before it is)
+    const go = async (z) => { await until(host, () => !document.getElementById('fade').classList.contains('on'), null, 10000, 'fade'); await sleep(300); await ev(host, (z) => window.__D.emit('travel', z, { at: 'waypoint' }), z); };
+    const walk = (pg, cells) => ev(pg, (cells) => { const m = window.__G.zone.map; return cells.filter(([x, z]) => m.walkable(x + 0.5, z + 0.5)).length; }, cells);
+    // (a forest with chests)
+    const { host, guests: [g, g2], code } = await party('forest', 2, { lvl: 14, glvl: 14, hq: '&seed=1234' });
+    for (const pg of [host, g, g2]) await tough(pg);
+    // arriving: at the host's side, not at the waypoint
+    const h0 = await hostPos(host);
+    for (const [i, pg] of [g, g2].entries()) { const p = await at(pg); ok(dist(p, h0) < 4, 'guest ' + (i + 1) + ' joined at the host\'s side', { d: +dist(p, h0).toFixed(1) }); }
+
+    // a guest's page stops (a hidden tab): not counted once its beat stops, the other guest's events never wait for it
+    const p1 = await ev(g, () => window.__NET.S.ch.me), p2 = await ev(g2, () => window.__NET.S.ch.me);
+    await ev(g2, () => { window.__raf0 = window.requestAnimationFrame; window.__rafQ = []; window.requestAnimationFrame = (f) => { window.__rafQ.push(f); return 0; }; });
+    await ev(host, (pr) => { for (let i = 0; i < 150; i++) window.__NET.relTo(pr, ['say', 'x'.repeat(40)]); }, p2);
+    const stopped = await until(host, () => window.__NET.NET.n === 2 && window.__NET.NET.remotes.length === 1, null, 12000, 'stopped guest dropped');
+    ok(stopped, 'a guest whose page stopped is not counted once its beat stops', await ev(host, () => window.__NET.NET.n));
+    await ev(host, (pr) => window.__NET.relTo(pr, ['cd', 900, 'probe']), p1);
+    const t0 = Date.now(), probe = await until(g, () => window.__NET.S.hclips.get(900) === 'probe', null, 10000, 'probe');
+    ok(probe && Date.now() - t0 < 2000, 'and the other guest\'s reliable events still come at once', { ms: Date.now() - t0 });
+    await ev(g2, () => { window.requestAnimationFrame = window.__raf0; for (const f of window.__rafQ.splice(0)) window.__raf0(f); });
+    ok(await until(host, () => window.__NET.NET.n === 3, null, 15000, 'beats again'), 'it is counted again once it beats');
+    await g2.close(); pages.splice(pages.indexOf(g2), 1);
+    await until(host, () => window.__NET.NET.n === 2, null, 25000, 'g2 gone');
+
+    // a monster's pool with no owner and the Flood's ring of amber: on the guest's page too
+    const gp = await at(g);
+    await ev(host, async (p) => { const S = await import('/src/game/sap.js'); S.addSapPool(p.x, p.z, 2, 8); S.addSapRing(p.x + 20, p.z, 7, 16, 6); }, gp);
+    await sleep(1200);
+    const sp = await ev(g, async (p) => (await import('/src/game/sap.js')).sapPools().map((q) => [Math.round(q.x - p.x), Math.round(q.z - p.z), q.r0, q.r]), gp);
+    ok(sp.some(([dx, dz, r0, r]) => Math.abs(dx) <= 1 && Math.abs(dz) <= 1 && r === 2) && sp.some(([, , r0, r]) => r0 === 7 && r === 16), 'a pool with no owner and the Flood\'s ring reach the guest', sp);
+
+    // the puppet's bar: a guest's blow moves it by its share of the host's life (x1.7 for two)
+    const m0 = await ev(host, async (p) => { const A = await import('/src/game/actors.js'), G = window.__G; const m = A.spawnMonster('skeleton', p.x + 3, p.z, {}); G.actors.push(m); return { id: m.id, max: Math.round(m.hpMax), k: m.coopK }; }, gp);
+    await until(g, (id) => window.__NET.S.pup.has(id), m0.id, 8000, 'puppet');
+    await sleep(300);
+    const bar = await ev(g, async (id) => { const C = await import('/src/game/combat.js'), G = window.__G, S = window.__NET.S, a = S.pup.get(id), f0 = a.hp / a.hpMax; C.damage(G.player, a, 40, { crit: false }); const e = S.ev[S.ev.length - 1]; return { f0, f1: a.hp / a.hpMax, amt: e?.[3], net: a.netHpMax, own: Math.round(a.hpMax) }; }, m0.id);
+    const want = bar.amt / m0.max;
+    ok(bar.net === m0.max && Math.abs(bar.f0 - bar.f1 - want) < want * 0.25 + 0.002, 'a guest\'s blow moves the puppet\'s bar by its share of the host\'s life', { ...bar, host: m0, want: +want.toFixed(4) });
+
+    // the 50 m rule for the host too: a kill beside the guest 60 m from the host pays the guest only; beside both, both
+    const xp = (pg) => ev(pg, () => { const h = window.__G.hero.__real || window.__G.hero; return h.level * 1e7 + h.xp; });
+    let hx = await xp(host), gx = await xp(g);
+    await ev(host, (id) => { const m = window.__G.actors.find((a) => a.id === id); if (m) window.__D.kill(m); }, m0.id);
+    await sleep(1500);
+    let hx1 = await xp(host), gx1 = await xp(g);
+    ok(hx1 > hx && gx1 > gx, 'a kill beside both pays both', { host: hx1 - hx, guest: gx1 - gx });
+    const far = await ev(host, (p) => { const G = window.__G, m = G.zone.map; for (let a = 0; a < 6.28; a += 0.2) for (const d of [62, 66, 70]) { const x = p.x + Math.cos(a) * d, z = p.z + Math.sin(a) * d; if (m.walkable(x, z)) { G.player.x = x; G.player.z = z; return { x, z }; } } return null; }, gp);
+    hx = await xp(host); gx = await xp(g);
+    await ev(host, async (p) => { const A = await import('/src/game/actors.js'), G = window.__G; const m = A.spawnMonster('skeleton', p.x + 2, p.z, {}); G.actors.push(m); window.__D.kill(m); }, gp);
+    await sleep(1500);
+    hx1 = await xp(host); gx1 = await xp(g);
+    ok(far && hx1 === hx && gx1 > gx, 'a kill 60 m from the host pays the guest beside it, not the host', { far: !!far, host: hx1 - hx, guest: gx1 - gx });
+    await place(host, gp.x - 2, gp.z);
+    await sleep(1000);
+
+    // a chest the guest opened, its loot left lying: the host goes to town (the guest comes by its side, its loot with it)
+    // and back to the same forest (the chest still open)
+    const chest = await ev(g, () => { const G = window.__G, p = G.player, c = G.zone.interact.filter((i) => i.kind === 'chest' && !i.used).sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z))[0]; if (!c) return null; c.use(); return { i: G.zone.interact.indexOf(c), x: c.x, z: c.z }; });
+    await sleep(1800);
+    const b0 = await ev(g, () => ({ ground: window.__G.pickups.filter((p) => p.kind === 'item').length, bag: window.__G.hero.inv.filter(Boolean).length, gold: window.__G.hero.gold }));
+    const fk = await ev(host, () => window.__G.zone.ep);
+    await go('town');
+    const inT = await inZone(g, 'town', 60000);
+    await sleep(400);
+    const ht = await hostPos(host), gt = await at(g);
+    ok(inT && dist(ht, gt) < 4, 'after the host\'s zone change the guest arrives at its side', { d: +dist(ht, gt).toFixed(1) });
+    const b1 = await ev(g, () => ({ bag: window.__G.hero.inv.filter(Boolean).length, gold: window.__G.hero.gold }));
+    ok(chest && b0.ground > 0 && b1.bag - b0.bag >= b0.ground && b1.gold > b0.gold, 'what had fallen for the guest came with it', { b0, b1 });
+    await go('forest');
+    const inF = await inZone(g, 'forest', 60000);
+    const kept = await ev(g, (c) => { const it = c && window.__G.zone.interact[c.i]; return { chest: it?.kind === 'chest' && Math.abs(it.x - c.x) < 0.01, used: !!it?.used }; }, chest);
+    ok(inF && (await ev(host, () => window.__G.zone.ep)) === fk && kept.chest && kept.used, 'back in the same forest the chest it opened is still open', kept);
+
+    // the scaling: a skeleton of the party's, the party goes to town, the guest leaves there, the host comes back alone: its
+    // life and its blows are one hero's again
+    await until(host, () => window.__NET.NET.n === 2, null, 15000, 'n 2 in the forest');
+    const sk0 = await ev(host, async () => { const A = await import('/src/game/actors.js'), G = window.__G, p = G.player; const m = A.spawnMonster('skeleton', p.x + 30, p.z, {}); G.actors.push(m); window.__sk = m; return { hp: m.hpMax, dmg: m.dmg, k: m.coopK, d: m.coopD, n: window.__NET.NET.n }; });
+    await go('town');
+    await inZone(g, 'town', 60000);
+    await until(host, () => window.__NET.NET.n === 2, null, 15000, 'n 2 in town');
+    await ev(g, () => window.__NET.leaveGame('coop.youLeft'));
+    await until(host, () => window.__NET.NET.n === 1, null, 15000, 'n 1');
+    await go('forest');
+    await until(host, () => window.__G.zone?.id === 'forest' && window.__G.mode === 'play', null, 30000, 'host in the forest');
+    const sk1 = await ev(host, () => { const m = window.__sk; return { hp: m.hpMax, dmg: m.dmg, k: m.coopK, d: m.coopD, here: window.__G.actors.includes(m) }; });
+    ok(sk0.n === 2 && sk0.k > 1 && sk0.d > 1 && sk1.here && sk1.k === 1 && sk1.d === 1 && Math.abs(sk1.hp - sk0.hp / sk0.k) < 1 && Math.abs(sk1.dmg - sk0.dmg / sk0.d) < 0.01, 'a monster of the party\'s left in the forest is one hero\'s again, life and blows, when the host comes back alone', { party: sk0, alone: sk1 });
+    await until(g, () => !window.__NET.S.role && window.__G.zone?.id === 'town' && window.__G.mode === 'play', null, 30000, 'home');
+    await ev(g, (c) => window.__NET.joinGame(c), code);
+    ok(await inZone(g, 'forest', 60000), 'the guest joined again');
+    await tough(g);
+
+    // the Heartwood: the guest is there when the host kills the three Heartroots: their walls open on its page too
+    await ev(host, async () => { const G = window.__G, h = G.hero; h.quest = 14; for (const f of ['hart', 'act1', 'act2']) h.flags[f] = true; const W = await import('/src/game/world.js'); await W.zoneReady('heart'); window.__D.enterZone('heart', { fresh: true }); for (const p of G.zone.packs) p.spawned = true; });
+    const inH = await inZone(g, 'heart');
+    const thorns = await ev(g, () => (window.__G.zone.L.thorns || []).map((t) => t.cells));
+    const shut = []; for (const c of thorns) shut.push(await walk(g, c));
+    await ev(host, () => { for (const a of window.__G.actors.slice()) if (a.kind === 'heartroot' && a.wall != null && !a.dead) window.__D.kill(a); });
+    const opened = await until(g, () => { const z = window.__G.zone; return (z.L.thorns || []).every((t) => t.cells.every(([x, zz]) => z.map.walkable(x + 0.5, zz + 0.5))); }, null, 15000, 'walls open');
+    ok(inH && thorns.length === 3 && shut.every((n) => n === 0) && opened, 'the thorn walls the host broke with the guest there open on the guest\'s page', { shut, opened });
+
+    // the Forge: the slag the host's third breath melts is gone on the guest's page, the stair to the Anvil open
+    await ev(host, async () => { const G = window.__G, h = G.hero; h.quest = 20; for (const f of 'act3,after3,autumn,fireTaken,lamp_l1,lamp_l2,lamp_l3,lamp_l4,lamp_l5,mem_l1,mem_l2,mem_l3,mem_l4,mem_l5,ivar'.split(',')) h.flags[f] = true; const W = await import('/src/game/world.js'); await W.zoneReady('forge'); window.__D.enterZone('forge', { fresh: true }); for (const p of G.zone.packs) p.spawned = true; });
+    const inFo = await inZone(g, 'forge');
+    const plug = await ev(g, () => window.__G.zone.L.plug?.cells || []);
+    const plug0 = await walk(g, plug);
+    await ev(host, async () => { const B = await import('/src/ui/bus.js'); B.emit('bellowsDone', 'b3', 3, window.__G.zone); });
+    const melted = await until(g, (n) => { const z = window.__G.zone; return z.id === 'forge' && z.L.plug.cells.every(([x, zz]) => z.map.walkable(x + 0.5, zz + 0.5)); }, null, 15000, 'plug');
+    ok(inFo && plug.length > 0 && plug0 === 0 && melted, 'the slag the host melted is gone on the guest\'s page', { cells: plug.length, plug0, melted });
+
+    // Skerry Bay: the skerry opens on the guest's page when the host's Tower wakes; its fight clock runs with only the
+    // guest in the bay (the host 70 m off); once the Tower is down the skerry shuts again
+    const A5 = 'act4,hart,weaver,lord,plug,karthax,crownUnmade,giftsTaken,unbound,newFire,alkyone,coastCall,cradle,coal,alkField,coastSeen,hearth,rite,tamMet,glaukosMet,light_grey,mem_i1,light_wreck,mem_i2,light_fall';
+    await ev(host, async (F5) => { const G = window.__G, h = G.hero; h.quest = 27; for (const f of F5.split(',')) h.flags[f] = true; h.act1 = h.act2 = h.act3 = h.act4 = 1; h.flags.lights5 = ['grey', 'wreck', 'fall']; const W = await import('/src/game/world.js'); await W.zoneReady('coast'); window.__D.enterZone('coast', { fresh: true }); const z = G.zone, b = z.L.boss; for (const p of z.packs) p.spawned = true; const f = z.map.nearestFloor(b.x + 2, b.z + 8); G.player.x = f.x; G.player.z = f.z; }, A5);
+    const inC = await inZone(g, 'coast');
+    await tough(host); await tough(g);
+    const skc = await ev(g, () => window.__G.zone.L.spots.skerry.cells);
+    const sk0c = await walk(g, skc);
+    await until(host, () => !!window.__G.zone.boss, null, 15000, 'tower');
+    await ev(host, async () => { const C = await import('/src/game/combat.js'), B = await import('/src/ui/bus.js'), G = window.__G, z = G.zone, b = z.boss, sk = z.L.spots.skerry; G.hero.flags.towerWake = true; if (z.map.open(sk.cells)) B.emit('mapChanged'); b.holdWake = false; C.damage(G.player, b, 1, { crit: false }); });
+    const skOpen = await until(g, (n) => { const z = window.__G.zone; return z.L.spots.skerry.cells.every(([x, zz]) => z.map.walkable(x + 0.5, zz + 0.5)); }, null, 15000, 'skerry open');
+    ok(inC && sk0c === 0 && skOpen, 'the skerry opens on the guest\'s page when the host\'s Tower wakes', { cells: skc.length, before: sk0c, skOpen });
+    await ev(host, () => { const G = window.__G, c = G.zone.L.boss, m = G.zone.map; for (let a = 0; a < 6.28; a += 0.2) for (const d of [70, 66, 74, 62]) { const x = c.x + Math.cos(a) * d, z = c.z + Math.sin(a) * d; if (m.walkable(x, z)) { G.player.x = x; G.player.z = z; return; } } });
+    await ev(g, () => { const G = window.__G, c = G.zone.L.boss, f = G.zone.map.nearestFloor(c.x, c.z + 10); G.player.x = f.x; G.player.z = f.z; });
+    await until(host, () => { const r = window.__NET.NET.remotes[0], c = window.__G.zone.L.boss; return r && Math.hypot(r.x - c.x, r.z - c.z) < 20; }, null, 15000, 'guest in the bay');
+    const tw = () => ev(host, () => { const G = window.__G, b = G.zone.boss, c = G.zone.L.boss; return { awake: !!b.awake, away: b.away, st: b.tide?.st, t: b.tide ? +b.tide.t.toFixed(2) : null, hostD: Math.round(Math.hypot(G.player.x - c.x, G.player.z - c.z)) }; });
+    await sleep(1500);
+    const tw0 = await tw(); await sleep(3000); const tw1 = await tw();
+    ok(tw1.awake && tw1.away === false && tw1.hostD > 42 && tw0.t != null && (tw1.t < tw0.t || tw1.st !== tw0.st), 'the Walking Tower\'s fight clock runs with only a guest in the bay', { tw0, tw1 });
+    await ev(host, () => { window.__G.hero.flags.towerDown = true; });
+    const skShut = await until(g, () => { const z = window.__G.zone; return z.L.spots.skerry.cells.every(([x, zz]) => !z.map.walkable(x + 0.5, zz + 0.5)); }, null, 15000, 'skerry shut');
+    ok(skShut, 'and shuts again on the guest\'s page once the host\'s Tower is down');
+
+    // the Farthest Light: the gusts on the host's clock, the fires the host lights and the dark puts out, a hole it seals
+    await ev(host, async () => { const G = window.__G, h = G.hero; Object.assign(h.flags, { frozen: true, farSeen: true, alkShip: true, mem_i3: true }); h.quest = 28; const W = await import('/src/game/world.js'); await W.zoneReady('farlight'); window.__D.enterZone('farlight', { fresh: true }); for (const p of G.zone.packs) p.spawned = true; });
+    const inL = await inZone(g, 'farlight');
+    await tough(host); await tough(g);
+    await sleep(2500);
+    for (const pg of [host, g]) await ev(pg, async () => { const B = await import('/src/ui/bus.js'); window.__gusts = []; if (!window.__gustOn) { window.__gustOn = true; B.on('gust', (on) => window.__gusts?.push(on ? 1 : 0)); } });
+    await ev(host, () => { window.__G.zone.gust.t = 28; });
+    await sleep(1500);
+    const gc = [await ev(host, () => window.__G.zone.gust.t % 40), await ev(g, () => window.__G.zone.gust?.t % 40)];
+    await sleep(11000);
+    const gn = [await ev(host, () => window.__gusts), await ev(g, () => window.__gusts)];
+    ok(inL && Math.abs(gc[0] - gc[1]) < 1 && gn[0].length === 2 && gn[1].length >= 2 && gn[1].length <= 3, 'the guest\'s gusts come on the host\'s clock, once each', { clocks: gc.map((v) => +v.toFixed(2)), host: gn[0], guest: gn[1] });
+    await ev(host, async () => { const W = await import('/src/game/world.js'), z = window.__G.zone; W.light5(z, z.act5.cairns[0], true); W.light5(z, z.act5.lamps[0], true); });
+    const lit = await until(g, () => { const A = window.__G.zone.act5; return A.cairns[0].lit && A.lamps[0].lit; }, null, 5000, 'lit');
+    const warm = await ev(g, () => { const c = window.__G.zone.act5.cairns[0]; return !!window.__act5.warmAt(c.x + 1.2, c.z); });
+    await ev(host, async () => { const W = await import('/src/game/world.js'), z = window.__G.zone; W.light5(z, z.act5.cairns[0], false); W.light5(z, z.act5.lamps[0], false); });
+    const dark = await until(g, () => { const A = window.__G.zone.act5; return !A.cairns[0].lit && !A.lamps[0].lit; }, null, 5000, 'out');
+    ok(lit && warm && dark, 'a cairn and a hole lamp the host lights burn (and warm) on the guest\'s page, and go out with the host\'s', { lit, warm, dark });
+    const hole0 = await ev(g, () => window.__G.zone.act5.lamps.filter((l) => l.hole === 0).length);
+    await ev(host, () => { window.__G.hero.flags.hole0 = true; });
+    const sealed = await until(g, () => { const z = window.__G.zone, A = z.act5, ho = z.L.spots.holes.find((h) => h.id === 0); return !A.lamps.some((l) => l.hole === 0) && A.markers.some((m) => m.userData.ho === ho) && ho.lead.every(([x, zz]) => z.map.walkable(x + 0.5, zz + 0.5)); }, null, 15000, 'sealed');
+    ok(hole0 === 3 && sealed, 'a hole the host sealed is sealed on the guest\'s page: one marker-light, its lead walkable ice', { hole0, sealed });
+    ok(!(await fatal(host)) && !(await fatal(g)), 'neither page broke', { host: await fatal(host), guest: await fatal(g) });
+
+    // downed when the game ends: both down, the host closes the game (before the wipe's 3 s): the guest's card goes and it
+    // is up at home; the host, alone and down, has the death panel
+    for (const pg of [g, host]) await ev(pg, async () => { const C = await import('/src/game/combat.js'), G = window.__G; C.damage({ team: 'foe', level: 10, x: G.player.x, z: G.player.z, def: {}, affixes: [] }, G.player, 1e9, { pure: true }); });
+    await sleep(900);
+    const card = (pg) => ev(pg, () => ({ card: !document.getElementById('downed')?.hidden, dead: window.__G.player.dead, downed: !!window.__NET.S.downed, panel: window.__G.panel, role: window.__NET.S.role, zone: window.__G.zone?.id }));
+    const d0 = [await card(host), await card(g)];
+    await ev(host, () => window.__NET.leaveGame());
+    await until(g, () => !window.__NET.S.role, null, 15000, 'guest out');
+    await sleep(2500);
+    const d1 = [await card(host), await card(g)];
+    ok(d0[0].downed && d0[1].downed && d0[0].card && d0[1].card, 'both were down, their cards shown', d0);
+    ok(!d1[1].card && !d1[1].dead && !d1[1].role, 'the game ended: the guest\'s card is gone and it is up at home', d1[1]);
+    ok(!d1[0].card && d1[0].dead && d1[0].panel === 'dead', 'and the host, alone and down, has the death panel', d1[0]);
+    ok(!(await fatal(host)) && !(await fatal(g)), 'no error on either page', { host: await fatal(host), guest: await fatal(g) });
+  },
+
 
   // Act V: the host's tide on the guest's coast (its clock and a boss's hold), the host's ice breaking under the guest
   async act5() {
@@ -635,6 +819,8 @@ const SC = {
 try {
   if (!SC[name]) throw new Error('no scenario ' + name);
   await SC[name]();
+  // (the game's errors from its timers and its loop go to the #fatal box, not the console: every page still open is read)
+  for (const [i, pg] of pages.entries()) if (!pg.isClosed()) { const f = await pg.evaluate(() => document.getElementById('fatal')?.textContent || '').catch(() => ''); ok(!f, 'page ' + (i + 1) + ': nothing in the #fatal box', f ? f.slice(0, 300) : undefined); }
 } catch (e) { ok(false, 'scenario threw: ' + (e.stack || e).toString().slice(0, 600)); }
 fs.writeFileSync(out + '/' + name + '.json', JSON.stringify({ name, fails, results }, null, 1));
 console.log(fails ? fails + ' FAILED' : 'all passed');

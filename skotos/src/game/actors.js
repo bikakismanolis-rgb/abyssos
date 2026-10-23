@@ -159,8 +159,8 @@ export function spawnMonster(id, x, z, o = {}) {
   // (Act V's zones: their creatures' blows by difficulty too, HAZ5.dmg, so the act steps up from the one before on each)
   if (G.zone?.act5) dmg *= HAZ5[G.hero.diff]?.dmg ?? 1;
   // co-op: the host's monsters stand up to the party (data.js COOP; net/coop.js rescales them as players come and go)
-  const ck = NET.mode === 'host' && NET.n > 1 ? (def.boss ? COOP.boss : COOP.hp)[Math.min(4, NET.n) - 1] : 1;
-  if (ck !== 1) { hp *= ck; dmg *= COOP.dmg[Math.min(4, NET.n) - 1]; }
+  const ck = NET.mode === 'host' && NET.n > 1 ? (def.boss ? COOP.boss : COOP.hp)[Math.min(4, NET.n) - 1] : 1, cd = ck !== 1 ? COOP.dmg[Math.min(4, NET.n) - 1] : 1;
+  if (ck !== 1) { hp *= ck; dmg *= cd; }
   let scale = def.look?.scale || 1;
   const look = {};
   if (o.elite === 'champion') { hp *= 3; dmg *= 1.25; scale = 1.1; }
@@ -179,7 +179,7 @@ export function spawnMonster(id, x, z, o = {}) {
   if (id === 'stoneborn') av.hold('L', 'shield', { face: 0x3a2a24, rim: 0x8a6a3a, emblem: 0xb07a30, r: 0.3 });
   if (def.shield) av.hold('L', 'shield', def.shield);
   const a = new Actor({ x, z, team: 'foe', kind: id, def, radius: def.radius * scale, speed: def.speed * (o.elite ? 1.05 : 1), hp, dmg, level: lvl, avatar: av, elite: o.elite, affixes: o.affixes, boss: def.boss });
-  a.scale = scale; a.coopK = ck;
+  a.scale = scale; a.coopK = ck; a.coopD = cd;
   // the tint an actor returns to after a freeze or a disguise
   const tint = (c, k) => { av.setTint(c, k); a.baseTint = c; a.baseTintAmt = k; };
   if (o.elite === 'champion') { tint(0x5070ff, 0.35); av.setRim(0x6090ff, 0.9); }

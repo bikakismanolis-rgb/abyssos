@@ -101,6 +101,18 @@ function removePickup(p, i) {
   G.pickups.splice(i, 1);
 }
 export function clearPickups() { for (let i = G.pickups.length - 1; i >= 0; i--) removePickup(G.pickups[i], i); }
+// what lies here taken at once (a co-op guest that follows its host away, net/coop.js): the gold, and the items while the
+// bag has room; what is left stays where it fell
+export function gatherPickups() {
+  const out = { gold: 0, items: 0, left: 0 };
+  for (let i = G.pickups.length - 1; i >= 0; i--) {
+    const p = G.pickups[i];
+    if (p.kind === 'gold') { G.hero.gold += p.amount; out.gold += p.amount; removePickup(p, i); }
+    else if (p.kind === 'item') { if (addToBag(p.item)) { out.items++; emit('itemPicked', p.item); removePickup(p, i); } else out.left++; }
+  }
+  if (out.gold) emit('gold');
+  return out;
+}
 
 let fullWarn = 0;
 export function updatePickups(dt) {

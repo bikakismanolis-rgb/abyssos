@@ -2304,8 +2304,7 @@ function flood(a) {
   a.avatar?.play('castUp', 0.9); Audio.sfx('amaranthSong');
   return { t: 1.5, fn() {
     killTele(safe); ring(a.x, a.z, 16, 0xffb040, 0.8); ring(a.x, a.z, 11, 0xffa030, 0.6); glowBurst(a.x, 1, a.z, 0xffb040, 50, 9, 0.4, 0.8); shake(0.6); Audio.sfx('sapRoot');
-    const p = G.player, dd = Math.hypot(p.x - a.x, p.z - a.z);
-    if (dd > 7 && dd < 16.3) hitHero(a, p, 1.4);
+    for (const p of heroes()) { const dd = Math.hypot(p.x - a.x, p.z - a.z); if (dd > 7 && dd < 16.3) hitHero(a, p, 1.4); }
     addSapRing(a.x, a.z, 7, 16, 6);
   }, after: 0.8 };
 }
@@ -2401,6 +2400,12 @@ const arenaR = (r) => G.zone.L.boss?.r ?? r;
 // or near the boss wherever the fight has drifted (heroNear), not across the whole zone
 const heroInArena = (a, pad = 6) => { const c = arena(a), p = G.player; return Math.hypot(p.x - c.x, p.z - c.z) < arenaR(16) + pad; };
 const heroNear = (a, r = 20) => heroInArena(a) || Math.hypot(G.player.x - a.x, G.player.z - a.z) < r;
+// (the fight's own clock and moves go on while any hero is there: on a co-op host its guests too; the camera, the light
+// and the sky above stay this page's hero's, heroNear and heroInArena)
+const inArena = (a, p, pad) => { const c = arena(a); return Math.hypot(p.x - c.x, p.z - c.z) < arenaR(16) + pad; };
+const guestThere = (f) => NET.mode === 'host' && NET.remotes.some((r) => !r.dead && !r.removed && f(r));
+const partyInArena = (a, pad = 6) => heroInArena(a, pad) || guestThere((r) => inArena(a, r, pad));
+const partyNear = (a, r = 20) => heroNear(a, r) || guestThere((p) => inArena(a, p, 6) || Math.hypot(p.x - a.x, p.z - a.z) < r);
 // a channel broken by a stun (updateActors skips the AI while stunned, and marks it)
 const interrupted = (a) => { const i = a.interrupted; a.interrupted = false; return i || a.status.stun > 0 || a.status.freeze > 0 || a.status.fear > 0; };
 
@@ -3122,13 +3127,13 @@ const KARTHAX = {
   },
   moves: [
     // every 15 s (cooldowns run a quarter faster in a last phase)
-    { id: 'dark', when: (a) => a.phase >= 2 && heroNear(a), cd: 18.75, run: (a) => theDark(a) },
+    { id: 'dark', when: (a) => a.phase >= 2 && partyNear(a), cd: 18.75, run: (a) => theDark(a) },
     { id: 'breath', when: (a, d) => a.phase >= 2 && !!getLightPool('isarn'), cd: 10, run: (a, pl) => ashBreath(a, pl) },
     // behind the cages one every 3.8 s, wherever she is in the arena (the statues break only to it); never far out of it.
     // Statues risen whole (gifts taken) take more blows, so he strikes faster: 3.8 s for three blows, 3.2 s for six
-    { id: 'hammerfall', when: (a, d) => (a.phase === 1 && heroInArena(a)) || (d > 3 && d < 16), phaseCd: [9, 5, 9], cdOf: (a, ph) => (ph === 1 && a.cageBlows ? 3.8 - 0.2 * (a.cageBlows - 3) : null), run: (a, pl) => hammerfall(a, pl) },
+    { id: 'hammerfall', when: (a, d) => (a.phase === 1 && partyInArena(a)) || (d > 3 && d < 16), phaseCd: [9, 5, 9], cdOf: (a, ph) => (ph === 1 && a.cageBlows ? 3.8 - 0.2 * (a.cageBlows - 3) : null), run: (a, pl) => hammerfall(a, pl) },
     { id: 'kneel', when: (a, d) => a.phase === 1 && cageUp(a, 'lord') && d < 8.5, cd: 12, run: (a) => kneel(a) },
-    { id: 'rain', when: (a) => a.phase === 1 && cageUp(a, 'king') && heroInArena(a), cd: 10, run: (a, pl) => moltenRain(a, pl) },
+    { id: 'rain', when: (a) => a.phase === 1 && cageUp(a, 'king') && partyInArena(a), cd: 10, run: (a, pl) => moltenRain(a, pl) },
     { id: 'host', when: (a) => a.phase === 0 && alive(a.host).length < 4, cd: 22, run: (a) => raiseHost(a) },
     { id: 'tongs', when: (a, d) => a.phase !== 1 && d > 3.5 && d < 10, cd: 12, run: (a, pl) => tongs(a, pl) },
     { id: 'gaze', when: (a, d) => a.phase !== 1 && d > 4, phaseCd: [9, 9, 10], run: (a, pl) => gaze(a, pl) },
@@ -3325,7 +3330,7 @@ function moltenRain(a, pl) {
 // The Dark: every 15 s the whole platform burns for anyone not standing in a light (Isarn's 6 m, the ghosts' 4 m);
 // a fight drawn off the platform burns around him
 function theDark(a) {
-  const c = heroInArena(a) ? arena(a) : { x: a.x, z: a.z }, R0 = arenaR(16) + 3;
+  const c = partyInArena(a) ? arena(a) : { x: a.x, z: a.z }, R0 = arenaR(16) + 3;
   a.tele = teleCircle(c.x, c.z, R0, 1.8, 0xff2010);
   const safes = lightPools().filter((p) => p.r > 0).map((p) => teleCircle(p.x, p.z, p.r, 1.8, 0x60c0ff));
   a.avatar?.play('summon', 0.8); Audio.sfx('bossRoar', { vol: 0.6 }); shake(0.3);
@@ -3453,14 +3458,15 @@ function towerPre(a, dt, pl, d) {
   if (a.invuln > 0 && (a.invuln -= dt) <= 0) { a.invuln = 0; restoreRim(a); }
   // (a little lower and further back while she fights it, and aimed between her and it while it is near: the crab's whole
   // bulk, the light on its back and its telegraphs on a phone screen)
-  if (heroNear(a, 26) && !pl.dead) {
-    const D = Math.hypot(a.x - pl.x, a.z - pl.z), k = clamp((18 - D) / 10, 0, 1), g = angleTo(pl.x, pl.z, a.x, a.z), ah = Math.min(4, D * 0.4) * k;
+  const me = G.player;
+  if (heroNear(a, 26) && !me.dead) {
+    const D = Math.hypot(a.x - me.x, a.z - me.z), k = clamp((18 - D) / 10, 0, 1), g = angleTo(me.x, me.z, a.x, a.z), ah = Math.min(4, D * 0.4) * k;
     fightCam(dt, { p: 0.86 - 0.1 * k, y: 1.2 + 1.4 * k, z: 1.15 + 0.08 * k, ax: Math.sin(g) * ah, az: Math.cos(g) * ah });
   } else fightCam(dt, null);
   // the bay's water is the Tower's while it is awake and she is at the bay (and back at low water on every entry:
   // act5Enter, then here). Away from it (the force holds every tidal cell of the coast, tide.js) the coast keeps its own
   // clock, and the Tower comes up out of what it called; back at the bay the water is at low again, its tide anew
-  const away = !heroInArena(a, 24);
+  const away = !partyInArena(a, 24);
   if (away && !a.away) towerAway(a);
   a.away = away;
   if (TIDE && !TIDE.force && !away) towerWater(a, 0, 0.3);
@@ -3949,7 +3955,7 @@ function towerHome(a, dt) {
   skerryRide(a);
   return true;
 }
-function skerryClose(z, sk) {
+export function skerryClose(z, sk) {
   const pl = G.player, R0 = sk.r + 0.75;
   const clear = (p) => {
     const dx = p.x - sk.x, dz = p.z - sk.z, l = Math.hypot(dx, dz);
@@ -4007,10 +4013,10 @@ const SKOTOS = {
     return null;
   },
   moves: [
-    { id: 'cold', when: (a) => a.phase === 2 && heroNear(a, 26) && roomFor(a), cdOf: cdm(18.75), run: (a) => deepCold(a) },
+    { id: 'cold', when: (a) => a.phase === 2 && partyNear(a, 26) && roomFor(a), cdOf: cdm(18.75), run: (a) => deepCold(a) },
     { id: 'smother', when: (a) => a.phase === 2 && a.relit && !a.coil && !(a.beamOffT > 0), cdOf: cdm(25), run: (a) => smother(a) },
-    { id: 'wave', when: (a) => a.phase !== 1 && heroNear(a, 20) && roomFor(a), cdOf: cdm([14, 16, 22.5]), run: (a, pl) => { a.waveN = 0; return blackWave(a, pl); } },
-    { id: 'drink', when: (a) => a.phase === 0 && heroNear(a, 20) && roomFor(a), cdOf: cdm(20), run: (a, pl) => drinkLight(a, pl) },
+    { id: 'wave', when: (a) => a.phase !== 1 && partyNear(a, 20) && roomFor(a), cdOf: cdm([14, 16, 22.5]), run: (a, pl) => { a.waveN = 0; return blackWave(a, pl); } },
+    { id: 'drink', when: (a) => a.phase === 0 && partyNear(a, 20) && roomFor(a), cdOf: cdm(20), run: (a, pl) => drinkLight(a, pl) },
     { id: 'slam', basic: true, when: (a, d) => a.phase !== 1 && d < 8.5 && roomFor(a), cdOf: cdm(5), run: (a, pl) => bodySlam(a, pl) }
   ]
 };
@@ -4019,7 +4025,7 @@ const SKOTOS = {
 function skotosPre(a, dt, pl, d) {
   const base = a.wrapped ? -2.6 : -4.2;
   if (!a.awake) { a.y = a.hidden ? -9 : damp(a.y ?? base, base, 1.2, dt); return 0; }
-  const z = G.zone, near = heroNear(a, 30);
+  const z = G.zone, near = heroNear(a, 30), fought = partyNear(a, 30);
   if (a.invuln > 0 && (a.invuln -= dt) <= 0) a.invuln = 0;
   // a fight left behind past the third Remember (a death, a walk away: her name is hidden again, story.js): the Night
   // again, from its start, and the Remembers to play again
@@ -4044,7 +4050,7 @@ function skotosPre(a, dt, pl, d) {
     // clock is the actor's, so a death or a walk away only pauses it)
     if (a.hp <= a.hpMax * 0.3 + 1 && (a.remembers || 0) < 3) {
       if (!a.floorSaid) { a.floorSaid = true; a.floorT = 0; emit('skotosFloor', a); tally(a, 'floor'); }
-      if (!a.echo && near && !pl.dead && G.mode === 'play' && (a.floorT += dt) >= 40) { a.floorT = -1e9; emit('skotosSelf', a); tally(a, 'self'); }
+      if (!a.echo && fought && !pl.dead && G.mode === 'play' && (a.floorT += dt) >= 40) { a.floorT = -1e9; emit('skotosSelf', a); tally(a, 'self'); }
     }
     if (a.lockPhase === 1 && (a.remembers || 0) >= 3) { a.lockPhase = null; a.hp = Math.min(a.hp, a.hpMax * 0.299); a.hpFloor = Math.min(a.hp, a.hpMax * 0.299); tally(a, 'remembered'); }
   }
@@ -4058,8 +4064,9 @@ function skotosPre(a, dt, pl, d) {
     if (!a.rolled && a.hp < a.hpMax * 0.15) { a.rolled = true; emit('skotosRoll', a); tally(a, 'roll'); }
   }
   // the camera, lowered and drawn back so the hood stays in the frame when she is near it (a little ahead, toward it)
-  if (near && !pl.dead) {
-    const D = Math.hypot(a.x - pl.x, a.z - pl.z), k = a.under || a.hidden ? 0 : clamp((18 - D) / 11, 0, 1), g = angleTo(pl.x, pl.z, a.x, a.z);
+  const me = G.player;
+  if (near && !me.dead) {
+    const D = Math.hypot(a.x - me.x, a.z - me.z), k = a.under || a.hidden ? 0 : clamp((18 - D) / 11, 0, 1), g = angleTo(me.x, me.z, a.x, a.z);
     fightCam(dt, clearFarLight({ p: 0.72 - 0.15 * k, y: 2.4 + 1.4 * k, z: 1.25 + 0.17 * k, ax: Math.sin(g) * 2.2 * k, az: Math.cos(g) * 2.2 * k }, g, k));
   } else fightCam(dt, null);
   return 0;
@@ -4105,7 +4112,7 @@ function handsTick(a, dt, pl) {
   q.sort((x, y) => x - y);
   while (up.length + (a.handsRising || 0) + q.length < want) q.push(a.t + 3);
   while (up.length + (a.handsRising || 0) + q.length > want && q.length) q.pop();
-  if (q.length && q[0] <= a.t && roomFor(a) && !pl.dead && heroNear(a, 30)) { q.shift(); riseHand(a, pl); }
+  if (q.length && q[0] <= a.t && roomFor(a) && !pl.dead && partyNear(a, 30)) { q.shift(); riseHand(a, pl); }
   // each Hand turns to her and, every 5 s (staggered), Sweeps her if she is in reach or Lashes at her from further off
   for (const h of up) {
     h.rot = dampAngle(h.rot, angleTo(h.x, h.z, pl.x, pl.z), 2.2, dt);
@@ -4283,7 +4290,7 @@ function nightTick(a, dt, pl) {
     if (Math.random() < dt * 10) { const g = N.ang + Math.sign(diff || 1) * 6 / N.R; P({ add: false, x: c.x + Math.sin(g) * N.R + rand.range(-0.8, 0.8), y: 0.1, z: c.z + Math.cos(g) * N.R + rand.range(-0.8, 0.8), vy: 0.6, life: 0.7, size: 0.18, size1: 0.3, color: 0xd8e8f0, alpha: 0.6, alpha1: 0 }); }
     const under = Math.hypot(pl.x - N.x, pl.z - N.z) < 5 ? 1 : 0;
     if (under !== N.under) { N.under = under; Audio.mood({ under }); }
-    if ((N.t -= dt) <= 0 && roomFor(a) && !pl.dead && heroInArena(a, 4) && !(a.dazed > 0) && !remembering()) breachAt(a, pl);
+    if ((N.t -= dt) <= 0 && roomFor(a) && !pl.dead && partyInArena(a, 4) && !(a.dazed > 0) && !remembering()) breachAt(a, pl);
     return;
   }
   if (N.st === 'tele') {

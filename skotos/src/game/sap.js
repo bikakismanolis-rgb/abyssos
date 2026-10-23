@@ -88,7 +88,8 @@ export const sapPools = () => pools;
 export function addSapPool(...args) { return mir('sap', addSapPool0, args); }
 function addSapPool0(x, z, r = 1.8, dur = 6, owner = null, kind = 'amber') { return add(x, z, 0, r, dur, owner, kind); }
 // a ring of sap between r0 and r1 (the Flood leaves the outer chamber set in amber)
-export function addSapRing(x, z, r0, r1, dur = 6) { return add(x, z, r0, r1, dur, null, 'amber'); }
+export function addSapRing(...args) { return mir('sapRing', addSapRing0, args); }
+function addSapRing0(x, z, r0, r1, dur = 6) { return add(x, z, r0, r1, dur, null, 'amber'); }
 function add(x, z, r0, r, dur, owner, kind) {
   while (pools.length >= SAP_CAP) drop(0);
   const p = { x, z, r0, r, dur, t: 0, owner, kind, mesh: poolMesh(r, r0 / r, kind) };

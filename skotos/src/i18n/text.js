@@ -940,6 +940,7 @@ export const TEXT = {
   'coop.full': ['Η συντροφιά είναι γεμάτη', 'The party is full'],
   'coop.version': ['Ο οικοδεσπότης έχει άλλη έκδοση του παιχνιδιού', 'The host has another version of the game'],
   'coop.hostLeads': ['Ο οικοδεσπότης δείχνει τον δρόμο', 'The host leads the way'],
+  'coop.gathered': ['Μάζεψες ό,τι είχε πέσει για σένα πριν φύγεις', 'You gathered what had fallen for you before you left'],
   'coop.downed': ['ΠΕΣΜΕΝΟΣ', 'DOWN'],
   'coop.downedSub': ['Ένας σύντροφος μπορεί να σε σηκώσει· αλλιώς σηκώνεσαι σε {0}″', 'A companion can raise you, or you rise in {0}s'],
   'coop.respawn': ['Σήκω τώρα', 'Rise now'],
