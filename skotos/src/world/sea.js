@@ -320,6 +320,7 @@ float sq256(float x) { x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; r
   // 0.45: they are closed, and the step lies a little under it; the corners' mean beds put it near the cells' edge.) A still
   // noise moves the waterline, and the step a little, inside the cells, so neither traces the grid
   float sn = shoreN(P), dw = dep + sn, depD = dep;
+  bool seaOn = true;
 #if !defined(SEA_LOW) && !defined(SEA_FAR)
   // the waterline and the closed step from the smooth bed: the corners' beds blurred over a couple of metres and read
   // between them (vG: the grid's own point, the corners' jitter taken off), so both curve across the flats' stepped beds
@@ -331,8 +332,11 @@ float sq256(float x) { x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; r
   vec2 bS = texture2D(tBed, (vG * ${BS.toFixed(1)} + 0.5) / uBedS).rg;
   float lvS = mix(uLevel, uBayLevel, vBay), depS = lvS - bS.r;
   dw = depS + sn; depD = lvS - bS.g;
+  // (and the rest in a branch: a discard alone spares a software GPU none of what follows)
   if (depS + sn < -0.04) discard;
+  seaOn = depS + sn >= -0.04;
 #endif
+  if (seaOn) {
   float deep = smoothstep(0.37, 0.43, depD + sn * 0.4);
 #ifndef SEA_LOW
   // (over a drop, the ground metres down, the water is the open sea's whatever its bed says)
@@ -571,7 +575,8 @@ float sq256(float x) { x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; r
   // ahead of the Freeze the crests break white
   col = mix(col, vec3(0.55, 0.6, 0.62) * amb + uSkyC * 0.3, smoothstep(0.22, 0.45, vCr) * (1.0 - fk) * 0.75);
 #endif
-  diffuseColor = vec4(col, a);`);
+  diffuseColor = vec4(col, a);
+  }`);
   };
   m.customProgramCacheKey = () => 'sea|' + key;
   SEA_MATS.set(key, m);
