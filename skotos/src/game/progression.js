@@ -110,7 +110,11 @@ export function migrateHero(h) {
   const def = LOADOUT[h.cls];
   if (!Array.isArray(h.loadout) || h.loadout.length !== 4) h.loadout = def.slice();
   for (let i = 0; i < 4; i++) if (h.loadout[i] && !skillDef(h.loadout[i], h.cls)) h.loadout[i] = def[i];
+  // (a skill on two buttons keeps the first; the other takes the first of today's four not on a button)
+  for (let i = 1; i < 4; i++) if (h.loadout.indexOf(h.loadout[i]) < i) h.loadout[i] = SKILLS[h.cls].find((s) => !s.basic && !h.loadout.includes(s.id))?.id || null;
   h.skills ||= {}; h.vars ||= {}; h.variant ||= {}; h.mast ||= {};
+  // (a way of playing a skill that was never learnt is the skill as it is)
+  for (const id in h.variant) if (h.variant[id] && !hasVariant(h, id, h.variant[id])) h.variant[id] = 0;
   h.mlvl ||= 0; h.mxp ||= 0;
   if (h.level >= MAX_LEVEL) h.xp = 0;
   const free = pointsEarned(h) - pointsSpent(h);

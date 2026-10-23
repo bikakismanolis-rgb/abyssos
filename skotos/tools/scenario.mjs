@@ -978,6 +978,40 @@ const S = {
     const novas = Object.entries(res).filter(([k, v]) => v.healed != null && v.healed < 20).map(([k]) => k);
     return { pass: !selfBreak.length && !novas.length && (!cold || cold.ember >= cold.whirl - 3) && down.after === 0, spot, base, res, cold, down, selfBreak, novasWeak: novas, noCrack: zero };
   } },
+  // saves into this line: a version-13 hero (Acts I-IV with the progression: Mastery, variants, a later skill on a button,
+  // no Act V field), an Act V hero of this line from before the progression (on the Skotos difficulty, the Farthest Light
+  // reached), and one whose points disagree with its books; each taken up from the title, its panel opened
+  save13: { q: 'q=0&sim=2&norender', run: async (pg) => {
+    const now = Date.now(), base = (o) => Object.assign({ xp: 0, gold: 5000, inv: new Array(32).fill(null), equip: {}, stash: new Array(48).fill(null), wps: ['town', 'forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'forge'], act1: 1, act2: 1, act3: 1, act4: 1, gateBest: 3, boons: ['ember', 'forge', 'amber', 'lantern'], stats: { kills: 5000, deaths: 9, time: 90000, legs: 4, elites: 120 }, created: now, played: now, seeds: {} }, o);
+    const flags4 = Object.fromEntries(A5.ACT4.map((k) => [k, true])), flags5 = Object.fromEntries([...A5.ACT4, ...A5.flagsTo('alkShip')].map((k) => [k, true]));
+    const heroes = [
+      base({ id: 'hV13', cls: 'ranger', level: 50, diff: 3, quest: 23, flags: flags4, mlvl: 12, mxp: 5000, points: 61 - 28 - 4 - 15,
+        skills: { multi: 5, rain: 5, wolf: 5, pierce: 5, trap: 5, vault: 5, hawks: 5 }, vars: { rain: 3, multi: 1 }, variant: { rain: 2, multi: 1 }, mast: { might: 10, leech: 5 }, loadout: ['hawks', 'rain', 'multi', 'vault'] }),
+      base({ id: 'hAct5', cls: 'warden', level: 36, diff: 5, quest: 28, flags: flags5, act5: -1, points: 4, skills: { whirl: 5, leap: 5, cry: 5, quake: 5 }, wps: ['town', 'forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'forge', 'coast', 'farlight'], boons: ['ember', 'forge', 'amber', 'lantern'] }),
+      base({ id: 'hOdd', cls: 'mage', level: 30, diff: 1, quest: 23, flags: flags4, mlvl: 0, points: 99, skills: { fireball: 5, nova: 3 }, vars: { fireball: 2 }, variant: { fireball: 2 }, mast: { might: 3 }, loadout: ['fireball', 'nova', 'nova', 'bogus'] })
+    ];
+    await pg.evaluate((heroes) => { localStorage.setItem('skotos.save.v1', JSON.stringify({ heroes, settings: { helpSeen: true }, last: heroes[0].id })); }, heroes);
+    const out = {};
+    for (const h of heroes) {
+      await pg.goto(A5.base + '?q=0&sim=2&norender');
+      await pg.waitForFunction(() => window.__ready && window.__G?.save, null, { timeout: 240000 });
+      await pg.evaluate((id) => window.__D.emit('startHero', window.__G.save.heroes.find((x) => x.id === id), false), h.id);
+      await pg.waitForFunction(() => window.__G?.zone && window.__G.mode === 'play', null, { timeout: 240000 });
+      await A5.tick(pg);
+      out[h.id] = await pg.evaluate(async () => {
+        const G = window.__G, h = G.hero, P = await import('/src/game/progression.js'), S = await import('/src/game/skills.js');
+        window.__D.openPanel('skills'); await new Promise((r) => setTimeout(r, 600));
+        const panel = !!document.querySelector('#panel .pg-tiles, #panel .pg-t, #panel .pn-b');
+        window.__D.closePanel();
+        return { cls: h.cls, level: h.level, diff: h.diff, act5: h.act5, quest: h.quest, mlvl: h.mlvl, points: h.points, earned: P.pointsEarned(h), spent: P.pointsSpent(h), loadout: h.loadout, slots: [1, 2, 3, 4].map((i) => S.skillOn(i)?.id || null), variant: { ...h.variant }, mast: { ...h.mast }, dmgPct: Math.round(G.stats.dmgPct ?? 0), lifeMax: G.stats.lifeMax, panel, cds: G.player.cds.length };
+      });
+    }
+    const a = out.hV13, b = out.hAct5, c = out.hOdd;
+    const ok13 = a.mlvl === 12 && a.loadout.join() === 'hawks,rain,multi,vault' && a.variant.rain === 2 && a.points === a.earned - a.spent && a.act5 === -1 && a.diff === 3 && a.cds === 8;
+    const ok5 = b.loadout.join() === 'whirl,leap,cry,quake' && b.diff === 5 && b.quest === 28 && b.points === b.earned - b.spent && b.points === 35 - 16 && b.mlvl === 0;
+    const okOdd = c.points === c.earned - c.spent && c.slots.every(Boolean) && !c.loadout.includes('bogus') && new Set(c.loadout).size === 4;
+    return { pass: ok13 && ok5 && okOdd && a.panel && b.panel && c.panel, ok13, ok5, okOdd, out };
+  } },
   // levels past the old skill cap, Mastery past 50, and a save from before the progression taken up from the title
   progress: { q: 'auto=town&sim=2&q=1&lvl=1&cls=' + (process.env.CLS || 'ranger'), run: async (pg, shot) => {
     const r = {};
@@ -2064,7 +2098,8 @@ if (sc.child) { let res; try { res = await sc.child(out); } catch (e) { res = { 
 // (every page's #fatal text fails the run: tools/fatal.mjs)
 const FATAL = [];
 const browser = watchBrowser(await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] }), FATAL);
-const page = await browser.newPage({ viewport: { width: +W, height: +H } });
+// (TOUCH=1: a phone, touch and all, as the co-op ui scenario)
+const page = await browser.newPage(process.env.TOUCH ? { viewport: { width: +W, height: +H }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : { viewport: { width: +W, height: +H } });
 page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') { const t = m.text(); if (!t.includes('ERR_CERT')) logs.push(m.type() + ': ' + t); } });
 page.on('pageerror', (e) => logs.push('pageerror: ' + e.message + ' ' + (e.stack || '').split('\n').slice(0, 3).join(' | ')));
 // the test hero never dies (levelling up resets the life pool, so keep topping it up; window.__tough also puts back the
