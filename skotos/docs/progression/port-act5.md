@@ -113,7 +113,20 @@ is the co-op session's; it is left for the lead.
 Leap, Dawnbreaker; Ranger: Hawks, Rain of Fire, Scatter Blast, Vault; Mage: Rift, Ray of Dawn, Meteor Shower, Blizzard;
 Warden: Challenge, Bulwark, Ring of Earth, Maelstrom), resources kept full, for 20 s at a pack of ten:
 
-RESULTS_BUDGET
+| page | sends a second (peak) | bytes a second out | in | dropped by the budget | over 4 KiB |
+|---|---|---|---|---|---|
+| host | 12.0 | 8.7 KB | 9.9 KB | 0 | 0 |
+| Ranger guest | 14.0 | 3.9 KB | 15.8 KB | 0 | 0 |
+| Mage guest | 13.6 | 5.0 KB | 13.7 KB | 0 | 0 |
+| Warden guest | 11.8 | 3.1 KB | 15.8 KB | 0 | 0 |
+
+Against `four` on the same tree (host 10.2 sends a second, 22.7 KB out; guests 9.4-9.6, 1.7-1.8 KB out): a guest sends
+about 4 more messages a second (its `f` fx, now with what its timers, shots and areas do, and its events in presence),
+2-3 KB more; the host fewer bytes than in `four`'s Old Forest fight (fewer monsters near). Every page stays near a third of
+the room's ~40 sends a second; the host's snapshot is still capped at 3.9 KB and a guest's `f` at its 1.8 KB a send
+(packFx drops the least important first, so the budget holds by construction; these are what was used). In the same run
+the host landed 61 521 of damage against the 52 408 the guests sent (its own blows the rest), refused none (`why` empty),
+and the Mage guest drew 13 of the others' shots and effects by their looks at once.
 
 ## Saves
 
