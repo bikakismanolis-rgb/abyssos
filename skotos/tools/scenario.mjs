@@ -220,6 +220,9 @@ async function BOT5(o) {
     const u = under(pl.x, pl.z);
     // (into a calm, or out of its ring if that is nearer: from the Tower's bait, 9 m off, the Bell's calm was 5 m away)
     if (u) { const c = u.r > 0 && calmIn(u.c, u.r > 14), du = Math.hypot(u.x, u.z), cc = c && Math.hypot(pl.x - c.x, pl.z - c.z) - c.r + 0.3, ok = (k) => z.map.walkable(pl.x + (u.x / (du || 1)) * k, pl.z + (u.z / (du || 1)) * k), out = u.r + 0.6 - du; if (c && !(u.r > 0 && out < cc && u.r <= 14 && ok(out * 0.5) && ok(out + 0.4))) goal = { x: c.x, z: c.z }; else { const l = Math.hypot(u.x, u.z) || 1; goal = { x: pl.x + (u.x / l) * 4, z: pl.z + (u.z / l) * 4 }; } }
+    // (the Tower's ice phase, a line a second for the report when no Overturn came: time, its state, how far apart, the ice
+    // under her and its stage, her bait (web, bait or none) and how far, a telegraph on her, its Rushes so far)
+    if (o.kind === 'tower' && b.phase === 1 && (B.logT = (B.logT || 0) - dt) <= 0) { B.logT = 1; const f = (v) => +v.toFixed(1); (B.log ||= []).push([f(B.t), b.st, f(Math.hypot(b.x - pl.x, b.z - pl.z)), I.iceAt(pl.x, pl.z), I.stageAt(pl.x, pl.z), B.webPt ? 'web' : B.icePt ? 'bait' : '-', goal ? f(Math.hypot(goal.x - pl.x, goal.z - pl.z)) : null, !!u, b.rushes || 0, f(pl.x), f(pl.z), f(b.x), f(b.z)]); }
     // (the Tower's Bell: how far she stood from it the frame it rang; looked at from Node, she had walked on)
     if (o.kind === 'tower' && b) { const n = window.__act5.AI_LOG['tower:bellRung'] || 0; if (n > (B.bellN ??= n)) { const d = Math.hypot(b.x - pl.x, b.z - pl.z); (B.bellD ||= []).push(+d.toFixed(1)); if (d > 4.5 && d < 9 + pl.radius * 0.5) B.bellHit = (B.bellHit || 0) + 1; } B.bellN = n; }
     // (a bait is walked to by the map's own way; a dodge or a chase straight)
@@ -1268,6 +1271,8 @@ const S = {
     const ttk = bot?.t ?? null, inBand = ttk != null && ttk >= lo && ttk <= hi;
     // (the Bell never caught her: in its calm or out of its ring each time it rang, read the frame it rang)
     if (bot?.bellD) seen.bellD = bot.bellD;
+    if (bot?.log && !(seen.overturned || (home.log || {})['tower:overturned'] > 0)) console.log('tower ice phase ' + JSON.stringify(bot.log));
+    if (bot) delete bot.log;
     const bellIn = bot ? !bot.bellHit : !seen.bellD || seen.bellD.some((d) => d <= 4.5);
     // (its windows, seen between two looks or told by its tally: at SIMK 4 a 3.5 s Beached lasts under a second)
     const lg = home.log, win = { beached: !!seen.beached || !!seen.stranded || lg['tower:beached'] > 0 || lg['tower:stranded'] > 0, overturned: !!seen.overturned || lg['tower:overturned'] > 0, blinded: !!seen.blinded || lg['tower:lit'] > 0 };
