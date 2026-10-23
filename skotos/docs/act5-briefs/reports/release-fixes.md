@@ -155,3 +155,6 @@ a game second (time, state, distance, the ice under her and its stage, her bait,
   takes 12-16 s and meets about one Breath, the shield-or-let-go plan runs over the three holes (shield the first, let
   the second go out and relight it, shield the rest), so "some lamp shielded" and "some lamp relit" both happen.
 - 19:33 holes x10, tower x10, cp5 x4 queued.
+- 19:49-23:25 tower: about a dozen rounds of 10 (each failure read from the bot's new ice-phase log); the two haul fixes in
+  ai.js; the final bot 10 of 10. cp5 4 of 4 with all three fixes.
+- 23:27 the sweep (every Act V and Act IV scenario once, with the #fatal check) started.
