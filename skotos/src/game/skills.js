@@ -14,6 +14,8 @@ import { rand, angleTo, angleDiff, clamp } from '../core/util.js';
 import { t } from '../i18n/i18n.js';
 import { crackAt, crackLine, refreezeAt, iceAt } from './ice.js';
 import { coldMul } from './cold.js';
+import { slotSkill, variantOf } from './progression.js';
+import { VARIANT_FN, NEW_FN } from './skillsx.js';
 
 const V = new THREE.Vector3(), V2 = new THREE.Vector3();
 const p = () => G.player;
@@ -53,7 +55,7 @@ function resolveAim(ev, range, ground) {
 }
 
 // ---------- actions ----------
-function act(o) {
+export function act(o) {
   const pl = p();
   const clipDur = o.anim ? pl.avatar.play(o.anim, o.speed ?? 1, o.animOpts) || 0.8 : 0.5;
   const a = Object.assign({ t: 0, move: 0, clip: clipDur }, o);
@@ -75,10 +77,10 @@ export function updateAction(dt) {
 }
 export function trailOn(a) { return a && a.trail && a.t >= a.trail[0] * a.clip && a.t <= a.trail[1] * a.clip; }
 // (the Cold slows her blows as it slows her feet: Chilled -8%, Freezing -15%, cold.js)
-const attackSpeed = (base = 1) => clamp(G.stats.aps / 1.15, 0.6, 2.6) * base * coldMul();
+export const attackSpeed = (base = 1) => clamp(G.stats.aps / 1.15, 0.6, 2.6) * base * coldMul();
 
 // hit everything in an arc in front of the hero
-function arcHit(range, arc, fn) {
+export function arcHit(range, arc, fn) {
   const pl = p(); let n = 0;
   for (const f of foes(pl.x, pl.z, range)) {
     const ang = Math.abs(angleDiff(pl.rot, angleTo(pl.x, pl.z, f.x, f.z)));
@@ -86,13 +88,13 @@ function arcHit(range, arc, fn) {
   }
   return n;
 }
-function circleHit(x, z, r, fn) { let n = 0; for (const f of foes(x, z, r)) { fn(f); n++; } return n; }
-function swingFx(n, heavy) {
+export function circleHit(x, z, r, fn) { let n = 0; for (const f of foes(x, z, r)) { fn(f); n++; } return n; }
+export function swingFx(n, heavy) {
   Audio.sfx(heavy ? 'swingHeavy' : 'swing', { vol: 0.8 });
   if (n > 0) { G.hitstop = Math.max(G.hitstop, heavy ? 0.07 : 0.045); shake(heavy ? 0.22 : 0.1); }
 }
-function staffTip(out) { const pl = p(); const h = pl.avatar.held.R; if (h?.gem) return pl.avatar.weaponPoint('R', h.gem, out); return out.set(pl.x + Math.sin(pl.rot) * 0.5, 1.6, pl.z + Math.cos(pl.rot) * 0.5); }
-function handPoint(out) { const pl = p(); return pl.avatar.bonePoint('handR', out) || out.set(pl.x, 1.3, pl.z); }
+export function staffTip(out) { const pl = p(); const h = pl.avatar.held.R; if (h?.gem) return pl.avatar.weaponPoint('R', h.gem, out); return out.set(pl.x + Math.sin(pl.rot) * 0.5, 1.6, pl.z + Math.cos(pl.rot) * 0.5); }
+export function handPoint(out) { const pl = p(); return pl.avatar.bonePoint('handR', out) || out.set(pl.x, 1.3, pl.z); }
 
 // ---------- basic attacks ----------
 function basicWarden(aim) {
@@ -149,31 +151,39 @@ export function basicAttack(ev) {
 }
 
 // ---------- skills ----------
+// i is a button (1-4): the loadout says which skill is on it (progression.js); cooldowns are kept per skill, by its place
+// in SKILLS, so a skill taken off a button and put back keeps its own
+export const skillOn = (i) => slotSkill(i);
+export const cdIndex = (sk) => SKILLS[G.hero.cls].indexOf(sk);
 export function canUse(i) {
-  const sk = SKILLS[G.hero.cls][i];
+  const sk = skillOn(i);
   if (!sk || !skillUnlocked(sk)) return 'locked';
   const pl = p();
-  if (pl.cds[i] > 0) return 'cd';
+  if (pl.cds[cdIndex(sk)] > 0) return 'cd';
   if ((sk.cost || 0) > pl.res) return 'res';
   return null;
 }
 export function useSkill(i, ev) {
-  const pl = p(), sk = SKILLS[G.hero.cls][i];
+  const pl = p(), sk = skillOn(i);
+  // a channel already running is let go when its own button is pressed again
+  if (pl.act && pl.act.name === 'beam' && sk?.id === 'beam') { pl.act.dur = Math.min(pl.act.dur, pl.act.t + 0.05); return true; }
   const why = canUse(i);
   if (why) {
     if (why === 'res') { emit('toast', t('hud.noRes', t('res.' + CLASSES[G.hero.cls].res))); Audio.sfx('denied'); }
     else if (why === 'cd') Audio.sfx('denied', { vol: 0.4 });
     return false;
   }
-  if (pl.act && pl.act.name === 'whirl' && sk.id !== 'whirl') pl.act = null;
+  if (pl.act && (pl.act.name === 'whirl' || pl.act.name === 'beam')) pl.act = null;
   pl.res -= sk.cost || 0;
-  if (sk.cd) pl.cds[i] = sk.cd * (1 - G.stats.cdr / 100);
-  const rank = Math.max(1, skillRank(sk.id)), mult = skillMult(sk);
+  const ci = cdIndex(sk);
+  if (sk.cd) pl.cds[ci] = sk.cd * (1 - G.stats.cdr / 100);
+  const rank = Math.max(1, skillRank(sk.id)), mult = skillMult(sk), v = variantOf(sk.id);
   const aim = resolveAim(ev, sk.range || CLASSES[G.hero.cls].range, !!sk.ground);
-  SKILL_FN[sk.id](sk, aim, rank, mult);
+  (v && VARIANT_FN[sk.id + '.' + v] || SKILL_FN[sk.id] || NEW_FN[sk.id])(sk, aim, rank, mult, ci);
   emit('skillUsed', i);
   return true;
 }
+export { resolveAim };
 
 const SKILL_FN = {
   // ===== Warden =====
@@ -412,7 +422,7 @@ const SKILL_FN = {
 export function dodge(ev) {
   const pl = p(), D = DODGE[G.hero.cls];
   if (pl.dodgeCd > 0) { Audio.sfx('denied', { vol: 0.4 }); return; }
-  if (pl.act && pl.act.name === 'leap') return;
+  if (pl.act && (pl.act.name === 'leap' || pl.act.name === 'vault' || pl.act.name === 'charge')) return;
   // dragged by the tongs, there is no rolling free
   if (pl.pull) return;
   pl.act = null;

@@ -11,6 +11,7 @@ import { WIND } from '../world/build.js';
 import { initInput, pollInput, takeEvents, IN } from '../core/input.js';
 import { loadSave, writeSave } from './save.js';
 import { refreshStats } from './stats.js';
+import { migrateHero } from './progression.js';
 import { enterZone, updatePacks, updateAct, nearestInteract, updatePortalFx, ZONES, zoneReady, zoneParts, disposeZone } from './world.js';
 import { updatePlayer } from './player.js';
 import { damage } from './combat.js';
@@ -82,6 +83,7 @@ export async function boot(q) {
     if (q.get('auto') === 'farlight') h.flags.frozen = true;
     // &seed=N: the zone's layout seed (Act V's are kept per difficulty)
     if (q.has('seed')) { const z = q.get('auto'); h.seeds = { [z]: +q.get('seed'), [z + '@' + h.diff]: +q.get('seed') }; }
+    if (q.has('mlvl')) h.mlvl = +q.get('mlvl');
     await startHero(h, false, q.get('auto'));
   } else showTitle();
   requestAnimationFrame(loop);
@@ -98,6 +100,8 @@ async function starterGear(hero) {
 }
 async function startHero(hero, isNew, zone = 'town') {
   await starterGear(hero);
+  // saves from before the progression: a loadout, nothing learnt, the points kept spendable (progression.js)
+  migrateHero(hero);
   G.hero = hero; G.zones = {}; G.player = null; G.portal = null; G.gate = null;
   hideScreen(); removeTitleScene(); clearFX();
   refreshStats();
