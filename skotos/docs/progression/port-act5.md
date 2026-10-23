@@ -157,7 +157,7 @@ What it says:
   Act IV levels and plan, int/bal/mkplan5.mjs, are not in the repo; I put Act IV at L34-38, inside the "about 32-38" of
   act4-balance/sim.md). So the comparison is the change Mastery makes to each act, not my absolute ratios. Carried over
   onto the integrator's own steps (x1.19 / x1.42 / x1.31 without Mastery), the step with Mastery comes to about x1.2 for
-  the Warden, x1.4 for the Mage and x2.6 for the Ranger.
+  the Warden, x1.5 for the Mage and x2.6 for the Ranger.
 - **The Ranger** is the one to watch: with Mastery her Act IV gets much easier (zones 0.72 -> 0.47, bosses 0.43 -> 0.20
   lives) and her Act V not at all (1.61 -> 1.63). That is a steeper step (Act II over Act I was up to x1.94 on Warden,
   x2.58 on Wanderer) but no cliff (no deaths, the biggest hit 9-10%). Nothing was re-tuned: the brief asks that Act V stay
