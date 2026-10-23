@@ -1285,7 +1285,9 @@ const S = {
       const r = { k };
       // to the hole: Alkyone there before her
       r.alk = await pg.evaluate((k) => { const G = window.__G, z = G.zone, ho = z.L.spots.holes.find((h) => h.id === k), a = z.p5?.alkyone?.a; return a ? +Math.hypot(a.x - ho.alk.x, a.z - ho.alk.z).toFixed(1) : null; }, k);
-      const t0 = await pg.evaluate(() => window.__G.hero.stats.time);
+      // (the page lights again any lamp of the seal that is dark, from the first: a Breath met while she lit the second or
+      // third broke her touch, and a lamp left dark here stalled the ring for the whole wait below)
+      const t0 = await pg.evaluate(() => { window.__relight = true; return window.__G.hero.stats.time; });
       for (let i = 0; i < 3; i++) {
         await A5.use(pg, `z.act5.lamps.find((l) => l.hole === ${k} && l.i === ${i})`); await A5.until(pg, (a) => !!window.__G.zone.act5.lamps.find((l) => l.hole === a[0] && l.i === a[1])?.lit, 15000, [k, i]);
         // the fail-safe, once: on the second hole the clock is moved on past the minute as soon as its run begins
@@ -1296,7 +1298,7 @@ const S = {
       // the run: she shields a lamp the Breath turns on (the first), lets the next go out and lights it again, kills what
       // comes, keeps the others lit
       let failsafe = false, shot1 = false;
-      await pg.evaluate(() => { window.__breath = null; window.__relight = true; });
+      await pg.evaluate(() => { window.__breath = null; });
       for (const w0 = Date.now(); Date.now() - w0 < 20 * 60000;) {
         const s = await pg.evaluate((k) => {
           const G = window.__G, z = G.zone, S = z.seal, pl = G.player, B = window.__breath;
