@@ -33,3 +33,8 @@ the flaky `holes` and `tower` scenarios, and runtime errors only the on-screen `
   branch skips are discarded anyway).
 - 17:47-18:08 perf5 (QS 1, 21 cycles): coast 1.075, coastLow 0.968, farlight 0.962: PASS (field 879 ms, coast 946).
 - 18:09 cp5 x5, holes x10, tower x10 queued, one browser at a time.
+- 18:10-18:40 cp5 x5: 2 PASS, then runs 3 and 4 stuck in the "Tower awake" wait. Probe (a copy of the runner logging the
+  wait every 10 s): the game paused on the death panel, game time frozen. die() set window.__immortal = false to kill her
+  and never set it back, so after the respawn a coast monster could kill her again, and that death's panel, opening
+  1.8 s later, held the game while the test waited for the Tower. Fixed in the test (immortal again at the respawn).
+- 18:50 cp5 x6, holes x10, tower x10 queued again.
