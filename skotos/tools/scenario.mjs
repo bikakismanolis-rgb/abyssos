@@ -990,7 +990,8 @@ const S = {
       base({ id: 'hAct5', cls: 'warden', level: 36, diff: 5, quest: 28, flags: flags5, act5: -1, points: 4, skills: { whirl: 5, leap: 5, cry: 5, quake: 5 }, wps: ['town', 'forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'forge', 'coast', 'farlight'], boons: ['ember', 'forge', 'amber', 'lantern'] }),
       base({ id: 'hOdd', cls: 'mage', level: 30, diff: 1, quest: 23, flags: flags4, mlvl: 0, points: 99, skills: { fireball: 5, nova: 3 }, vars: { fireball: 2 }, variant: { fireball: 2 }, mast: { might: 3 }, loadout: ['fireball', 'nova', 'nova', 'bogus'] })
     ];
-    await pg.evaluate((heroes) => { localStorage.setItem('skotos.save.v1', JSON.stringify({ heroes, settings: { helpSeen: true }, last: heroes[0].id })); }, heroes);
+    // (the page keeps its own save in G.save and writes it as it goes: it is given this one too, or it writes its own over it)
+    await pg.evaluate((heroes) => { const s = { heroes, settings: { helpSeen: true }, last: heroes[0].id }; localStorage.setItem('skotos.save.v1', JSON.stringify(s)); window.__G.save = JSON.parse(JSON.stringify(s)); }, heroes);
     const out = {};
     for (const h of heroes) {
       await pg.goto(A5.base + '?q=0&sim=2&norender');
