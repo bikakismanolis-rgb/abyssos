@@ -7,6 +7,7 @@
 //   ch.peers()                  [{ peer, by, isMe, presence, updatedAt }], this page included
 //   ch.onPeers(fn)              fn({ peers, joined, left, updated }) when the room changes
 //   ch.connected(), ch.onConnection(fn), ch.leave()
+//   ch.presenceDue()            true when a presence given now would go at once (a page builds its own no oftener)
 //   ch.meter                    what went out and came in: { tx: { msgs, bytes, drops }, rx: { msgs, bytes }, rate() }
 // A transport: { kind, lobby: Channel | null, join(name) -> Promise<Channel> }. Three of them:
 // - RoomTransport (claude.ai artifact `room`): the lobby is the room itself, a game is room.join(name). The room's own
@@ -22,14 +23,18 @@ const enc = typeof TextEncoder !== 'undefined' ? new TextEncoder() : null;
 export const bytesOf = (v) => { const s = JSON.stringify(v ?? null); return enc ? enc.encode(s).length : s.length; };
 const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
-// what a channel sent and heard, with a 5 s window for the rates
+// what a channel sent and heard: the totals, and the rates over the last 5 whole seconds (a count for each second, six
+// kept: nothing grows with the session). What is heard is not stringified again only to be counted: each kind's size
+// (a topic from a peer, a peer's presence) is measured once in eight and the others taken as that size
 export function makeMeter() {
-  const M = { tx: { msgs: 0, bytes: 0, drops: 0, big: 0 }, rx: { msgs: 0, bytes: 0 }, win: [], peak: 0 };
-  M.out = (b) => { M.tx.msgs++; M.tx.bytes += b; M.win.push([now(), b, 0]); };
-  M.in = (b) => { M.rx.msgs++; M.rx.bytes += b; M.win.push([now(), 0, b]); };
+  const M = { tx: { msgs: 0, bytes: 0, drops: 0, big: 0 }, rx: { msgs: 0, bytes: 0 }, peak: 0 }, W = Array.from({ length: 6 }, () => [-1, 0, 0, 0, 0]), est = new Map();
+  const sec = () => { const s = Math.floor(now() / 1000), w = W[s % 6]; if (w[0] !== s) { w[0] = s; w[1] = w[2] = w[3] = w[4] = 0; } return w; };
+  M.out = (b) => { M.tx.msgs++; M.tx.bytes += b; const w = sec(); w[1]++; w[2] += b; };
+  M.in = (b) => { M.rx.msgs++; M.rx.bytes += b; const w = sec(); w[3]++; w[4] += b; };
+  M.heard = (k, v) => { let e = est.get(k); if (!e) { if (est.size > 64) est.clear(); est.set(k, (e = { n: 0, b: 0 })); } if (e.n++ % 8 === 0) e.b = bytesOf(v); M.in(e.b); };
   M.rate = () => {
-    const t = now(); while (M.win.length && M.win[0][0] < t - 5000) M.win.shift();
-    let n = 0, bo = 0, bi = 0, ni = 0; for (const w of M.win) { if (w[1]) { n++; bo += w[1]; } if (w[2]) { ni++; bi += w[2]; } }
+    const s = Math.floor(now() / 1000); let n = 0, bo = 0, bi = 0, ni = 0;
+    for (const w of W) if (w[0] >= s - 5 && w[0] < s) { n += w[1]; bo += w[2]; ni += w[3]; bi += w[4]; }
     const r = { msgsOut: n / 5, bytesOut: bo / 5, msgsIn: ni / 5, bytesIn: bi / 5 };
     if (r.msgsOut > M.peak) M.peak = r.msgsOut;
     return r;
@@ -47,7 +52,8 @@ export function makeBucket(rate = BUDGET, burst = BURST) {
 // send(topic, data), sendPresence(obj), leave(), and calls ch._hear(msg), ch._peers(list), ch._conn(bool)
 export function makeChannel(name, wire, o = {}) {
   const meter = makeMeter(), bucket = o.bucket || makeBucket(o.rate, o.burst), H = {}, PH = [], CH = [];
-  let mine = {}, dirty = false, presT = 0, list = [], conn = false, left = false, queue = [];
+  let mine = {}, mineB = 2, dirty = false, presT = 0, list = [], conn = false, left = false, queue = [], retry = 0;
+  const gap = 1000 / (o.presHz || PRES_HZ);
   const ch = {
     name, kind: wire.kind, meter, get me() { return wire.me; },
     emit(topic, data, eo = {}) {
@@ -63,37 +69,41 @@ export function makeChannel(name, wire, o = {}) {
     presence(patch) {
       const next = Object.assign({}, mine);
       for (const k in patch) { if (patch[k] === null) delete next[k]; else next[k] = patch[k]; }
-      if (bytesOf(next) > MAX_PRES) { meter.tx.big++; return Promise.resolve(false); }
-      mine = next; dirty = true; ch.pump();
+      const b = bytesOf(next);
+      if (b > MAX_PRES) { meter.tx.big++; return Promise.resolve(false); }
+      mine = next; mineB = b; dirty = true; ch.pump();
       return Promise.resolve(true);
     },
+    presenceDue: () => !left && conn && now() - presT >= gap,
     mine: () => mine,
     peers: () => list,
     onPeers(fn) { PH.push(fn); return () => { const i = PH.indexOf(fn); if (i >= 0) PH.splice(i, 1); }; },
     connected: () => conn && !left,
     onConnection(fn) { CH.push(fn); Promise.resolve().then(() => fn(ch.connected())); return () => { const i = CH.indexOf(fn); if (i >= 0) CH.splice(i, 1); }; },
-    leave() { if (left) return Promise.resolve(); left = true; for (const k in H) H[k].length = 0; PH.length = 0; return Promise.resolve(wire.leave()).catch(() => {}); },
-    // (called each frame by the game, and on every presence change: the coalesced send and the queued musts)
+    leave() { if (left) return Promise.resolve(); left = true; clearTimeout(retry); retry = 0; for (const k in H) H[k].length = 0; PH.length = 0; return Promise.resolve(wire.leave()).catch(() => {}); },
+    // (called each frame by the game, and on every presence change: the coalesced send and the queued musts. What the
+    // rate or the budget holds back is tried again on a timer, so a channel nobody pumps, the lobby, still sends its last)
     pump() {
       if (left || !conn) return;
       while (queue.length && bucket.level >= 1) { const [t, d, b] = queue.shift(); bucket.take(); meter.out(b); Promise.resolve(wire.send(t, d)).catch(() => { meter.tx.drops++; }); }
-      const t = now();
-      if (!dirty || t - presT < 1000 / (o.presHz || PRES_HZ) || !bucket.take()) return;
-      dirty = false; presT = t;
-      const b = bytesOf(mine); meter.out(b);
-      Promise.resolve(wire.sendPresence(mine)).catch(() => { meter.tx.drops++; dirty = true; });
+      const t = now(), wait = gap - (t - presT);
+      if (dirty && wait <= 0 && bucket.take()) {
+        dirty = false; presT = t; meter.out(mineB);
+        Promise.resolve(wire.sendPresence(mine)).catch(() => { meter.tx.drops++; dirty = true; });
+      }
+      if ((dirty || queue.length) && !retry) retry = setTimeout(() => { retry = 0; ch.pump(); }, Math.max(1, dirty && wait > 0 ? wait : 1000 / (o.rate || BUDGET)));
     },
-    _hear(msg) { if (left) return; meter.in(bytesOf(msg.data)); const l = H[msg.topic]; if (l) for (const fn of l.slice()) { try { fn(msg); } catch (e) { console.error(e); } } },
+    _hear(msg) { if (left) return; meter.heard(msg.topic + ' ' + msg.peer, msg.data); const l = H[msg.topic]; if (l) for (const fn of l.slice()) { try { fn(msg); } catch (e) { console.error(e); } } },
     _peers(next, change) {
       if (left) return;
       const old = new Map(list.map((p) => [p.peer, p])), nw = new Map(next.map((p) => [p.peer, p]));
       const joined = next.filter((p) => !old.has(p.peer)), lft = list.filter((p) => !nw.has(p.peer));
       const updated = change?.updated || next.filter((p) => old.has(p.peer) && old.get(p.peer) !== p);
       list = next;
-      for (const p of updated) if (!p.isMe) meter.in(bytesOf(p.presence));
+      for (const p of updated) if (!p.isMe) meter.heard(p.peer, p.presence);
       if (joined.length || lft.length || updated.length) for (const fn of PH.slice()) { try { fn({ peers: list, joined, left: lft, updated }); } catch (e) { console.error(e); } }
     },
-    _conn(v) { if (conn === v) return; conn = v; if (v) dirty = true; for (const fn of CH.slice()) { try { fn(ch.connected()); } catch (e) { console.error(e); } } }
+    _conn(v) { if (conn === v) return; conn = v; if (v) { dirty = true; ch.pump(); } for (const fn of CH.slice()) { try { fn(ch.connected()); } catch (e) { console.error(e); } } }
   };
   return ch;
 }
@@ -204,42 +214,72 @@ export function LocalTransport(o = {}) {
 }
 
 // ---------- Supabase Realtime (the app, a public web build) ----------
-// client: a supabase-js v2 client (createClient(url, anonKey)), or anything with its channel() shape. Broadcast is the
-// emit arm (self: false), presence the presence arm (track); presence is keyed by our peer label. Who sent a broadcast
-// rides in its payload (Supabase does not stamp it: untrusted, as everything)
+// client: a supabase-js v2 client (createClient(url, anonKey)), or anything with its channel() shape. Broadcast carries
+// everything (self: false). Realtime lets a client track() its presence only 5 times in 30 s (past that it shuts the
+// channel, broadcast and all), so the presence is tracked once a channel ({ k }, keyed by our peer label: who is there,
+// who joins and leaves) and the game's presence goes as a broadcast '_p', coalesced as any presence, said again every
+// 1.5 s (a lost one mended) and when someone joins. A peer is a member with its last '_p'; one silent 12 s is gone.
+// Who sent a broadcast rides in its payload (Supabase does not stamp it: untrusted, as everything)
 export function SupabaseTransport(client, o = {}) {
   if (!client?.channel) return null;
   const me = o.me || 'p' + Math.random().toString(36).slice(2, 10);
   const bucket = makeBucket(o.rate, o.burst);
   const open = (name) => {
     const sc = client.channel('skotos:' + name, { config: { broadcast: { self: false, ack: false }, presence: { key: me } } });
+    let hb = 0;
     const wire = {
-      kind: 'supabase', me,
+      kind: 'supabase', me, sentT: 0,
       send: (topic, data) => sc.send({ type: 'broadcast', event: topic, payload: { f: me, d: data } }),
-      sendPresence: (p) => sc.track({ p }),
-      leave: () => client.removeChannel ? client.removeChannel(sc) : sc.unsubscribe()
+      sendPresence: (p) => { wire.sentT = Date.now(); return sc.send({ type: 'broadcast', event: '_p', payload: { f: me, p } }); },
+      leave: () => { clearInterval(hb); return client.removeChannel ? client.removeChannel(sc) : sc.unsubscribe(); }
     };
     const ch = makeChannel(name, wire, Object.assign({ bucket }, o));
-    const memo = new Map();
+    // each peer's last presence ({ p, raw, t }), the views handed out (the same object while its presence is the same)
+    const last = new Map(), memo = new Map();
+    let members = new Set(), self = null;
     const sync = () => {
-      const st = sc.presenceState() || {}, next = [];
-      for (const key in st) {
-        const metas = st[key]; const m = metas?.[metas.length - 1]; if (!m) continue;
-        const p = m.p || {}, c = memo.get(key);
-        const v = c && c.raw === JSON.stringify(p) ? c.v : { peer: key, by: null, isMe: key === me, presence: p, updatedAt: Date.now() };
-        memo.set(key, { raw: JSON.stringify(p), v }); next.push(v);
+      const st = sc.presenceState() || {}, t = Date.now(), next = [], now0 = new Set(Object.keys(st));
+      // (someone new: our presence again, at once)
+      for (const k of now0) if (k !== me && !members.has(k)) { ch.presence({}); break; }
+      members = now0;
+      for (const k of now0) {
+        if (k === me) continue;
+        const L = last.get(k);
+        if (L && t - L.t > (o.gone || 12000)) continue;
+        const c = memo.get(k), v = c && c.src === L ? c.v : { peer: k, by: null, isMe: false, presence: L?.p || {}, updatedAt: L?.t || t };
+        memo.set(k, { src: L, v }); next.push(v);
       }
-      if (!next.some((p) => p.isMe)) next.unshift({ peer: me, by: null, isMe: true, presence: ch.mine(), updatedAt: Date.now() });
+      for (const k of memo.keys()) if (!now0.has(k)) memo.delete(k);
+      for (const k of last.keys()) if (!now0.has(k) && t - last.get(k).t > (o.gone || 12000)) last.delete(k);
+      if (!self || self.presence !== ch.mine()) self = { peer: me, by: null, isMe: true, presence: ch.mine(), updatedAt: t };
+      next.unshift(self);
       ch._peers(next);
     };
     const topics = new Set();
     const on0 = ch.on;
     // (supabase-js wants its listeners before subscribe(): the game's topics are given up front, o.topics, and any other
     // is heard through a catch-all '*' listener)
-    sc.on('broadcast', { event: '*' }, (m) => { const t = m.event, pl = m.payload || {}; if (!TOPIC.test(t) || pl.f === me) return; ch._hear({ topic: t, data: pl.d, peer: String(pl.f || '?'), by: null }); });
+    sc.on('broadcast', { event: '*' }, (m) => {
+      const t = m.event, pl = m.payload || {}; if (pl.f === me) return;
+      if (t === '_p') {
+        const k = String(pl.f || ''); if (!k || !pl.p || typeof pl.p !== 'object' || Array.isArray(pl.p)) return;
+        const raw = JSON.stringify(pl.p), L = last.get(k);
+        if (L && L.raw === raw) { L.t = Date.now(); return; }
+        if (!L && last.size > 64) return;
+        last.set(k, { p: pl.p, raw, t: Date.now() }); sync();
+        return;
+      }
+      if (!TOPIC.test(t)) return;
+      ch._hear({ topic: t, data: pl.d, peer: String(pl.f || '?'), by: null });
+    });
     ch.on = (topic, fn) => { topics.add(topic); return on0(topic, fn); };
     sc.on('presence', { event: 'sync' }, sync);
-    sc.subscribe((status) => { if (status === 'SUBSCRIBED') { ch._conn(true); sync(); } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') ch._conn(false); });
+    sc.subscribe((status) => {
+      if (status === 'SUBSCRIBED') { Promise.resolve(sc.track({ k: me })).catch(() => {}); ch._conn(true); sync(); }
+      else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') ch._conn(false);
+    });
+    // (the presence said again when nothing new went for a while; the silent let go)
+    hb = setInterval(() => { if (!ch.connected()) return; if (Date.now() - wire.sentT > 1200) ch.presence({}); sync(); }, 1500);
     return ch;
   };
   const T = { kind: 'supabase', me, lobby: open(o.lobby || 'lobby'), rooms: new Map() };

@@ -21,7 +21,7 @@ export function initCoopUi() {
   EXTRA.coop = { avail: () => S.avail, render, click };
   document.addEventListener('input', (e) => { if (e.target?.id === 'coop-code') { e.target.value = e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 4); UI.code = e.target.value; } });
   document.addEventListener('keydown', (e) => { if (e.target?.id === 'coop-code' && e.key === 'Enter') { e.preventDefault(); doJoin(UI.code); } });
-  on('netLobby', () => { if (G.panel === 'coop' && document.activeElement?.id !== 'coop-code') renderPanel(); });
+  on('netLobby', lobbyRender);
   on('netReady', (ok) => { if (ok) build(); });
   on('netDowned', (d) => downed(d));
   on('netRevive', (k) => reviveRing(k));
@@ -45,6 +45,15 @@ function build() {
   // a party button beside the bag, the skills and the menu
   const btns = $('hud-btns');
   if (btns) { const b = document.createElement('button'); b.className = 'hbtn'; b.id = 'h-coop'; b.setAttribute('aria-label', 'co-op'); b.innerHTML = PARTY_ICON; b.onclick = () => { Audio.sfx('open'); openPanel('coop'); }; btns.insertBefore(b, btns.firstChild); }
+}
+// (the open lobby panel drawn again as the room changes: at most four times a second, the last change always shown)
+let lobbyT = 0, lobbyTimer = 0;
+function lobbyRender() {
+  if (G.panel !== 'coop' || lobbyTimer) return;
+  const wait = 250 - (performance.now() - lobbyT);
+  if (wait > 0) { lobbyTimer = setTimeout(() => { lobbyTimer = 0; lobbyRender(); }, wait); return; }
+  if (document.activeElement?.id === 'coop-code') return;
+  lobbyT = performance.now(); renderPanel();
 }
 const PARTY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8.5" cy="8" r="3"/><circle cx="16.5" cy="9" r="2.5"/><path d="M3 19c.6-3.4 2.8-5.2 5.5-5.2s4.9 1.8 5.5 5.2M14.4 14.2c.7-.3 1.4-.4 2.1-.4 2.3 0 4.1 1.5 4.6 4.6"/></svg>';
 

@@ -37,7 +37,7 @@ import { t, has } from '../i18n/i18n.js';
 import { clamp, rand } from '../core/util.js';
 
 export const VER = 2;
-const SNAP_HZ = 10, SNAP_MAX = 3900, REL_MAX = 1700, REL_Q = 200, FX_MAX = 900, FX_RATE = 600, NEAR = 40, CHUNK = 3300, HOST_LOST = 25000, HOST_GONE = 10000, STALL = 6000, DOWNED = 30, REVIVE = 2.5, LAG = 130;
+const SNAP_HZ = 10, SNAP_MAX = 3900, REL_MAX = 1700, REL_Q = 200, FX_MAX = 900, FX_MIN = 500, FX_RATE = 600, NEAR = 40, NEAREST = 10, OVERDUE = 1000, CHUNK = 3300, HOST_LOST = 25000, HOST_GONE = 10000, STALL = 6000, DOWNED = 30, REVIVE = 2.5, LAG = 130;
 const CODE_CH = 'abcdefghjkmnpqrstuvwxyz23456789';
 const KINDS = Object.keys(MONSTERS), KIDX = new Map(KINDS.map((k, i) => [k, i]));
 // what a page sees of the session (the lobby panel and the HUD read it)
@@ -47,6 +47,8 @@ export const S = {
   // the host: each guest's reliable events (one count for all), their acks, the guests' events done, the raises given,
   // the clip names given out; the world and ice versions
   rel: new Map(), relSeq: 0, done: new Map(), rvT: new Map(), clips: new Map(), worldSent: '', worldT: 0, iceT: 0, iceKey: '', snapT: 0, lobbyT: 0,
+  // (the guest whose blow is landing: the look it makes is that guest's, shown on its page already)
+  landing: null,
   // a guest: the world as the host has it, the zone loaded, puppets (and what each was, for its kill's reward), the events
   // not yet acked, the host's clip names; the kills paid, the kills a second and the items they may bring
   real: null, world: null, wkey: '', zoneKey: null, loading: false, pup: new Map(), pupInfo: new Map(), ev: [], evSeq: 0, relDone: 0, hclips: new Map(), lastSnap: 0, chunks: {},
@@ -175,7 +177,7 @@ function carryLoot() {
 // ---------- the game room's wires ----------
 function wire() {
   const ch = S.ch;
-  ch.onPeers(() => { peersChanged(); resolveNames(); });
+  ch.onPeers((c) => { peersChanged(c); resolveNames(); });
   ch.on('s', (m) => { if (S.role === 'guest' && m.peer === S.hostPeer) onSnap(m.data); });
   ch.on('w', (m) => { if (S.role === 'guest' && m.peer === S.hostPeer) chunk(m.data, onWorld); });
   ch.on('i', (m) => { if (S.role === 'guest' && m.peer === S.hostPeer) chunk(m.data, onIce); });
@@ -185,17 +187,20 @@ function wire() {
 }
 // the look of a hero's skills is taken from the party only: on the host its guests, on a guest the host and its guests
 const fxFrom = (pr) => (S.role === 'host' ? S.roster.includes(pr) : pr === S.hostPeer || !!S.peers.get(S.hostPeer)?.roster?.includes(pr));
-// who is in the room: a host keeps the first three guests of its version (the roster); a guest finds its host
-function peersChanged() {
+// who is in the room: a host keeps the first three guests of its version (the roster); a guest finds its host. A hero's
+// place is taken only from its own new presence (the change's joined and updated, and a presence not seen before), not
+// again whenever another peer's changes
+function peersChanged(c) {
   const ch = S.ch; if (!ch) return;
-  const seen = new Set();
+  const seen = new Set(), fresh = c ? new Set([...(c.joined || []), ...(c.updated || [])].map((p) => p.peer)) : null;
   for (const p of ch.peers()) {
     if (p.isMe) continue;
     seen.add(p.peer);
     let P = S.peers.get(p.peer);
     if (!P) S.peers.set(p.peer, (P = { peer: p.peer, by: p.by, buf: [], seq: -1, actor: null, joined: now(), hbT: now() }));
-    P.pres = p.presence || {}; P.by = p.by;
-    readPeer(P);
+    const moved = P.src !== p.presence && (!fresh || fresh.has(p.peer));
+    P.src = p.presence; P.pres = p.presence || {}; P.by = p.by;
+    readPeer(P, moved);
   }
   for (const [k, P] of S.peers) if (!seen.has(k)) { if (P.actor) dropRemote(P.actor); S.peers.delete(k); S.done.delete(k); if (S.role === 'host') emit('toast', t('coop.left', nameOf(P)), 'quest'); if (k === S.hostPeer) S.hostGone = now(); }
   if (S.role === 'host') {
@@ -215,15 +220,16 @@ function peersChanged() {
   }
   emit('netLobby');
 }
-function readPeer(P) {
+function readPeer(P, moved) {
   const p = P.pres;
   P.role = p.r === 'h' ? 'host' : p.r === 'g' ? 'guest' : null; P.code = p.c; P.v = p.v | 0;
-  P.lk = p.lk && typeof p.lk === 'object' ? p.lk : P.lk; P.zk = typeof p.zk === 'string' ? p.zk : null;
+  if (p.lk && typeof p.lk === 'object' && p.lk !== P.lk) { P.lk = p.lk; P.lookKey = JSON.stringify(p.lk); }
+  P.zk = typeof p.zk === 'string' ? p.zk : null;
   P.roster = Array.isArray(p.ro) ? p.ro.filter((x) => typeof x === 'string').slice(0, 3) : null;
   P.zone = p.z && typeof p.z === 'object' ? p.z : null; P.on = !!p.on;
   P.mf = num(p.mf, 0, 400); P.gf = num(p.gf, 0, 400); P.dmax = num(p.dm, 0, 1e7);
   if (p.hb !== P.hb) { P.hb = p.hb; P.hbT = now(); }
-  if (Array.isArray(p.h)) {
+  if (Array.isArray(p.h) && (moved || !P.state)) {
     const h = p.h, st = { x: num(h[0], -10, 1e4) / 20, z: num(h[1], -10, 1e4) / 20, r: num(h[2], -1e3, 1e3) / 100, sp: num(h[3], 0, 400) / 10, hp: num(h[4], 0, 1e8), hpMax: Math.max(1, num(h[5], 1, 1e8)), fl: h[6] | 0, y: num(h[7], -100, 400) / 20 };
     if (S.role === 'host') heldMove(P, st);
     P.state = st;
@@ -252,7 +258,9 @@ function heldMove(P, st) {
   if (d > free) P.moveB -= d - free;
   if (z?.map) { const f = z.map.nearestFloor(st.x, st.z); st.x = f.x; st.z = f.z; }
 }
-const pushSample = (buf, s) => { buf.push({ t: now(), x: s.x, z: s.z, r: s.r, y: s.y || 0 }); if (buf.length > 6) buf.shift(); };
+// (a sample after a gap longer than the lag: the one before is put at the lag's edge, where it is shown now, so the hero
+// or the monster goes on from where it stood, not a leap ahead)
+const pushSample = (buf, s) => { const t = now(), l = buf[buf.length - 1]; if (l && l.t < t - LAG) l.t = t - LAG; buf.push({ t, x: s.x, z: s.z, r: s.r, y: s.y || 0 }); if (buf.length > 6) buf.shift(); };
 // (a zone's key: the same id built once more is another zone, a guest builds it again)
 export const myKey = () => (G.zone ? G.zone.netKey || G.zone.id + ':' + (G.zone.ep || 0) : null);
 
@@ -267,12 +275,12 @@ function heroState() {
   return [q(pl.x, 20), q(pl.z, 20), q(pl.rot, 100), q(pl.netSp || 0, 10), Math.round(pl.hp), Math.round(pl.hpMax), (pl.dead ? 1 : 0) | (air ? 4 : 0) | (pl.iframes > 0 ? 8 : 0), q(pl.y || 0, 20)];
 }
 function hostPresence(full) {
-  if (!S.ch || !G.hero) return;
+  if (!S.ch || !G.hero || (!full && S.presT && now() - S.presT <= 1000)) return;
   const z = G.zone;
   const p = { r: 'h', c: S.code, v: VER, lk: lookOf(), zk: myKey(), ro: S.roster, on: S.started ? 1 : 0, mf: 0 };
   // (and where its hero stands in it: a guest arriving comes to its side)
   if (z) p.z = { id: z.id, s: z.seed | 0, l: z.level | 0, ti: z.tier | 0, d: G.hero.diff | 0, k: myKey(), x: q(G.player?.x, 20), y: q(G.player?.z, 20) };
-  if (full || !S.presT || now() - S.presT > 1000) { S.ch.presence(p); S.presT = now(); }
+  S.ch.presence(p); S.presT = now();
 }
 function lobbyPresence(force) {
   const L = S.T?.lobby; if (!L || S.role !== 'host' || !G.hero) return;
@@ -280,15 +288,17 @@ function lobbyPresence(force) {
   S.lobbyT = now();
   L.presence({ g: { c: S.code, cls: G.hero.cls, l: G.hero.level, z: G.zone?.id || 'town', n: 1 + S.roster.length, d: G.hero.diff | 0, v: VER, on: S.started ? 1 : 0 } });
 }
-function guestPresence() {
-  if (!S.ch || !G.hero) return;
+// (built only when the channel would send it at once: at most its presence rate, not every frame)
+const EVB = new WeakMap();
+function guestPresence(force) {
+  if (!S.ch || !G.hero || (!force && !S.ch.presenceDue())) return;
   const h = S.real || G.hero, pl = G.player, s = G.stats;
   const p = { h: null, c2: null, nd: null, ev: null, r: 'g', c: S.code, v: VER, hb: Math.floor(now() / 1000) & 1023, lk: { c: h.cls, l: h.level, w: h.equip.weapon ? [h.equip.weapon.base, h.equip.weapon.rar | 0, h.equip.weapon.leg || 0] : 0, o: h.equip.offhand ? [h.equip.offhand.rar | 0, h.equip.offhand.leg || 0] : 0 }, zk: S.zoneKey, ak: S.relDone, mf: Math.round(s?.mf || 0), gf: Math.round(s?.gold || 0), dm: Math.round((s?.wmax || 1) * (s?.dmgMult || 1)) };
   if (pl && S.zoneKey && S.zoneKey === myKey()) { p.h = heroState(); const av = pl.avatar; if (av?.netSeq) p.c2 = [av.netClip, Math.round((av.netSpd || 1) * 100) / 100, av.netSeq]; }
   if (!S.world) p.nd = 'w';
   // the events the host has not acked, oldest first, as many as fit
   const ev = []; let b = bytesOf(p) + 10;
-  for (const e of S.ev) { const n = bytesOf(e) + 1; if (b + n > 3600) break; ev.push(e); b += n; }
+  for (const e of S.ev) { let n = EVB.get(e); if (n == null) EVB.set(e, (n = bytesOf(e) + 1)); if (b + n > 3600) break; ev.push(e); b += n; }
   if (ev.length) p.ev = ev;
   S.ch.presence(p);
 }
@@ -332,8 +342,9 @@ function hostTick(dt) {
   for (const P of S.peers.values()) if (P.actor && !S.roster.includes(P.peer)) { dropRemote(P.actor); P.actor = null; }
   if (n !== NET.n) { NET.n = n; rescale(); }
   standByTick(dt);
-  // the world, when it changed or someone asks for it
-  const wk = worldKey();
+  // the world, when it changed (looked at four times a second) or someone asks for it
+  if (!(now() - (S.wkT || 0) < 250)) { S.wkT = now(); S.wk = worldKey(); }
+  const wk = S.wk;
   const asked = [...S.peers.values()].some((P) => P.need === 'w' && S.roster.includes(P.peer));
   if ((wk !== S.worldSent || (asked && now() - S.worldT > 1500) || now() - S.worldT > 12000) && S.roster.length) { S.worldSent = wk; S.worldT = now(); sendBig('w', worldOf()); }
   // the ice: what changed, at most twice a second, all of it every 3 s
@@ -357,7 +368,7 @@ function worldOf() {
   const h = G.hero;
   return { flags: h.flags, quest: h.quest, diff: h.diff, wps: h.wps, a: [h.act1, h.act2, h.act3, h.act4, h.act5], gb: h.gateBest | 0, gate: G.gate ? { tier: G.gate.tier } : null, clips: [...S.clips] };
 }
-function worldKey() { const h = G.hero; return JSON.stringify(h.flags).length + ':' + h.quest + ':' + h.diff + ':' + hashStr(JSON.stringify(h.flags)); }
+function worldKey() { const h = G.hero, f = JSON.stringify(h.flags); return f.length + ':' + h.quest + ':' + h.diff + ':' + hashStr(f); }
 function hashStr(s) { let x = 0; for (let i = 0; i < s.length; i++) x = (x * 31 + s.charCodeAt(i)) | 0; return x; }
 // big JSON in chunks under the message limit (the world's flags, the ice): { id, i, n, s }
 function sendBig(topic, obj) {
@@ -407,46 +418,75 @@ function sendSnap() {
   // acks of each guest's events
   o.ak = {}; for (const P of gs) o.ak[P.peer] = S.done.get(P.peer) || 0;
   let b = bytesOf(o) + 20;
-  // the reliable events each guest still lacks, oldest first: its share of the bytes, then what the others left
+  // the reliable events each guest still lacks, oldest first: its share of the bytes, then what the others left (taken
+  // in turn, a different guest first each time)
   const W = gs.map((P) => { const q = S.rel.get(P.peer) || []; let i = 0; while (i < q.length && q[i].seq <= (P.ack || 0)) i++; return { P, q, i, out: [] }; });
   // (an event no snapshot could carry is let go, not left to hold back the ones after it)
   const fill = (w, cap) => { while (w.i < w.q.length) { const e = w.q[w.i], x = [e.seq, ...e.d], n = bytesOf(x) + 1; if (n > REL_MAX) { w.q.splice(w.i, 1); continue; } if (n > cap) break; w.out.push(x); w.i++; cap -= n; } return cap; };
   let spare = 0;
   for (const w of W) spare += fill(w, REL_MAX / W.length);
-  for (const w of W) spare = fill(w, spare);
+  for (let j = 0; j < W.length; j++) spare = fill(W[(j + S.stats.snaps) % W.length], spare);
   const r = {}; for (const w of W) if (w.out.length) r[w.P.peer] = w.out;
   if (Object.keys(r).length) { o.r = r; b += bytesOf(r) + 6; }
-  // what the host saw happen near them
-  const f = packFx(S.fxHost || [], FX_MAX, gs);
+  // what the host saw happen near them, the most important first (and which of it is the look of a guest's own blow,
+  // shown on its page already: that guest passes it over)
+  const fs = {}, f = packFx(S.fxHost || [], FX_MAX, gs, fs);
   S.fxHost = [];
-  if (f.length) { o.f = f; b += bytesOf(f) + 6; }
-  // the actors near any guest, nearest first, as many as fit
-  const list = [];
-  for (const a of G.actors) {
-    if (a.removed || a.remote || a.team === 'npc' || a.prop || !KIDX.has(a.kind)) continue;
-    if (a.dead && a.deadT > 4) continue;
-    let d = Infinity; for (const P of gs) d = Math.min(d, Math.abs(a.x - P.actor.x) + Math.abs(a.z - P.actor.z));
-    if (d > NEAR * 1.3 && !a.boss) continue;
-    list.push([d, a]);
+  let fb = f.length ? bytesOf(f) + 6 : 0;
+  const fsb = Object.keys(fs).length ? bytesOf(fs) + 6 : 0;
+  // the monsters the guests need, before the fx (which keep at least FX_MIN of their bytes)
+  b += pickActors(o.a = [], gs, SNAP_MAX - b - Math.min(fb + fsb, FX_MIN));
+  // the fx in what is left, the least important let go first
+  while (f.length && b + fb + fsb > SNAP_MAX) { fb -= bytesOf(f.pop()) + 1; if (!f.length) fb = 0; }
+  if (f.length) {
+    o.f = f; b += fb;
+    for (const pr in fs) { const l = fs[pr].filter((i) => i < f.length); if (l.length) (o.fs ||= {})[pr] = l; }
+    if (o.fs) b += bytesOf(o.fs) + 6;
   }
-  list.sort((x, y) => x[0] - y[0]);
-  const A = [];
-  for (const [, a] of list) {
-    const e = actorEntry(a), n = bytesOf(e) + 1;
-    if (b + n > SNAP_MAX) break;
-    A.push(e); b += n;
-  }
-  o.a = A;
   S.stats.snaps++; S.stats.snapBytes += b;
   S.ch.emit('s', o);
 }
 const bits = (list, at) => { let m = 0; for (const it of list) if (it.lit) m |= 1 << (at(it) & 31); return m; };
-const ACT_DT = new Map();
-function actorEntry(a) {
+// the monsters near any guest, as many as fit in cap bytes (into A; returns the bytes). Every snapshot carries the bosses,
+// each guest's own NEAREST (whatever crowd stands by another) and a death not yet told; the rest go by a claim that grows
+// while one waits: the time since it was last sent, times what it is to the guests (one after a guest, aggro on its
+// stand-in near it or that struck it a moment ago, the most; else the nearer the more), and one that waited OVERDUE before
+// those. A monster sent starts again from nothing, so what is left out once comes in a later snapshot and none waits long
+// (a guest's puppet unseen for 2.5 s is let go)
+function pickActors(A, gs, cap) {
+  const t = now(), C = [];
+  for (const a of G.actors) {
+    if (a.removed || a.remote || a.team === 'npc' || a.prop || !KIDX.has(a.kind)) continue;
+    // (a death is told three times, then the guests' puppets fade on their own)
+    if (a.dead && (a.deadT > 4 || (a.netDead | 0) >= 3)) continue;
+    let d = Infinity, after = false;
+    for (const P of gs) {
+      const dd = Math.abs(a.x - P.actor.x) + Math.abs(a.z - P.actor.z);
+      if (dd < d) d = dd;
+      if (!a.dead && dd < 24 && ((a.aggro && a.tgt === P.actor) || t - (a.netHitT ?? -1e9) < 1500)) after = true;
+    }
+    if (d > NEAR * 1.3 && !a.boss) continue;
+    const waited = t - (a.netSentT ?? t - OVERDUE);
+    C.push({ a, d, waited, k: a.boss || (a.dead && !a.netDead) ? 1e9 : waited * (after ? 8 : 2 / (1 + d / 10)) + (waited >= OVERDUE ? 1e7 : 0) });
+  }
+  for (const P of gs) {
+    const L = C.filter((c) => !c.a.dead).map((c) => [Math.abs(c.a.x - P.actor.x) + Math.abs(c.a.z - P.actor.z), c]).sort((x, y) => x[0] - y[0]);
+    for (let i = 0; i < Math.min(NEAREST, L.length); i++) L[i][1].k = Math.max(L[i][1].k, 1e9 - L[i][0]);
+  }
+  C.sort((x, y) => y.k - x.k);
+  let b = 0;
+  for (const { a } of C) {
+    const e = actorEntry(a, t), n = bytesOf(e) + 1;
+    if (b + n > cap) break;
+    A.push(e); b += n;
+    a.netSentT = t; a.netLx = a.x; a.netLz = a.z; a.netDead = a.dead ? (a.netDead | 0) + 1 : 0;
+  }
+  return b;
+}
+// (its speed: from where it was when last sent, kept on the monster itself, so nothing outlives it)
+function actorEntry(a, t) {
   const av = a.avatar, hpF = a.hpMax > 0 ? Math.round(clamp(a.hp / a.hpMax, 0, 1) * 255) : 0;
-  // its speed: from where it was at the last snapshot
-  const lp = ACT_DT.get(a) || { x: a.x, z: a.z, t: now() }, dtt = Math.max(0.03, (now() - lp.t) / 1000), sp = Math.hypot(a.x - lp.x, a.z - lp.z) / dtt;
-  ACT_DT.set(a, { x: a.x, z: a.z, t: now() });
+  const sp = a.netSentT == null ? 0 : Math.hypot(a.x - a.netLx, a.z - a.netLz) / Math.max(0.03, (t - a.netSentT) / 1000);
   const fl = (a.dead ? 1 : 0) | (a.hidden || a.under || (a.avatar && !a.avatar.group.visible && !a.dead) ? 2 : 0) | (a.aggro ? 4 : 0) | (a.status.freeze > 0 ? 8 : 0) | (a.status.stun > 0 ? 16 : 0)
     | (a.elite === 'champion' ? 32 : 0) | (a.elite === 'rare' ? 64 : 0) | (a.minion ? 128 : 0) | (a.flash > 0.5 ? 256 : 0) | (a.dormant ? 512 : 0) | (a.airborne ? 1024 : 0) | (a.statue && !a.awake ? 2048 : 0) | (a.team === 'hero' ? 4096 : 0) | (a.boss ? 8192 : 0) | (a.drowned ? 16384 : 0);
   return [a.id, KIDX.get(a.kind), q(a.x, 10), q(a.z, 10), q(((a.rot % 6.2832) + 6.2832) % 6.2832, 20), hpF, fl, clipIdx(av?.netClip), (av?.netSeq || 0) & 1023, q(Math.min(sp, 30), 10), q(a.y || 0, 10), a.level | 0, Math.round((av?.netSpd || 1) * 100), Math.round(a.hpMax)];
@@ -505,7 +545,8 @@ function guestEvent(P, e) {
     for (const k of ['area', 'dot', 'breakGuard', 'swing', 'quiet', 'noFx']) if (o[k]) opts[k] = true;
     if (typeof o.kx === 'number' && typeof o.kz === 'number' && isFinite(o.kx) && isFinite(o.kz)) { opts.kx = o.kx; opts.kz = o.kz; }
     S.stats.hits++;
-    damage(me, a, amt, opts);
+    S.landing = P.peer;
+    try { damage(me, a, amt, opts); } finally { S.landing = null; }
   } else if (type === 'rv') {
     // a revive: the reviver (this guest) has stood by another hero, down a moment, as long as a raise takes (the host's
     // own count of its stand-in beside it), and that hero was not raised a moment ago
@@ -540,6 +581,8 @@ NET.h.hurtRemote = (src, tg, amount, o = {}) => {
   for (const k of HURT_KEYS) if (o[k] != null && (typeof o[k] === 'number' || o[k] === true)) oo[k] = typeof o[k] === 'number' ? Math.round(o[k] * 100) / 100 : 1;
   if (o.slow?.k) oo.slow = { k: Math.round(o.slow.k * 100) / 100, t: Math.round(o.slow.t * 100) / 100 };
   relTo(tg.peer, ['h', src?.id | 0, Math.round(amount), src?.level | 0, oo]);
+  // (a monster that struck a guest is one that guest needs in its snapshots)
+  if (src && typeof src === 'object') src.netHitT = now();
   tg.flash = 0.6;
   return Math.round(amount);
 };
@@ -688,7 +731,8 @@ function onSnap(o) {
   if (Array.isArray(o.l)) lit5(o.l);
   // the monsters
   if (Array.isArray(o.a)) for (const e of o.a) if (Array.isArray(e)) puppetEntry(e);
-  if (Array.isArray(o.f)) replayFx(o.f, S.hostPeer);
+  // (the look of this guest's own blows it has shown already: passed over)
+  if (Array.isArray(o.f)) { const sk = o.fs && typeof o.fs === 'object' && own(o.fs, S.ch.me) && Array.isArray(o.fs[S.ch.me]) ? new Set(o.fs[S.ch.me]) : null; replayFx(sk ? o.f.filter((e, i) => !sk.has(i)) : o.f, S.hostPeer); }
 }
 function onIce(o) { if (o && o.k === S.zoneKey && o.k === myKey()) netIce(G.zone, o.d); }
 function worldState(w) {
@@ -816,7 +860,7 @@ function puppetEntry(e) {
     G.actors.push(a); S.pup.set(id, a);
   }
   a.seen = now();
-  a.buf.push({ t: now(), x, z, r: rot, y: (e[10] | 0) / 10 }); if (a.buf.length > 6) a.buf.shift();
+  pushSample(a.buf, { x, z, r: rot, y: (e[10] | 0) / 10 });
   a.netSp = num(e[9], 0, 300) / 10;
   // (the host's top life for it: this page's blow moves the bar by its share of that)
   a.netHpMax = num(e[13], 1, 1e9, a.hpMax);
@@ -890,7 +934,7 @@ function addRemote(P) {
   const a = new Actor({ x: st.x, z: st.z, team: 'hero', kind: 'hero', radius: 0.45, speed: 5.4, hp: st.hp || 100, avatar: av, rot: st.r || 0 });
   a.remote = true; a.peer = P.peer; a.hpMax = st.hpMax || 100; a.level = P.lk?.l | 0 || 1;
   a.buffs = {}; a.cds = [0, 0, 0, 0, 0]; a.act = null; a.iframes = 0;
-  a.lookKey = JSON.stringify(P.lk || {}); a.clipSeq = -1;
+  a.lookKey = P.lookKey || '{}'; a.clipSeq = -1;
   G.actors.push(a); NET.remotes.push(a);
   return a;
 }
@@ -912,7 +956,7 @@ function remotesTick(dt) {
     }
     const a = P.actor; if (!a || !P.state) continue;
     // its look changed (a new weapon): a new avatar
-    const lk = JSON.stringify(P.lk || {});
+    const lk = P.lookKey || '{}';
     if (lk !== a.lookKey && a.avatar) { a.lookKey = lk; try { const nv = heroAvatar(lookHero(P.lk)); a.avatar.dispose(); a.avatar = nv; nv.actor = a; R.scene.add(nv.group); } catch (e) { console.error(e); } }
     const p = interp(P.buf);
     if (p) { a.x = p.x; a.z = p.z; a.rot = p.r; a.y = p.y; }
@@ -1032,8 +1076,12 @@ function recFx(name, args, ret) {
   else a = args.map((v) => (typeof v === 'number' ? R2(v) : v && typeof v === 'object' ? smallObj(v) : v));
   if (name.startsWith('tele') && ret) { ret.nid = ++teleN; a.push(ret.nid); }
   const pos = fxPos(name, a);
-  list.push({ n: name, a, x: pos[0], z: pos[1] });
+  // (the look of a guest's blow landing here, which its page has shown already: the guest it is)
+  const by = S.landing && (name === 'hitFx' || (name === 'sfx' && HIT_SND.has(a[0]))) ? S.landing : undefined;
+  list.push({ n: name, a, x: pos[0], z: pos[1], by });
 }
+// (combat.js damage: the sounds of a blow landing)
+const HIT_SND = new Set(['hitFlesh', 'hitBone', 'hitSpirit', 'hitChitin', 'woodHit', 'crit']);
 function recGuestFx(name, args, ret) { if (MIRROR.hero) recFx(name, args, ret); }
 const smallObj = (o) => { const r = {}; let n = 0; for (const k in o) { const v = o[k]; if (typeof v === 'number' || typeof v === 'boolean' || (typeof v === 'string' && v.length < 24)) { r[k] = R2(v); if (++n > 8) break; } } return r; };
 function optsOf(o) { if (!o || typeof o !== 'object') return undefined; const r = {}; for (const k of ['slow', 'freeze', 'poison', 'burn', 'root', 'push', 'stun', 'cold', 'pure', 'chill', 'knock', 'fear']) if (o[k] != null) r[k] = typeof o[k] === 'object' ? smallObj(o[k]) : R2(o[k]); return r; }
@@ -1047,12 +1095,13 @@ function fxPos(name, a) {
     default: return [a[0], a[1]];
   }
 }
-// near a guest (the host's) or anyone (a guest's), the most important first, under the byte cap
-function packFx(list, cap, gs) {
+// near a guest (the host's) or anyone (a guest's), the most important first, under the byte cap (tags: for each guest,
+// where in the list the look of its own blows is)
+function packFx(list, cap, gs, tags) {
   const out = []; let b = 0;
   const near = (e) => e.x == null || !gs || gs.some((P) => Math.abs(P.actor.x - e.x) + Math.abs(P.actor.z - e.z) < NEAR);
   const sorted = list.filter(near).sort((x, y) => (PRIO[x.n] ?? 3) - (PRIO[y.n] ?? 3));
-  for (const e of sorted) { const x = [FXI.get(e.n), ...e.a], n = bytesOf(x) + 1; if (b + n > cap) continue; out.push(x); b += n; }
+  for (const e of sorted) { const x = [FXI.get(e.n), ...e.a], n = bytesOf(x) + 1; if (b + n > cap) continue; if (e.by && tags) (tags[e.by] ||= []).push(out.length); out.push(x); b += n; }
   return out;
 }
 const TELES = new Map();

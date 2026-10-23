@@ -86,20 +86,35 @@ async function localTest() {
   await cb.leave(); a.lobby.leave(); b.lobby.leave();
 }
 
-// a fake supabase-js v2 client: channels by name share a bus; broadcast (self: false), presence track/sync
+// a fake supabase-js v2 client: channels by name share a bus; broadcast (self: false), presence track/sync (a key is in
+// presenceState once it has tracked). Realtime's limits, as its docs give them: a client's 6th track() or untrack() within
+// 30 s shuts its channel (ClientPresenceRateLimitReached: CLOSED, broadcast with it), and bus.log counts the project's
+// events (each message sent and each delivered: the project's messages a second)
 function fakeSupabase(bus) {
+  const log = (bus.log ||= { events: 0, tracks: 0, closed: 0 }), tracks = [];
   return {
     channel(name, opts) {
       const key = opts?.config?.presence?.key, L = { b: [], p: [] };
       const c = bus[name] ||= { members: new Map() };
-      let status = null;
+      let status = null, cb0 = null;
+      const sync = () => setTimeout(() => { for (const m of c.members.values()) m.L.p.forEach((f) => f()); }, 5);
       const ch = {
         on(type, filter, fn) { if (type === 'broadcast') L.b.push([filter.event, fn]); if (type === 'presence') L.p.push(fn); return ch; },
-        subscribe(cb) { c.members.set(key, { L, state: null }); setTimeout(() => { status = 'SUBSCRIBED'; cb('SUBSCRIBED'); for (const m of c.members.values()) m.L.p.forEach((f) => f()); }, 5); return ch; },
-        send(m) { for (const [k, mm] of c.members) if (k !== key) setTimeout(() => mm.L.b.forEach(([ev, f]) => { if (ev === '*' || ev === m.event) f({ event: m.event, payload: m.payload }); }), 5); return Promise.resolve('ok'); },
-        track(p) { c.members.get(key).state = p; setTimeout(() => { for (const m of c.members.values()) m.L.p.forEach((f) => f()); }, 5); return Promise.resolve('ok'); },
-        presenceState() { const o = {}; for (const [k, m] of c.members) o[k] = [Object.assign({ presence_ref: 'r' }, m.state || {})]; return o; },
-        unsubscribe() { c.members.delete(key); for (const m of c.members.values()) m.L.p.forEach((f) => f()); return Promise.resolve('ok'); }
+        subscribe(cb) { cb0 = cb; c.members.set(key, { L, state: null }); setTimeout(() => { status = 'SUBSCRIBED'; cb('SUBSCRIBED'); sync(); }, 5); return ch; },
+        send(m) {
+          if (status !== 'SUBSCRIBED') return Promise.resolve('error');
+          log.events++;
+          for (const [k, mm] of c.members) if (k !== key) { log.events++; setTimeout(() => mm.L.b.forEach(([ev, f]) => { if (ev === '*' || ev === m.event) f({ event: m.event, payload: m.payload }); }), 5); }
+          return Promise.resolve('ok');
+        },
+        track(p) {
+          if (status !== 'SUBSCRIBED') return Promise.resolve('error');
+          const t = Date.now(); tracks.push(t); while (tracks[0] < t - 30000) tracks.shift(); log.tracks++;
+          if (tracks.length > 5) { status = 'CLOSED'; log.closed++; c.members.delete(key); cb0?.('CLOSED'); sync(); return Promise.resolve('error'); }
+          log.events++; c.members.get(key).state = p; sync(); return Promise.resolve('ok');
+        },
+        presenceState() { const o = {}; for (const [k, m] of c.members) if (m.state) o[k] = [Object.assign({ presence_ref: 'r' }, m.state)]; return o; },
+        unsubscribe() { status = 'CLOSED'; c.members.delete(key); sync(); return Promise.resolve('ok'); }
       };
       return ch;
     },
@@ -117,8 +132,8 @@ async function supaTest() {
   ok(ca.peers().length === 2, 'presence sync gives both peers: ' + ca.peers().length);
   await ca.emit('s', { n: 3 }); await sleep(30);
   ok(heard?.data?.n === 3 && heard.peer === 'sa', 'a broadcast arrives with its sender');
-  ca.presence({ h: [4] }); ca.pump(); await sleep(40);
-  ok(JSON.stringify(cb.peers().find((p) => p.peer === 'sa')?.presence?.h) === '[4]', 'tracked presence arrives');
+  ca.presence({ h: [4] }); ca.pump(); await sleep(120);
+  ok(JSON.stringify(cb.peers().find((p) => p.peer === 'sa')?.presence?.h) === '[4]', 'presence arrives (by broadcast)');
   // (Realtime does not stamp the sender: any client can name itself in a broadcast. So the game never takes Supabase
   // until the server stamps senders, release.md step 5: a forged host cannot reach a guest's game)
   const evil = fakeSupabase(bus).channel('skotos:skotos-g-sup', { config: { presence: { key: 'evil' } } }); evil.subscribe(() => {});
@@ -130,6 +145,43 @@ async function supaTest() {
   ok(!!(await pickTransport(new URLSearchParams(''), Object.assign({ stamped: true }, cfg))), 'and takes one once it does (cfg.stamped)');
   await evil.unsubscribe(); await ca.leave(); await sleep(30);
   ok(cb.peers().length === 1, 'a channel removed is gone for the other');
+  await cb.leave(); a.lobby.leave(); b.lobby.leave();
+
+  // Realtime's rates: four pages at the game's own (the host's snapshots, the guests' presence every frame and their fx),
+  // for 8 s. Presence goes by broadcast and is tracked once a channel, so no channel is shut; a late joiner learns the
+  // others' presence at once; one gone silent is dropped
+  const bus2 = {};
+  const T = [0, 1, 2, 3].map((i) => SupabaseTransport(fakeSupabase(bus2), { me: 'q' + i, gone: 4000 }));
+  const chs = await Promise.all(T.map((t) => t.join('skotos-g-rate')));
+  await sleep(60);
+  const snap = { a: Array.from({ length: 60 }, (_, i) => [i, 12, 1234, 2345, 51, 200, 3, 4, 1]), pad: 'x'.repeat(800) };
+  const t0 = Date.now(), e0 = bus2.log.events; let k = 0;
+  while (Date.now() - t0 < 8000) {
+    if (k % 6 === 0) chs[0].emit('s', snap);
+    for (let g = 1; g < 4; g++) { chs[g].presence({ h: [k, g, 1000 + k], hb: (k / 60) | 0 }); if (k % 12 === 0) chs[g].emit('f', [[1, 2, 3]]); }
+    for (const c of chs) c.pump();
+    k++; await sleep(16);
+  }
+  const secs = (Date.now() - t0) / 1000, evs = (bus2.log.events - e0) / secs;
+  await sleep(150);
+  ok(bus2.log.closed === 0 && chs.every((c) => c.connected()) && T.every((t) => t.lobby.connected()), 'eight seconds at the game\'s rates: no channel shut for its presence');
+  ok(bus2.log.tracks === 8, 'presence tracked once on each game and lobby channel, never again: ' + bus2.log.tracks);
+  ok(chs[0].peers().length === 4 && chs.slice(1).every((c) => (chs[0].peers().find((p) => p.peer === c.me)?.presence?.h?.[0] ?? -1) >= k - 12), 'the host has every guest\'s presence of the last frames');
+  console.log('     the project\'s events a second for a party of four (each sent and each delivered): ' + Math.round(evs));
+  const late = SupabaseTransport(fakeSupabase(bus2), { me: 'q9' }), cl = await late.join('skotos-g-rate');
+  await sleep(300);
+  ok(cl.peers().length === 5 && cl.peers().filter((p) => !p.isMe && p.peer !== 'q0').every((p) => p.presence.h), 'a late joiner has the others\' presence at once (they say it again when someone joins)');
+  // one that tracked, said its presence once and went silent (a stopped page): gone after o.gone; the others, only
+  // beating now (nothing new to say), are kept
+  const mute = fakeSupabase(bus2).channel('skotos:skotos-g-rate', { config: { presence: { key: 'mute' } } });
+  mute.subscribe((st) => { if (st === 'SUBSCRIBED') { mute.track({ k: 'mute' }); mute.send({ type: 'broadcast', event: '_p', payload: { f: 'mute', p: { h: [1] } } }); } });
+  await sleep(400);
+  ok(chs[0].peers().some((p) => p.peer === 'mute'), 'a member that said its presence is listed');
+  await sleep(6000);
+  ok(!chs[0].peers().some((p) => p.peer === 'mute') && chs[0].peers().length === 5, 'one silent past o.gone is dropped, the beating ones kept: ' + chs[0].peers().map((p) => p.peer).join(' '));
+  ok(bus2.log.closed === 0, 'and still no channel shut');
+  for (const c of [...chs, cl]) await c.leave();
+  for (const t of [...T, late]) t.lobby.leave();
 }
 
 await roomTest();
