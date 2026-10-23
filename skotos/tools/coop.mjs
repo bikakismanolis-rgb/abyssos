@@ -311,7 +311,22 @@ const SC = {
     await until(gW, () => [...window.__NET.S.pup.values()].filter((a) => !a.dead).length >= 8, null, 10000, 'puppets');
     // --- taunt: the Warden guest's Challenge holds the host's monsters to its stand-in ---
     await ev(host, () => { for (const a of window.__G.actors) if (a.test) a.status.stun = 0; });
-    const cast = (pg, i, x, z) => ev(pg, ([i, x, z]) => { const G = window.__G, pl = G.player; if (G.panel) window.__D.closePanel(); pl.res = G.stats.resMax; pl.act = null; window.__D.IN.events.push({ t: 'skill', i, aim: x == null ? null : { x, z } }); }, [i, x, z]);
+    // (a cast is pushed again until the page says it was used: an input taken while a panel or a channel holds it is lost)
+    const cast = async (pg, i, x, z) => {
+      for (let n = 0; n < 4; n++) {
+        const used = await ev(pg, async ([i, x, z]) => {
+          const G = window.__G, pl = G.player, B = await import('/src/ui/bus.js');
+          if (!window.__usedOn) { window.__usedOn = true; window.__used = 0; B.on('skillUsed', () => window.__used++); }
+          const u0 = window.__used;
+          if (G.panel) window.__D.closePanel(); pl.res = G.stats.resMax; pl.act = null;
+          window.__D.IN.events.push({ t: 'skill', i, aim: x == null ? null : { x, z } });
+          for (let k = 0; k < 20 && window.__used === u0; k++) await new Promise((r) => setTimeout(r, 50));
+          return window.__used > u0;
+        }, [i, x, z]);
+        if (used) return true;
+      }
+      return false;
+    };
     await cast(gW, 1, spot.x, spot.z + 6);
     await sleep(300);
     const taunted = await until(host, () => { const r = window.__NET.NET.remotes; return window.__G.actors.filter((a) => a.test && a.taunt > window.__G.hero.stats.time && a.tauntBy && r.includes(a.tauntBy)).length >= 3; }, null, 8000, 'taunt');
@@ -351,22 +366,28 @@ const SC = {
     await sleep(1500);
     const vis = await Promise.all(all.map((pg) => ev(pg, () => window.__G.areas.filter((a) => a.kind === 'custom' && a.team === 'vis').length)));
     ok(vis[0] >= 2 && vis[1] >= 1 && vis[2] >= 2 && vis[3] >= 1, 'each page draws the others\' Bulwarks and Hawks', vis);
-    const looks = await ev(gM, () => window.__G.projs.filter((p) => p.team === 'vis' && p.look).length + window.__G.areas.filter((a) => a.team === 'vis' && a.look).length);
     // --- 20 s of every page casting its four in turn (cooldowns as they are, resources full) ---
     await spawnPack();
     await ev(host, () => { for (const a of window.__G.actors) if (a.test) a.status.stun = 99; });
+    // (everyone at the pack's edge: the Warden's spins reach it)
+    for (const [i, pg] of all.entries()) await place(pg, spot.x + [-1.5, 1.5, -3, 3][i], spot.z + 3.6);
     for (const pg of all) await ev(pg, () => { window.__sent = 0; const h0 = window.__NET.NET.h.hitPuppet; if (h0 && !h0.wrapped) { const f = (src, tg, amt, o, crit) => { const r = h0(src, tg, amt, o, crit); window.__sent += r; return r; }; f.wrapped = true; window.__NET.NET.h.hitPuppet = f; } });
     const hp0 = await ev(host, () => window.__G.actors.filter((a) => a.test && !a.dead).reduce((s, a) => s + a.hp, 0));
     const drops0 = await Promise.all(all.map((pg) => ev(pg, () => window.__NET.S.ch.meter.tx.drops)));
     for (const pg of all) await ev(pg, () => { window.__NET.S.ch.meter.peak = 0; });
+    for (const pg of all) await ev(pg, async () => { const B = await import('/src/ui/bus.js'); window.__casts = {}; if (!window.__castOn) { window.__castOn = true; B.on('skillUsed', (i) => { const id = (window.__G.hero.loadout || [])[i - 1]; window.__casts[id] = (window.__casts[id] || 0) + 1; }); } });
+    let looks = 0;
     const t0 = Date.now(); let k = 0;
     while (Date.now() - t0 < 20000) {
       for (const pg of all) await ev(pg, async (k) => { const G = window.__G, pl = G.player, S = await import('/src/game/skills.js'); if (G.panel) window.__D.closePanel(); pl.res = G.stats.resMax; const f = S.nearestFoe(20); if (!pl.act || pl.act.name === 'whirl') window.__D.IN.events.push({ t: 'skill', i: 1 + (k % 4), aim: f ? { x: f.x, z: f.z } : null }); }, k);
       k++; await sleep(350);
+      if (k % 6 === 0) looks = Math.max(looks, await ev(gM, () => window.__G.projs.filter((p) => p.team === 'vis' && p.look).length + window.__G.areas.filter((a) => a.team === 'vis' && (a.look || a.kind === 'custom')).length));
     }
     await sleep(1500);
     // (the host's own blows on them: its Bulwark, Ember Dance and the rest; the guests' sum is what they sent)
     const sent = await Promise.all(guests.map((g) => ev(g, () => window.__sent)));
+    console.log('     casts', JSON.stringify(await Promise.all(all.map((pg) => ev(pg, () => window.__casts)))));
+    ok(looks > 0, 'the mage guest draws the others\' shots and effects by their looks', looks);
     const hs = await ev(host, () => ({ left: window.__G.actors.filter((a) => a.test && !a.dead).reduce((s, a) => s + a.hp, 0), why: window.__NET.S.stats.why, rejected: window.__NET.S.stats.rejected, hits: window.__NET.S.stats.hits }));
     ok(!hs.why.big && !hs.why.rate && !hs.why.bad && !hs.why.pull && !hs.why.ice, 'nothing a guest\'s Mastery or skills did was refused as too much', hs.why);
     const st = await Promise.all(all.map((pg) => stats(pg)));
@@ -377,7 +398,6 @@ const SC = {
     await sleep(14000);
     const end = await Promise.all(all.map((pg) => ev(pg, () => window.__G.areas.filter((a) => a.kind === 'custom' && a.team === 'vis').length)));
     ok(end.every((n) => n === 0), 'the drawn effects all end', end);
-    console.log('     looks drawn on the mage guest', looks);
   },
   async act5() {
     const A4 = 'act1,act2,act3,act4,after3,hart,autumn,weaver,lord,fireTaken,ivar,plug,karthax,crownUnmade,giftsTaken,unbound,newFire';
