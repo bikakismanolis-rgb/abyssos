@@ -21,3 +21,13 @@ the flaky `holes` and `tower` scenarios, and runtime errors only the on-screen `
   three cine cameras) show no difference beyond what the same tree shows against itself (snow, the aurora's ramp).
 - 16:45 cp5: the test's own watch on towerWake/cp5 made both flags non-enumerable, so the save lost them; fixed (test).
 - 16:50 holes: the Breath handled in the page every frame (test).
+- 16:50-17:20 perf5 (QS 1, 21 cycles) with those changes: coast 1.170 (from 1.224), coastLow 0.970, farlight 0.971. Not
+  enough. The coast frame by material (each group drawn alone over the full depth, scratch prof.mjs): ground 397 ms,
+  the Dalaro wreck 193, the sea 187, the hero ~150. Two facts about swiftshader decided the rest: it shades every
+  rasterized fragment, depth test or not (the wreck costs the same over a depth buffer cleared to 0 as to 1), and a
+  discard (or a return after it) spares nothing of what follows (the ground discarding every fragment still cost 368 of
+  388 ms), while a branch whose lanes are all false is skipped like deleted code.
+- 17:40 build.js: the coast ground's "not drawn under closed water" discard now also opens a branch round the rest of the
+  shader (its own comment already said its layers and lights were spared; they were not). sea.js: the same for the
+  water's dry-pixel discard. Frame 1062 -> 959 ms against the start tree (ab2, 9 rounds); shots unchanged (pixels the
+  branch skips are discarded anyway).
