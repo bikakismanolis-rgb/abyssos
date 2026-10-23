@@ -90,6 +90,57 @@ export function makeItem(ilvl, o = {}) {
   return item;
 }
 
+// An item this page did not roll (a co-op host's, net/coop.js; one in a save, save.js): rebuilt from what an item is made
+// of, each number held to what makeItem can roll at its level, so no item can break a hero or its panels. Stats only
+// from STATS (a skill only one its class has), damage and speed only on a weapon, armour and block only where the base
+// has them, a legendary only its own base's; the price worked out again. o.maxIlvl: the highest level it may claim;
+// o.keep: other plain fields kept (a save's, which nothing reads); else every other field is dropped. null: no item
+export const MAX_ILVL = 99;
+const own = (o, k) => typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k);
+const fin = (v) => typeof v === 'number' && isFinite(v);
+export function statMax(k, ilvl) {
+  const s = STATS[k];
+  let v = s.r[1] + s.g * (ilvl - 1) * 1.05;
+  if (s.cap) v = Math.min(s.cap, v);
+  return s.pct ? Math.round(v * 10) / 10 : Math.round(v);
+}
+export function cleanItem(it, o = {}) {
+  if (!it || typeof it !== 'object' || !own(BASES, it.base)) return null;
+  const B = BASES[it.base];
+  let rar = fin(it.rar) ? clamp(Math.round(it.rar), 0, 3) : 0;
+  const ilvl = fin(it.ilvl) ? clamp(Math.round(it.ilvl), 1, o.maxIlvl || MAX_ILVL) : 1;
+  const leg = rar === 3 && LEGENDARIES.find((l) => l.id === it.leg && l.base === it.base);
+  if (rar === 3 && !leg) rar = 2;
+  const out = { id: (typeof it.id === 'string' || fin(it.id)) && String(it.id) ? String(it.id).slice(0, 40) : iid++ + '_' + Date.now().toString(36), base: it.base, rar, ilvl, stats: {} };
+  const q = [1, 1.08, 1.16, 1.26][rar], num = (v, hi, d) => (fin(v) ? clamp(Math.round(v), 0, hi) : d);
+  if (B.slot === 'weapon') {
+    const top = (3.2 + ilvl * 2.35) * q * 1.08, mid = (3.2 + ilvl * 2.35) * q;
+    const hi0 = Math.max(1, Math.round(top * B.dmg[0])), hi1 = Math.max(2, Math.round(top * B.dmg[1]));
+    const d = Array.isArray(it.dmg) ? it.dmg : [];
+    const d1 = num(d[1], hi1, Math.max(2, Math.round(mid * B.dmg[1])));
+    out.dmg = [Math.min(d1, num(d[0], hi0, Math.max(1, Math.round(mid * B.dmg[0])))), d1];
+    out.spd = B.spd;
+  }
+  if (B.armor) out.armor = num(it.armor, Math.round((4 + ilvl * 2.6) * B.armor * q * 1.1), Math.round((4 + ilvl * 2.6) * B.armor * q));
+  if (B.block) out.block = num(it.block, Math.round((B.block + 0.06) * 100), Math.round(B.block * 100));
+  if (it.stats && typeof it.stats === 'object') for (const k of Object.keys(it.stats)) {
+    const v = it.stats[k];
+    if (k === 'skill') {
+      // (a skill of the item's class, or of any class for an item of none; never a basic attack)
+      const ok = v && typeof v === 'object' && typeof v.id === 'string' && (B.cls ? [B.cls] : Object.keys(SKILLS)).some((c) => SKILLS[c].some((s) => s.id === v.id && !s.basic));
+      if (ok && fin(v.v)) out.stats.skill = { id: v.id, v: clamp(v.v, 0, statMax('skill', ilvl)) };
+    } else if (own(STATS, k) && fin(v)) out.stats[k] = clamp(v, 0, statMax(k, ilvl));
+  }
+  if (leg) out.leg = leg.id;
+  if (rar === 2) out.sfx = fin(it.sfx) ? clamp(Math.round(it.sfx), 0, 999) : 0;
+  if (rar === 1) out.sfx = own(STATS, it.sfx) ? it.sfx : Object.keys(out.stats)[0];
+  out.value = Math.round((6 + ilvl * 2.2) * [1, 2.5, 6, 18][rar]);
+  if (it.isNew) out.isNew = true;
+  if (o.keep) for (const k of Object.keys(it)) if (!(k in out) && !CLEAN_KEYS.has(k) && (fin(it[k]) || typeof it[k] === 'boolean' || (typeof it[k] === 'string' && it[k].length < 40))) out[k] = it[k];
+  return out;
+}
+const CLEAN_KEYS = new Set(['id', 'base', 'rar', 'ilvl', 'stats', 'dmg', 'spd', 'armor', 'block', 'leg', 'sfx', 'value', 'isNew']);
+
 export function itemName(item) {
   const b = t('base.' + item.base);
   if (item.rar === 3) return t('leg.' + item.leg);

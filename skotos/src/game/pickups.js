@@ -57,6 +57,8 @@ function launch(x, z, spread = 1.4) {
 }
 
 export function dropGold(x, z, amount) {
+  // (a pile is a whole, finite number of coins: no level or roll can take gold away or make it endless)
+  if (!(amount >= 1 && amount < 1e9)) return null;
   const p = launch(x, z, 1.2);
   const mesh = kitMesh('dungeon', amount > 60 ? 'coin_stack_medium' : 'coin_stack_small', 0.38);
   return add(Object.assign(p, { kind: 'gold', amount, mesh, t: 0 }));

@@ -11,6 +11,7 @@ import Audio from '../audio/audio.js';
 import { grantBuff, refreshStats } from './stats.js';
 import { spawnMonster, spawnNpc, ghostly } from './actors.js';
 import { BOONS } from './data.js';
+import { NET } from '../net/state.js';
 import { ATMOS } from '../world/atmos.js';
 import { SEA, setFreezeAll, freezeWave, setShade } from '../world/sea.js';
 import { tex } from '../gfx/textures.js';
@@ -153,6 +154,9 @@ on('talk', (kind, actor) => {
 });
 
 on('zoneEnter', (id, z) => {
+  // (a co-op guest in the host's world: the story there is the host's, none of it is caught up or played on this page;
+  // only the guest's own gifts are recounted, suspended in a Shadow Gate as ever)
+  if (NET.mode === 'guest') { if ((G.hero.__real || G.hero).flags?.gifts) refreshStats(); return; }
   const q = G.hero.quest, F = G.hero.flags;
   if (id === 'forest' && G.hero.quest < 1) setQuest(1, true);
   if (id === 'crypt' && G.hero.quest < 3 && G.hero.flags.weaver) setQuest(3);
@@ -495,7 +499,8 @@ function lanternLean(far) {
 }
 // a beacon blessing for each act, chosen once (heroes from before the blessings get theirs on their next return)
 export function offerBoons() {
-  const h = G.hero; if (!h) return false;
+  // (the hero's own acts and blessings: a co-op guest's record, never the host's world laid over it, net/coop.js)
+  const h = G.hero?.__real || G.hero; if (!h) return false;
   h.boons ||= [];
   // never over a cinematic or another panel: try again in a moment
   if (G.mode !== 'play' || G.panel) { later(2, offerBoons); return false; }
@@ -516,6 +521,8 @@ on('boonTaken', (id) => {
 });
 function actComplete(act) {
   const h = G.hero;
+  // (an act is closed by the host on its own page; a guest's view of it closes nothing of the guest's)
+  if (h.__real) return;
   if (act === 1) { h.act1 = Math.max(h.act1, h.diff); h.quest = 5; h.flags.act1 = true; }
   else if (act === 2) { h.act2 = Math.max(h.act2 ?? -1, h.diff); h.quest = 10; h.flags.act2 = true; }
   else if (act === 3) { h.act3 = Math.max(h.act3 ?? -1, h.diff); h.quest = 16; h.flags.act3 = true; }

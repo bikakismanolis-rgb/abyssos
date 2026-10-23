@@ -254,7 +254,9 @@ export function SupabaseTransport(client, o = {}) {
 
 // ---------- which one ----------
 // ?net=local (the tests: pages of one browser), the artifact's room when the page runs in claude.ai, Supabase when the
-// build carries its config (net/netcfg.js) and a client; else null: the single-player game
+// build carries its config (net/netcfg.js), a client, and a server that stamps who sent each message (cfg.stamped:
+// Realtime itself does not, and a guest believes its host's messages only for the sender on them; docs/coop/release.md
+// step 5); else null: the single-player game
 export async function pickTransport(q, cfg = {}) {
   const want = q?.get?.('net');
   if (want === 'off') return null;
@@ -262,7 +264,7 @@ export async function pickTransport(q, cfg = {}) {
   if (want !== 'supabase' && typeof window !== 'undefined' && window.claude?.use) {
     try { const room = await window.claude.use('room'); if (room) return RoomTransport(room); } catch (e) { /* no room here */ }
   }
-  if (cfg.url && cfg.anonKey) {
+  if (cfg.url && cfg.anonKey && cfg.stamped === true) {
     try { const make = cfg.createClient || (typeof window !== 'undefined' && window.supabase?.createClient); if (make) return SupabaseTransport(make(cfg.url, cfg.anonKey, { realtime: { params: { eventsPerSecond: BUDGET } } })); } catch (e) { /* not this build */ }
   }
   return null;

@@ -75,10 +75,13 @@ function isUpgrade(item) {
 }
 function compare(item) {
   const h = G.hero;
-  if (!usable(item, h.cls)) return null;
-  const slot = bestSlotFor(h, item);
-  const cur = G.stats, nxt = computeStats(h, withItem(h.equip, item, slot));
-  return { dps: ((nxt.dps - cur.dps) / cur.dps) * 100, tough: ((nxt.toughness - cur.toughness) / cur.toughness) * 100, life: nxt.lifeMax - cur.lifeMax };
+  // (a comparison that cannot be made shows none: a bad item never takes the bag, the shops or the stash with it)
+  try {
+    if (!usable(item, h.cls)) return null;
+    const slot = bestSlotFor(h, item);
+    const cur = G.stats, nxt = computeStats(h, withItem(h.equip, item, slot));
+    return { dps: ((nxt.dps - cur.dps) / cur.dps) * 100, tough: ((nxt.toughness - cur.toughness) / cur.toughness) * 100, life: nxt.lifeMax - cur.lifeMax };
+  } catch (e) { console.error(e); return null; }
 }
 function tip(item, actions) {
   if (!item) return '';
@@ -269,7 +272,8 @@ export function diffUnlocked(i) {
 }
 function render() {
   if (!P.name) return;
-  $('panel').innerHTML = R[P.name] ? R[P.name]() : EXTRA[P.name]?.render(P) || '';
+  // (a panel that cannot be drawn still shows its close button: it never stays open and empty)
+  try { $('panel').innerHTML = R[P.name] ? R[P.name]() : EXTRA[P.name]?.render(P) || ''; } catch (e) { console.error(e); $('panel').innerHTML = `<div class="pn narrow"><div class="pn-h"><h2></h2><button class="x" data-a="close" aria-label="${t('panel.close')}">${ICON.close}</button></div></div>`; }
   if (P.name === 'map') drawBigMap($('bigmap'));
 }
 
