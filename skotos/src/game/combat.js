@@ -20,7 +20,7 @@ import { coldAdd, coldMul } from './cold.js';
 import { staticGeo, makeCharMat } from '../gfx/rig.js';
 import { slagParts } from '../gfx/models.js';
 import { R as RR } from '../gfx/gfx.js';
-import { NET } from '../net/state.js';
+import { NET, MIRROR } from '../net/state.js';
 
 const HIT_SFX = { flesh: 'hitFlesh', bone: 'hitBone', spirit: 'hitSpirit', chitin: 'hitChitin', ash: 'hitFlesh', stone: 'hitBone', magma: 'hitFlesh', wood: 'woodHit', drowned: 'hitFlesh', skotos: 'hitSpirit' };
 const DIE_SFX = { goblin: 'goblinDie', wolf: 'wolfDie', spider: 'spiderDie', orc: 'orcDie', troll: 'trollRoar', skeleton: 'skeletonDie', wraith: 'wraithDie', hound: 'wolfDie', bat: 'batDie', worm: 'wormDie', dwarf: 'dwarfDie', golem: 'golemDie', moth: 'mothDie', bear: 'bearRoar', hart: 'hartBellow' };
@@ -89,9 +89,12 @@ export function damage(src, target, amount, o = {}) {
     const def = target.def;
     const dx = o.kx ?? (src ? target.x - src.x : 0), dz = o.kz ?? (src ? target.z - src.z : 0), l = Math.hypot(dx, dz) || 1;
     if (!o.noFx) {
+      // (co-op: a guest's blow on a puppet is seen here at once and by the others in the host's echo of it, not twice)
+      const sk = MIRROR.skip; if (target.puppet) MIRROR.skip = true;
       hitFx(target.x, (def.big || target.boss ? 1.6 : 1.0) * (target.scale || 1), target.z, target.prop ? 'wood' : def.flesh === 'wood' ? 'bark' : def.flesh, dx / l, dz / l, crit);
       if (!o.quiet) Audio.sfx(target.prop ? 'break' : (HIT_SFX[def.flesh] || 'hitFlesh'), { x: target.x, z: target.z, vol: crit ? 1 : 0.8 });
       if (crit && !o.quiet) Audio.sfx('crit', { x: target.x, z: target.z, vol: 0.6 });
+      MIRROR.skip = sk;
     }
     if (o.knock && !target.boss && !target.prop && !def.anchored && blocked > 0.5 && !(target.curled > 0)) {
       const k = o.knock / (def.big ? 3 : 1);
