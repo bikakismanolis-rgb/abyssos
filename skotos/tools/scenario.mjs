@@ -1566,8 +1566,10 @@ const S = {
     const woke = await where('grey'); await shot();
     // the Tower awake (the three lights, their memories): a retry by the bay's shore rock, across a Continue too
     // (when the Tower's waking and its checkpoint happen, which zone and scene: reported if the checkpoint is missed)
-    await pg.evaluate(() => { const G = window.__G, F = G.hero.flags; window.__cpLog = []; for (const k of ['towerWake', 'cp5']) { let v = F[k]; delete F[k]; Object.defineProperty(F, k, { get() { return v; }, set(x) { v = x; window.__cpLog.push([k, JSON.stringify(x), +G.hero.stats.time.toFixed(1), G.zone?.id, !!G.cine, new Error().stack.split('\n').slice(2, 5).map((l) => l.trim().replace(/\(?https?:[^)]*\/src\//, '').replace(/\?[^:]*/, '')).join(' < ')]); }, configurable: true, enumerable: false }); } });
+    // (installed after A5.state, which deletes every flag; enumerable, so the save keeps both: hidden from JSON, a Continue
+    // lost the waking and the checkpoint, and the test passed only when the Tower woke again before its death)
     await A5.state(pg, 'mem_i3', { quest: 26, zone: 'coast', at: 'waypoint' });
+    await pg.evaluate(() => { const G = window.__G, F = G.hero.flags; window.__cpLog = []; for (const k of ['towerWake', 'cp5']) { let v = F[k]; delete F[k]; Object.defineProperty(F, k, { get() { return v; }, set(x) { v = x; window.__cpLog.push([k, JSON.stringify(x), +G.hero.stats.time.toFixed(1), G.zone?.id, !!G.cine, new Error().stack.split('\n').slice(2, 5).map((l) => l.trim().replace(/\(?https?:[^)]*\/src\//, '').replace(/\?[^:]*/, '')).join(' < ')]); }, configurable: true, enumerable: true }); } });
     // (on a loaded machine the waking scene can outlast four minutes: a wait that ran out is reported, not read as a miss)
     const waited = await A5.until(pg, () => window.__G.hero.flags.towerWake && !window.__G.cine, 600000);
     const tw = await where('rock');

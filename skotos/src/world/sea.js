@@ -200,6 +200,8 @@ vec3 freezeIf(vec2 p, float lead, float shore) { return uFrzOn > 0.5 ? freezeAt(
 // o.low: held just under the ice's surface (the Farthest Light: no tide, the leads lie a hand below the ice's edge);
 // o.far: the far-sea quads (no freeze slots, no lead)
 const SEA_MATS = new Map();
+// (tBed's grid: this many texels to a cell, buildSea)
+const BS = 4;
 function seaMat(o = {}) {
   const hi = R.quality >= 1, key = (o.low ? 'l' : 't') + (o.far ? 'f' : '') + (hi ? 'h' : '') + (R.quality >= 2 ? '2' : '');
   if (SEA_MATS.has(key)) return SEA_MATS.get(key);
@@ -305,7 +307,11 @@ varying vec3 vWP; varying float vDep; varying float vLead; varying float vShore;
 #if defined(SEA_HI) && !defined(SEA_FAR)
 varying vec3 vAur; varying float vAurK;
 #endif
-${FREEZE}`)
+${FREEZE}
+// (whole powers by squaring: a pow() is a log and an exp per pixel, a dozen of them the water's dearest arithmetic on a
+// software GPU; the glints' 220-300 are taken as 256)
+float sq2(float x) { return x * x; } float sq4(float x) { x *= x; return x * x; } float sq16(float x) { x *= x; x *= x; x *= x; return x * x; }
+float sq256(float x) { x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; return x * x; }`)
       .replace('#include <map_fragment>', `
   float t = uTime, dep = vDep;
   vec3 V = normalize(cameraPosition - vWP);
@@ -318,19 +324,13 @@ ${FREEZE}`)
   // the waterline and the closed step from the smooth bed: the corners' beds blurred over a couple of metres and read
   // between them (vG: the grid's own point, the corners' jitter taken off), so both curve across the flats' stepped beds
   // instead of following the triangles (read from the corners, the closed step and its pale line zigzagged cell by cell
-  // at mid tide). The closed step reads the corners' own beds through a cubic B-spline (four bilinear taps, only near the
-  // step): its line curves smoothly across the cells, yet stays within a few centimetres of the beds the walk grid keeps
-  // (read bilinearly, the step ran in right angles cell by cell; from the blurred bed, a closed trough two cells wide
-  // across the Shallows blurred up to a wading film the walk grid would not let her into)
-  vec2 bS = texture2D(tBed, (vG + 0.5) / uBedS).rg;
+  // at mid tide). The closed step reads the corners' own beds through a cubic B-spline (tBed's green, buildSea): its line
+  // curves smoothly across the cells, yet stays within a few centimetres of the beds the walk grid keeps (read bilinearly,
+  // the step ran in right angles cell by cell; from the blurred bed, a closed trough two cells wide across the Shallows
+  // blurred up to a wading film the walk grid would not let her into)
+  vec2 bS = texture2D(tBed, (vG * ${BS.toFixed(1)} + 0.5) / uBedS).rg;
   float lvS = mix(uLevel, uBayLevel, vBay), depS = lvS - bS.r;
   dw = depS + sn; depD = lvS - bS.g;
-  if (abs(depD - 0.4) < 0.25) {
-    vec2 f = fract(vG), ci = vG - f, f2 = f * f, f3 = f2 * f;
-    vec2 w0 = (1.0 - 3.0 * f + 3.0 * f2 - f3) / 6.0, w1 = (4.0 - 6.0 * f2 + 3.0 * f3) / 6.0, w2 = (1.0 + 3.0 * f + 3.0 * f2 - 3.0 * f3) / 6.0, w3 = f3 / 6.0;
-    vec2 g0 = w0 + w1, g1 = w2 + w3, h0 = (ci - 0.5 + w1 / g0) / uBedS, h1 = (ci + 1.5 + w3 / g1) / uBedS;
-    depD = lvS - (g0.y * (g0.x * texture2D(tBed, h0).g + g1.x * texture2D(tBed, vec2(h1.x, h0.y)).g) + g1.y * (g0.x * texture2D(tBed, vec2(h0.x, h1.y)).g + g1.x * texture2D(tBed, h1).g));
-  }
   if (depS + sn < -0.04) discard;
 #endif
   float deep = smoothstep(0.37, 0.43, depD + sn * 0.4);
@@ -359,7 +359,7 @@ ${FREEZE}`)
   vec2 swg = (cos(P.x * 0.21 + P.y * 0.13 + t * 1.1) * vec2(0.21, 0.13) + cos(-P.x * 0.09 + P.y * 0.27 + t * 0.83) * vec2(-0.09, 0.27)) * 0.5 * 0.18 * 2.5 * deep;
   vec3 N = normalize(vec3(g.x * mix(0.12, 0.3, deep) - swg.x, 1.0, g.y * mix(0.12, 0.3, deep) - swg.y));
   vec3 Nc = normalize(vec3((n1.r - 0.5) * 0.08 - swg.x, 1.0, (n1.g - 0.5) * 0.08 - swg.y));
-  float NdV = clamp(dot(Nc, V), 0.0, 1.0), F = 0.02 + 0.98 * pow(1.0 - NdV, 5.0);
+  float NdV = clamp(dot(Nc, V), 0.0, 1.0), F = 0.02 + 0.98 * sq4(1.0 - NdV) * (1.0 - NdV);
   vec3 Rf = reflect(-V, N), Rc = reflect(-V, Nc);
   // see-through grey-green where she can wade; a night teal where it is closed (never black: closed water must read as
   // water at a glance, and open water by its motion); the leads' open sea darker still
@@ -407,15 +407,19 @@ ${FREEZE}`)
   {
     float gk = smoothstep(0.86, 1.0, n2.b * 0.6 + n1.a * 0.4 + (g.x + g.y) * 0.08) * smoothstep(0.42, 0.72, n1.r);
     vec3 gcol = vec3(dot(skyG, vec3(0.3, 0.45, 0.25))) * 1.6 + uMoonC * 0.05;
-    col += gcol * gk * deep * (0.25 + 0.75 * pow(max(dot(Rc, uMoonD), 0.0), 3.0));
+    col += gcol * gk * deep * (0.25 + 0.75 * sq2(max(dot(Rc, uMoonD), 0.0)) * max(dot(Rc, uMoonD), 0.0));
   }
   // the moon's glint, broken by the ripple, and its broad path
-  col += uMoonC * (pow(max(dot(Rf, uMoonD), 0.0), 300.0) * 0.35 + pow(max(dot(Rc, uMoonD), 0.0), 14.0) * 0.03) * deep;
+  col += uMoonC * (sq256(max(dot(Rf, uMoonD), 0.0)) * 0.37 + sq16(max(dot(Rc, uMoonD), 0.0)) * 0.032) * deep;
   // the hero's lantern: it lights the shallows and glints on the water
-  vec3 hd = uHeroP - vWP; float hl = length(hd); hd /= max(hl, 0.001);
-  float ha = pow(clamp(1.0 - pow(hl / uHeroR, 4.0), 0.0, 1.0), 2.0) / max(pow(hl, 1.4), 0.5);
-  // (her lantern's glint off the ripple narrow and few: wide, it laid a field of flecks round her feet)
-  col += uHeroC * ha * (0.008 * (1.0 - deep) * max(hd.y, 0.0) + 0.0025 * deep + pow(max(dot(Rf, hd), 0.0), 260.0) * 0.011);
+  // (worked out only within its reach: none of it shows past uHeroR)
+  vec3 hd = uHeroP - vWP; float hl = length(hd);
+  if (hl < uHeroR) {
+    hd /= max(hl, 0.001);
+    float ha = sq2(1.0 - sq4(hl / uHeroR)) / max(pow(hl, 1.4), 0.5);
+    // (her lantern's glint off the ripple narrow and few: wide, it laid a field of flecks round her feet)
+    col += uHeroC * ha * (0.008 * (1.0 - deep) * max(hd.y, 0.0) + 0.0025 * deep + sq256(max(dot(Rf, hd), 0.0)) * 0.011);
+  }
 #ifdef SEA_HI
   // the aurora in the water: the reflected ray meets a sheet of sky 70 m up (not under the black aurora, where it would
   // be all but black: it comes back with the returning front)
@@ -441,12 +445,15 @@ ${FREEZE}`)
     vec4 Lp = uLights[i];
     if (Lp.w <= 0.0) continue;
     vec3 ld = Lp.xyz - vWP; float dl = length(ld); ld /= dl;
+    vec2 lq = P - Lp.xz;
+    // (none past where its path or its pool shows: the path's broad glow is under 1e-4 below 0.55, the pool's past 30 m)
+    if (dot(Rc, ld) < 0.55 && dot(lq, lq) > 900.0) continue;
     // (and its fire on the water round the tower's foot, so lighting it changes the play frame: a broad warm path, its sparks,
     // and a glow on the water within a dozen metres)
     // (the sparks thinned within a dozen metres of the fire, where its pool already lights the water: there they lay round
     // her as a field of white flecks)
-    float s = pow(max(dot(Rg, ld), 0.0), 220.0) * 2.0 * smoothstep(0.34, 0.64, n1.r) * (0.25 + 0.75 * smoothstep(6.0, 16.0, length(ld.xz) * dl)) + pow(max(dot(Rc, ld), 0.0), 16.0) * 0.2;
-    vec2 lq = P - Lp.xz; float pool = exp(-dot(lq, lq) * 0.012) * (0.6 + 0.4 * n1.g);
+    float s = sq256(max(dot(Rg, ld), 0.0)) * 2.15 * smoothstep(0.34, 0.64, n1.r) * (0.25 + 0.75 * smoothstep(6.0, 16.0, length(ld.xz) * dl)) + sq16(max(dot(Rc, ld), 0.0)) * 0.2;
+    float pool = exp(-dot(lq, lq) * 0.012) * (0.6 + 0.4 * n1.g);
     col += vec3(1.0, 0.72, 0.42) * (s * deep / (1.0 + dl * 0.04) + pool * 0.05 * mix(0.6, 1.0, deep)) * Lp.w;
   }
 #endif
@@ -480,7 +487,8 @@ ${FREEZE}`)
   // (and a few sparkles on the shallows, here and gone)
   // (each a round point of two or three pixels at a hashed spot in its cell: the cell's own square, 14 cm, read as pale
   // squares strewn over the flats)
-  {
+  // (none on closed water)
+  if (deep < 0.999) {
     vec2 sc = P * 7.0, ci = floor(sc);
     float tt = floor(t * 2.0 + n1.g * 3.0);
     if (sH(ci + tt) > 0.993) {
@@ -772,10 +780,21 @@ export function buildSea(L, group, quality = R.quality) {
     }
     // (the smoothed bed never above the corner's own where that is wet: the water a corner holds stays drawn)
     for (let k = 0; k < bedS.length; k++) if (raw[k] < bedS[k] && raw[k] < 1.2) bedS[k] = Math.min(bedS[k], raw[k] + 0.08);
-    // (and the corners' own beds beside them, unblurred: the closed step may follow the smooth bed only so far from them)
-    const hd = new Uint16Array(W * H1 * 2);
-    for (let k = 0; k < bedS.length; k++) { hd[k * 2] = THREE.DataUtils.toHalfFloat(bedS[k]); hd[k * 2 + 1] = THREE.DataUtils.toHalfFloat(raw[k]); }
-    const t = new THREE.DataTexture(hd, W, H1, THREE.RGFormat, THREE.HalfFloatType);
+    // (and the corners' own beds beside them, unblurred, through a cubic B-spline for the closed step: its line curves
+    // smoothly across the cells, yet stays within a few centimetres of the beds the walk grid keeps. Both are laid on a
+    // grid four times as fine as the corners', so one tap reads both: the smooth bed bilinearly (exact), the B-spline
+    // within a millimetre or two; worked out per pixel, its four taps were the water's dearest part on the Shallows' flats,
+    // which at high water lie within its reach of the step almost everywhere)
+    const TW = w * BS + 1, TH = h * BS + 1, bsp = (t) => { t = Math.abs(t); return t < 1 ? (4 - 6 * t * t + 3 * t * t * t) / 6 : t < 2 ? (2 - t) ** 3 / 6 : 0; };
+    const sx = new Float32Array(TW * H1), hd = new Uint16Array(TW * TH * 2);
+    for (let vz = 0; vz < H1; vz++) for (let xs = 0; xs < TW; xs++) { const i0 = Math.floor(xs / BS), f = xs / BS - i0; let v = 0; for (let j = -1; j <= 2; j++) v += raw[vz * W + clamp(i0 + j, 0, w)] * bsp(f - j); sx[vz * TW + xs] = v; }
+    for (let zs = 0; zs < TH; zs++) for (let xs = 0; xs < TW; xs++) {
+      const i0 = Math.floor(zs / BS), f = zs / BS - i0, x0 = Math.min(w - 1, Math.floor(xs / BS)), fx = xs / BS - x0, z0 = Math.min(h - 1, i0), fz = zs / BS - z0;
+      let v = 0; for (let j = -1; j <= 2; j++) v += sx[clamp(i0 + j, 0, h) * TW + xs] * bsp(f - j);
+      const b0 = bedS[z0 * W + x0] * (1 - fx) + bedS[z0 * W + x0 + 1] * fx, b1 = bedS[(z0 + 1) * W + x0] * (1 - fx) + bedS[(z0 + 1) * W + x0 + 1] * fx;
+      hd[(zs * TW + xs) * 2] = THREE.DataUtils.toHalfFloat(b0 * (1 - fz) + b1 * fz); hd[(zs * TW + xs) * 2 + 1] = THREE.DataUtils.toHalfFloat(v);
+    }
+    const t = new THREE.DataTexture(hd, TW, TH, THREE.RGFormat, THREE.HalfFloatType);
     t.magFilter = t.minFilter = THREE.LinearFilter; t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; t.generateMipmaps = false; t.needsUpdate = true;
     L.bedTex5 = t;
   }
@@ -784,7 +803,7 @@ export function buildSea(L, group, quality = R.quality) {
   const open = [];
   if (!low) for (let i = 0; i < N; i += 3) if (wet(i) && !iceLike(i) && !L.ice[i] && L.bed[i] < 0.2) open.push(i % w + 0.5, Math.floor(i / w) + 0.5);
   L.open5 = Float32Array.from(open);
-  const hook = () => { SEA.uMap.value.set(w, h); SEA.seaL = L; if (L.bedTex5) { SEA.tBed.value = L.bedTex5; SEA.uBedS.value.set(W, h + 1); } };
+  const hook = () => { SEA.uMap.value.set(w, h); SEA.seaL = L; if (L.bedTex5) { SEA.tBed.value = L.bedTex5; SEA.uBedS.value.set(w * BS + 1, h * BS + 1); } };
   for (let cz0 = 0; cz0 < h; cz0 += CH) for (let cx0 = 0; cx0 < w; cx0 += CH) {
     const vid = new Map(), pos = [], bed = [], hold = [], ld = [], sh = [], fr = [], by = [], lnd = [], gd = [], dp = [], gg = [], bs = [], idx = [];
     const vert = (vx, vz) => {
