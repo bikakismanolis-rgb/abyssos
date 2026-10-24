@@ -74,7 +74,7 @@ export async function initNet(params) {
   try { S.T = await pickTransport(params, SUPABASE); } catch (e) { S.T = null; }
   S.avail = !!S.T; S.ready = true;
   // (what the tests drive: tools/coop.mjs)
-  window.__NET = { S, NET, hostGame, joinGame, startGame, leaveGame, party, respawnNow, relTo };
+  window.__NET = { S, NET, VER, hostGame, joinGame, startGame, leaveGame, party, respawnNow, relTo };
   if (!S.T) { emit('netReady', false); return; }
   S.me = S.T.lobby?.me || S.T.me || null;
   // the room ended for this page (never granted, withdrawn, switched off): the game plays on alone and says why
@@ -697,9 +697,10 @@ function guestEvent(P, e) {
     // the rate: what a second of its hits may come to
     const R0 = P.rate ||= { t: now(), sum: 0 };
     if (now() - R0.t > 1000) { R0.t = now(); R0.sum = 0; }
-    // (a burn counts with the blow that lights it, and one that keeps a bigger burn going costs that burn: the game
-    // renews a burn at the bigger of the two)
-    R0.sum += amt + (fin(o.burn) && o.burn > 0 ? Math.min(Math.max(o.burn, (a.status.burnDps || 0) * 3), cap) : 0); if (R0.sum > cap * 20) return reject('rate');
+    // (a burn counts with the blow that lights it; one that renews a bigger burn, which the game keeps at the bigger of
+    // the two, costs what the renewal adds to it: the seconds it puts back at that burn's rate)
+    const st = a.status, bc = fin(o.burn) && o.burn > 0 ? Math.min(Math.max(o.burn, (st.burnDps || 0) * (3 - Math.max(0, st.burn || 0))), cap) : 0;
+    R0.sum += amt + bc; if (R0.sum > cap * 20) return reject('rate');
     const opts = { crit, net: true };
     for (const k in OPT_NUM) if (typeof o[k] === 'number' && isFinite(o[k]) && o[k] > 0) opts[k] = Math.min(o[k], OPT_NUM[k] === 1e7 ? cap : OPT_NUM[k]);
     if (o.slow && typeof o.slow.k === 'number' && typeof o.slow.t === 'number') opts.slow = { k: clamp(o.slow.k, 0, 0.8), t: clamp(o.slow.t, 0, 5) };
@@ -720,7 +721,8 @@ function guestEvent(P, e) {
   } else if (type === 'ta') {
     // a taunt (a Challenge, an Iron Bulwark): the monster comes for that guest (ai.js targetOf) for as long as it said
     const a = foeNear(e[2], me); if (!a) return;
-    if (a.keeper || a.dormant || a.cling || a.under || a.hidden || a.airborne || a.disguised) return reject('taunt');
+    // (a bone pile is roused by a taunt, as by the host's own Challenge)
+    if (a.keeper || a.cling || a.under || a.hidden || a.airborne || a.disguised) return reject('taunt');
     if (over(P, 'ta', 40)) return reject('rate');
     a.aggro = true; a.status.fear = 0; a.taunt = G.hero.stats.time + num(e[3], 0, 12); a.tauntBy = me;
   } else if (type === 'ic') {
@@ -1489,11 +1491,12 @@ function replayOne(name, a, from) {
       return;
     }
     if (!fromHost && !HERO_AREAS.has(kind)) return;
-    // (another hero's lays no wider or longer than a skill's, and by that hero: its fire melts the host's ice)
+    // (another hero's lays no wider or longer than a skill's, by that hero, and stays where it was laid but a tornado,
+    // which drifts at its own pace: its fire melts the host's ice)
     const by = fromHost ? null : S.peers.get(from)?.actor;
     if (!fromHost && (!by || Math.hypot(px(x) - by.x, pz(z) - by.z) > 30)) return;
-    const real = foe && fromHost;
-    const ar = area(kind, px(x), pz(z), clamp(r, 0.1, fromHost ? 30 : 8), clamp(dur, 0, fromHost ? 20 : 10), { team: real ? 'foe' : 'vis', src: real ? S.pup.get(sid) || { team: 'foe', level: clamp(G.zone.level, 1, zoneTop()), x, z, def: {} } : null, dmg: real ? num(dmg, 0, 1e8) : 0, tick: fin(tick) ? clamp(tick, 0.1, 5) : undefined, opts: real ? hurtOpts(opts) : {}, vx: num(vx, -20, 20), vz: num(vz, -20, 20), floats: !!(floats & 1), dim: !!(floats & 2), nowarm: !!(floats & 4), net: true, look: typeof lk === 'string' && Object.hasOwn(LOOKS, lk) ? LOOKS[lk] : undefined });
+    const real = foe && fromHost, vm = fromHost ? 20 : kind === 'tornado' ? 3 : 0, rm = fromHost ? 30 : kind === 'fire' ? 4.5 : 8;
+    const ar = area(kind, px(x), pz(z), clamp(r, 0.1, rm), clamp(dur, 0, fromHost ? 20 : 10), { team: real ? 'foe' : 'vis', src: real ? S.pup.get(sid) || { team: 'foe', level: clamp(G.zone.level, 1, zoneTop()), x, z, def: {} } : null, dmg: real ? num(dmg, 0, 1e8) : 0, tick: fin(tick) ? clamp(tick, 0.1, 5) : undefined, opts: real ? hurtOpts(opts) : {}, vx: num(vx, -vm, vm), vz: num(vz, -vm, vm), floats: !!(floats & 1), dim: !!(floats & 2), nowarm: !!(floats & 4), net: true, look: typeof lk === 'string' && Object.hasOwn(LOOKS, lk) ? LOOKS[lk] : undefined });
     if (ar) ar.net = true;
     return;
   }

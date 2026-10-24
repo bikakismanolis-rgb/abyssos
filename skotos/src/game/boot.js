@@ -9,7 +9,7 @@ import { loadCreatures, hasCreature, creatureCount } from '../gfx/creatures.js';
 import { loadEnv, loadPack } from '../gfx/env.js';
 import { WIND } from '../world/build.js';
 import { initInput, pollInput, takeEvents, IN } from '../core/input.js';
-import { loadSave, writeSave } from './save.js';
+import { loadSave, writeSave, freshHero } from './save.js';
 import { refreshStats } from './stats.js';
 import { migrateHero } from './progression.js';
 import { enterZone, updatePacks, updateAct, nearestInteract, updatePortalFx, ZONES, zoneReady, zoneParts, disposeZone } from './world.js';
@@ -101,6 +101,7 @@ async function starterGear(hero) {
   hero.equip.chest ||= makeItem(1, { base: 'chest', rar: 0, cls: hero.cls });
 }
 async function startHero(hero, isNew, zone = 'town') {
+  if (!isNew) hero = freshHero(hero);
   await starterGear(hero);
   // saves from before the progression: a loadout, nothing learnt, the points kept spendable (progression.js)
   migrateHero(hero);
@@ -206,7 +207,7 @@ on('heroLook', () => refreshHeroLook());
 on('diffChanged', () => { for (const k of Object.keys(G.zones)) if (k !== 'town') { disposeZone(G.zones[k]); delete G.zones[k]; } G.portal = null; writeSave(); emit('toast', t('pick.diff') + ': ' + t('diff.' + DIFFS[G.hero.diff].id), 'quest'); });
 on('settings', () => { Audio.setVolumes({ music: G.settings.music, sfx: G.settings.sfx }); setLang(G.settings.lang); if (G.hero) setupHeroHud(); writeSave(); });
 // (a channelled Ray of Dawn ends with the scene's start: its beam, an effect, runs out in the scene while the act stands)
-on('cine', (c) => { const ac = G.player?.act; if (ac?.name === 'beam') ac.dur = Math.min(ac.dur, ac.t); G.cine = Object.assign({ t: 0, done: new Set() }, c); G.mode = 'cine'; showHud(false); document.getElementById('letterbox').classList.add('on'); });
+on('cine', (c) => { const pl = G.player; if (pl?.act?.name === 'beam') { pl.act = null; pl.avatar?.anim.stop?.(0.18); } G.cine = Object.assign({ t: 0, done: new Set() }, c); G.mode = 'cine'; showHud(false); document.getElementById('letterbox').classList.add('on'); });
 on('actClosed', () => { Audio.music('town'); });
 on('raiseAlly', (a) => {
   const m = spawnMonster('skeleton', a.x, a.z, { level: G.hero.level, rising: true });

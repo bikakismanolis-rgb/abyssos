@@ -67,7 +67,7 @@ export function resetIce(z) {
   const N = L.w * L.h;
   z.ice ||= { stage: new Uint8Array(N), load: new Float32Array(N), t: new Float32Array(N), warn: [], tex: null, dirty: true, upT: 0, ring: [], floes: [] };
   const I = ICE = z.ice, open = [];
-  Object.assign(I, { fl: I.fl || new Uint8Array(N), litAt: I.litAt || new Float32Array(N).fill(-1e9), litV: I.litV || new Uint8Array(N), live: [], pend: [], reo: [], broken: [], slush: [], hit: [], batchT: BATCH, clock: 0, lastPlunge: -99, ringT: 0, sndT: 0, flounder: [] });
+  Object.assign(I, { fl: I.fl || new Uint8Array(N), litAt: I.litAt || new Float32Array(N).fill(-1e9), litV: I.litV || new Uint8Array(N), live: [], pend: [], reo: [], broken: [], slush: [], hit: [], held: new Set(), batchT: BATCH, clock: 0, lastPlunge: -99, ringT: 0, sndT: 0, flounder: [] });
   for (let i = 0; i < N; i++) {
     I.fl[i] = 0;
     if (!L.ice[i]) continue;

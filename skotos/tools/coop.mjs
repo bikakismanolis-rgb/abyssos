@@ -513,7 +513,7 @@ const SC = {
     ok(off === 0, 'one that says it stands off the map: its stand-in stands on the map\'s floor all the while', { off, n });
 
     // a listing in another's name: the room's own peer and person stand on it
-    await ev(g, () => window.__NET.S.T.lobby.presence({ g: { c: 'zzzz', cls: 'warden', l: 40, z: 'coast', n: 1, d: 0, v: 2, on: 1, by: 'user_owner', peer: 'forged' } }));
+    await ev(g, () => window.__NET.S.T.lobby.presence({ g: { c: 'zzzz', cls: 'warden', l: 40, z: 'coast', n: 1, d: 0, v: window.__NET.VER, on: 1, by: 'user_owner', peer: 'forged' } }));
     await until(host, () => window.__NET.S.hosts.some((h) => h.c === 'zzzz'), null, 8000, 'listing');
     const L = await ev(host, () => window.__NET.S.hosts.find((h) => h.c === 'zzzz'));
     const lme = await ev(g, () => window.__NET.S.T.lobby.me);
@@ -521,7 +521,7 @@ const SC = {
     // two listings of the host's code (the host's and a copy): each button names its own listing's peer, so a tap joins
     // the host it shows however the list has moved since it was drawn
     const code = await ev(host, () => window.__NET.S.code), hpeer = await ev(host, () => window.__NET.S.T.lobby.me);
-    await ev(g, (c) => window.__NET.S.T.lobby.presence({ g: { c, cls: 'mage', l: 50, z: 'coast', n: 1, d: 0, v: 2, on: 1 } }), code);
+    await ev(g, (c) => window.__NET.S.T.lobby.presence({ g: { c, cls: 'mage', l: 50, z: 'coast', n: 1, d: 0, v: window.__NET.VER, on: 1 } }), code);
     const v = await open('v1', 'auto=town&lvl=8&cls=mage');
     const two = await until(v, (c) => window.__NET.S.hosts.filter((h) => h.c === c).length === 2, code, 15000, 'two listings');
     const tap = await ev(v, (hp) => { window.__D.openPanel('coop'); const b = [...document.querySelectorAll('#panel [data-a^="cjoin:"]')].find((e) => e.dataset.a.split(':')[2] === encodeURIComponent(hp)); window.__NET.S.hosts.reverse(); b?.click(); return { found: !!b, want: window.__NET.S.wantHost }; }, hpeer);
@@ -1079,7 +1079,7 @@ const SC = {
     ok(!lw.role && lw.zone && lw.gate && lw.quest === 11 && lw.flag, 'leaving while waiting: still in its gate, what its story did meanwhile kept', { ...lw, saved: undefined });
     ok(await toasted(g, 'coop.leftWait') && !(await toasted(g, 'coop.youLeft')), 'told it left the party, not that it is back');
     // a game its listing shows full: refused at once, its button disabled
-    const full = await ev(g, async () => { const N = window.__NET; N.S.hosts = [{ c: 'fu11', cls: 'warden', l: 5, z: 'town', n: 4, d: 0, v: 2, on: 1, peer: 'pz', by: null }]; window.__D.openPanel('coop'); const r = await N.joinGame('fu11'); return { r, err: N.S.err, role: N.S.role, disabled: document.querySelector('[data-a^="cjoin:fu11:"]')?.disabled }; });
+    const full = await ev(g, async () => { const N = window.__NET; N.S.hosts = [{ c: 'fu11', cls: 'warden', l: 5, z: 'town', n: 4, d: 0, v: N.VER, on: 1, peer: 'pz', by: null }]; window.__D.openPanel('coop'); const r = await N.joinGame('fu11'); return { r, err: N.S.err, role: N.S.role, disabled: document.querySelector('[data-a^="cjoin:fu11:"]')?.disabled }; });
     ok(full.r === false && full.err === 'full' && !full.role && full.disabled, 'a listing of four: its button disabled, joining it refused at once (full)', full);
     await ev(g, () => window.__D.closePanel());
     // a guest waiting walks out of its zone (its own travel) just as the host starts: it ends in the host's town, not in
