@@ -5,9 +5,9 @@ Read this first when picking the project up in a new session.
 ## Where things are
 
 - Repo `bikakismanolis-rgb/abyssos`, game in `skotos/`, working branch `claude/sleepy-tesla-4030vd` (pull request #2 into the branch of #1). Commit only there.
-- The playable build is a private claude.ai artifact: https://claude.ai/artifact/74dKQSTSnJmPAyDHBz4BRP, pinned in the owner's sidebar. **Version 12 (16 October) is Acts I-IV: commit 7eded86 plus the Act IV difficulty fix** (`docs/act4-balance/published-v12.patch`; why and what in `docs/act4-balance/README.md`). It was built from a worktree at 7eded86 so that the unfinished Act V stayed out; the same fix is ported into this branch (`docs/act4-balance/port.md`). Update it in place (same URL), never publish a new one.
+- The playable build is a claude.ai artifact: https://claude.ai/artifact/74dKQSTSnJmPAyDHBz4BRP, pinned in the owner's sidebar and shared as "anyone with the link". **Version 13 (23 October) is Acts I-IV + the progression** (built from `claude/skotos-progression` ff37476); version 14 (this branch: Acts I-V, progression, co-op) is next. Update it in place (same URL), never publish a new one.
 - The owner writes in Greek; answer in Greek. The game text is Greek and English (`src/i18n/text.js`).
-- **Act V is being built (paused on 10 October at the owner's request, to keep usage until the plan renews on Tuesday 13 October).** Its plan is `docs/act5-design.md`, its contract `docs/act5-contract.md` (the owner's decisions, the four stages and gates, file ownership, every shared name, and the stage-A outcome), the briefs and the measured asset report in `docs/act5-briefs/`, every stage's reports in `docs/act5-briefs/reports/`, and the workflow scripts of the running stages in `docs/act5-workflows/`. See "Act V: where it stopped" below.
+- Act V: its plan is `docs/act5-design.md`, its contract `docs/act5-contract.md` (the owner's decisions, the stages, file ownership, every shared name), the briefs and asset report in `docs/act5-briefs/`, every stage's and review's reports in `docs/act5-briefs/reports/`. The progression: `docs/progression/` (README, port-act5.md). Co-op: `docs/coop/` (README, release.md, review-fixes.md).
 - Design and contracts of earlier acts: `docs/act4-design.md` (the Act IV plan), `docs/act4-contract.md`, `docs/act3-contract.md`. README.md describes every act (in Greek). CREDITS.txt, `src/ui/credits.js` and `src/assets/*/CREDITS.txt` list every third-party asset.
 
 ## State
@@ -21,34 +21,65 @@ Read this first when picking the project up in a new session.
 - **The code graph:** `graphify-out/` maps the code (modules, functions, calls, named communities); `docs/GRAPH.md` says how to install graphify and query it (`graphify query "..."`, `explain`, `path`, `affected`). Use it to find where something lives and what a change touches before reading files, and refresh it (`graphify update .`) with your commits.
 
 - `cd skotos && npm install` if needed; dev server `npx vite --port 5199 --strictPort`.
-- Scenarios (Playwright, headless swiftshader): `node tools/scenario.mjs <name> <outdir>`. Names: Act I `combat, ranger, mage, weaver, lord, ending, title, panels`; Act II `pass, stonewarden, halls, king, ending2, cast2, boons`; Act III `weep, hart, heart, amaranthe, echo, ending3, cast3`; Act IV `ashfield, ivar, forge, karthax, ending4, cast4, echo4`. Run the ones touched by a change, and the whole set before publishing.
+- Scenarios (Playwright, headless swiftshader): `node tools/scenario.mjs <name> <outdir>` (BASE=http://localhost:<port>/). Names: Act I `combat, ranger, mage, weaver, lord, ending, title, panels`; Act II `gate, pass, stonewarden, halls, king, ending2, cast2, boons`; Act III `weep, hart, heart, amaranthe, echo, ending3, cast3`; Act IV `ashfield, ivar, forge, karthax, ending4, cast4, echo4`; Act V `hook5, catch5, coast, tide, ice, tower, holes, skotos, freeze, ending5, cast5, echo5, cp5, cameo, diff6, shallowtele, perf5`; progression `progpanel, progress, skillsfx, skills5` (CLS=warden|ranger|mage), saves `save13, save14`. Co-op: `node tools/net/test-transport.mjs`, `node tools/coop.mjs join|pack|loot|revive|churn|hostleave|cheat|world|prog|act5|four|ui|ux|access|room|bosses <out>`. Also `tools/soak5.mjs all`, `check-act4.mjs`, `check-act5.mjs`, `parity-ashfield.mjs`. Every tool fails on the on-screen `#fatal` box (`tools/fatal.mjs`). Run the ones touched by a change, and the whole set before publishing.
 - Views: `?auto=<zone>&lvl=N&q=1` jumps into a zone; `?world=<zone>&at=...` world viewer; `?cview&only=...` creature viewer; `?viewer&only=p:<name>` people viewer. `tools/shot.mjs` takes screenshots. `tools/check-act3.mjs` and `tools/check-act4.mjs` check the generated layouts over many seeds.
 - Publishing: `npm run build:artifact` writes `skotos/artifact/` (index.html fragment + assets/*.js, every file under 16 MB). Before publishing, serve it with `node tools/csp-server.mjs skotos/artifact <port> "<csp>"` using a strict CSP (`default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data:; connect-src 'self' data:; media-src 'self' data:; worker-src 'self' blob:`) and check in Playwright (desktop and an `isMobile`/`hasTouch` context) that there are no CSP violations and no white models. Then publish `skotos/artifact/index.html` to the artifact URL with a `files` map: upload only the changed hashed files and set the removed ones to null.
 - Assets: CC-BY 4.0 or CC0 only, credited everywhere; no rips of commercial games or films (the owner wants a Play Store release). Builders live in `tools/creatures/**` and `tools/pack-*.mjs`; sources are downloaded to `/tmp/claude-0/sf` and `/tmp/claude-0/ph` (not in the repo).
 - Commit messages end with the session's Co-Authored-By and Claude-Session lines; never put a model name in commits or code.
 
-## Where everything stopped (20 October, paused by the owner until next week)
+## Where everything stopped (24 October)
 
-Update 23 October: **version 13 is live** (Acts I-IV + the progression, built from `claude/skotos-progression` ff37476; the artifact is now shared as "anyone with the link"). Co-op is merged into this branch (ca88dd3). Two parallel sessions run: `session_01Ftg7XpSegCpD4grBzQhAjM` ports the progression onto this line (branch `claude/skotos-act5-prog`), `session_01XPr7CfHtdojZCrndmM1fiP` fixes perf5 at the coast, the Act V checkpoint after Continue, the flaky holes/tower scenarios and makes the test tools fail on the on-screen `#fatal` box (branch `claude/skotos-act5-fixes`). Then: merge both, gate G4, final review, publish version 14 with the co-op capabilities.
+**All four lines of work are merged into this branch**: Act V (stages A-C, look rounds, the release fixes of
+`claude/skotos-act5-fixes`: perf at the coast, cp5, holes, tower, `#fatal` in the tools), the progression (ported onto
+Act V by `claude/skotos-act5-prog`: `docs/progression/port-act5.md`), and co-op (merged at ca88dd3, then reviewed: 42
+findings fixed, `docs/coop/review-fixes.md`). Merge commits ba77c67 and c8069c2; the conflicts kept both sides (one
+`#fatal` helper in `tools/fatal.mjs`; coop.js keeps protocol v2's per-guest queues and checks and adds the port's events).
 
-The table below is the state of 20 October.
+After the merges, three review rounds, every finding checked by two skeptics, all fixed:
+- the port's co-op traffic (a subagent): meshes of Storm of Hawks, Void Rift, Ray of Dawn and traps leaked every cast;
+  guests' burns, pulls, taunts, refreezes, areas and telegraphs bounded; protocol **3**;
+- the release tree on four lenses (saves, release fixes, progression in Act V, merge integrity): Continue with no
+  weapon replaced (lost) the worn chest and shield (old, since v12); two tabs of one browser undid each other's hero;
+  five variants dropped their skill's legendary (Dawnblade, Wayfarer's Staff, Storm Ring); Frost Nova closed a Hand's
+  held hole; a Ray of Dawn ran on unseen after a scene; delayed landings fell in the next zone; Ember Dance's carried
+  fire counted as light; a soak's `#fatal` did not fail `tide`/`ice`;
+- the fixes themselves: burns charged by what a renewal adds; guest areas never move but tornadoes; `freshHero` (a
+  hero taken up from the title is its stored record); Continue keeps the other page's last hero; every Hand's hole let go.
+The co-op blow cap now covers an endgame hero (56x dm, a level ceiling of (12 + 9 x level) x 12 with Mastery) and a blow
+past it lands as the cap instead of being dropped. New scenario `save14` (starter gear, two pages).
+
+**Gate G4** (`scratchpad/g4/run.sh` in the session; the list is every scenario below): round 1 on the merged tree
+passed everything but perf5; round 2 runs on the final code. **perf5:** the coast is 1.17-1.20 of the Field of Ash at q1
+on a quiet machine, on the release-fixes branch and on this one alike (`git worktree` comparison, 2 x 9 cycles each);
+the fixes session's 1.075 was measured with a second browser running beside it. The gate's bar is 1.15: left for a
+later pass (the software renderer shades hidden fragments, so a real GPU may differ; ask the owner how the coast runs
+on a phone).
+
+**Then:** publish **version 14** (Acts I-V, progression, co-op) to the same URL with the co-op capabilities (below).
 
 | line | branch | state |
 |---|---|---|
-| Act V (the Frozen Coast) | `claude/sleepy-tesla-4030vd` (this branch) | Stages A-C done and reviewed (`docs/act5-briefs/reports/`: integrate.md, stage-c-fixes.md). Look polish: rounds 1 and 2 done, round 3's fixer stopped during its final re-shoots (`reports/look-round3.md`; its work so far is committed). Left: gate G4 (every Act I-V scenario, soak5, check-act4/5, parity, the strict-CSP artifact, the memory report) and a final review. |
-| Progression (Mastery, 24 skill variants, 9 later skills, the 4-button loadout) | `claude/skotos-progression` (from `claude/skotos-live` = version 12) | Built by a parallel session; an independent review found 21 problems, all fixed and committed (`docs/progression/review/fixes.md`). The release check was stopped part way: re-run every shipped scenario plus progpanel, progress and skillsfx, build the artifact, run the strict-CSP check, list the files against version 12 (`docs/progression/release.md`), then publish it as **version 13** from that branch. Then port it onto the Act V branch (`docs/progression/README.md` says how). |
-| Co-op, up to 4 players | `claude/skotos-coop` (from 564162f of this branch) | Built and tested by a parallel session (`docs/coop/README.md`, `release.md`, `questions.md`). Left: merge it into this branch (resolve against stage C's later fixes and the look rounds), re-run its tests (`node tools/net/test-transport.mjs`, `node tools/coop.mjs …`), review it (above all the host's validation of what guests send), and publish with the `capabilities` object in its `release.md` (room topics s, w, i, f, c at `interact`, and `user` with the `profile` scope). |
-| The code graph | this branch: `graphify-out/`, `docs/GRAPH.md` | Built on 20 October; refresh with `graphify update .` after the merges. |
+| Release candidate v14 | `claude/sleepy-tesla-4030vd` (this branch) | merged, reviewed, gate round 2 |
+| Live v13 (Acts I-IV + progression) | `claude/skotos-progression` ff37476 | live since 23 October; its build is the file list to diff against |
+| Later: co-op without claude.ai | none | needs the owner's yes (a Supabase project, a public web or Android build): `docs/coop/release.md` step 5 |
 
-The two parallel sessions are finished and idle: progression `session_01AQQxkmADsS4LmWLZPKr5CP`, co-op `session_01Vx2KGUsifJTJjaxdkfT6L6`.
+Publishing v14: `npm run build:artifact`, the strict-CSP check (desktop and `isMobile`/`hasTouch`), then publish
+`artifact/index.html` with a `files` map (the new hashed files, the removed ones null) and
+`capabilities: { room: { topics: { s: 'interact', w: 'interact', i: 'interact', f: 'interact', c: 'interact' } }, user: { scopes: ['profile'] } }`.
+To invite a friend: Share, invite at Contributor (or Editor); the friend opens the link signed in, picks a hero, Co-op,
+enters the code. A public-link viewer plays alone.
 
-**Order to resume:** (1) finish the progression release check and publish version 13; (2) finish Act V's look round 3 if needed, merge the co-op branch and port the progression onto this branch, then gate G4 and a final review over all of it; (3) publish version 14 (Acts I-V, progression, co-op) with the co-op capabilities, and tell the owner how to invite a friend (Share, Contributor access, the Co-op code).
-
-Lessons from these weeks: the container restarts every few hours (not from memory: the log showed 3 of 15 GB in use), so agents keep progress notes and the lead checkpoints often; agents can read the owner's latest message and have twice stopped their own task because of an unrelated one, so their prompts must say that such messages are not addressed to them; one headless browser at a time, and a private no-HMR dev server (`npx vite --config tools/vite.nohmr.mjs --port <n>`) for long runs.
+Lessons from these weeks: the container restarts every few hours (not from memory: the log showed 3 of 15 GB in use),
+so agents keep progress notes and the lead checkpoints often; agents can read the owner's latest message and have twice
+stopped their own task because of an unrelated one, so their prompts must say that such messages are not addressed to
+them; one headless browser at a time (two at once also skew perf ratios), and a private no-HMR dev server
+(`npx vite --config tools/vite.nohmr.mjs --port <n>`) for long runs; `pgrep -f`/`pkill -f` match the calling shell:
+kill by PIDs from `ps`.
 
 ## Open items
 
-- Act V, progression and co-op: see "Where everything stopped" above.
+- perf5 at the coast (above). Two review findings judged not worth their code: the delayed blows of the base skills
+  (only the later skills are guarded), and two pages playing the same hero (the last write wins).
 - Acts I-IV: none known. The owner confirmed on a real phone (version 11) that high quality no longer crashes and runs smoothly.
 
 ## Done in the last session
