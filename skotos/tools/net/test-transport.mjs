@@ -147,10 +147,11 @@ function fakeSupabase(bus) {
           if (status !== 'SUBSCRIBED') return Promise.resolve('error');
           const t = Date.now(); tracks.push(t); while (tracks[0] < t - 30000) tracks.shift(); log.tracks++;
           if (tracks.length > 5) { status = 'CLOSED'; log.closed++; c.members.delete(key); cb0?.('CLOSED'); sync(); return Promise.resolve('error'); }
-          log.events++; c.members.get(key).state = p; sync(); return Promise.resolve('ok');
+          // (a track is sent, and its presence diff delivered to every other member)
+          log.events += c.members.size; c.members.get(key).state = p; sync(); return Promise.resolve('ok');
         },
         presenceState() { const o = {}; for (const [k, m] of c.members) if (m.state) o[k] = [Object.assign({ presence_ref: 'r' }, m.state)]; return o; },
-        unsubscribe() { status = 'CLOSED'; c.members.delete(key); sync(); return Promise.resolve('ok'); }
+        unsubscribe() { status = 'CLOSED'; if (c.members.delete(key)) log.events += c.members.size; sync(); return Promise.resolve('ok'); }
       };
       return ch;
     },
@@ -220,9 +221,45 @@ async function supaTest() {
   for (const t of [...T, late]) t.lobby.leave();
 }
 
+// the lobby: every page that loads the game is in it (a single-player one too), so what it costs grows with the pages
+// open, project-wide. A page with nothing to show says nothing; a host's listing is said when it changes, again every
+// 10 s and once for those who come in; a listing reaches every page however many there are
+async function lobbyTest() {
+  const room = async (M, H, secs) => {
+    const bus = {};
+    const T = Array.from({ length: M }, (_, i) => SupabaseTransport(fakeSupabase(bus), { me: 'l' + i }));
+    await sleep(300);
+    // (the hosts list their games, and say it again every 2.5 s as the game's lobbyPresence does, unchanged)
+    const card = (i) => ({ g: { c: 'c' + String(i).padStart(3, '0'), cls: 'warden', l: 10, z: 'forest', n: 1, d: 1, v: 2, on: 1 } });
+    for (let i = 0; i < H; i++) T[i].lobby.presence(card(i));
+    const re = setInterval(() => { for (let i = 0; i < H; i++) T[i].lobby.presence(card(i)); }, 2500);
+    await sleep(1500);
+    const e0 = bus.log.events, t0 = Date.now();
+    await sleep(secs * 1000);
+    const evs = (bus.log.events - e0) / ((Date.now() - t0) / 1000);
+    const reach = T.slice(H).map((t) => t.lobby.peers().filter((p) => p.presence?.g).length);
+    // (one more page comes in: it has every listing at once)
+    const late = SupabaseTransport(fakeSupabase(bus), { me: 'late' });
+    await sleep(600);
+    const lateN = late.lobby.peers().filter((p) => p.presence?.g).length;
+    clearInterval(re);
+    for (const t of [...T, late]) t.lobby.leave();
+    await sleep(50);
+    return { evs: Math.round(evs), reach: Math.min(...reach), lateN, closed: bus.log.closed };
+  };
+  const idle = await room(32, 0, 6);
+  ok(idle.evs === 0 && idle.closed === 0, 'thirty-two pages in the lobby, no game: nothing sent, nothing delivered: ' + idle.evs + ' events/s');
+  const big = await room(70, 2, 4);
+  ok(big.reach === 2 && big.lateN === 2, 'seventy pages in the lobby: each lists both hosts, a newcomer too: ' + JSON.stringify(big));
+  const twelve = await room(48, 12, 21);
+  ok(twelve.reach === 12 && twelve.lateN === 12 && twelve.closed === 0, 'twelve parties\' pages (48) in the lobby, twelve hosts listed on every page');
+  console.log('     the lobby\'s events a second with twelve hosts and 48 pages (each sent and each delivered): ' + twelve.evs);
+}
+
 await roomTest();
 await endsTest();
 await localTest();
 await supaTest();
+await lobbyTest();
 console.log(fails ? fails + ' FAILED' : 'all passed');
 process.exit(fails ? 1 : 0);

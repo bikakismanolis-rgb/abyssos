@@ -81,7 +81,7 @@ export function showTitle() {
   mainMenu();
 }
 // (co-op becomes possible once the page has a room, a moment after the title: the menu is drawn again with it)
-on('netReady', (ok) => { TS.net = ok; if (ok && G.mode === 'title' && TS.menu && document.getElementById('m-new')) mainMenu(); });
+on('netReady', (ok) => { TS.net = ok; if (G.mode === 'title' && TS.menu && document.getElementById('m-new')) mainMenu(); });
 function mainMenu() {
   const heroes = G.save.heroes;
   const last = heroes.find((h) => h.id === G.save.last) || heroes[0];

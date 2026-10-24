@@ -94,7 +94,8 @@ export function makeItem(ilvl, o = {}) {
 // of, each number held to what makeItem can roll at its level, so no item can break a hero or its panels. Stats only
 // from STATS (a skill only one its class has), damage and speed only on a weapon, armour and block only where the base
 // has them, a legendary only its own base's; the price worked out again. o.maxIlvl: the highest level it may claim;
-// o.keep: other plain fields kept (a save's, which nothing reads); else every other field is dropped. null: no item
+// o.keep: other plain fields kept (a save's, which nothing reads); else every other field is dropped. o.rolled: one said
+// to be just rolled (a co-op host's): only the stats its slot rolls, no more of them than its rarity rolls. null: no item
 export const MAX_ILVL = 99;
 const own = (o, k) => typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k);
 const fin = (v) => typeof v === 'number' && isFinite(v);
@@ -123,8 +124,10 @@ export function cleanItem(it, o = {}) {
   }
   if (B.armor) out.armor = num(it.armor, Math.round((4 + ilvl * 2.6) * B.armor * q * 1.1), Math.round((4 + ilvl * 2.6) * B.armor * q));
   if (B.block) out.block = num(it.block, Math.round((B.block + 0.06) * 100), Math.round(B.block * 100));
+  const slot = B.slot, most = o.rolled ? [0, 2, 4, 4][rar] : Infinity;
   if (it.stats && typeof it.stats === 'object') for (const k of Object.keys(it.stats)) {
     const v = it.stats[k];
+    if (o.rolled && (Object.keys(out.stats).length >= most || !own(STATS, k) || !(STATS[k].slots === '*' || STATS[k].slots.split(',').includes(slot)))) continue;
     if (k === 'skill') {
       // (a skill of the item's class, or of any class for an item of none; never a basic attack)
       const ok = v && typeof v === 'object' && typeof v.id === 'string' && (B.cls ? [B.cls] : Object.keys(SKILLS)).some((c) => SKILLS[c].some((s) => s.id === v.id && !s.basic));
