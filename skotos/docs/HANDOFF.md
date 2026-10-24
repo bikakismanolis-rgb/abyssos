@@ -5,7 +5,7 @@ Read this first when picking the project up in a new session.
 ## Where things are
 
 - Repo `bikakismanolis-rgb/abyssos`, game in `skotos/`, working branch `claude/sleepy-tesla-4030vd` (pull request #2 into the branch of #1). Commit only there.
-- The playable build is a claude.ai artifact: https://claude.ai/artifact/74dKQSTSnJmPAyDHBz4BRP, pinned in the owner's sidebar and shared as "anyone with the link". **Version 13 (23 October) is Acts I-IV + the progression** (built from `claude/skotos-progression` ff37476); version 14 (this branch: Acts I-V, progression, co-op) is next. Update it in place (same URL), never publish a new one.
+- The playable build is a claude.ai artifact: https://claude.ai/artifact/74dKQSTSnJmPAyDHBz4BRP, pinned in the owner's sidebar and shared as "anyone with the link". **Version 14 (24 October) is Acts I-V + the progression + co-op**, built from this branch at bc5aba8-eacb5db (artifact version id 1792826525-f04b; contract 0.2.90; capabilities room with topics s, w, i, f, c at `interact`, and user with the `profile` scope). Update it in place (same URL), never publish a new one; a later publish without `capabilities` keeps them.
 - The owner writes in Greek; answer in Greek. The game text is Greek and English (`src/i18n/text.js`).
 - Act V: its plan is `docs/act5-design.md`, its contract `docs/act5-contract.md` (the owner's decisions, the stages, file ownership, every shared name), the briefs and asset report in `docs/act5-briefs/`, every stage's and review's reports in `docs/act5-briefs/reports/`. The progression: `docs/progression/` (README, port-act5.md). Co-op: `docs/coop/` (README, release.md, review-fixes.md).
 - Design and contracts of earlier acts: `docs/act4-design.md` (the Act IV plan), `docs/act4-contract.md`, `docs/act3-contract.md`. README.md describes every act (in Greek). CREDITS.txt, `src/ui/credits.js` and `src/assets/*/CREDITS.txt` list every third-party asset.
@@ -55,12 +55,17 @@ the fixes session's 1.075 was measured with a second browser running beside it. 
 later pass (the software renderer shades hidden fragments, so a real GPU may differ; ask the owner how the coast runs
 on a phone).
 
-**Then:** publish **version 14** (Acts I-V, progression, co-op) to the same URL with the co-op capabilities (below).
+**Published as version 14 on 24 October** after round 2 (81 runs: all passed but perf5, as above; `ice` and `shallowtele`
+fixed and re-run: a plunge's fallback point past the 2 s, and the scenario's one-moment read of a flickering rim) and the
+strict-CSP check of the built artifact (desktop and phone; title, town, coast, Farthest Light: no violation, no error,
+no untextured model). Not yet checked on the published page: two signed-in accounts playing co-op through the
+artifact's room (`docs/coop/release.md` step 3); the owner can do it with a friend. Next: the coast plan
+(`docs/act5-briefs/reports/coast-perf-plan.md`, steps 1-3, exact, ~35-60 ms), measured alone on the machine.
 
 | line | branch | state |
 |---|---|---|
-| Release candidate v14 | `claude/sleepy-tesla-4030vd` (this branch) | merged, reviewed, gate round 2 |
-| Live v13 (Acts I-IV + progression) | `claude/skotos-progression` ff37476 | live since 23 October; its build is the file list to diff against |
+| Live v14 | `claude/sleepy-tesla-4030vd` (this branch) | published 24 October |
+| v13 (Acts I-IV + progression) | `claude/skotos-progression` ff37476 | live 23-24 October |
 | Later: co-op without claude.ai | none | needs the owner's yes (a Supabase project, a public web or Android build): `docs/coop/release.md` step 5 |
 
 Publishing v14: `npm run build:artifact`, the strict-CSP check (desktop and `isMobile`/`hasTouch`), then publish
