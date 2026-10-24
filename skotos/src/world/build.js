@@ -1466,8 +1466,10 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
   // round the hole, so the window reads as lit from below at the play camera)
   for (int i = 0; i < 8; i++) { if (uWin[i].x < -50.0) break; vec2 wq = vGW.xz - uWin[i]; gEm += vec3(1.0, 0.52, 0.18) * 0.06 * exp(-dot(wq, wq) * 0.5); }` : '') : '') + (X5.wet ? `
   // (under closed water the sea, 95% opaque from 0.43 m, hides the bed: past 0.5 m it is not drawn at all, its layers and
-  // its lights spared, the open sea's floor at low water too. Skerry Bay keeps its own level: sea.js)
-  if (mix(uLevel, uBayLevel, vBay) - vBed > 0.56) discard;` : '') + (X5.edge ? `
+  // its lights spared, the open sea's floor at low water too. Skerry Bay keeps its own level: sea.js. The rest of the
+  // shader stands in a branch closed after its last chunk: a discard alone spares a software GPU none of what follows)
+  if (mix(uLevel, uBayLevel, vBay) - vBed > 0.56) discard;
+  if (mix(uLevel, uBayLevel, vBay) - vBed <= 0.56) {` : '') + (X5.edge ? `
   // the Farthest Light's open water: the snow and the thick ice end on it along a frayed line a little in from the cells'
   // edge (the water runs on under that band: sea.js), never along their squares
   if (vWat > 0.001) { vec4 gE = texture2D(tNoise, vec2(vGW.x * 0.021 + vGW.z * 0.006, vGW.z * 0.07) + 0.29); if (vWat * 1.5 + (gE.a - 0.5) * 0.5 + (gE.b - 0.5) * 0.2 > 0.38) discard; }` : '') + `
@@ -1620,6 +1622,7 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
   diffuseColor.rgb *= gc * (0.82 + 0.36 * vLay.w);`)
       .replace('#include <roughnessmap_fragment>', `float roughnessFactor = clamp(mix(mix(uR.x, uR.y, wB), uR.z, wP) * (1.12 - 0.25 * gh), 0.3, 1.0);` + (X.sap ? '\n  roughnessFactor = mix(roughnessFactor, 0.14, wS);' : '') + (X5.wet ? '\n  roughnessFactor = mix(roughnessFactor, 0.2, max(gWet, gPool * wB * 0.8));' : ''))
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>' + (X5.any ? '\n  totalEmissiveRadiance += gEm;' : ''))
+      .replace('#include <dithering_fragment>', '#include <dithering_fragment>' + (X5.wet ? '\n  }' : ''))
       .replace('#include <normal_fragment_maps>', `#ifdef G_NRM
   // the second readings are rotated: turn their tangent-space xy back into the first frame` + (X5.v5 ? `
   // (each layer's normal read only where its weight is not 0: mix() then takes the other's exactly)
