@@ -38,7 +38,7 @@ import { on, emit } from '../ui/bus.js';
 import { t, has } from '../i18n/i18n.js';
 import { clamp, rand } from '../core/util.js';
 
-export const VER = 2;
+export const VER = 3;
 const SNAP_HZ = 10, SNAP_MAX = 3900, REL_MAX = 1700, REL_Q = 200, FX_MAX = 900, FX_MIN = 500, FX_RATE = 600, NEAR = 40, NEAREST = 10, OVERDUE = 1000, CHUNK = 3300, HOST_LOST = 25000, HOST_GONE = 10000, STALL = 6000, DOWNED = 30, REVIVE = 2.5, LAG = 130, WAIT_MAX = 300000, NO_WORLD = 15000;
 const CODE_CH = 'abcdefghjkmnpqrstuvwxyz23456789';
 const KINDS = Object.keys(MONSTERS), KIDX = new Map(KINDS.map((k, i) => [k, i]));
@@ -690,13 +690,16 @@ function guestEvent(P, e) {
     if (!a || a.dead || a.removed || a.team !== 'foe' || a.prop) return;
     if (Math.hypot(a.x - me.x, a.z - me.z) > 26 + (a.radius || 0.5)) return reject('far');
     if (!(typeof amt0 === 'number' && isFinite(amt0) && amt0 > 0)) return reject('bad');
+    // (no more blows a second than the busiest fight makes: each may carry a status or a burn)
+    if (over(P, 'h', 200)) return reject('rate');
     // (a blow past the cap lands as the cap: a strong guest's best hit is never lost, a forged one does no more)
     const cap = blowCap(P), amt = amt0 > cap ? (reject('big'), cap) : amt0;
     // the rate: what a second of its hits may come to
     const R0 = P.rate ||= { t: now(), sum: 0 };
     if (now() - R0.t > 1000) { R0.t = now(); R0.sum = 0; }
-    // (a burn counts with the blow that lights it)
-    R0.sum += amt + (fin(o.burn) && o.burn > 0 ? Math.min(o.burn, cap) : 0); if (R0.sum > cap * 30) return reject('rate');
+    // (a burn counts with the blow that lights it, and one that keeps a bigger burn going costs that burn: the game
+    // renews a burn at the bigger of the two)
+    R0.sum += amt + (fin(o.burn) && o.burn > 0 ? Math.min(Math.max(o.burn, (a.status.burnDps || 0) * 3), cap) : 0); if (R0.sum > cap * 20) return reject('rate');
     const opts = { crit, net: true };
     for (const k in OPT_NUM) if (typeof o[k] === 'number' && isFinite(o[k]) && o[k] > 0) opts[k] = Math.min(o[k], OPT_NUM[k] === 1e7 ? cap : OPT_NUM[k]);
     if (o.slow && typeof o.slow.k === 'number' && typeof o.slow.t === 'number') opts.slow = { k: clamp(o.slow.k, 0, 0.8), t: clamp(o.slow.t, 0, 5) };
@@ -709,7 +712,7 @@ function guestEvent(P, e) {
     // a pull (the Maelstrom, a Seismic Leap, a Challenge, the Void Rift): by the host's own rules for what may be moved
     const a = foeNear(e[2], me); if (!a) return;
     const ix = e[3], iz = e[4]; if (!nums([ix, iz], 2)) return reject('bad');
-    if (a.boss || a.prop || a.keeper || a.def.anchored || a.dormant || a.cling) return reject('pull');
+    if (a.boss || a.prop || a.keeper || a.def.anchored || a.dormant || a.cling || a.under || a.hidden || a.airborne || a.disguised) return reject('pull');
     if (over(P, 'pu', 80)) return reject('rate');
     // (no more than the strongest pull, the Rift's, over the 0.2 s a guest sums them for)
     const m = Math.hypot(ix, iz), k = m > 8 ? 8 / m : 1;
@@ -717,6 +720,7 @@ function guestEvent(P, e) {
   } else if (type === 'ta') {
     // a taunt (a Challenge, an Iron Bulwark): the monster comes for that guest (ai.js targetOf) for as long as it said
     const a = foeNear(e[2], me); if (!a) return;
+    if (a.keeper || a.dormant || a.cling || a.under || a.hidden || a.airborne || a.disguised) return reject('taunt');
     if (over(P, 'ta', 40)) return reject('rate');
     a.aggro = true; a.status.fear = 0; a.taunt = G.hero.stats.time + num(e[3], 0, 12); a.tauntBy = me;
   } else if (type === 'ic') {
@@ -728,7 +732,7 @@ function guestEvent(P, e) {
     if (op === 'c') { if (!near(a[0], a[1]) || a[2] > 4) return reject('ice'); crackAt(a[0], a[1], a[2], st, { src: 'guest' }); }
     else if (op === 'l') { if (!near(a[0], a[1]) || !near(a[2], a[3]) || Math.hypot(a[2] - a[0], a[3] - a[1]) > 14 || a[4] > 2.5) return reject('ice'); crackLine(a[0], a[1], a[2], a[3], a[4], st, { src: 'guest' }); }
     else if (op === 'r') { if (!near(a[0], a[1]) || a[3] > 8 || a[3] - a[2] > 1.5 || a[2] < 0) return reject('ice'); crackRing(a[0], a[1], a[2], a[3], st, { src: 'guest' }); }
-    else if (op === 'f') { if (!near(a[0], a[1]) || a[2] > 6) return reject('ice'); refreezeAt(a[0], a[1], a[2]); emit('frostNova', a[0], a[1], a[2]); }
+    else if (op === 'f') { if (!near(a[0], a[1]) || a[2] > 6) return reject('ice'); if (now() - (P.freezeT || 0) < 2000) return reject('rate'); P.freezeT = now(); refreezeAt(a[0], a[1], a[2]); emit('frostNova', a[0], a[1], a[2]); }
     else return reject('bad');
   } else if (type === 'rv') {
     // a revive: the reviver (this guest) has stood by another hero, down a moment, as long as a raise takes (the host's
@@ -1471,15 +1475,18 @@ function replayOne(name, a, from) {
       return;
     }
     if (!fromHost && !HERO_AREAS.has(kind)) return;
+    // (another hero's lays no wider or longer than a skill's, and by that hero: its fire melts the host's ice)
+    const by = fromHost ? null : S.peers.get(from)?.actor;
+    if (!fromHost && (!by || Math.hypot(px(x) - by.x, pz(z) - by.z) > 30)) return;
     const real = foe && fromHost;
-    const ar = area(kind, px(x), pz(z), clamp(r, 0.1, 30), clamp(dur, 0, 20), { team: real ? 'foe' : 'vis', src: real ? S.pup.get(sid) || { team: 'foe', level: clamp(G.zone.level, 1, zoneTop()), x, z, def: {} } : null, dmg: real ? num(dmg, 0, 1e8) : 0, tick: fin(tick) ? clamp(tick, 0.1, 5) : undefined, opts: real ? hurtOpts(opts) : {}, vx: num(vx, -20, 20), vz: num(vz, -20, 20), floats: !!(floats & 1), dim: !!(floats & 2), nowarm: !!(floats & 4), net: true, look: typeof lk === 'string' && Object.hasOwn(LOOKS, lk) ? LOOKS[lk] : undefined });
+    const ar = area(kind, px(x), pz(z), clamp(r, 0.1, fromHost ? 30 : 8), clamp(dur, 0, fromHost ? 20 : 10), { team: real ? 'foe' : 'vis', src: real ? S.pup.get(sid) || { team: 'foe', level: clamp(G.zone.level, 1, zoneTop()), x, z, def: {} } : null, dmg: real ? num(dmg, 0, 1e8) : 0, tick: fin(tick) ? clamp(tick, 0.1, 5) : undefined, opts: real ? hurtOpts(opts) : {}, vx: num(vx, -20, 20), vz: num(vz, -20, 20), floats: !!(floats & 1), dim: !!(floats & 2), nowarm: !!(floats & 4), net: true, look: typeof lk === 'string' && Object.hasOwn(LOOKS, lk) ? LOOKS[lk] : undefined });
     if (ar) ar.net = true;
     return;
   }
   if (name === 'sap') { if (fromHost && nums(a, 4)) addSapPool(px(a[0]), pz(a[1]), clamp(a[2], 0.2, 12), clamp(a[3], 0, 30), { team: 'foe' }, kindOk(a[4]) ? a[4] : undefined); return; }
   if (name === 'sapRing') { if (fromHost && nums(a, 4)) { const r1 = clamp(a[3], 0.2, 20); addSapRing(px(a[0]), pz(a[1]), clamp(a[2], 0, r1), r1, fin(a[4]) ? clamp(a[4], 0, 30) : 6); } return; }
   if (name === 'sfx') { if (kindOk(a[0]) && nums(a.slice(1), 2)) Audio.sfx(a[0], { x: px(a[1]), z: pz(a[2]), vol: num(a[3], 0, 2, 1), pitch: num(a[4], 0.25, 4, 1) }); return; }
-  if (name === 'killTele') { const tl = TELES.get(a[0]); if (tl) { tl.alive = false; TELES.delete(a[0]); } return; }
+  if (name === 'killTele') { const k = from + ':' + a[0], tl = TELES.get(k); if (tl) { tl.alive = false; TELES.delete(k); } return; }
   if (name === 'visEnd') { const k = from + ':' + a[0], v = VISN.get(k); if (v) { v.done = true; VISN.delete(k); } return; }
   const fn = FX[name], spec = FXS[name]; if (typeof fn !== 'function' || !spec) return;
   // (the rings and telegraphs a page holds at once, each its own mesh, are held too)
@@ -1490,7 +1497,7 @@ function replayOne(name, a, from) {
   // (a bolt no longer than a chain's longest jump)
   if (name === 'bolt') { const L = Math.hypot(args[3] - args[0], args[4] - args[1], args[5] - args[2]); if (L > 40) { const k = 40 / L; for (let i = 3; i < 6; i++) args[i] = args[i - 3] + (args[i] - args[i - 3]) * k; } }
   if (tele) {
-    const id = a[a.length - 1]; const tl = fn(...args); if (tl && id) { TELES.set(id, tl); if (TELES.size > 200) TELES.delete(TELES.keys().next().value); }
+    const id = a[a.length - 1]; const tl = fn(...args); if (tl && id) { TELES.set(from + ':' + id, tl); if (TELES.size > 200) TELES.delete(TELES.keys().next().value); }
     return;
   }
   fn(...args);
