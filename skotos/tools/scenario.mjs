@@ -2,6 +2,7 @@
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+import { watchFatal, fatalAll } from './fatal.mjs';
 const [, , name = 'combat', out = '/tmp', W = '1280', H = '720'] = process.argv;
 const logs = [];
 // Act IV: a dialog advances on Enter (the key finishes the line, then moves on), whatever the frame rate; what is said is
@@ -132,6 +133,10 @@ async function BOT5(o) {
   const B = window.BOT = { t: 0, deaths: 0, hurt: 0, potions: 0, low: 1, phases: [], done: false, kind: o.kind, cls, L, life: G.player.hpMax, stop: false };
   Bus.on('hurt', (f) => { B.hurt += f; });
   const pl = G.player, z = G.zone, Lz = z.L, ranged = cls !== 'warden';
+  // (the Tower: how far each cell lies from the thick ice it keeps to in its ice phase, in cells)
+  let dThick = null;
+  if (o.kind === 'tower' && Lz.thick) { const W = Lz.w, H = Lz.h, q = []; dThick = new Float32Array(W * H).fill(99); for (let i = 0; i < W * H; i++) if (Lz.thick[i]) { dThick[i] = 0; q.push(i); } for (let h = 0; h < q.length; h++) { const i = q[h], x = i % W, y = (i - x) / W; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy, n = ny * W + nx; if (nx >= 0 && ny >= 0 && nx < W && ny < H && dThick[n] > dThick[i] + 1) { dThick[n] = dThick[i] + 1; q.push(n); } } } }
+  const way = { x: 0, z: 0 };
   const keys = (dx, dz) => { IN.keys.clear(); const l = Math.hypot(dx, dz); if (l < 0.35) return; const r = Math.round(Math.atan2(dx, dz) / (Math.PI / 4)), ux = Math.round(Math.sin(r * Math.PI / 4)), uz = Math.round(Math.cos(r * Math.PI / 4)); if (ux > 0) IN.keys.add('d'); if (ux < 0) IN.keys.add('a'); if (uz > 0) IN.keys.add('s'); if (uz < 0) IN.keys.add('w'); };
   const calm = (t) => { const c = t.m.material.uniforms.uColor.value; return c.b > c.r; };
   const _v = { x: 0, z: 0, r: 0 };
@@ -168,7 +173,41 @@ async function BOT5(o) {
     if (o.kind === 'tower') {
       if (b.phase === 0 && T && T.st !== 'low') { const isl = Lz.spots.bayIslets.slice().sort((p, q) => Math.hypot(p.x - pl.x, p.z - pl.z) - Math.hypot(q.x - pl.x, q.z - pl.z))[0]; goal = { x: isl.x, z: isl.z }; if (b.dazed > 0 && Math.hypot(b.x - isl.x, b.z - isl.z) < 6) goal = null; }
       if (b.st === 'island' && b.lightIt) { goal = { x: b.lightIt.x, z: b.lightIt.z }; if (Math.hypot(goal.x - pl.x, goal.z - pl.z) < 2.5 && !pl.act) b.lightIt.use(); }
-      if (b.phase === 1 && b.st === 'fight' && !(b.dazed > 0)) { if (!B.icePt || Math.hypot(B.icePt.x - b.x, B.icePt.z - b.z) > 12 || (B.icePtT -= dt) <= 0 || I.iceAt(B.icePt.x, B.icePt.z) !== 'thin') { B.icePtT = 18; B.icePt = null; for (let r = 7; r < 10 && !B.icePt; r++) for (let k = 0; k < 16; k++) { const g = k * 0.39, x = b.x + Math.sin(g) * r, zz = b.z + Math.cos(g) * r; if (I.iceAt(x, zz) === 'thin' && I.stageAt(x, zz) < 2 && z.map.walkable(x, zz)) { B.icePt = { x, z: zz }; break; } } } if (B.icePt) goal = B.icePt; }
+      // the bait (the hint's own play: thin ice between them, she behind it). Where a Hammer Claw has webbed the thin ice
+      // (stage 2), she stands 3 m beyond it so the next Shell Rush runs through it; else on unwebbed thin ice 8-14 m off,
+      // as far from the thick as she can find (the Tower keeps to the thick in this phase, so it cannot close to its sweep),
+      // past the Bell's 9.5 m if she can, and not far from where she stands; walked to by the map's own way, not a line.
+      // (Baited 7-10 m from where the Tower stood and walked to in a line, she was caught on the land or the thick beside it,
+      // dodging its sweeps, and a phase could end on its clock with no Overturn)
+      // (the whole phase but its Overturn and a daze: while it turned or hauled itself back she went to strike it, and stayed)
+      if (b.phase === 1 && b.st !== 'over' && !(b.dazed > 0)) {
+        if ((B.webT = (B.webT || 0) - dt) <= 0) {
+          B.webT = 0.25; B.webPt = null; let bd = 1e9;
+          for (let r = 3; r <= 12; r++) for (let k = 0; k < 24; k++) {
+            const g = k * 0.2618, x = b.x + Math.sin(g) * r, zz = b.z + Math.cos(g) * r;
+            if (I.iceAt(x, zz) !== 'thin' || I.stageAt(x, zz) < 2) continue;
+            for (const e of [3, 2.5, 3.5, 2, 4]) { const px = x + Math.sin(g) * e, pz = zz + Math.cos(g) * e, s2 = I.iceAt(px, pz); if (r + e < 7.5 || !z.map.walkable(px, pz) || s2 === 'water' || (s2 === 'thin' && I.stageAt(px, pz) >= 2)) continue; const sc = Math.hypot(px - pl.x, pz - pl.z) + Math.abs(r - 7); if (sc < bd) { bd = sc; B.webPt = { x: px, z: pz }; } break; }
+          }
+        }
+        const dI = B.icePt && Math.hypot(B.icePt.x - b.x, B.icePt.z - b.z);
+        if (!B.webPt && (!B.icePt || dI < 7.5 || dI > 16 || (B.icePtT -= dt) <= 0 || I.iceAt(B.icePt.x, B.icePt.z) !== 'thin')) {
+          // (within 15 m, the Rush's reach; out to 20 m only if nothing nearer can be walked to: hauled back onto the thick far
+          // from any thin ice, it comes over the thick toward her. Up to 6 cells from the thick: further, the thick cell
+          // nearest her lay past the 14 m it looks, and it stood still. The old bait kept if nothing is found)
+          B.icePtT = 12; let pick = null;
+          for (let r = 8; r <= 20; r++) for (let k = 0; k < 24; k++) {
+            const g = k * 0.2618, x = b.x + Math.sin(g) * r, zz = b.z + Math.cos(g) * r, i = Math.floor(zz) * Lz.w + Math.floor(x);
+            if (I.iceAt(x, zz) !== 'thin' || I.stageAt(x, zz) >= 2 || !z.map.walkable(x, zz)) continue;
+            const sc = Math.min(dThick ? dThick[i] : 0, 6) + (r >= 9.6 ? 2 : 0) - (r > 15 ? 20 : 0) - Math.hypot(x - pl.x, zz - pl.z) * 0.15;
+            (B.cands ||= []).push([sc, x, zz]);
+          }
+          // (the best she can walk to: a patch of thin ice cut off by water or rock held her against its edge a whole phase)
+          const cs = (B.cands || []).sort((p, q) => q[0] - p[0]); B.cands = null;
+          for (let j = 0; j < Math.min(cs.length, 12) && !pick; j++) { const [, x, zz] = cs[j]; if (Math.hypot(x - pl.x, zz - pl.z) < 1.5 || z.map.stepToward({}, pl.x, pl.z, x, zz, way, 24)) pick = { x, z: zz }; }
+          if (pick || (B.icePt && I.iceAt(B.icePt.x, B.icePt.z) !== 'thin')) B.icePt = pick;
+        }
+        if (B.webPt || B.icePt) { goal = B.webPt || B.icePt; goal.way = true; }
+      }
     } else if (o.kind === 'skotos') {
       if (z.remember && !pl.act) { goal = { x: z.remember.x, z: z.remember.z + 1.0 }; if (Math.hypot(goal.x - pl.x, goal.z - pl.z) < 1.6 && (!b.nb || b.nb.st === 'down' || b.nb.st === 'up')) z.remember.use(); }
       else if (z.giving && z.act5?.farIt && !pl.act) { const it = z.act5.farIt; goal = { x: it.x, z: it.z + 0.8 }; if (Math.hypot(goal.x - pl.x, goal.z - pl.z) < 1.6) it.use(); }
@@ -184,10 +223,21 @@ async function BOT5(o) {
     }
     if (!goal && tgt) { const d = Math.hypot(tgt.x - pl.x, tgt.z - pl.z), want = ranged ? 8 : tgt.radius + 1.0; if (d > want + 0.8) goal = { x: tgt.x, z: tgt.z }; else if (ranged && d < want - 3) goal = { x: pl.x * 2 - tgt.x, z: pl.z * 2 - tgt.z }; }
     const u = under(pl.x, pl.z);
-    if (u) { const c = u.r > 0 && calmIn(u.c, u.r > 14); if (c) goal = { x: c.x, z: c.z }; else { const l = Math.hypot(u.x, u.z) || 1; goal = { x: pl.x + (u.x / l) * 4, z: pl.z + (u.z / l) * 4 }; } }
-    if (goal) keys(goal.x - pl.x, goal.z - pl.z); else keys(0, 0);
+    // (into a calm, or out of its ring if that is nearer: from the Tower's bait, 9 m off, the Bell's calm was 5 m away)
+    if (u) { const c = u.r > 0 && calmIn(u.c, u.r > 14), du = Math.hypot(u.x, u.z), cc = c && Math.hypot(pl.x - c.x, pl.z - c.z) - c.r + 0.3, ok = (k) => z.map.walkable(pl.x + (u.x / (du || 1)) * k, pl.z + (u.z / (du || 1)) * k), out = u.r + 0.6 - du; if (c && !(u.r > 0 && out < cc && u.r <= 14 && ok(out * 0.5) && ok(out + 0.4))) goal = { x: c.x, z: c.z }; else { const l = Math.hypot(u.x, u.z) || 1; goal = { x: pl.x + (u.x / l) * 4, z: pl.z + (u.z / l) * 4 }; } }
+    // (the Tower's ice phase, a line a second for the report when no Overturn came: time, its state, how far apart, the ice
+    // under her and its stage, her bait (web, bait or none) and how far, a telegraph on her, its Rushes so far)
+    if (o.kind === 'tower' && b.phase === 1 && (B.logT = (B.logT || 0) - dt) <= 0) { B.logT = 1; const f = (v) => +v.toFixed(1); (B.log ||= []).push([f(B.t), b.st, f(Math.hypot(b.x - pl.x, b.z - pl.z)), I.iceAt(pl.x, pl.z), I.stageAt(pl.x, pl.z), B.webPt ? 'web' : B.icePt ? 'bait' : '-', goal ? f(Math.hypot(goal.x - pl.x, goal.z - pl.z)) : null, !!u, b.rushes || 0, f(pl.x), f(pl.z), f(b.x), f(b.z)]); }
+    // (the Tower's Bell: how far she stood from it the frame it rang; looked at from Node, she had walked on)
+    if (o.kind === 'tower' && b) { const n = window.__act5.AI_LOG['tower:bellRung'] || 0; if (n > (B.bellN ??= n)) { const d = Math.hypot(b.x - pl.x, b.z - pl.z); (B.bellD ||= []).push(+d.toFixed(1)); if (d > 4.5 && d < 9 + pl.radius * 0.5) B.bellHit = (B.bellHit || 0) + 1; } B.bellN = n; }
+    // (every goal but a dodge walked to by the map's own way, the Tower's: in a line, she stood 22 m off it across the water
+    // a whole phase; a dodge straight)
+    const wv = goal && !u && (goal.way || o.kind === 'tower') && Math.hypot(goal.x - pl.x, goal.z - pl.z) > 1.5 && z.map.stepToward(B.wayP ||= {}, pl.x, pl.z, goal.x, goal.z, way, 24);
+    if (wv) keys(wv.x, wv.z); else if (goal) keys(goal.x - pl.x, goal.z - pl.z); else keys(0, 0);
     B.near = Math.min(B.near ?? 99, tgt === b && b ? Math.hypot(b.x - pl.x, b.z - pl.z) - b.radius : 99);
-    if ((skT -= dt) <= 0 && tgt && !pl.pull && !(pl.act && pl.act.name === 'touch')) {
+    // (no blow struck from inside the Tower's telegraphs: its swing held her where she stood, and the Bell caught her a step
+    // short of its calm)
+    if ((skT -= dt) <= 0 && tgt && !pl.pull && !(pl.act && pl.act.name === 'touch') && !(u && o.kind === 'tower')) {
       skT = 0.2;
       const d = Math.hypot(tgt.x - pl.x, tgt.z - pl.z), aim = { x: tgt.x, z: tgt.z };
       let used = false;
@@ -1218,7 +1268,8 @@ const S = {
       last = s;
       if (s.done || s.dead) break;
     }
-    const bot = await pg.evaluate(() => window.__botP);
+    // (after a death the game holds on its panel and the bot's clock with it: stopped first, or this waited for ever)
+    const bot = await pg.evaluate(() => { if (window.BOT) window.BOT.stop = true; return window.__botP; });
     await pg.waitForTimeout(1500); await shot();
     // the crawl home and the island
     await A5.until(pg, () => { const b = window.__G.zone.boss; return !b || b.settled || window.__G.hero.flags.towerDown; }, 60000);
@@ -1227,7 +1278,12 @@ const S = {
     await shot();
     const [lo, hi] = (process.env.TTK || '60,300').split(',').map(Number);
     const ttk = bot?.t ?? null, inBand = ttk != null && ttk >= lo && ttk <= hi;
-    const bellIn = !seen.bellD || seen.bellD.some((d) => d <= 4.5);
+    // (the Bell read: she took one in its calm, or it never caught her, in the calm or out of the ring each time; read the
+    // frame it rang)
+    if (bot?.bellD) seen.bellD = bot.bellD;
+    if (bot?.log && !(seen.overturned || (home.log || {})['tower:overturned'] > 0)) console.log('tower ice phase ' + JSON.stringify(bot.log));
+    if (bot) delete bot.log;
+    const bellIn = !seen.bellD || seen.bellD.some((d) => d <= 4.5) || (bot && !bot.bellHit);
     // (its windows, seen between two looks or told by its tally: at SIMK 4 a 3.5 s Beached lasts under a second)
     const lg = home.log, win = { beached: !!seen.beached || !!seen.stranded || lg['tower:beached'] > 0 || lg['tower:stranded'] > 0, overturned: !!seen.overturned || lg['tower:overturned'] > 0, blinded: !!seen.blinded || lg['tower:lit'] > 0 };
     const pass = !seen.died && !!bot?.done && win.beached && win.overturned && win.blinded && (bot.near ?? 99) <= 1.5 && bellIn && home.towerDown && home.at != null && home.at <= 2.5 && home.closed > 0 && !home.heroIn && inBand && (!process.env.TTK0 || +process.env.DIFF !== 0 || ttk >= 0.6 * +process.env.TTK0);
@@ -1256,6 +1312,26 @@ const S = {
           D.kill(a);
           if (!a.dead) { const w = window.__sealLive ||= {}, k = a.kind + (a.hidden ? ':h' : '') + (a.airborne ? ':air' : '') + (a.invuln > 0 ? ':inv' : ''); w[k] = (w[k] || 0) + 1; }
         }
+        // the Black Breath, every frame (its warning is 1.2 s of play, a third of a second at this speed: looks from here
+        // missed it): over the three holes she shields the first, steps away from the second and lets its lamp go out,
+        // and shields the rest; each counted (per hole, B; over all, A) by what the Breath did once it landed
+        const B = window.__breath ||= { shielded: 0, lost: 0, relit: 0, tele: null, it: null, shield: false }, A = window.__breathAll ||= { shielded: 0, lost: 0 };
+        if (S && pl && S.tele && S.target && B.tele !== S.tele) {
+          const it = S.target, ho = S.ho, m = z.map;
+          B.tele = S.tele; B.it = it; B.shield = !A.shielded || A.lost > 0;
+          let f = null;
+          if (B.shield) { const dl = Math.hypot(it.x - ho.x, it.z - ho.z) || 1; for (const k of [0.7, 0.4, 1.1, 0.15, 1.6]) { const x = it.x + (ho.x - it.x) / dl * k, zz = it.z + (ho.z - it.z) / dl * k; if (m.walkable(x, zz)) { f = { x, z: zz }; break; } } f ||= m.nearestFloor(it.x, it.z, 1.5); }
+          else f = m.nearestFloor(ho.x - (it.x - ho.x) * 0.9, ho.z - (it.z - ho.z) * 0.9, 3);
+          pl.x = f.x; pl.z = f.z; pl.act = null; pl.kx = pl.kz = 0;
+        } else if (B.tele && (!S || S.tele !== B.tele)) {
+          if (S) { if (B.shield && B.it.lit) { B.shielded++; A.shielded++; } else if (!B.shield && !B.it.lit) { B.lost++; A.lost++; } }
+          B.tele = null;
+        } else if (window.__relight && S && pl && !S.tele && !pl.act) {
+          // a lamp out (the Breath, the Ice Singer, a Skua) lit again at once, as the Breath is met: from the Node side
+          // each took a look and a wait, game seconds at this speed with the ring stalled
+          const dark = z.act5.lamps.find((l) => l.hole === S.ho.id && !l.lit);
+          if (dark) { const q = z.map.nearestFloor(dark.x, dark.z + 1.2, 2); pl.x = q.x; pl.z = q.z; pl.kx = pl.kz = 0; dark.use(); B.relit++; }
+        }
         requestAnimationFrame(f);
       };
       requestAnimationFrame(f);
@@ -1264,7 +1340,9 @@ const S = {
       const r = { k };
       // to the hole: Alkyone there before her
       r.alk = await pg.evaluate((k) => { const G = window.__G, z = G.zone, ho = z.L.spots.holes.find((h) => h.id === k), a = z.p5?.alkyone?.a; return a ? +Math.hypot(a.x - ho.alk.x, a.z - ho.alk.z).toFixed(1) : null; }, k);
-      const t0 = await pg.evaluate(() => window.__G.hero.stats.time);
+      // (the page lights again any lamp of the seal that is dark, from the first: a Breath met while she lit the second or
+      // third broke her touch, and a lamp left dark here stalled the ring for the whole wait below)
+      const t0 = await pg.evaluate(() => { window.__relight = true; return window.__G.hero.stats.time; });
       for (let i = 0; i < 3; i++) {
         await A5.use(pg, `z.act5.lamps.find((l) => l.hole === ${k} && l.i === ${i})`); await A5.until(pg, (a) => !!window.__G.zone.act5.lamps.find((l) => l.hole === a[0] && l.i === a[1])?.lit, 15000, [k, i]);
         // the fail-safe, once: on the second hole the clock is moved on past the minute as soon as its run begins
@@ -1274,31 +1352,22 @@ const S = {
       if (k === order[0]) await shot();
       // the run: she shields a lamp the Breath turns on (the first), lets the next go out and lights it again, kills what
       // comes, keeps the others lit
-      let shielded = 0, lost = 0, relit = 0, failsafe = false;
+      let failsafe = false, shot1 = false;
+      await pg.evaluate(() => { window.__breath = null; });
       for (const w0 = Date.now(); Date.now() - w0 < 20 * 60000;) {
-        const s = await pg.evaluate(([k, shielded, lost]) => {
-          const G = window.__G, z = G.zone, S = z.seal, pl = G.player;
+        const s = await pg.evaluate((k) => {
+          const G = window.__G, z = G.zone, S = z.seal, pl = G.player, B = window.__breath;
           if (!S || S.ho.id !== k) return { done: !!G.hero.flags['hole' + k] };
-          const ho = S.ho;
-          if (S.tele && S.target) {
-            const it = S.target;
-            // (between the hole and the lamp: the first point on that line she can stand on, from the lamp in)
-            if (shielded < 2 && !lost) { const dl = Math.hypot(it.x - ho.x, it.z - ho.z) || 1; let f = null; for (const k of [0.7, 0.4, 1.1, 0.15, 1.6]) { const x = it.x + (ho.x - it.x) / dl * k, zz = it.z + (ho.z - it.z) / dl * k; if (z.map.walkable(x, zz)) { f = { x, z: zz }; break; } } f ||= z.map.nearestFloor(it.x, it.z, 1.5); pl.x = f.x; pl.z = f.z; return { shield: it.i, ring: S.ring }; }
-            const f = z.map.nearestFloor(ho.x - (it.x - ho.x) * 0.9, ho.z - (it.z - ho.z) * 0.9, 3); pl.x = f.x; pl.z = f.z;
-            return { away: it.i, ring: S.ring };
-          }
-          const dark = z.act5.lamps.find((l) => l.hole === k && !l.lit);
-          if (dark && !pl.act) { const f = z.map.nearestFloor(dark.x, dark.z + 1.2, 2); pl.x = f.x; pl.z = f.z; dark.use(); return { relight: dark.i, ring: S.ring, lost: S.lost }; }
-          return { ring: +S.ring.toFixed(2), lost: S.lost, t: +S.t.toFixed(1), held: !!S.held };
-        }, [k, shielded, lost]);
+          // (the Breath and the relighting are the page's own, above)
+          return { ring: +S.ring.toFixed(2), lost: S.lost, t: +S.t.toFixed(1), held: !!S.held, shielded: B?.shielded || 0 };
+        }, k);
         if (s.done) break;
-        if (s.shield != null) { await pg.waitForTimeout(1400); const ok = await pg.evaluate((i) => !!window.__G.zone.act5.lamps.find((l) => l.i === i && l.hole === window.__G.zone.seal?.ho.id)?.lit, s.shield); if (ok) shielded++; if (shielded === 1 && k === order[0]) await shot(); }
-        if (s.away != null) { await pg.waitForTimeout(1400); lost++; }
-        if (s.relight != null) { await pg.waitForTimeout(1200); relit++; }
+        if (s.shielded && !shot1 && k === order[0]) { shot1 = true; await shot(); }
         if (s.held) failsafe = true;
         await pg.waitForTimeout(300);
       }
-      const t1 = await pg.evaluate(() => window.__G.hero.stats.time);
+      const t1 = await pg.evaluate(() => { window.__relight = false; return window.__G.hero.stats.time; });
+      const { shielded, lost, relit } = await pg.evaluate(() => ({ shielded: window.__breath?.shielded || 0, lost: window.__breath?.lost || 0, relit: window.__breath?.relit || 0 }));
       // (the fail-safe seen as it is said, if it came and went between two looks)
       if (!failsafe && r.forced) failsafe = await pg.evaluate(() => (window.__says || []).includes('d.alk.s0'));
       Object.assign(r, { secs: +(t1 - t0).toFixed(1), shielded, lost, relit, failsafe, sealed: await pg.evaluate((k) => !!window.__G.hero.flags['hole' + k], k) });
@@ -1548,11 +1617,14 @@ const S = {
     const die = async () => {
       await pg.evaluate(() => { const G = window.__G; window.__immortal = false; G.player.hp = 0; window.__D.emit('heroDeath'); });
       await A5.until(pg, () => window.__G.panel === 'dead', 30000);
-      await pg.evaluate(() => { window.__D.closePanel(); window.__D.emit('respawn', false); });
-      await pg.waitForFunction(() => !window.__G.player.dead && !document.getElementById('fade').classList.contains('on'), null, { timeout: 240000 });
+      // (and immortal again as soon as she is up: left mortal, a monster on the coast could kill her a second time, and
+      // that death's panel, opening a moment later, held the game while the test waited for the Tower to wake)
+      // (where she wakes is read as the fade lifts: a Sunken's hook could pull her metres in the moment after)
+      await pg.evaluate(() => { window.__D.closePanel(); window.__D.emit('respawn', false); window.__immortal = true; });
+      await pg.waitForFunction(() => { const ok = !window.__G.player.dead && !document.getElementById('fade').classList.contains('on'); if (ok) window.__woke = { x: window.__G.player.x, z: window.__G.player.z }; return ok; }, null, { timeout: 240000 });
       await pg.waitForTimeout(800);
     };
-    const where = (k) => pg.evaluate((k) => { const G = window.__G, z = G.zone, S = z.L.spots, p = k === 'rock' ? S.npcs.rock : /^hole/.test(k) ? S.holes.find((h) => 'hole' + h.id === k)?.alk : z.act5.lights.find((l) => l.id === k), pl = G.player; return { zone: z.id, key: G.hero.flags.cp5?.[z.id], cp: !!z.checkpoint, d: p ? +Math.hypot(pl.x - p.x, pl.z - p.z).toFixed(1) : null }; }, k);
+    const where = (k) => pg.evaluate((k) => { const G = window.__G, z = G.zone, S = z.L.spots, p = k === 'rock' ? S.npcs.rock : /^hole/.test(k) ? S.holes.find((h) => 'hole' + h.id === k)?.alk : z.act5.lights.find((l) => l.id === k), pl = window.__woke || G.player; window.__woke = null; return { zone: z.id, key: G.hero.flags.cp5?.[z.id], cp: !!z.checkpoint, d: p ? +Math.hypot(pl.x - p.x, pl.z - p.z).toFixed(1) : null }; }, k);
     // a sea-light lit (its memory seen), then a Continue: the coast built again, and a death there
     await A5.state(pg, 'rite', { quest: 26, zone: 'coast', at: 'waypoint' });
     await A5.use(pg, "z.act5.lights.find((l) => l.id === 'grey')");
@@ -1565,8 +1637,10 @@ const S = {
     const woke = await where('grey'); await shot();
     // the Tower awake (the three lights, their memories): a retry by the bay's shore rock, across a Continue too
     // (when the Tower's waking and its checkpoint happen, which zone and scene: reported if the checkpoint is missed)
-    await pg.evaluate(() => { const G = window.__G, F = G.hero.flags; window.__cpLog = []; for (const k of ['towerWake', 'cp5']) { let v = F[k]; delete F[k]; Object.defineProperty(F, k, { get() { return v; }, set(x) { v = x; window.__cpLog.push([k, JSON.stringify(x), +G.hero.stats.time.toFixed(1), G.zone?.id, !!G.cine, new Error().stack.split('\n').slice(2, 5).map((l) => l.trim().replace(/\(?https?:[^)]*\/src\//, '').replace(/\?[^:]*/, '')).join(' < ')]); }, configurable: true, enumerable: false }); } });
+    // (installed after A5.state, which deletes every flag; enumerable, so the save keeps both: hidden from JSON, a Continue
+    // lost the waking and the checkpoint, and the test passed only when the Tower woke again before its death)
     await A5.state(pg, 'mem_i3', { quest: 26, zone: 'coast', at: 'waypoint' });
+    await pg.evaluate(() => { const G = window.__G, F = G.hero.flags; window.__cpLog = []; for (const k of ['towerWake', 'cp5']) { let v = F[k]; delete F[k]; Object.defineProperty(F, k, { get() { return v; }, set(x) { v = x; window.__cpLog.push([k, JSON.stringify(x), +G.hero.stats.time.toFixed(1), G.zone?.id, !!G.cine, new Error().stack.split('\n').slice(2, 5).map((l) => l.trim().replace(/\(?https?:[^)]*\/src\//, '').replace(/\?[^:]*/, '')).join(' < ')]); }, configurable: true, enumerable: true }); } });
     // (on a loaded machine the waking scene can outlast four minutes: a wait that ran out is reported, not read as a miss)
     const waited = await A5.until(pg, () => window.__G.hero.flags.towerWake && !window.__G.cine, 600000);
     const tw = await where('rock');
@@ -1874,6 +1948,7 @@ const sc = S[name];
 // (a scenario run in a child process of its own, as the soaks: this runner's browser is never opened beside it)
 if (sc.child) { let res; try { res = await sc.child(out); } catch (e) { res = { error: e.message }; } console.log(name, JSON.stringify(res)); process.exit(0); }
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const FATAL = watchFatal(browser);
 const page = await browser.newPage({ viewport: { width: +W, height: +H } });
 page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') { const t = m.text(); if (!t.includes('ERR_CERT')) logs.push(m.type() + ': ' + t); } });
 page.on('pageerror', (e) => logs.push('pageerror: ' + e.message + ' ' + (e.stack || '').split('\n').slice(0, 3).join(' | ')));
@@ -1891,6 +1966,11 @@ const shot = async (pg = page) => { await pg.evaluate(() => new Promise((ok) => 
 shot.dir = out;
 let res;
 try { res = await sc.run(page, shot); } catch (e) { logs.push('scenario error: ' + e.message); }
+// (a runtime error on the game's #fatal box fails the scenario, whatever it checked)
+const fatal = await fatalAll(browser, FATAL);
+if (fatal.length) res = { ...(res && typeof res === 'object' ? res : { res }), pass: false, fatal: fatal.slice(0, 10) };
 console.log(name, JSON.stringify(res));
+if (fatal.length) console.log('FATAL ' + fatal.slice(0, 10).join('\nFATAL '));
 if (logs.length) console.log(logs.slice(0, 30).join('\n'));
 await browser.close();
+if (fatal.length) process.exitCode = 1;

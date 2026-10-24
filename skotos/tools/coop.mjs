@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 import fs from 'node:fs';
 const require = createRequire(import.meta.url);
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+import { watchFatal, fatalAll } from './fatal.mjs';
 const [, , name = 'join', out = '/tmp/coop'] = process.argv;
 const BASE = process.env.BASE || 'http://localhost:5311/';
 fs.mkdirSync(out, { recursive: true });
@@ -14,6 +15,7 @@ const results = []; let fails = 0;
 const ok = (c, m, v) => { results.push({ ok: !!c, m, v }); console.log((c ? 'ok   ' : 'FAIL ') + m + (v !== undefined ? '  ' + JSON.stringify(v) : '')); if (!c) fails++; };
 
 const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'] });
+const FATAL = watchFatal(browser);
 // (the phone: 844 x 390 landscape; the ui scenario as a touch phone)
 const ctx = await browser.newContext(name === 'ui' || name === 'ux' ? { viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : { viewport: { width: 844, height: 390 } });
 const pages = [];
@@ -1195,6 +1197,9 @@ try {
   // (the game's errors from its timers and its loop go to the #fatal box, not the console: every page still open is read)
   for (const [i, pg] of pages.entries()) if (!pg.isClosed()) { const f = await pg.evaluate(() => document.getElementById('fatal')?.textContent || '').catch(() => ''); ok(!f, 'page ' + (i + 1) + ': nothing in the #fatal box', f ? f.slice(0, 300) : undefined); }
 } catch (e) { ok(false, 'scenario threw: ' + (e.stack || e).toString().slice(0, 600)); }
+// (a runtime error on any page's #fatal box fails the scenario)
+const fatal = await fatalAll(browser, FATAL);
+ok(!fatal.length, 'no #fatal error on any page', fatal.length ? fatal.slice(0, 10) : undefined);
 fs.writeFileSync(out + '/' + name + '.json', JSON.stringify({ name, fails, results }, null, 1));
 console.log(fails ? fails + ' FAILED' : 'all passed');
 await browser.close();
