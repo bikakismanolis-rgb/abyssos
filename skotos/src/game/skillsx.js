@@ -623,7 +623,7 @@ export const NEW_FN = {
             circleHit(pl.x, pl.z, sk.radius, (f) => damage(pl, f, heroHit(mult * k, { area: true }), { knock: 6, kx: f.x - pl.x, kz: f.z - pl.z, stun: 0.6, area: true, breakGuard: true }));
           },
           // (also when a waypoint clears it, with no burst: the ward does not go on without its dome)
-          dispose() { R.scene.remove(dome); dome.geometry.dispose(); dome.material.dispose(); pl.shield = 0; delete pl.buffs.bulwark; }
+          dispose() { dropMesh(dome); pl.shield = 0; delete pl.buffs.bulwark; }
         });
       }]]
     });
@@ -684,7 +684,7 @@ export const NEW_FN = {
               if ((armed && foes(tx, tz, 1.7).some(live)) || a.t > 4) { a.springT = a.t; spring(); }
             },
             end() { if (!sprung) spring(); },
-            dispose() { R.scene.remove(jaw); }
+            dispose() { dropMesh(jaw); }
           });
         });
       }]]
@@ -752,7 +752,7 @@ export const NEW_FN = {
               P({ x: b.x, y: b.y, z: b.z, life: 0.12, size: 0.9, size1: 0.4, color: 0x4a90d0, alpha: 0.35 }); if (Math.random() < 0.6) P({ x: b.x, y: b.y, z: b.z, life: 0.35, size: 0.2, size1: 0.02, color: 0xc8f0ff, color1: 0x3070ff });
             }
           },
-          dispose() { for (const b of birds) { glowBurst(b.x, b.y, b.z, 0x9ad8ff, 10, 2, 0.25, 0.4); R.scene.remove(b.m); } }
+          dispose() { for (const b of birds) { glowBurst(b.x, b.y, b.z, 0x9ad8ff, 10, 2, 0.25, 0.4); dropMesh(b.m); } }
         });
       }]]
     });
@@ -798,7 +798,7 @@ export const NEW_FN = {
             Audio.sfx('explosion', { x, z }); Audio.sfx('blink', { x, z, pitch: 1.4 });
             circleHit(x, z, r * 0.8, (f) => damage(pl, f, heroHit(mult * 6, { area: true }), { stun: 1, area: true, knock: 3, kx: f.x - x, kz: f.z - z }));
           },
-          dispose() { R.scene.remove(core); core.geometry.dispose(); core.material.dispose(); }
+          dispose() { dropMesh(core); }
         });
       }]]
     });
@@ -841,7 +841,7 @@ export const NEW_FN = {
     effect(pl.x, pl.z, 1, sk.dur + 0.2 * rank + 0.3, {
       follow: true, vis: ['beam', sk.range],
       tick(a) { const o = staffTip(V); glow.x = o.x + Math.sin(pl.rot) * len * 0.6; glow.y = o.y; glow.z = o.z + Math.cos(pl.rot) * len * 0.6; if (pl.act !== me) a.done = true; },
-      dispose() { R.scene.remove(beam); removeLight(glow); }
+      dispose() { dropMesh(beam); removeLight(glow); }
     });
   }
 };
@@ -869,11 +869,11 @@ export const VIS = {
       a.x = who.x; a.z = who.z; spin += dt;
       dome.position.set(who.x, who.y || 0, who.z); dome.rotation.y = spin * 0.8; dome.material.opacity = 0.18 + 0.04 * Math.sin(spin * 6);
       for (let k = 0; k < 2; k++) { const an = spin * 3 + k * 3.14; P({ x: who.x + Math.sin(an) * 1.2, y: 0.3 + (spin * 1.3 + k) % 1.8, z: who.z + Math.cos(an) * 1.2, life: 0.4, size: 0.25, size1: 0.04, color: 0xfff0c0, color1: 0xffa040 }); }
-    }, dispose() { R.scene.remove(dome); dome.geometry.dispose(); dome.material.dispose(); } };
+    }, dispose() { dropMesh(dome); } };
   },
   trap: (a) => {
     const jaw = trapMesh(); jaw.position.set(a.x, 0.05, a.z); jaw.rotation.y = Math.random() * 6.28;
-    return { tick(a) { if (Math.random() < 0.15) P({ x: a.x + rand.range(-0.4, 0.4), y: 0.15, z: a.z + rand.range(-0.4, 0.4), life: 0.3, size: 0.1, size1: 0.02, color: 0xfff0d0 }); }, dispose() { R.scene.remove(jaw); } };
+    return { tick(a) { if (Math.random() < 0.15) P({ x: a.x + rand.range(-0.4, 0.4), y: 0.15, z: a.z + rand.range(-0.4, 0.4), life: 0.3, size: 0.1, size1: 0.02, color: 0xfff0d0 }); }, dispose() { dropMesh(jaw); } };
   },
   // (the hawks wheel over the hero and stoop on what is near as hers do; where they strike is the mirror's sparks)
   hawks: (a, args, who) => {
@@ -895,14 +895,14 @@ export const VIS = {
         b.m.children[0].rotation.z = 0.25 + flap; b.m.children[1].rotation.z = -0.25 - flap;
         P({ x: b.x, y: b.y, z: b.z, life: 0.12, size: 0.9, size1: 0.4, color: 0x4a90d0, alpha: 0.35 });
       }
-    }, dispose() { for (const b of birds) R.scene.remove(b.m); } };
+    }, dispose() { for (const b of birds) dropMesh(b.m); } };
   },
   rift: (a) => {
     const core = riftMesh(); core.position.set(a.x, 1.1, a.z);
     return { light: { color: 0x8a50ff, intensity: 18, range: 10, y: 1.2 }, tick(a, dt) {
       core.rotation.y += dt * 3; core.rotation.z += dt * 1.3; core.scale.setScalar(Math.min(1, a.t * 4) * (1 + 0.08 * Math.sin(a.t * 12)));
       for (let k = 0; k < 4; k++) { const an = Math.random() * 6.28, rr = rand.range(1.5, a.r); P({ x: a.x + Math.sin(an) * rr, y: rand.range(0.2, 2), z: a.z + Math.cos(an) * rr, vx: -Math.sin(an) * rr * 2 + Math.cos(an) * 4, vy: 0, vz: -Math.cos(an) * rr * 2 - Math.sin(an) * 4, life: 0.45, size: 0.3, size1: 0.02, color: 0xc0a0ff, color1: 0x3a10a0, drag: 0.5 }); }
-    }, dispose() { R.scene.remove(core); core.geometry.dispose(); core.material.dispose(); } };
+    }, dispose() { dropMesh(core); } };
   },
   // (the beam from the hero's hands along where she faces, as far as the walls let it)
   beam: (a, args, who) => {
@@ -915,16 +915,21 @@ export const VIS = {
       beam.children[0].material.opacity = 0.32 + 0.1 * Math.sin(a.t * 23);
       for (let k = 0; k < 2; k++) { const u = Math.random(); P({ x: ox + dx * len * u, y: oy + rand.range(-0.15, 0.15), z: oz + dz * len * u, vy: rand.range(0.2, 1), life: 0.25, size: 0.25, size1: 0.02, color: 0xfff4d0, color1: 0xffa040 }); }
       P({ x: ox + dx * len, y: oy, z: oz + dz * len, life: 0.12, size: 1.5, size1: 0.6, color: 0xfff0c0, alpha: 0.8 });
-    }, dispose() { R.scene.remove(beam); } };
+    }, dispose() { dropMesh(beam); } };
   }
 };
 // which of them go about with their hero (a page that has no actor for that hero draws them not at all)
 export const VIS_FOLLOW = new Set(['rally', 'blizzard', 'bulwark', 'hawks', 'beam']);
 
 // ---------- the later skills' meshes and looks (code-built) ----------
+// (a mesh of these taken out: its materials freed, and its geometry unless it is one of the shared ones below, built once)
+function dropMesh(o) { R.scene.remove(o); o.traverse((m) => { m.material?.dispose(); if (m.geometry && !m.geometry.userData.shared) m.geometry.dispose(); }); }
+const shared = (g) => { g.userData.shared = true; return g; };
 const ADD = (color, opacity = 1) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+let domeGeo = null;
 function domeMesh() {
-  const m = new THREE.Mesh(new THREE.SphereGeometry(1.35, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), ADD(0xc88a30, 0.2));
+  domeGeo ||= shared(new THREE.SphereGeometry(1.35, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.55));
+  const m = new THREE.Mesh(domeGeo, ADD(0xc88a30, 0.2));
   m.material.wireframe = true; R.scene.add(m); return m;
 }
 let jawGeo = null;
@@ -932,28 +937,36 @@ function trapMesh() {
   if (!jawGeo) {
     const g = [], ring0 = new THREE.TorusGeometry(0.45, 0.04, 4, 16); ring0.rotateX(Math.PI / 2); g.push(ring0);
     for (let i = 0; i < 10; i++) { const c = new THREE.ConeGeometry(0.05, 0.22, 4); const a = (i / 10) * Math.PI * 2; c.translate(Math.sin(a) * 0.42, 0.1, Math.cos(a) * 0.42); g.push(c); }
-    jawGeo = mergeGeo(g);
+    jawGeo = shared(mergeGeo(g));
   }
   const m = new THREE.Mesh(jawGeo, new THREE.MeshLambertMaterial({ color: 0x8a9098, emissive: 0x222018 }));
   R.scene.add(m); return m;
 }
+let hawkGeo = null;
 function hawkMesh() {
+  const wing = (k) => { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0.18, k * 0.75, 0.05, -0.1, 0, 0, -0.22], 3)); return shared(geo); };
+  hawkGeo ||= { l: wing(1), r: wing(-1), body: shared(new THREE.ConeGeometry(0.08, 0.5, 5)) };
   const mat = ADD(0x3a86c8, 0.55), g = new THREE.Group();
-  const wing = (s) => { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0.18, s * 0.75, 0.05, -0.1, 0, 0, -0.22], 3)); const m = new THREE.Mesh(geo, mat); return m; };
-  g.add(wing(1), wing(-1));
-  const body = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.5, 5), ADD(0x9ad0ff, 0.7)); body.rotation.x = Math.PI / 2; g.add(body);
+  g.add(new THREE.Mesh(hawkGeo.l, mat), new THREE.Mesh(hawkGeo.r, mat));
+  const body = new THREE.Mesh(hawkGeo.body, ADD(0x9ad0ff, 0.7)); body.rotation.x = Math.PI / 2; g.add(body);
   g.scale.setScalar(1.05); R.scene.add(g); return g;
 }
+let riftGeo = null;
 function riftMesh() {
-  const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.75, 1), new THREE.MeshBasicMaterial({ color: 0x0a0414 }));
-  const halo = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.07, 6, 28), ADD(0xb080ff, 0.8)); m.add(halo);
-  const halo2 = new THREE.Mesh(new THREE.TorusGeometry(1.25, 0.04, 6, 28), ADD(0x7040ff, 0.6)); halo2.rotation.x = Math.PI / 2; m.add(halo2);
+  riftGeo ||= { core: shared(new THREE.IcosahedronGeometry(0.75, 1)), h1: shared(new THREE.TorusGeometry(1.0, 0.07, 6, 28)), h2: shared(new THREE.TorusGeometry(1.25, 0.04, 6, 28)) };
+  const m = new THREE.Mesh(riftGeo.core, new THREE.MeshBasicMaterial({ color: 0x0a0414 }));
+  const halo = new THREE.Mesh(riftGeo.h1, ADD(0xb080ff, 0.8)); m.add(halo);
+  const halo2 = new THREE.Mesh(riftGeo.h2, ADD(0x7040ff, 0.6)); halo2.rotation.x = Math.PI / 2; m.add(halo2);
   R.scene.add(m); return m;
 }
+let beamGeo = null;
 function beamMesh() {
-  const core = new THREE.CylinderGeometry(0.09, 0.09, 1, 8, 1, true); core.rotateX(Math.PI / 2); core.translate(0, 0, 0.5);
-  const outer = new THREE.CylinderGeometry(0.32, 0.32, 1, 10, 1, true); outer.rotateX(Math.PI / 2); outer.translate(0, 0, 0.5);
-  const m = new THREE.Mesh(core, ADD(0xfff8e0, 1)); m.add(new THREE.Mesh(outer, ADD(0xffb040, 0.35)));
+  if (!beamGeo) {
+    const core = new THREE.CylinderGeometry(0.09, 0.09, 1, 8, 1, true); core.rotateX(Math.PI / 2); core.translate(0, 0, 0.5);
+    const outer = new THREE.CylinderGeometry(0.32, 0.32, 1, 10, 1, true); outer.rotateX(Math.PI / 2); outer.translate(0, 0, 0.5);
+    beamGeo = { core: shared(core), outer: shared(outer) };
+  }
+  const m = new THREE.Mesh(beamGeo.core, ADD(0xfff8e0, 1)); m.add(new THREE.Mesh(beamGeo.outer, ADD(0xffb040, 0.35)));
   R.scene.add(m); return m;
 }
 function mergeGeo(list) {
