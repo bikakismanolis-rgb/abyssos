@@ -1192,11 +1192,17 @@ const S = {
       const cradle = B.act4Prop('lightRing'); cradle.scale.setScalar(0.6); cradle.position.set(spot.x, 0, spot.z + 0.2); B.drape(cradle, L); R.scene.add(cradle);
       const items = { tele: [tele.m, ring(spot.x + 1.4, spot.z, 0.66)], pool: [pool, ring(spot.x - 1.4, spot.z, 0.63)], cradle: [cradle, ring(spot.x, spot.z + 0.2, 0.54)] };
       const out = { spot };
+      // (each read at six set moments of the shaders' clock, the mean: the rim's strength wanders with it as a flame's
+      // does, so one moment, which the viewer's start decided, ranged 8 to 18)
       for (const k in items) {
         const [o, pts] = items[k];
-        draw(); const on = mean(pts);
-        o.visible = false; draw(); const off = mean(pts); o.visible = true;
-        out[k] = +diff(on, off).toFixed(1);
+        let sum = 0;
+        for (let j = 0; j < 6; j++) {
+          B.WIND.uTime.value = 10 + j * 0.83; draw(); const on = mean(pts);
+          o.visible = false; B.WIND.uTime.value = 10 + j * 0.83; draw(); const off = mean(pts); o.visible = true;
+          sum += diff(on, off);
+        }
+        out[k] = +(sum / 6).toFixed(1);
       }
       for (const k in items) items[k][0].visible = false;
       draw(); out.tones = +diff(mean([[spot.x, spot.z], [spot.x + 0.3, spot.z + 0.2]]), mean([[spot.deep.x, spot.deep.z], [spot.deep.x + 0.3, spot.deep.z]])).toFixed(1);
