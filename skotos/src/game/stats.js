@@ -1,26 +1,40 @@
 // Hero stats from level, items and buffs.
-import { CLASSES, SKILLS, SKILL_MAX_RANK } from './data.js';
+import { CLASSES, SKILLS, SKILL_MAX_RANK, BOON, BOONS, BUFFS, UNBOUND, REMEMBERED, GIFTS } from './data.js';
 import { G } from './state.js';
+import { masteryStats } from './progression.js';
+
+const fin = (v) => typeof v === 'number' && isFinite(v);
 
 export function computeStats(hero, equip = hero.equip) {
   const C = CLASSES[hero.cls], L = hero.level;
-  const s = { main: 8 + L * 3, vit: 7 + L * 2, life: 0, dmgPct: 0, crit: 5, critDmg: 50, atkSpd: 0, armor: 0, lifeOnHit: 0, regen: 0, move: 0, cdr: 0, resRegen: 0, area: 0, eliteDmg: 0, gold: 0, mf: 0, thorns: 0, block: 0, skill: {}, legs: new Set() };
+  const s = { main: 8 + L * 3, vit: 7 + L * 2, life: 0, dmgPct: 0, crit: 5, critDmg: 50, atkSpd: 0, armor: 0, lifeOnHit: 0, regen: 0, move: 0, cdr: 0, resRegen: 0, area: 0, eliteDmg: 0, gold: 0, mf: 0, thorns: 0, block: 0, lifePct: 0, armorPct: 0, furyGain: 0, skill: {}, legs: new Set() };
   let wmin = 2, wmax = 4, wspd = 1.2;
+  // (only what an item is made of counts: a key or a value no item can have is passed over, so no save breaks a hero)
   for (const slot in equip) {
-    const it = equip[slot]; if (!it) continue;
-    if (it.dmg) { wmin = it.dmg[0]; wmax = it.dmg[1]; wspd = it.spd; }
-    if (it.armor) s.armor += it.armor;
-    if (it.block) s.block += it.block;
-    if (it.leg) s.legs.add(it.leg);
+    const it = equip[slot]; if (!it || typeof it !== 'object') continue;
+    if (Array.isArray(it.dmg) && fin(it.dmg[0]) && fin(it.dmg[1])) { wmin = it.dmg[0]; wmax = it.dmg[1]; wspd = fin(it.spd) && it.spd > 0 ? it.spd : 1.2; }
+    if (fin(it.armor)) s.armor += it.armor;
+    if (fin(it.block)) s.block += it.block;
+    if (typeof it.leg === 'string') s.legs.add(it.leg);
     for (const k in it.stats) {
       const v = it.stats[k];
-      if (k === 'skill') s.skill[v.id] = (s.skill[v.id] || 0) + v.v;
-      else s[k] += v;
+      if (k === 'skill') { if (v && typeof v.id === 'string' && fin(v.v)) s.skill[v.id] = (s.skill[v.id] || 0) + v.v; }
+      else if (fin(v) && Object.prototype.hasOwnProperty.call(s, k) && typeof s[k] === 'number') s[k] += v;
     }
   }
   if (s.legs.has('swiftboots')) s.move += 15;
-  const lifeMax = Math.round((40 + L * 12 + s.vit * 5 + s.life) * C.life);
-  const armor = Math.round(s.armor * C.armor + L * 3);
+  // the beacons' blessings; the fire lit by hand is worth half again to a hero the crown never held (Unbound), the lights of
+  // the sea a quarter again to one who lit the four Name-stones (Remembered)
+  const F = hero.flags || {};
+  for (const id of Array.isArray(hero.boons) ? hero.boons : []) { const b = typeof id === 'string' && Object.prototype.hasOwnProperty.call(BOON, id) && BOON[id]; if (!b) continue; const m = F.unbound && BOONS[4].includes(b) ? UNBOUND : F.remembered && BOONS[5].includes(b) ? REMEMBERED : 1; for (const k in b.stats) s[k] += Math.floor(b.stats[k] * m); }
+  // the Crown's Offers: a gift and its cage, held until Karthax takes them back (never in a Shadow Gate); a co-op guest's
+  // own, never the host's world's (net/coop.js: hero.__real is the guest's record)
+  const own = hero.__real || hero, OF = own.flags || {};
+  if (OF.gifts && !(OF.giftsTaken || OF.crownUnmade || own.quest >= 22) && G.zone?.id !== 'gate') for (const id in GIFTS) if (OF.gifts[id] === 'taken') for (const k in GIFTS[id]) s[k] += GIFTS[id][k];
+  // Mastery (progression.js)
+  masteryStats(hero, s);
+  const lifeMax = Math.round((40 + L * 12 + s.vit * 5 + s.life) * C.life * (1 + s.lifePct / 100));
+  const armor = Math.round((s.armor * C.armor + L * 3) * (1 + s.armorPct / 100));
   const dmgMult = (1 + s.main / 100) * (1 + s.dmgPct / 100);
   const aps = wspd * (1 + s.atkSpd / 100);
   const critC = Math.min(75, s.crit), critD = s.critDmg;
@@ -52,3 +66,10 @@ export function skillMult(sk) {
 }
 export function skillUnlocked(sk) { return sk.basic || G.hero.level >= sk.lvl; }
 export { SKILL_MAX_RANK, SKILLS };
+// a timed buff on the hero (the Memory of the Evergreen from an Amber Tear: +12% damage, +8% move for 60 s);
+// it never shortens one already running. The HUD lists pl.buffs; combat.js reads them.
+export function grantBuff(kind, sec = BUFFS[kind]?.dur ?? 30) {
+  const p = G.player; if (!p) return 0;
+  p.buffs[kind] = Math.max(p.buffs[kind] || 0, sec);
+  return p.buffs[kind];
+}
