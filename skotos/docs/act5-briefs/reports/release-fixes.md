@@ -3,6 +3,17 @@
 Branch `claude/skotos-act5-fixes` from ca88dd3. Four problems: perf5 at the coast, the Act V checkpoint after Continue,
 the flaky `holes` and `tower` scenarios, and runtime errors only the on-screen `#fatal` box shows.
 
+**Outcome.**
+1. perf5 passes: the coast 1.224 -> **1.075** of the Field at q1 (21 cycles; 1.072 in a full default run with the q0
+   floors all held), no visible change to the water (phone and desktop shots, gameplay and cine cameras).
+2. cp5: the game kept the checkpoint all along; the test lost it (its own watch hid the flags from the save), froze the
+   game (a second death's panel) and measured late. 4 of 4 after the fixes.
+3. holes 10 of 10 (the test: the Breath and the relighting now in the page). tower 10 of 10 (the bot rebuilt; and two
+   real game bugs fixed, the Walking Tower freezing in a haul it could not finish, which on the crawl home also meant no
+   Island, no light and no Blinded).
+4. Every tool fails on `#fatal`; the sweep of Act IV and V found none. ending5 hangs on a screenshot in Whitecliff on
+   this branch and on the start tree alike: left for the lead.
+
 ## 1. Frame time at the coast (perf5)
 
 **Cause.** At perf5's coast spot (the Dalaro, high water, phone emulation, quality 1) the frame is all draw (logic ~2 ms)
@@ -186,3 +197,8 @@ No #fatal error appeared anywhere, so there was nothing behind it to fix.
 - 19:49-23:25 tower: about a dozen rounds of 10 (each failure read from the bot's new ice-phase log); the two haul fixes in
   ai.js; the final bot 10 of 10. cp5 4 of 4 with all three fixes.
 - 23:27 the sweep (every Act V and Act IV scenario once, with the #fatal check) started.
+- 23:23-00:10 the sweep (section 4); ending5 hangs twice, and on the start tree too.
+- 00:30 desktop (q2) shots of both trees: no difference beyond the snow and a hairline in the moon's glint on the foam.
+- 00:41-01:05 perf5 default (QS 1,0, 5 cycles): PASS. q1 coast 1.072, coastLow 0.972, farlight 0.972; q0 floors all
+  held (coast 222 ms against 792 at q1).
+- 01:10 code graph refreshed (graphify update).
