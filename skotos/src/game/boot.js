@@ -11,6 +11,7 @@ import { WIND } from '../world/build.js';
 import { initInput, pollInput, takeEvents, IN } from '../core/input.js';
 import { loadSave, writeSave } from './save.js';
 import { refreshStats } from './stats.js';
+import { migrateHero } from './progression.js';
 import { enterZone, updatePacks, updateAct, nearestInteract, updatePortalFx, ZONES, zoneReady, zoneParts, disposeZone } from './world.js';
 import { updatePlayer } from './player.js';
 import { damage } from './combat.js';
@@ -82,6 +83,7 @@ export async function boot(q) {
     if (q.get('auto') === 'farlight') h.flags.frozen = true;
     // &seed=N: the zone's layout seed (Act V's are kept per difficulty)
     if (q.has('seed')) { const z = q.get('auto'); h.seeds = { [z]: +q.get('seed'), [z + '@' + h.diff]: +q.get('seed') }; }
+    if (q.has('mlvl')) h.mlvl = +q.get('mlvl');
     await startHero(h, false, q.get('auto'));
   } else showTitle();
   requestAnimationFrame(loop);
@@ -98,6 +100,8 @@ async function starterGear(hero) {
 }
 async function startHero(hero, isNew, zone = 'town') {
   await starterGear(hero);
+  // saves from before the progression: a loadout, nothing learnt, the points kept spendable (progression.js)
+  migrateHero(hero);
   G.hero = hero; G.zones = {}; G.player = null; G.portal = null; G.gate = null;
   hideScreen(); removeTitleScene(); clearFX();
   refreshStats();
@@ -293,12 +297,23 @@ function tick(dt, noDraw) {
   if (G.slowT > 0) { G.slowT -= dt; gdt *= G.slow; }
   if (G.mode === 'cine') cineTick(dt);
   if (!paused) {
+    // (co-op: what her hero does is told to the others, the timers it sets going included: net/coop.js)
+    const t0 = G.timers.length;
     if (G.mode === 'play') { MIRROR.hero = true; try { updatePlayer(party && (panelOpen() || dialogOpen()) ? 0 : gdt); } finally { MIRROR.hero = false; } }
     else { pl.avatar.update(gdt, { speed: 0 }); }
+    for (let i = t0; i < G.timers.length; i++) G.timers[i].h = true;
     updateActors(gdt);
     updatePacks(); updateAct(gdt);
     updateProjs(gdt); updateAreas(gdt); updatePickups(gdt);
-    for (let i = G.timers.length - 1; i >= 0; i--) { const tm = G.timers[i]; tm.t -= gdt; if (tm.t <= 0) { G.timers.splice(i, 1); try { tm.fn(); } catch (e) { fatal(e.stack || e); } } }
+    for (let i = G.timers.length - 1; i >= 0; i--) {
+      const tm = G.timers[i]; tm.t -= gdt; if (tm.t <= 0) {
+        G.timers.splice(i, 1);
+        const n0 = G.timers.length;
+        MIRROR.hero = !!tm.h;
+        try { tm.fn(); } catch (e) { fatal(e.stack || e); } finally { MIRROR.hero = false; }
+        if (tm.h) for (let k = n0; k < G.timers.length; k++) G.timers[k].h = true;
+      }
+    }
     comboTick(dt);
     G.hero.stats.time += dt;
   }

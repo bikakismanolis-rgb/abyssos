@@ -73,7 +73,7 @@ export function tickCold(dt) {
   const pl = G.player, z = G.zone;
   if (!pl || pl.dead || !coldZone()) { if (COLD.v || COLD.state !== 'none') resetCold(); return; }
   const v0 = COLD.v, wet = !!pl.inWater, gust = !!z.gust?.on && !lee(z, pl.x, pl.z);
-  const warm = warmAt(pl.x, pl.z), fire = !warm && fireAt(pl.x, pl.z, 0.3);
+  const warm = warmAt(pl.x, pl.z), fire = !warm && fireAt(pl.x, pl.z, 0.3, true);
   COLD.warmT = pl.buffs.warmed || 0;
   let gain = (wet ? 4 : 0) + (gust ? 2.5 : 0);
   if (gain) coldAdd(gain * dt);

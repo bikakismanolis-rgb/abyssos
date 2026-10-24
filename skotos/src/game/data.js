@@ -56,25 +56,44 @@ export const SKILLS = {
     { id: 'whirl', cost: 22, cd: 0, dmg: 0.55, icon: 'whirl', lvl: 1, dur: 2.2, tick: 0.25, radius: 2.7 },
     { id: 'leap', cost: 0, cd: 7, dmg: 2.6, icon: 'leap', lvl: 2, radius: 3.2, range: 9, ground: true },
     { id: 'cry', cost: 0, cd: 16, icon: 'horn', lvl: 4, buff: 7, gain: 40 },
-    { id: 'quake', cost: 45, cd: 5, dmg: 4.2, icon: 'quake', lvl: 6, range: 11 }
+    { id: 'quake', cost: 45, cd: 5, dmg: 4.2, icon: 'quake', lvl: 6, range: 11 },
+    // the later skills (skillsx.js): one at 20, 30 and 40, for the loadout
+    { id: 'charge', cost: 0, cd: 6, dmg: 2.2, icon: 'charge', lvl: 20, range: 9, gain: 15, radius: 2.4 },
+    { id: 'bulwark', cost: 0, cd: 20, dmg: 2.2, icon: 'bulwark', lvl: 30, buff: 6, shield: 0.3, radius: 4.6 },
+    { id: 'dawn', cost: 50, cd: 9, dmg: 1.25, icon: 'sun', lvl: 40, range: 13 }
   ],
   ranger: [
     { id: 'bolt', basic: true, dmg: 1.0, icon: 'bolt', range: 14, gain: 4 },
     { id: 'multi', cost: 24, cd: 0, dmg: 0.9, icon: 'fan', lvl: 1, count: 5 },
     { id: 'rain', cost: 34, cd: 3, dmg: 0.6, icon: 'rain', lvl: 2, radius: 3.6, dur: 2.2, range: 12, ground: true },
     { id: 'wolf', cost: 20, cd: 18, dmg: 0.8, icon: 'wolf', lvl: 4, dur: 22 },
-    { id: 'pierce', cost: 40, cd: 4, dmg: 5.0, icon: 'arrow', lvl: 6, range: 22 }
+    { id: 'pierce', cost: 40, cd: 4, dmg: 5.0, icon: 'arrow', lvl: 6, range: 22 },
+    { id: 'trap', cost: 25, cd: 7, dmg: 2.6, icon: 'trap', lvl: 20, radius: 3.2, range: 10, ground: true },
+    { id: 'vault', cost: 15, cd: 5, dmg: 1.0, icon: 'vault', lvl: 30, count: 5, dist: 6.5 },
+    { id: 'hawks', cost: 35, cd: 16, dmg: 0.4, icon: 'hawk', lvl: 40, dur: 9, count: 3 }
   ],
   mage: [
     { id: 'arcane', basic: true, dmg: 1.0, icon: 'orb', range: 14, gain: 3 },
     { id: 'fireball', cost: 18, cd: 0, dmg: 2.2, icon: 'fire', lvl: 1, radius: 2.8 },
     { id: 'nova', cost: 26, cd: 7, dmg: 1.6, icon: 'frost', lvl: 2, radius: 5.5, freeze: 2.2 },
     { id: 'chain', cost: 22, cd: 0.8, dmg: 1.7, icon: 'storm', lvl: 4, jumps: 4, range: 13 },
-    { id: 'meteor', cost: 42, cd: 6, dmg: 6.0, icon: 'meteor', lvl: 6, radius: 3.6, range: 12, ground: true }
+    { id: 'meteor', cost: 42, cd: 6, dmg: 6.0, icon: 'meteor', lvl: 6, radius: 3.6, range: 12, ground: true },
+    { id: 'frostorb', cost: 30, cd: 1.5, dmg: 0.8, icon: 'snow', lvl: 20, range: 14 },
+    { id: 'rift', cost: 38, cd: 10, dmg: 0.45, icon: 'rift', lvl: 30, radius: 5.5, dur: 2.4, range: 12, ground: true },
+    { id: 'beam', cost: 10, cd: 0, dmg: 0.7, icon: 'beam', lvl: 40, range: 16, dur: 2.6, drain: 20 }
   ]
 };
+// two other ways to play each of the first four skills (skillsx.js): unlocked at rank 5 for a point, one at a time, chosen in town
+export const VARIANTS = {
+  whirl: ['vortex', 'ember'], leap: ['seismic', 'twin'], cry: ['rally', 'challenge'], quake: ['shatter', 'ring'],
+  multi: ['volley', 'scatter'], rain: ['fire', 'hail'], wolf: ['pack', 'alpha'], pierce: ['split', 'siege'],
+  fireball: ['triple', 'cinder'], nova: ['shatter', 'blizzard'], chain: ['fork', 'ball'], meteor: ['shower', 'comet']
+};
+// the skills on the phone's four buttons, until the player chooses others
+export const LOADOUT = { warden: ['whirl', 'leap', 'cry', 'quake'], ranger: ['multi', 'rain', 'wolf', 'pierce'], mage: ['fireball', 'nova', 'chain', 'meteor'] };
 export const DODGE = { warden: { cd: 2.2, dist: 5, kind: 'roll' }, ranger: { cd: 1.6, dist: 6, kind: 'roll' }, mage: { cd: 3, dist: 7, kind: 'blink' } };
 export const SKILL_MAX_RANK = 5;
+export const VARIANT_RANK = 5;
 
 // ---------- monsters ----------
 // hp/dmg are multipliers on the level curve; speed in units/s
@@ -279,6 +298,8 @@ export const monsterDmg = (L) => 2.6 + 1.5 * L + 0.055 * L * L;
 export const xpToNext = (L) => Math.round(50 + 45 * Math.pow(L, 1.45));
 export const monsterXP = (L) => 6 + 2.5 * L;
 export const MAX_LEVEL = 50;
+// after the last level the experience goes on into Mastery levels, each a little longer than the last (mastery.js)
+export const mxpToNext = (m) => Math.round(xpToNext(MAX_LEVEL - 1) * (1 + 0.06 * m));
 
 // ---------- items ----------
 export const SLOTS = ['weapon', 'offhand', 'helm', 'chest', 'gloves', 'boots', 'amulet', 'ring1', 'ring2'];

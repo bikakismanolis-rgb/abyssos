@@ -163,6 +163,9 @@ export function updateActors(dt) {
   if (G.zone.act5) shadeTick(dt);
 }
 function targetOf(a) {
+  // held by a Challenge or an Iron Bulwark (skillsx.js; a guest's, net/coop.js): that hero, while it stands
+  const tb = a.tauntBy;
+  if (a.taunt > G.hero.stats.time && tb && !tb.dead && !tb.removed && (tb === G.player || NET.remotes.includes(tb))) return (a.tgt = tb);
   const n = nearestHero(a.x, a.z), c = a.tgt;
   if (!c || c.dead || c.removed || (c.remote && !NET.remotes.includes(c))) return (a.tgt = n);
   if (n !== c && Math.hypot(n.x - a.x, n.z - a.z) < Math.hypot(c.x - a.x, c.z - a.z) - 3) a.tgt = n;
@@ -329,6 +332,8 @@ function hitHero(a, pl, mult = 1, o = {}) {
 }
 // pets draw aggro too: pick the nearest of hero and pets
 function victim(a, pl) {
+  // a War Cry's Challenge or an Iron Bulwark holds them to her (skillsx.js)
+  if (a.taunt > G.hero.stats.time) return pl;
   let best = pl, bd = Math.hypot(pl.x - a.x, pl.z - a.z);
   for (const b of G.actors) if (b.pet && !b.dead) { const d = Math.hypot(b.x - a.x, b.z - a.z); if (d < bd - 1.5) { bd = d; best = b; } }
   return best;
