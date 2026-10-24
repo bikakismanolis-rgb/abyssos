@@ -110,6 +110,34 @@ calm or out of its ring each time). Also: after a death the test waited for ever
 panel stops the bot's clock); it stops the bot first. And when no Overturn comes it prints the bot's ice phase, a line
 a game second (time, state, distance, the ice under her and its stage, her bait, a telegraph on her, the Rushes so far).
 
+## 4. Errors the tests could not see (#fatal)
+
+**Fix.** `tools/fatal.mjs`: `watchFatal(browser)` wraps `browser.newContext` (which `browser.newPage` goes through), so
+every page any of the tools opens polls the game's `#fatal` box every 250 ms and reports each new line to the console,
+where the tool collects it (a page reloaded or closed keeps what it reported); `fatalAll` adds whatever is still on
+screen at the end. scenario.mjs sets `pass: false` and a `fatal` list on the result, prints `FATAL ...` lines and exits
+1; soak5.mjs adds a failing `fatal` entry to its report (and its exit code); coop.mjs adds a failed check. Checked with a
+timer that throws (caught with its stack: boot.js tick < loop).
+
+**Sweep** (each once, against this branch, one browser at a time):
+
+| scenario | result | #fatal |
+|---|---|---|
+| hook5, catch5, coast, tide, ice, freeze, skotos, cast5, echo5, cameo, diff6, shallowtele | all pass | none |
+| holes (x10), tower (x10), cp5 (x4) | all pass (see 2 and 3) | none |
+| ending5 | did not finish: a screenshot times out (120 s) at the first shot of the child's cine in Whitecliff, twice; **the start tree (ca88dd3) hangs at the same shot**, so it predates this work. Not a #fatal error and not the frame's cost (that view draws in 1-2.5 s at 1280x720 q0). Left for the lead: it needs its own look | none |
+| ashfield, ivar, forge, karthax, ending4, cast4, echo4 | ran to the end, no page or console error | none |
+
+No #fatal error appeared anywhere, so there was nothing behind it to fix.
+
+## Files
+
+- `src/world/sea.js`: the water's cost (powers, the baked B-spline in tBed, gates, the branch after its discard).
+- `src/world/build.js`: the coast ground's branch after its discard.
+- `src/game/ai.js`: the Walking Tower's haul watchdog.
+- `tools/fatal.mjs` (new), `tools/scenario.mjs` (the #fatal check; cp5, holes, tower, BOT5), `tools/soak5.mjs`,
+  `tools/coop.mjs` (the #fatal check).
+
 ## Progress
 - 14:40 started; npm install, graphify; private no-HMR dev server on :5401.
 - 14:55 `tools/fatal.mjs` (the shared #fatal check) wired into scenario.mjs, soak5.mjs and coop.mjs; checked with a
