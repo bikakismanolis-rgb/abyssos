@@ -368,10 +368,11 @@ function landing(z, I, pl) {
     else if (sc < ss) { ss = sc; scrap = { x, z: y, how: 'scrap' }; }
   }
   if (best) return best;
-  const age = (p) => +(I.clock - p.t).toFixed(2), rs = (p) => Math.floor(p.z) * w + Math.floor(p.x);
-  for (const p of ring) if (safeCell(z, I, rs(p)) && roomy(z, rs(p))) return { x: p.x, z: p.z, how: 'ring', age: age(p) };
+  // (the ring is trimmed ten times a second: a point a moment past the 2 s is not one of them)
+  const age = (p) => +(I.clock - p.t).toFixed(2), rs = (p) => Math.floor(p.z) * w + Math.floor(p.x), last = ring.filter((p) => I.clock - p.t <= RING);
+  for (const p of last) if (safeCell(z, I, rs(p)) && roomy(z, rs(p))) return { x: p.x, z: p.z, how: 'ring', age: age(p) };
   if (scrap) return scrap;
-  for (const p of ring) if (safeCell(z, I, rs(p))) return { x: p.x, z: p.z, how: 'ring', age: age(p) };
+  for (const p of last) if (safeCell(z, I, rs(p))) return { x: p.x, z: p.z, how: 'ring', age: age(p) };
   // (nothing safe within 3 m and no safe point in the last 2 s: the nearest safe ground further out, ring by ring)
   for (let r = 4; r <= 12; r++) for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
     if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
