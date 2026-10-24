@@ -4512,7 +4512,8 @@ function skotosDying(a, dt) {
   const av = a.avatar; if (!av) { a.remove(); return; }
   if (!a.endDone) {
     a.endDone = true;
-    for (const h of [...(a.handList || []), ...(a.wrapHands || [])]) if (!h.removed && !h.dead) { h.avatar?.play('sink', 1); later(0.8, () => { if (!h.removed) h.remove(); }); handHole(h, false); }
+    // (every Hand's hole let go, one already dead and not yet tidied away too: a held hole never closes, ice.js)
+    for (const h of [...(a.handList || []), ...(a.wrapHands || [])]) { handHole(h, false); if (!h.removed && !h.dead) { h.avatar?.play('sink', 1); later(0.8, () => { if (!h.removed) h.remove(); }); } }
     dropCoil(a); setShade(3, 0, 0, 0, 0); setHeroLight(null); Audio.mood({ under: 0 });
     a.nb = null; a.under = false; a.hidden = false; av.group.visible = true;
     av.play('recoil', 0.6); later(1.2, () => { if (!a.sinking) av.play('idle', 0.5); });

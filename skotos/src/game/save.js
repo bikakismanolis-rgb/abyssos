@@ -36,6 +36,8 @@ export function writeSave() {
       if (m && JSON.stringify(m) === JSON.stringify(h)) return m;
       repairHero(h); return h;
     });
+    // (a page at the title keeps the hero another page played last as the one Continue offers)
+    if (!hero && typeof disk.last === 'string' && G.save.heroes.some((h) => h.id === disk.last)) G.save.last = disk.last;
   }
   if (hero) {
     hero.played = Date.now();
@@ -44,6 +46,18 @@ export function writeSave() {
     G.save.last = hero.id;
   }
   try { localStorage.setItem(KEY, JSON.stringify(G.save)); } catch (e) { /* private mode or full storage: keep playing */ }
+}
+// a hero taken up from the title as it is stored now (another page of this browser may have played it since this page
+// read the save): the stored record, made whole, in the list in its place; the hero itself when it is not stored
+export function freshHero(h) {
+  let disk = null;
+  try { disk = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { disk = null; }
+  const d = disk && Array.isArray(disk.heroes) ? disk.heroes.find((x) => x && typeof x === 'object' && x.id === h.id) : null;
+  if (!d || gone.has(h.id) || JSON.stringify(d) === JSON.stringify(h)) return h;
+  repairHero(d);
+  const i = G.save.heroes.findIndex((x) => x.id === h.id);
+  if (i >= 0) G.save.heroes[i] = d; else G.save.heroes.unshift(d);
+  return d;
 }
 export function deleteHero(id) {
   gone.add(id);
