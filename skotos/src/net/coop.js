@@ -21,7 +21,7 @@ import { enterZone, zoneReady, disposeZone, act3Presence, act4Presence, act5Pres
 import { skerryClose } from '../game/ai.js';
 import { spawnMonster, Actor, heroAvatar, freshStatus, frozenLook, restoreRim } from '../game/actors.js';
 import { damage, gainXP, healHero } from '../game/combat.js';
-import { MONSTERS, DIFFS, monsterXP, COOP, BASES, MAX_LEVEL, CLASSES } from '../game/data.js';
+import { MONSTERS, DIFFS, monsterXP, COOP, BASES, MAX_LEVEL, CLASSES, PACKS, PACK_LEAD } from '../game/data.js';
 import { makeItem, cleanItem, MAX_ILVL } from '../game/items.js';
 import { refreshStats } from '../game/stats.js';
 import { dropGold, dropItem, dropGlobe, gatherPickups } from '../game/pickups.js';
@@ -49,14 +49,16 @@ export const S = {
   hostPeer: null, peers: new Map(), roster: [], hosts: [], names: {}, me: null,
   // the host: each guest's reliable events (one count for all), their acks, the guests' events done, the raises given,
   // the clip names given out; the world and ice versions
-  rel: new Map(), relSeq: 0, done: new Map(), rvT: new Map(), clips: new Map(), worldSent: '', worldT: 0, iceT: 0, iceKey: '', snapT: 0, lobbyT: 0,
-  // (the guest whose blow is landing: the look it makes is that guest's, shown on its page already)
-  landing: null,
+  rel: new Map(), relSeq: 0, done: new Map(), rvT: new Map(), clips: new Map(), worldSent: '', worldT: 0, iceT: 0, iceKey: '', snapT: 0, lobbyT: 0, hostAt: [],
+  // (the guest whose blow is landing, and the monster it strikes: the hit look it makes there is that guest's, shown on
+  // its page already)
+  landing: null, landingA: null,
   // a guest: the world as the host has it, the zone loaded, puppets (and what each was, for its kill's reward), the events
-  // not yet acked, the host's clip names; the kills paid, the kills a second and the items they may bring
+  // not yet acked, the host's clip names; the kills paid, the bosses paid, what each zone holds, the kills a second and
+  // the items they may bring
   real: null, world: null, wkey: '', wgate: null, zoneKey: null, loading: false, pup: new Map(), pupInfo: new Map(), ev: [], evSeq: 0, relDone: 0, hclips: new Map(), lastSnap: 0, chunks: {},
-  paid: new Set(), killB: { tok: 40, t: 0 }, owed: 0,
-  downed: null, rv: null, fxOut: [], fxT: 0, fxIn: new Map(), stats: { snaps: 0, snapBytes: 0, rejected: 0, hits: 0, why: {} }
+  paid: new Set(), bossPaid: new Set(), purses: new Map(), killB: { tok: 40, t: 0 }, owed: 0,
+  downed: null, rv: null, fxOut: [], fxT: 0, fxIn: new Map(), stats: { snaps: 0, snapBytes: 0, rejected: 0, hits: 0, why: {}, jumps: { enter: 0, rise: 0, refused: 0 } }
 };
 const now = () => performance.now();
 const q = (v, k) => Math.round((+v || 0) * k);
@@ -100,12 +102,13 @@ async function sendRights() {
   if (S.dead) return;
   if (await L.emit('c', { op: 'hi' })) { S.send = true; S.sendSure = true; emit('netLobby'); }
 }
-// the room's end for this page: a game in play is left (a guest goes home, a host plays on alone), the list let go
+// the room's end for this page: a game in play is left (a guest goes home, a host plays on alone), the list let go, and
+// the page is the single-player one from then on (no Co-op entry; the room's contract leaves saying why to the app)
 function netDead(code) {
   if (S.dead) return;
-  S.dead = code; S.send = false; S.sendSure = true; S.hosts = [];
-  if (S.role) leaveGame(code === 'revoked' ? 'coop.revoked' : code === 'not_granted' ? 'coop.notGranted' : 'coop.off');
-  emit('netLobby'); emit('netMode');
+  S.dead = code; S.send = false; S.sendSure = true; S.hosts = []; S.avail = false;
+  if (S.role) leaveGame('coop.off');
+  emit('netLobby'); emit('netMode'); emit('netReady', false);
 }
 function lobbyHosts() {
   const L = S.T?.lobby; if (!L) return;
@@ -149,6 +152,7 @@ export async function hostGame() {
   const code = newCode();
   const ch = await roomOf('skotos-' + code); if (!ch) return false;
   if (S.role) { if (ch !== S.ch) ch.leave(); return null; }
+  if (S.dead) return ended(ch);
   S.ch = ch; S.role = 'host'; S.code = code; S.started = false; S.status = 'open'; NET.mode = 'host';
   S.rel.clear(); S.relSeq = 0; S.done.clear(); S.rvT.clear(); S.clips.clear(); S.worldSent = '';
   wire(); hostPresence(true); lobbyPresence(true);
@@ -163,22 +167,27 @@ export async function joinGame(code, peer) {
   if (!/^[a-z0-9]{4}$/.test(code)) return false;
   if (!canPlay()) { S.status = 'error'; S.err = S.dead || 'not_permitted'; emit('netLobby'); return false; }
   peer = typeof peer === 'string' && peer ? peer : null;
-  // (a game its listing shows full is said so at once: the listing picked, or the one listing of that code)
+  // (a game its listing shows full is said so at once: the listing picked, or the one listing of that code. By code, the
+  // one peer the lobby lists for it is the host: another that hosts the same code in the room is not taken)
   const ls = S.hosts.filter((h) => h.c === code), L = peer ? ls.find((h) => h.peer === peer) : ls.length === 1 ? ls[0] : null;
+  if (!peer && L) peer = L.peer;
   if (L && L.n >= 4) { S.status = 'error'; S.err = 'full'; emit('netLobby'); return false; }
   S.status = 'connecting'; S.err = null; emit('netLobby');
   const ch = await roomOf('skotos-' + code); if (!ch) return false;
   if (S.role) { if (ch !== S.ch) ch.leave(); return null; }
+  if (S.dead) return ended(ch);
   S.ch = ch;
   S.role = 'guest'; S.code = code; S.status = 'waiting'; S.hostPeer = null; S.wantHost = peer; S.hostGone = 0; S.lastSnap = now(); S.joinT = now(); S.onT = 0;
   S.ev.length = 0; S.evSeq = 0; S.relDone = 0; S.hclips.clear(); S.world = null; S.wkey = ''; S.wgate = null; S.zoneKey = null; S.chunks = {};
-  S.paid.clear(); S.pupInfo.clear(); S.owed = 0; S.killB = { tok: 40, t: now() };
+  S.paid.clear(); S.bossPaid.clear(); S.pupInfo.clear(); S.purses.clear(); S.owed = 0; S.killB = { tok: 40, t: now() };
   wire(); guestPresence(true);
   emit('netLobby');
   return true;
 }
 // a game its view may host or join: the room is there, has not ended for this page, and lets it send
 export const canPlay = () => !!S.T && !S.dead && S.send !== false;
+// (a game's room that came after the page's room ended, while it was being joined: left, the try failed with the end's code)
+function ended(ch) { try { ch.leave(); } catch (e) { /* gone */ } S.status = 'error'; S.err = S.dead; emit('netLobby'); return false; }
 // the game's room joined (null: it failed, S.status and S.err say why; one the room refused for good is told)
 async function roomOf(name) {
   try { return await S.T.join(name); } catch (e) {
@@ -223,14 +232,19 @@ function goHome(entered) {
   // (the host's Shadow Gate is not this page's run)
   G.gate = null;
   const pl = G.player;
-  if (pl?.dead) { pl.dead = false; pl.hp = pl.hpMax; }
+  // (down when it ended: up at home, its avatar again, not lying in its fall)
+  if (pl?.dead) emit('respawn', 'net');
   // (nothing of the host's world outlasts the game: its statuses, Seen, a push or a pull; the hero's own stats again)
   if (pl) { pl.status = freshStatus(); if (pl.buffs) pl.buffs.seen = 0; pl.kx = pl.kz = 0; pl.pull = null; }
   if (G.hero) refreshStats();
   for (const k of Object.keys(G.zones)) if (G.zones[k] !== G.zone) { disposeZone(G.zones[k]); delete G.zones[k]; }
+  // (the host's zone it stood in is no zone of this page's own, nor one to be kept for a later game: let go once left)
   const z0 = G.zone;
+  if (z0) z0.netKey = z0.netGame = null;
   NET.mode = null;
-  later(0.05, () => { emit('travel', 'town', { at: 'waypoint', fresh: true }); later(1.5, () => { if (z0 && G.zone !== z0 && !Object.values(G.zones).includes(z0)) disposeZone(z0); }); });
+  let tries = 0;
+  const drop = () => { if (G.zone === z0) { if (++tries < 30) later(1, drop); return; } if (G.zones[z0.id] === z0) { delete G.zones[z0.id]; disposeZone(z0); } };
+  later(0.05, () => { emit('travel', 'town', { at: 'waypoint', fresh: true }); if (z0) later(1.5, drop); });
   writeSave();
 }
 
@@ -255,7 +269,9 @@ function wire() {
   // (a send of the game's the room refused: this view may not send, it plays alone; the game's room ended (it could not
   // be joined again after a reconnect): a guest goes home, a host plays on alone. A terminal code is netDead's)
   ch.onError?.((code, how) => {
-    if (S.ch !== ch || TERMINAL.has(code)) return;
+    if (S.ch !== ch) return;
+    // (a terminal code is netDead's, which leaves the game in play; one heard on a game that began after it, too)
+    if (TERMINAL.has(code)) { if (S.dead && S.role) leaveGame('coop.off'); return; }
     if (how === 'send' && code === 'not_permitted') { S.send = false; S.sendSure = true; leaveGame('coop.noSend'); }
     else if (how === 'room') leaveGame(S.role === 'host' ? 'coop.lostHost' : 'coop.lost');
   });
@@ -282,12 +298,11 @@ function peersChanged(c) {
     const guests = [...S.peers.values()].filter((P) => P.role === 'guest' && P.code === S.code && P.v === VER).sort((a, b) => a.joined - b.joined);
     const roster = guests.slice(0, 3).map((P) => P.peer);
     for (const pr of roster) if (!S.roster.includes(pr)) { const P = S.peers.get(pr); emit('toast', t('coop.joined', nameOf(P)), 'quest'); Audio.sfx('waypoint', { vol: 0.5 }); }
-    if (roster.join() !== S.roster.join()) { S.roster = roster; hostPresence(true); }
+    // (and its listing at once: a page joining just after another left is not told the game is full)
+    if (roster.join() !== S.roster.join()) { S.roster = roster; hostPresence(true); lobbyPresence(true); }
   } else if (S.role === 'guest') {
-    // (the host: the peer picked from the list, else the one peer that hosts this code; while two claim it, neither)
-    const hs = [...S.peers.values()].filter((P) => P.role === 'host' && P.code === S.code && (!S.wantHost || P.peer === S.wantHost));
-    if (!S.hostPeer && hs.length === 1) S.hostPeer = hs[0].peer;
-    const h = hs.find((P) => P.peer === S.hostPeer);
+    pickHost();
+    const H = S.hostPeer && S.peers.get(S.hostPeer), h = H && H.role === 'host' && H.code === S.code ? H : null;
     if (h) S.hostGone = 0;
     if (h && h.v !== VER) { leaveGame('coop.version'); return; }
     // (not in the host's roster once it has one: the game is full)
@@ -295,6 +310,15 @@ function peersChanged(c) {
   }
   // (the lobby panel is told only when what it shows has changed, not on every presence)
   const k = lobbyKey(); if (k !== S.lobbyK) { S.lobbyK = k; emit('netLobby'); }
+}
+// (a guest's host: the peer picked from the list or listed for the code, else the one peer that hosts this code once the
+// room's peers have come in (they arrive for a moment after the join: the first seen is not taken for being first);
+// while two claim it, neither)
+const SETTLE = 2000;
+function pickHost() {
+  if (S.hostPeer || (!S.wantHost && now() - S.joinT < SETTLE)) return;
+  const hs = [...S.peers.values()].filter((P) => P.role === 'host' && P.code === S.code && (!S.wantHost || P.peer === S.wantHost));
+  if (hs.length === 1) S.hostPeer = hs[0].peer;
 }
 const lobbyKey = () => [S.role, S.code, S.hostPeer, S.started, S.zoneKey, S.roster.join(), S.peers.get(S.hostPeer)?.on ? 1 : 0, ...party().map((p) => p.peer + p.name + p.cls + p.lvl + (p.dead ? 1 : 0) + (p.here ? 1 : 0) + (p.host ? 1 : 0))].join('|');
 function readPeer(P, moved) {
@@ -308,7 +332,8 @@ function readPeer(P, moved) {
   if (p.hb !== P.hb) { P.hb = p.hb; P.hbT = now(); }
   if (Array.isArray(p.h) && (moved || !P.state)) {
     const h = p.h, st = { x: num(h[0], -10, 1e4) / 20, z: num(h[1], -10, 1e4) / 20, r: num(h[2], -1e3, 1e3) / 100, sp: num(h[3], 0, 400) / 10, hp: num(h[4], 0, 1e8), hpMax: Math.max(1, num(h[5], 1, 1e8)), fl: h[6] | 0, y: num(h[7], -100, 400) / 20 };
-    if (S.role === 'host') heldMove(P, st);
+    // (a stand-in put somewhere new starts there: no slide from where it was)
+    if (S.role === 'host' && heldMove(P, st)) P.buf.length = 0;
     P.state = st;
     pushSample(P.buf, P.state);
   }
@@ -318,22 +343,51 @@ function readPeer(P, moved) {
   P.need = p.nd || null;
 }
 // (on the host a guest's hero goes only where a hero can go: a run, and a dodge, blink or leap's worth banked, since its
-// last sample, onto the map; entering the zone and rising after a fall are the only jumps. Its reach, its kills' rewards,
-// the packs and bosses it wakes and its weight on the ice follow where it can really be)
-const MOVE_V = 10, MOVE_BANK = 14, MOVE_REFILL = 5;
+// last sample, on the floor. The only jumps are where the game puts a hero: entering the zone (by the host, where the
+// host stood a moment ago) and rising after a fall (where it fell, by the host, or, the host down too, at the zone's
+// checkpoint); a jump anywhere else is not taken (on entering, it stands by the host and goes on from there).
+// Its reach, its kills' rewards, the packs and bosses it wakes and its weight on the ice follow where it can really be.
+// Returns true when it was put somewhere new)
+const MOVE_V = 10, MOVE_BANK = 14, MOVE_REFILL = 5, JUMP_R = 8;
 function heldMove(P, st) {
-  const t = now(), o = P.state, z = G.zone;
-  const jump = !o || P.zk !== myKey() || P.mzk !== P.zk || ((o.fl & 1) && !(st.fl & 1));
+  const t = now(), o = P.state, z = G.zone, key = myKey();
+  const enter = !o || P.mzk !== P.zk, rise = !!o && (o.fl & 1) && !(st.fl & 1);
   const dt = Math.min(2, Math.max(0, (t - (P.moveT ?? t)) / 1000));
   P.mzk = P.zk; P.moveT = t;
-  if (jump) { P.moveB = MOVE_BANK; return; }
+  // (in another zone: nothing here to hold it to)
+  if (P.zk !== key || !z?.map) { P.moveB = MOVE_BANK; return true; }
+  if (enter || rise) {
+    const J = S.stats.jumps;
+    if (landsAt(st, rise ? o : null)) { J[enter ? 'enter' : 'rise']++; P.moveB = MOVE_BANK; onFloor(st, null); return true; }
+    J.refused++;
+    // (an entry anywhere else: by the host; a rise anywhere else: no jump, it goes from where it fell)
+    if (enter) { const pl = G.player, f = z.map.nearestFloor(pl.x, pl.z); st.x = f.x; st.z = f.z; P.moveB = MOVE_BANK; return true; }
+  }
   P.moveB = Math.min(MOVE_BANK, (P.moveB ?? MOVE_BANK) + dt * MOVE_REFILL);
   // (a run's worth for at most half a second: a page that stood still, sending little, banks no more than a dodge's)
   const d = Math.hypot(st.x - o.x, st.z - o.z), free = MOVE_V * Math.min(dt, 0.5);
-  // (held back, it is on its way there; arrived, it stands on the floor)
-  if (d > free && d - free > P.moveB) { const k = (free + P.moveB) / d; P.moveB = 0; st.x = o.x + (st.x - o.x) * k; st.z = o.z + (st.z - o.z) * k; return; }
-  if (d > free) P.moveB -= d - free;
-  if (z?.map) { const f = z.map.nearestFloor(st.x, st.z); st.x = f.x; st.z = f.z; }
+  // (held back, it is on its way there)
+  if (d > free && d - free > P.moveB) { const k = (free + P.moveB) / d; P.moveB = 0; st.x = o.x + (st.x - o.x) * k; st.z = o.z + (st.z - o.z) * k; }
+  else if (d > free) P.moveB -= d - free;
+  onFloor(st, o);
+  return false;
+}
+// (where it stands is on the map's floor: the nearest floor to it, else where it stood)
+function onFloor(st, o) {
+  const m = G.zone.map, f = m.nearestFloor(clamp(st.x, 0.5, m.w - 0.5), clamp(st.z, 0.5, m.h - 0.5));
+  if (m.walkable(f.x, f.z)) { st.x = f.x; st.z = f.z; }
+  else if (o) { st.x = o.x; st.z = o.z; }
+}
+// (a spot the game puts a hero on in this zone: by the host now or a moment ago; on rising, also where it fell, and,
+// with the host down a moment ago (a wipe, its own rise), where the zone keeps its checkpoint: the checkpoint, the
+// waypoint, the second camp, the start)
+function landsAt(st, fell) {
+  const z = G.zone, sp = z.L?.spots || {}, k = myKey(), near = (p) => !!p && fin(p.x) && fin(p.z) && Math.hypot(st.x - p.x, st.z - p.z) < JUMP_R;
+  if (near(G.player)) return true;
+  for (const p of S.hostAt) if (p.k === k && near(p)) return true;
+  if (!fell) return false;
+  if (near(fell)) return true;
+  return now() - (S.hostDownT ?? -1e9) < 10000 && (near(z.checkpoint) || near(z.L?.start) || near(sp.waypoint && { x: sp.waypoint.x, z: sp.waypoint.z + 2 }) || near(sp.camp2 && { x: sp.camp2.x, z: sp.camp2.z + 2 }));
 }
 // (a sample after a gap longer than the lag: the one before is put at the lag's edge, where it is shown now, so the hero
 // or the monster goes on from where it stood, not a leap ahead)
@@ -404,6 +458,9 @@ function hostTick(dt) {
   const key = myKey();
   // (a new zone is told at once: the guests follow)
   hostPresence(key !== S.lastKey); lobbyPresence(key !== S.lastKey); S.lastKey = key;
+  // (where its hero stood the last few seconds, and when it was last down: where a guest entering or rising is put)
+  if (now() - (S.hostAtT || 0) > 250) { S.hostAtT = now(); S.hostAt.push({ x: pl.x, z: pl.z, k: key }); if (S.hostAt.length > 24) S.hostAt.shift(); }
+  if (pl.dead) S.hostDownT = now();
   // the guests here: their stand-ins, their events
   let n = 1;
   for (const pr of S.roster) {
@@ -542,7 +599,8 @@ function pickActors(A, gs, cap) {
       if (dd < d) d = dd;
       if (!a.dead && dd < 24 && ((a.aggro && a.tgt === P.actor) || t - (a.netHitT ?? -1e9) < 1500)) after = true;
     }
-    if (d > NEAR * 1.3 && !a.boss) continue;
+    // (and a death not yet told near enough to a guest to pay it, 50 m: its reward is paid only for one it was shown)
+    if (d > NEAR * 1.3 && !a.boss && !(a.dead && !a.netDead && gs.some((P) => Math.hypot(a.x - P.actor.x, a.z - P.actor.z) <= 52))) continue;
     const waited = t - (a.netSentT ?? t - OVERDUE);
     C.push({ a, d, waited, k: a.boss || (a.dead && !a.netDead) ? 1e9 : waited * (after ? 8 : 2 / (1 + d / 10)) + (waited >= OVERDUE ? 1e7 : 0) });
   }
@@ -622,8 +680,8 @@ function guestEvent(P, e) {
     for (const k of ['area', 'dot', 'breakGuard', 'swing', 'quiet', 'noFx']) if (o[k]) opts[k] = true;
     if (typeof o.kx === 'number' && typeof o.kz === 'number' && isFinite(o.kx) && isFinite(o.kz)) { opts.kx = o.kx; opts.kz = o.kz; }
     S.stats.hits++;
-    S.landing = P.peer;
-    try { damage(me, a, amt, opts); } finally { S.landing = null; }
+    S.landing = P.peer; S.landingA = a;
+    try { damage(me, a, amt, opts); } finally { S.landing = S.landingA = null; }
   } else if (type === 'rv') {
     // a revive: the reviver (this guest) has stood by another hero, down a moment, as long as a raise takes (the host's
     // own count of its stand-in beside it), and that hero was not raised a moment ago
@@ -699,14 +757,16 @@ function guestTick(dt) {
   if (S.hostGone && now() - S.hostGone > HOST_GONE) { leaveGame('coop.hostLeft'); return; }
   // the host gone quiet: home
   if (S.zoneKey && now() - S.lastSnap > HOST_LOST && (!H || H.zk === S.zoneKey)) { leaveGame('coop.lost'); return; }
+  pickHost();
   if (S.role === 'guest' && !S.hostPeer && now() - S.joinT > 10000) { leaveGame('coop.noHost'); return; }
   // (waiting has an end: a host that never starts; one started whose world never comes, a host that cannot send it)
   if (!S.zoneKey) {
     if (now() - S.joinT > WAIT_MAX) { leaveGame('coop.waitLong'); return; }
     if (H?.on && !S.world) { S.onT ||= now(); if (now() - S.onT > NO_WORLD) { leaveGame('coop.noWorld'); return; } }
   }
-  // the host's zone: built here from its seed with the host's world (once the world has come)
-  if (H?.on && H.zone && S.world && !S.loading && H.zone.k !== S.zoneKey) guestEnter(H.zone);
+  // the host's zone: built here from its seed with the host's world (once the world has come); and again when this page
+  // stands in another (its own travel, begun while it waited, that landed after it entered)
+  if (H?.on && H.zone && S.world && !S.loading && (H.zone.k !== S.zoneKey || G.zone?.netKey !== S.zoneKey)) guestEnter(H.zone);
   if (S.zoneKey && S.zoneKey === myKey()) { MIRROR.rec = recGuestFx; puppetsTick(dt); }
   // presence each frame (sent coalesced), after the events of this frame
   guestPresence();
@@ -777,19 +837,41 @@ async function guestEnter(Z) {
     // (the zone's own level; only a Shadow Gate's is the host's, within what an item may be: chests, urns and the drops on
     // this page roll at it). The host's zone this page has built already, the same one (its key), is kept as it was: its
     // chests opened, its shrines used, what lies on its ground
-    const kept = G.zones[Z.id]?.netKey === Z.k;
+    // (a zone's key is the host's count of its zones, which every page starts again: this game's, its host's, its seed)
+    const game = S.code + '/' + S.hostPeer, Zo = G.zones[Z.id];
+    const kept = Zo?.netKey === Z.k && Zo.netGame === game && Zo.seed === (Z.s | 0);
     enterZone(Z.id, { fresh: !kept, seed: Z.s | 0, level: Z.id === 'gate' ? clamp(Z.l | 0, 1, MAX_ILVL - 3) : ZONES[Z.id].level, tier: clamp(Z.ti | 0, 0, 999), at });
-    // (the guest's own zones from before the game are let go; the host's are kept by id, as one's own are alone)
-    for (const k in prev) if (prev[k] !== G.zone && !prev[k].netKey) { disposeZone(prev[k]); if (G.zones[k] === prev[k]) delete G.zones[k]; }
-    G.zone.netKey = Z.k; S.zoneKey = Z.k; S.lastSnap = now(); S.placeK = Z.k; NET.mode = 'guest'; emit('netMode');
+    // (the guest's own zones from before the game, and any not this game's, are let go; this game's are kept by id, as
+    // one's own are alone)
+    // (one the build replaced, enterZone has let go already)
+    for (const k in prev) if (prev[k] !== G.zone && G.zones[k] === prev[k] && (!prev[k].netKey || prev[k].netGame !== game)) { disposeZone(prev[k]); delete G.zones[k]; }
+    // (by the host is where it can walk to the host from, not across a wall from it)
+    if (typeof at === 'object') { const pl = G.player, f = besideHost(G.zone.map, Zh.x / 20, Zh.y / 20, pl.x, pl.z, 8); pl.x = f.x; pl.z = f.z; }
+    G.zone.netKey = Z.k; G.zone.netGame = game; S.zoneKey = Z.k; S.lastSnap = now(); S.placeK = Z.k; NET.mode = 'guest'; emit('netMode');
     // the act's look again for the world as the host has it
     presenceAgain(G.zone);
   } catch (e) { console.error(e); }
   finally { S.loading = false; setTimeout(() => fade?.classList.remove('on'), 120); }
 }
+// a spot by the host at (hx, hz) for a hero put at (x, z): its floor if it walks to the host's in a few steps more than
+// the straight way (R: the cells looked through round the host), else the nearest floor to it that does, else the host's
+const WIN = {};
+function besideHost(m, hx, hz, x, z, R) {
+  const h = m.nearestFloor(num(hx, -10, 1e4), num(hz, -10, 1e4), 4), c = m.nearestFloor(x, z);
+  if (m.solid(Math.floor(h.x), Math.floor(h.z))) return c;
+  m.fillWindow(WIN, Math.floor(h.x), Math.floor(h.z), R);
+  const W = 2 * R + 1, walks = (ix, iz) => { const cx = ix - WIN.x0, cz = iz - WIN.z0, d = cx >= 0 && cz >= 0 && cx < W && cz < W ? WIN.d[cz * W + cx] : 65535; return d !== 65535 && d <= 10 * (Math.hypot(ix + 0.5 - h.x, iz + 0.5 - h.z) + 3); };
+  const ix = Math.floor(c.x), iz = Math.floor(c.z);
+  if (walks(ix, iz)) return c;
+  let best = h, bd = Infinity;
+  for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) { const d = dx * dx + dz * dz; if (d < bd && walks(ix + dx, iz + dz)) { bd = d; best = { x: ix + dx + 0.5, z: iz + dz + 0.5 }; } }
+  return best;
+}
 function onSnap(o) {
   if (!o || typeof o !== 'object') return;
   S.lastSnap = now();
+  // (the deaths this snapshot tells, before the kills it pays: a kill is paid only for a monster seen dead)
+  if (Array.isArray(o.a) && o.k === S.zoneKey && o.k === myKey()) for (const e of o.a) if (Array.isArray(e) && (e[6] & 1)) pupSeen(e, S.pup.get(e[0] | 0) || null);
   // this guest's own reliable events first (a clip's number may be given in the same snapshot)
   const mine = o.r && typeof o.r === 'object' && own(o.r, S.ch.me) && Array.isArray(o.r[S.ch.me]) ? o.r[S.ch.me] : [];
   for (const e of mine) {
@@ -813,7 +895,11 @@ function onSnap(o) {
     H.zk = o.k;
     // (the first snapshot of a zone just entered: a guest that came in far from the host, its place unknown, is put by it)
     const pl = G.player;
-    if (S.placeK === o.k) { S.placeK = null; if (pl && !pl.dead && Math.hypot(pl.x - H.state.x, pl.z - H.state.z) > 16) { const f = G.zone.map.nearestFloor(H.state.x + 1.2, H.state.z + 1.2); pl.x = f.x; pl.z = f.z; } }
+    if (S.placeK === o.k) {
+      S.placeK = null;
+      // (or one that came in where it cannot walk to the host)
+      if (pl && !pl.dead) { const far = Math.hypot(pl.x - H.state.x, pl.z - H.state.z) > 16, f = besideHost(G.zone.map, H.state.x, H.state.z, far ? H.state.x + 1.2 : pl.x, far ? H.state.z + 1.2 : pl.z, 16); if (far || f.x !== pl.x || f.z !== pl.z) { pl.x = f.x; pl.z = f.z; } }
+    }
   }
   // the tide and the gusts; the fires on the ice
   if (Array.isArray(o.w)) worldState(o.w);
@@ -860,17 +946,51 @@ function hurtOpts(oo) {
   if (fin(oo.kx) && fin(oo.kz)) { const l = Math.hypot(oo.kx, oo.kz); if (l > 1e-6) { o.kx = oo.kx / l; o.kz = oo.kz / l; } }
   return o;
 }
-// the highest level anything in the host's zone can be (its monsters, the items they drop): the game's own top, or a
-// Shadow Gate's level; never a number the host made up
-const zoneTop = () => { const z = G.zone; return Math.min(MAX_ILVL, Math.max(MAX_LEVEL, z?.id === 'gate' ? z.level | 0 : 0) + 3); };
-// what a kill can pay this guest at most: XP, a gold pile, the piles and items (data.js COOP, combat.js kill), from what
-// the puppet was (its kind, level and rank as the guest saw them; one it never saw is taken as a rare of the zone's top)
-const XP_TOP = Math.max(...Object.values(MONSTERS).filter((m) => !m.boss).map((m) => m.xp));
-function killPay(id) {
-  const I = S.pupInfo.get(id), D = DIFFS[clamp(S.world?.diff | 0, 0, DIFFS.length - 1)], L = clamp(I ? I.level : zoneTop(), 1, zoneTop());
-  const boss = !!I?.boss, elite = I ? I.elite : 'rare';
-  const em = boss ? 1 : elite === 'rare' ? 5 : elite === 'champion' ? 3 : I?.minion ? 1.5 : 1, gf = Math.min((G.stats?.gold || 0) + 1, 401);
-  return { xp: monsterXP(L) * (I ? MONSTERS[I.kind].xp : XP_TOP) * D.xp * em * COOP.xp[3], gold: (3 + L * 1.6) * 1.4 * D.gold * (1 + gf / 100) * (boss ? 3 : 1) * COOP.gold[3], piles: boss ? 6 : elite ? 2 : 1, items: boss ? 4 + Math.floor(D.loot) + 3 : elite === 'rare' ? 3 : 1 };
+// the highest level anything in the host's zone can be (its monsters, the items they drop): the zone's own level, or its
+// host's (monsters are the hero's level, two more on the hard difficulties), three more for a boss. The host's level is its
+// own claim, as a guest's is (bounded by the game's top): never a number past what a hero of that level meets
+const zoneTop = () => { const z = G.zone, H = S.peers.get(S.hostPeer), hl = clamp(H?.lk?.l | 0 || MAX_LEVEL, 1, MAX_LEVEL); return Math.min(MAX_ILVL, Math.max(z?.level | 0, hl + 2) + 3); };
+// each zone's boss (the story's, and its echo): the only boss a kill there is paid as (in a Shadow Gate, its guardian)
+const ZONE_BOSS = { forest: 'weaver', crypt: 'barrowLord', pass: 'stonewarden', halls: 'moltenKing', weep: 'silverhorn', heart: 'amaranthe', ashfield: 'ivar', forge: 'karthax', coast: 'tower', farlight: 'skotos' };
+const GUARDS = new Set(['barrowLord', 'weaver', 'troll']);
+// a monster as the host's snapshots showed it (its kind, level and rank; where and when it was seen dead): what a kill of
+// it can be paid. One the host never showed, or never showed dead, is paid nothing
+function pupSeen(e, a) {
+  const id = e[0] | 0, kind = KINDS[e[1] | 0], fl = e[6] | 0; if (!kind || !MONSTERS[kind]) return null;
+  let I = S.pupInfo.get(id);
+  if (!I) {
+    const zid = G.zone?.id, boss = zid === 'gate' ? !!(fl & 8192) && GUARDS.has(kind) : !!MONSTERS[kind].boss && ZONE_BOSS[zid] === kind;
+    I = { kind, level: a ? a.level : clamp(e[11] | 0 || G.zone.level, 1, zoneTop()), boss, elite: fl & 64 ? 'rare' : fl & 32 ? 'champion' : null, minion: !!(fl & 128), deadT: 0 };
+    S.pupInfo.set(id, I); if (S.pupInfo.size > 3000) S.pupInfo.delete(S.pupInfo.keys().next().value);
+  }
+  if ((fl & 1) && !I.deadT) { I.deadT = now(); I.x = (e[2] | 0) / 10; I.z = (e[3] | 0) / 10; }
+  return I;
+}
+// what the zone can give, from its own plan (the packs this page built from the zone's seed, as the host did): its
+// monsters at the most a party meets (bigger packs; a rare and its minions over them, or five champions, any pack being
+// one), counted in its kinds' XP; its rares and champions; the most XP a kind of them gives. Each minute in the zone adds
+// some (a tide's waves, what monsters call up)
+function purseOf() {
+  const z = G.zone, had = S.purses.get(S.zoneKey); if (had) return had;
+  let u = 180, xp = 3, rares = 1, champs = 5;
+  for (const p of z?.packs || []) {
+    const tag = z.id === 'gate' ? 'gate' : p.tag;
+    let m = 1; for (const k of [...(PACKS[tag] || []).map((w) => w[0]), ...(PACK_LEAD[tag] || [])]) m = Math.max(m, MONSTERS[k]?.xp || 0);
+    xp = Math.max(xp, m);
+    u += m * (Math.ceil((p.n | 0) * 1.2 * COOP.pack[3]) + (p.elite === 'rare' ? 13 : 15));
+    if (p.elite === 'rare') rares++; else champs += 5;
+  }
+  const P = { t: now(), u, rares, champs, xp, used: 0, usedR: 0, usedC: 0 };
+  S.purses.set(S.zoneKey, P); if (S.purses.size > 32) S.purses.delete(S.purses.keys().next().value);
+  return P;
+}
+// what a kill can pay this guest at most: XP, a gold pile, the piles and items (data.js COOP, combat.js kill, with one
+// player more than this page sees here), its kind's XP no more than the zone's best but for its boss
+function killPay(I) {
+  const D = DIFFS[clamp(S.world?.diff | 0, 0, DIFFS.length - 1)], L = clamp(I.level, 1, zoneTop()), boss = I.boss, elite = I.elite, k = clamp(NET.n, 1, 3);
+  const em = boss ? 1 : elite === 'rare' ? 5 : elite === 'champion' ? 3 : I.minion ? 1.5 : 1, gf = Math.min((G.stats?.gold || 0) + 1, 401);
+  const kx = boss ? MONSTERS[I.kind].xp : Math.min(MONSTERS[I.kind].xp, purseOf().xp);
+  return { xp: Math.round(monsterXP(L) * kx * D.xp * em * COOP.xp[k]), gold: (3 + L * 1.6) * 1.4 * D.gold * (1 + gf / 100) * (boss ? 3 : 1) * COOP.gold[k], piles: boss ? 6 : elite ? 2 : 1, items: boss ? 4 + Math.floor(D.loot) + 3 : elite === 'rare' ? 3 : 1 };
 }
 // (kills paid a second: 40 at once, 8 a second after)
 function killOk() { const B = S.killB, t = now(); B.tok = Math.min(40, B.tok + (t - B.t) / 1000 * 8); B.t = t; if (B.tok < 1) return false; B.tok--; return true; }
@@ -887,15 +1007,25 @@ function relEvent(e) {
     return;
   }
   if (type === 'k') {
-    // a kill near this guest: its own share, each kill paid once, no more than such a kill can pay
-    const id = e[1] | 0;
-    if (S.paid.has(id) || !killOk()) return;
+    // a kill near this guest: its own share of a monster the host showed it dying (in the last seconds, near it; a boss
+    // anywhere), each paid once, no more than such a kill can pay; one boss of a kind for each zone entered
+    const id = e[1] | 0, I = S.pupInfo.get(id);
+    if (S.paid.has(id) || !I?.deadT || now() - I.deadT > 10000) return reject('k');
+    if (!I.boss && pl && Math.hypot(pl.x - I.x, pl.z - I.z) > 65) return reject('k');
+    if (!killOk()) return reject('k');
+    // (no more than the zone can give: past its rares or champions one is paid as an ordinary monster, past what its
+    // monsters are worth nothing)
+    const P = purseOf(), mins = (now() - P.t) / 60000;
+    if (I.boss) { const bk = S.zoneKey + ' ' + I.kind; if (S.bossPaid.has(bk)) I.boss = false; else S.bossPaid.add(bk); }
+    if (I.elite === 'rare' && !I.boss && P.usedR++ >= P.rares + mins) I.elite = null;
+    if (I.elite === 'champion' && P.usedC++ >= P.champs + mins * 5) I.elite = null;
+    if (!I.boss) { const w = Math.min(MONSTERS[I.kind].xp, P.xp) * (I.elite === 'rare' ? 5 : I.elite === 'champion' ? 3 : I.minion ? 1.5 : 1); if (P.used + w > P.u + mins * 90) return reject('k'); P.used += w; }
     S.paid.add(id); if (S.paid.size > 5000) S.paid.delete(S.paid.values().next().value);
-    const K = killPay(id), m = G.zone?.map;
+    const K = killPay(I), m = G.zone?.map;
     const x = clamp((e[2] | 0) / 10, 0, m?.w ?? 1e3), z = clamp((e[3] | 0) / 10, 0, m?.h ?? 1e3), xp = Math.min(num(e[4], 0, 1e9), K.xp);
     const h = S.real || G.hero;
     if (xp > 0) gainXP(xp);
-    h.stats.kills++; if (e[8]) h.stats.elites++;
+    h.stats.kills++; if (I.elite) h.stats.elites++;
     const c = G.combo; c.n = c.t > 0 ? c.n + 1 : 1; c.t = 1.4;
     if (Array.isArray(e[5])) for (const g of e[5].slice(0, K.piles)) if (fin(g) && g >= 1) dropGold(x, z, Math.round(Math.min(g, K.gold)));
     if (e[7]) dropGlobe(x + rand.range(-0.5, 0.5), z + rand.range(-0.5, 0.5));
@@ -906,7 +1036,7 @@ function relEvent(e) {
   if (type === 'it') {
     // an item rolled for this guest: only after a kill that could bring it, rebuilt as an item is, at most the zone's level
     if (S.owed < 1) return;
-    const it = cleanItem(e[3], { maxIlvl: zoneTop() }); if (!it) return;
+    const it = cleanItem(e[3], { maxIlvl: zoneTop(), rolled: true }); if (!it) return;
     S.owed--; it.isNew = true;
     const m = G.zone?.map;
     dropItem(clamp((e[1] | 0) / 10, 0, m?.w ?? 1e3), clamp((e[2] | 0) / 10, 0, m?.h ?? 1e3), it);
@@ -938,12 +1068,12 @@ function puppetEntry(e) {
   const x = (e[2] | 0) / 10, z = (e[3] | 0) / 10, rot = (e[4] | 0) / 20, fl = e[6] | 0;
   let a = S.pup.get(id);
   if (!a) {
-    if (fl & 1) return; // (seen first dead: nothing to show)
+    if (fl & 1) { pupSeen(e, null); return; } // (seen first dead: nothing to show, but what it was)
     try {
       a = spawnMonster(kind, x, z, { level: clamp(e[11] | 0 || G.zone.level, 1, zoneTop()), elite: fl & 64 ? 'rare' : fl & 32 ? 'champion' : null, minion: !!(fl & 128), affixes: [], dormant: !!(fl & 512) });
     } catch (err) { console.error(err); return; }
     a.puppet = true; a.netId = id; a.rot = rot; a.buf = []; a.seen = now(); a.clipSeq = -1;
-    S.pupInfo.set(id, { kind, level: a.level, boss: !!a.boss || !!(fl & 8192), elite: a.elite, minion: a.minion }); if (S.pupInfo.size > 3000) S.pupInfo.delete(S.pupInfo.keys().next().value);
+    S.pupInfo.delete(id); pupSeen(e, a);
     if (fl & 4096) { a.team = 'hero'; a.pet = true; }
     if (a.avatar) R.scene.add(a.avatar.group);
     G.actors.push(a); S.pup.set(id, a);
@@ -965,6 +1095,7 @@ function puppetEntry(e) {
   // the clip the host's avatar last played
   const name = S.hclips.get(e[7] | 0), seq = e[8] | 0;
   if (name && seq !== a.clipSeq) { if (a.clipSeq !== -1 || !(fl & 1)) a.avatar?.play(name, num(e[12], 1, 500, 100) / 100); a.clipSeq = seq; }
+  if (fl & 1) pupSeen(e, a);
   if ((fl & 1) && !a.dead) { a.dead = true; a.deadT = 0; a.drowned = !!(fl & 16384); if (a.boss) emit('bossDown', a); }
   if (a.boss && a.aggro && !a.netIntro && !(fl & 1)) { a.netIntro = true; emit('bossIntro', a); }
 }
@@ -1093,8 +1224,8 @@ function respawnSelf() {
     // up where the host's zone keeps its checkpoint (by the host, or the zone's waypoint or start)
     emit('respawn', 'net');
     const z = G.zone, pl = G.player, H = S.peers.get(S.hostPeer);
-    const at = H?.state && !(H.state.fl & 1) ? { x: H.state.x + 1.2, z: H.state.z + 1.2 } : z.checkpoint || z.L.spots.waypoint || z.L.start;
-    const f = z.map.nearestFloor(at.x, at.z); pl.x = f.x; pl.z = f.z; pl.iframes = 2;
+    const by = H?.state && !(H.state.fl & 1), at = by ? { x: H.state.x + 1.2, z: H.state.z + 1.2 } : z.checkpoint || z.L.spots.waypoint || z.L.start;
+    const f = by ? besideHost(z.map, H.state.x, H.state.z, at.x, at.z, 8) : z.map.nearestFloor(at.x, at.z); pl.x = f.x; pl.z = f.z; pl.iframes = 2;
   } else emit('respawn', false);
 }
 function revived() {
@@ -1165,12 +1296,11 @@ function recFx(name, args, ret) {
   else a = args.map((v) => (typeof v === 'number' ? R2(v) : v && typeof v === 'object' ? smallObj(v) : v));
   if (name.startsWith('tele') && ret) { ret.nid = ++teleN; a.push(ret.nid); }
   const pos = fxPos(name, a);
-  // (the look of a guest's blow landing here, which its page has shown already: the guest it is)
-  const by = S.landing && (name === 'hitFx' || (name === 'sfx' && HIT_SND.has(a[0]))) ? S.landing : undefined;
+  // (the look of a guest's blow landing here, which its page has shown already: the guest it is. Only that blow's own
+  // hit look on the monster it struck: what its death or a legendary's blow on another plays is the host's)
+  const by = S.landing && MIRROR.look && MIRROR.look === S.landingA ? S.landing : undefined;
   list.push({ n: name, a, x: pos[0], z: pos[1], by });
 }
-// (combat.js damage: the sounds of a blow landing)
-const HIT_SND = new Set(['hitFlesh', 'hitBone', 'hitSpirit', 'hitChitin', 'woodHit', 'crit']);
 function recGuestFx(name, args, ret) { if (MIRROR.hero) recFx(name, args, ret); }
 const smallObj = (o) => { const r = {}; let n = 0; for (const k in o) { const v = o[k]; if (typeof v === 'number' || typeof v === 'boolean' || (typeof v === 'string' && v.length < 24)) { r[k] = R2(v); if (++n > 8) break; } } return r; };
 function optsOf(o) { if (!o || typeof o !== 'object') return undefined; const r = {}; for (const k of ['slow', 'freeze', 'poison', 'burn', 'root', 'push', 'stun', 'cold', 'pure', 'chill', 'knock', 'fear']) if (o[k] != null) r[k] = typeof o[k] === 'object' ? smallObj(o[k]) : R2(o[k]); return r; }
@@ -1239,10 +1369,18 @@ function shotOpts(o, real) {
   if (real) { put('dmg', 0, 1e8); r.opts = hurtOpts(o.opts); }
   return r;
 }
+// what a hero's skills fire and lay (skills.js): all another hero's page may send; a monster's (a herd of ghosts, a wave,
+// an orb) come from the host alone. The ones played from the net that a page holds at once are held too, a creature's
+// ghost (an avatar each) the fewest
+const HERO_SHOTS = new Set(['bolt', 'arcane', 'pierce', 'fireball', 'mini']), HERO_AREAS = new Set(['tornado', 'rain', 'fire']);
+const NET_SHOTS = 96, NET_AREAS = 64, NET_GHOSTS = 8;
+const count = (list, f) => { let n = 0; for (const x of list) if (f(x)) n++; return n; };
 function replayOne(name, a, from) {
   const fromHost = from === S.hostPeer && S.role === 'guest', m = G.zone.map, px = (v) => clamp(v, -20, m.w + 20), pz = (v) => clamp(v, -20, m.h + 20);
   if (name === 'fire') {
     const [kind, foe, sid, x, z, dir] = a; if (!nums([x, z, dir], 3) || !kindOk(kind)) return;
+    if (!fromHost && !HERO_SHOTS.has(kind)) return;
+    if (count(G.projs, (p) => p.net) >= NET_SHOTS || (kind === 'phantomHart' && count(G.projs, (p) => p.kind === kind) >= NET_GHOSTS)) return;
     const real = foe && fromHost;
     const src = real ? (S.pup.get(sid) || { team: 'foe', id: 0, level: clamp(G.zone.level, 1, zoneTop()), x, z, def: {}, affixes: [], dead: false }) : { team: 'vis', x, z };
     const oo = Object.assign(shotOpts(a[6], real), { team: real ? 'foe' : 'vis', net: true });
@@ -1252,8 +1390,12 @@ function replayOne(name, a, from) {
   }
   if (name === 'area') {
     const [kind, x, z, r, dur, foe, sid, dmg, tick, opts, vx, vz, floats] = a; if (!nums([x, z, r, dur], 4) || !kindOk(kind)) return;
+    if (!fromHost && !HERO_AREAS.has(kind)) return;
+    // (an orb bursts into a ring at its end: held with the rings)
+    if (count(G.areas, (q) => q.net) >= NET_AREAS || (kind === 'frostOrb' && FX.FX.rings.length > 96)) return;
     const real = foe && fromHost;
-    area(kind, px(x), pz(z), clamp(r, 0.1, 30), clamp(dur, 0, 20), { team: real ? 'foe' : 'vis', src: real ? S.pup.get(sid) || { team: 'foe', level: clamp(G.zone.level, 1, zoneTop()), x, z, def: {} } : null, dmg: real ? num(dmg, 0, 1e8) : 0, tick: fin(tick) ? clamp(tick, 0.1, 5) : undefined, opts: real ? hurtOpts(opts) : {}, vx: num(vx, -20, 20), vz: num(vz, -20, 20), floats: !!floats, net: true });
+    const ar = area(kind, px(x), pz(z), clamp(r, 0.1, 30), clamp(dur, 0, 20), { team: real ? 'foe' : 'vis', src: real ? S.pup.get(sid) || { team: 'foe', level: clamp(G.zone.level, 1, zoneTop()), x, z, def: {} } : null, dmg: real ? num(dmg, 0, 1e8) : 0, tick: fin(tick) ? clamp(tick, 0.1, 5) : undefined, opts: real ? hurtOpts(opts) : {}, vx: num(vx, -20, 20), vz: num(vz, -20, 20), floats: !!floats, net: true });
+    if (ar) ar.net = true;
     return;
   }
   if (name === 'sap') { if (fromHost && nums(a, 4)) addSapPool(px(a[0]), pz(a[1]), clamp(a[2], 0.2, 12), clamp(a[3], 0, 30), { team: 'foe' }, kindOk(a[4]) ? a[4] : undefined); return; }

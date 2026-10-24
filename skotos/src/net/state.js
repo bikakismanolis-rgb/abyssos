@@ -31,8 +31,9 @@ export function nearestHero(x, z) {
 
 // The fx mirror: while rec is set, the game's look-only calls (fx.js, positional sounds, projectiles, areas) are told to
 // it, the outermost only (d counts the depth); the host sends them to its guests, a guest its hero's to the others.
-// skip: the call comes from the net itself (a replay), not from this page's game
-export const MIRROR = { rec: null, d: 0, skip: false };
+// skip: the call comes from the net itself (a replay), not from this page's game; look: the target whose hit look
+// (combat.js damage: its spark and sounds) is being played
+export const MIRROR = { rec: null, d: 0, skip: false, look: null };
 export function mir(name, fn, args) {
   const rec = !MIRROR.d && !MIRROR.skip ? MIRROR.rec : null;
   MIRROR.d++;

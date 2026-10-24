@@ -171,7 +171,11 @@ export function RoomTransport(room, o = {}) {
     if (T.dead) return Promise.reject(Object.assign(new Error(T.dead), { code: T.dead }));
     if (T.rooms.has(name)) return Promise.resolve(T.rooms.get(name));
     if (pending.has(name)) return pending.get(name);
-    const p = Promise.resolve(room.join(name)).then((r) => { const ch = wrap(r, name); const l0 = ch.leave; ch.leave = () => { T.rooms.delete(name); return l0(); }; T.rooms.set(name, ch); return ch; }, (e) => { dead(e); throw e; }).finally(() => pending.delete(name));
+    // (a room whose join answers after the page's room has ended is left at once: the join fails with the end's code)
+    const p = Promise.resolve(room.join(name)).then((r) => {
+      if (T.dead) { Promise.resolve().then(() => r.leave?.()).catch(() => {}); throw Object.assign(new Error(T.dead), { code: T.dead }); }
+      const ch = wrap(r, name); const l0 = ch.leave; ch.leave = () => { T.rooms.delete(name); return l0(); }; T.rooms.set(name, ch); return ch;
+    }, (e) => { dead(e); throw e; }).finally(() => pending.delete(name));
     pending.set(name, p);
     return p;
   };
@@ -242,22 +246,34 @@ export function LocalTransport(o = {}) {
 // client: a supabase-js v2 client (createClient(url, anonKey)), or anything with its channel() shape. Broadcast carries
 // everything (self: false). Realtime lets a client track() its presence only 5 times in 30 s (past that it shuts the
 // channel, broadcast and all), so the presence is tracked once a channel ({ k }, keyed by our peer label: who is there,
-// who joins and leaves) and the game's presence goes as a broadcast '_p', coalesced as any presence, said again every
-// 1.5 s (a lost one mended) and when someone joins. A peer is a member with its last '_p'; one silent 12 s is gone.
+// who joins and leaves) and the game's presence goes as a broadcast '_p', coalesced as any presence, said again (a lost
+// one mended) every 1.5 s in a game and every 10 s in the lobby, and once when someone joins. Realtime counts every
+// message sent and every one delivered, project-wide, so nothing is said that says nothing: an empty presence (every
+// page in the lobby but the hosts) is never sent, nor one unchanged before its time. A peer is a member with its last
+// '_p'; one silent past three of its beats (12 s in a game, 30 s in the lobby) is gone.
 // Who sent a broadcast rides in its payload (Supabase does not stamp it: untrusted, as everything)
 export function SupabaseTransport(client, o = {}) {
   if (!client?.channel) return null;
   const me = o.me || 'p' + Math.random().toString(36).slice(2, 10);
   const bucket = makeBucket(o.rate, o.burst);
-  const open = (name) => {
+  const open = (name, lobby) => {
     const sc = client.channel('skotos:' + name, { config: { broadcast: { self: false, ack: false }, presence: { key: me } } });
+    const beat = lobby ? 10000 : 1500, gone = lobby ? Math.max(o.gone || 12000, 3 * beat) : o.gone || 12000;
     let hb = 0;
     const wire = {
-      kind: 'supabase', me, sentT: 0,
+      kind: 'supabase', me, sentT: 0, raw: '{}', again: false, soon: 0,
       send: (topic, data) => sc.send({ type: 'broadcast', event: topic, payload: { f: me, d: data } }),
-      sendPresence: (p) => { wire.sentT = Date.now(); return sc.send({ type: 'broadcast', event: '_p', payload: { f: me, p } }); },
-      leave: () => { clearInterval(hb); return client.removeChannel ? client.removeChannel(sc) : sc.unsubscribe(); }
+      sendPresence: (p) => {
+        // (what the others have already, an empty presence never said or one said a moment ago, is not said again)
+        const raw = JSON.stringify(p), t = Date.now();
+        if (raw === wire.raw && (raw === '{}' || (!wire.again && t - wire.sentT < beat - 300))) return Promise.resolve('ok');
+        wire.raw = raw; wire.sentT = t; wire.again = false;
+        return sc.send({ type: 'broadcast', event: '_p', payload: { f: me, p } });
+      },
+      leave: () => { clearInterval(hb); clearTimeout(wire.soon); return client.removeChannel ? client.removeChannel(sc) : sc.unsubscribe(); }
     };
+    // (our presence said again: on its beat, and for someone new, once for all who came in the same moment)
+    const again = () => { wire.again = true; ch.presence({}); };
     const ch = makeChannel(name, wire, Object.assign({ bucket }, o));
     // each peer's last presence ({ p, raw, t }), the views handed out (the same object while its presence is the same)
     const last = new Map(), memo = new Map();
@@ -265,17 +281,17 @@ export function SupabaseTransport(client, o = {}) {
     const sync = () => {
       const st = sc.presenceState() || {}, t = Date.now(), next = [], now0 = new Set(Object.keys(st));
       // (someone new: our presence again, at once)
-      for (const k of now0) if (k !== me && !members.has(k)) { ch.presence({}); break; }
+      for (const k of now0) if (k !== me && !members.has(k)) { if (wire.raw !== '{}' && !wire.soon) wire.soon = setTimeout(() => { wire.soon = 0; again(); }, 200); break; }
       members = now0;
       for (const k of now0) {
         if (k === me) continue;
         const L = last.get(k);
-        if (L && t - L.t > (o.gone || 12000)) continue;
+        if (L && t - L.t > gone) continue;
         const c = memo.get(k), v = c && c.src === L ? c.v : { peer: k, by: null, isMe: false, presence: L?.p || {}, updatedAt: L?.t || t };
         memo.set(k, { src: L, v }); next.push(v);
       }
       for (const k of memo.keys()) if (!now0.has(k)) memo.delete(k);
-      for (const k of last.keys()) if (!now0.has(k) && t - last.get(k).t > (o.gone || 12000)) last.delete(k);
+      for (const k of last.keys()) if (!now0.has(k) && t - last.get(k).t > gone) last.delete(k);
       if (!self || self.presence !== ch.mine()) self = { peer: me, by: null, isMe: true, presence: ch.mine(), updatedAt: t };
       next.unshift(self);
       ch._peers(next);
@@ -290,7 +306,8 @@ export function SupabaseTransport(client, o = {}) {
         const k = String(pl.f || ''); if (!k || !pl.p || typeof pl.p !== 'object' || Array.isArray(pl.p)) return;
         const raw = JSON.stringify(pl.p), L = last.get(k);
         if (L && L.raw === raw) { L.t = Date.now(); return; }
-        if (!L && last.size > 64) return;
+        // (any member's is kept; of senders not yet members, as many as there are members and 64 more)
+        if (!L && !members.has(k) && last.size > members.size + 64) return;
         last.set(k, { p: pl.p, raw, t: Date.now() }); sync();
         return;
       }
@@ -300,14 +317,14 @@ export function SupabaseTransport(client, o = {}) {
     ch.on = (topic, fn) => { topics.add(topic); return on0(topic, fn); };
     sc.on('presence', { event: 'sync' }, sync);
     sc.subscribe((status) => {
-      if (status === 'SUBSCRIBED') { Promise.resolve(sc.track({ k: me })).catch(() => {}); ch._conn(true); sync(); }
+      if (status === 'SUBSCRIBED') { Promise.resolve(sc.track({ k: me })).catch(() => {}); wire.again = true; ch._conn(true); sync(); }
       else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') ch._conn(false);
     });
-    // (the presence said again when nothing new went for a while; the silent let go)
-    hb = setInterval(() => { if (!ch.connected()) return; if (Date.now() - wire.sentT > 1200) ch.presence({}); sync(); }, 1500);
+    // (the presence said again when nothing new went for its beat; the silent let go)
+    hb = setInterval(() => { if (!ch.connected()) return; if (wire.raw !== '{}' && Date.now() - wire.sentT > beat - 300) again(); sync(); }, lobby ? 2500 : 1500);
     return ch;
   };
-  const T = { kind: 'supabase', me, lobby: open(o.lobby || 'lobby'), rooms: new Map() };
+  const T = { kind: 'supabase', me, lobby: open(o.lobby || 'lobby', true), rooms: new Map() };
   T.join = (name) => {
     if (!ROOM.test(name)) return Promise.reject(new Error('invalid_argument'));
     if (T.rooms.has(name)) return Promise.resolve(T.rooms.get(name));

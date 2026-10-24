@@ -181,6 +181,27 @@ const SC = {
     const st = await stats(host);
     ok(!st.why.big && !st.why.rate && !st.why.bad, 'no honest blow was refused (too big, too fast, malformed)', st.why);
     console.log('     host net', JSON.stringify(st));
+    // a guest's killing blow on a Rootsworn (its death cry is a hit's sound): the guest hears its blow once (its own look)
+    // and the death once (the host's echo), as the host does: what the death plays is not taken for the blow's look
+    const snd = (pg) => ev(pg, async () => { const A = (await import('/src/audio/audio.js')).default, f = A.sfx; window.__snd = []; A.sfx = function (n, o) { window.__snd.push(n); return f.call(this, n, o); }; });
+    await snd(g); await snd(host);
+    // (its stand-in on the host by it first: the fight moved it about faster than a hero runs; a Rootsworn that is
+    // not there to strike when the blow comes, another)
+    let rid = 0;
+    for (let k = 0; k < 4; k++) {
+      const gp = await ev(g, () => ({ x: window.__G.player.x, z: window.__G.player.z }));
+      await until(host, (gp) => { const r = window.__NET.NET.remotes[0]; return !!r && Math.hypot(r.x - gp.x, r.z - gp.z) < 3; }, gp, 15000, 'stand-in by the guest');
+      rid = await ev(host, async (gp) => { const A = await import('/src/game/actors.js'), G = window.__G, f = G.zone.map.nearestFloor(gp.x + 1.5, gp.z), a = A.spawnMonster('rootsworn', f.x, f.z, {}); a.hp = 1; a.speed = 0; G.actors.push(a); return a.id; }, gp);
+      await until(g, (id) => window.__NET.S.pup.has(id), rid, 8000, 'rootsworn');
+      if (!(await ev(host, (id) => { const a = window.__G.actors.find((x) => x.id === id); return !!a && !a.dead; }, rid))) continue;
+      await ev(g, () => { window.__snd.length = 0; }); await ev(host, () => { window.__snd.length = 0; });
+      await ev(g, async (id) => { const C = await import('/src/game/combat.js'), G = window.__G; C.damage(G.player, window.__NET.S.pup.get(id), 50, { crit: false }); }, rid);
+      if (await until(host, (id) => !!window.__G.actors.find((a) => a.id === id)?.dead, rid, 3000, 'rootsworn dead')) break;
+    }
+    await sleep(1500);
+    const heard = [await ev(g, () => window.__snd.filter((n) => n === 'hitFlesh').length), await ev(host, () => window.__snd.filter((n) => n === 'hitFlesh').length)];
+    if (heard[0] !== 2) console.log('     diag', JSON.stringify(await ev(g, (id) => { const a = window.__NET.S.pup.get(id), p = window.__G.player; return { pup: a && { hidden: a.hidden, air: a.airborne, inv: a.invuln, bond: a.bondT, dead: a.dead, hp: a.hp, removed: a.removed, d: Math.hypot(a.x - p.x, a.z - p.z) }, me: { dead: p.dead, hp: p.hp }, mode: window.__G.mode, panel: window.__G.panel, why: window.__NET.S.stats.why }; }, rid)), JSON.stringify(await ev(host, (id) => { const a = window.__G.actors.find((x) => x.id === id), N = window.__NET; return { a: a && { dead: a.dead, hp: a.hp, x: a.x, z: a.z }, why: N.S.stats.why, r: N.NET.remotes[0] && { x: N.NET.remotes[0].x, z: N.NET.remotes[0].z, dead: N.NET.remotes[0].dead } }; }, rid)));
+    ok(heard[0] === 2 && heard[1] === 2, 'a guest\'s killing blow on a Rootsworn: its blow and its death cry once each, on the guest\'s page as on the host\'s', { guest: heard[0], host: heard[1] });
   },
   // each player's own loot: the host's drops are not on the guest's page, the guest's not on the host's
   async loot() {
@@ -211,7 +232,7 @@ const SC = {
     const hp = await hostPos(host); await place(g, hp.x + 6, hp.z);
     await ev(host, () => { for (const p of window.__G.zone.packs) p.spawned = true; });
     // the guest falls
-    await ev(g, async () => { const C = await import('/src/game/combat.js'), G = window.__G; C.damage({ team: 'foe', level: 10, x: G.player.x, z: G.player.z, def: {}, affixes: [] }, G.player, 1e7, { pure: true }); });
+    await ev(g, async () => { const C = await import('/src/game/combat.js'), G = window.__G; G.player.iframes = 0; C.damage({ team: 'foe', level: 10, x: G.player.x, z: G.player.z, def: {}, affixes: [] }, G.player, 1e7, { pure: true }); });
     await sleep(2600);
     const dn = await ev(g, () => ({ dead: window.__G.player.dead, downed: !!window.__NET.S.downed, panel: window.__G.panel, card: !document.getElementById('downed')?.hidden }));
     ok(dn.dead && dn.downed && dn.panel !== 'dead', 'a guest at 0 life is downed (no death panel)', dn);
@@ -224,15 +245,16 @@ const SC = {
     const r1 = await ev(g, () => ({ dead: window.__G.player.dead, hp: Math.round(window.__G.player.hp / window.__G.player.hpMax * 100) }));
     ok(up && r1.hp >= 35 && r1.hp <= 45, 'the host raised the guest (at 40% life)', r1);
     // the host falls, the guest raises it
-    await ev(host, async () => { const C = await import('/src/game/combat.js'), G = window.__G; C.damage({ team: 'foe', level: 10, x: G.player.x, z: G.player.z, def: {}, affixes: [] }, G.player, 1e7, { pure: true }); });
+    await ev(host, async () => { const C = await import('/src/game/combat.js'), G = window.__G; G.player.iframes = 0; C.damage({ team: 'foe', level: 10, x: G.player.x, z: G.player.z, def: {}, affixes: [] }, G.player, 1e7, { pure: true }); });
     await sleep(2500);
     ok(await ev(host, () => window.__G.player.dead && !!window.__NET.S.downed && window.__G.panel !== 'dead'), 'the host is downed too (co-op: no death panel)');
     const hp2 = await hostPos(host); await place(g, hp2.x + 0.5, hp2.z);
     const up2 = await until(host, () => !window.__G.player.dead, null, 12000, 'host raised');
     ok(up2, 'the guest raised the host (its ask, checked on the host)');
-    // the rise: downed and left alone, the guest gets up by itself
+    // the rise: downed and left alone, the guest gets up by itself (its grace from being raised let go: on a busy machine
+    // the game's seconds run slow)
     await place(host, gp.x + 20, gp.z);
-    await ev(g, async () => { const C = await import('/src/game/combat.js'), G = window.__G; C.damage({ team: 'foe', level: 10, x: G.player.x, z: G.player.z, def: {}, affixes: [] }, G.player, 1e7, { pure: true }); });
+    await ev(g, async () => { const C = await import('/src/game/combat.js'), G = window.__G; G.player.iframes = 0; C.damage({ team: 'foe', level: 10, x: G.player.x, z: G.player.z, def: {}, affixes: [] }, G.player, 1e7, { pure: true }); });
     await sleep(2400);
     await ev(g, () => { if (window.__NET.S.downed) window.__NET.S.downed.t = 0.2; });
     const up3 = await until(g, () => !window.__G.player.dead && window.__G.player.hp >= window.__G.player.hpMax * 0.95, null, 6000, 'rose');
@@ -342,8 +364,63 @@ const SC = {
     });
     ok(g1.bad.length === 0, 'every item the host sent is rebuilt as an item: stats from STATS within a roll, no price, junk or false legendary', g1);
     ok(!g1.ids.some((s) => s.startsWith('evil4')), 'a base that is no base never reaches the bag', g1.ids);
-    ok(g1.kills - g0.kills <= 50 && g1.gold - g0.gold < 2e5 && isFinite(g1.xp), 'rewards are held to what kills can pay: each kill once, forty at once, gold within a pile\'s', { before: g0, after: { level: g1.level, gold: g1.gold, kills: g1.kills } });
-    ok(g1.bag - g0.bag <= 3, 'and items only as many as the kills could bring', { before: g0.bag, after: g1.bag });
+    const whyK = await ev(g, () => window.__NET.S.stats.why.k || 0);
+    ok(g1.kills === g0.kills && g1.level === g0.level && g1.xp === 0 && g1.gold === g0.gold && whyK >= 100, 'a kill of no monster the host showed dying pays nothing at all (XP, gold, kills)', { before: g0, after: { level: g1.level, xp: g1.xp, gold: g1.gold, kills: g1.kills }, whyK });
+    ok(g1.bag - g0.bag === 0, 'and brings no item', { before: g0.bag, after: g1.bag });
+
+    // a monster the guest sees die, paid by a lying host: a billion XP twice, ten-million piles, items stuffed with every
+    // stat at a billion: paid once, as such a monster pays at most, and its items as such a kill rolls them
+    const lie = await ev(host, async (gp) => { const A = await import('/src/game/actors.js'), G = window.__G, f = G.zone.map.nearestFloor(gp.x + 2, gp.z + 1), a = A.spawnMonster('skeleton', f.x, f.z, { elite: 'rare' }); a.hp = a.hpMax = 1e6; G.actors.push(a); window.__lieA = a; return { id: a.id, level: a.level }; }, gp);
+    await until(g, (id) => window.__NET.S.pup.has(id), lie.id, 10000, 'the puppet');
+    const k0 = await ev(g, () => { const h = window.__G.hero.__real; return { level: h.level, xp: h.xp, gold: h.gold, kills: h.stats.kills, elites: h.stats.elites, bag: h.inv.filter(Boolean).length }; });
+    await ev(host, async (pr) => {
+      const C = await import('/src/game/combat.js'), D = await import('/src/game/data.js'), N = window.__NET, a = window.__lieA, x = Math.round(a.x * 10), z = Math.round(a.z * 10), r0 = N.NET.h.reward;
+      const all = {}; for (const k of Object.keys(D.STATS)) all[k] = 1e9; all.skill = { id: 'multi', v: 1e9 };
+      N.NET.h.reward = () => {
+        for (let i = 0; i < 2; i++) N.relTo(pr, ['k', a.id, x, z, 1e9, Array(8).fill(1e7), [], 0, 1]);
+        for (let i = 0; i < 8; i++) N.relTo(pr, ['it', x, z, { id: 'stuff' + i, base: ['helm', 'ring', 'sword', 'boots'][i % 4], rar: i % 4, leg: 'swiftboots', ilvl: 99, stats: { ...all } }]);
+      };
+      try { C.kill(a, null, {}); } finally { N.NET.h.reward = r0; }
+    }, me);
+    await sleep(2500);
+    for (let k = 0; k < 12; k++) {
+      const left = await ev(g, () => { const G = window.__G, p = G.pickups.find((q) => q.kind === 'item' || q.kind === 'gold'); if (!p) return 0; G.player.x = p.x; G.player.z = p.z; G.player.hp = G.player.hpMax; return G.pickups.length; });
+      if (!left) break;
+      await sleep(700);
+    }
+    const k1 = await ev(g, async ([id, k0]) => {
+      const D = await import('/src/game/data.js'), I = await import('/src/game/items.js'), S = window.__NET.S, h = window.__G.hero.__real, P = S.pupInfo.get(id);
+      const top = Math.max(window.__G.zone.level, (S.peers.get(S.hostPeer)?.lk?.l | 0) + 2) + 3, Dd = D.DIFFS[S.world.diff];
+      // (all the XP to this level and in it, then the most such a rare could pay)
+      let got = h.xp - k0.xp; for (let L = k0.level; L < h.level; L++) got += D.xpToNext(L);
+      const most = D.monsterXP(P.level) * D.MONSTERS.skeleton.xp * Dd.xp * 5 * D.COOP.xp[3], pile = (3 + P.level * 1.6) * 1.4 * Dd.gold * (1 + 401 / 100) * D.COOP.gold[3];
+      const items = h.inv.filter((it) => it && String(it.id).startsWith('stuff'));
+      const bad = items.filter((it) => { const ks = Object.keys(it.stats), slot = D.BASES[it.base].slot; return ks.length > [0, 2, 4, 4][it.rar] || ks.some((k) => !(D.STATS[k].slots === '*' || D.STATS[k].slots.split(',').includes(slot))) || it.ilvl > top || (it.leg && D.LEGENDARIES.find((l) => l.id === it.leg)?.base !== it.base); }).map((it) => ({ base: it.base, rar: it.rar, ilvl: it.ilvl, stats: Object.keys(it.stats) }));
+      return { pLevel: P.level, top, level: h.level, xp: h.xp, got, dKills: h.stats.kills - k0.kills, dElites: h.stats.elites - k0.elites, dGold: h.gold - k0.gold, mostGold: Math.ceil(pile * 2), mostXp: Math.ceil(most), items: items.length, stats: items.map((it) => Object.keys(it.stats).length), bad };
+    }, [lie.id, k0]);
+    ok(k1.dKills === 1 && k1.dElites === 1 && k1.got <= k1.mostXp && k1.pLevel <= k1.top, 'a kill paid once, at most what that rare of its level pays, whatever the host says', { before: k0, after: k1 });
+    ok(k1.dGold <= k1.mostGold, 'its gold no more than its two piles can be', { gold: k1.dGold, most: k1.mostGold });
+    ok(k1.items <= 3 && k1.bad.length === 0, 'and three items at most, each with only its slot\'s stats, no more than its rarity rolls, at the zone\'s level', { items: k1.items, stats: k1.stats, bad: k1.bad });
+    // a host that shows a hundred and fifty rare Cave Trolls dying by the guest in the Old Forest (none live there), each
+    // paid a billion: the guest is paid no more than the forest's own monsters are worth (its plan), its rares as many as
+    // the plan has
+    const t0 = await ev(g, () => { const h = window.__G.hero.__real; return { level: h.level, xp: h.xp, kills: h.stats.kills }; });
+    for (let b = 0; b < 15; b++) {
+      const ids = await ev(host, async (gp) => { const A = await import('/src/game/actors.js'), G = window.__G, out = []; for (let i = 0; i < 10; i++) { const f = G.zone.map.nearestFloor(gp.x + 2 + (i % 5), gp.z + 2 + Math.floor(i / 5)), a = A.spawnMonster('caveTroll', f.x, f.z, { elite: 'rare' }); a.hp = a.hpMax = 1e6; a.speed = 0; G.actors.push(a); out.push(a.id); } return out; }, gp);
+      await until(g, (ids) => ids.every((id) => window.__NET.S.pup.has(id)), ids, 8000, 'trolls seen');
+      // (the host's own share of them would raise its level, and with it its monsters': it stays at its own)
+      await ev(host, async ([pr, ids]) => { const C = await import('/src/game/combat.js'), N = window.__NET, h = window.__G.hero, l0 = h.level, x0 = h.xp, r0 = N.NET.h.reward; N.NET.h.reward = (a) => N.relTo(pr, ['k', a.id, Math.round(a.x * 10), Math.round(a.z * 10), 1e9, [1e7, 1e7], [], 0, 1]); try { for (const id of ids) { const a = window.__G.actors.find((x) => x.id === id); if (a) C.kill(a, null, {}); } } finally { N.NET.h.reward = r0; h.level = l0; h.xp = x0; } }, [me, ids]);
+      await sleep(1300);
+    }
+    await sleep(1500);
+    const t1 = await ev(g, async (t0) => {
+      const D = await import('/src/game/data.js'), S = window.__NET.S, h = window.__G.hero.__real, P = S.purses.get(S.zoneKey), Dd = D.DIFFS[S.world.diff];
+      const top = Math.max(window.__G.zone.level, (S.peers.get(S.hostPeer)?.lk?.l | 0) + 2) + 3;
+      let got = h.xp - t0.xp; for (let L = t0.level; L < h.level; L++) got += D.xpToNext(L);
+      const most = (P.u + (performance.now() - P.t) / 60000 * 90) * D.monsterXP(top) * Dd.xp * D.COOP.xp[3];
+      return { level: h.level, got: Math.round(got), most: Math.round(most), kills: h.stats.kills - t0.kills, units: Math.round(P.u), used: Math.round(P.used), rares: P.rares, paidRares: Math.min(P.usedR, P.rares), refused: S.stats.why.k || 0 };
+    }, t0);
+    ok(t1.got <= t1.most && t1.used <= t1.units + 60 && t1.refused >= 150 - t1.kills, 'a hundred and fifty rare Cave Trolls shown dying in the Old Forest pay no more than the forest\'s own monsters are worth', { before: t0, after: t1 });
 
     // the zone's level is the zone's own, whatever the host says
     for (const lv of [2e9, -2e9]) {
@@ -365,6 +442,20 @@ const SC = {
     const gaps = { host: await gapOff(host), guest: await gapOff(g) };
     const rings = await ev(host, async () => (await import('/src/gfx/fx.js')).FX.rings.length);
     ok(gaps.host < 1000 && gaps.guest < 1000 && rings <= 100, 'a flood of fx no skill makes: each page\'s frames go on, its rings held', { gaps, rings });
+    // what only monsters make (a herd of ghosts, waves), and more shots than a page holds, from the guest: the host plays
+    // none of the first and holds the rest; a herd of ghosts and orbs past count from the host: the guest holds them
+    await gapOn(host); await gapOn(g);
+    await ev(g, () => { const S = window.__NET.S, p = window.__G.player; let k = 0; const send = () => { const L = []; for (let i = 0; i < 39; i++) L.push(i % 3 === 0 ? [18, 'phantomHart', 0, 0, p.x, p.z, 0, { speed: 0, life: 8 }] : i % 3 === 1 ? [19, 'wave', p.x, p.z, 30, 20, 0, 0, 0, 0, 0, 0, 0, 0] : [18, 'bolt', 0, 0, p.x, p.z, 0, { speed: 0, life: 8 }]); S.ch.emit('f', L); if (++k < 30) setTimeout(send, 66); }; send(); });
+    await ev(host, () => { const N = window.__NET; let k = 0; const t = setInterval(() => { const r = N.NET.remotes[0]; if (r) for (let i = 0; i < 12; i++) (N.S.fxHost ||= []).push({ n: 'fire', a: ['phantomHart', 1, 0, r.x, r.z, 0, { speed: 0, life: 8 }], x: r.x, z: r.z }, { n: 'area', a: ['frostOrb', r.x, r.z, 3, 0, 0, 0, 0, 0.5, {}, 0, 0, 0], x: r.x, z: r.z }); if (++k > 45) clearInterval(t); }, 66); });
+    let most = { hHart: 0, hWave: 0, hNet: 0, gHart: 0, gRings: 0 };
+    for (let i = 0; i < 12; i++) {
+      const [a, b] = [await ev(host, () => { const G = window.__G; return { hHart: G.projs.filter((p) => p.kind === 'phantomHart').length, hWave: G.areas.filter((q) => q.kind === 'wave').length, hNet: G.projs.filter((p) => p.net).length }; }), await ev(g, async () => { const G = window.__G; return { gHart: G.projs.filter((p) => p.kind === 'phantomHart').length, gRings: (await import('/src/gfx/fx.js')).FX.rings.length }; })];
+      for (const [k, v] of Object.entries({ ...a, ...b })) most[k] = Math.max(most[k], v);
+      await sleep(250);
+    }
+    const gaps2 = { host: await gapOff(host), guest: await gapOff(g) };
+    ok(most.hHart === 0 && most.hWave === 0 && most.hNet <= 96, 'a guest\'s page sends a monster\'s ghosts and waves: the host plays none, and holds a flood of shots', most);
+    ok(most.gHart <= 8 && most.gRings <= 110 && gaps2.host < 200 && gaps2.guest < 200, 'a host\'s flood of ghosts and orbs: the guest holds them, every frame goes on', { most, gaps: gaps2 });
 
     // raises: a guest cannot raise itself, nor flood the host with raises (the host away, so it raises no one)
     const hp3 = await hostPos(host); await place(host, hp3.x + 15, hp3.z);
@@ -381,15 +472,43 @@ const SC = {
 
     // a jump across the map: the host's stand-in follows only as fast as a hero moves
     const a0 = await ev(host, () => { const r = window.__NET.NET.remotes[0]; return { x: r.x, z: r.z }; });
-    // (to a spot 30 m off where the guest's own game lets its hero stand)
-    const to = await ev(g, () => { const G = window.__G, p = G.player, m = G.zone.map; for (let a = 0; a < 6.28; a += 0.2) for (const d of [30, 28, 32, 26]) { const x = p.x + Math.cos(a) * d, z = p.z + Math.sin(a) * d; if (m.walkable(x, z)) { p.x = x; p.z = z; return { x, z }; } } return null; });
+    // (to a spot 40-46 m off where the guest's own game lets its hero stand: well past a run and a dodge's bank in 0.45 s)
+    const to = await ev(g, () => { const G = window.__G, p = G.player, m = G.zone.map; for (let a = 0; a < 6.28; a += 0.2) for (const d of [42, 40, 44, 46]) { const x = p.x + Math.cos(a) * d, z = p.z + Math.sin(a) * d; if (m.walkable(x, z)) { p.x = x; p.z = z; return { x, z }; } } return null; });
     await sleep(450);
     const a1 = await ev(host, () => { const r = window.__NET.NET.remotes[0]; return { x: r.x, z: r.z }; });
     const gat = await ev(g, () => ({ x: window.__G.player.x, z: window.__G.player.z }));
-    ok(to && Math.hypot(gat.x - to.x, gat.z - to.z) < 1 && Math.hypot(a1.x - a0.x, a1.z - a0.z) < 25 && Math.hypot(a1.x - to.x, a1.z - to.z) > 4, 'a guest\'s jump of 30 m: its stand-in on the host does not jump with it', { a0, a1, to, gat });
-    await sleep(4000);
+    ok(to && Math.hypot(gat.x - to.x, gat.z - to.z) < 2.5 && Math.hypot(a1.x - a0.x, a1.z - a0.z) < 32 && Math.hypot(a1.x - to.x, a1.z - to.z) > 8, 'a guest\'s jump of 40 m: its stand-in on the host does not jump with it', { a0, a1, to, gat });
+    await sleep(6000);
     const a2 = await ev(host, () => { const r = window.__NET.NET.remotes[0]; return { x: r.x, z: r.z }; });
-    ok(to && Math.hypot(a2.x - to.x, a2.z - to.z) < 2, 'and it catches up at a hero\'s pace', { a2, to });
+    const gat2 = await ev(g, () => ({ x: window.__G.player.x, z: window.__G.player.z }));
+    ok(to && Math.hypot(a2.x - gat2.x, a2.z - gat2.z) < 2, 'and it catches up at a hero\'s pace', { a2, at: gat2, to });
+    // lies about itself: a moment in another zone, a fall it gets up from, a spot off the map; then by a foe far off. The
+    // stand-in jumps only where the game puts a hero (by the host; rising, where it fell), stands on the map, and does not
+    // reach it
+    // (a foe far from both, and from where the zone puts a hero: more than its reach and a run and a dodge's bank away)
+    const gpT = await ev(g, () => ({ x: window.__G.player.x, z: window.__G.player.z }));
+    const T = await ev(host, async (gq) => { const A = await import('/src/game/actors.js'), G = window.__G, p = G.player, m = G.zone.map, sp = G.zone.L.spots, far = (x, z) => [G.zone.L.start, sp.waypoint, sp.camp2, G.zone.checkpoint].every((q) => !q || Math.hypot(q.x - x, q.z - z) > 20) && Math.hypot(p.x - x, p.z - z) > 70; for (let d = 140; d >= 70; d -= 5) for (let a = 0; a < 6.28; a += 0.3) { const x = gq.x + Math.cos(a) * d, z = gq.z + Math.sin(a) * d; if (m.walkable(x, z) && m.walkable(x + 2, z) && far(x, z)) { const s = A.spawnMonster('skeleton', x, z, {}); s.hp = s.hpMax = 5e6; s.speed = 0; G.actors.push(s); window.__farT = s; return { id: s.id, x, z }; } } return null; }, gpT);
+    await ev(g, () => { const S = window.__NET.S, P0 = S.ch.presence.bind(S.ch); S.ch.presence = (p) => P0(window.__lie ? window.__lie(p) : p); });
+    const at = (T) => `(p) => p.h ? { ...p, h: [Math.round((${T.x} + 2) * 20), Math.round(${T.z} * 20), ...p.h.slice(2)] } : p`;
+    const trick = async (first, T) => {
+      const r0 = await ev(host, () => { const r = window.__NET.NET.remotes[0]; return r && { x: r.x, z: r.z }; });
+      await ev(g, (f) => { window.__lie = eval(f); }, first); await sleep(400);
+      await ev(g, (f) => { window.__lie = eval(f); }, at(T)); await sleep(700);
+      const r = await ev(host, ([id, T, r0]) => { const N = window.__NET, r = N.NET.remotes[0], st = N.S.peers.get(r?.peer)?.state, m = window.__G.zone.map, p = window.__G.player; return { d: r ? Math.round(Math.hypot(r.x - T.x, r.z - T.z)) : null, moved: r && r0 ? Math.round(Math.hypot(r.x - r0.x, r.z - r0.z)) : null, byHost: r ? Math.round(Math.hypot(r.x - p.x, r.z - p.z)) : null, onMap: !!st && m.walkable(st.x, st.z), far: N.S.stats.why.far || 0, hp: window.__farT.hp }; }, [T.id, T, r0]);
+      await ev(g, (id) => { const S = window.__NET.S; for (let i = 0; i < 5; i++) S.ev.push([++S.evSeq, 'h', id, 50, 0, {}]); }, T.id); await sleep(600);
+      const r2 = await ev(host, () => ({ far: window.__NET.S.stats.why.far || 0, hp: window.__farT.hp }));
+      await ev(g, () => { window.__lie = null; }); await sleep(5000);
+      return { ...r, refused: r2.far - r.far, struck: r.hp - r2.hp };
+    };
+    const zk = await trick(`(p) => ({ ...p, zk: 'nowhere:0' })`, T);
+    ok(T && zk.d > 26 && zk.byHost < 30 && zk.onMap && zk.refused === 5 && zk.struck === 0, 'a guest that says it was in another zone a moment is put by the host, not by the foe it names: its blows are refused', zk);
+    const up = await trick(`(p) => p.h ? { ...p, h: [...p.h.slice(0, 6), p.h[6] | 1, p.h[7]] } : p`, T);
+    ok(T && up.d > 26 && up.moved < 36 && up.onMap && up.refused === 5 && up.struck === 0, 'one that says it fell and got up far away does not rise there (it goes from where it fell, at a run)', up);
+    await ev(g, () => { window.__lie = (p) => (p.h ? { ...p, h: [499 * 20, 499 * 20, ...p.h.slice(2)] } : p); });
+    let off = 0, n = 0;
+    for (let i = 0; i < 25; i++) { const w = await ev(host, () => { const N = window.__NET, r = N.NET.remotes[0], st = N.S.peers.get(r?.peer)?.state, m = window.__G.zone.map; return !st || (m.walkable(st.x, st.z) && r.x >= 0 && r.z >= 0 && r.x < m.w && r.z < m.h); }); n++; if (!w) off++; await sleep(120); }
+    await ev(g, () => { window.__lie = null; }); await sleep(4000);
+    ok(off === 0, 'one that says it stands off the map: its stand-in stands on the map\'s floor all the while', { off, n });
 
     // a listing in another's name: the room's own peer and person stand on it
     await ev(g, () => window.__NET.S.T.lobby.presence({ g: { c: 'zzzz', cls: 'warden', l: 40, z: 'coast', n: 1, d: 0, v: 2, on: 1, by: 'user_owner', peer: 'forged' } }));
@@ -397,6 +516,19 @@ const SC = {
     const L = await ev(host, () => window.__NET.S.hosts.find((h) => h.c === 'zzzz'));
     const lme = await ev(g, () => window.__NET.S.T.lobby.me);
     ok(L && L.peer === lme && L.by !== 'user_owner', 'a listing cannot name another peer or person', L);
+    // two listings of the host's code (the host's and a copy): each button names its own listing's peer, so a tap joins
+    // the host it shows however the list has moved since it was drawn
+    const code = await ev(host, () => window.__NET.S.code), hpeer = await ev(host, () => window.__NET.S.T.lobby.me);
+    await ev(g, (c) => window.__NET.S.T.lobby.presence({ g: { c, cls: 'mage', l: 50, z: 'coast', n: 1, d: 0, v: 2, on: 1 } }), code);
+    const v = await open('v1', 'auto=town&lvl=8&cls=mage');
+    const two = await until(v, (c) => window.__NET.S.hosts.filter((h) => h.c === c).length === 2, code, 15000, 'two listings');
+    const tap = await ev(v, (hp) => { window.__D.openPanel('coop'); const b = [...document.querySelectorAll('#panel [data-a^="cjoin:"]')].find((e) => e.dataset.a.split(':')[2] === encodeURIComponent(hp)); window.__NET.S.hosts.reverse(); b?.click(); return { found: !!b, want: window.__NET.S.wantHost }; }, hpeer);
+    await until(v, () => !!window.__NET.S.hostPeer, null, 10000, 'host taken');
+    const [vh, want] = await ev(v, () => [window.__NET.S.hostPeer, window.__NET.S.wantHost]);
+    ok(two && tap.found && want === hpeer && vh === hpeer, 'a tap on a listing joins that listing\'s host, the list moved under it', { two, tap, vh, want, hpeer });
+    ok(!(await fatal(v)), 'no error on its page', await fatal(v));
+    await ev(v, () => window.__NET.leaveGame()); await sleep(500);
+    pages.splice(pages.indexOf(v), 1); await v.close();
     await ev(g, () => window.__NET.S.T.lobby.presence({ g: null }));
 
     // a world with every act done and the new fire lit (Act IV left open), and the town: the guest is offered nothing and
@@ -422,8 +554,8 @@ const SC = {
     await ev(g, () => { window.__G.player.dead = false; window.__G.player.hp = window.__G.player.hpMax; });
     const panelOk = async (name, ctx) => ev(g, ([n, c]) => { window.__D.openPanel(n, c); const el = document.getElementById('panel'), r = { name: n, open: window.__G.panel === n, close: !!el.querySelector('[data-a="close"]'), cells: el.querySelectorAll('.cell').length }; window.__D.closePanel(); return r; }, [name, ctx]);
     for (const [n, c] of [['inventory'], ['vendor', { npc: 'healer' }], ['smith'], ['stash']]) { const p = await panelOk(n, c); ok(p.open && p.close && p.cells > 0, 'the guest\'s ' + n + ' panel opens, drawn', p); }
-    const eq = await ev(g, async () => { const Iv = await import('/src/game/inventory.js'), h = window.__G.hero.__real, i = h.inv.findIndex((it) => it && it.id === 'evil1'); if (i < 0) return { none: true }; const ok1 = Iv.equip(i); return { ok: ok1, ring: !!(h.equip.ring1?.id === 'evil1' || h.equip.ring2?.id === 'evil1'), dps: window.__G.stats.dps, life: window.__G.stats.lifeMax }; });
-    ok((eq.none || eq.ok && eq.ring) && isFinite(eq.dps ?? 1) && isFinite(eq.life ?? 1), 'and equipping what the host sent works', eq);
+    const eq = await ev(g, async () => { const Iv = await import('/src/game/inventory.js'), h = window.__G.hero.__real, I = await import('/src/game/items.js'), i = h.inv.findIndex((it) => it && String(it.id).startsWith('stuff') && I.usable(it, h.cls)); if (i < 0) return { none: true }; const id = h.inv[i].id, ok1 = Iv.equip(i); return { ok: ok1, ring: Object.values(h.equip).some((e) => e?.id === id), dps: window.__G.stats.dps, life: window.__G.stats.lifeMax }; });
+    ok(eq.ok && eq.ring && isFinite(eq.dps) && isFinite(eq.life), 'and equipping what the host sent works', eq);
     // home, and its save poisoned the old way (as a page before this fix let it be): Continue repairs it
     await ev(g, () => window.__NET.leaveGame('coop.youLeft'));
     await until(g, () => window.__G.zone?.id === 'town' && !window.__NET.S.role && !window.__G.hero.__real, null, 30000, 'home');
@@ -623,16 +755,38 @@ const SC = {
     // is up at home; the host, alone and down, has the death panel
     for (const pg of [g, host]) await ev(pg, async () => { const C = await import('/src/game/combat.js'), G = window.__G; C.damage({ team: 'foe', level: 10, x: G.player.x, z: G.player.z, def: {}, affixes: [] }, G.player, 1e9, { pure: true }); });
     await sleep(900);
-    const card = (pg) => ev(pg, () => ({ card: !document.getElementById('downed')?.hidden, dead: window.__G.player.dead, downed: !!window.__NET.S.downed, panel: window.__G.panel, role: window.__NET.S.role, zone: window.__G.zone?.id }));
+    const card = (pg) => ev(pg, () => ({ card: !document.getElementById('downed')?.hidden, dead: window.__G.player.dead, downed: !!window.__NET.S.downed, panel: window.__G.panel, role: window.__NET.S.role, zone: window.__G.zone?.id, act: window.__G.player.avatar?.anim?.actName || null, hold: !!window.__G.player.avatar?.anim?.hold }));
     const d0 = [await card(host), await card(g)];
     await ev(host, () => window.__NET.leaveGame());
     await until(g, () => !window.__NET.S.role, null, 15000, 'guest out');
     await sleep(2500);
     const d1 = [await card(host), await card(g)];
     ok(d0[0].downed && d0[1].downed && d0[0].card && d0[1].card, 'both were down, their cards shown', d0);
-    ok(!d1[1].card && !d1[1].dead && !d1[1].role, 'the game ended: the guest\'s card is gone and it is up at home', d1[1]);
+    ok(!d1[1].card && !d1[1].dead && !d1[1].role && !d1[1].hold && !/^die/.test(d1[1].act || ''), 'the game ended: the guest\'s card is gone and it is up at home, on its feet', d1[1]);
     ok(!d1[0].card && d1[0].dead && d1[0].panel === 'dead', 'and the host, alone and down, has the death panel', d1[0]);
     ok(!(await fatal(host)) && !(await fatal(g)), 'no error on either page', { host: await fatal(host), guest: await fatal(g) });
+    // home, none of the host's zones is kept (the one it stood in let go once it left it); and another host's zones are
+    // that host's: in the Forge by a wall (seed 1234, a cell beyond it sealed off), a guest joining comes in where it can
+    // walk to the host from, every time
+    await until(g, () => window.__G.zone?.id === 'town' && !document.getElementById('fade').classList.contains('on'), null, 20000, 'home');
+    await sleep(2000);
+    const zs = await ev(g, () => Object.values(window.__G.zones).map((z) => [z.id, z.netKey || null]));
+    ok(zs.length === 1 && zs.every(([, k]) => !k), 'at home the guest holds none of the host\'s zones', zs);
+    const hB = await open('hostB', 'auto=forge&lvl=14&cls=warden&seed=1234');
+    await tough(hB);
+    await place(hB, 5.5, 97.5);
+    const codeB = await ev(hB, async () => { const c = await window.__NET.hostGame(); window.__NET.startGame(); return c; });
+    const walks = () => ev(g, () => { const G = window.__G, m = G.zone.map, H = window.__NET.S.peers.get(window.__NET.S.hostPeer), P = {}; m.fillWindow(P, Math.floor(H.state.x), Math.floor(H.state.z), 20); const W = 41, cx = Math.floor(G.player.x) - P.x0, cz = Math.floor(G.player.z) - P.z0, d = P.d[cz * W + cx]; return { at: [+G.player.x.toFixed(2), +G.player.z.toFixed(2)], host: [H.state.x, H.state.z], walk: d === 65535 ? null : d / 10, seed: G.zone.seed }; });
+    const lands = [];
+    for (let r = 0; r < 3; r++) {
+      await ev(g, (c) => window.__NET.joinGame(c), codeB);
+      const inB = await inZone(g, 'forge', 90000); await sleep(1500);
+      lands.push(inB ? await walks() : null);
+      await ev(g, () => window.__NET.leaveGame()); await until(g, () => !window.__NET.S.role && window.__G.zone?.id === 'town' && !document.getElementById('fade').classList.contains('on'), null, 30000, 'home'); await sleep(1500);
+    }
+    const seedB = await ev(hB, () => window.__G.zone.seed);
+    ok(lands.every((l) => l && l.walk !== null && l.walk < 6 && l.seed === seedB), 'by a wall in another host\'s Forge the guest comes in where it walks to the host from, every time', lands);
+    ok(!(await fatal(hB)) && !(await fatal(g)), 'no error on either page', { host: await fatal(hB), guest: await fatal(g) });
   },
 
 
@@ -792,10 +946,18 @@ const SC = {
     const full = await ev(g, async () => { const N = window.__NET; N.S.hosts = [{ c: 'fu11', cls: 'warden', l: 5, z: 'town', n: 4, d: 0, v: 2, on: 1, peer: 'pz', by: null }]; window.__D.openPanel('coop'); const r = await N.joinGame('fu11'); return { r, err: N.S.err, role: N.S.role, disabled: document.querySelector('[data-a^="cjoin:fu11:"]')?.disabled }; });
     ok(full.r === false && full.err === 'full' && !full.role && full.disabled, 'a listing of four: its button disabled, joining it refused at once (full)', full);
     await ev(g, () => window.__D.closePanel());
-    // the open panel with a guest walking: the same body, its scroll kept, the meter set in place
-    await ev(host, () => window.__NET.startGame());
+    // a guest waiting walks out of its zone (its own travel) just as the host starts: it ends in the host's town, not in
+    // the zone its own travel built
     await ev(g, (c) => window.__NET.joinGame(c), code);
+    await until(g, () => !!window.__NET.S.world && !!window.__NET.S.hostPeer, null, 15000, 'world again');
+    await ev(g, () => window.__D.emit('travel', 'forest', { at: 'waypoint' }));
+    await sleep(100);
+    await ev(host, () => window.__NET.startGame());
     ok(await until(g, () => window.__NET.S.zoneKey && window.__NET.S.zoneKey === window.__G.zone.netKey, null, 60000, 'g in'), 'the guest came into the host\'s town');
+    await sleep(3000);
+    const race = await ev(g, () => ({ zone: window.__G.zone.id, key: window.__G.zone.netKey || null, zk: window.__NET.S.zoneKey, mode: window.__NET.NET.mode }));
+    ok(race.zone === 'town' && race.key === race.zk && race.mode === 'guest', 'its own travel, begun while it waited, did not leave it elsewhere', race);
+    // the open panel with a guest walking: the same body, its scroll kept, the meter set in place
     const hp = await hostPos(host); await place(g, hp.x + 2, hp.z + 1);
     await ev(g, () => { let k = 0; window.__walk = setInterval(() => { const p = window.__G.player, f = window.__G.zone.map.nearestFloor(p.x + Math.sin(k / 6) * 0.3, p.z + Math.cos(k / 6) * 0.3); p.x = f.x; p.z = f.z; k++; }, 50); });
     await ev(host, () => window.__D.openPanel('coop')); await sleep(600);
@@ -820,6 +982,17 @@ const SC = {
     ok(pl.length === 3 && !over, 'three plates over three heroes side by side, none over another', pl.map((r) => r.slice(0, 4).map(Math.round)));
     ok(pl.every((r) => r[4] !== 'rgba(0, 0, 0, 0)'), 'each on its own background', pl[0]?.[4]);
     await shot(host, 'ux-plates.png');
+    // a cinematic on the host while their names change (they level up): after it the plates still stand apart
+    // (four pages drawing on one machine run the game slowly: a short scene, waited for as long as it takes)
+    await ev(host, (hp) => window.__D.emit('cine', { x: hp.x, z: hp.z - 2, dur: 2.5, zoom: 1, steps: [] }), hp);
+    await until(host, () => document.getElementById('hud').hidden, null, 5000, 'cine on');
+    for (const pg of [g, g2, g3]) await ev(pg, () => { const h = window.__NET.S.real || window.__G.hero; h.level += 1; });
+    const inCine = await until(host, () => window.__G.mode === 'cine' && [...document.querySelectorAll('#plates .plate')].filter((e) => / 13$/.test(e.textContent)).length === 3, null, 20000, 'names changed in the scene');
+    await until(host, () => window.__G.mode === 'play' && !document.getElementById('hud').hidden, null, 90000, 'cine end');
+    await sleep(1200);
+    const pl2 = await ev(host, () => [...document.querySelectorAll('#plates .plate')].filter((e) => e.style.display !== 'none').map((e) => { const r = e.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom, e.textContent]; }));
+    const over2 = pl2.some((a, i) => pl2.some((b, j) => j > i && a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]));
+    ok(inCine && pl2.length === 3 && pl2.every((r) => r[2] > r[0]) && !over2, 'after a cinematic in which their names changed, none over another', pl2.map((r) => [...r.slice(0, 4).map(Math.round), r[4]]));
     // the kill counter right of the party frames; the revive ring below a Bellows' ring
     const hud = await ev(host, () => {
       const m = document.getElementById('massacre'), pe = document.getElementById('party'), ring = document.getElementById('ring'), rv = document.getElementById('revive');
@@ -841,13 +1014,14 @@ const SC = {
     ok(under.every((x) => x === 'panel'), 'with a panel open, the card is under it: its taps are the panel\'s', under);
     await ev(g2, () => window.__D.closePanel());
     // the host down too (a guest by it), then the host closes the game: the guest up at home, the host by the death panel
-    await ev(host, async () => { window.__mortal = true; const C = await import('/src/game/combat.js'), G = window.__G; C.damage({ team: 'foe', level: 10, x: G.player.x, z: G.player.z, def: {}, affixes: [] }, G.player, 1e7, { pure: true }); });
+    // (the cinematic's end leaves its hero a moment's grace, and four drawing pages run the game slowly)
+    await ev(host, async () => { window.__mortal = true; const C = await import('/src/game/combat.js'), G = window.__G; G.player.iframes = 0; C.damage({ team: 'foe', level: 10, x: G.player.x, z: G.player.z, def: {}, affixes: [] }, G.player, 1e7, { pure: true }); });
     await until(host, () => !!window.__NET.S.downed, null, 5000, 'host downed');
     await ev(host, () => window.__NET.leaveGame(null));
     await until(g2, () => !window.__NET.S.role && window.__G.zone.id === 'town', null, 15000, 'g2 home');
     await sleep(800);
-    const ge = await ev(g2, () => ({ dead: window.__G.player.dead, card: !document.getElementById('downed').hidden, role: window.__NET.S.role }));
-    ok(!ge.dead && !ge.card && !ge.role, 'the game closed: the downed guest is up at home, no card left', ge);
+    const ge = await ev(g2, () => ({ dead: window.__G.player.dead, card: !document.getElementById('downed').hidden, role: window.__NET.S.role, act: window.__G.player.avatar?.anim?.actName || null, hold: !!window.__G.player.avatar?.anim?.hold }));
+    ok(!ge.dead && !ge.card && !ge.role && !ge.hold && !/^die/.test(ge.act || ''), 'the game closed: the downed guest is up at home on its feet, no card left', ge);
     const he = await ev(host, () => ({ dead: window.__G.player.dead, panel: window.__G.panel, card: !document.getElementById('downed').hidden, ring: !document.getElementById('revive').hidden }));
     ok(he.dead && he.panel === 'dead' && !he.card && !he.ring, 'the downed host alone: the death panel, no card', he);
     await ev(host, () => { document.querySelector('#panel [data-a="respawn"]')?.click(); });
@@ -874,8 +1048,15 @@ const SC = {
     // a view the room cannot connect (signed out, a public link)
     const n = await open('nat', 'ng=1&auto=town&lvl=8&cls=ranger'); await watch(n);
     await until(n, () => window.__NET.S.dead === 'not_granted', null, 8000, 'ng');
-    const nn = await ev(n, async () => { const N = window.__NET; window.__D.openPanel('coop'); const txt = document.querySelector('#panel .pn-b').textContent; window.__D.closePanel(); return { dead: N.S.dead, told: txt.includes(window.__t('coop.notGranted')), host: txt.includes(window.__t('coop.host')), hud: !document.getElementById('h-coop').hidden, hg: await N.hostGame(), mode: window.__G.mode }; });
-    ok(nn.dead === 'not_granted' && nn.told && !nn.host && !nn.hud && nn.hg === false && nn.mode === 'play', 'not_granted: told why, no Host, no party button, the game plays on', nn);
+    const nn = await ev(n, async () => { const N = window.__NET; window.__D.openPanel('coop'); const txt = document.querySelector('#panel .pn-b').textContent; window.__D.openPanel('pause'); const pause = !!document.querySelector('#panel [data-a="coop"]'); window.__D.closePanel(); return { dead: N.S.dead, none: txt === window.__t('coop.none'), how: txt.includes(window.__t('coop.noneHow')), host: txt.includes(window.__t('coop.host')), pause, hud: !document.getElementById('h-coop').hidden, hg: await N.hostGame(), mode: window.__G.mode }; });
+    ok(nn.dead === 'not_granted' && nn.none && !nn.how && !nn.host && !nn.pause && !nn.hud && nn.hg === false && nn.mode === 'play', 'not_granted: the single-player page (no Co-op in the pause menu, no party button; a panel left open says only that there is no co-op here, nothing of access), the game plays on', nn);
+    // (and its title has no Co-op)
+    await n.goto(BASE + '?peer=nat&slot=nat&q=0&norender&ng=1');
+    await n.waitForFunction(() => window.__ready && window.__G.mode === 'title', null, { timeout: 240000 });
+    await sleep(600); await ev(n, () => document.getElementById('screen').click());
+    await n.waitForFunction(() => !!document.getElementById('m-cont'), null, { timeout: 30000 });
+    await until(n, () => window.__NET?.S.dead === 'not_granted', null, 8000, 'ng at the title'); await sleep(300);
+    ok(await ev(n, () => !!document.getElementById('m-cont') && !document.getElementById('m-coop')), 'nor its title');
     // the hosts listed by name, one there before the page and one after
     const c = await open('carol', 'by=carol&auto=town&lvl=12&cls=ranger'); await watch(c);
     await until(c, () => window.__NET.S.names.alice === 'Name-alice', null, 8000, 'alice named');
@@ -900,16 +1081,23 @@ const SC = {
     ok(await until(c, () => window.__NET.S.zoneKey && window.__NET.S.zoneKey === window.__G.zone.netKey, null, 60000, 'c in'), 'a guest in alice\'s game');
     await ev(c, () => window.__roomEnd('revoked'));
     ok(await until(c, () => !window.__NET.S.role && window.__NET.S.dead === 'revoked' && !window.__G.hero.__real, null, 8000, 'c revoked'), 'revoked on the guest: out of the game, its own hero');
-    ok(await toasted(c, 'coop.revoked'), 'and told why');
+    ok(await toasted(c, 'coop.off'), 'and told co-op is no longer here (nothing of access)');
     ok(await until(c, () => window.__G.zone.id === 'town' && window.__G.mode === 'play' && !window.__NET.NET.mode, null, 20000, 'c home'), 'home in its own town, playing');
-    const cp = await ev(c, async () => { window.__D.openPanel('coop'); const txt = document.querySelector('#panel .pn-b').textContent; window.__D.closePanel(); await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); return { told: txt.includes(window.__t('coop.revoked')), hud: !document.getElementById('h-coop').hidden }; });
-    ok(cp.told && !cp.hud, 'its panel says why after; no party button', cp);
+    const cp = await ev(c, async () => { window.__D.openPanel('pause'); const pause = !!document.querySelector('#panel [data-a="coop"]'); window.__D.closePanel(); await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); return { pause, hud: !document.getElementById('h-coop').hidden, avail: window.__NET.S.avail }; });
+    ok(!cp.pause && !cp.hud && !cp.avail, 'the single-player page after: no Co-op entry, no party button', cp);
     ok(await until(h, () => window.__NET.NET.n === 1 && !window.__NET.NET.remotes.length, null, 20000, 'h alone'), 'the host plays on, the guest gone');
     await ev(h, () => window.__roomEnd('revoked'));
     ok(await until(h, () => !window.__NET.S.role && window.__NET.S.dead === 'revoked', null, 8000, 'h revoked'), 'revoked on the host: its game ended');
     await sleep(600);
-    const hh = await ev(h, () => ({ party: !document.getElementById('party').hidden, mode: window.__G.mode, net: window.__NET.NET.mode, told: window.__toasts.includes(window.__t('coop.revoked')) }));
-    ok(!hh.party && hh.mode === 'play' && !hh.net && hh.told, 'no party frame or blinking link left, told why, the game plays on alone', hh);
+    const hh = await ev(h, () => ({ party: !document.getElementById('party').hidden, mode: window.__G.mode, net: window.__NET.NET.mode, told: window.__toasts.includes(window.__t('coop.off')) }));
+    ok(!hh.party && hh.mode === 'play' && !hh.net && hh.told, 'no party frame or blinking link left, told co-op is no longer here, the game plays on alone', hh);
+    // a grant withdrawn while Host is on its way (the room's answer to the join after the end): no game, no party frame
+    const e = await open('eve', 'by=eve&auto=town&lvl=12&cls=mage'); await watch(e);
+    await until(e, () => window.__NET.S.send === true, null, 8000, 'eve may send');
+    await ev(e, () => { window.__D.openPanel('coop'); document.querySelector('[data-a="chost"]').click(); window.__roomEnd('revoked'); });
+    await sleep(4000);
+    const ee = await ev(e, () => ({ role: window.__NET.S.role, dead: window.__NET.S.dead, status: window.__NET.S.status, party: !document.getElementById('party').hidden, stale: document.getElementById('party').classList.contains('stale'), hud: !document.getElementById('h-coop').hidden, net: window.__NET.NET.mode, panel: document.querySelector('#panel .pn-b')?.textContent, told: window.__toasts.includes(window.__t('coop.off')) }));
+    ok(!ee.role && ee.dead === 'revoked' && !ee.party && !ee.hud && !ee.net && ee.told, 'revoked while Host connects: no game is left open, no party frame, told co-op is no longer here', ee);
   },
   async room() {
     const { host, guests: [g, g2] } = await party('forest', 2, { lvl: 10, glvl: 10 });

@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { G } from '../game/state.js';
 import { NET } from '../net/state.js';
 import { S, VER, hostGame, joinGame, leaveGame, startGame, party, nameOf, respawnNow, stale, canPlay } from '../net/coop.js';
+import { TERMINAL } from '../net/transport.js';
 import { EXTRA, open as openPanel, renderPanel } from './panels.js';
 import { DIFFS } from '../game/data.js';
 import { R } from '../gfx/gfx.js';
@@ -68,8 +69,9 @@ const PARTY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
 
 // ---------- the lobby panel ----------
 // why this view cannot host or join (the room's answer), else why the last try failed
-const WHY = { not_permitted: 'coop.noSend', not_granted: 'coop.notGranted', revoked: 'coop.revoked', full: 'coop.full' };
-const why = (code) => WHY[code] || (code === 'capability_disabled' || code === 'capability_removed' || code === 'transform_error' ? 'coop.off' : 'coop.error');
+// (the room's end for the page, whatever its code, only as co-op no longer here: who may play is the app's to say)
+const WHY = { not_permitted: 'coop.noSend', full: 'coop.full' };
+const why = (code) => WHY[code] || (TERMINAL.has(code) ? 'coop.off' : 'coop.error');
 const meterText = () => { const net = S.ch?.meter?.rate?.(); return net ? t('coop.meter', net.msgsOut.toFixed(1), (net.bytesOut / 1024).toFixed(1), net.msgsIn.toFixed(1), (net.bytesIn / 1024).toFixed(1)) : ''; };
 function render() { const [k, h] = html(); UI.shown = k; return h; }
 // [what it shows but the meter, the panel]
@@ -77,15 +79,15 @@ function html() {
   const head = `<div class="pn-h"><h2>${t('coop.title')}</h2><button class="x" data-a="close">${ICON.close}</button></div>`;
   let body = '', meter = '';
   if (!S.ready) body = `<p class="muted">${t('coop.looking')}</p>`;
-  else if (!S.avail) body = `<p>${t('coop.none')}</p><p class="muted">${t('coop.noneHow')}</p>`;
-  else if (!S.role && !canPlay()) {
-    // (a view the room does not connect, or lets in without sending: it plays alone, and is told why)
-    const code = S.dead || 'not_permitted';
-    body = `<p>${t(why(code))}</p>${code === 'not_permitted' || code === 'not_granted' ? `<p class="muted">${t('coop.noneHow')}</p>` : ''}`;
-  } else if (!S.role) {
+  // (a room that ended for this page: the single-player page, nothing said of access)
+  else if (!S.avail) body = `<p>${t('coop.none')}</p>${S.dead ? '' : `<p class="muted">${t('coop.noneHow')}</p>`}`;
+  // (a view the room lets in without sending: it plays alone, and is told why)
+  else if (!S.role && !canPlay()) body = `<p>${t('coop.noSend')}</p><p class="muted">${t('coop.noneHow')}</p>`;
+  else if (!S.role) {
     // (while a try is on its way nothing else can be tapped; a game its listing shows full cannot be)
     const busy = S.status === 'connecting' ? ' disabled' : '';
-    const hosts = S.hosts.map((h, i) => [h, i]).filter(([h]) => h.v === VER).map(([h, i]) => `<button class="slot coop-h" data-a="cjoin:${esc(h.c)}:${i}"${busy || (h.n >= 4 ? ' disabled' : '')}><span>${clsIcon(h.cls)}</span><span class="nm">${esc(S.names[h.by] || t('class.' + (h.cls || 'warden')) + ' ' + (h.l | 0))}</span><span class="mt">${esc(t('zone.' + (h.z || 'town')))} · ${Math.min(4, h.n | 0)}/4 · ${esc(t('diff.' + (DIFFS[h.d | 0]?.id || 'warden')))}${h.on ? '' : ' · ' + t('coop.lobbyWait')}</span></button>`).join('');
+    // (each button names the peer of the listing it shows: a tap joins that peer, however the list has changed since)
+    const hosts = S.hosts.filter((h) => h.v === VER).map((h) => `<button class="slot coop-h" data-a="cjoin:${esc(h.c)}:${esc(encodeURIComponent(h.peer))}"${busy || (h.n >= 4 ? ' disabled' : '')}><span>${clsIcon(h.cls)}</span><span class="nm">${esc(S.names[h.by] || t('class.' + (h.cls || 'warden')) + ' ' + (h.l | 0))}</span><span class="mt">${esc(t('zone.' + (h.z || 'town')))} · ${Math.min(4, h.n | 0)}/4 · ${esc(t('diff.' + (DIFFS[h.d | 0]?.id || 'warden')))}${h.on ? '' : ' · ' + t('coop.lobbyWait')}</span></button>`).join('');
     body = `<p>${t('coop.intro')}</p>
       <button class="btn" data-a="chost" style="width:100%"${busy}>${t('coop.host')}</button>
       <div class="coop-join"><input id="coop-code" maxlength="4" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${t('coop.codePh')}" value="${esc(UI.code)}"><button class="btn ghost" data-a="cjoin"${busy}>${t('coop.join')}</button></div>
@@ -116,7 +118,7 @@ function doJoin(code, peer) {
 }
 function click(a, x, y) {
   if (a === 'chost') { hostGame().then((ok) => { if (ok === false) emit('toast', t(why(S.err))); renderPanel(); }); renderPanel(); return true; }
-  if (a === 'cjoin') { const h = x && y != null ? S.hosts[+y] : null; doJoin(x || UI.code || $('coop-code')?.value, h && h.c === x ? h.peer : null); return true; }
+  if (a === 'cjoin') { let pr = null; try { pr = x && y ? decodeURIComponent(y) : null; } catch (e) { /* not a peer */ } doJoin(x || UI.code || $('coop-code')?.value, pr); return true; }
   if (a === 'cstart') { startGame(); renderPanel(); return true; }
   if (a === 'cleave') { leaveGame(S.role === 'host' ? null : 'coop.youLeft'); renderPanel(); return true; }
   return false;
@@ -162,8 +164,9 @@ function frame() {
     UI.v.set(a.x, (a.y || 0) + 2.35, a.z).project(R.camera);
     const vis = UI.v.z < 1 && Math.abs(UI.v.x) < 1.1 && Math.abs(UI.v.y) < 1.1;
     el.style.display = vis ? '' : 'none';
-    // (its width measured once for each text)
-    if (vis) { if (!N.w) N.w = el.offsetWidth || 60; put.push({ el, w: N.w, x: (UI.v.x + 1) / 2 * innerWidth, y: (1 - UI.v.y) / 2 * innerHeight }); }
+    // (its width measured once for each text, while it can be: under a hidden HUD, a cinematic's, it has none, and is
+    // measured when it shows again)
+    if (vis) { const w = N.w || (N.w = el.offsetWidth) || 60; put.push({ el, w, x: (UI.v.x + 1) / 2 * innerWidth, y: (1 - UI.v.y) / 2 * innerHeight }); }
   }
   put.sort((a, b) => b.y - a.y || a.x - b.x);
   for (let i = 0; i < put.length; i++) {

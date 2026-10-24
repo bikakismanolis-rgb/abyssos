@@ -913,8 +913,6 @@ export const TEXT = {
   'coop.looking': ['Ψάχνουμε σύνδεση…', 'Looking for a connection…'],
   'coop.none': ['Εδώ δεν υπάρχει σύνδεση με άλλους παίκτες. Το παιχνίδι παίζεται κανονικά, χωρίς συντροφιά.', 'There is no connection to other players here. The game plays as ever, alone.'],
   'coop.noSend': ['Με πρόσβαση θεατή ή σχολιαστή δεν ανοίγεις ούτε μπαίνεις σε παιχνίδι συντροφιάς· το παιχνίδι παίζεται κανονικά, χωρίς αυτήν.', 'With Viewer or Commenter access you cannot host or join a game together: the game plays as ever, alone.'],
-  'coop.notGranted': ['Αυτή η προβολή δεν συνδέεται με άλλους παίκτες (χωρίς σύνδεση λογαριασμού, ή από δημόσιο σύνδεσμο)· το παιχνίδι παίζεται κανονικά, χωρίς συντροφιά.', 'This view cannot reach other players (signed out, or opened by a public link): the game plays as ever, alone.'],
-  'coop.revoked': ['Η πρόσβαση στη συντροφιά αποσύρθηκε· το παιχνίδι συνεχίζεται χωρίς αυτήν.', 'Access to playing together was withdrawn: the game goes on without it.'],
   'coop.off': ['Η συντροφιά δεν είναι διαθέσιμη πια σε αυτή τη σελίδα· το παιχνίδι συνεχίζεται χωρίς αυτήν.', 'Co-op is no longer available on this page: the game goes on without it.'],
   'coop.noneHow': ['Στο claude.ai: ο κάτοχος μοιράζεται το παιχνίδι (Κοινή χρήση) με δικαίωμα Contributor ή Editor, και ο φίλος το ανοίγει συνδεδεμένος.', 'On claude.ai: the owner shares the game (Share) with Contributor or Editor access, and the friend opens it signed in.'],
   'coop.connecting': ['Σύνδεση…', 'Connecting…'],
