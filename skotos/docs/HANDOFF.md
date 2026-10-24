@@ -59,8 +59,16 @@ on a phone).
 fixed and re-run: a plunge's fallback point past the 2 s, and the scenario's one-moment read of a flickering rim) and the
 strict-CSP check of the built artifact (desktop and phone; title, town, coast, Farthest Light: no violation, no error,
 no untextured model). Not yet checked on the published page: two signed-in accounts playing co-op through the
-artifact's room (`docs/coop/release.md` step 3); the owner can do it with a friend. Next: the coast plan
-(`docs/act5-briefs/reports/coast-perf-plan.md`, steps 1-3, exact, ~35-60 ms), measured alone on the machine.
+artifact's room (`docs/coop/release.md` step 3); the owner can do it with a friend. The coast plan's
+steps 1-3 (`docs/act5-briefs/reports/coast-perf-plan.md`) were applied, kept the look (45 frozen views, `tools/stillshots.mjs`)
+and saved nothing on SwiftShader, which skips a branch only when its body holds a loop: reverted
+(`docs/act5-briefs/reports/coast-perf.md`). Its step 4 (a flat stand-in for the ground under closed water, gating the
+lights' loop) is the one that could move perf5, at a ~1.5 sRGB-level change: wait for the owner's word on how the coast
+runs on a phone before more work on a proxy. Watch item from the same report (section 5): implicit-LOD texture reads and
+`fwidth` inside the water's `if (seaOn)` branch after its discard (and the ground's 0.56 m branch) are undefined on real
+GPUs at the waterline's quads; two reviewers judged it a one-pixel, mostly transparent edge, not new. If the owner
+reports sparkles along the water's edge on a phone, hoist those reads or use textureGrad with derivatives taken before
+the discard.
 
 | line | branch | state |
 |---|---|---|
