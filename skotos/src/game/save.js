@@ -16,11 +16,27 @@ export function loadSave() {
   Object.assign(G.settings, s.settings || {});
   return s;
 }
+// (the heroes this page deleted: another page's copy of the list never brings them back)
+const gone = new Set();
 export function writeSave() {
   if (!G.save) return;
   G.save.settings = G.settings;
   // (a co-op guest's G.hero is a view with the host's story over it: its own record is what is kept, net/coop.js)
   const hero = G.hero?.__real || G.hero;
+  // every other hero as it is stored now, not as this page read it at boot: two pages of one browser (a co-op host and
+  // its guest in two tabs, say) each keep only their own hero's record and never write the other's back stale
+  let disk = null;
+  try { disk = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { disk = null; }
+  if (disk && Array.isArray(disk.heroes)) {
+    const mine = new Map(G.save.heroes.map((h) => [h.id, h]));
+    G.save.heroes = disk.heroes.filter((h) => h && typeof h === 'object' && !gone.has(h.id)).map((h) => {
+      if (hero && h.id === hero.id) return hero;
+      const m = mine.get(h.id);
+      // (unchanged since this page read it: the same record; else the other page's, made whole as at boot)
+      if (m && JSON.stringify(m) === JSON.stringify(h)) return m;
+      repairHero(h); return h;
+    });
+  }
   if (hero) {
     hero.played = Date.now();
     const i = G.save.heroes.findIndex((h) => h.id === hero.id);
@@ -30,6 +46,7 @@ export function writeSave() {
   try { localStorage.setItem(KEY, JSON.stringify(G.save)); } catch (e) { /* private mode or full storage: keep playing */ }
 }
 export function deleteHero(id) {
+  gone.add(id);
   G.save.heroes = G.save.heroes.filter((h) => h.id !== id);
   if (G.save.last === id) G.save.last = null;
   writeSave();

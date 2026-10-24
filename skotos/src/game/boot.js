@@ -90,13 +90,15 @@ export async function boot(q) {
 }
 
 // ---------- starting and travelling ----------
+// a new hero's first gear; a hero who took off its weapon is given one again, and only the slots that are empty are
+// filled (what it wears is never replaced)
 async function starterGear(hero) {
   if (hero.equip.weapon) return;
   const { makeItem } = await import('./items.js');
   const C = (await import('./data.js')).CLASSES[hero.cls];
   hero.equip.weapon = makeItem(1, { base: C.weapon, rar: 0, cls: hero.cls });
-  if (hero.cls === 'warden') hero.equip.offhand = makeItem(1, { base: 'shield', rar: 0, cls: hero.cls });
-  hero.equip.chest = makeItem(1, { base: 'chest', rar: 0, cls: hero.cls });
+  if (hero.cls === 'warden') hero.equip.offhand ||= makeItem(1, { base: 'shield', rar: 0, cls: hero.cls });
+  hero.equip.chest ||= makeItem(1, { base: 'chest', rar: 0, cls: hero.cls });
 }
 async function startHero(hero, isNew, zone = 'town') {
   await starterGear(hero);
@@ -203,7 +205,8 @@ on('quit', () => {
 on('heroLook', () => refreshHeroLook());
 on('diffChanged', () => { for (const k of Object.keys(G.zones)) if (k !== 'town') { disposeZone(G.zones[k]); delete G.zones[k]; } G.portal = null; writeSave(); emit('toast', t('pick.diff') + ': ' + t('diff.' + DIFFS[G.hero.diff].id), 'quest'); });
 on('settings', () => { Audio.setVolumes({ music: G.settings.music, sfx: G.settings.sfx }); setLang(G.settings.lang); if (G.hero) setupHeroHud(); writeSave(); });
-on('cine', (c) => { G.cine = Object.assign({ t: 0, done: new Set() }, c); G.mode = 'cine'; showHud(false); document.getElementById('letterbox').classList.add('on'); });
+// (a channelled Ray of Dawn ends with the scene's start: its beam, an effect, runs out in the scene while the act stands)
+on('cine', (c) => { const ac = G.player?.act; if (ac?.name === 'beam') ac.dur = Math.min(ac.dur, ac.t); G.cine = Object.assign({ t: 0, done: new Set() }, c); G.mode = 'cine'; showHud(false); document.getElementById('letterbox').classList.add('on'); });
 on('actClosed', () => { Audio.music('town'); });
 on('raiseAlly', (a) => {
   const m = spawnMonster('skeleton', a.x, a.z, { level: G.hero.level, rising: true });

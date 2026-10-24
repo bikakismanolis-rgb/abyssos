@@ -825,9 +825,23 @@ function guestTick(dt) {
 }
 // the host's world on this page: G.hero becomes a view of the guest's own record with the host's story laid over it
 const WORLD = new Set(['flags', 'quest', 'diff', 'wps', 'act1', 'act2', 'act3', 'act4', 'act5', 'gateBest', 'seeds']);
+// (the flags that are the hero's own, not the story's: a later skill seen in the panel, the hint given once; read and
+// written in the guest's own record)
+const OWN_FLAG = /^(seen_|tickHint$)/;
 function viewHero(real, W) {
+  let wf = null, fv = null;
+  const flags = () => {
+    if (wf !== W.flags) {
+      wf = W.flags; real.flags ||= {};
+      fv = new Proxy(wf, {
+        get(f, k) { return typeof k === 'string' && OWN_FLAG.test(k) ? real.flags[k] : f[k]; },
+        set(f, k, v) { if (typeof k === 'string' && OWN_FLAG.test(k)) real.flags[k] = v; else f[k] = v; return true; }
+      });
+    }
+    return fv;
+  };
   return new Proxy(real, {
-    get(t0, k) { if (k === '__real') return real; if (WORLD.has(k)) return W[k]; return t0[k]; },
+    get(t0, k) { if (k === '__real') return real; if (k === 'flags') return flags(); if (WORLD.has(k)) return W[k]; return t0[k]; },
     set(t0, k, v) { if (WORLD.has(k)) W[k] = v; else t0[k] = v; return true; }
   });
 }

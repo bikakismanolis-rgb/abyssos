@@ -64,9 +64,10 @@ export function lampAt(x, z, pad = 0) {
 // burning ground at (x, z), pad metres past its edge (in a boss's dark a hero's fire, hers or a co-op companion's drawn
 // here, team 'vis', lights only as it bursts, and
 // the fires the skills' variants leave, a.dim, never: Rain of Fire, Pale Cinder, Ember Dance)
-// warm: asked for the Cold (cold.js), which a fire that follows her about (a.nowarm: Ember Dance) never answers
+// warm: asked for the Cold (cold.js). A fire that follows her about (a.nowarm: Ember Dance) never answers, for warmth
+// or for light (a Skua would never dive at a spinning Warden), and the Cradle never drinks it
 export function fireAt(x, z, pad = 0, warm = false) {
-  for (const a of G.areas) if (a.kind === 'fire' && a.t <= a.dur && !(warm && a.nowarm) && !(S.over != null && (a.team === 'hero' || a.team === 'vis') && (a.t > FLARE || a.dim)) && (a.x - x) ** 2 + (a.z - z) ** 2 < (a.r + pad) ** 2) return a;
+  for (const a of G.areas) if (a.kind === 'fire' && a.t <= a.dur && !a.nowarm && !(S.over != null && (a.team === 'hero' || a.team === 'vis') && (a.t > FLARE || a.dim)) && (a.x - x) ** 2 + (a.z - z) ** 2 < (a.r + pad) ** 2) return a;
   return null;
 }
 // lamp light (Act V): what holds the ice, keeps the Sunken from waking with the tide, and keeps the Icemaw, the Hands and
@@ -312,7 +313,7 @@ function drink(dt, pl) {
   const at = S.streamT <= 0 ? cradlePoint(V) : null;
   if (at) S.streamT = 0.12;
   for (const a of G.areas) {
-    if (a.kind !== 'fire' || a.t > a.dur || Math.hypot(a.x - pl.x, a.z - pl.z) > r + a.r * 0.5) continue;
+    if (a.kind !== 'fire' || a.t > a.dur || a.nowarm || Math.hypot(a.x - pl.x, a.z - pl.z) > r + a.r * 0.5) continue;
     n++; a.t += dt;
     if (!at) continue;
     if (FXM.fireStream) FXM.fireStream({ x: a.x, y: 0.4, z: a.z }, { x: at.x, y: at.y, z: at.z });
