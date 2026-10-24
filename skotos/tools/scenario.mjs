@@ -1216,9 +1216,9 @@ const S = {
       R.scene.remove(fl);
       for (const k in items) items[k][0].visible = true;
       draw();
-      // (the hero's ring is a thin flickering rim since look round 3: its mean over the six moments is 9, where one
-      // moment read 7.8-18; its bar is set under that mean, the others' as before)
-      out.pass = out.tele > 12 && out.pool > 12 && out.cradle > 8 && out.tones > 12 && out.halo > 0.75;
+      // (the hero's ring is a thin flickering rim since look round 3: its mean over the six moments is 8.3-9.1, where one
+      // moment read 7.8-18; its bar is set well under that mean, enough to catch the ring gone or dimmed, the others as before)
+      out.pass = out.tele > 12 && out.pool > 12 && out.cradle > 6 && out.tones > 12 && out.halo > 0.75;
       return out;
     });
     await shot();
