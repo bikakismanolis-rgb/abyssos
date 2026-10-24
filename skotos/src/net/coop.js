@@ -662,14 +662,16 @@ function takeEvents(P) {
   S.done.set(P.peer, last);
 }
 const reject = (why) => { S.stats.rejected++; S.stats.why[why] = (S.stats.why[why] || 0) + 1; };
-// the biggest blow a guest may claim: 14x its weapon's top damage as it claims it (dm), never past what a hero of its
+// the biggest blow a guest may claim: 56x its weapon's top damage as it claims it (dm), never past what a hero of its
 // level could have (and, past the last level, its Mastery: every point it has in Might), times its crit damage as it
-// claims it over a plain crit's x1.5, never past its level's and its Mastery's (every point in Ferocity)
+// claims it over a plain crit's x1.5, never past its level's and its Mastery's (every point in Ferocity). Measured
+// (docs/progression/port-act5.md): a level-50 hero in the best boss legendaries claims dm 4 200-5 200 with no Mastery,
+// and its crit Meteor or Earthsplitter under a War Cry and a shrine is up to 150x dm; both are under this cap
 function blowCap(P) {
   const lvl = clamp(P.lk?.l | 0, 1, MAX_LEVEL), ml = clamp(P.lk?.ml | 0, 0, 1e4), pts = lvl - 1 + ml;
-  const dmCeil = (12 + lvl * 9) * 8 * (1 + masteryValue(MASTERY_BY.might, pts, lvl) / 100);
+  const dmCeil = (12 + lvl * 9) * 12 * (1 + masteryValue(MASTERY_BY.might, pts, lvl) / 100);
   const cdCeil = 50 + 6 * lvl + masteryValue(MASTERY_BY.fury, pts, lvl);
-  return Math.max(60, Math.min(P.dmax || 0, dmCeil) * 14 * Math.max(1, (1 + Math.min(P.cdmg ?? 50, cdCeil) / 100) / 1.5));
+  return Math.max(60, Math.min(P.dmax || 0, dmCeil) * 56 * Math.max(1, (1 + Math.min(P.cdmg ?? 50, cdCeil) / 100) / 1.5));
 }
 // a live monster of the host's within reach of the guest's stand-in, or null (refused as too far)
 function foeNear(id, me) {
@@ -683,12 +685,13 @@ function over(P, k, n) { const R0 = (P.rates ||= {})[k] ||= { t: now(), n: 0 }; 
 function guestEvent(P, e) {
   const type = e[1], me = P.actor;
   if (type === 'h') {
-    const id = e[2] | 0, amt = e[3], crit = !!e[4], o = e[5] && typeof e[5] === 'object' ? e[5] : {};
+    const id = e[2] | 0, amt0 = e[3], crit = !!e[4], o = e[5] && typeof e[5] === 'object' ? e[5] : {};
     const a = G.actors.find((x) => x.id === id);
     if (!a || a.dead || a.removed || a.team !== 'foe' || a.prop) return;
     if (Math.hypot(a.x - me.x, a.z - me.z) > 26 + (a.radius || 0.5)) return reject('far');
-    const cap = blowCap(P);
-    if (!(typeof amt === 'number' && isFinite(amt) && amt > 0 && amt <= cap)) return reject('big');
+    if (!(typeof amt0 === 'number' && isFinite(amt0) && amt0 > 0)) return reject('bad');
+    // (a blow past the cap lands as the cap: a strong guest's best hit is never lost, a forged one does no more)
+    const cap = blowCap(P), amt = amt0 > cap ? (reject('big'), cap) : amt0;
     // the rate: what a second of its hits may come to
     const R0 = P.rate ||= { t: now(), sum: 0 };
     if (now() - R0.t > 1000) { R0.t = now(); R0.sum = 0; }

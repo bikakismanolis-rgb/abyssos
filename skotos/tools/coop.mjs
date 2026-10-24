@@ -312,12 +312,12 @@ const SC = {
     const ids = await ev(host, () => [window.__near.id, window.__far.id]);
     const hp = await hostPos(host); await place(g, hp.x + 2, hp.z);
     await sleep(1200);
-    await ev(g, ([near, far]) => { const S = window.__NET.S; for (const e of [['h', near, 1e9, 0, {}], ['h', far, 5, 0, {}], ['h', 999999, 5, 0, {}], ['h', near, 'x', 0, {}], ['h', near, 5, 0, { stun: 1e9, knock: 1e9 }], ['zz', 1], ['h', near, -5, 0, null]]) S.ev.push([++S.evSeq, ...e]); for (let i = 0; i < 400; i++) S.ev.push([++S.evSeq, 'h', near, 60, 0, {}]); }, ids);
+    await ev(g, ([near, far]) => { const S = window.__NET.S; for (const e of [['h', near, 1e9, 0, {}], ['h', far, 5, 0, {}], ['h', 999999, 5, 0, {}], ['h', near, 'x', 0, {}], ['h', near, 5, 0, { stun: 1e9, knock: 1e9 }], ['zz', 1], ['h', near, -5, 0, null]]) S.ev.push([++S.evSeq, ...e]); for (let i = 0; i < 400; i++) S.ev.push([++S.evSeq, 'h', near, 2000, 0, {}]); }, ids);
     await sleep(3000);
     const r = await ev(host, () => ({ near: window.__near.dead ? 0 : Math.round(window.__near.hp), max: Math.round(window.__near.hpMax), why: { ...window.__NET.S.stats.why }, far: window.__far.hp === window.__far.hpMax, stun: window.__near.status.stun, err: document.getElementById('fatal')?.textContent || '' }));
-    ok(r.why.big >= 1 && r.far && !r.err, 'a blow too big and one from 40 m are refused; nothing broke', r);
+    ok(r.why.big >= 1 && r.far && !r.err, 'a blow too big is held to the cap and one from 40 m refused; nothing broke', r);
     ok(r.stun <= 3, 'statuses are clamped', r.stun);
-    ok((r.why.rate || 0) > 0 && r.near > 1e7 - 400 * 60, 'a flood of 400 blows in a moment is rate-held', { why: r.why, lost: 1e7 - r.near });
+    ok((r.why.rate || 0) > 0 && r.near > 1e7 - 400 * 2000 / 4, 'a flood of 400 blows in a moment is rate-held', { why: r.why, lost: 1e7 - r.near });
     // burns count with their blows: forty touches that each light a burn as big as a blow may be go over the second's rate
     await sleep(1200);
     await ev(g, (near) => { const S = window.__NET.S; for (let i = 0; i < 40; i++) S.ev.push([++S.evSeq, 'h', near, 1, 0, { burn: 1e7 }]); }, ids[0]);
