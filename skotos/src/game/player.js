@@ -23,6 +23,8 @@ export function updatePlayer(dt) {
   const pl = G.player, s = G.stats, C = CLASSES[G.hero.cls];
   if (!pl) return;
   const av = pl.avatar;
+  // only a leap or the Vault holds her in the air: whatever ends or cuts one short (a death, the tongs) puts her down
+  if (pl.y && !(pl.act && (pl.act.name === 'leap' || pl.act.name === 'vault'))) { pl.y = 0; av.group.position.y = 0; }
   if (pl.dead) { av.update(dt, { speed: 0 }); pl.trail?.push(VB, VT, false); return; }
   const x0 = pl.x, z0 = pl.z, zone0 = G.zone;
 
@@ -32,6 +34,8 @@ export function updatePlayer(dt) {
   for (let i = 0; i < pl.cds.length; i++) pl.cds[i] = Math.max(0, pl.cds[i] - dt);
   pl.dodgeCd = Math.max(0, pl.dodgeCd - dt); pl.potionCd = Math.max(0, pl.potionCd - dt);
   for (const k in pl.buffs) { pl.buffs[k] -= dt; if (pl.buffs[k] <= 0) delete pl.buffs[k]; }
+  // the Alpha's +15% lasts only while an Alpha runs with her (killed, run out, left behind at a waypoint: skillsx.js)
+  if (pl.buffs.alpha && !G.actors.some((a) => a.alpha && a.pet && !a.dead)) delete pl.buffs.alpha;
   tickStatus(pl, dt);
   // Act IV: Ember Ticks on her back burn and slow her (a dodge throws them off: skills.js)
   tickCling(dt);
@@ -42,7 +46,8 @@ export function updatePlayer(dt) {
   else if (lastHit > 3) pl.res = Math.max(0, pl.res + C.resRegen * dt);
 
   // input
-  const busyHard = pl.act && (pl.act.name === 'leap' || pl.act.name === 'roll' || pl.act.name === 'blink');
+  // (the Vault and the Charge carry her like a leap: nothing cuts them short)
+  const busyHard = pl.act && (pl.act.name === 'leap' || pl.act.name === 'vault' || pl.act.name === 'charge' || pl.act.name === 'roll' || pl.act.name === 'blink');
   for (const ev of takeEvents()) {
     if (G.panel) continue;
     if (ev.t === 'skill') {

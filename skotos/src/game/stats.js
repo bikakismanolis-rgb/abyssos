@@ -1,12 +1,13 @@
 // Hero stats from level, items and buffs.
 import { CLASSES, SKILLS, SKILL_MAX_RANK, BOON, BOONS, BUFFS, UNBOUND, REMEMBERED, GIFTS } from './data.js';
 import { G } from './state.js';
+import { masteryStats } from './progression.js';
 
 const fin = (v) => typeof v === 'number' && isFinite(v);
 
 export function computeStats(hero, equip = hero.equip) {
   const C = CLASSES[hero.cls], L = hero.level;
-  const s = { main: 8 + L * 3, vit: 7 + L * 2, life: 0, dmgPct: 0, crit: 5, critDmg: 50, atkSpd: 0, armor: 0, lifeOnHit: 0, regen: 0, move: 0, cdr: 0, resRegen: 0, area: 0, eliteDmg: 0, gold: 0, mf: 0, thorns: 0, block: 0, lifePct: 0, armorPct: 0, skill: {}, legs: new Set() };
+  const s = { main: 8 + L * 3, vit: 7 + L * 2, life: 0, dmgPct: 0, crit: 5, critDmg: 50, atkSpd: 0, armor: 0, lifeOnHit: 0, regen: 0, move: 0, cdr: 0, resRegen: 0, area: 0, eliteDmg: 0, gold: 0, mf: 0, thorns: 0, block: 0, lifePct: 0, armorPct: 0, furyGain: 0, skill: {}, legs: new Set() };
   let wmin = 2, wmax = 4, wspd = 1.2;
   // (only what an item is made of counts: a key or a value no item can have is passed over, so no save breaks a hero)
   for (const slot in equip) {
@@ -30,6 +31,8 @@ export function computeStats(hero, equip = hero.equip) {
   // own, never the host's world's (net/coop.js: hero.__real is the guest's record)
   const own = hero.__real || hero, OF = own.flags || {};
   if (OF.gifts && !(OF.giftsTaken || OF.crownUnmade || own.quest >= 22) && G.zone?.id !== 'gate') for (const id in GIFTS) if (OF.gifts[id] === 'taken') for (const k in GIFTS[id]) s[k] += GIFTS[id][k];
+  // Mastery (progression.js)
+  masteryStats(hero, s);
   const lifeMax = Math.round((40 + L * 12 + s.vit * 5 + s.life) * C.life * (1 + s.lifePct / 100));
   const armor = Math.round((s.armor * C.armor + L * 3) * (1 + s.armorPct / 100));
   const dmgMult = (1 + s.main / 100) * (1 + s.dmgPct / 100);

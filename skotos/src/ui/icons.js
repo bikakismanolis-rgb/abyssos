@@ -34,7 +34,24 @@ export const ICON = {
   skull: S('<path d="M5 11a7 7 0 1 1 14 0c0 2.5-1.2 4-3 5v3H8v-3c-1.8-1-3-2.5-3-5z"/><circle cx="9" cy="11" r="1.5" fill="currentColor"/><circle cx="15" cy="11" r="1.5" fill="currentColor"/><path d="M11 19v-2M13 19v-2"/>'),
   flame: S('<path d="M12 21c3.5 0 6-2.4 6-5.8 0-4.4-4-6.2-4-11.2-2.5 1.6-4.6 4.4-4 8-1-.6-1.8-1.8-2-3-1.5 1.6-2 3.6-2 6.2C6 18.6 8.5 21 12 21z"/>'),
   settings: S('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>'),
-  portal: S('<ellipse cx="12" cy="12" rx="6" ry="9"/><ellipse cx="12" cy="12" rx="3" ry="5.5" stroke-dasharray="2 2"/>')
+  portal: S('<ellipse cx="12" cy="12" rx="6" ry="9"/><ellipse cx="12" cy="12" rx="3" ry="5.5" stroke-dasharray="2 2"/>'),
+  // the later skills
+  charge: S('<path d="M13 5c3 1.2 5 3.8 5 7s-2 5.8-5 7c-1.6-1.6-2.4-4-2.4-7s.8-5.4 2.4-7z"/><path d="M3 9h5M2 12h6M3 15h5" stroke-width="1.4"/>'),
+  bulwark: S('<path d="M12 3l7 3v5c0 4.6-3 8-7 10-4-2-7-5.4-7-10V6z"/><path d="M12 7.5v9M8.5 10.5h7" stroke-width="1.4"/><circle cx="12" cy="12" r="10.4" stroke-dasharray="1.5 2.5" stroke-width="1"/>'),
+  sun: S('<circle cx="12" cy="12" r="3.6"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4M5.3 5.3l2.8 2.8M15.9 15.9l2.8 2.8M5.3 18.7l2.8-2.8M15.9 8.1l2.8-2.8"/>'),
+  trap: S('<path d="M3 15h18"/><path d="M5 15l1.5-5 1.5 5 1.5-5 1.5 5 1.5-5 1.5 5 1.5-5 1.5 5 1.5-5 1 5"/><path d="M8 19h8M12 15v4" stroke-width="1.3"/>'),
+  vault: S('<path d="M19 20c-4-1-7-5-8-11"/><path d="M11 9L8.5 11.5M11 9l2.5 2"/><circle cx="10" cy="5.5" r="1.6"/><path d="M3 6l5 2M3 10l5 0M3 14l5-2" stroke-width="1.3"/>'),
+  hawk: S('<path d="M2 9c3-1 6 0 8 2l2-1 2 1c2-2 5-3 8-2-2 1-4 3-5 6l-3-1-2 3-2-3-3 1C6 12 4 10 2 9z"/><circle cx="12" cy="9.2" r=".6" fill="currentColor"/>'),
+  snow: S('<path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7"/><path d="M9.5 3.5L12 6l2.5-2.5M9.5 20.5L12 18l2.5 2.5M3.6 10.4L7 9.6 6.3 6.2M20.4 13.6L17 14.4l.7 3.4M3.6 13.6L7 14.4l-.7 3.4M20.4 10.4L17 9.6l.7-3.4" stroke-width="1.2"/>'),
+  rift: S('<path d="M12 12c0-2 1.6-3 3-3 2.4 0 3.6 2 3.6 4 0 3.6-3 6-6.6 6-4.4 0-7.4-3.4-7.4-7.6C4.6 6.6 8.4 3 13 3"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/>'),
+  beam: S('<path d="M3 21L14 10"/><path d="M14 10l7-7M13 6l5 5" stroke-width="1.2"/><circle cx="14" cy="10" r="2.4"/><path d="M5 15l-2-2M9 19l-2-2" stroke-width="1.2"/>'),
+  // Mastery
+  heart: S('<path d="M12 20s-7.5-4.4-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.6-7.5 10-7.5 10z"/>'),
+  eye: S('<path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.8"/>'),
+  hourglass: S('<path d="M6 3h12M6 21h12M7 3c0 5 10 5 10 9s-10 4-10 9M17 3c0 5-10 5-10 9s10 4 10 9"/>'),
+  mastery: S('<path d="M12 2.5l2.4 5.6 6 .6-4.6 4 1.4 6-5.2-3.2-5.2 3.2 1.4-6-4.6-4 6-.6z"/><circle cx="12" cy="11.6" r="2" stroke-width="1.2"/>'),
+  variant: S('<path d="M6 4v6a6 6 0 0 0 6 6h6"/><path d="M6 4v16"/><path d="M15 13l3 3-3 3" stroke-width="1.5"/>'),
+  reset: S('<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/>')
 };
 // equipment slot glyphs
 export const SLOT_ICON = { weapon: 'sword', offhand: 'shield', helm: 'skull', chest: 'shield', gloves: 'hand', boots: 'roll', amulet: 'star', ring1: 'orb', ring2: 'orb' };

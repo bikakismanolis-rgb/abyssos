@@ -793,6 +793,140 @@ const SC = {
 
 
   // Act V: the host's tide on the guest's coast (its clock and a boss's hold), the host's ice breaking under the guest
+  // the progression in co-op, four players on the Farthest Light's ice, each with its own Mastery, variants and later
+  // skills from its own save: the host lands what each guest's blows were (its Mastery in them once, the host's not at
+  // all, none refused), a guest's taunt, pull, cracks and refreeze are done on the host's world, every page draws the
+  // others' effects (VIS) and they end, and the room's budget holds with the most effect-heavy loadouts cast for 20 s
+  async prog() {
+    const A4 = 'act1,act2,act3,act4,after3,hart,autumn,weaver,lord,fireTaken,ivar,plug,karthax,crownUnmade,giftsTaken,unbound,newFire';
+    const F5 = 'alkyone,coastCall,cradle,coal,alkField,coastSeen,hearth,rite,tamMet,glaukosMet,light_grey,mem_i1,light_wreck,mem_i2,light_fall,mem_i3,towerWake,towerDown,frozen,farSeen,alkShip';
+    const { host, guests } = await party('farlight', 3, { lvl: 45, glvl: 45, hq: '&quest=28&flags=' + A4 + ',' + F5 });
+    const [gR, gM, gW] = guests, all = [host, ...guests];
+    // each page's own build (its own save): Mastery, every rank and variant, a loadout of the heavy skills
+    const BUILD = {
+      host: { mast: { might: 100, vigor: 40 }, load: ['bulwark', 'whirl', 'leap', 'dawn'], variant: { whirl: 2, leap: 1 } },
+      ranger: { mast: { might: 40, fury: 30, aim: 30, leech: 20 }, load: ['hawks', 'rain', 'multi', 'vault'], variant: { rain: 1, multi: 2 } },
+      mage: { mast: { might: 50, fury: 60, aim: 40 }, load: ['rift', 'beam', 'meteor', 'nova'], variant: { meteor: 1, nova: 2 } },
+      warden: { mast: { might: 30, iron: 30, well: 20 }, load: ['cry', 'bulwark', 'quake', 'whirl'], variant: { cry: 2, quake: 2, whirl: 1 } }
+    };
+    for (const [i, pg] of all.entries()) await ev(pg, async ([B, host]) => {
+      const G = window.__G, h = G.__real || G.hero, D = await import('/src/game/data.js'), b = host ? B.host : B[h.cls];
+      for (const sk of D.SKILLS[h.cls]) if (!sk.basic) h.skills[sk.id] = 5;
+      for (const id in D.VARIANTS) if (D.SKILLS[h.cls].some((s) => s.id === id)) h.vars[id] = 3;
+      Object.assign(h.variant, b.variant); h.mast = { ...b.mast }; h.loadout = b.load.slice(); h.mlvl = 30;
+      // (the host's story owes a guest the blessings of the acts it has finished: they are taken, so no panel waits on them)
+      h.boons = ['ember', 'forge', 'amber', 'lantern']; if (G.panel) window.__D.closePanel();
+      window.__D.refreshStats(); window.__D.emit('loadout'); window.__immortal = true;
+      (await import('/src/game/save.js')).writeSave();
+    }, [BUILD, i === 0]);
+    const mine = await ev(gR, () => ({ might: window.__G.hero.mast.might, saved: JSON.parse(localStorage.getItem(Object.keys(localStorage).find((k) => k.includes('g1')) || 'x') || 'null')?.heroes?.[0]?.mast?.might ?? null, dm: window.__G.stats.dmgMult }));
+    ok(mine.might === 40, 'a guest\'s Mastery is its own hero\'s (its own save)', mine);
+    // a thin-ice spot near the host; everyone there; a pack of sturdy monsters 6 m off and a dummy
+    const spot = await ev(host, () => { const G = window.__G, L = G.zone.L, p = G.player; let best = null, bd = 1e9; for (let i = 0; i < L.ice.length; i += 2) { if (!L.ice[i] || L.thick?.[i]) continue; const x = i % L.w + 0.5, z = Math.floor(i / L.w) + 0.5; let ok = true; for (let k = 0; k < 12 && ok; k++) for (const r of [3, 7]) { const xx = x + Math.sin(k * 0.52) * r, zz = z + Math.cos(k * 0.52) * r, j = Math.floor(zz) * L.w + Math.floor(xx); if (!L.ice[j] || L.thick?.[j] || !G.zone.map.walkable(xx, zz)) ok = false; } const d = Math.hypot(x - p.x, z - p.z); if (ok && d < bd) { bd = d; best = { x, z }; } } return best; });
+    ok(!!spot, 'a spot of thin ice', spot);
+    const at = [[0, 0], [2, -1.5], [-2, -1.5], [0, -3]];
+    for (const [i, pg] of all.entries()) await place(pg, spot.x + at[i][0], spot.z + at[i][1]);
+    await sleep(1200);
+    const spawnPack = () => ev(host, ([x, z]) => { const G = window.__G; for (const a of G.actors) if (a.team === 'foe' && !a.boss) { a.dead = true; a.remove(); } G.actors = G.actors.filter((a) => !a.removed); for (const p of G.zone.packs || []) p.spawned = true; for (let i = 0; i < 10; i++) { const m = window.__D.spawnMonster(i % 2 ? 'goblin' : 'skeleton', x + Math.sin(i * 0.63) * 2.5, z + 6 + Math.cos(i * 0.63) * 2.5, { level: 45 }); m.hp = m.hpMax = 1e7; m.test = true; G.actors.push(m); } return G.actors.filter((a) => a.test).length; }, [spot.x, spot.z]);
+    ok(await spawnPack() === 10, 'ten sturdy monsters 6 m off');
+    await until(gW, () => [...window.__NET.S.pup.values()].filter((a) => !a.dead).length >= 8, null, 10000, 'puppets');
+    // --- taunt: the Warden guest's Challenge holds the host's monsters to its stand-in ---
+    await ev(host, () => { for (const a of window.__G.actors) if (a.test) a.status.stun = 0; });
+    // (a cast is pushed again until the page says it was used: an input taken while a panel or a channel holds it is lost)
+    const cast = async (pg, i, x, z) => {
+      for (let n = 0; n < 4; n++) {
+        const used = await ev(pg, async ([i, x, z]) => {
+          const G = window.__G, pl = G.player, B = await import('/src/ui/bus.js');
+          if (!window.__usedOn) { window.__usedOn = true; window.__used = 0; B.on('skillUsed', () => window.__used++); }
+          const u0 = window.__used;
+          if (G.panel) window.__D.closePanel(); pl.res = G.stats.resMax; pl.act = null;
+          window.__D.IN.events.push({ t: 'skill', i, aim: x == null ? null : { x, z } });
+          for (let k = 0; k < 20 && window.__used === u0; k++) await new Promise((r) => setTimeout(r, 50));
+          return window.__used > u0;
+        }, [i, x, z]);
+        if (used) return true;
+      }
+      return false;
+    };
+    await cast(gW, 1, spot.x, spot.z + 6);
+    await sleep(300);
+    const taunted = await until(host, () => { const r = window.__NET.NET.remotes; return window.__G.actors.filter((a) => a.test && a.taunt > window.__G.hero.stats.time && a.tauntBy && r.includes(a.tauntBy)).length >= 3; }, null, 8000, 'taunt');
+    const tg = await ev(host, () => { const r = window.__NET.NET.remotes; return window.__G.actors.filter((a) => a.test && a.tgt && r.includes(a.tgt) && a.tauntBy === a.tgt).length; });
+    ok(taunted && tg >= 3, 'a guest\'s Challenge holds the host\'s monsters to that guest', { held: tg });
+    // --- pull: the Mage guest's Void Rift draws them in on the host ---
+    await spawnPack();
+    await ev(host, () => { for (const a of window.__G.actors) if (a.test) { a.status.stun = 99; a.x0 = a.x; a.z0 = a.z; } });
+    await sleep(800);
+    const rx = spot.x + 3.5, rz = spot.z + 6;
+    await cast(gM, 1, rx, rz);
+    await sleep(2200);
+    const pulled = await ev(host, ([rx, rz]) => { const L = window.__G.actors.filter((a) => a.test && !a.dead); return { n: L.length, closer: L.filter((a) => Math.hypot(a.x - rx, a.z - rz) < Math.hypot(a.x0 - rx, a.z0 - rz) - 0.4).length }; }, [rx, rz]);
+    const why0 = await ev(host, () => ({ ...window.__NET.S.stats.why }));
+    ok(pulled.closer >= 3, 'a guest\'s Rift pulls the host\'s monsters in', { ...pulled, why: why0 });
+    // --- the ice: the Warden guest's Ring of Earth cracks the host's; the Mage guest's Nova heals it ---
+    const iceSum = (pg, x, z, r) => ev(pg, ([x, z, r]) => { const G = window.__G, L = G.zone.L, I = G.zone.ice; let n = 0; for (let cz = Math.floor(z - r); cz <= z + r; cz++) for (let cx = Math.floor(x - r); cx <= x + r; cx++) { const i = cz * L.w + cx; if (L.ice[i] && Math.hypot(cx + 0.5 - x, cz + 0.5 - z) <= r && I.stage[i] >= 1 && I.stage[i] <= 3) n += I.stage[i]; } return n; }, [x, z, r]);
+    const wp = await ev(gW, () => ({ x: window.__G.player.x, z: window.__G.player.z }));
+    const c0 = await iceSum(host, wp.x, wp.z, 8);
+    await ev(gW, () => { const G = window.__G; G.player.cds.fill(0); });
+    await cast(gW, 3, wp.x, wp.z + 6);
+    await sleep(2000);
+    const c1 = await iceSum(host, wp.x, wp.z, 8), cg = await iceSum(gW, wp.x, wp.z, 8);
+    ok(c1 >= c0 + 20, 'a guest\'s Ring of Earth cracks the host\'s ice (and the guest\'s follows it)', { before: c0, host: c1, guest: cg });
+    const mp = await ev(gM, () => ({ x: window.__G.player.x, z: window.__G.player.z }));
+    await ev(host, async ([x, z]) => { const I = await import('/src/game/ice.js'); I.crackAt(x, z, 4, 2, { lamp: false }); }, [mp.x, mp.z]);
+    await sleep(1500);
+    const f0 = await iceSum(host, mp.x, mp.z, 4.5);
+    await ev(gM, () => { window.__G.player.cds.fill(0); });
+    await cast(gM, 4, null, null);
+    await sleep(1800);
+    const f1 = await iceSum(host, mp.x, mp.z, 4.5);
+    ok(f0 > 10 && f1 < f0 * 0.5, 'a guest\'s Blizzard (a Nova) heals the host\'s cracks', { before: f0, after: f1 });
+    // --- every page draws the others' effects: the host's Bulwark on the guests, the guests' on the host ---
+    await ev(host, () => { window.__G.player.cds.fill(0); });
+    await cast(host, 1, null, null); await cast(gR, 1, null, null); await cast(gW, 2, null, null);
+    await sleep(1500);
+    const vis = await Promise.all(all.map((pg) => ev(pg, () => window.__G.areas.filter((a) => a.kind === 'custom' && a.team === 'vis').length)));
+    ok(vis[0] >= 2 && vis[1] >= 1 && vis[2] >= 2 && vis[3] >= 1, 'each page draws the others\' Bulwarks and Hawks', vis);
+    // --- a boss's darkness on the host: a guest's fire there (Rain of Fire's, dim) is drawn but is no light past its flare ---
+    await ev(host, async () => { (await import('/src/game/light.js')).setHeroLight(2.5, null); });
+    await ev(gR, () => { window.__G.player.cds.fill(0); });
+    await cast(gR, 2, spot.x - 4, spot.z + 2);
+    await sleep(3200);
+    const dark = await ev(host, async ([x, z]) => { const L = await import('/src/game/light.js'), G = window.__G; const f = G.areas.filter((a) => a.kind === 'fire' && a.team === 'vis' && Math.hypot(a.x - x, a.z - z) < 4); const r = { fires: f.length, dim: f.filter((a) => a.dim).length, lit: f.some((a) => L.lightAt(a.x, a.z)) }; L.setHeroLight(null); return r; }, [spot.x - 4, spot.z + 2]);
+    ok(dark.fires > 0 && dark.dim === dark.fires && !dark.lit, 'in a boss\'s darkness a guest\'s fire is drawn on the host, and is no light there', dark);
+    // --- 20 s of every page casting its four in turn (cooldowns as they are, resources full) ---
+    await spawnPack();
+    await ev(host, () => { for (const a of window.__G.actors) if (a.test) a.status.stun = 99; });
+    // (everyone at the pack's edge: the Warden's spins reach it)
+    for (const [i, pg] of all.entries()) await place(pg, spot.x + [-1.5, 1.5, -3, 3][i], spot.z + 3.6);
+    for (const pg of all) await ev(pg, () => { window.__sent = 0; const h0 = window.__NET.NET.h.hitPuppet; if (h0 && !h0.wrapped) { const f = (src, tg, amt, o, crit) => { const r = h0(src, tg, amt, o, crit); window.__sent += r; return r; }; f.wrapped = true; window.__NET.NET.h.hitPuppet = f; } });
+    const hp0 = await ev(host, () => window.__G.actors.filter((a) => a.test && !a.dead).reduce((s, a) => s + a.hp, 0));
+    const drops0 = await Promise.all(all.map((pg) => ev(pg, () => window.__NET.S.ch.meter.tx.drops)));
+    for (const pg of all) await ev(pg, () => { window.__NET.S.ch.meter.peak = 0; });
+    for (const pg of all) await ev(pg, async () => { const B = await import('/src/ui/bus.js'); window.__casts = {}; if (!window.__castOn) { window.__castOn = true; B.on('skillUsed', (i) => { const id = (window.__G.hero.loadout || [])[i - 1]; window.__casts[id] = (window.__casts[id] || 0) + 1; }); } });
+    let looks = 0;
+    const t0 = Date.now(); let k = 0;
+    while (Date.now() - t0 < 20000) {
+      for (const pg of all) await ev(pg, async (k) => { const G = window.__G, pl = G.player, S = await import('/src/game/skills.js'); if (G.panel) window.__D.closePanel(); pl.res = G.stats.resMax; const f = S.nearestFoe(20); if (!pl.act || pl.act.name === 'whirl') window.__D.IN.events.push({ t: 'skill', i: 1 + (k % 4), aim: f ? { x: f.x, z: f.z } : null }); }, k);
+      k++; await sleep(350);
+      if (k % 6 === 0) looks = Math.max(looks, await ev(gM, () => window.__G.projs.filter((p) => p.team === 'vis' && p.look).length + window.__G.areas.filter((a) => a.team === 'vis' && (a.look || a.kind === 'custom')).length));
+    }
+    await sleep(1500);
+    // (the host's own blows on them: its Bulwark, Ember Dance and the rest; the guests' sum is what they sent)
+    const sent = await Promise.all(guests.map((g) => ev(g, () => window.__sent)));
+    console.log('     casts', JSON.stringify(await Promise.all(all.map((pg) => ev(pg, () => window.__casts)))));
+    ok(looks > 0, 'the mage guest draws the others\' shots and effects by their looks', looks);
+    const hs = await ev(host, () => ({ left: window.__G.actors.filter((a) => a.test && !a.dead).reduce((s, a) => s + a.hp, 0), why: window.__NET.S.stats.why, rejected: window.__NET.S.stats.rejected, hits: window.__NET.S.stats.hits }));
+    ok(!hs.why.big && !hs.why.rate && !hs.why.bad && !hs.why.pull && !hs.why.ice, 'nothing a guest\'s Mastery or skills did was refused as too much', hs.why);
+    const st = await Promise.all(all.map((pg) => stats(pg)));
+    for (const [i, x] of st.entries()) console.log('     ' + (i ? 'guest ' + i : 'host   ') + ' sends/s ' + x.r.msgsOut.toFixed(1) + ' (peak ' + (x.peak || 0).toFixed(1) + '), bytes/s out ' + Math.round(x.r.bytesOut) + ', in ' + Math.round(x.r.bytesIn) + ', drops ' + x.tx.drops + ', too big ' + x.tx.big);
+    ok(st.every((x, i) => !x.tx.big && x.tx.drops === drops0[i] && x.peak <= 20), 'every page under 20 sends a second, none over 4 KiB, none dropped by the budget', st.map((x, i) => [+x.peak.toFixed(1), Math.round(x.r.bytesOut), x.tx.drops - drops0[i]]));
+    // what the host took off them: at least the guests' blows (its own on top), each guest's no more than once
+    ok(hp0 - hs.left >= sent.reduce((a, b) => a + b, 0) * 0.98, 'the host landed every blow the guests sent (Mastery in it once)', { sent, took: Math.round(hp0 - hs.left) });
+    await sleep(14000);
+    const end = await Promise.all(all.map((pg) => ev(pg, () => window.__G.areas.filter((a) => a.kind === 'custom' && a.team === 'vis').length)));
+    ok(end.every((n) => n === 0), 'the drawn effects all end', end);
+  },
   async act5() {
     const A4 = 'act1,act2,act3,act4,after3,hart,autumn,weaver,lord,fireTaken,ivar,plug,karthax,crownUnmade,giftsTaken,unbound,newFire';
     const { host, guests: [g] } = await party('coast', 1, { lvl: 30, glvl: 30, hq: '&quest=26&flags=' + A4 + ',alkyone,coastCall,cradle,coal,alkField,coastSeen,hearth,rite' });

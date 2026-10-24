@@ -27,7 +27,9 @@ import { refreshStats } from '../game/stats.js';
 import { dropGold, dropItem, dropGlobe, gatherPickups } from '../game/pickups.js';
 import { fire, area } from '../game/projectiles.js';
 import { addSapPool, addSapRing } from '../game/sap.js';
-import { netIce, iceDigest } from '../game/ice.js';
+import { netIce, iceDigest, crackAt, crackLine, crackRing, refreezeAt } from '../game/ice.js';
+import { LOOKS, VIS, VIS_FOLLOW } from '../game/skillsx.js';
+import { MASTERY_BY, masteryValue } from '../game/progression.js';
 import { writeSave } from '../game/save.js';
 import * as FX from '../gfx/fx.js';
 import { R } from '../gfx/gfx.js';
@@ -58,7 +60,7 @@ export const S = {
   // the items they may bring
   real: null, world: null, wkey: '', wgate: null, zoneKey: null, loading: false, pup: new Map(), pupInfo: new Map(), ev: [], evSeq: 0, relDone: 0, hclips: new Map(), lastSnap: 0, chunks: {},
   paid: new Set(), bossPaid: new Set(), purses: new Map(), killB: { tok: 40, t: 0 }, owed: 0,
-  downed: null, rv: null, fxOut: [], fxT: 0, fxIn: new Map(), stats: { snaps: 0, snapBytes: 0, rejected: 0, hits: 0, why: {}, jumps: { enter: 0, rise: 0, refused: 0 } }
+  pulls: new Map(), pullT: 0, downed: null, rv: null, fxOut: [], fxT: 0, fxIn: new Map(), stats: { snaps: 0, snapBytes: 0, rejected: 0, hits: 0, why: {}, jumps: { enter: 0, rise: 0, refused: 0 } }
 };
 const now = () => performance.now();
 const q = (v, k) => Math.round((+v || 0) * k);
@@ -328,7 +330,7 @@ function readPeer(P, moved) {
   P.zk = typeof p.zk === 'string' ? p.zk : null;
   P.roster = Array.isArray(p.ro) ? p.ro.filter((x) => typeof x === 'string').slice(0, 3) : null;
   P.zone = p.z && typeof p.z === 'object' ? p.z : null; P.on = !!p.on;
-  P.mf = num(p.mf, 0, 400); P.gf = num(p.gf, 0, 400); P.dmax = num(p.dm, 0, 1e7);
+  P.mf = num(p.mf, 0, 400); P.gf = num(p.gf, 0, 400); P.dmax = num(p.dm, 0, 1e7); P.cdmg = num(p.cd, 0, 5000, 50);
   if (p.hb !== P.hb) { P.hb = p.hb; P.hbT = now(); }
   if (Array.isArray(p.h) && (moved || !P.state)) {
     const h = p.h, st = { x: num(h[0], -10, 1e4) / 20, z: num(h[1], -10, 1e4) / 20, r: num(h[2], -1e3, 1e3) / 100, sp: num(h[3], 0, 400) / 10, hp: num(h[4], 0, 1e8), hpMax: Math.max(1, num(h[5], 1, 1e8)), fl: h[6] | 0, y: num(h[7], -100, 400) / 20 };
@@ -424,7 +426,7 @@ const EVB = new WeakMap();
 function guestPresence(force) {
   if (!S.ch || !G.hero || (!force && !S.ch.presenceDue())) return;
   const h = S.real || G.hero, pl = G.player, s = G.stats;
-  const p = { h: null, c2: null, nd: null, ev: null, r: 'g', c: S.code, v: VER, hb: Math.floor(now() / 1000) & 1023, lk: { c: h.cls, l: h.level, w: h.equip.weapon ? [h.equip.weapon.base, h.equip.weapon.rar | 0, h.equip.weapon.leg || 0] : 0, o: h.equip.offhand ? [h.equip.offhand.rar | 0, h.equip.offhand.leg || 0] : 0 }, zk: S.zoneKey, ak: S.relDone, mf: Math.round(s?.mf || 0), gf: Math.round(s?.gold || 0), dm: Math.round((s?.wmax || 1) * (s?.dmgMult || 1)) };
+  const p = { h: null, c2: null, nd: null, ev: null, r: 'g', c: S.code, v: VER, hb: Math.floor(now() / 1000) & 1023, lk: { c: h.cls, l: h.level, ml: h.mlvl || 0, w: h.equip.weapon ? [h.equip.weapon.base, h.equip.weapon.rar | 0, h.equip.weapon.leg || 0] : 0, o: h.equip.offhand ? [h.equip.offhand.rar | 0, h.equip.offhand.leg || 0] : 0 }, zk: S.zoneKey, ak: S.relDone, mf: Math.round(s?.mf || 0), gf: Math.round(s?.gold || 0), dm: Math.round((s?.wmax || 1) * (s?.dmgMult || 1)), cd: Math.round(s?.critD ?? 50) };
   if (pl && S.zoneKey && S.zoneKey === myKey()) { p.h = heroState(); const av = pl.avatar; if (av?.netSeq) p.c2 = [av.netClip, Math.round((av.netSpd || 1) * 100) / 100, av.netSeq]; }
   if (!S.world) p.nd = 'w';
   // the events the host has not acked, oldest first, as many as fit
@@ -660,6 +662,24 @@ function takeEvents(P) {
   S.done.set(P.peer, last);
 }
 const reject = (why) => { S.stats.rejected++; S.stats.why[why] = (S.stats.why[why] || 0) + 1; };
+// the biggest blow a guest may claim: 14x its weapon's top damage as it claims it (dm), never past what a hero of its
+// level could have (and, past the last level, its Mastery: every point it has in Might), times its crit damage as it
+// claims it over a plain crit's x1.5, never past its level's and its Mastery's (every point in Ferocity)
+function blowCap(P) {
+  const lvl = clamp(P.lk?.l | 0, 1, MAX_LEVEL), ml = clamp(P.lk?.ml | 0, 0, 1e4), pts = lvl - 1 + ml;
+  const dmCeil = (12 + lvl * 9) * 8 * (1 + masteryValue(MASTERY_BY.might, pts, lvl) / 100);
+  const cdCeil = 50 + 6 * lvl + masteryValue(MASTERY_BY.fury, pts, lvl);
+  return Math.max(60, Math.min(P.dmax || 0, dmCeil) * 14 * Math.max(1, (1 + Math.min(P.cdmg ?? 50, cdCeil) / 100) / 1.5));
+}
+// a live monster of the host's within reach of the guest's stand-in, or null (refused as too far)
+function foeNear(id, me) {
+  const a = G.actors.find((x) => x.id === (id | 0));
+  if (!a || a.dead || a.removed || a.team !== 'foe' || a.prop) return null;
+  if (Math.hypot(a.x - me.x, a.z - me.z) > 26 + (a.radius || 0.5)) { reject('far'); return null; }
+  return a;
+}
+// more than n events of a kind from one guest in a second
+function over(P, k, n) { const R0 = (P.rates ||= {})[k] ||= { t: now(), n: 0 }; if (now() - R0.t > 1000) { R0.t = now(); R0.n = 0; } return ++R0.n > n; }
 function guestEvent(P, e) {
   const type = e[1], me = P.actor;
   if (type === 'h') {
@@ -667,7 +687,7 @@ function guestEvent(P, e) {
     const a = G.actors.find((x) => x.id === id);
     if (!a || a.dead || a.removed || a.team !== 'foe' || a.prop) return;
     if (Math.hypot(a.x - me.x, a.z - me.z) > 26 + (a.radius || 0.5)) return reject('far');
-    const lvl = clamp(P.lk?.l | 0, 1, MAX_LEVEL), cap = Math.max(60, Math.min(P.dmax || 0, (12 + lvl * 9) * 8) * 14);
+    const cap = blowCap(P);
     if (!(typeof amt === 'number' && isFinite(amt) && amt > 0 && amt <= cap)) return reject('big');
     // the rate: what a second of its hits may come to
     const R0 = P.rate ||= { t: now(), sum: 0 };
@@ -682,6 +702,31 @@ function guestEvent(P, e) {
     S.stats.hits++;
     S.landing = P.peer; S.landingA = a;
     try { damage(me, a, amt, opts); } finally { S.landing = S.landingA = null; }
+  } else if (type === 'pu') {
+    // a pull (the Maelstrom, a Seismic Leap, a Challenge, the Void Rift): by the host's own rules for what may be moved
+    const a = foeNear(e[2], me); if (!a) return;
+    const ix = e[3], iz = e[4]; if (!nums([ix, iz], 2)) return reject('bad');
+    if (a.boss || a.prop || a.keeper || a.def.anchored || a.dormant || a.cling) return reject('pull');
+    if (over(P, 'pu', 80)) return reject('rate');
+    // (no more than the strongest pull, the Rift's, over the 0.2 s a guest sums them for)
+    const m = Math.hypot(ix, iz), k = m > 8 ? 8 / m : 1;
+    a.kx += ix * k; a.kz += iz * k;
+  } else if (type === 'ta') {
+    // a taunt (a Challenge, an Iron Bulwark): the monster comes for that guest (ai.js targetOf) for as long as it said
+    const a = foeNear(e[2], me); if (!a) return;
+    if (over(P, 'ta', 40)) return reject('rate');
+    a.aggro = true; a.status.fear = 0; a.taunt = G.hero.stats.time + num(e[3], 0, 12); a.tauntBy = me;
+  } else if (type === 'ic') {
+    // the ice: a guest's crack or refreeze done on the host's (the only ice that cracks), near it and no wider than a skill's
+    const op = e[2], a = e.slice(3, 9);
+    if (!nums(a, op === 'f' ? 3 : op === 'l' ? 6 : op === 'r' ? 5 : 4)) return reject('bad');
+    if (over(P, 'ic', 14)) return reject('rate');
+    const near = (x, z) => Math.hypot(x - me.x, z - me.z) < 28, st = clamp(a[op === 'l' ? 5 : op === 'r' ? 4 : 3] | 0, 1, 2);
+    if (op === 'c') { if (!near(a[0], a[1]) || a[2] > 4) return reject('ice'); crackAt(a[0], a[1], a[2], st, { src: 'guest' }); }
+    else if (op === 'l') { if (!near(a[0], a[1]) || !near(a[2], a[3]) || Math.hypot(a[2] - a[0], a[3] - a[1]) > 14 || a[4] > 2.5) return reject('ice'); crackLine(a[0], a[1], a[2], a[3], a[4], st, { src: 'guest' }); }
+    else if (op === 'r') { if (!near(a[0], a[1]) || a[3] > 8 || a[3] - a[2] > 1.5 || a[2] < 0) return reject('ice'); crackRing(a[0], a[1], a[2], a[3], st, { src: 'guest' }); }
+    else if (op === 'f') { if (!near(a[0], a[1]) || a[2] > 6) return reject('ice'); refreezeAt(a[0], a[1], a[2]); emit('frostNova', a[0], a[1], a[2]); }
+    else return reject('bad');
   } else if (type === 'rv') {
     // a revive: the reviver (this guest) has stood by another hero, down a moment, as long as a raise takes (the host's
     // own count of its stand-in beside it), and that hero was not raised a moment ago
@@ -767,7 +812,7 @@ function guestTick(dt) {
   // the host's zone: built here from its seed with the host's world (once the world has come); and again when this page
   // stands in another (its own travel, begun while it waited, that landed after it entered)
   if (H?.on && H.zone && S.world && !S.loading && (H.zone.k !== S.zoneKey || G.zone?.netKey !== S.zoneKey)) guestEnter(H.zone);
-  if (S.zoneKey && S.zoneKey === myKey()) { MIRROR.rec = recGuestFx; puppetsTick(dt); }
+  if (S.zoneKey && S.zoneKey === myKey()) { MIRROR.rec = recGuestFx; puppetsTick(dt); flushPulls(); }
   // presence each frame (sent coalesced), after the events of this frame
   guestPresence();
 }
@@ -1062,6 +1107,20 @@ NET.h.hitPuppet = (src, tg, amount, o, crit) => {
   return amount;
 };
 
+// what this guest's skills do to the host's world besides their blows (skillsx.js, ice.js): pulls summed per monster and
+// sent five times a second, a taunt and the ice at once; the host checks each (guestEvent) and does it by its own rules
+function pushEv(e) { S.ev.push([++S.evSeq, ...e]); if (S.ev.length > 300) S.ev.splice(0, S.ev.length - 300); }
+NET.h.pullPuppet = (f, ix, iz) => { if (!f.netId || !isFinite(ix) || !isFinite(iz)) return; const v = S.pulls.get(f.netId) || [0, 0]; v[0] += ix; v[1] += iz; S.pulls.set(f.netId, v); };
+NET.h.tauntPuppet = (f, dur) => { if (f.netId) pushEv(['ta', f.netId, R2(dur)]); };
+// (a refreeze answers 1: the guest plays its own sound for it; the host's crystals come in its snapshot)
+NET.h.iceOp = (op, ...a) => { if (a.every((v) => typeof v === 'number' && isFinite(v))) pushEv(['ic', op, ...a.map(R2)]); return op === 'f' ? 1 : 0; };
+function flushPulls() {
+  if (!S.pulls.size || now() - S.pullT < 200) return;
+  S.pullT = now(); let n = 0;
+  for (const [id, v] of S.pulls) { if (n++ >= 12) break; pushEv(['pu', id, R2(v[0]), R2(v[1])]); }
+  S.pulls.clear();
+}
+
 // ---------- puppets: the host's monsters on a guest's page ----------
 function puppetEntry(e) {
   const id = e[0] | 0, kind = KINDS[e[1] | 0]; if (!kind || !MONSTERS[kind]) return;
@@ -1268,10 +1327,10 @@ NET.h.guestUse = (it) => {
 
 // ---------- the fx mirror ----------
 // codes for what is sent (FX: fx.js calls; 'p' a projectile, 'a' an area, 's' a sound, 'sap' a pool)
-const FXN = ['explosion', 'ring', 'glowBurst', 'sparks', 'puff', 'flash', 'hitFx', 'decal', 'splash', 'iceShards', 'freezeCrystals', 'bolt', 'teleCircle', 'teleCone', 'teleLine', 'killTele', 'sapBurst', 'sfx', 'fire', 'area', 'sap', 'sapRing'];
+const FXN = ['explosion', 'ring', 'glowBurst', 'sparks', 'puff', 'flash', 'hitFx', 'decal', 'splash', 'iceShards', 'freezeCrystals', 'bolt', 'teleCircle', 'teleCone', 'teleLine', 'killTele', 'sapBurst', 'sfx', 'fire', 'area', 'sap', 'sapRing', 'visEnd'];
 const FXI = new Map(FXN.map((n, i) => [n, i]));
 // (what goes first when the message is full: what is played, then what is seen, then what is heard)
-const PRIO = { teleCircle: 0, teleCone: 0, teleLine: 0, killTele: 0, fire: 0, area: 0, sap: 0, sapRing: 0, explosion: 1, decal: 1, hitFx: 2, ring: 2, bolt: 1, splash: 2, iceShards: 2, freezeCrystals: 2, sapBurst: 2, glowBurst: 3, sparks: 3, puff: 3, flash: 3, sfx: 3 };
+const PRIO = { teleCircle: 0, teleCone: 0, teleLine: 0, killTele: 0, fire: 0, area: 0, sap: 0, sapRing: 0, visEnd: 0, explosion: 1, decal: 1, hitFx: 2, ring: 2, bolt: 1, splash: 2, iceShards: 2, freezeCrystals: 2, sapBurst: 2, glowBurst: 3, sparks: 3, puff: 3, flash: 3, sfx: 3 };
 let teleN = 0;
 const R2 = (v) => (typeof v === 'number' ? Math.round(v * 100) / 100 : v);
 function recFx(name, args, ret) {
@@ -1282,10 +1341,13 @@ function recFx(name, args, ret) {
   if (name === 'killTele') { const tl = args[0]; if (!tl?.nid) return; a = [tl.nid]; }
   else if (name === 'fire') {
     const [kind, src, x, z, dir, o = {}] = args;
-    a = [kind, src?.team === 'foe' ? 1 : 0, src?.id | 0, R2(x), R2(z), R2(dir), { speed: o.speed, y: o.y, life: o.life, r: o.r, dmg: R2(o.dmg), pierce: o.pierce, homing: o.homing, scale: o.scale, opts: optsOf(o.opts) }];
+    a = [kind, src?.team === 'foe' ? 1 : 0, src?.id | 0, R2(x), R2(z), R2(dir), { speed: o.speed, y: o.y, life: o.life, r: o.r, dmg: R2(o.dmg), pierce: o.pierce, homing: o.homing, scale: o.scale, opts: optsOf(o.opts), look: LOOK_ID.get(o.look) }];
   } else if (name === 'area') {
     const [kind, x, z, r, dur, o = {}] = args;
-    a = [kind, R2(x), R2(z), R2(r), R2(dur), o.team === 'foe' ? 1 : 0, o.src?.id | 0, R2(o.dmg), o.tick, optsOf(o.opts), R2(o.vx), R2(o.vz), o.floats ? 1 : 0];
+    // (a hero effect of its own kind is sent only for its look: VIS, by name; its end comes as 'visEnd')
+    if (kind === 'custom' && !(Array.isArray(o.vis) && VIS[o.vis[0]])) return;
+    a = [kind, R2(x), R2(z), R2(r), R2(dur), o.team === 'foe' ? 1 : 0, o.src?.id | 0, R2(o.dmg), o.tick, optsOf(o.opts), R2(o.vx), R2(o.vz), (o.floats ? 1 : 0) | (o.dim ? 2 : 0) | (o.nowarm ? 4 : 0), LOOK_ID.get(o.look) || 0];
+    if (kind === 'custom') { a.push(o.vis.slice(0, 4).map((v) => (typeof v === 'number' ? R2(v) : String(v).slice(0, 12)))); if (ret) { ret.nid = ++teleN; a.push(ret.nid); } }
   } else if (name === 'sap') {
     // (every pool but a hero's: most of the monsters' have no owner)
     const [x, z, r, dur, owner, kind] = args; if (owner && (owner.team === 'hero' || owner.hero || owner.remote)) return;
@@ -1309,7 +1371,7 @@ function fxPos(name, a) {
     case 'fire': return [a[3], a[4]];
     case 'area': return [a[1], a[2]];
     case 'sfx': return [a[1], a[2]];
-    case 'killTele': return [null, null];
+    case 'killTele': case 'visEnd': return [null, null];
     case 'glowBurst': case 'sparks': case 'puff': case 'flash': case 'hitFx': case 'bolt': return [a[0], a[2]];
     default: return [a[0], a[1]];
   }
@@ -1323,7 +1385,9 @@ function packFx(list, cap, gs, tags) {
   for (const e of sorted) { const x = [FXI.get(e.n), ...e.a], n = bytesOf(x) + 1; if (b + n > cap) continue; if (e.by && tags) (tags[e.by] ||= []).push(out.length); out.push(x); b += n; }
   return out;
 }
-const TELES = new Map();
+const TELES = new Map(), VISN = new Map();
+// the looks by name both ways (skillsx.js LOOKS)
+const LOOK_ID = new Map(Object.entries(LOOKS).map(([k, f]) => [f, k]));
 function replayFx(list, from) {
   if (!Array.isArray(list) || !G.zone) return;
   // (each sender's calls a second are held to what a fight makes: 120 a message, FX_RATE a second)
@@ -1369,10 +1433,10 @@ function shotOpts(o, real) {
   if (real) { put('dmg', 0, 1e8); r.opts = hurtOpts(o.opts); }
   return r;
 }
-// what a hero's skills fire and lay (skills.js): all another hero's page may send; a monster's (a herd of ghosts, a wave,
+// what a hero's skills fire and lay (skills.js, skillsx.js): all another hero's page may send; a monster's (a herd of ghosts, a wave,
 // an orb) come from the host alone. The ones played from the net that a page holds at once are held too, a creature's
 // ghost (an avatar each) the fewest
-const HERO_SHOTS = new Set(['bolt', 'arcane', 'pierce', 'fireball', 'mini']), HERO_AREAS = new Set(['tornado', 'rain', 'fire']);
+const HERO_SHOTS = new Set(['bolt', 'arcane', 'pierce', 'fireball', 'mini', 'blast', 'siege', 'cinder', 'spark', 'radiant', 'shard', 'frostorb']), HERO_AREAS = new Set(['tornado', 'rain', 'fire']);
 const NET_SHOTS = 96, NET_AREAS = 64, NET_GHOSTS = 8;
 const count = (list, f) => { let n = 0; for (const x of list) if (f(x)) n++; return n; };
 function replayOne(name, a, from) {
@@ -1384,17 +1448,28 @@ function replayOne(name, a, from) {
     const real = foe && fromHost;
     const src = real ? (S.pup.get(sid) || { team: 'foe', id: 0, level: clamp(G.zone.level, 1, zoneTop()), x, z, def: {}, affixes: [], dead: false }) : { team: 'vis', x, z };
     const oo = Object.assign(shotOpts(a[6], real), { team: real ? 'foe' : 'vis', net: true });
+    oo.look = typeof a[6]?.look === 'string' && Object.hasOwn(LOOKS, a[6].look) ? LOOKS[a[6].look] : undefined;
     if (!real) oo.dmg = 0;
     fire(kind, src, px(x), pz(z), clamp(dir, -1e3, 1e3), oo);
     return;
   }
   if (name === 'area') {
-    const [kind, x, z, r, dur, foe, sid, dmg, tick, opts, vx, vz, floats] = a; if (!nums([x, z, r, dur], 4) || !kindOk(kind)) return;
-    if (!fromHost && !HERO_AREAS.has(kind)) return;
+    const [kind, x, z, r, dur, foe, sid, dmg, tick, opts, vx, vz, floats, lk, vis, nid] = a; if (!nums([x, z, r, dur], 4) || !kindOk(kind)) return;
     // (an orb bursts into a ring at its end: held with the rings)
     if (count(G.areas, (q) => q.net) >= NET_AREAS || (kind === 'frostOrb' && FX.FX.rings.length > 96)) return;
+    // another hero's effect: drawn here by its look only (skillsx.js VIS), going about with that hero's actor here
+    if (kind === 'custom') {
+      if (!Array.isArray(vis) || typeof vis[0] !== 'string' || !Object.hasOwn(VIS, vis[0])) return;
+      const who = VIS_FOLLOW.has(vis[0]) ? S.peers.get(from)?.actor : null; if (VIS_FOLLOW.has(vis[0]) && !who) return;
+      const ar = { x: px(x), z: pz(z), r: clamp(r, 0.1, 30), dur: clamp(dur, 0, 30), t: 0 }, V = VIS[vis[0]](ar, vis.slice(1), who);
+      const made = area('custom', ar.x, ar.z, ar.r, ar.dur, { team: 'vis', onTick: V.tick, dispose: V.dispose, light: V.light });
+      if (made) made.net = true;
+      if (typeof nid === 'number') { VISN.set(from + ':' + nid, made); if (VISN.size > 200) VISN.delete(VISN.keys().next().value); }
+      return;
+    }
+    if (!fromHost && !HERO_AREAS.has(kind)) return;
     const real = foe && fromHost;
-    const ar = area(kind, px(x), pz(z), clamp(r, 0.1, 30), clamp(dur, 0, 20), { team: real ? 'foe' : 'vis', src: real ? S.pup.get(sid) || { team: 'foe', level: clamp(G.zone.level, 1, zoneTop()), x, z, def: {} } : null, dmg: real ? num(dmg, 0, 1e8) : 0, tick: fin(tick) ? clamp(tick, 0.1, 5) : undefined, opts: real ? hurtOpts(opts) : {}, vx: num(vx, -20, 20), vz: num(vz, -20, 20), floats: !!floats, net: true });
+    const ar = area(kind, px(x), pz(z), clamp(r, 0.1, 30), clamp(dur, 0, 20), { team: real ? 'foe' : 'vis', src: real ? S.pup.get(sid) || { team: 'foe', level: clamp(G.zone.level, 1, zoneTop()), x, z, def: {} } : null, dmg: real ? num(dmg, 0, 1e8) : 0, tick: fin(tick) ? clamp(tick, 0.1, 5) : undefined, opts: real ? hurtOpts(opts) : {}, vx: num(vx, -20, 20), vz: num(vz, -20, 20), floats: !!(floats & 1), dim: !!(floats & 2), nowarm: !!(floats & 4), net: true, look: typeof lk === 'string' && Object.hasOwn(LOOKS, lk) ? LOOKS[lk] : undefined });
     if (ar) ar.net = true;
     return;
   }
@@ -1402,6 +1477,7 @@ function replayOne(name, a, from) {
   if (name === 'sapRing') { if (fromHost && nums(a, 4)) { const r1 = clamp(a[3], 0.2, 20); addSapRing(px(a[0]), pz(a[1]), clamp(a[2], 0, r1), r1, fin(a[4]) ? clamp(a[4], 0, 30) : 6); } return; }
   if (name === 'sfx') { if (kindOk(a[0]) && nums(a.slice(1), 2)) Audio.sfx(a[0], { x: px(a[1]), z: pz(a[2]), vol: num(a[3], 0, 2, 1), pitch: num(a[4], 0.25, 4, 1) }); return; }
   if (name === 'killTele') { const tl = TELES.get(a[0]); if (tl) { tl.alive = false; TELES.delete(a[0]); } return; }
+  if (name === 'visEnd') { const k = from + ':' + a[0], v = VISN.get(k); if (v) { v.done = true; VISN.delete(k); } return; }
   const fn = FX[name], spec = FXS[name]; if (typeof fn !== 'function' || !spec) return;
   // (the rings and telegraphs a page holds at once, each its own mesh, are held too)
   if ((name === 'ring' || name === 'explosion' || name === 'splash') && FX.FX.rings.length > 96) return;

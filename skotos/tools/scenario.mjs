@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 import { watchFatal, fatalAll } from './fatal.mjs';
-const [, , name = 'combat', out = '/tmp', W = '1280', H = '720'] = process.argv;
+const [, , name = 'combat', out = '/tmp', W = process.env.W || '1280', H = process.env.H || '720'] = process.argv;
 const logs = [];
 // Act IV: a dialog advances on Enter (the key finishes the line, then moves on), whatever the frame rate; what is said is
 // recorded for the report
@@ -888,6 +888,228 @@ const S = {
       out[zid] = await pg.evaluate((o) => { const G = window.__G, z = G.zone, it = z.interact.find((i) => i.kind === 'echo'); return { ...o, dead: z.boss?.dead, bar: !!G.bossActor, quest: G.hero.quest, crownUnmade: G.hero.flags.crownUnmade, ivar: G.hero.flags.ivar, used: it?.used, mode: G.mode, dialog: !document.querySelector('#dialog')?.hidden, loot: G.pickups.filter((p) => p.item).length, toast: [...document.querySelectorAll('.toast')].map((e) => e.textContent).pop() }; }, { before, spawned });
     }
     return out;
+  } },
+  // the progression panels (run at 844 390 for a phone): skills, a variant, the loadout, Mastery
+  progpanel: { q: 'auto=town&sim=2&q=1&lvl=' + (process.env.LVL || 50) + '&mlvl=' + (process.env.MLVL || 12) + '&cls=' + (process.env.CLS || 'warden'), run: async (pg, shot) => {
+    const P = () => pg.evaluate(() => { const h = window.__G.hero; return { pts: h.points, skills: h.skills, vars: h.vars, variant: h.variant, loadout: h.loadout, mast: h.mast }; });
+    await pg.evaluate(() => { window.__G.hero.gold = 99999; window.__D.openPanel('skills'); }); await pg.waitForTimeout(500); await shot();
+    const ids = await pg.evaluate(() => window.__G.hero.loadout.slice());
+    // rank the first skill to 5, learn both variants, choose the second
+    for (let k = 0; k < 4; k++) await pg.click(`[data-a="prank:${ids[0]}"]`).catch(() => {});
+    const V = await pg.evaluate(async (id) => (await import('/src/game/data.js')).VARIANTS[id], ids[0]);
+    await pg.click(`[data-a="pvar:${ids[0]}:1"]`); await pg.click(`[data-a="pvar:${ids[0]}:2"]`); await pg.waitForTimeout(200); await shot();
+    await pg.click(`[data-a="pvar:${ids[0]}:2"]`); await pg.waitForTimeout(200); await shot();
+    // a later skill on button 2
+    const late = await pg.evaluate(async () => (await import('/src/game/data.js')).SKILLS[window.__G.hero.cls].filter((s) => s.lvl >= 20).map((s) => s.id));
+    await pg.click(`[data-a="psel:${late[0]}"]`); await pg.click('[data-a="pslot:2"]'); await pg.waitForTimeout(200); await shot();
+    await pg.click('[data-a="ptab:1"]'); await pg.waitForTimeout(200); await shot();
+    await pg.click('[data-a="mup:might:5"]').catch(() => {}); await pg.click('[data-a="mup:vigor:1"]'); await pg.click('[data-a="mup:aim:1"]'); await pg.waitForTimeout(200); await shot();
+    const before = await P();
+    await pg.click('[data-a="respec"]'); await pg.click('[data-a="respec"]'); await pg.waitForTimeout(200); await shot();
+    const after = await P();
+    await pg.evaluate(() => window.__D.closePanel()); await pg.waitForTimeout(400); await shot();
+    return { V, late, before, after };
+  } },
+  // every skill, variant and later skill of a class, cast at a ring of sturdy dummies (one shot each, at its peak), with the
+  // damage each cast did to them: CLS=warden|ranger|mage, ONLY=id[.variant],... to pick
+  skillsfx: { q: 'auto=forest&sim=4&q=1&norender&lvl=45&cls=' + (process.env.CLS || 'warden'), run: async (pg, shot) => {
+    const list = await pg.evaluate(async (only) => {
+      const D = await import('/src/game/data.js'), G = window.__G, out = [];
+      for (const sk of D.SKILLS[G.hero.cls]) { if (sk.basic) continue; out.push({ id: sk.id, v: 0 }); (D.VARIANTS[sk.id] || []).forEach((n, i) => out.push({ id: sk.id, v: i + 1, n })); }
+      window.__wait = (sec) => new Promise((ok) => { const t0 = G.hero.stats.time, w0 = performance.now(); const f = () => (G.hero.stats.time - t0 >= sec || performance.now() - w0 > 400000 ? ok() : setTimeout(f, 20)); f(); });
+      return only ? out.filter((e) => only.split(',').includes(e.n ? e.id + '.' + e.n : e.id)) : out;
+    }, process.env.ONLY || '');
+    await pg.evaluate(() => { window.__immortal = true; const G = window.__G; for (const p of G.zone.packs) p.spawned = true; for (const a of G.actors) if (a.team === 'foe') { a.dead = true; a.remove(); } });
+    const res = {}, errs = [];
+    for (const e of list) {
+      await pg.evaluate((e) => {
+        const G = window.__G, h = G.hero, pl = G.player;
+        for (const a of G.actors) if (a.dummy || (a.pet && !a.dead)) { a.dead = true; a.remove(); }
+        G.actors = G.actors.filter((a) => !a.removed);
+        h.skills[e.id] = 5; h.vars[e.id] = 3; h.variant[e.id] = e.v; { const j = h.loadout.indexOf(e.id); if (j > 0) h.loadout[j] = h.loadout[0]; h.loadout[0] = e.id; }
+        pl.res = G.stats.resMax; pl.cds.fill(0); pl.act = null; pl.twinT = 0; for (const k in pl.buffs) delete pl.buffs[k]; pl.shield = 0;
+        const far = G.hero.cls === 'warden' ? 2.2 : 7, fx = pl.x + Math.sin(pl.rot) * far, fz = pl.z + Math.cos(pl.rot) * far;
+        window.__dum = [];
+        for (let i = 0; i < 7; i++) {
+          const a = i * 0.9, r = i ? (G.hero.cls === 'warden' ? 1.6 : 2.2) : 0, x = fx + Math.sin(a) * r, z = fz + Math.cos(a) * r;
+          if (!G.zone.map.walkable(x, z)) continue;
+          const m = window.__D.spawnMonster(i % 3 ? 'goblin' : 'skeleton', x, z, { level: 45 }); m.hp = m.hpMax = 1e7; m.dummy = true; m.status.stun = 99;
+          G.actors.push(m); window.__dum.push(m);
+        }
+        window.__D.emit('loadout');
+      }, e);
+      await pg.evaluate(() => window.__wait(0.3));
+      await pg.evaluate(() => { const G = window.__G, d = window.__dum[0]; window.__D.IN.events.push({ t: 'skill', i: 1, aim: d ? { x: d.x, z: d.z } : null }); });
+      const at = { leap: 0.6, quake: 0.75, meteor: 1.15, rain: 0.9, wolf: 1.2, cry: 0.45, nova: 0.3, dawn: 1.25, bulwark: 1.0, trap: 1.0, hawks: 2.0, rift: 1.2, beam: 0.9, frostorb: 0.8, charge: 0.25, vault: 0.3, multi: 0.3, pierce: 0.4, fireball: 0.5, chain: 0.3, whirl: 0.8 }[e.id] ?? 0.4;
+      await pg.evaluate((s) => window.__wait(s), at); await shot();
+      // what follows the cast (a channel, a storm, a trap) plays out, then the books
+      await pg.evaluate((s) => window.__wait(s), e.id === 'bulwark' ? 11 : e.id === 'hawks' ? 10 : e.id === 'wolf' ? 8 : 4);
+      res[e.n ? e.id + '.' + e.n : e.id] = await pg.evaluate(() => { const d = window.__dum; return { dealt: Math.round(d.reduce((s, a) => s + (a.hpMax - Math.max(0, a.hp)), 0)), hit: d.filter((a) => a.hp < a.hpMax).length, n: d.length }; });
+    }
+    return res;
+  } },
+  // Act V with the progression: every skill and variant of a class (CLS) cast on the Farthest Light's thin ice, each time on
+  // ice reset to stage 0 round her: the stages it adds in 3 s (less what her own weight adds standing there as long), the
+  // stage under her after it, and for the Novas the stage-2 cells round her they heal; then the Cold under Ember Dance
+  // against the plain Whirlwind (a fire that follows her never warms her) and a downed hero's following effects
+  skills5: { q: 'auto=farlight&sim=4&q=0&norender&lvl=45&cls=' + (process.env.CLS || 'warden') + '&' + A5.url('alkShip'), run: async (pg) => {
+    await A5.tick(pg);
+    const list = await pg.evaluate(async () => {
+      const D = await import('/src/game/data.js'), G = window.__G, out = [];
+      for (const sk of D.SKILLS[G.hero.cls]) { if (sk.basic) continue; out.push({ id: sk.id, v: 0 }); (D.VARIANTS[sk.id] || []).forEach((n, i) => out.push({ id: sk.id, v: i + 1, n })); }
+      window.__wait = (sec) => new Promise((ok) => { const t0 = G.hero.stats.time, w0 = performance.now(); const f = () => (G.hero.stats.time - t0 >= sec || performance.now() - w0 > 400000 ? ok() : setTimeout(f, 20)); f(); });
+      window.__immortal = true;
+      for (const p of G.zone.packs || []) p.spawned = true;
+      for (const a of G.actors) if (a.team === 'foe' && !a.boss) { a.dead = true; a.remove(); }
+      G.actors = G.actors.filter((a) => !a.removed);
+      // a spot of thin ice 9 m round, out of lamp light, and a heading along it
+      const L = G.zone.L, I = G.zone.ice, LT = await import('/src/game/light.js'), w = L.w;
+      const thin = (x, z) => { const ix = Math.floor(x), iz = Math.floor(z); return ix >= 0 && iz >= 0 && ix < w && iz < L.h && L.ice[iz * w + ix] && !L.thick?.[iz * w + ix] && !LT.lampLightAt(x, z); };
+      let best = null;
+      for (let i = 0; i < L.ice.length && !best; i += 3) {
+        if (!L.ice[i]) continue;
+        const x = i % w + 0.5, z = (i - i % w) / w + 0.5;
+        let ok = thin(x, z);
+        for (let k = 0; k < 16 && ok; k++) for (const r of [3, 6, 9]) if (!thin(x + Math.sin(k * 0.39) * r, z + Math.cos(k * 0.39) * r)) { ok = false; break; }
+        if (ok) best = { x, z };
+      }
+      window.__spot = best;
+      window.__reset = (st = 0) => { const S = window.__spot; for (let cz = Math.floor(S.z - 14); cz <= S.z + 14; cz++) for (let cx = Math.floor(S.x - 14); cx <= S.x + 14; cx++) { const i = cz * w + cx; if (cx < 0 || cz < 0 || cx >= w || cz >= L.h || !L.ice[i]) continue; I.stage[i] = Math.hypot(cx + 0.5 - S.x, cz + 0.5 - S.z) < 6 ? st : 0; I.load[i] = 0; I.fl[i] = 0; } I.dirty = true; I.live.length = 0; I.hit.length = 0; I.reo.length = 0; };
+      window.__sum = () => { const S = window.__spot; let n = 0, hi = 0; for (let cz = Math.floor(S.z - 14); cz <= S.z + 14; cz++) for (let cx = Math.floor(S.x - 14); cx <= S.x + 14; cx++) { const i = cz * w + cx; if (cx < 0 || cz < 0 || cx >= w || cz >= L.h || !L.ice[i]) continue; const s = I.stage[i]; if (s >= 1 && s <= 4) { n += s; hi++; } } return { stages: n, cells: hi }; };
+      return out;
+    });
+    const spot = await pg.evaluate(() => window.__spot);
+    if (!spot) return { pass: false, error: 'no thin-ice spot' };
+    const place = async (e) => { await pg.evaluate((e) => {
+      const G = window.__G, h = G.hero, pl = G.player, S = window.__spot;
+      for (const a of G.actors) if (a.pet && !a.dead) { a.dead = true; a.remove(); }
+      for (const a of G.areas) if (a.team === 'hero') { if (a.kind === 'custom') a.done = true; else a.t = a.dur + 1; }
+      for (const a of G.actors) if (a.dummy) { a.dead = true; a.remove(); }
+      G.actors = G.actors.filter((a) => !a.removed);
+      // (a sturdy dummy 6 m ahead, that the shots land on and the bolts are aimed at)
+      const m = window.__D.spawnMonster('skeleton', S.x, S.z + 6, { level: 45 }); m.hp = m.hpMax = 1e8; m.dummy = true; m.status.stun = 99; G.actors.push(m);
+      if (e) { h.skills[e.id] = 5; h.vars[e.id] = 3; h.variant[e.id] = e.v; const j = h.loadout.indexOf(e.id); if (j > 0) h.loadout[j] = h.loadout[0]; h.loadout[0] = e.id; window.__D.emit('loadout'); }
+      pl.x = S.x; pl.z = S.z; pl.rot = 0; pl.y = 0; pl.res = G.stats.resMax; pl.cds.fill(0); pl.act = null; pl.twinT = 0; for (const k in pl.buffs) delete pl.buffs[k]; pl.shield = 0; pl.inWater = null;
+    }, e);
+    await pg.evaluate((pre) => window.__wait(0.15).then(() => window.__reset(pre)), e?.pre || 0); };
+    const res = {};
+    await place(null); await pg.evaluate(() => window.__wait(3)); const base = await pg.evaluate(() => window.__sum());
+    for (const e of list) {
+      e.pre = e.id === 'nova' ? 2 : 0;
+      await place(e);
+      const s0 = await pg.evaluate(() => window.__sum());
+      await pg.evaluate(() => { const S = window.__spot; window.__D.IN.events.push({ t: 'skill', i: 1, aim: { x: S.x, z: S.z + 6 } }); });
+      await pg.evaluate(() => window.__wait(3));
+      const r = await pg.evaluate(() => { const G = window.__G, pl = G.player, I = (async () => 0)(); return { sum: window.__sum(), under: (G.zone.ice.stage[Math.floor(pl.z) * G.zone.L.w + Math.floor(pl.x)] || 0), moved: +Math.hypot(pl.x - window.__spot.x, pl.z - window.__spot.z).toFixed(1) }; });
+      res[e.n ? e.id + '.' + e.n : e.id] = e.pre ? { healed: s0.cells - r.sum.cells, under: r.under } : { added: r.sum.stages - base.stages, cells: r.sum.cells, under: r.under, moved: r.moved };
+    }
+    // the Cold (Warden only): 3 s of each spin from Cold 50 on dry ice, no gust
+    let cold = null;
+    if (await pg.evaluate(() => window.__G.hero.cls === 'warden')) {
+      cold = {};
+      for (const v of [0, 2]) {
+        await place({ id: 'whirl', v });
+        cold[v ? 'ember' : 'whirl'] = await pg.evaluate(async () => {
+          const C = await import('/src/game/cold.js'), G = window.__G; if (G.zone.gust) G.zone.gust.on = false;
+          C.COLD.v = 50; window.__D.IN.events.push({ t: 'skill', i: 1, aim: null });
+          await window.__wait(2.5); return +C.COLD.v.toFixed(1);
+        });
+      }
+    }
+    // a downed hero: what follows her ends with no burst (Bulwark for the Warden, Hawks for the Ranger, Blizzard for the Mage)
+    const fol = { warden: { id: 'bulwark', v: 0 }, ranger: { id: 'hawks', v: 0 }, mage: { id: 'nova', v: 2 } }[await pg.evaluate(() => window.__G.hero.cls)];
+    await place(fol);
+    await pg.evaluate(() => window.__D.IN.events.push({ t: 'skill', i: 1, aim: null }));
+    await pg.evaluate(() => window.__wait(1.2));
+    const down = await pg.evaluate(async () => { const G = window.__G, pl = G.player, n0 = G.areas.filter((a) => a.kind === 'custom').length; window.__immortal = false; pl.dead = true; await window.__wait(0.5); const n1 = G.areas.filter((a) => a.kind === 'custom').length; pl.dead = false; window.__immortal = true; return { before: n0, after: n1, shield: pl.shield || 0 }; });
+    const cracks = Object.entries(res).filter(([k, v]) => v.added != null);
+    const zero = cracks.filter(([k, v]) => v.added <= 0).map(([k]) => k), selfBreak = Object.entries(res).filter(([k, v]) => v.under >= 4).map(([k]) => k);
+    const novas = Object.entries(res).filter(([k, v]) => v.healed != null && v.healed < 20).map(([k]) => k);
+    return { pass: !selfBreak.length && !novas.length && (!cold || cold.ember >= cold.whirl - 3) && down.after === 0, spot, base, res, cold, down, selfBreak, novasWeak: novas, noCrack: zero };
+  } },
+  // saves into this line: a version-13 hero (Acts I-IV with the progression: Mastery, variants, a later skill on a button,
+  // no Act V field), an Act V hero of this line from before the progression (on the Skotos difficulty, the Farthest Light
+  // reached), and one whose points disagree with its books; each taken up from the title, its panel opened
+  save13: { q: 'q=0&sim=2&norender', run: async (pg) => {
+    const now = Date.now(), base = (o) => Object.assign({ xp: 0, gold: 5000, inv: new Array(32).fill(null), equip: {}, stash: new Array(48).fill(null), wps: ['town', 'forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'forge'], act1: 1, act2: 1, act3: 1, act4: 1, gateBest: 3, boons: ['ember', 'forge', 'amber', 'lantern'], stats: { kills: 5000, deaths: 9, time: 90000, legs: 4, elites: 120 }, created: now, played: now, seeds: {} }, o);
+    const flags4 = Object.fromEntries(A5.ACT4.map((k) => [k, true])), flags5 = Object.fromEntries([...A5.ACT4, ...A5.flagsTo('alkShip')].map((k) => [k, true]));
+    const heroes = [
+      base({ id: 'hV13', cls: 'ranger', level: 50, diff: 3, quest: 23, flags: flags4, mlvl: 12, mxp: 5000, points: 61 - 28 - 4 - 15,
+        skills: { multi: 5, rain: 5, wolf: 5, pierce: 5, trap: 5, vault: 5, hawks: 5 }, vars: { rain: 3, multi: 1 }, variant: { rain: 2, multi: 1 }, mast: { might: 10, leech: 5 }, loadout: ['hawks', 'rain', 'multi', 'vault'] }),
+      base({ id: 'hAct5', cls: 'warden', level: 36, diff: 5, quest: 28, flags: flags5, act5: -1, points: 4, skills: { whirl: 5, leap: 5, cry: 5, quake: 5 }, wps: ['town', 'forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'forge', 'coast', 'farlight'], boons: ['ember', 'forge', 'amber', 'lantern'] }),
+      base({ id: 'hOdd', cls: 'mage', level: 30, diff: 1, quest: 23, flags: flags4, mlvl: 0, points: 99, skills: { fireball: 5, nova: 3 }, vars: { fireball: 2 }, variant: { fireball: 2 }, mast: { might: 3 }, loadout: ['fireball', 'nova', 'nova', 'bogus'] })
+    ];
+    // (the page keeps its own save in G.save and writes it as it goes: it is given this one too, or it writes its own over it)
+    await pg.evaluate((heroes) => { const s = { heroes, settings: { helpSeen: true }, last: heroes[0].id }; localStorage.setItem('skotos.save.v1', JSON.stringify(s)); window.__G.save = JSON.parse(JSON.stringify(s)); }, heroes);
+    const out = {};
+    for (const h of heroes) {
+      await pg.goto(A5.base + '?q=0&sim=2&norender');
+      await pg.waitForFunction(() => window.__ready && window.__G?.save, null, { timeout: 240000 });
+      await pg.evaluate((id) => window.__D.emit('startHero', window.__G.save.heroes.find((x) => x.id === id), false), h.id);
+      await pg.waitForFunction(() => window.__G?.zone && window.__G.mode === 'play', null, { timeout: 240000 });
+      await A5.tick(pg);
+      out[h.id] = await pg.evaluate(async () => {
+        const G = window.__G, h = G.hero, P = await import('/src/game/progression.js'), S = await import('/src/game/skills.js');
+        window.__D.openPanel('skills'); await new Promise((r) => setTimeout(r, 600));
+        const panel = !!document.querySelector('#panel .pg-tiles, #panel .pg-t, #panel .pn-b');
+        window.__D.closePanel();
+        return { cls: h.cls, level: h.level, diff: h.diff, act5: h.act5, quest: h.quest, mlvl: h.mlvl, points: h.points, earned: P.pointsEarned(h), spent: P.pointsSpent(h), loadout: h.loadout, slots: [1, 2, 3, 4].map((i) => S.skillOn(i)?.id || null), variant: { ...h.variant }, mast: { ...h.mast }, dmgPct: Math.round(G.stats.dmgPct ?? 0), lifeMax: G.stats.lifeMax, panel, cds: G.player.cds.length };
+      });
+    }
+    const a = out.hV13, b = out.hAct5, c = out.hOdd;
+    const ok13 = a.mlvl === 12 && a.loadout.join() === 'hawks,rain,multi,vault' && a.variant.rain === 2 && a.points === a.earned - a.spent && a.act5 === -1 && a.diff === 3 && a.cds === 8;
+    const ok5 = b.loadout.join() === 'whirl,leap,cry,quake' && b.diff === 5 && b.quest === 28 && b.points === b.earned - b.spent && b.points === 35 - 16 && b.mlvl === 0;
+    const okOdd = c.points === c.earned - c.spent && c.slots.every(Boolean) && !c.loadout.includes('bogus') && new Set(c.loadout).size === 4;
+    return { pass: ok13 && ok5 && okOdd && a.panel && b.panel && c.panel, ok13, ok5, okOdd, out };
+  } },
+  // levels past the old skill cap, Mastery past 50, and a save from before the progression taken up from the title
+  progress: { q: 'auto=town&sim=2&q=1&lvl=1&cls=' + (process.env.CLS || 'ranger'), run: async (pg, shot) => {
+    const r = {};
+    r.climb = await pg.evaluate(async () => {
+      const C = await import('/src/game/combat.js'), D = await import('/src/game/data.js'), P = await import('/src/game/progression.js'), B = await import('/src/ui/bus.js');
+      const G = window.__G, h = G.hero, ev = { lv: 0, m: 0, sk: [] };
+      B.on('levelUp', (l, sk) => { ev.lv++; if (sk) ev.sk.push(l + ':' + sk.id); }); B.on('masteryUp', () => ev.m++);
+      const at = {};
+      while (h.level < 50) { C.gainXP(D.xpToNext(h.level) * 0.6); if ([17, 20, 30, 40, 50].includes(h.level) && !at[h.level]) at[h.level] = { pts: h.points, earned: P.pointsEarned(h) }; }
+      for (let i = 0; i < 25; i++) C.gainXP(D.mxpToNext(h.mlvl) * 0.55);
+      return { level: h.level, mlvl: h.mlvl, mxp: Math.round(h.mxp), xp: h.xp, points: h.points, earned: P.pointsEarned(h), ev, at };
+    });
+    await pg.waitForTimeout(800); await shot();
+    // spend everything: every rank, every variant, the rest in Mastery
+    r.spend = await pg.evaluate(async () => {
+      const P = await import('/src/game/progression.js'), D = await import('/src/game/data.js'), G = window.__G, h = G.hero;
+      for (const sk of D.SKILLS[h.cls]) while (P.rankUp(h, sk.id));
+      for (const id in D.VARIANTS) if (D.SKILLS[h.cls].some((s) => s.id === id)) { P.unlockVariant(h, id, 1); P.unlockVariant(h, id, 2); }
+      const left = h.points, ids = P.MASTERY.map((m) => m.id); let k = 0;
+      while (h.points > 0) P.masterUp(h, ids[k++ % ids.length]);
+      window.__D.refreshStats();
+      return { left, spent: P.pointsSpent(h), earned: P.pointsEarned(h), dps: Math.round(G.stats.dps), life: G.stats.lifeMax, crit: G.stats.critC };
+    });
+    await pg.evaluate(() => window.__D.openPanel('skills', { tab: 1 })); await pg.waitForTimeout(400); await shot();
+    await pg.evaluate(() => window.__D.closePanel());
+    // an old save: a level 50 hero with the old cap's points left over and no loadout; the title's Continue takes it up
+    await pg.evaluate(() => {
+      const G = window.__G, old = JSON.parse(JSON.stringify(G.hero));
+      for (const k of ['loadout', 'vars', 'variant', 'mast', 'mlvl', 'mxp']) delete old[k];
+      old.id = 'hold'; old.level = 50; old.xp = 4321; old.skills = { multi: 5, rain: 5, wolf: 3, pierce: 5, bolt: 1 }; old.points = 49 - 13; old.cls = 'ranger';
+      // (no more autosaves from this page over the planted save)
+      G.save = null;
+      localStorage.setItem('skotos.save.v1', JSON.stringify({ heroes: [old], settings: { helpSeen: true }, last: 'hold' }));
+    });
+    await pg.goto((process.env.BASE || 'http://localhost:5199/') + '?sim=1&q=1');
+    await pg.waitForFunction(() => window.__ready, null, { timeout: 180000 });
+    await pg.waitForTimeout(1500); await pg.mouse.click(300, 200); await pg.waitForTimeout(1200);
+    await pg.click('#m-cont'); await pg.waitForFunction(() => window.__G?.mode === 'play' && window.__G.player, null, { timeout: 180000 });
+    await pg.waitForTimeout(1500);
+    r.migrated = await pg.evaluate(() => { const h = window.__G.hero; return { level: h.level, xp: h.xp, points: h.points, skills: h.skills, loadout: h.loadout, mlvl: h.mlvl, mast: h.mast }; });
+    await pg.evaluate(() => window.__D.openPanel('skills')); await pg.waitForTimeout(400); await shot();
+    return r;
+  } },
+  // the runner's own check: a game timer that throws lands in #fatal, and the run must report pass: false with it
+  fatalcheck: { q: 'auto=town&sim=2&q=0&norender', run: async (pg) => {
+    await pg.evaluate(() => window.__G.timers.push({ t: 0.05, fn() { throw new Error('fatalcheck: a thrown timer'); } }));
+    await pg.waitForTimeout(1500);
+    return { pass: true, note: 'must come out pass: false with the fatal text' };
   } },
   title: { q: 'sim=1&q=' + (process.env.Q || '1'), run: async (pg, shot) => {
     await pg.waitForTimeout(2500); await shot();
@@ -1949,7 +2171,8 @@ const sc = S[name];
 if (sc.child) { let res; try { res = await sc.child(out); } catch (e) { res = { error: e.message }; } console.log(name, JSON.stringify(res)); process.exit(0); }
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const FATAL = watchFatal(browser);
-const page = await browser.newPage({ viewport: { width: +W, height: +H } });
+// (TOUCH=1: a phone, touch and all, as the co-op ui scenario)
+const page = await browser.newPage(process.env.TOUCH ? { viewport: { width: +W, height: +H }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : { viewport: { width: +W, height: +H } });
 page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') { const t = m.text(); if (!t.includes('ERR_CERT')) logs.push(m.type() + ': ' + t); } });
 page.on('pageerror', (e) => logs.push('pageerror: ' + e.message + ' ' + (e.stack || '').split('\n').slice(0, 3).join(' | ')));
 // the test hero never dies (levelling up resets the life pool, so keep topping it up; window.__tough also puts back the
@@ -1966,6 +2189,7 @@ const shot = async (pg = page) => { await pg.evaluate(() => new Promise((ok) => 
 shot.dir = out;
 let res;
 try { res = await sc.run(page, shot); } catch (e) { logs.push('scenario error: ' + e.message); }
+await page.waitForTimeout(250).catch(() => {});
 // (a runtime error on the game's #fatal box fails the scenario, whatever it checked)
 const fatal = await fatalAll(browser, FATAL);
 if (fatal.length) res = { ...(res && typeof res === 'object' ? res : { res }), pass: false, fatal: fatal.slice(0, 10) };

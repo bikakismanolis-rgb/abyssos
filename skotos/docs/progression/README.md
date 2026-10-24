@@ -1,0 +1,158 @@
+# Progression: Mastery, skill variants, later skills and the loadout
+
+The owner's complaint: «έχω τερματίσει τα skills μου και δεν έχω τι να κάνω τα points». Each class had a basic attack and
+four skills of five ranks, so 16 of the 49 points a hero earns by level 50 could be spent; after about level 17 a level-up
+gave nothing. This adds three things as one system, all paid for from one pool of points.
+
+## What the player sees
+
+- **Points** (`Πόντοι`): one per level (49 by level 50), and one per Mastery level after that. The skills button on the HUD
+  shows how many are waiting; the skills panel's header glows while any are.
+- **Skills tab**: the four buttons of the phone at the top (tap one to look at its skill), then every skill of the class
+  as a tile (rank pips, the button it is on, a `+` when it can be improved, `Νέα` for a later skill not yet placed, the
+  level a locked one opens at). Tap a tile for its detail on the right: the rank and an Upgrade button, what it does, its
+  damage now and at the next rank, which button it is on (tap 1-4 to put it there: a skill already on another button
+  swaps places; out of town a skill brought onto the buttons comes in on its whole cooldown, since the panel pauses the
+  game), and its variants.
+- **Variants** (`Παραλλαγές`): each of the first four skills of each class has two other versions that change how it is
+  played (24 in all). A variant needs the skill at rank 5 and costs 1 point. The first one learnt takes effect at once
+  (only the first: a second is chosen in town); switching between the skill as it is and its variants is done in town. The button on the HUD shows a small blue
+  diamond while a variant is in use.
+- **Later skills**: three more per class, at levels 20, 30 and 40 (ranks 1-5, like the others). A class now has seven
+  skills for four buttons: the loadout is the choice.
+- **Mastery tab** (`Μαεστρία`): twelve tracks, each bought a rank at a time (+1 or +5). After level 50 experience goes on
+  counting into Mastery levels, each a point and a little longer than the last; the HUD shows the Mastery level on the
+  portrait (a blue star) and the XP bar turns blue. A respec (`Ξέχνα ό,τι έμαθες`, town only, gold) gives every point back;
+  when it cannot be had, the line under it says why (out of town, or the gold the hero has).
+
+## Numbers
+
+### Mastery tracks
+bonus(r) = max x (1 - e^(-r/k)): the first ranks are small, the tail endless but bounded.
+
+| track | stat | max | k | rank 1 | rank 10 | rank 40 |
+|---|---|---|---|---|---|---|
+| Δύναμη / Might | damage % | 100 | 40 | 2.5 | 22 | 63 |
+| Ζωτικότητα / Vigor | life % | 100 | 40 | 2.5 | 22 | 63 |
+| Σημάδι / True Aim | crit chance % | 12 | 30 | 0.4 | 3.4 | 8.8 |
+| Μανία / Ferocity | crit damage % | 120 | 40 | 3 | 27 | 76 |
+| Γοργότητα / Haste | attack speed % | 25 | 40 | 0.6 | 5.5 | 16 |
+| Δρασκελιά / Stride | move % (cap 40 with items) | 15 | 25 | 0.6 | 4.9 | 12 |
+| Εστίαση / Focus | cooldown % (cap 40 with items) | 15 | 35 | 0.4 | 3.7 | 10.2 |
+| Πηγή / Wellspring | resource regen % (Warden: fury per hit %) | 50 | 30 | 1.6 | 14 | 37 |
+| Σίδερο / Iron | armour % | 80 | 40 | 2 | 18 | 51 |
+| Βδέλλα / Leech | life per hit (x level, not rounded: 0.13 at L2) | 2 x L | 30 | 3.3 at L50 | 28 at L50 | 74 at L50 |
+| Τύχη / Fortune | gold % | 150 | 30 | 4.9 | 43 | 110 |
+| Ανιχνευτής / Seeker | magic find % | 150 | 30 | 4.9 | 43 | 110 |
+
+### Points and Mastery levels
+- Ranks 2-5 of the seven skills: 28 points; the 24 variants: 8 per class (two for each of four skills); so 36 points
+  buy every rank and variant (level 37). Everything else, and every Mastery level, goes to Mastery.
+- Mastery level m needs xpToNext(49) x (1 + 0.06 m): 12 756 for the first, 19 644 for the tenth, 88 527 for the
+  hundredth. The whole road from 1 to 50 is 263 000 XP; the first hundred Mastery levels are 5.06 million (the Shadow
+  Gates' long tail).
+- Respec: 100 + 12 x level² + 400 x Mastery level gold.
+
+## Balance before and after
+
+Measured with `tools/balance-act.mjs` (Warden difficulty, the bot's gear and skills as before): Acts III and IV, every
+zone (8 packs) and every boss, each class, at the levels a hero meets them (weep 17, heart 20, ashfield 23, forge 26;
+Silverhorn 18, Amaranthe 22, Ivar 24, Karthax 28), 6 runs each (seeds 1000 + r x 7919). *Before* is version 12; *after*
+is this branch with every point the four skills cannot take put into Mastery (Might and Vigor in turn: the most raw
+power a spare point buys; 0 points at 17, 3 at 20, 6 at 23, 9 at 26, 11 at 28). The later skills and the variants are
+sidegrades (tuned at the dummies, below), so the bot keeps today's four.
+
+| | zones: life lost / min | zones: clear time | bosses: life lost / min | bosses: kill time | deaths |
+|---|---|---|---|---|---|
+| before (v12) | 0.715 | 30.1 s | 0.490 | 31.7 s | 0 |
+| after | 0.609 (-15%) | 33.3 s (+11%) | 0.447 (-9%) | 30.0 s (-5%) | 0 |
+
+Per job (`balance-acts3-4.txt`) the swings are mostly noise of 6 runs (the Warden at 17, who has no spare point, moves
+as much as the others). The acts stay within the 20-30% the owner allowed; the large rewards are in the tail: at
+Mastery 100 (5 million XP of Shadow Gates past level 50) a hero who spreads the 113 points left after the skills evenly over
+the twelve tracks has +21% damage, +21% life, +3% crit, +25% crit damage and the rest besides; one who puts them into
+Might and Vigor alone has +76% of each.
+
+### The later skills and variants at the dummies
+`node tools/scenario.mjs skillsfx <out> 844 390` with `CLS=warden|ranger|mage` casts every skill and variant (rank 5,
+level 45, starter weapon) at a ring of seven sturdy dummies and reports the damage of one cast. Tuned so that a variant
+stays within about +-30% of its base in a pack (the pulling and freezing ones trade some for control), and a later skill
+is worth its cooldown and cost (Dawnbreaker about 2x an Earthsplitter for 50 Fury and a long swing; the Ray of Dawn
+about a Fireball's damage per mana, through a whole line).
+
+After review the outliers were brought back (the reviewers' harness `meas.mjs`: the skill cast whenever ready for 16 s,
+rank 5, level 45, a ring of seven sturdy dummies and a lone boss-sized one): Ember Dance keeps one burning patch under
+her while she spins in place (a new one only once she has moved off it), Shatter bursts for 0.6x with no forced
+crit, Blizzard's storm ticks for 0.07x, Tight Volley's bolts are 0.45x and pierce two, Storm of Hawks dives for 0.4x
+(one cast about one Piercing Shot cycle on one foe), and the Alpha bites for 0.6x (its worth is the +15% on her own
+blows, which now lasts only while an Alpha runs with her). The fires the variants leave (Rain of Fire, Pale Cinder,
+Ember Dance: area `dim`) never count as light in a boss's darkness (light.js), so they do not unveil a Shrouded boss.
+
+## Code
+
+- `src/game/data.js`: the later skills appended to `SKILLS` (indices 0-4 unchanged), `VARIANTS`, `LOADOUT`,
+  `VARIANT_RANK`, `mxpToNext`.
+- `src/game/progression.js` (new): the rules. Mastery tracks and their bonus (`masteryStats`, called by
+  `computeStats`), points earned/spent, rank up, variants (unlock, choose), the loadout (`slotSkill`, `setSlot`), respec,
+  and `migrateHero` for old saves.
+- `src/game/skillsx.js` (new): `VARIANT_FN['skill.variant']` and `NEW_FN[skill]`, each called like a skill.
+- `src/game/skills.js`: a button (1-4) maps through the loadout; cooldowns are kept per skill by its index in `SKILLS`
+  (`pl.cds` is as long as the class's list); the variant, else the base, else a later skill is called; helpers exported.
+- `src/game/projectiles.js`: `fire()` takes `onTick` and `look`; `area()` takes `look`, `light` (in place of the kind's
+  own), `dim`, and the kind `'custom'` runs `onTick` every frame and `onEnd`/`dispose` at its end (or a zone change).
+- `src/game/player.js`: the Vault and the Charge cannot be cut short (like a leap); only a leap or the Vault holds her
+  off the ground; the Alpha's buff ends with the last Alpha. `src/game/light.js`: `dim` fires are never light in a boss's
+  darkness.
+- `src/game/combat.js`: XP past level 50 goes to `gainMastery`; `furyGain` (Warden's Wellspring); the Alpha's +15%; the
+  Challenge's damage cut and reflection.
+- `src/game/ai.js`: `victim()` honours a taunt (`a.taunt`, game time).
+- `src/ui/progpanel.js` (new) + `style.css` (`.pg-*`): the skills panel. `src/ui/hud.js`: buttons from the loadout, the
+  Mastery badge and bar, the Mastery level-up.
+- `src/i18n/text.js`: every string (`sk.*` for the later skills, `var.*`, `prog.*`, `mast.*`).
+
+## Saves
+
+`migrateHero` (on every hero taken up, boot.js `startHero`): `loadout` = today's four, `skills`/`vars`/`variant`/`mast`
+empty objects if missing, `mlvl`/`mxp` 0, and `points` set to (level - 1) + Mastery level - points spent, so any point the
+old cap left unspendable is now spendable. Old ranks are kept as they were.
+
+## Porting onto the Act V branch (`claude/sleepy-tesla-4030vd`)
+
+Most of the work is in new files, which carry over as they are: `src/game/progression.js`, `src/game/skillsx.js`,
+`src/ui/progpanel.js`, `tools/vite.nohmr.mjs`, `docs/progression/*`. The edits to shared files are small and local;
+merge them by hand in this order (`git diff c70d65d claude/skotos-progression -- <file>` shows each):
+
+1. `data.js`: append the three later skills to each class in `SKILLS` (after `quake`, `pierce`, `meteor`), add
+   `VARIANTS`, `LOADOUT`, `VARIANT_RANK` after `SKILL_MAX_RANK`, and `mxpToNext` after `MAX_LEVEL`. Act V's six
+   difficulties need nothing (the Skotos difficulty's xp 6.5 simply makes Mastery come faster there).
+2. `stats.js`: import `masteryStats`, add `furyGain: 0` to the stat record, call `masteryStats(hero, s)` before
+   `lifeMax` (after Act V's Remembered boons). `items.js`: the `skill` affix filter (later skills on deep items only).
+3. `skills.js`: the imports (`slotSkill`, `variantOf`, `VARIANT_FN`, `NEW_FN`), `export` on `act`, `attackSpeed`
+   (Act V's keeps its `coldMul()`), `arcHit`, `circleHit`, `swingFx`, `staffTip`, `handPoint`, and the new
+   `skillOn`/`cdIndex`/`canUse`/`useSkill` block. **Act V hooks to repeat in the variants** (skillsx.js), since a variant
+   replaces its base function: `crackAt(tx, tz, 3, 1, { src: 'leap' })` in `leapCore`'s landing; `crackLine(...)` along
+   each fissure in `quakeLines` and a `crackAt` per ring in `quake.ring`; `crackAt(x, z, 3.5, 1, { src: 'rain' })` in
+   `rainCore`; `crackAt(x, z, 1.5, 1, { src: 'fireball' })` in `fireBoom` (not the small ones) and `fireball.cinder`;
+   `refreezeAt` + `emit('frostNova', ...)` in `novaCore`; `crackAt(x, z, 3.5, 2, { src: 'meteor' })` in the comet and
+   (r 2, +1) in each shower stone. Rolls skid on ice in `dodge`; the Vault and the Charge could too (optional).
+4. `actors.js`: `p.cds` as long as `SKILLS[cls]` (and the `SKILLS` import). `ai.js`: the taunt line at the top of
+   `victim()`. `combat.js`: the `mxpToNext` import, `gainXP`/`gainMastery`/`levelFx` (replace `gainXP`), `furyGain` in
+   the fury gain, the Alpha line in `heroHit`, the Challenge line after `shrineShield` in `hurtHero`, and `beam` in the
+   interrupt test. `projectiles.js`: the new `KIND`s, `onTick`/`look` in `fire()` and `updateProjs`, the `custom` area
+   branch, `look`/`light`/`dim`/`dispose` in `area()` (the kind's light only when there is no `o.light`), the looks
+   chain after the move line (`if (a.look) ... else if (a.kind === 'fire') ...`), and `dispose` in `clearProjs`.
+   `light.js`: `a.dim` in `lightAt`'s fire test. `player.js`: `vault`/`charge` in `busyHard`, the `pl.y` line before
+   the `pl.dead` test, the Alpha line after the buffs loop; `skills.js` `dodge()`: `vault`/`charge` beside `leap`.
+5. `hud.js`: imports, `#mlvl` in the portrait, `setupSkillButtons` (+ the `loadout` listener), the XP bar block, the
+   skill loop reading `slotSkill`, the buff icons, `masteryUp`, the later-skill line in `levelUp`. Act V's own HUD changes
+   (`HAZ5`) do not touch these lines.
+6. `panels.js`: the `renderSkills`/`skillsClick` import, `skills()` replaced, `open()`'s `P.sure`/`P.msel`/`ctx.tab`, the
+   `skillsClick` line at the top of `onClick`, the old `rank` case removed, and `render()` keeping `.pn-b`'s scroll
+   (`render.key`, reset in `open()`). `screens.js`: the ✦ Mastery level on a
+   hero's slot. `boot.js`: `migrateHero` import and call in `startHero`, `?mlvl=`. `icons.js`: the new icons.
+   `style.css`: the `.pg-*` block at the end. `text.js`: the block after `sk.roll` and `hud.levelupSub`, and the soft hyphens (`\u00ad`, where a long name breaks on a narrow tile) in `sk.quake`, `sk.pierce`, `sk.meteor`.
+7. `tools/balance-act.mjs`: `prog` import, `ready()` through the loadout, and the progression lines in `setupHero`.
+   `tools/scenario.mjs`: the `progpanel`, `skillsfx`, `progress` scenarios.
+
+Then run `progpanel`, `skillsfx` (each class), `progress`, and Act V's own scenarios, and re-measure Act V with
+`balance-act.mjs` (`mast: true` jobs at the act's levels) to keep its numbers.

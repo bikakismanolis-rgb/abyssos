@@ -50,8 +50,9 @@ async function installBot(cfg) {
   const G = window.__G, D = window.__D, IN = D.IN;
   const [data, items, stats, world, actors, fx, bus, hud, light, forge, state] = await Promise.all(['/src/game/data.js', '/src/game/items.js', '/src/game/stats.js', '/src/game/world.js', '/src/game/actors.js', '/src/gfx/fx.js', '/src/ui/bus.js', '/src/ui/hud.js', '/src/game/light.js', '/src/game/forge.js', '/src/game/state.js'].map((p) => import(p)));
   const { CLASSES, SKILLS, SLOTS, MONSTERS } = data;
+  const prog = await import('/src/game/progression.js');
   const B = window.__bal = { st: null, done: null, err: null, log: [] };
-  const OWN = new Set([0xffb040, 0xffe0a0, 0xff6a20]);      // the hero's own telegraphs: leap, arrow rain, meteor
+  const OWN = new Set([0xffb040, 0xffe0a0, 0xff6a20]);      // the hero's own telegraphs: leap, arrow rain, meteor (and their variants)
   const SAFE = 0x60c0ff;                                      // a blue safe circle (the Stonewarden's pulse, Ivar's nova, Karthax's dark)
   const angleTo = (ax, az, bx, bz) => Math.atan2(bx - ax, bz - az);
   const angDiff = (a, b) => { let d = (b - a) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; };
@@ -135,6 +136,12 @@ async function installBot(cfg) {
     const zf = ZFLAGS[job.zone], bf = job.boss ? BFLAGS[job.boss] : null;
     h.diff = job.diff; h.level = job.lvl; h.xp = 0;
     const R = skillRanks(h.cls, h.level); h.skills = R.sk; h.points = R.pts;
+    // the progression (progression.js): job.mast spends what is left on Might and Vigor in turn (the most raw power a
+    // spare point can buy); job.variant {skill: 1|2} plays those variants; job.loadout the four on the buttons
+    h.mast = {}; h.vars = {}; h.variant = {}; h.mlvl = job.mlvl || 0; h.points += h.mlvl;
+    h.loadout = job.loadout ? job.loadout.slice() : null;
+    for (const id in job.variant || {}) { h.vars[id] = 3; h.variant[id] = job.variant[id]; if (h.points > 0) h.points--; }
+    if (job.mast) { let k = 0; while (h.points > 0) { const id = k++ % 2 ? 'vigor' : 'might'; h.mast[id] = (h.mast[id] || 0) + 1; h.points--; } }
     h.quest = bf?.quest ?? zf.quest;
     h.flags = Object.assign({ tickHint: true, helpSeen: true }, zf.flags, bf?.flags || {});
     if (job.zone === 'forge' && !job.boss && job.heat != null) h.flags.heat = job.heat;
@@ -262,7 +269,8 @@ async function installBot(cfg) {
     }
     return bestA || best;
   }
-  function ready(pl, i) { const sk = SKILLS[G.hero.cls][i]; return sk && G.hero.level >= (sk.lvl || 0) && pl.cds[i] <= 0 && pl.res >= (sk.cost || 0); }
+  // (button i holds the loadout's skill: progression.js; cooldowns are kept by the skill's place in SKILLS)
+  function ready(pl, i) { const sk = prog.slotSkill(i); return sk && G.hero.level >= (sk.lvl || 0) && pl.cds[SKILLS[G.hero.cls].indexOf(sk)] <= 0 && pl.res >= (sk.cost || 0); }
   function chooseSkill(cls, pl, tg, d) {
     if (!tg || !attackable(tg)) return 0;
     if (cls === 'warden') {
