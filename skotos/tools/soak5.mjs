@@ -319,9 +319,13 @@ if (which === 'ice' || which === 'all') { report.iceCoast = await iceSoak('coast
 if (which === 'ice-coast') report.iceCoast = await iceSoak('coast');
 if (which === 'ice-farlight') report.iceFarlight = await iceSoak('farlight');
 if (which === 'perf' || which === 'all') report.perf = await perf();
-// (a runtime error on the game's #fatal box fails the soak)
+// (a runtime error on the game's #fatal box fails the soak: every soak of the run, which is what scenario.mjs's tide
+// and ice read, and its own line)
 const fatal = await fatalAll(browser, FATAL);
-if (fatal.length) report.fatal = { res: { pass: false, fatal: fatal.slice(0, 10) }, logs: [] };
+if (fatal.length) {
+  for (const v of Object.values(report)) if (v?.res) { v.res.pass = false; v.res.fatal = fatal.slice(0, 6); }
+  report.fatal = { res: { pass: false, fatal: fatal.slice(0, 10) }, logs: [] };
+}
 writeFileSync(`${out}/soak5-${which}${process.env.SEED ? '-' + process.env.SEED : ''}.json`, JSON.stringify(report, null, 1));
 for (const [k, v] of Object.entries(report)) {
   if (k === 'perf') { console.log('perf', JSON.stringify(v)); continue; }

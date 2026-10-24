@@ -1062,6 +1062,46 @@ const S = {
     const okOdd = c.points === c.earned - c.spent && c.slots.every(Boolean) && !c.loadout.includes('bogus') && new Set(c.loadout).size === 4;
     return { pass: ok13 && ok5 && okOdd && a.panel && b.panel && c.panel, ok13, ok5, okOdd, out };
   } },
+  // saves kept whole: a hero who took its weapon off keeps the chest and the shield it wears through Continue; two pages
+  // of one browser (a co-op host and its guest in two tabs) each write their own hero and never the other's back stale;
+  // a hero deleted on this page is not brought back by the other page's copy
+  save14: { q: 'q=0&sim=2&norender', run: async (pg) => {
+    await pg.evaluate(async () => {
+      const I = await import('/src/game/items.js'), G = window.__G;
+      const mk = (o) => I.makeItem(45, Object.assign({ cls: 'warden' }, o));
+      const base = (o) => Object.assign({ xp: 0, gold: 100, inv: new Array(32).fill(null), equip: {}, stash: new Array(48).fill(null), wps: ['town'], act1: -1, act2: -1, act3: -1, act4: -1, act5: -1, flags: {}, quest: 1, diff: 0, skills: {}, points: 0, played: 1, stats: { kills: 0, deaths: 0, time: 0 } }, o);
+      const bare = base({ id: 'hBare', name: 'Bare', cls: 'warden', level: 45, equip: { chest: mk({ base: 'chest', rar: 3, leg: 'vampiricMail' }), offhand: mk({ base: 'shield', rar: 3, leg: 'lastBastion' }) } });
+      bare.inv[0] = mk({ base: 'sword', rar: 2 });
+      const other = base({ id: 'hOther', name: 'Other', cls: 'mage', level: 20 });
+      const s = { heroes: [bare, other], settings: { helpSeen: true }, last: 'hBare' };
+      localStorage.setItem('skotos.save.v1', JSON.stringify(s)); G.save = JSON.parse(JSON.stringify(s));
+    });
+    await pg.goto(A5.base + '?q=0&sim=2&norender');
+    await pg.waitForFunction(() => window.__ready && window.__G?.save, null, { timeout: 240000 });
+    await pg.evaluate(() => window.__D.emit('startHero', window.__G.save.heroes.find((x) => x.id === 'hBare'), false));
+    await pg.waitForFunction(() => window.__G?.zone && window.__G.mode === 'play', null, { timeout: 240000 });
+    await A5.tick(pg);
+    const gear = await pg.evaluate(() => { const e = window.__G.hero.equip, inv = window.__G.hero.inv.filter(Boolean); return { chest: e.chest?.leg, offhand: e.offhand?.leg, weapon: !!e.weapon, bagWeapon: inv.some((it) => it.base === 'sword') }; });
+    // another page of this browser plays hOther and makes a hero of its own; then this page writes
+    const two = await pg.evaluate(async () => {
+      const SV = await import('/src/game/save.js'), G = window.__G;
+      const disk = JSON.parse(localStorage.getItem('skotos.save.v1'));
+      const o = disk.heroes.find((h) => h.id === 'hOther'); o.gold = 777; o.level = 21;
+      disk.heroes.push(Object.assign(JSON.parse(JSON.stringify(o)), { id: 'hNew', name: 'New', gold: 5 }));
+      localStorage.setItem('skotos.save.v1', JSON.stringify(disk));
+      G.hero.gold = 4242; SV.writeSave();
+      const a = JSON.parse(localStorage.getItem('skotos.save.v1'));
+      const r1 = { me: a.heroes.find((h) => h.id === 'hBare')?.gold, other: a.heroes.find((h) => h.id === 'hOther')?.gold, otherLvl: a.heroes.find((h) => h.id === 'hOther')?.level, made: !!a.heroes.find((h) => h.id === 'hNew'), inMemory: G.save.heroes.find((h) => h.id === 'hOther')?.gold };
+      // this page deletes hNew; the other page, still holding it, writes; this page writes again
+      SV.deleteHero('hNew');
+      const d2 = JSON.parse(localStorage.getItem('skotos.save.v1')); d2.heroes.push({ ...JSON.parse(JSON.stringify(d2.heroes.find((h) => h.id === 'hOther'))), id: 'hNew' }); localStorage.setItem('skotos.save.v1', JSON.stringify(d2));
+      SV.writeSave();
+      const b = JSON.parse(localStorage.getItem('skotos.save.v1'));
+      return { ...r1, deletedStays: !b.heroes.some((h) => h.id === 'hNew'), count: b.heroes.length };
+    });
+    const pass = gear.chest === 'vampiricMail' && gear.offhand === 'lastBastion' && gear.weapon && gear.bagWeapon && two.me === 4242 && two.other === 777 && two.otherLvl === 21 && two.made && two.inMemory === 777 && two.deletedStays && two.count === 2;
+    return { pass, gear, two };
+  } },
   // levels past the old skill cap, Mastery past 50, and a save from before the progression taken up from the title
   progress: { q: 'auto=town&sim=2&q=1&lvl=1&cls=' + (process.env.CLS || 'ranger'), run: async (pg, shot) => {
     const r = {};

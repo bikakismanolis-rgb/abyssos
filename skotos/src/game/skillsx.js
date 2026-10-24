@@ -56,13 +56,14 @@ export const VARIANT_FN = {
   // ===== Warden =====
   // Maelstrom: the spin drags everything near into the blades
   'whirl.vortex'(sk, aim, rank, mult) {
-    const pl = p(); let tick = 0, snd = 0;
+    const pl = p(); let tick = 0, snd = 0, tor = 0;
     act({
       name: 'whirl', anim: 'spin', dur: sk.dur + 0.15 * (rank - 1), move: 0.65, trail: [0, 99],
       update(dt) {
         tick -= dt; snd -= dt;
         if (snd <= 0) { snd = 0.5; Audio.sfx('whirlwind', { vol: 0.7, pitch: 0.85 }); Audio.sfx('windGust', { vol: 0.25 }); }
         for (const f of foes(pl.x, pl.z, 6.5)) if (live(f)) pull(f, pl.x, pl.z, 26 * dt);
+        if ((tor -= dt) <= 0) tor = dawnTornado(pl);
         if (tick <= 0) {
           tick = sk.tick;
           const n = circleHit(pl.x, pl.z, sk.radius + 0.3, (f) => damage(pl, f, heroHit(mult * 0.7, { area: true }), { quiet: true, resMul: 0.3, area: true }));
@@ -78,12 +79,13 @@ export const VARIANT_FN = {
   },
   // Ember Dance: the blade burns, and so does the ground behind her
   'whirl.ember'(sk, aim, rank, mult) {
-    const pl = p(); let tick = 0, snd = 0, patch = null;
+    const pl = p(); let tick = 0, snd = 0, tor = 0, patch = null;
     act({
       name: 'whirl', anim: 'spin', dur: sk.dur + 0.15 * (rank - 1), move: 0.9, trail: [0, 99],
       update(dt) {
         tick -= dt; snd -= dt;
         if (snd <= 0) { snd = 0.55; Audio.sfx('whirlwind', { vol: 0.6 }); Audio.sfx('fireCrackle', { vol: 0.4 }); }
+        if ((tor -= dt) <= 0) tor = dawnTornado(pl);
         if (tick <= 0) {
           tick = sk.tick;
           const n = circleHit(pl.x, pl.z, sk.radius, (f) => damage(pl, f, heroHit(mult * 0.75, { area: true }), { knock: 1.2, kx: f.x - pl.x, kz: f.z - pl.z, quiet: true, resMul: 0.3, area: true, burn: heroHit(mult * 0.25) }));
@@ -211,7 +213,7 @@ export const VARIANT_FN = {
   'rain.fire'(sk, aim, rank, mult) {
     rainCore(sk, aim, rank, (x, z, dur) => {
       area('rain', x, z, sk.radius, dur, { tick: 0.25, delay: 0.35, dmg: heroHit(mult * 0.4, { area: true }), opts: { burn: heroHit(mult * 0.18), quiet: true }, look: fireRain });
-      later(0.4, () => area('fire', x, z, sk.radius * 0.85, dur + 1.2, { tick: 0.5, dmg: heroHit(mult * 0.16, { area: true }), dim: true }));
+      later(0.4, here(() => area('fire', x, z, sk.radius * 0.85, dur + 1.2, { tick: 0.5, dmg: heroHit(mult * 0.16, { area: true }), dim: true })));
     }, 0xffe0a0);
   },
   // Hail: ice instead of iron; what is under it at the end is frozen
@@ -219,7 +221,7 @@ export const VARIANT_FN = {
     const pl = p();
     rainCore(sk, aim, rank, (x, z, dur) => {
       area('rain', x, z, sk.radius, dur, { tick: 0.25, delay: 0.35, dmg: heroHit(mult * 0.34, { area: true }), opts: { slow: { k: 0.7, t: 0.6 }, quiet: true }, look: hailRain });
-      later(dur + 0.3, () => { if (!G.zone) return; ring(x, z, sk.radius, 0xc8f0ff, 0.5); glowBurst(x, 0.6, z, 0xd8f4ff, 30, 4, 0.3, 0.6); Audio.sfx('frost', { x, z, vol: 0.8 }); circleHit(x, z, sk.radius, (f) => damage(pl, f, heroHit(mult * 0.8, { area: true }), { freeze: 1.4, area: true, quiet: true })); });
+      later(dur + 0.3, here(() => { ring(x, z, sk.radius, 0xc8f0ff, 0.5); glowBurst(x, 0.6, z, 0xd8f4ff, 30, 4, 0.3, 0.6); Audio.sfx('frost', { x, z, vol: 0.8 }); circleHit(x, z, sk.radius, (f) => damage(pl, f, heroHit(mult * 0.8, { area: true }), { freeze: 1.4, area: true, quiet: true })); }));
     }, 0xffe0a0);
   },
   // The Pack: three lesser wolves
@@ -265,7 +267,7 @@ export const VARIANT_FN = {
       name: 'fireball', anim: 'cast', speed: 1.6, face: aim.dir, cut: 0.45,
       events: [[0.22, () => {
         const o = staffTip(V); Audio.sfx('fireball');
-        for (const da of [-0.28, 0, 0.28]) fire('fireball', pl, o.x, o.z, pl.rot + da, { y: Math.max(1, o.y), scale: 0.7, onHit: (f, pr) => { pr.life = 0; }, onEnd: (x, z) => fireBoom(x, z, (sk.radius + 0.15 * rank) * 0.72, mult * 0.55, true, 1.1) });
+        for (const da of [-0.28, 0, 0.28]) fire('fireball', pl, o.x, o.z, pl.rot + da, { y: Math.max(1, o.y), scale: 0.7, onHit: (f, pr) => { pr.life = 0; }, onEnd: (x, z) => { fireBoom(x, z, (sk.radius + 0.15 * rank) * 0.72, mult * 0.55, true, 1.1); wayfarer(pl, x, z, mult, 1); } });
       }]]
     });
   },
@@ -277,14 +279,14 @@ export const VARIANT_FN = {
       events: [[0.22, () => {
         const o = staffTip(V); Audio.sfx('fireball', { pitch: 1.2 });
         fire('cinder', pl, o.x, o.z, pl.rot, { y: Math.max(1, o.y), homing: 6, onHit: (f, pr) => { pr.life = 0; }, look: cinderLook,
-          onEnd: (x, z) => { const r = (sk.radius + 0.15 * rank) * 0.85; explosion(x, z, r, 0xfff0c0, { shake: 0.22, smoke: 0x4a4440 }); crackAt(x, z, 1.5, 1, { src: 'fireball' }); Audio.sfx('explosion', { x, z, vol: 0.8 }); circleHit(x, z, r, (f) => damage(pl, f, heroHit(mult * 0.8, { area: true }), { knock: 3, kx: f.x - x, kz: f.z - z, burn: heroHit(mult * 0.3), area: true })); area('fire', x, z, 1.9, 3, { tick: 0.5, dmg: heroHit(mult * 0.14, { area: true }), look: paleFire, light: { color: 0xffe8b0, intensity: 12 }, dim: true }); } });
+          onEnd: (x, z) => { wayfarer(pl, x, z, mult, 3); const r = (sk.radius + 0.15 * rank) * 0.85; explosion(x, z, r, 0xfff0c0, { shake: 0.22, smoke: 0x4a4440 }); crackAt(x, z, 1.5, 1, { src: 'fireball' }); Audio.sfx('explosion', { x, z, vol: 0.8 }); circleHit(x, z, r, (f) => damage(pl, f, heroHit(mult * 0.8, { area: true }), { knock: 3, kx: f.x - x, kz: f.z - z, burn: heroHit(mult * 0.3), area: true })); area('fire', x, z, 1.9, 3, { tick: 0.5, dmg: heroHit(mult * 0.14, { area: true }), look: paleFire, light: { color: 0xffe8b0, intensity: 12 }, dim: true }); } });
       }]]
     });
   },
   // Shatter: a shorter freeze, and what is still frozen after it bursts (a boss, whose freeze is short, always does)
   'nova.shatter'(sk, aim, rank, mult) {
     const pl = p();
-    novaCore(sk, mult * 0.6, sk.freeze * 0.6 + 0.2 * rank, 0xa0e0ff, (hits) => later(1.1, () => {
+    novaCore(sk, mult * 0.6, sk.freeze * 0.6 + 0.2 * rank, 0xa0e0ff, (hits) => later(1.1, here(() => {
       for (const f of hits) {
         if (f.dead || !(f.status.freeze > 0 || f.boss)) continue;
         glowBurst(f.x, 1, f.z, 0xe8faff, 22, 5, 0.3, 0.5); sparks(f.x, 1, f.z, 14, 0xd0f0ff, 7, { color1: 0x4080ff });
@@ -292,7 +294,7 @@ export const VARIANT_FN = {
         f.status.freeze = 0;
       }
       if (hits.length) Audio.sfx('break', { x: pl.x, z: pl.z, vol: 0.8 });
-    }));
+    })));
   },
   // Blizzard: a softer wave, and a storm of snow that goes with her
   'nova.blizzard'(sk, aim, rank, mult) {
@@ -343,7 +345,7 @@ export const VARIANT_FN = {
         fire('spark', pl, o.x, o.z, pl.rot, { y: 1.2, pierce: 999, onHit: () => {}, look: sparkLook,
           onTick(pr, dt) {
             z0 -= dt; if (z0 > 0) return; z0 = 0.25;
-            const n = nearest(pr.x, pr.z, 4.5, 2 + (rank >= 4 ? 1 : 0));
+            const n = nearest(pr.x, pr.z, 4.5, 2 + (rank >= 4 ? 1 : 0) + (G.stats.legs.has('stormRing') ? 1 : 0));
             for (const f of n) { bolt(pr.x, pr.y, pr.z, f.x, 1.1, f.z, 0xb0a0ff, 0.9); damage(pl, f, heroHit(mult * 0.34), { stun: 0.15, quiet: true }); }
             if (n.length) Audio.sfx('lightning', { x: pr.x, z: pr.z, vol: 0.3 });
           },
@@ -458,7 +460,7 @@ function rainCore(sk, aim, rank, drop, tele) {
       teleCircle(x, z, sk.radius, 0.35, tele);
       drop(x, z, sk.dur + 0.2 * (rank - 1));
       // Act V: +1 stage under the rain, once a cast (the Ranger cracks from range, whatever falls)
-      later(0.4, () => crackAt(x, z, 3.5, 1, { src: 'rain' }));
+      later(0.4, here(() => crackAt(x, z, 3.5, 1, { src: 'rain' })));
     }]]
   });
 }
@@ -494,6 +496,22 @@ function pierceCore(sk, aim, m, onHit) {
     }]]
   });
 }
+// a delayed landing (a Hail's burst, a falling stone, a thrown trap) only in the zone it was cast in: travel keeps the
+// timers going through its fade
+const here = (fn) => { const z0 = G.zone; return (...a) => { if (G.zone === z0) fn(...a); }; };
+// the legendaries that change a skill (skills.js) change its variants too: Dawnblade's fire tornadoes behind a spin
+// (one each 0.5 s: what it returns is the wait), the Wayfarer's Staff's small fireballs where a fireball bursts (the base
+// skill's three; one each for the Trident's three)
+function dawnTornado(pl) {
+  if (!G.stats.legs.has('dawnblade')) return 0.5;
+  const a = Math.random() * 6.28;
+  area('tornado', pl.x, pl.z, 1.3, 3, { tick: 0.4, dmg: heroHit(0.25, { area: true }), vx: Math.sin(a) * 2.5, vz: Math.cos(a) * 2.5, opts: { burn: 3 } });
+  return 0.5;
+}
+function wayfarer(pl, x, z, mult, n) {
+  if (!G.stats.legs.has('wayfarerStaff')) return;
+  for (let k = 0; k < n; k++) { const a = Math.random() * 6.28; fire('mini', pl, x, z, a, { y: 1, onHit: (f, pr) => { pr.life = 0; }, onEnd: (mx, mz) => fireBoom(mx, mz, 1.8, mult * 0.4, true) }); }
+}
 // (crack: the thin ice it breaks round it, Act V; the Trident's three each a smaller one than a Fireball's 1.5)
 function fireBoom(x, z, r, m, small, crack = 0) {
   const pl = p();
@@ -526,7 +544,7 @@ function meteorFall(x, z, t, size, land, ice) {
   const c0 = ice ? 0xe8f8ff : 0xffd080, c1 = ice ? 0x4a8aff : 0xff3000, sm = ice ? 0xc0d8f0 : 0x2a2420;
   const n = Math.round(t / 0.05);
   for (let k = 0; k < n; k++) later(k * 0.05, () => { const u = k / n; P({ x: x - 6 + u * 6, y: 14 - u * 14, z: z - 3 + u * 3, life: 0.35, size: 2.2 * size, size1: 0.4, color: c0, color1: c1 }); P({ add: false, x: x - 6 + u * 6, y: 14 - u * 14, z: z - 3 + u * 3, vy: 0.5, life: 1.0, size: 1.2 * size, size1: 2.5 * size, color: sm, alpha: 0.45 }); });
-  later(t, () => { if (G.zone) land(); });
+  later(t, here(land));
 }
 // projectile looks
 function goldBolt(pr) { P({ x: pr.x, y: pr.y, z: pr.z, life: 0.2, size: 0.3, size1: 0.04, color: 0xfff0b0, color1: 0xffa040 }); }
@@ -661,8 +679,7 @@ export const NEW_FN = {
         const o = handPoint(V), fly = 0.38, sx = o.x, sy = o.y, sz = o.z;
         Audio.sfx('swing', { vol: 0.6 });
         for (let k = 0; k <= 8; k++) later((k / 8) * fly, () => { const u = k / 8; P({ x: sx + (tx - sx) * u, y: sy + (0 - sy) * u + Math.sin(u * Math.PI) * 2.2, z: sz + (tz - sz) * u, life: 0.25, size: 0.3, size1: 0.05, color: 0xd0d8e0, color1: 0x6a7480 }); });
-        later(fly, () => {
-          if (!G.zone) return;
+        later(fly, here(() => {
           Audio.sfx('trap', { x: tx, z: tz, vol: 0.6 }); sparks(tx, 0.2, tz, 8, 0xe0e8f0, 3);
           const jaw = trapMesh(); jaw.position.set(tx, 0.05, tz); jaw.rotation.y = Math.random() * 6.28;
           let armed = false, sprung = false;
@@ -686,7 +703,7 @@ export const NEW_FN = {
             end() { if (!sprung) spring(); },
             dispose() { dropMesh(jaw); }
           });
-        });
+        }));
       }]]
     });
   },

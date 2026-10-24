@@ -210,7 +210,8 @@ function timers(z, I, dt) {
   for (let j = I.broken.length - 1; j >= 0; j--) {
     const i = I.broken[j];
     if (I.stage[i] !== 4) { I.fl[i] &= ~BRK; I.broken[j] = I.broken[I.broken.length - 1]; I.broken.pop(); continue; }
-    if (I.fl[i] & REO) continue;
+    // (a hole something keeps open, a Skotos's Hand's, waits: it closes once nothing holds it)
+    if (I.fl[i] & REO || I.held?.has(i)) continue;
     if ((I.t[i] -= dt * (lampLit(z, i) ? MELT / MELT_LAMP : 1)) <= 0) { I.fl[i] |= REO; I.reo.push(i); }
   }
   const per = haz().load;
@@ -599,13 +600,13 @@ export function breakAt(x, z, r, o = {}) {
   }
   return n;
 }
-// Frost Nova, a beam: stages 1-3 back to 0, broken cells to slush in the next batch
+// Frost Nova, a beam: stages 1-3 back to 0, broken cells to slush in the next batch (never a hole something holds open)
 export function refreezeAt(x, z, r) {
   const zn = G.zone, I = zn?.L?.ice && zn.ice; if (!I) return 0;
   if (toHost()) return NET.h.iceOp('f', x, z, r);
   let n = 0;
   for (const i of cellsIn(zn.L, x, z, r)) {
-    if (!zn.L.ice[i]) continue;
+    if (!zn.L.ice[i] || I.held?.has(i)) continue;
     const s = I.stage[i];
     if (s === 4) { if (!(I.fl[i] & REO)) { I.fl[i] |= REO; I.reo.push(i); n++; } }
     else if (s >= 1 && s <= 3) { I.stage[i] = 0; I.load[i] = 0; I.fl[i] &= ~(WARNF | PEND); I.dirty = true; n++; }
