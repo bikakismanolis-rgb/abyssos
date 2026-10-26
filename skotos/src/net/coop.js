@@ -271,13 +271,14 @@ function wire() {
   ch.on('c', (m) => { if (S.role === 'guest' && m.peer === S.hostPeer && m.data?.op === 'end') leaveGame('coop.hostLeft'); });
   ch.onConnection((c) => { if (!c && S.role) S.lostT = now(); else S.lostT = 0; emit('netLobby'); });
   // (a send of the game's the room refused: this view may not send, it plays alone; the game's room ended (it could not
-  // be joined again after a reconnect): a guest goes home, a host plays on alone. A terminal code is netDead's)
+  // be joined again after a reconnect; on Supabase, its row gone or the project's day spent): a guest goes home, a host
+  // plays on alone. A terminal code is netDead's)
   ch.onError?.((code, how) => {
     if (S.ch !== ch) return;
     // (a terminal code is netDead's, which leaves the game in play; one heard on a game that began after it, too)
     if (TERMINAL.has(code)) { if (S.dead && S.role) leaveGame('coop.off'); return; }
     if (how === 'send' && code === 'not_permitted') { S.send = false; S.sendSure = true; leaveGame('coop.noSend'); }
-    else if (how === 'room') leaveGame(S.role === 'host' ? 'coop.lostHost' : 'coop.lost');
+    else if (how === 'room') leaveGame(code === 'quota' ? 'coop.quota' : S.role === 'host' ? 'coop.lostHost' : code === 'no_game' ? 'coop.hostLeft' : 'coop.lost');
   });
 }
 // the look of a hero's skills is taken from the party only: on the host its guests, on a guest the host and its guests

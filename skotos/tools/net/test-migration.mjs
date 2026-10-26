@@ -3,10 +3,12 @@
 // stood in for by a few lines each, as its docs give them: the roles (anon, authenticated), auth.uid() (the JWT's sub),
 // realtime.messages with row level security, realtime.topic() and realtime.send() (a row in realtime.messages, its
 // errors caught and only warned). Then the migration runs twice (it must change nothing the second time) and its rules
-// are tried: what skotos.send refuses and what it writes (the server's '_by', whatever the page put in its data), the
-// 4 KiB cap counted in bytes, the rate (80 at once, 40 a second), the games (host, taken, renewed, ended, run out, four
-// at most), the tables closed to pages, and Realtime's join check (a page may hear and track presence on 'skotos:'
-// topics, never broadcast on one, whatever another app's policy allows). What this cannot show is Supabase itself:
+// are tried: what skotos.send refuses and what it writes (the server's '_by', whatever the page put in its data; the
+// data as the page's own text, so what goes out is never more than twice what was checked, a number of 8 bytes no
+// 131,072), the 4 KiB cap counted in bytes, the topics (the lobby, or a live game's), the rate (80 at once, 40 a
+// second) and the bytes by role, the user's and the project's day (skotos.quota), the games (host, taken, renewed,
+// ended, run out, one a user, none new past the day), the tables closed to pages, and Realtime's join check (a page may
+// hear and track presence on 'skotos:' topics, never broadcast on one, whatever another app's policy allows). What this cannot show is Supabase itself:
 // its postgres role, PostgREST, Realtime's delivery (docs/coop/supabase.md, what is not verified).
 // PGlite is not one of the game's packages: npm i --no-save @electric-sql/pglite@0.5.8 first, or PGLITE=<its
 // dist/index.js> to take one from elsewhere.
@@ -118,15 +120,19 @@ ok(unlogged === 'u', 'the rates table is unlogged');
 // who may call
 ok(/not_signed_in/.test(err(await send('', [['skotos:lobby', '_p', '{}']]))), 'a page not signed in (no user) is refused');
 ok(/permission denied/.test(err(await as('', 'select skotos.send($1::jsonb)', ['[]'], { role: 'anon' }))), 'the public key alone (anon) cannot call it at all');
-ok(/permission denied/.test(err(await as(A, 'select * from skotos.games'))) && /permission denied/.test(err(await as(A, 'select * from skotos.rates'))), 'a signed-in page cannot read the tables');
+ok(/permission denied/.test(err(await as(A, 'select * from skotos.games'))) && /permission denied/.test(err(await as(A, 'select * from skotos.rates'))) && /permission denied/.test(err(await as(A, 'select * from skotos.quota'))), 'a signed-in page cannot read the tables');
+ok(/permission denied/.test(err(await as(A, 'update skotos.quota set day_cap = 1e15'))), 'nor raise the project\'s cap');
 ok(/permission denied/.test(err(await as(A, `insert into skotos.games values ('skotos-zz99', $1, now() + interval '9 hours')`, [A]))), 'nor write a games row of its own making');
 
-// what it writes: the server's '_by', the page's data inside d, whatever it says of itself
+// what it writes: the server's '_by', the page's data inside d, whatever it says of itself (a game's topic only while
+// its game is live: A hosts skotos-ab12, made here as host_game would)
+await db.query(`insert into skotos.games values ('skotos-ab12', $1, now() + interval '4 hours')`, [A]);
 const n0 = await count();
 const r1 = await send(A, [['skotos:skotos-ab12', 's', JSON.stringify({ k: 1, f: B, _by: B })]]);
 const m1 = await last();
 ok(r1[0]?.n === 1 && m1.topic === 'skotos:skotos-ab12' && m1.event === 's' && m1.private === true, 'a message goes to its private channel: ' + JSON.stringify(m1));
-ok(m1.payload._by === A && m1.payload.d._by === B && m1.payload.d.f === B && Object.keys(m1.payload).sort().join() === '_by,d,id', 'the sender is the caller, written by the server; a "_by" or "f" the page wrote stays inside its data (and realtime.send\'s own id beside them)');
+const d1 = typeof m1.payload.d === 'string' ? JSON.parse(m1.payload.d) : null;
+ok(m1.payload._by === A && d1?._by === B && d1?.f === B && Object.keys(m1.payload).sort().join() === '_by,d,id', 'the sender is the caller, written by the server; a "_by" or "f" the page wrote stays inside its data, which goes as the page\'s own text (and realtime.send\'s own id beside them)');
 const r2 = await send(A, [['skotos:lobby', '_p', '{"g":{"c":"ab12"}}'], ['skotos:skotos-ab12', 'f', '[[1,2,3]]'], ['skotos:skotos-ab12', 'c', '{"op":"end"}']]);
 const three = (await db.query('select event from realtime.messages order by inserted_at, ctid')).rows.slice(-3).map((r) => r.event).join();
 ok(r2[0]?.n === 3 && three === '_p,f,c' && (await count()) === n0 + 4, 'a call of three goes as three, in order: ' + three);
@@ -143,33 +149,74 @@ await bad(Array.from({ length: 17 }, () => ['skotos:lobby', 'f', '1']), /invalid
 await bad([], /invalid_argument/, 'an empty call');
 // the cap, in bytes as the page counts them (UTF-8 of its JSON text)
 const str = (ch, n) => JSON.stringify(ch.repeat(n));
-ok(!err(await send(B, [['skotos:lobby', 's', str('x', 4094)]])), '4096 bytes go');
-await bad([['skotos:lobby', 's', str('x', 4095)]], /too_big/, '4097 bytes do not');
-ok(!err(await send(B, [['skotos:lobby', 's', str('α', 2047)]])), '4096 bytes of Greek go (2047 letters of two bytes each, and the quotes)');
-await bad([['skotos:lobby', 's', str('α', 2048)]], /too_big/, '4098 bytes of Greek do not');
+ok(!err(await send(B, [['skotos:skotos-ab12', 's', str('x', 4094)]])), '4096 bytes go');
+await bad([['skotos:skotos-ab12', 's', str('x', 4095)]], /too_big/, '4097 bytes do not');
+ok(!err(await send(B, [['skotos:skotos-ab12', 's', str('α', 2047)]])), '4096 bytes of Greek go (2047 letters of two bytes each, and the quotes)');
+await bad([['skotos:skotos-ab12', 's', str('α', 2048)]], /too_big/, '4098 bytes of Greek do not');
+// what goes out is what was checked: a jsonb number would be written out digit by digit (8 bytes of 1e131071 as 131,072),
+// the page's text is not. Realtime decodes and delivers the payload's text: at most about twice the data, escaped
+const wire = async () => (await db.query('select octet_length(payload::text) as n from realtime.messages order by inserted_at desc, ctid desc limit 1')).rows[0].n;
+const e15 = '{"g":1e131071}', e4k = '[' + Array.from({ length: 455 }, () => '1e131071').join(',') + ']', n4k = '[' + '\n'.repeat(4093) + '1]';
+const w1 = !err(await send(B, [['skotos:lobby', '_p', e15]])) && (await wire()), w2 = !err(await send(B, [['skotos:skotos-ab12', 'f', e4k]])) && (await wire()), w3 = !err(await send(B, [['skotos:skotos-ab12', 'f', n4k]])) && (await wire());
+ok(Buffer.byteLength(e4k) === 4096 && Buffer.byteLength(n4k) === 4096 && w1 > 0 && w1 < 200 && w2 > 0 && w2 <= 4300 && w3 > 0 && w3 <= 8400, 'a number with a long exponent goes as the page wrote it: ' + e15.length + ' bytes go out as ' + w1 + ', 4096 bytes of them as ' + w2 + ' (not 59 MB); 4096 bytes of newlines, the most escaping can make (twice), as ' + w3);
+// the topics: the lobby, or a game's while its game is live
+await bad([['skotos:junk', 'f', '1']], /no_game/, 'a topic with no game (a junk room)');
+await db.query(`insert into skotos.games values ('skotos-old1', $1, now() - interval '1 second')`, [C]);
+await bad([['skotos:skotos-old1', 'f', '1']], /no_game/, 'a game past its time');
+await bad([['skotos:skotos-ab12', 'f', '1'], ['skotos:junk', 'f', '1']], /no_game/, 'one message to no game in a call: none of it');
 
 // the rate: 80 at once, then 40 a second (time moved back by hand: now() is each call's own moment)
 // (at once: in one transaction, where now() stands still; each call kept or refused on its own, by a savepoint)
-const sixteen = JSON.stringify(Array.from({ length: 16 }, () => ['skotos:lobby', 'f', '1']));
+const sixteen = JSON.stringify(Array.from({ length: 16 }, () => ['skotos:skotos-ab12', 'f', '1']));
 await db.exec(`begin; set local role authenticated; select set_config('request.jwt.claim.sub', '${C}', true);`);
 const burst = [];
 for (let i = 0; i < 6; i++) {
   await db.exec('savepoint s');
-  try { await db.query('select skotos.send($1::jsonb)', [i < 5 ? sixteen : '[["skotos:lobby","f","1"]]']); burst.push(''); await db.exec('release savepoint s'); } catch (e) { burst.push(e.message); await db.exec('rollback to savepoint s'); }
+  try { await db.query('select skotos.send($1::jsonb)', [i < 5 ? sixteen : '[["skotos:skotos-ab12","f","1"]]']); burst.push(''); await db.exec('release savepoint s'); } catch (e) { burst.push(e.message); await db.exec('rollback to savepoint s'); }
 }
 await db.exec('commit');
 ok(burst.slice(0, 5).every((x) => !x), 'a new user may send 80 at once (five calls of sixteen)');
 ok(/rate_limited/.test(burst[5]), 'the 81st, at once, is refused: rate_limited');
 await db.query(`update skotos.rates set at = now() where uid = $1`, [C]);
 await db.query(`update skotos.rates set at = at - interval '500 milliseconds' where uid = $1`, [C]);
-ok(!err(await send(C, Array.from({ length: 16 }, () => ['skotos:lobby', 'f', '1']))), 'half a second later twenty more are there: sixteen go');
-ok(/rate_limited/.test(err(await send(C, Array.from({ length: 16 }, () => ['skotos:lobby', 'f', '1'])))), 'sixteen more do not (four left), and nothing of them goes');
-ok(!err(await send(C, Array.from({ length: 4 }, () => ['skotos:lobby', 'f', '1']))), 'the four left do');
+const ones = (k) => Array.from({ length: k }, () => ['skotos:skotos-ab12', 'f', '1']);
+ok(!err(await send(C, ones(16))), 'half a second later twenty more are there: sixteen go');
+ok(/rate_limited/.test(err(await send(C, ones(16)))), 'sixteen more do not (four left), and nothing of them goes');
+ok(!err(await send(C, ones(4))), 'the four left do');
 await db.query(`update skotos.rates set at = at - interval '10 seconds' where uid = $1`, [C]);
-await send(C, [['skotos:lobby', 'f', '1']]);
+await send(C, ones(1));
 const tk = (await db.query('select tokens from skotos.rates where uid = $1', [C])).rows[0].tokens;
 ok(tk === 79, 'an idle bucket fills to 80, no more: ' + tk + ' after one');
 ok(!err(await send(A, [['skotos:lobby', 'f', '1']])), 'and one user\'s rate is not another\'s');
+// the bytes, by role, each message its data's and 256: a game's host 256 KiB at once (64 KiB a second), any other on a
+// game's topic 64 KiB at once (24 KiB a second), the lobby 8 KiB at once (512 bytes a second), each its own bucket
+const D = '00000000-0000-4000-8000-00000000000e', x4 = str('x', 4094), four = (t, k) => Array.from({ length: k }, () => [t, 'f', x4]);
+await db.query(`insert into skotos.games values ('skotos-by01', $1, now() + interval '4 hours')`, [D]);
+const at0 = async (uid) => db.query(`update skotos.rates set at = now(), game_at = now(), lobby_at = now() where uid = $1`, [uid]);
+await send(D, [['skotos:lobby', 'f', '1']]); await at0(D);
+const hb16 = err(await send(D, four('skotos:skotos-by01', 16)));
+ok(!hb16, 'the host of a game: sixteen messages of 4 KiB at once go (68 KiB), its game\'s bucket its own (a call to the lobby before it neither fills nor empties it): ' + (hb16 || 'sent'));
+await db.query(`update skotos.rates set game = 65536, lobby = 8192, tokens = 80, at = now(), game_at = now(), lobby_at = now() where uid = $1`, [B]);
+ok(/rate_limited/.test(err(await send(B, four('skotos:skotos-ab12', 16)))) && !err(await send(B, four('skotos:skotos-ab12', 15))), 'a guest: sixteen of them at once do not (past 64 KiB), fifteen do');
+ok(!err(await send(B, four('skotos:lobby', 1))) && /rate_limited/.test(err(await send(B, four('skotos:lobby', 1)))), 'the lobby has its own: one of 4 KiB goes, another at once does not (8 KiB at once)');
+
+// the day: the user's own (user_cap) and the project's (day_cap), counted as the buckets count; the project's told by
+// each user's row in steps of 64 KiB
+const Q = async () => (await db.query('select day, bytes::float8 as bytes, day_cap::float8 as day_cap, user_cap::float8 as user_cap from skotos.quota')).rows[0];
+const q1 = await Q(), spentD = (await db.query('select spent::float8 as s, held::float8 as h from skotos.rates where uid = $1', [D])).rows[0];
+ok(q1.day_cap === 40 * 1048576 && q1.user_cap === 40 * 1048576, 'the caps as made: 40 MiB a day for the project, and for a user');
+ok(spentD.s === 1 + 256 + 16 * 4352 && q1.bytes >= 16 * 4352 && spentD.h < 65536, 'a user\'s day counts each message (its data and 256); past 64 KiB it is told to the project\'s: ' + spentD.s + ' spent, ' + q1.bytes + ' told');
+await db.query(`update skotos.quota set user_cap = $1`, [spentD.s + 300]);
+await at0(D);
+ok(!err(await send(D, [['skotos:skotos-by01', 'f', '1']])) && /quota/.test(err(await send(D, [['skotos:skotos-by01', 'f', '1']]))) && !err(await send(A, [['skotos:lobby', 'f', '1']])), 'a user past its own day is refused quota (another is not)');
+await db.query(`update skotos.quota set user_cap = day_cap`);
+const tq = await Q();
+await db.query(`update skotos.quota set day_cap = $1`, [tq.bytes]);
+const qs = err(await send(A, [['skotos:lobby', 'f', '1']])), qh = (await as(C, 'select skotos.host_game($1) as r', ['skotos-qu01']))[0]?.r;
+await db.query(`update skotos.quota set day = day - 1`);
+const qy = err(await send(A, [['skotos:lobby', 'f', '1']]));
+await db.query(`update skotos.quota set day = $1, day_cap = $2`, [tq.day, 40 * 1048576]);
+ok(/quota/.test(qs) && qh === 'quota' && !qy, 'the project\'s day spent: every send refused quota, and no new game made; a count of another day is no count of today\'s');
 
 // who hosts: the games row, by its host alone
 const host = (uid, room) => as(uid, 'select skotos.host_game($1) as r', [room]).then((r) => r.error || r[0].r);
@@ -190,8 +237,10 @@ ok((await hostOf(C, 'skotos-ab12')) === null && (await host(B, 'skotos-ab12')) =
 await db.query(`update skotos.games set expires_at = now() - interval '1 second' where name = 'skotos-ab12'`);
 ok((await hostOf(C, 'skotos-ab12')) === null, 'a game past its time has no host');
 ok((await host(C, 'skotos-cd34')) === 'ok' && (await db.query(`select count(*)::int as n from skotos.games where name = 'skotos-ab12'`)).rows[0].n === 0, 'and the next host_game lets it go');
+const rows = async (uid) => (await db.query('select name from skotos.games where host = $1 order by name', [uid])).rows.map((r) => r.name).join();
 for (const r of ['skotos-c001', 'skotos-c002', 'skotos-c003']) await host(C, r);
-ok((await host(C, 'skotos-c004')) === 'too_many' && (await host(C, 'skotos-cd34')) === 'ok', 'four live games a user at most (a renewal of one of them still goes)');
+ok((await rows(C)) === 'skotos-c003' && (await host(C, 'skotos-c003')) === 'ok' && (await rows(C)) === 'skotos-c003', 'a user hosts one game: each new one lets its others go (reloads while hosting leave nothing in the way), and a renewal keeps it');
+ok((await rows(D)) === 'skotos-by01', 'and another user\'s are not touched');
 
 // Realtime's join check, its own function: what a page joining a private channel may read and write there
 const EXT = "array['broadcast', 'presence']";
@@ -224,7 +273,7 @@ ok(/row-level security/.test(err(await as(A, 'insert into realtime.messages (top
 // without it realtime.send could not write, and would only warn (a send lost, not refused): what to check on a project
 await db.exec(`create role owner_rls nosuperuser bypassrls; create role owner_plain nosuperuser nobypassrls;`);
 for (const r of ['owner_rls', 'owner_plain']) await db.exec(`grant usage on schema auth, realtime to ${r}; grant insert, select on realtime.messages to ${r}; grant usage, create on schema skotos to ${r};`);
-const own = async (r) => { for (const f of ['send(jsonb)', 'host_game(text)', 'game_host(text)', 'end_game(text)']) await db.exec(`alter function skotos.${f} owner to ${r}`); await db.exec(`alter table skotos.games owner to ${r}; alter table skotos.rates owner to ${r};`); };
+const own = async (r) => { for (const f of ['send(jsonb)', 'host_game(text)', 'game_host(text)', 'end_game(text)']) await db.exec(`alter function skotos.${f} owner to ${r}`); await db.exec(`alter table skotos.games owner to ${r}; alter table skotos.rates owner to ${r}; alter table skotos.quota owner to ${r};`); };
 await own('owner_rls');
 let c0 = await count();
 ok(!err(await send(A, [['skotos:lobby', 'f', '7']])) && (await count()) === c0 + 1, 'owned by a role with bypassrls (as postgres on Supabase), a send is written');
@@ -246,13 +295,19 @@ const snapOf = () => ({ k: 'oldforest:1234:8', t: R(1e7), h: [R(4000), R(4000), 
 const presOf = () => ({ h: [R(4000), R(4000), R(628), R(90), R(900), 900, R(7), R(40)], c2: ['run', 120, R(99)], hb: R(9999), ak: R(900), lk: { c: 'mage', l: 24, w: 'staff', r: 2, o: null }, zk: 'oldforest:1234:8' });
 const size = async () => (await db.query(`select pg_total_relation_size('realtime.messages')::float8 as b`)).rows[0].b;
 const s0 = await size(); let jb = 0, nm = 0;
-const say = async (uid, ev, d) => { const t = JSON.stringify(d); jb += Buffer.byteLength(t); nm++; await db.query('update skotos.rates set tokens = 80'); const r = await send(uid, [['skotos:skotos-st01', ev, t]]); if (err(r)) throw new Error(err(r)); };
+await db.query(`insert into skotos.games values ('skotos-st01', $1, now() + interval '4 hours')`, [A]);
+const say = async (uid, ev, d) => { const t = JSON.stringify(d); jb += Buffer.byteLength(t) + 256; nm++; await db.query('update skotos.rates set tokens = 80, game = 262144'); const r = await send(uid, [['skotos:skotos-st01', ev, t]]); if (err(r)) throw new Error(err(r)); };
 for (let sec = 0; sec < 10; sec++) {
   for (let i = 0; i < 10; i++) await say(A, 's', snapOf());
   for (const g of G3) for (let i = 0; i < 9; i++) await say(g, i === 8 ? 'f' : '_p', i === 8 ? [['bolt', R(4000), R(4000), R(4000), R(4000), 2]] : presOf());
 }
 const per = ((await size()) - s0) / 10;
-ok(per > 0, 'a party of four, ' + nm / 10 + ' messages a second (' + (jb / 10240).toFixed(1) + ' KB of JSON): ' + (per / 1024).toFixed(1) + ' KB a second stored, ' + (per / (jb / 10)).toFixed(2) + '× the JSON, about ' + Math.round(per * 3600 / 1048576) + ' MB an hour of play');
+ok(per > 0, 'a party of four, ' + nm / 10 + ' messages a second (' + (jb / 10240).toFixed(1) + ' KB a second as the caps count it, its JSON and 256 a message): ' + (per / 1024).toFixed(1) + ' KB a second stored, ' + (per / (jb / 10)).toFixed(2) + '× what was counted, about ' + Math.round(per * 3600 / 1048576) + ' MB an hour of play');
+// and the most a counted byte can take: messages that do not compress, the smallest and the largest
+const worst = async (k, mk) => { const s1 = await size(); let c = 0; for (let i = 0; i < k; i++) { const t = mk(); c += Buffer.byteLength(t) + 256; await db.query('update skotos.rates set tokens = 80, game = 262144'); if (err(await send(A, [['skotos:skotos-st01', 'f', t]]))) throw new Error('refused'); } return ((await size()) - s1) / c; };
+const { randomBytes } = await import('node:crypto');
+const wTiny = await worst(400, () => '1'), wBig = await worst(120, () => JSON.stringify(randomBytes(3060).toString('base64').slice(0, 4094)));
+ok(wTiny < 1.5 && wBig < 1.5, 'stored, at most about 1.45 times what was counted: ' + wTiny.toFixed(2) + ' for the smallest message, ' + wBig.toFixed(2) + ' for 4 KiB that does not compress (so a day at the cap, kept four days and the hours before Realtime drops the oldest, is about 6 times the cap at most)');
 
 console.log(fails ? fails + ' FAILED' : 'all passed');
 await db.close();
