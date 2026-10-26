@@ -1,10 +1,10 @@
 // Level layouts as plain data. Visuals are built from these in build.js, gameplay content in zones.js.
 import { RNG, clamp, fbm, angleDiff } from '../core/util.js';
 
-function base(w, h) {
+export function base(w, h) {
   return { w, h, cells: new Uint8Array(w * h), paint: new Float32Array(w * h), props: [], lights: [], packs: [], spots: {}, exits: [], rooms: [] };
 }
-function carveCircle(L, cx, cz, r, paint = 0) {
+export function carveCircle(L, cx, cz, r, paint = 0) {
   const { w, h, cells } = L;
   for (let z = Math.floor(cz - r); z <= Math.ceil(cz + r); z++) for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) {
     if (x < 2 || z < 2 || x >= w - 2 || z >= h - 2) continue;
@@ -15,11 +15,11 @@ function carveCircle(L, cx, cz, r, paint = 0) {
     if (paint) L.paint[i] = Math.max(L.paint[i], paint * clamp((r - d) / Math.max(0.8, r * 0.6), 0, 1));
   }
 }
-function carveLine(L, x0, z0, x1, z1, r, paint = 0) {
+export function carveLine(L, x0, z0, x1, z1, r, paint = 0) {
   const n = Math.ceil(Math.hypot(x1 - x0, z1 - z0));
   for (let i = 0; i <= n; i++) { const t = i / Math.max(1, n); carveCircle(L, x0 + (x1 - x0) * t, z0 + (z1 - z0) * t, r, paint); }
 }
-function smoothCells(L, passes = 2) {
+export function smoothCells(L, passes = 2) {
   const { w, h } = L;
   for (let p = 0; p < passes; p++) {
     const c = L.cells.slice();
@@ -46,8 +46,16 @@ export function distField(L, cap = 10) {
   }
   return d;
 }
-const floorAt = (L, x, z) => x >= 0 && z >= 0 && x < L.w && z < L.h && L.cells[Math.floor(z) * L.w + Math.floor(x)] === 1;
-function blockCircle(L, cx, cz, r) {
+export const floorAt = (L, x, z) => x >= 0 && z >= 0 && x < L.w && z < L.h && L.cells[Math.floor(z) * L.w + Math.floor(x)] === 1;
+// a rotated rectangle (half sizes hw x hd, turned by r like the props) closed to walking
+export function blockRect(L, cx, cz, hw, hd, r = 0) {
+  const c = Math.cos(r), s = Math.sin(r), R = Math.hypot(hw, hd);
+  for (let z = Math.floor(cz - R); z <= Math.floor(cz + R); z++) for (let x = Math.floor(cx - R); x <= Math.floor(cx + R); x++) {
+    const dx = x + 0.5 - cx, dz = z + 0.5 - cz, u = dx * c - dz * s, v = dx * s + dz * c;
+    if (Math.abs(u) <= hw && Math.abs(v) <= hd && x >= 0 && z >= 0 && x < L.w && z < L.h) L.cells[z * L.w + x] = 0;
+  }
+}
+export function blockCircle(L, cx, cz, r) {
   for (let z = Math.floor(cz - r); z <= Math.floor(cz + r); z++) for (let x = Math.floor(cx - r); x <= Math.floor(cx + r); x++)
     if (Math.hypot(x + 0.5 - cx, z + 0.5 - cz) <= r && x >= 0 && z >= 0 && x < L.w && z < L.h) L.cells[z * L.w + x] = 0;
 }
@@ -118,7 +126,7 @@ export function genForest(seed, o = {}) {
     const p = d === 1 ? 0.62 : d <= 3 ? 0.36 : d <= 6 ? 0.16 : 0.05;
     if (rng.chance(p)) {
       const tt = rng.weighted([['pine', 5], ['oak', 3], ['dead', d === 1 ? 1 : 0.4]]);
-      L.props.push({ t: tt, x: xx + rng.range(0.2, 0.8), z: zz + rng.range(0.2, 0.8), r: rng.range(0, 6.28), s: rng.range(0.85, 1.35) * (d > 3 ? 1.2 : 1) });
+      L.props.push({ t: tt, x: xx + rng.range(0.2, 0.8), z: zz + rng.range(0.2, 0.8), r: rng.range(0, 6.28), s: rng.range(0.85, 1.35) * (d > 3 ? 1.2 : 1), d });
     } else if (d <= 2 && rng.chance(0.4)) L.props.push({ t: 'bush', x: xx + rng.next(), z: zz + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.8, 1.4) });
     else if (d === 1 && rng.chance(0.05)) L.props.push({ t: 'rock', x: xx + 0.5, z: zz + 0.5, r: rng.range(0, 6.28), s: rng.range(0.8, 1.6) });
     else if (d <= 2 && rng.chance(0.025)) L.props.push({ t: 'stump', x: xx + 0.5, z: zz + 0.5, r: rng.range(0, 6.28), s: rng.range(0.8, 1.15) });
@@ -380,30 +388,43 @@ export function genTown() {
   carveLine(L, CX, CZ, 20, 36, 1.4, 0.9);
   carveLine(L, CX, CZ, 44, 36, 1.4, 0.9);
   carveCircle(L, CX, 18, 3.5, 0.7);
+  // the old mountain road leaves past the beacon hill, north-east toward the Giants' Stair
+  carveLine(L, CX + 3, 18, 44, 15, 1.5, 0.9);
+  carveLine(L, 44, 15, 55, 8.5, 1.5, 0.9);
   const Dout = distField(L, 12); // the village edge, before anything is built inside
   L.start = { x: CX, z: CZ + 6 };
   L.spots.waypoint = { x: CX + 3.8, z: 51 };
   L.lights.push({ x: CX + 3.8, y: 1.2, z: 51, color: 0x60a8ff, intensity: 10, range: 8, flicker: 0.1 });
   L.exits.push({ x: CX, z: h - 5, to: 'forest', label: 'exit.forest' });
+  L.exits.push({ x: 55, z: 8.5, to: 'pass', label: 'exit.pass', locked: 'act1' });
+  L.props.push({ t: 'lamp', x: 52.5, z: 11.6 });
+  L.lights.push({ x: 52.5, y: 2.2, z: 11.6, color: 0xffb060, intensity: 9, range: 9, flicker: 0.2 });
   // the beacon on its hill
   L.beacon = { x: CX, z: 12 };
   L.props.push({ t: 'beacon', x: CX, z: 12 });
   blockCircle(L, CX, 12, 3.2);
   L.lights.push({ x: CX, y: 9, z: 12, color: 0xff8a30, intensity: 120, range: 34, flicker: 0.25, fx: 'beacon', big: true });
-  // two tall timber houses by the beacon road
-  for (const [x, z, hw, hd, r] of [[21, 23, 7, 5, 0.15], [43, 23, 7, 5, -0.15]]) {
-    L.props.push({ t: 'house', x, z, w: hw, d: hd, r, roof: rng.pick([0x9a9eb0, 0xb09a88, 0x8aa0a0]) });
-    for (let zz = Math.floor(z - hd / 2); zz < Math.ceil(z + hd / 2); zz++) for (let xx = Math.floor(x - hw / 2); xx < Math.ceil(x + hw / 2); xx++) L.cells[zz * w + xx] = 0;
-    L.lights.push({ x, y: 1.4, z: z + hd / 2 + 0.6, color: 0xffa050, intensity: 6, range: 6, flicker: 0.15 });
+  // the houses (tools/pack-village.mjs; the KayKit ones stand in without the pack): model, KayKit stand-in, x, z,
+  // turn (the door faces +z at 0), footprint half sizes along the model's x and z
+  const HOUSES = [
+    ['hHall', 'building_tavern_blue', 21, 23, 0.15, 4.6, 2.9], ['hLong', 'building_home_B_yellow', 43, 23, -0.15, 4.3, 1.8],
+    ['hInn', 'building_tavern_blue', 16.5, 44, 1.57, 5.6, 2.8], ['hLong', 'building_home_B_yellow', 47.5, 44, -1.57, 4.3, 1.8],
+    ['hTall', 'building_home_A_red', 22, 54, 0.4, 1.1, 1.7], ['hMarket', 'building_market_red', 46, 57.5, -0.5, 3.0, 2.6],
+    ['hManor', 'building_home_A_green', 14.5, 32.5, 1.5, 3.4, 3.4], ['hStilt', 'building_home_B_yellow', 50.5, 33, -1.5, 1.6, 3.8],
+    ['hTall', 'building_tower_A_red', 53, 49, -0.9, 1.1, 1.7]
+  ];
+  for (const [m, kit, x, z, r, hw, hd] of HOUSES) {
+    L.props.push({ t: 'bld', m, kit, x, z, r, hw, hd });
+    blockRect(L, x, z, hw, hd, r);
+    // a lantern by the door
+    L.lights.push({ x: x + Math.sin(r) * (hd + 0.8), y: 1.6, z: z + Math.cos(r) * (hd + 0.8), color: 0xffa050, intensity: 6, range: 6, flicker: 0.15 });
   }
-  // KayKit buildings around the plaza
-  const kitB = [['building_tavern_blue', 17, 44, 1.3, 2.8], ['building_home_B_yellow', 47, 44, -1.3, 2.3], ['building_home_A_red', 22, 53, 0.4, 2.0], ['building_market_red', 46, 57, -0.5, 2.0], ['building_home_A_green', 13, 33, 1.5, 2.0], ['building_home_B_yellow', 51, 33, -1.5, 2.0], ['building_tower_A_red', 53, 49, -0.8, 1.8]];
-  for (const [m, x, z, r, rad] of kitB) { L.props.push({ t: 'kit', kit: 'town', m, x, z, r }); blockCircle(L, x, z, rad); L.lights.push({ x: x + Math.sin(r) * (rad + 0.6), y: 1.4, z: z + Math.cos(r) * (rad + 0.6), color: 0xffa050, intensity: 6, range: 6, flicker: 0.15 }); }
   // the forge, the healer's tent, the well, the stash
   L.props.push({ t: 'forge', x: 21.5, z: 32.5, r: 0.5 }); blockCircle(L, 21, 32, 1.5);
   L.lights.push({ x: 21.4, y: 1.2, z: 32.6, color: 0xff6020, intensity: 22, range: 9, flicker: 0.45 });
   L.props.push({ t: 'anvil', x: 23.6, z: 35 }); blockCircle(L, 23.6, 35, 0.5);
   L.props.push({ t: 'kit', kit: 'town', m: 'weaponrack', x: 19.5, z: 36, r: 1.2 });
+  for (const [m, x, z, r, rad] of [['sGrind', 25.8, 31.2, -0.6, 0.8], ['sTrough', 19.0, 33.9, 1.45, 0.6], ['sBucket', 19.6, 35.2, 0.3, 0.3]]) { L.props.push({ t: 'envp', m, x, z, r }); blockCircle(L, x, z, rad); }
   L.props.push({ t: 'healtent', x: 43, z: 32, r: -0.4 }); blockCircle(L, 43.4, 31.2, 2.0);
   L.lights.push({ x: 42, y: 1.5, z: 34.2, color: 0x90ffc0, intensity: 7, range: 7, flicker: 0.1 });
   L.props.push({ t: 'well', x: CX, z: CZ }); blockCircle(L, CX, CZ, 1.3);
@@ -413,7 +434,7 @@ export function genTown() {
     L.lights.push({ x, y: 2.2, z, color: 0xffb060, intensity: 9, range: 9, flicker: 0.2 });
   }
   for (const [x, z, r] of [[26.5, 40, 0.3], [38, 39.5, -0.2]]) { L.props.push({ t: 'stall', x, z, r }); blockCircle(L, x, z, 1.1); }
-  for (const [m, x, z, r] of [['wheelbarrow', 26, 48, 0.8], ['resource_lumber', 17, 37.5, 0.3], ['sack', 42.5, 54, 0.4], ['tent', 46, 40, -0.8], ['target', 12, 40, 1.2]]) L.props.push({ t: 'kit', kit: 'town', m, x, z, r });
+  for (const [m, x, z, r] of [['wheelbarrow', 26, 48, 0.8], ['resource_lumber', 17, 37.5, 0.3], ['sack', 42.5, 54, 0.4], ['target', 12, 40, 1.2]]) L.props.push({ t: 'kit', kit: 'town', m, x, z, r });
   for (const [t, x, z, r] of [['bucket', 33.8, 40, 0], ['bucket', CX + 1.5, CZ + 1.1, 0.7], ['crateS', 41.6, 53.2, 0.2], ['crateS', 41.9, 53.9, 1.7], ['barrelS', 47.5, 52.5, 0], ['barrelS', 48.3, 53.1, 2], ['crateS', 24, 49.5, 1], ['barrelS', 20.6, 47.4, 0.5], ['barrelS', 21.4, 48.1, 2.2], ['bucket', 22.1, 47.2, 1]]) { L.props.push({ t, x, z, r }); blockCircle(L, x, z, t === 'bucket' ? 0.25 : 0.45); }
   // a fire pit where the villagers warm themselves
   L.props.push({ t: 'firepit', x: 40, z: 50 }); blockCircle(L, 40, 50, 0.9);
@@ -422,15 +443,42 @@ export function genTown() {
   // palisade along the edge, trees and rocks beyond it, the gate in the south
   const D = Dout;
   L.dist = distField(L, 12);
+  // the windmill's meadow, outside the palisade to the west: no trees there
+  const MX = 6.5, MZ = 46;
   for (let z = 0; z < h; z++) for (let x = 0; x < w; x++) {
     const i = z * w + x, d = D[i];
     if (d === 0 && !L.cells[i]) continue;
     if (d === 1 && z > 22 && !(Math.abs(x - CX) < 3 && z > h - 9)) L.props.push({ t: 'stake', x: x + 0.5, z: z + 0.5, r: rng.next() * 6, s: rng.range(0.9, 1.15) });
-    else if (d >= 2 && d <= 11 && rng.chance(d < 4 ? 0.3 : 0.45)) L.props.push({ t: z < 24 ? rng.pick(['rock', 'pine', 'pine']) : rng.pick(['pine', 'pine', 'oak']), x: x + rng.next(), z: z + rng.next(), r: rng.next() * 6, s: rng.range(1, 1.5) });
+    else if (d >= 2 && d <= 11 && Math.hypot(x + 0.5 - MX, z + 0.5 - MZ) < 6.5) { if (rng.chance(0.4)) L.props.push({ t: 'grass', x: x + rng.next(), z: z + rng.next(), r: rng.next() * 6, s: rng.range(0.7, 1.1) }); }
+    else if (d >= 2 && d <= 11 && rng.chance(d < 4 ? 0.3 : 0.45)) L.props.push({ t: z < 24 ? rng.pick(['rock', 'pine', 'pine']) : rng.pick(['pine', 'pine', 'oak']), x: x + rng.next(), z: z + rng.next(), r: rng.next() * 6, s: rng.range(1, 1.5), d });
     else if (d === 0 && L.paint[i] < 0.3 && rng.chance(0.35)) L.props.push({ t: 'grass', x: x + rng.next(), z: z + rng.next(), r: rng.next() * 6, s: rng.range(0.6, 1) });
   }
-  L.props.push({ t: 'kit', kit: 'town', m: 'building_windmill_red', x: 6, z: 56, r: 0.6, s: 1.1 });
+  L.props.push({ t: 'bld', m: 'hMill', kit: 'building_windmill_red', x: MX, z: MZ, r: 0.25, s: 1.1, hw: 2.4, hd: 2.4 });
   L.props.push({ t: 'gate', x: CX, z: h - 6.5 });
+  // the west lane (Act III): from the north road between the Hall and the Manor, out through the palisade toward the
+  // Weeping Woods. Cut last, so everything else in the village stays where it was; only the stakes and trees on it go.
+  const before = L.cells.slice(), paintBefore = L.paint.slice();
+  carveLine(L, CX - 0.5, 27.6, 10, 27.4, 1.3, 0.9);
+  carveLine(L, 10, 27.4, 3, 27.2, 1.5, 0.9);
+  const lane = [];
+  for (let i = 0; i < w * h; i++) if ((L.cells[i] && !before[i]) || L.paint[i] > paintBefore[i] + 0.3) lane.push([i % w + 0.5, Math.floor(i / w) + 0.5]);
+  const clearR = { stake: 1.5, pine: 1.4, oak: 1.4, rock: 1.4, grass: 0.8 };
+  L.props = L.props.filter((p) => !clearR[p.t] || !lane.some(([x, z]) => Math.hypot(p.x - x, p.z - z) < clearR[p.t]));
+  L.dist = distField(L, 12);
+  L.exits.push({ x: 6.2, z: 27.3, to: 'weep', label: 'exit.weep', locked: 'act2' });
+  L.props.push({ t: 'lamp', x: 7.2, z: 25.4 });
+  L.lights.push({ x: 7.2, y: 2.2, z: 25.4, color: 0xffb060, intensity: 9, range: 9, flicker: 0.2 });
+  // the north path (Act IV): down the far side of the beacon hill toward the Field of Ash. Cut last as well, clear of the
+  // beacon's stones; only the trees and rocks on it go.
+  const before4 = L.cells.slice(), paint4 = L.paint.slice();
+  carveLine(L, CX - 3.5, 17.5, 24, 9.8, 1.3, 0.8);
+  carveLine(L, 24, 9.8, CX - 13.5, 7.2, 1.4, 0.8);
+  carveLine(L, CX - 13.5, 7.2, CX - 14, 3.6, 1.4, 0.8);
+  const north = [];
+  for (let i = 0; i < w * h; i++) if ((L.cells[i] && !before4[i]) || L.paint[i] > paint4[i] + 0.3) north.push([i % w + 0.5, Math.floor(i / w) + 0.5]);
+  L.props = L.props.filter((p) => !clearR[p.t] || !north.some(([x, z]) => Math.hypot(p.x - x, p.z - z) < clearR[p.t]));
+  L.dist = distField(L, 12);
+  L.exits.push({ x: CX - 14, z: 4, to: 'ashfield', label: 'exit.ashfield', locked: 'act3' });
   L.spots.npcs = { wayfarer: { x: CX - 2.6, z: 20.5, r: 0.4 }, smith: { x: 24.6, z: 33.4, r: -1.2 }, healer: { x: 41.2, z: 35.6, r: 0.8 }, villagers: [{ x: 27, z: 43, r: 0.8 }, { x: 38, z: 45, r: -0.6 }, { x: 34, z: 27, r: 2.8 }] };
   return L;
 }

@@ -1,12 +1,9 @@
 // Loads the packed KayKit kits (CC0) and exposes each model as one merged geometry in model space.
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { gltfLoader } from './gltf.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import dungeonUrl from '../assets/dungeon.glb?url';
-import graveUrl from '../assets/grave.glb?url';
-import townUrl from '../assets/town.glb?url';
-
-const URLS = { dungeon: dungeonUrl, grave: graveUrl, town: townUrl };
+// lazy (see people.js)
+const URLS = { dungeon: () => import('../assets/dungeon.glb?url'), grave: () => import('../assets/grave.glb?url'), town: () => import('../assets/town.glb?url') };
 export const KIT = {};      // KIT[kit][model] = geometry
 export const KITMAT = {};   // KITMAT[kit] = material
 export const KIT_SCALE = { dungeon: 0.75, grave: 0.75, town: 3.4 };
@@ -21,7 +18,7 @@ const loading = {};
 export function loadKit(kit) {
   if (KIT[kit]) return Promise.resolve(KIT[kit]);
   if (loading[kit]) return loading[kit];
-  loading[kit] = new Promise((resolve, reject) => {
+  loading[kit] = URLS[kit]().then((mod) => new Promise((resolve, reject) => {
     const onLoad = (gltf) => {
       const models = {};
       let map = null;
@@ -52,14 +49,14 @@ export function loadKit(kit) {
       KIT[kit] = models;
       resolve(models);
     };
-    const url = URLS[kit];
+    const url = mod.default;
     // inlined builds carry the model as a data URI: decode it here instead of fetching it
     if (url.startsWith('data:')) {
       const b64 = url.slice(url.indexOf(',') + 1), bin = atob(b64), u8 = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-      new GLTFLoader().parse(u8.buffer, '', onLoad, reject);
-    } else new GLTFLoader().load(url, onLoad, undefined, reject);
-  });
+      gltfLoader().parse(u8.buffer, '', onLoad, reject);
+    } else gltfLoader().load(url, onLoad, undefined, reject);
+  }));
   return loading[kit];
 }
 export const loadKits = (list) => Promise.all(list.map(loadKit));
