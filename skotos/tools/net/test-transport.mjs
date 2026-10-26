@@ -527,7 +527,16 @@ async function stampedLimits() {
   const t1 = Date.now(); let seenAt = 0;
   while (Date.now() - t1 < 4500 && !seenAt) { await sleep(100); if (O.T.lobby.peers().some((p) => p.presence?.g?.c === 'pq01')) seenAt = Date.now() - t1; }
   ok((bus.srv.log.refused.rate_limited || 0) > r0 && seenAt > 0 && seenAt < 3500, 'a lobby listing the server refused (its bytes) is said again within the lobby\'s look (2.5 s): heard after ' + seenAt + ' ms');
-  for (const x of [A, B, C, U, D, Gd, P, O]) { x.T.lobby.leave(); for (const c of x.T.rooms.values()) await c.leave(); }
+  // a host that leaves with a send on its way and another waiting behind it (its guests told the game is over, a last
+  // presence): its game's row ends only once both have had their answer. An end_game sent beside them could be
+  // committed first, and they refused no_game (seen on the live project: docs/coop/supabase-live.md)
+  const L = await mk({ lag: 80 }), l1 = await L.T.join('skotos-lv01', { host: true });
+  await sleep(120);
+  const ng0 = bus.srv.log.refused.no_game || 0, q1 = l1.emit('s', { n: 1 }), q2 = l1.emit('c', { op: 'end' });
+  await sleep(5); l1.leave();
+  const [v1, v2] = await Promise.all([q1, q2]); await sleep(250);
+  ok(v1 === true && v2 === true && (bus.srv.log.refused.no_game || 0) === ng0 && !bus.srv.games.has('skotos-lv01'), 'a host leaving with a send on its way and one behind it: both go while its game is there, then its row ends');
+  for (const x of [A, B, C, U, D, Gd, P, O, L]) { x.T.lobby.leave(); for (const c of x.T.rooms.values()) await c.leave(); }
   for (const t of [TA, TB, TC]) t.lobby.leave();
   await sleep(50);
 }

@@ -388,7 +388,9 @@ export function SupabaseTransport(client, o = {}) {
       const keep = (ms) => { renew = setTimeout(() => rpc('host_game', { room: name }).then((r) => { if (done) return; if (r === 'ok') keep(every); else ch._err(typeof r === 'string' && r ? r : 'upstream_error', 'room'); }, () => { if (!done) keep(Math.min(every, 60000)); }), ms); };
       if (hosting) keep(every);
       const l0 = ch.leave;
-      ch.leave = () => { if (!done) { done = true; T.rooms.delete(name); clearTimeout(renew); if (hosting) rpc('end_game', { room: name }).catch(() => {}); } return l0(); };
+      // (the game's row ends once what this page said before has had its answer: its last messages, the end of the game
+      // its guests are told among them, go while the row is there)
+      ch.leave = () => { if (!done) { done = true; T.rooms.delete(name); clearTimeout(renew); if (hosting) post.settled().then(() => rpc('end_game', { room: name })).catch(() => {}); } return l0(); };
       T.rooms.set(name, ch); return ch;
     }).finally(() => pending.delete(name));
     pending.set(name, p);
@@ -412,19 +414,27 @@ const rpcOf = (client, ms = CALL_MS) => (fn, args) => new Promise((ok, no) => {
 });
 // what a page says, by skotos.send: one call on its way at a time; what is said meanwhile waits (64 at most) and goes
 // in the next, sixteen a call. Each message's promise is its call's answer (a call past its deadline is refused
-// 'timeout', and the next goes)
+// 'timeout', and the next goes). post.settled(): a promise for when everything said so far has had its answer (a host
+// ends its game only then: an end_game sent beside a call still on its way could be committed first, and that call's
+// messages refused no_game)
 function poster(rpc) {
-  const q = []; let busy = false;
+  const q = [], waits = []; let busy = false, seq = 0, done = 0;
   const flush = () => {
     if (busy || !q.length) return;
     busy = true;
-    const b = q.splice(0, CALL_MAX);
-    rpc('send', { msgs: b.map((m) => m.m) }).then(() => { for (const m of b) m.ok('ok'); }, (e) => { for (const m of b) m.no(e); }).finally(() => { busy = false; flush(); });
+    const b = q.splice(0, CALL_MAX), last = b[b.length - 1].seq;
+    rpc('send', { msgs: b.map((m) => m.m) }).then(() => { for (const m of b) m.ok('ok'); }, (e) => { for (const m of b) m.no(e); }).finally(() => {
+      busy = false; done = last;
+      for (let i = waits.length - 1; i >= 0; i--) if (waits[i].at <= done) waits.splice(i, 1)[0].r();
+      flush();
+    });
   };
-  return (topic, event, data) => new Promise((ok, no) => {
+  const post = (topic, event, data) => new Promise((ok, no) => {
     if (q.length >= WAIT_MAX) { no(coded('busy')); return; }
-    q.push({ m: [topic, event, JSON.stringify(data ?? null)], ok, no }); flush();
+    q.push({ m: [topic, event, JSON.stringify(data ?? null)], ok, no, seq: ++seq }); flush();
   });
+  post.settled = () => new Promise((r) => { if (done >= seq) r(); else waits.push({ at: seq, r }); });
+  return post;
 }
 
 // ---------- which one ----------

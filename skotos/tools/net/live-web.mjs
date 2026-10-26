@@ -51,7 +51,8 @@ const BASE = 'http://localhost:' + PORT + '/';
 
 // (LIVE_PROXY=<http://host:port>: the project reached through that proxy, this server directly)
 const proxy = process.env.LIVE_PROXY;
-const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'], ...(proxy ? { proxy: { server: proxy, bypass: 'localhost,127.0.0.1,<-loopback>' } } : {}) });
+// (CHROME_ARGS: more of Chromium's flags, space-separated, e.g. --disable-gpu-compositing)
+const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows', ...(process.env.CHROME_ARGS || '').split(' ').filter(Boolean)], ...(proxy ? { proxy: { server: proxy, bypass: 'localhost,127.0.0.1,<-loopback>' } } : {}) });
 const FATAL = watchFatal(browser);
 const logs = { A: [], B: [] }, net = { A: { supa: 0, failed: [] }, B: { supa: 0, failed: [] } };
 // what each page said on the wire (each skotos.send call and its messages, by event) and what its sockets brought in
@@ -65,6 +66,8 @@ async function open(who, q) {
   pg.on('pageerror', (e) => { logs[who].push('pageerror ' + e.message.slice(0, 300)); console.log('[' + who + '] pageerror', e.message.slice(0, 300)); });
   pg.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') { const t = m.type() + ' ' + m.text().slice(0, 300); logs[who].push(t); console.log('[' + who + '] ' + t); } });
   pg.on('requestfinished', (r) => { if (r.url().includes('.supabase.co')) net[who].supa++; });
+  // (a call the project refused: which, and its answer. A browser shows each as a failed request in the console)
+  pg.on('response', async (r) => { if (r.url().includes('.supabase.co') && r.status() >= 400) { let body = ''; try { body = (await r.text()).slice(0, 160); } catch (e) { /* gone */ } net[who].refused = (net[who].refused || []).concat([r.status() + ' ' + new URL(r.url()).pathname + ' ' + body]); } });
   pg.on('request', (r) => {
     if (!r.url().includes('/rest/v1/rpc/send')) return;
     try { const m = JSON.parse(r.postData() || '{}').msgs || []; wire[who].calls.push({ t: Date.now(), n: m.length, ev: m.map((x) => x[1]), b: m.reduce((a, x) => a + Buffer.byteLength(x[2] || ''), 0) }); } catch (e) { /* not ours */ }
@@ -197,7 +200,15 @@ try {
   const walk = (pg) => ev(pg, () => { let k = 0; window.__walk = setInterval(() => { const p = window.__G.player, f = window.__G.zone.map.nearestFloor(p.x + Math.sin(k / 6) * 0.3, p.z + Math.cos(k / 6) * 0.3); p.x = f.x; p.z = f.z; k++; }, 50); });
   await walk(A); await walk(B); await sleep(2000);
   const f0 = [await ev(A, () => [window.__frames, window.__NET.S.stats.snaps]), await ev(B, () => window.__frames)];
+  // (PROFILE=1: a CPU profile of each page over the ten seconds, its busiest functions by their own time)
+  const prof = process.env.PROFILE ? await Promise.all([A, B].map(async (pg) => { const c = await pg.context().newCDPSession(pg); await c.send('Profiler.enable'); await c.send('Profiler.setSamplingInterval', { interval: 1000 }); await c.send('Profiler.start'); return c; })) : null;
   const w0 = Date.now(); await sleep(10000); const w1 = Date.now();
+  if (prof) for (const [i, c] of prof.entries()) {
+    const { profile: P } = await c.send('Profiler.stop'), self = new Map(), byId = new Map(P.nodes.map((n) => [n.id, n]));
+    P.samples.forEach((id, j) => { const n = byId.get(id), f = n.callFrame, k = (f.functionName || '(anon)') + ' ' + (f.url || '').split('/').pop() + ':' + f.lineNumber; self.set(k, (self.get(k) || 0) + (P.timeDeltas[j] || 0)); });
+    const tot = [...self.values()].reduce((a, x) => a + x, 0);
+    info('CPU profile of ' + 'AB'[i] + ' (10 s), the busiest by own time', [...self].sort((x, y) => y[1] - x[1]).slice(0, 14).map(([k, v]) => Math.round(v / 1000) + ' ms ' + k).concat(['total ' + Math.round(tot / 1000) + ' ms']));
+  }
   const f1 = [await ev(A, () => [window.__frames, window.__NET.S.stats.snaps]), await ev(B, () => window.__frames)];
   info('while walking: frames a second, and the host\'s snapshots a second (the game\'s own count; it sends one at most every 100 ms, once a frame)', { A: Math.round((f1[0][0] - f0[0][0]) / ((w1 - w0) / 1000)), B: Math.round((f1[1] - f0[1]) / ((w1 - w0) / 1000)), snaps: +((f1[0][1] - f0[0][1]) / ((w1 - w0) / 1000)).toFixed(1) });
   await ev(A, () => clearInterval(window.__walk)); await ev(B, () => clearInterval(window.__walk));
@@ -236,7 +247,7 @@ try {
   const errs = (w) => logs[w].filter((l) => l.startsWith('error') || l.startsWith('pageerror'));
   ok(!errs('A').length && !errs('B').length, 'no console errors on either page', { A: errs('A'), B: errs('B') });
   info('console warnings', { A: logs.A.filter((l) => l.startsWith('warning')).length, B: logs.B.filter((l) => l.startsWith('warning')).length });
-  info('requests to the project (HTTP, finished)', { A: net.A.supa, B: net.B.supa, failed: [...net.A.failed, ...net.B.failed].slice(0, 6) });
+  info('requests to the project (HTTP, finished)', { A: net.A.supa, B: net.B.supa, failed: [...net.A.failed, ...net.B.failed].slice(0, 6), refused: { A: net.A.refused || [], B: net.B.refused || [] } });
   // (every game hosted here ended: the host's leave does it; a page closed takes its channels)
   for (const pg of [A, B]) { try { await pg?.evaluate(async () => { const N = window.__NET; if (N?.S.role) await N.leaveGame(null); }); } catch (e) { /* gone */ } }
   await sleep(500);
