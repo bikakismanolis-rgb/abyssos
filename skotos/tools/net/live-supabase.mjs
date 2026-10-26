@@ -1,20 +1,24 @@
-// node tools/net/live-supabase.mjs [--sessions <file>] [--two]: the co-op's Supabase path against a live project, with the
-// real supabase-js (the game's dependency) and the game's own transport (src/net/transport.js SupabaseTransport,
-// stamped), from node (22+: its WebSocket and fetch). The project must have supabase/migrations/*_skotos_coop.sql
-// applied, anonymous sign-ins on and the schema 'skotos' exposed (docs/coop/supabase.md, setting up a project).
-// URL and key: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY from the environment, else from .env.web.local (git-ignored).
+// node tools/net/live-supabase.mjs [--sessions <file>] [--two] [--public]: the co-op's Supabase path against a live
+// project, with the real supabase-js (the game's dependency) and the game's own transport (src/net/transport.js
+// SupabaseTransport, stamped), from node (22+: its WebSocket and fetch). The project must have
+// supabase/migrations/*_skotos_coop.sql applied, anonymous sign-ins on and the schema 'skotos' exposed
+// (docs/coop/supabase.md, setting up a project). URL and key: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY from the
+// environment, else from .env.web.local (git-ignored). Results: docs/coop/supabase-live.md.
 //
 // What it does on the project, and nothing else: anonymous sign-ins (four users, marked app: 'skotos', test:
-// 'live-supabase'; --sessions <file> keeps their sessions there, so a run again signs nobody new in: Supabase allows 30
-// anonymous sign-ins an hour from one address), the game's four RPCs (skotos.send, host_game, game_host, end_game) on
-// rooms named 'skotos-test-...', and joining 'skotos:' channels as the game does. Every game it hosts it ends, every
-// channel it leaves. About a minute, a few hundred small messages. --two: the pair only (no third and fourth user).
+// 'live-supabase'; --sessions <file> keeps their sessions in that file, so a run again signs nobody new in: Supabase
+// allows 30 anonymous sign-ins an hour from one address), the game's four RPCs (skotos.send, host_game, game_host,
+// end_game) on rooms named 'skotos-test-...', and joining 'skotos:' private channels as the game does. Every game it
+// hosts it ends, every channel it leaves. About a minute, a few hundred small messages. --two: the pair only (no third
+// and fourth user). --public: also a public channel of the game's topic's name (which the game never joins), to show it
+// is another channel; off by default, the game's own traffic being private channels only.
 //
-// Part 1, supabase-js itself (what the transport cannot show: the server's refusals, who hears what): the stamp, a
-// forged '_by' or 'f', a page's own broadcast on a 'skotos:' topic (by the socket, and by REST both ways), a public
-// channel of the same name, a page with no session, the games, the sizes, a guest's bytes; latency and deliveries a
-// message, two pages then four. Part 2, SupabaseTransport over the same clients: host, guest, presence, the stamp as the
-// game reads it, a party of four, the host leaving. A table of pass and fail at the end; the exit code is the fails.
+// Part 1, supabase-js itself (what the transport hides by design: the server's refusals, who hears what, a page's own
+// echo): the stamp, a forged '_by' or 'f', a page's own broadcast on a 'skotos:' topic (by the socket, and by REST both
+// ways), a page with no session, the games, the sizes, a guest's bytes; latency and deliveries a message, two pages then
+// four. Part 2, SupabaseTransport over the same clients: host, guest, presence, the stamp as the game reads it, a party
+// of four, the host leaving (pickTransport's sign-in needs a browser's storage: tools/net/live-web.mjs runs it, in the
+// web build). A table of pass and fail at the end; the exit code is the number of fails.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
@@ -22,7 +26,7 @@ import { SupabaseTransport } from '../../src/net/transport.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const args = process.argv.slice(2), arg = (k) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : null; };
-const FOUR = !args.includes('--two'), SESS = arg('--sessions') || process.env.LIVE_SESSIONS || null;
+const FOUR = !args.includes('--two'), PUB = args.includes('--public'), SESS = arg('--sessions') || process.env.LIVE_SESSIONS || null;
 const envf = existsSync(root + '.env.web.local') ? Object.fromEntries(readFileSync(root + '.env.web.local', 'utf8').split(/\r?\n/).filter((l) => /^\s*[A-Z_]+\s*=/.test(l)).map((l) => { const i = l.indexOf('='); return [l.slice(0, i).trim(), l.slice(i + 1).trim().replace(/^(['"])(.*)\1$/, '$2')]; })) : {};
 const URL_ = process.env.VITE_SUPABASE_URL || envf.VITE_SUPABASE_URL, KEY = process.env.VITE_SUPABASE_ANON_KEY || envf.VITE_SUPABASE_ANON_KEY;
 if (!URL_ || !KEY) { console.log('no VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY (the environment, or .env.web.local)'); process.exit(2); }
@@ -113,9 +117,15 @@ async function main() {
   const [JN, LN] = await Promise.all([join(N, topic, { wait: 8000 }), join(N, 'skotos:lobby', { wait: 8000 })]);
   check(P, 'no session: the private channels refused', JN.status !== 'SUBSCRIBED' && LN.status !== 'SUBSCRIBED', 'game: ' + JN.status + ' ' + JN.why + ' / lobby: ' + LN.status + ' ' + LN.why);
   // (a public channel of the same name: another channel; whether it may be joined is the project's 'Allow public access')
-  const B2 = await again(B), N2 = nobody(); all.push(B2, N2);
-  const [PB, PN] = await Promise.all([join(B2, topic, { public: true, wait: 5000 }), join(N2, topic, { public: true, wait: 5000 })]);
-  info(P, 'a public channel of the same name (the project\'s Allow public access)', 'B: ' + joined(PB) + ', no session: ' + joined(PN));
+  // (--public only: a public channel of the same name, which the game never joins, is another channel. Whether one may
+  // be joined at all is the project's 'Allow public access'. Off by default: the game's own traffic is private channels)
+  const NONE = { heard: [], status: 'not tried' };
+  let PB = NONE, PN = NONE;
+  if (PUB) {
+    const B2 = await again(B), N2 = nobody(); all.push(B2, N2);
+    [PB, PN] = await Promise.all([join(B2, topic, { public: true, wait: 5000 }), join(N2, topic, { public: true, wait: 5000 })]);
+    info(P, 'a public channel of the same name (the project\'s Allow public access)', 'B: ' + joined(PB) + ', no session: ' + joined(PN));
+  }
   await sleep(500);
 
   // the stamp
@@ -132,8 +142,8 @@ async function main() {
   check(P, 'a guest\'s forged \'_by\' and \'f\' inside its data: the stamp is still the guest\'s', !s2.err && a2 && a2.pl._by === B.uid && JSON.parse(a2.pl.d)._by === A.uid, a2 ? '_by ' + (a2.pl._by === B.uid ? 'B' : a2.pl._by) + ', d ' + a2.pl.d.slice(0, 40) + '...' : s2.err || 'not heard');
   const s2b = await rpc(B, 'send', { msgs: [[topic, 'f', '{}', A.uid]] }), s2c = await rpc(B, 'send', { msgs: [[topic, 'f', { _by: A.uid }]] });
   check(P, 'a message with a fourth element, or data not a string: invalid_argument', s2b.err === 'invalid_argument' && s2c.err === 'invalid_argument', s2b.err + ' / ' + s2c.err);
-  check(P, 'the page with no session heard none of it (its private joins refused, its public channel of the same name)', !JN.heard.length && !LN.heard.length && !anyK(PN, k1).length && !anyK(PN, k2).length, JN.heard.length + LN.heard.length + PN.heard.length + ' heard');
-  check(P, 'nor did B\'s public channel of the same name', !anyK(PB, k1).length && !anyK(PB, k2).length, PB.heard.length + ' heard');
+  check(P, 'the page with no session heard none of it', !JN.heard.length && !LN.heard.length && !anyK(PN, k1).length && !anyK(PN, k2).length, JN.heard.length + LN.heard.length + PN.heard.length + ' heard');
+  if (PUB) check(P, 'nor did the public channels of the same name', !anyK(PB, k1).length && !anyK(PB, k2).length && !anyK(PN, k1).length, PB.heard.length + ' / ' + PN.heard.length + ' heard');
   check(P, 'the lobby heard none of the game\'s', !anyK(LB, k1).length, LB.heard.length + ' on the lobby');
 
   // a page's own broadcast on a 'skotos:' topic: by the socket (acked, to have the server's answer), and by REST both ways
@@ -151,10 +161,12 @@ async function main() {
   await sleep(3000);
   check(P, 'a page\'s own broadcast on the private channel (socket, httpSend, REST): never delivered', !anyK(JA, k3).length && !anyK(JB, k3).length, 'socket: ' + r3 + '; httpSend: ' + r4 + '; REST: ' + r5 + '; heard by A ' + anyK(JA, k3).length);
   info(P, 'the server\'s answer to the socket broadcast', String(r3));
-  let r6 = 'not joined';
-  if (PB.status === 'SUBSCRIBED') r6 = await PB.ch.send({ type: 'broadcast', event: 's', payload: { k: k3 + 'p', _by: A.uid, d: '{}' } });
-  await sleep(1500);
-  check(P, 'a broadcast on the public channel of the same name: not on the game\'s', !anyK(JA, k3 + 'p').length, 'sent: ' + r6 + '; heard on the public channel (no session): ' + anyK(PN, k3 + 'p').length);
+  if (PUB) {
+    let r6 = 'not joined';
+    if (PB.status === 'SUBSCRIBED') r6 = await PB.ch.send({ type: 'broadcast', event: 's', payload: { k: k3 + 'p', _by: A.uid, d: '{}' } });
+    await sleep(1500);
+    check(P, 'a broadcast on the public channel of the same name: not on the game\'s', !anyK(JA, k3 + 'p').length, 'sent: ' + r6 + '; heard on the public channel (no session): ' + anyK(PN, k3 + 'p').length);
+  }
   // presence: allowed on the private channel (the game tracks { k } once a channel)
   const tr = await JB.ch.track({ k: B.uid });
   await until(() => Object.keys(JA.ch.presenceState() || {}).includes(B.uid), 6000);
