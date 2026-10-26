@@ -70,7 +70,7 @@ const PARTY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
 // ---------- the lobby panel ----------
 // why this view cannot host or join (the room's answer), else why the last try failed
 // (the room's end for the page, whatever its code, only as co-op no longer here: who may play is the app's to say)
-const WHY = { not_permitted: 'coop.noSend', full: 'coop.full' };
+const WHY = { not_permitted: 'coop.noSend', full: 'coop.full', no_game: 'coop.noHost' };
 const why = (code) => WHY[code] || (TERMINAL.has(code) ? 'coop.off' : 'coop.error');
 const meterText = () => { const net = S.ch?.meter?.rate?.(); return net ? t('coop.meter', net.msgsOut.toFixed(1), (net.bytesOut / 1024).toFixed(1), net.msgsIn.toFixed(1), (net.bytesIn / 1024).toFixed(1)) : ''; };
 function render() { const [k, h] = html(); UI.shown = k; return h; }
