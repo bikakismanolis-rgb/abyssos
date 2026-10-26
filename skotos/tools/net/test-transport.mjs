@@ -129,15 +129,23 @@ async function localTest() {
 // And the stamped path, the project as supabase/migrations/*_skotos_coop.sql makes it (tools/net/test-migration.mjs
 // tries that SQL itself): auth (signInAnonymously gives a user id, getSession keeps it), private channels (another
 // channel than the public one of the same name; joined only signed in and only on a 'skotos:' topic; a client's own
-// broadcast on one is refused, as the policies refuse its write), and schema('skotos').rpc: send (signed in, the topic,
-// the event, 4096 bytes of the data's JSON text, the user's bucket of 40 a second and 80 at once, n tokens for n; then
-// each as { d, _by } to every member of the private channel, its sender too: a broadcast from the database knows no
-// self), host_game / game_host / end_game (the games rows). An RPC answers after o.lag ms (random below it: calls that
-// overlap may be answered out of order, as HTTP may). bus.srv.log counts the calls, refusals and stamped deliveries
+// broadcast on one is refused, as the policies refuse its write), and schema('skotos').rpc: send (signed in, the topic:
+// the lobby or a live game's, the event, 4096 bytes of the data's JSON text and JSON it must be, the user's buckets: 40
+// messages a second and 80 at once, n tokens for n, and bytes, each message its data's and 256, the game's host 64 KiB
+// a second and 256 KiB at once, any other 24 and 64, the lobby 0.5 and 8; the day's caps, the user's and the project's
+// (bus.srv.quota, counted exactly here: the migration's count lags by 64 KiB a user); then each as { d, _by }, d the
+// page's text as it came, to every member of the private channel, its sender too: a broadcast from the database knows
+// no self), host_game / game_host / end_game (the games rows: one a user, 'quota' for a new game past the day's cap).
+// An RPC answers after o.lag ms (random below it: calls that overlap may be answered out of order, as HTTP may); its
+// builder takes abortSignal() as supabase-js's does; o.hang: that many of the client's sends never answered (a request
+// lost on a dead connection). o.auth: the client's auth options (its session kept in o.auth.storage, as supabase-js
+// keeps it). bus.srv.log counts the calls, refusals, aborts and stamped deliveries
 function fakeSupabase(bus, o = {}) {
   const log = (bus.log ||= { events: 0, tracks: 0, closed: 0 }), tracks = [];
-  const srv = (bus.srv ||= { users: 0, ids: 0, games: new Map(), rates: new Map(), log: { calls: 0, refused: {}, signIns: 0 } });
-  let uid = o.uid || null;
+  const srv = (bus.srv ||= { users: 0, ids: 0, games: new Map(), rates: new Map(), quota: { bytes: 0, day_cap: 48 * 1048576, user_cap: 48 * 1048576 }, log: { calls: 0, refused: {}, signIns: 0, aborted: 0, hung: 0 } });
+  const store = o.auth?.storage, key = o.auth?.storageKey || 'sb-auth';
+  let uid = o.uid || null, hang = o.hang || 0;
+  if (!uid && store) { try { uid = JSON.parse(store.getItem(key) || 'null')?.user?.id || null; } catch (e) { uid = null; } }
   const RX = { topic: /^skotos:[a-z0-9][a-z0-9_.-]{0,47}$/, event: /^(_p|[a-z][a-z0-9_.-]{0,47})$/, room: /^[a-z0-9][a-z0-9_.-]{0,47}$/ };
   const utf8 = (x) => new TextEncoder().encode(x).length;
   const refuse = (m) => { srv.log.refused[m] = (srv.log.refused[m] || 0) + 1; return { data: null, error: { message: m, code: 'P0001' } }; };
@@ -146,16 +154,27 @@ function fakeSupabase(bus, o = {}) {
     send({ msgs }) {
       if (!uid) return refuse('not_signed_in');
       if (!Array.isArray(msgs) || msgs.length < 1 || msgs.length > 16) return refuse('invalid_argument');
+      let game = 0, lobby = 0, hosting = false;
       for (const m of msgs) {
         if (!Array.isArray(m) || m.length !== 3 || m.some((x) => typeof x !== 'string') || !RX.topic.test(m[0]) || !RX.event.test(m[1])) return refuse('invalid_argument');
-        if (utf8(m[2]) > 4096) return refuse('too_big');
+        const b = utf8(m[2]);
+        if (b > 4096) return refuse('too_big');
+        try { JSON.parse(m[2]); } catch (e) { return refuse('invalid input syntax for type json'); }
+        if (m[0] === 'skotos:lobby') { lobby += b + 256; continue; }
+        const g = live(m[0].slice(7)); if (!g) return refuse('no_game');
+        hosting ||= g.host === uid; game += b + 256;
       }
-      const t = Date.now(), r = srv.rates.get(uid) || { tok: 80, at: t }, tok = Math.min(80, r.tok + (t - r.at) / 1000 * 40);
-      if (tok < msgs.length) return refuse('rate_limited');
-      srv.rates.set(uid, { tok: tok - msgs.length, at: t });
-      let ds; try { ds = msgs.map((m) => JSON.parse(m[2])); } catch (e) { return refuse('invalid json'); }
+      const Q = srv.quota;
+      if (Q.bytes >= Q.day_cap) return refuse('quota');
+      // (each bucket fills from its own last draw: a call to the lobby neither fills nor empties the game's)
+      const t = Date.now(), r = srv.rates.get(uid) || { tok: 80, game: 262144, lobby: 8192, at: t, gat: t, lat: t, spent: 0 }, s = (x) => (t - x) / 1000;
+      const tok = Math.min(80, r.tok + s(r.at) * 40), gt = hosting ? Math.min(262144, r.game + s(r.gat) * 65536) : Math.min(65536, r.game + s(r.gat) * 24576), lt = Math.min(8192, r.lobby + s(r.lat) * 512);
+      if (tok < msgs.length || gt < game || lt < lobby) return refuse('rate_limited');
+      if (r.spent + game + lobby > Q.user_cap || Q.bytes + game + lobby > Q.day_cap) return refuse('quota');
+      srv.rates.set(uid, { tok: tok - msgs.length, at: t, game: game ? gt - game : r.game, gat: game ? t : r.gat, lobby: lobby ? lt - lobby : r.lobby, lat: lobby ? t : r.lat, spent: r.spent + game + lobby });
+      Q.bytes += game + lobby;
       // (realtime.send adds an id of its own to the payload)
-      msgs.forEach((m, i) => bus.stamp(m[0], m[1], { d: ds[i], _by: uid, id: 'm' + ++srv.ids }));
+      msgs.forEach((m) => bus.stamp(m[0], m[1], { d: m[2], _by: uid, id: 'm' + ++srv.ids }));
       return { data: msgs.length, error: null };
     },
     host_game({ room }) {
@@ -164,7 +183,8 @@ function fakeSupabase(bus, o = {}) {
       for (const [k, g] of srv.games) if (g.exp < Date.now()) srv.games.delete(k);
       const g = srv.games.get(room);
       if (g && g.host !== uid) return { data: 'taken', error: null };
-      if ([...srv.games.entries()].filter(([k, x]) => x.host === uid && k !== room).length >= 4) return { data: 'too_many', error: null };
+      if (!g && srv.quota.bytes >= srv.quota.day_cap) return { data: 'quota', error: null };
+      for (const [k, x] of srv.games) if (x.host === uid && k !== room) srv.games.delete(k);
       srv.games.set(room, { host: uid, exp: Date.now() + 4 * 3600e3 });
       return { data: 'ok', error: null };
     },
@@ -179,10 +199,26 @@ function fakeSupabase(bus, o = {}) {
   const client = {
     auth: {
       getSession: async () => ({ data: { session: uid ? { user: { id: uid } } : null }, error: null }),
-      signInAnonymously: async () => { if (bus.noAnon) return { data: null, error: { message: 'Anonymous sign-ins are disabled' } }; srv.log.signIns++; uid = 'u' + String(++srv.users).padStart(3, '0') + '-' + Math.random().toString(16).slice(2, 10); return { data: { user: { id: uid }, session: { user: { id: uid } } }, error: null }; }
+      signInAnonymously: async () => {
+        if (bus.noAnon) return { data: null, error: { message: 'Anonymous sign-ins are disabled' } };
+        srv.log.signIns++; uid = 'u' + String(++srv.users).padStart(3, '0') + '-' + Math.random().toString(16).slice(2, 10);
+        if (store) store.setItem(key, JSON.stringify({ access_token: 'a', refresh_token: 'r', user: { id: uid } }));
+        return { data: { user: { id: uid }, session: { user: { id: uid } } }, error: null };
+      }
     },
     realtime: { setAuth: async () => {} },
-    schema: (sch) => ({ rpc: (fn, args) => new Promise((res) => { srv.log.calls++; setTimeout(() => res(sch === 'skotos' && fns[fn] ? fns[fn](args || {}) : { data: null, error: { message: 'not found', code: 'PGRST202' } }), Math.random() * (o.lag ?? 20)); }) }),
+    schema: (sch) => ({
+      rpc: (fn, args) => {
+        let signal = null;
+        const run = () => new Promise((res) => {
+          srv.log.calls++;
+          if (fn === 'send' && hang > 0) { hang--; srv.log.hung++; signal?.addEventListener('abort', () => srv.log.aborted++); return; }
+          setTimeout(() => res(sch === 'skotos' && fns[fn] ? fns[fn](args || {}) : { data: null, error: { message: 'not found', code: 'PGRST202' } }), Math.random() * (o.lag ?? 20));
+        });
+        const b = { abortSignal(sg) { signal = sg; return b; }, then: (f, r) => run().then(f, r) };
+        return b;
+      }
+    }),
     channel(name, opts) {
       const key = opts?.config?.presence?.key, L = { b: [], p: [] }, priv = !!opts?.config?.private;
       const c = bus[(priv ? 'priv:' : '') + name] ||= { members: new Map() };
@@ -355,9 +391,27 @@ async function stampedTest() {
   ok((await hc.emit('s', { pad: 'x'.repeat(5000) })) === false, 'a 5 KB message is refused before the wire');
   const r1 = await send([['skotos:skotos-ab12', 'f', JSON.stringify('x'.repeat(4094))]]), r2 = await send([['skotos:skotos-ab12', 'f', JSON.stringify('x'.repeat(4095))]]);
   ok(!r1.error && r2.error?.message === 'too_big', 'the server takes 4096 bytes of data and refuses 4097: too_big');
+  // the data goes as the page's own text, read by the page that hears it: one whose data is not JSON text is dropped
+  heard.length = 0;
+  bus.stamp('skotos:skotos-ab12', 's', { d: '{', _by: E.uid }); bus.stamp('skotos:skotos-ab12', 's', { d: { n: 1 }, _by: E.uid }); bus.stamp('skotos:skotos-ab12', 's', { d: '{"n":2}', _by: E.uid });
+  await sleep(30);
+  ok(heard.length === 1 && heard[0].data.n === 2, 'stamped data is read from its JSON text; a message whose data is not JSON text (or not text) is dropped');
+  ok((await send([['skotos:skotos-ab12', 's', '{']])).error?.message === 'invalid input syntax for type json', 'and the server refuses data that is not JSON');
+  // a topic is the lobby or a live game's: a room with no game takes nothing
+  ok((await send([['skotos:junk', 'f', '1']])).error?.message === 'no_game', 'a topic with no live game (a junk room nobody hosts) is refused: no_game');
+  // the bytes, by role: sixteen messages of 4 KiB at once are past a guest's bucket (64 KiB at once), not the host's
+  // (256 KiB); the lobby's is its own and small (8 KiB at once, 512 bytes a second)
+  const HB = fakeSupabase(bus); await HB.auth.signInAnonymously();
+  const HBT = SupabaseTransport(HB, { stamped: true, me: HB.uid }); await HBT.join('skotos-by01', { host: true });
+  const sendH = (msgs) => HB.schema('skotos').rpc('send', { msgs }), x4 = JSON.stringify('x'.repeat(4094));
+  const big = (t) => Array.from({ length: 16 }, () => [t, 'f', x4]);
+  ok((await send(big('skotos:skotos-ab12'))).error?.message === 'rate_limited' && !(await sendH(big('skotos:skotos-by01'))).error, 'sixteen messages of 4 KiB at once: past a guest\'s bytes (64 KiB at once), refused; the host\'s game takes them (256 KiB)');
+  const la = await sendH([['skotos:lobby', 'f', x4]]), lb = await sendH([['skotos:lobby', 'f', x4]]);
+  ok(!la.error && lb.error?.message === 'rate_limited', 'the lobby\'s bytes are its own: one message of 4 KiB goes, a second at once does not (8 KiB at once)');
+  HBT.lobby.leave(); for (const c of HBT.rooms.values()) await c.leave();
   // the rate: a flood by RPC, past the page's own bucket
   await sleep(2000);
-  const f0 = bus.srv.log.refused.rate_limited || 0, flood = await Promise.all(Array.from({ length: 100 }, () => send([['skotos:lobby', 'f', '1']])));
+  const f0 = bus.srv.log.refused.rate_limited || 0, flood = await Promise.all(Array.from({ length: 100 }, () => send([['skotos:skotos-ab12', 'f', '1']])));
   const went = flood.filter((r) => !r.error).length;
   ok(went >= 80 && went <= 84 && (bus.srv.log.refused.rate_limited || 0) - f0 === 100 - went, 'a hundred sends at once: 80 go (and what 40 a second refills meanwhile), the rest refused: ' + went);
   // order and batching: thirty at once from the host arrive in order, in fewer calls
@@ -399,6 +453,83 @@ async function stampedTest() {
   console.log('     stamped, a party of four: ' + calls.toFixed(1) + ' RPC calls a second (each a transaction), ' + Math.round(del) + ' deliveries a second, ' + Math.round(evs) + ' events a second (each sent and each delivered, the sender\'s own echo too)');
   for (const c of chs) await c.leave();
   for (const t of T) t.lobby.leave();
+}
+
+// the stamped path's limits and its pages' own failures: a tab copied from the host's (the same user), one row a user,
+// a renewal that finds the row another's, the project's day and the user's spent, a request that never answers, a
+// session copied into a duplicated tab, a presence the server refused said again
+async function stampedLimits() {
+  const bus = {}, q0 = new URLSearchParams('');
+  const mk = async (o = {}) => { const c = fakeSupabase(bus, o); if (!c.uid) await c.auth.signInAnonymously(); return { c, T: SupabaseTransport(c, Object.assign({ stamped: true, me: c.uid }, o)) }; };
+  const ends = (ch) => { const l = []; ch.onError((c, how) => l.push(c + ':' + how)); return l; };
+  // a duplicated tab is the same user: its join as a guest of its own game is refused, and the host's row stays
+  const A = await mk(), a1 = await A.T.join('skotos-du01', { host: true });
+  const A2 = await mk({ uid: A.c.uid });
+  let su = null; await A2.T.join('skotos-du01').catch((e) => { su = e.code; });
+  await sleep(30);
+  ok(su === 'same_user' && bus.srv.games.get('skotos-du01')?.host === A.c.uid && !A2.T.rooms.size, 'a guest\'s join whose host is its own user (a tab copied from the host\'s): refused, same_user, and the host\'s row is still there');
+  A2.T.lobby.leave();
+  // one game a user: hosting another lets the first row go (a page hosts one game; a reload hosting again), and the first
+  // game's channel, its sends refused no_game, is told that its game is over
+  const e1 = ends(a1);
+  await A.T.join('skotos-du02', { host: true });
+  ok(!bus.srv.games.has('skotos-du01') && bus.srv.games.get('skotos-du02')?.host === A.c.uid, 'a user hosts one game: its second lets the first row go');
+  const s1 = await a1.emit('s', { n: 1 }); await sleep(30);
+  ok(s1 === false && e1.includes('no_game:room'), 'the first game\'s send is refused (no_game), and its channel is told its game ended: ' + e1);
+  // a renewal that finds the row another's (run out and taken) tells the game; while the row is its own, nothing
+  const B = await mk({ renew: 120 }), b1 = await B.T.join('skotos-rn01', { host: true }), e2 = ends(b1);
+  await sleep(200);
+  const kept = e2.length === 0 && bus.srv.games.get('skotos-rn01')?.host === B.c.uid;
+  bus.srv.games.set('skotos-rn01', { host: 'someone-else', exp: Date.now() + 3600e3 });
+  await sleep(200);
+  ok(kept && e2.includes('taken:room'), 'the host\'s row renewed while its own; a renewal answered taken is the row lost, and the game is told: ' + e2);
+  // the project's day: past its cap every send is refused 'quota', a game's channel told, and no new game is made; the
+  // renewal of a game already there still goes
+  const C = await mk(), c1 = await C.T.join('skotos-qu01', { host: true }), e3 = ends(c1);
+  await sleep(40);
+  const cap0 = bus.srv.quota.day_cap; bus.srv.quota.day_cap = bus.srv.quota.bytes;
+  const s3 = await c1.emit('s', { n: 1 }); await sleep(30);
+  const rq = await C.c.schema('skotos').rpc('host_game', { room: 'skotos-qu02' }), rr = await C.c.schema('skotos').rpc('host_game', { room: 'skotos-qu01' });
+  bus.srv.quota.day_cap = cap0;
+  ok(s3 === false && e3.includes('quota:room') && rq.data === 'quota' && rr.data === 'ok', 'the project\'s day spent: a send refused quota (the game\'s channel told), a new game refused quota, a renewal still ok');
+  // the user's day: what one user may send, whatever the project has left
+  const U = await mk(); bus.srv.rates.set(U.c.uid, { tok: 80, game: 65536, lobby: 8192, at: Date.now(), gat: Date.now(), lat: Date.now(), spent: bus.srv.quota.user_cap - 500 });
+  const sendU = (msgs) => U.c.schema('skotos').rpc('send', { msgs }), x198 = JSON.stringify('x'.repeat(196));
+  const u1 = await sendU([['skotos:lobby', 'f', x198]]), u2 = await sendU([['skotos:lobby', 'f', x198]]);
+  ok(!u1.error && u2.error?.message === 'quota', 'a user past its own day (user_cap) is refused quota: each message its bytes and 256');
+  // a request that never answers holds nothing back: past its deadline it is given up (aborted) and the next goes
+  const D = await mk({ hang: 1, callMs: 200 }), d1 = await D.T.join('skotos-hg01', { host: true });
+  const Gd = await mk(), g1 = await Gd.T.join('skotos-hg01'), got = [];
+  g1.on('s', (m) => got.push(m.data.n));
+  await sleep(60);
+  const t0 = Date.now(), p1 = d1.emit('s', { n: 1 }), p2 = d1.emit('s', { n: 2 }), r1 = await p1, r2 = await p2, dt = Date.now() - t0;
+  await sleep(40);
+  ok(r1 === false && r2 === true && got.join() === '2' && dt >= 180 && dt < 1000 && bus.srv.log.hung === 1 && bus.srv.log.aborted === 1, 'a send whose request never answers is given up at its deadline (' + dt + ' ms, aborted) and the one said after it goes: heard ' + got);
+  // a duplicated tab: its sessionStorage copied, the same user; asked of the other tabs, it lets the copy go and signs in
+  // anew. A tab no other holds keeps its user (a reload)
+  const mem = () => { const m = new Map(); return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => { m.set(k, String(v)); }, removeItem: (k) => { m.delete(k); } }; };
+  const cfg = { url: 'https://x.supabase.co', anonKey: 'k', stamped: true, createClient: (u, k, opts) => fakeSupabase(bus, { auth: opts.auth }) };
+  const uidIn = (st) => JSON.parse(st.getItem('skotos-auth') || 'null')?.user?.id;
+  const sA = mem(); globalThis.sessionStorage = sA;
+  const TA = await pickTransport(q0, cfg);
+  const sB = mem(); sB.setItem('skotos-auth', sA.getItem('skotos-auth')); globalThis.sessionStorage = sB;
+  const n0 = bus.srv.log.signIns, TB = await pickTransport(q0, cfg);
+  ok(TA?.me && TB?.me && TB.me !== TA.me && uidIn(sA) === TA.me && uidIn(sB) === TB.me && bus.srv.log.signIns === n0 + 1, 'a duplicated tab (its session copied) is told another tab holds its user, and signs in as another: ' + TA?.me + ', ' + TB?.me);
+  const sC = mem(); sC.setItem('skotos-auth', JSON.stringify({ user: { id: 'u-alone' } })); globalThis.sessionStorage = sC;
+  const TC = await pickTransport(q0, cfg);
+  ok(TC?.me === 'u-alone', 'a tab whose user no other tab holds (a reload) keeps it');
+  delete globalThis.sessionStorage;
+  // a presence the server refused (the lobby's bytes spent) is said again on the next look, not a whole beat later
+  const P = await mk(), O = await mk(); await sleep(60);
+  bus.srv.rates.set(P.c.uid, { tok: 80, game: 65536, lobby: 0, at: Date.now(), gat: Date.now(), lat: Date.now(), spent: 0 });
+  const r0 = bus.srv.log.refused.rate_limited || 0;
+  P.T.lobby.presence({ g: { c: 'pq01', cls: 'mage', l: 3, z: 'town', n: 1, d: 0, v: 3, on: 0 } });
+  const t1 = Date.now(); let seenAt = 0;
+  while (Date.now() - t1 < 4500 && !seenAt) { await sleep(100); if (O.T.lobby.peers().some((p) => p.presence?.g?.c === 'pq01')) seenAt = Date.now() - t1; }
+  ok((bus.srv.log.refused.rate_limited || 0) > r0 && seenAt > 0 && seenAt < 3500, 'a lobby listing the server refused (its bytes) is said again within the lobby\'s look (2.5 s): heard after ' + seenAt + ' ms');
+  for (const x of [A, B, C, U, D, Gd, P, O]) { x.T.lobby.leave(); for (const c of x.T.rooms.values()) await c.leave(); }
+  for (const t of [TA, TB, TC]) t.lobby.leave();
+  await sleep(50);
 }
 
 // the lobby: every page that loads the game is in it (a single-player one too), so what it costs grows with the pages
@@ -446,6 +577,7 @@ await endsTest();
 await localTest();
 await supaTest();
 await stampedTest();
+await stampedLimits();
 await lobbyTest();
 console.log(fails ? fails + ' FAILED' : 'all passed');
 process.exit(fails ? 1 : 0);

@@ -1011,6 +1011,8 @@ export const TEXT = {
   'coop.noWorld': ['Ο κόσμος του οικοδεσπότη δεν έφτασε· έφυγες από τη συντροφιά', 'The host’s world never came: you left the party'],
   'coop.noHost': ['Δεν βρέθηκε οικοδεσπότης με αυτόν τον κωδικό', 'No host with that code'],
   'coop.full': ['Η συντροφιά είναι γεμάτη', 'The party is full'],
+  'coop.sameUser': ['Αυτή η καρτέλα είναι αντίγραφο εκείνης που φιλοξενεί το παιχνίδι· άνοιξε το παιχνίδι σε καινούργια καρτέλα ή σε άλλο πρόγραμμα περιήγησης.', 'This tab is a copy of the one that hosts that game: open the game in a new tab or another browser.'],
+  'coop.quota': ['Η συντροφιά έφτασε το σημερινό της όριο σε αυτόν τον διακομιστή· το παιχνίδι συνεχίζεται χωρίς αυτήν.', 'Co-op has reached today’s limit on this server: the game goes on alone.'],
   'coop.version': ['Ο οικοδεσπότης έχει άλλη έκδοση του παιχνιδιού', 'The host has another version of the game'],
   'coop.hostLeads': ['Ο οικοδεσπότης δείχνει τον δρόμο', 'The host leads the way'],
   'coop.gathered': ['Μάζεψες ό,τι είχε πέσει για σένα πριν φύγεις', 'You gathered what had fallen for you before you left'],

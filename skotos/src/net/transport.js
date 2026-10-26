@@ -259,36 +259,46 @@ export function LocalTransport(o = {}) {
 // client's own word. Stamped (o.stamped, o.me: the page's user id, signed in), the server says who sent it
 // (supabase/migrations/*_skotos_coop.sql, docs/coop/supabase.md): the channels are private (a signed-in page may join a
 // 'skotos:' topic to hear it and track its presence there, and may not broadcast on it), everything the page says goes
-// by RPC to skotos.send, which checks it and broadcasts it as { d, _by }, '_by' the caller's id written by the server.
-// A peer is that id and nothing else: a message without it is dropped, an 'f' in it is not read, and our own (the
-// server's broadcast comes back to its sender too) passed over. One call is on its way at a time, what is said
-// meanwhile going together in the next (a page's messages arrive in the order it said them; the server's rate counts
-// each). Who hosts a game is the server's games row (skotos.host_game, skotos.game_host): the game's channel says it as
-// ch.host, and the game takes no other (coop.js pickHost). Presence keys are the clients' own word: they only say who
-// came and who left, sooner than silence would; a peer is listed only once the server has named it in a '_p'.
-const RENEW = 30 * 60 * 1000, CALL_MAX = 16, WAIT_MAX = 64;
+// by RPC to skotos.send, which checks it and broadcasts it as { d, _by }, '_by' the caller's id written by the server
+// and d the page's own JSON text (read here: a message whose d is not JSON is dropped). A peer is that id and nothing
+// else: a message without it is dropped, an 'f' in it is not read, and our own (the server's broadcast comes back to its
+// sender too) passed over. One call is on its way at a time, what is said meanwhile going together in the next (a page's
+// messages arrive in the order it said them; the server's rate counts each), and a call not answered in CALL_MS is
+// given up, so one lost request holds nothing back. Who hosts a game is the server's games row (skotos.host_game,
+// skotos.game_host): the game's channel says it as ch.host, and the game takes no other (coop.js pickHost). A game's
+// send the server refuses for its game ('no_game': its row is gone) or for the project's day ('quota') ends the game's
+// channel for the page (ch.onError, 'room'), as a renewal of the host's row that is not 'ok' does. Presence keys are the
+// clients' own word: they only say who came and who left, sooner than silence would; a peer is listed only once the
+// server has named it in a '_p'.
+const RENEW = 30 * 60 * 1000, CALL_MAX = 16, WAIT_MAX = 64, CALL_MS = 5000;
 const coded = (code) => Object.assign(new Error(code), { code });
+const BAD = Symbol('not json');
+const unjson = (s) => { if (typeof s !== 'string') return BAD; try { return JSON.parse(s); } catch (e) { return BAD; } };
 export function SupabaseTransport(client, o = {}) {
   if (!client?.channel) return null;
   const stamped = o.stamped === true;
   if (stamped && !(typeof o.me === 'string' && o.me && client.schema)) return null;
   const me = o.me || 'p' + Math.random().toString(36).slice(2, 10);
   const bucket = makeBucket(o.rate, o.burst);
-  const rpc = stamped ? rpcOf(client) : null, post = stamped ? poster(rpc) : null;
+  const rpc = stamped ? rpcOf(client, o.callMs) : null, post = stamped ? poster(rpc) : null;
   const open = (name, lobby) => {
     const topic = 'skotos:' + name;
     const sc = client.channel(topic, { config: Object.assign({ broadcast: { self: false, ack: false }, presence: { key: me } }, stamped ? { private: true } : {}) });
     const beat = lobby ? 10000 : 1500, gone = lobby ? Math.max(o.gone || 12000, 3 * beat) : o.gone || 12000;
     let hb = 0;
+    // (stamped: a game's send refused for its game or for the project's day ends the game for the page)
+    const said = (pr) => (lobby ? pr : pr.catch((e) => { if (e?.code === 'no_game' || e?.code === 'quota') ch._err(e.code, 'room'); throw e; }));
     const wire = {
       kind: 'supabase', me, sentT: 0, raw: '{}', again: false, soon: 0,
-      send: (t, data) => (stamped ? post(topic, t, data) : sc.send({ type: 'broadcast', event: t, payload: { f: me, d: data } })),
+      send: (t, data) => (stamped ? said(post(topic, t, data)) : sc.send({ type: 'broadcast', event: t, payload: { f: me, d: data } })),
       sendPresence: (p) => {
         // (what the others have already, an empty presence never said or one said a moment ago, is not said again)
         const raw = JSON.stringify(p), t = Date.now();
         if (raw === wire.raw && (raw === '{}' || (!wire.again && t - wire.sentT < beat - 300))) return Promise.resolve('ok');
         wire.raw = raw; wire.sentT = t; wire.again = false;
-        return stamped ? post(topic, '_p', p) : sc.send({ type: 'broadcast', event: '_p', payload: { f: me, p } });
+        if (!stamped) return sc.send({ type: 'broadcast', event: '_p', payload: { f: me, p } });
+        // (one the server refused (its rate) was not said: said again on the next beat's look, not a whole beat on)
+        return said(post(topic, '_p', p)).catch((e) => { if (wire.raw === raw) { wire.raw = null; wire.sentT = 0; } throw e; });
       },
       leave: () => { clearInterval(hb); clearTimeout(wire.soon); return client.removeChannel ? client.removeChannel(sc) : sc.unsubscribe(); }
     };
@@ -322,10 +332,13 @@ export function SupabaseTransport(client, o = {}) {
       // (who sent it: the server's '_by', stamped; the payload's own 'f', not)
       const k = stamped ? pl._by : pl.f;
       if (typeof k !== 'string' || !k || k === me) return;
+      // (stamped, what the page said comes as its own JSON text)
+      const d = stamped ? unjson(pl.d) : t === '_p' ? pl.p : pl.d;
+      if (d === BAD) return;
       if (t === '_p') {
-        const p = stamped ? pl.d : pl.p;
+        const p = d;
         if (!p || typeof p !== 'object' || Array.isArray(p)) return;
-        const raw = JSON.stringify(p), L = last.get(k);
+        const raw = stamped ? pl.d : JSON.stringify(p), L = last.get(k);
         if (L && L.raw === raw) { L.t = Date.now(); return; }
         // (any member's is kept; of senders not yet members, as many as there are members and 64 more)
         if (!L && !members.has(k) && last.size > members.size + 64) return;
@@ -333,7 +346,7 @@ export function SupabaseTransport(client, o = {}) {
         return;
       }
       if (!TOPIC.test(t)) return;
-      ch._hear({ topic: t, data: pl.d, peer: k, by: stamped ? k : null });
+      ch._hear({ topic: t, data: d, peer: k, by: stamped ? k : null });
     });
     sc.on('presence', { event: 'sync' }, sync);
     sc.subscribe((status) => {
@@ -346,22 +359,29 @@ export function SupabaseTransport(client, o = {}) {
   };
   const T = { kind: 'supabase', me, stamped, lobby: open(o.lobby || 'lobby', true), rooms: new Map() };
   const pending = new Map();
-  // jo.host: this page hosts the game (stamped: it makes the games row first; 'taken' when another holds it). A guest's
-  // join asks the row who hosts it ('no_game' when nobody does)
+  // jo.host: this page hosts the game (stamped: it makes the games row first; 'taken' when another holds it, 'quota' when
+  // the project's day is spent). A guest's join asks the row who hosts it ('no_game' when nobody does, 'same_user' when
+  // the host is this page's own user: a tab copied from the host's, whose session came with it)
   T.join = (name, jo = {}) => {
     if (!ROOM.test(name)) return Promise.reject(new Error('invalid_argument'));
     if (T.rooms.has(name)) return Promise.resolve(T.rooms.get(name));
     if (!stamped) { const ch = open(name); const l0 = ch.leave; ch.leave = () => { T.rooms.delete(name); return l0(); }; T.rooms.set(name, ch); return Promise.resolve(ch); }
     if (pending.has(name)) return pending.get(name);
-    const who = jo.host
+    const hosting = !!jo.host;
+    const who = hosting
       ? rpc('host_game', { room: name }).then((r) => { if (r !== 'ok') throw coded(typeof r === 'string' && r ? r : 'upstream_error'); return me; })
-      : rpc('game_host', { room: name }).then((h) => { if (typeof h !== 'string' || !h) throw coded('no_game'); return h; });
+      : rpc('game_host', { room: name }).then((h) => { if (typeof h !== 'string' || !h) throw coded('no_game'); if (h === me) throw coded('same_user'); return h; });
     const p = who.then((host) => {
       const ch = open(name); ch.host = host;
-      // (the host's row is renewed while its game is open, and let go when it leaves)
-      const renew = host === me ? setInterval(() => rpc('host_game', { room: name }).catch(() => {}), RENEW) : 0;
-      const l0 = ch.leave; let done = false;
-      ch.leave = () => { if (!done) { done = true; T.rooms.delete(name); clearInterval(renew); if (host === me) rpc('end_game', { room: name }).catch(() => {}); } return l0(); };
+      // (the row of a game this page hosts is renewed while the game is open, and let go when it leaves. A renewal answered
+      // with anything but 'ok' is the row lost (run out and another's): the game is told, as a room that ended. One that
+      // got no answer is tried again in a minute)
+      let renew = 0, done = false;
+      const every = o.renew || RENEW;
+      const keep = (ms) => { renew = setTimeout(() => rpc('host_game', { room: name }).then((r) => { if (done) return; if (r === 'ok') keep(every); else ch._err(typeof r === 'string' && r ? r : 'upstream_error', 'room'); }, () => { if (!done) keep(Math.min(every, 60000)); }), ms); };
+      if (hosting) keep(every);
+      const l0 = ch.leave;
+      ch.leave = () => { if (!done) { done = true; T.rooms.delete(name); clearTimeout(renew); if (hosting) rpc('end_game', { room: name }).catch(() => {}); } return l0(); };
       T.rooms.set(name, ch); return ch;
     }).finally(() => pending.delete(name));
     pending.set(name, p);
@@ -369,13 +389,23 @@ export function SupabaseTransport(client, o = {}) {
   };
   return T;
 }
-// (a function of the 'skotos' schema by RPC: its data, or a refusal coded by the server's own word)
-const rpcOf = (client) => (fn, args) => Promise.resolve(client.schema('skotos').rpc(fn, args)).then((r) => {
-  if (r?.error) throw coded(String(r.error.message || r.error.code || 'upstream_error').slice(0, 64));
-  return r?.data;
+// (a function of the 'skotos' schema by RPC: its data, or a refusal coded by the server's own word. Each call has its
+// deadline: supabase-js sets none, and a request that never settles (a connection gone dead that the browser has not
+// noticed yet, after a phone moved from wifi to cellular) would hold back every later message of the page. Past it the
+// call is aborted where the client can and refused 'timeout'; a request the server had already taken may still be
+// delivered, late)
+const rpcOf = (client, ms = CALL_MS) => (fn, args) => new Promise((ok, no) => {
+  let q = client.schema('skotos').rpc(fn, args), ac = null;
+  if (typeof q?.abortSignal === 'function' && typeof AbortController !== 'undefined') { ac = new AbortController(); q = q.abortSignal(ac.signal); }
+  const t = setTimeout(() => { try { ac?.abort(); } catch (e) { /* gone */ } no(coded('timeout')); }, ms);
+  Promise.resolve(q).then((r) => {
+    clearTimeout(t);
+    if (r?.error) no(coded(String(r.error.message || r.error.code || 'upstream_error').slice(0, 64))); else ok(r?.data);
+  }, () => { clearTimeout(t); no(coded('upstream_error')); });
 });
 // what a page says, by skotos.send: one call on its way at a time; what is said meanwhile waits (64 at most) and goes
-// in the next, sixteen a call. Each message's promise is its call's answer
+// in the next, sixteen a call. Each message's promise is its call's answer (a call past its deadline is refused
+// 'timeout', and the next goes)
 function poster(rpc) {
   const q = []; let busy = false;
   const flush = () => {
@@ -406,19 +436,51 @@ export async function pickTransport(q, cfg = {}) {
   if (cfg.url && cfg.anonKey && cfg.stamped === true) {
     try {
       const make = cfg.createClient || (typeof window !== 'undefined' && window.supabase?.createClient);
-      if (make) { const client = await make(cfg.url, cfg.anonKey, clientOpts()), me = await signIn(client); if (me) return SupabaseTransport(client, { stamped: true, me }); }
+      if (make) {
+        const opts = clientOpts(); await unclone(opts.auth.storage);
+        const client = await make(cfg.url, cfg.anonKey, opts), me = await signIn(client);
+        if (me) { claim(me); return SupabaseTransport(client, { stamped: true, me }); }
+      }
     } catch (e) { /* not this build, or no sign-in: single-player */ }
   }
   return null;
 }
 // (each tab its own anonymous user, kept across its reloads: the session in sessionStorage where the page may use it,
 // so two tabs of one browser are two players, not one user twice; with no storage, a user for this load only)
+const AUTH_KEY = 'skotos-auth';
 function clientOpts() {
   let storage = null;
   try { storage = typeof sessionStorage !== 'undefined' ? sessionStorage : null; } catch (e) { storage = null; }
-  const auth = { storageKey: 'skotos-auth', autoRefreshToken: true, detectSessionInUrl: false, persistSession: !!storage };
+  const auth = { storageKey: AUTH_KEY, autoRefreshToken: true, detectSessionInUrl: false, persistSession: !!storage };
   if (storage) auth.storage = storage;
   return { auth, realtime: { params: { eventsPerSecond: BUDGET } } };
+}
+// A tab copied from another (the browser's Duplicate, or one opened from it) has its sessionStorage copied too: the same
+// user in two tabs, one player twice (a guest that takes itself for its host, a game ended by its copy). So before the
+// client reads the session kept, the other tabs of the browser are asked whether one holds its user; if one does, this
+// tab lets the copy go (only here: the session is not signed out, which would end the other tab's) and signs in anew.
+// A tab answers for its user from then on. (A tab the browser froze in the background cannot answer: its copy is the
+// same user still, and a guest's join that finds itself the host is refused, 'same_user')
+async function unclone(storage, ms = 300) {
+  if (!storage || typeof BroadcastChannel === 'undefined') return false;
+  let uid = null;
+  try { uid = JSON.parse(storage.getItem(AUTH_KEY) || 'null')?.user?.id || null; } catch (e) { uid = null; }
+  if (typeof uid !== 'string' || !uid) return false;
+  let held = false;
+  const bc = new BroadcastChannel(AUTH_KEY);
+  bc.onmessage = (ev) => { if (ev.data?.t === 'mine' && ev.data.uid === uid) held = true; };
+  bc.postMessage({ t: 'who', uid });
+  await new Promise((r) => setTimeout(r, ms));
+  bc.close();
+  if (held) { try { storage.removeItem(AUTH_KEY); } catch (e) { /* kept */ } }
+  return held;
+}
+let claimed = null;
+function claim(uid) {
+  if (typeof BroadcastChannel === 'undefined') return;
+  try { claimed?.close(); } catch (e) { /* closed */ }
+  claimed = new BroadcastChannel(AUTH_KEY);
+  claimed.onmessage = (ev) => { if (ev.data?.t === 'who' && ev.data.uid === uid) claimed.postMessage({ t: 'mine', uid }); };
 }
 // the page's user id: the session it has, or a new anonymous user (the project's Auth must allow anonymous sign-ins;
 // marked as the game's, app: 'skotos', for whoever clears old anonymous users of a shared project). Realtime is given
