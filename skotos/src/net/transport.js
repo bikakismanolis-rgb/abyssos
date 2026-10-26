@@ -97,7 +97,10 @@ export function makeChannel(name, wire, o = {}) {
       if (left || !conn) return;
       while (queue.length && bucket.level >= 1) { const [t, d, b] = queue.shift(); bucket.take(); meter.out(b); Promise.resolve(wire.send(t, d)).catch((e) => { meter.tx.drops++; ch._err(e, 'send'); }); }
       const t = now(), wait = gap - (t - presT);
-      if (dirty && wait <= 0 && bucket.take()) {
+      // (a presence the wire would not send (wire.idle: Supabase's, the same as the one it said a moment ago) takes no
+      // token and is not counted: the meter is what went out)
+      if (dirty && wait <= 0 && wire.idle?.(mine)) { dirty = false; presT = t; }
+      else if (dirty && wait <= 0 && bucket.take()) {
         dirty = false; presT = t; meter.out(mineB);
         Promise.resolve(wire.sendPresence(mine)).catch((e) => { meter.tx.drops++; dirty = true; ch._err(e, 'send'); });
       }
@@ -288,13 +291,16 @@ export function SupabaseTransport(client, o = {}) {
     let hb = 0;
     // (stamped: a game's send refused for its game or for the project's day ends the game for the page)
     const said = (pr) => (lobby ? pr : pr.catch((e) => { if (e?.code === 'no_game' || e?.code === 'quota') ch._err(e.code, 'room'); throw e; }));
+    // (what the others have already, an empty presence never said or one said a moment ago, is not said again: idle)
+    const rawOf = (p) => { if (wire.memo?.[0] !== p) wire.memo = [p, JSON.stringify(p)]; return wire.memo[1]; };
+    const idle = (raw) => raw === wire.raw && (raw === '{}' || (!wire.again && Date.now() - wire.sentT < beat - 300));
     const wire = {
-      kind: 'supabase', me, sentT: 0, raw: '{}', again: false, soon: 0,
+      kind: 'supabase', me, sentT: 0, raw: '{}', again: false, soon: 0, memo: null,
       send: (t, data) => (stamped ? said(post(topic, t, data)) : sc.send({ type: 'broadcast', event: t, payload: { f: me, d: data } })),
+      idle: (p) => idle(rawOf(p)),
       sendPresence: (p) => {
-        // (what the others have already, an empty presence never said or one said a moment ago, is not said again)
-        const raw = JSON.stringify(p), t = Date.now();
-        if (raw === wire.raw && (raw === '{}' || (!wire.again && t - wire.sentT < beat - 300))) return Promise.resolve('ok');
+        const raw = rawOf(p), t = Date.now();
+        if (idle(raw)) return Promise.resolve('ok');
         wire.raw = raw; wire.sentT = t; wire.again = false;
         if (!stamped) return sc.send({ type: 'broadcast', event: '_p', payload: { f: me, p } });
         // (one the server refused (its rate) was not said: said again on the next beat's look, not a whole beat on)
@@ -339,7 +345,8 @@ export function SupabaseTransport(client, o = {}) {
         const p = d;
         if (!p || typeof p !== 'object' || Array.isArray(p)) return;
         const raw = stamped ? pl.d : JSON.stringify(p), L = last.get(k);
-        if (L && L.raw === raw) { L.t = Date.now(); return; }
+        // (said again, the same: heard, counted, nothing new to tell the game)
+        if (L && L.raw === raw) { L.t = Date.now(); ch.meter.in(raw.length); return; }
         // (any member's is kept; of senders not yet members, as many as there are members and 64 more)
         if (!L && !members.has(k) && last.size > members.size + 64) return;
         last.set(k, { p, raw, t: Date.now() }); sync();

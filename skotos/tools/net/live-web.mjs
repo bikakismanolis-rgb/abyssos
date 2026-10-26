@@ -1,19 +1,23 @@
 // node tools/net/live-web.mjs [outdir]: the web build (npm run build:web, dist-web/) in a browser, co-op over the live
-// Supabase project its .env.web.local names. A static server of this process serves dist-web/ (PORT, default 5391);
-// one headless Chromium (swiftshader, as tools/scenario.mjs), two pages, each in its own browser context, so two
-// anonymous users, nothing faked: the build picks SupabaseTransport itself (its netcfg.web.js). Through the game's own
-// UI: page A taps the title, makes a Warden (New, the card, Go, the intro skipped), opens Co-op from the HUD and hosts;
-// page B makes a Mage, opens Co-op, finds A's game in the lobby's list, types A's code and joins; A presses Start. Then:
-// each sees the other (the party frame, the other hero's actor, the host's monsters on the guest), a monster B kills is
-// dead on A, and A ends the game from its panel: B is told and is back in its own town. The #fatal box and the console
-// errors of both pages are reported. What it does on the project: two anonymous sign-ins (a context each), a game
-// hosted and ended, a minute or two of a pair's traffic (about 60 messages a second, deliveries counted).
-// Screenshots in outdir (default /tmp/skotos-live-web).
+// Supabase project its .env.web.local names (results: docs/coop/supabase-live.md). A static server of this process
+// serves dist-web/ (PORT, default 5391; no CSP); one headless Chromium (swiftshader, as tools/scenario.mjs), two pages,
+// each in its own browser context, so two anonymous users, nothing faked: the build picks SupabaseTransport itself (its
+// netcfg.web.js). The pages run ?norender (the game's test mode, as tools/coop.mjs: the game whole, nothing drawn but for
+// the screenshots), or two pages drawing through swiftshader on a few cores run at a few frames a second, and the game
+// sends once a frame. Through the game's own UI: page A taps the title, makes a Warden (New, the card, Go, the intro
+// skipped), opens Co-op from the HUD and hosts; page B makes a Mage, opens Co-op, finds A's game in the lobby's list,
+// types A's code and joins; A presses Start. Then: each sees the other (the party frame, the other hero's actor, the
+// host's monsters on the guest), a monster B strikes dead is dead on A, ten seconds of both walking measured on the wire
+// (each skotos.send call and its messages, each broadcast the sockets brought in, a page's own among them), and A ends
+// the game from its panel: B is told and is back in its own town. The #fatal box and the console errors of both pages
+// are reported. On the project: two anonymous sign-ins (a context each), a game hosted and ended, about a minute of a
+// pair's traffic (some 40 Realtime events a second). Screenshots in outdir (default /tmp/skotos-live-web).
 import { createRequire } from 'node:module';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execSync } from 'node:child_process';
 import { watchFatal, fatalAll } from '../fatal.mjs';
 const require = createRequire(import.meta.url);
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
@@ -50,6 +54,9 @@ const proxy = process.env.LIVE_PROXY;
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'], ...(proxy ? { proxy: { server: proxy, bypass: 'localhost,127.0.0.1,<-loopback>' } } : {}) });
 const FATAL = watchFatal(browser);
 const logs = { A: [], B: [] }, net = { A: { supa: 0, failed: [] }, B: { supa: 0, failed: [] } };
+// what each page said on the wire (each skotos.send call and its messages, by event) and what its sockets brought in
+// (every frame, and the broadcasts among them, by event and by whether they were its own coming back)
+const wire = { A: { calls: [], frames: [] }, B: { calls: [], frames: [] } }, uid = { A: null, B: null };
 async function open(who, q) {
   const ctx = await browser.newContext({ viewport: { width: 844, height: 390 } });
   // (the toasts a page shows, as text: what it was told)
@@ -58,6 +65,24 @@ async function open(who, q) {
   pg.on('pageerror', (e) => { logs[who].push('pageerror ' + e.message.slice(0, 300)); console.log('[' + who + '] pageerror', e.message.slice(0, 300)); });
   pg.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') { const t = m.type() + ' ' + m.text().slice(0, 300); logs[who].push(t); console.log('[' + who + '] ' + t); } });
   pg.on('requestfinished', (r) => { if (r.url().includes('.supabase.co')) net[who].supa++; });
+  pg.on('request', (r) => {
+    if (!r.url().includes('/rest/v1/rpc/send')) return;
+    try { const m = JSON.parse(r.postData() || '{}').msgs || []; wire[who].calls.push({ t: Date.now(), n: m.length, ev: m.map((x) => x[1]), b: m.reduce((a, x) => a + Buffer.byteLength(x[2] || ''), 0) }); } catch (e) { /* not ours */ }
+  });
+  pg.on('websocket', (ws) => {
+    if (!ws.url().includes('.supabase.co')) return;
+    ws.on('framereceived', (f) => {
+      const raw = typeof f.payload === 'string' ? f.payload : null, e = { t: Date.now(), b: typeof f.payload === 'string' ? Buffer.byteLength(f.payload) : f.payload.length, ev: null, own: false };
+      if (raw) { try { const j = JSON.parse(raw), ev = Array.isArray(j) ? j[3] : j.event, pl = Array.isArray(j) ? j[4] : j.payload; if (ev === 'broadcast') { e.ev = pl?.event || '?'; e.own = !!uid[who] && pl?.payload?._by === uid[who]; } else e.ev = 'sys:' + ev; } catch (x) { e.ev = 'text?'; } }
+      else {
+        // (realtime-js's binary frame of a broadcast, kind 4: sizes of the topic, the event and the metadata, the
+        // payload's encoding (1: JSON), then each; @supabase/realtime-js lib/serializer.js)
+        const u = Buffer.from(f.payload);
+        if (u[0] === 4) { const ts = u[1], es = u[2], ms = u[3], at = 5 + ts; e.topic = u.subarray(5, at).toString(); e.ev = u.subarray(at, at + es).toString(); try { const pl = u[4] === 1 ? JSON.parse(u.subarray(at + es + ms).toString()) : null; e.own = !!uid[who] && pl?._by === uid[who]; } catch (x) { /* not JSON */ } } else e.ev = 'binary:' + u[0];
+      }
+      wire[who].frames.push(e);
+    });
+  });
   pg.on('requestfailed', (r) => { net[who].failed.push(r.url().replace(/\?.*/, '').slice(0, 100) + ' ' + (r.failure()?.errorText || '')); });
   await pg.goto(BASE + '?' + q);
   await pg.waitForFunction(() => window.__ready && window.__G && window.__G.mode === 'title' && document.getElementById('screen') && !document.getElementById('screen').hidden, null, { timeout: 240000 });
@@ -107,6 +132,7 @@ try {
   const ta = await tr(A), tb = await tr(B);
   ok(ta.kind === 'supabase' && ta.stamped && tb.kind === 'supabase' && tb.stamped, 'both pages picked SupabaseTransport, stamped (the web build\'s own choice)', { A: ta.kind, B: tb.kind });
   ok(/^[0-9a-f-]{36}$/.test(ta.me || '') && /^[0-9a-f-]{36}$/.test(tb.me || '') && ta.me !== tb.me, 'two anonymous users, one a context', { A: ta.me, B: tb.me });
+  uid.A = ta.me; uid.B = tb.me;
   ok(await newHero(A, 'warden'), 'A made a Warden through the title and is in its town');
   ok(await newHero(B, 'mage'), 'B made a Mage and is in its town');
   // A: Co-op from the HUD, Host
@@ -127,6 +153,7 @@ try {
   await click(B, '[data-a="cjoin"]:not([data-a^="cjoin:"])');
   const inRoster = await until(A, () => window.__NET.S.roster.length === 1, null, 30000, 'roster');
   ok(inRoster, 'B joined by A\'s code: A\'s roster has it', await ev(A, () => window.__NET.S.roster));
+  await until(B, () => !!window.__NET.S.hostPeer, null, 15000, 'B\'s host');
   const bHost = await ev(B, () => ({ role: window.__NET.S.role, host: window.__NET.S.hostPeer, chHost: window.__NET.S.ch?.host }));
   ok(bHost.role === 'guest' && bHost.host === ta.me && bHost.chHost === ta.me, 'B is A\'s guest; its host is the server\'s word (game_host), A\'s user', bHost);
   await shot(A, 'a-roster.png');
@@ -159,11 +186,35 @@ try {
   const deadB = await until(B, (id) => { const a = window.__NET.S.pup.get(id); return !a || a.dead; }, id, 8000, 'dead on B');
   const k1 = await ev(B, () => window.__G.hero.stats?.kills || 0);
   ok(deadB && k1 > k0, 'and dead on B, the kill counted on B\'s own hero', { deadB, kills: [k0, k1] });
-  // a few seconds of the pair as it plays: what it costs
-  await sleep(4000);
+  // a few seconds of the pair as it plays: what it costs (and how fast the pages ran: the game sends once a frame)
+  await ev(A, () => window.__D.closePanel()); await ev(B, () => window.__D.closePanel());
+  await sleep(5000);
+  info('frames a second, the panels closed, and the busiest processes', { A: await fps(A), B: await fps(B), panels: [await ev(A, () => window.__G.panel || null), await ev(B, () => window.__G.panel || null)], ps: execSync('ps -eo pcpu,comm --sort=-pcpu | head -4 | tail -3').toString().trim().split('\n').map((l) => l.trim()) });
   const meter = (pg) => ev(pg, () => { const r = window.__NET.S.ch.meter.rate(); return { out: +r.msgsOut.toFixed(1), outKB: +(r.bytesOut / 1024).toFixed(1), in: +r.msgsIn.toFixed(1), inKB: +(r.bytesIn / 1024).toFixed(1), drops: window.__NET.S.ch.meter.tx.drops, err: window.__NET.S.ch.error || null }; });
   const ma = await meter(A), mb = await meter(B);
-  info('the pair\'s traffic, messages and KB a second (the last 5 s, each page\'s meter)', { A: ma, B: mb });
+  info('the pair standing, messages and KB a second (the last 5 s, each page\'s meter)', { A: ma, B: mb });
+  // ten seconds of both heroes walking about (each moved every 50 ms, as tools/coop.mjs ux does): what the wire carries
+  const walk = (pg) => ev(pg, () => { let k = 0; window.__walk = setInterval(() => { const p = window.__G.player, f = window.__G.zone.map.nearestFloor(p.x + Math.sin(k / 6) * 0.3, p.z + Math.cos(k / 6) * 0.3); p.x = f.x; p.z = f.z; k++; }, 50); });
+  await walk(A); await walk(B); await sleep(2000);
+  const f0 = [await ev(A, () => [window.__frames, window.__NET.S.stats.snaps]), await ev(B, () => window.__frames)];
+  const w0 = Date.now(); await sleep(10000); const w1 = Date.now();
+  const f1 = [await ev(A, () => [window.__frames, window.__NET.S.stats.snaps]), await ev(B, () => window.__frames)];
+  info('while walking: frames a second, and the host\'s snapshots a second (the game\'s own count; it sends one at most every 100 ms, once a frame)', { A: Math.round((f1[0][0] - f0[0][0]) / ((w1 - w0) / 1000)), B: Math.round((f1[1] - f0[1]) / ((w1 - w0) / 1000)), snaps: +((f1[0][1] - f0[0][1]) / ((w1 - w0) / 1000)).toFixed(1) });
+  await ev(A, () => clearInterval(window.__walk)); await ev(B, () => clearInterval(window.__walk));
+  const span = (w1 - w0) / 1000, inW = (x) => x.t >= w0 && x.t < w1;
+  const sum = (who) => {
+    const c = wire[who].calls.filter(inW), f = wire[who].frames.filter(inW), by = {};
+    for (const x of c) for (const e of x.ev) by[e] = (by[e] || 0) + 1;
+    const bc = f.filter((x) => x.ev && !x.ev.startsWith('sys:') && !x.ev.startsWith('binary:') && x.ev !== 'text?'), own = bc.filter((x) => x.own).length, sys = {};
+    for (const x of f) if (!bc.includes(x)) sys[x.ev] = (sys[x.ev] || 0) + 1;
+    return { calls: +(c.length / span).toFixed(1), msgs: +(c.reduce((a, x) => a + x.n, 0) / span).toFixed(1), byEvent: Object.fromEntries(Object.entries(by).map(([k, v]) => [k, +(v / span).toFixed(1)])), KBout: +(c.reduce((a, x) => a + x.b, 0) / span / 1024).toFixed(1), heard: +((bc.length - own) / span).toFixed(1), ownBack: +(own / span).toFixed(1), KBin: +(f.reduce((a, x) => a + x.b, 0) / span / 1024).toFixed(1), other: sys };
+  };
+  const sa = sum('A'), sbw = sum('B'), ma2 = await meter(A), mb2 = await meter(B);
+  info('the pair walking, on the wire, a second (10 s): skotos.send calls and messages, and the broadcasts each socket brought in', { A: sa, B: sbw });
+  info('the same 10 s by each page\'s own meter', { A: ma2, B: mb2 });
+  const sends = sa.msgs + sbw.msgs, dels = sa.heard + sa.ownBack + sbw.heard + sbw.ownBack;
+  info('the pair\'s Realtime events a second (each message sent, each delivered)', { sent: +sends.toFixed(1), delivered: +dels.toFixed(1), events: +(sends + dels).toFixed(1) });
+  ok(sa.heard > 0 && sbw.heard > 0 && Math.abs(sa.ownBack - sa.msgs) <= Math.max(1.5, sa.msgs * 0.15) && Math.abs(sbw.heard - sa.msgs) <= Math.max(1.5, sa.msgs * 0.15), 'every message the host said came to the guest and back to the host itself, once', { said: sa.msgs, heardByB: sbw.heard, backToA: sa.ownBack });
   ok(!ma.err && !mb.err && ma.drops === 0, 'nothing the server refused, no host drops', { A: [ma.drops, ma.err], B: [mb.drops, mb.err] });
   // A ends the game from its panel: B is told, and is home
   const lvl0 = await ev(B, () => window.__G.hero.__real?.level ?? window.__G.hero.level);
