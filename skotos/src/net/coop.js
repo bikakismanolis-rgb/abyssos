@@ -151,8 +151,10 @@ export async function hostGame() {
   if (!S.T || S.role || S.status === 'connecting' || !G.hero || !G.zone) return null;
   if (!canPlay()) { S.status = 'error'; S.err = S.dead || 'not_permitted'; emit('netLobby'); return false; }
   S.status = 'connecting'; S.err = null; emit('netLobby');
-  const code = newCode();
-  const ch = await roomOf('skotos-' + code); if (!ch) return false;
+  // (a code whose room another game holds, where the server keeps the games (Supabase), is passed for a new one)
+  let code = newCode(), ch = await roomOf('skotos-' + code, { host: true });
+  for (let i = 0; !ch && S.err === 'taken' && i < 3; i++) { S.status = 'connecting'; S.err = null; code = newCode(); ch = await roomOf('skotos-' + code, { host: true }); }
+  if (!ch) return false;
   if (S.role) { if (ch !== S.ch) ch.leave(); return null; }
   if (S.dead) return ended(ch);
   S.ch = ch; S.role = 'host'; S.code = code; S.started = false; S.status = 'open'; NET.mode = 'host';
@@ -191,8 +193,8 @@ export const canPlay = () => !!S.T && !S.dead && S.send !== false;
 // (a game's room that came after the page's room ended, while it was being joined: left, the try failed with the end's code)
 function ended(ch) { try { ch.leave(); } catch (e) { /* gone */ } S.status = 'error'; S.err = S.dead; emit('netLobby'); return false; }
 // the game's room joined (null: it failed, S.status and S.err say why; one the room refused for good is told)
-async function roomOf(name) {
-  try { return await S.T.join(name); } catch (e) {
+async function roomOf(name, o) {
+  try { return await S.T.join(name, o); } catch (e) {
     S.status = 'error'; S.err = e?.code || e?.message || 'upstream_error';
     // (not_permitted: this view cannot use the game's rooms; a terminal code: the room has ended for the page)
     if (S.err === 'not_permitted') { S.send = false; S.sendSure = true; }
@@ -318,7 +320,13 @@ function peersChanged(c) {
 // while two claim it, neither)
 const SETTLE = 2000;
 function pickHost() {
-  if (S.hostPeer || (!S.wantHost && now() - S.joinT < SETTLE)) return;
+  if (S.hostPeer) return;
+  // (where the server keeps the games (Supabase, stamped: ch.host, from its games row), its host is that peer and no
+  // other, taken once it says it hosts this code, and only if it is the one picked from the list when one was: who
+  // says it hosts, in its presence or the lobby's, is never taken for it)
+  const sh = S.ch?.host;
+  if (typeof sh === 'string') { const P = S.peers.get(sh); if ((!S.wantHost || S.wantHost === sh) && P?.role === 'host' && P.code === S.code) S.hostPeer = sh; return; }
+  if (!S.wantHost && now() - S.joinT < SETTLE) return;
   const hs = [...S.peers.values()].filter((P) => P.role === 'host' && P.code === S.code && (!S.wantHost || P.peer === S.wantHost));
   if (hs.length === 1) S.hostPeer = hs[0].peer;
 }
