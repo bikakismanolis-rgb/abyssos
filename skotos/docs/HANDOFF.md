@@ -74,7 +74,7 @@ the discard.
 |---|---|---|
 | Live v14 | `claude/sleepy-tesla-4030vd` (this branch) | published 24 October |
 | v13 (Acts I-IV + progression) | `claude/skotos-progression` ff37476 | live 23-24 October |
-| Later: co-op without claude.ai | none | needs the owner's yes (a Supabase project, a public web or Android build): `docs/coop/release.md` step 5 |
+| Co-op without claude.ai | this branch (in progress) | the owner said yes on 26 October. Supabase project **skotos** (ref `twabjiurbqhqmxzcokqj`, org Tsigenis, free plan, eu-central-1) created then, empty. A workflow writes the server-stamped backend (`supabase/migrations/`, the stamped SupabaseTransport, `npm run build:web`, tests, `docs/coop/supabase.md`) without touching the project; then: apply the migration, the owner turns on anonymous sign-ins (Authentication, Sign In / Providers), test on the real project, and ask the owner where to host the web build. The free plan pauses a project after a week with no traffic. The connector that sees the Tsigenis org is `Supabase_Game` (the `Supabase` one sees man-rgb's Org, Pro, TsigenisAppC only). |
 
 Publishing v14: `npm run build:artifact`, the strict-CSP check (desktop and `isMobile`/`hasTouch`), then publish
 `artifact/index.html` with a `files` map (the new hashed files, the removed ones null) and
