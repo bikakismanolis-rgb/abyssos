@@ -146,21 +146,30 @@ async function main() {
   if (PUB) check(P, 'nor did the public channels of the same name', !anyK(PB, k1).length && !anyK(PB, k2).length && !anyK(PN, k1).length, PB.heard.length + ' / ' + PN.heard.length + ' heard');
   check(P, 'the lobby heard none of the game\'s', !anyK(LB, k1).length, LB.heard.length + ' on the lobby');
 
-  // a page's own broadcast on a 'skotos:' topic: by the socket (acked, to have the server's answer), and by REST both ways
+  // a page's own broadcast on a 'skotos:' topic: by the socket (acked, to have the server's answer), by httpSend and by
+  // REST. Each must be refused as it is refused (the socket's ack 'error'; httpSend 'Unauthorized'; REST takes it, 202,
+  // and delivers nothing), from a client that did join, to listeners that were there throughout: a stamped message
+  // (skotos.send) before the three and one after them must reach both pages' channels and the sender's
   const B3 = await again(B); all.push(B3);
   const k3 = 'direct-' + rand(4), FB = await join(B3, topic, { ack: true });
-  info(P, 'B\'s second client on the private channel, broadcast acked', joined(FB));
+  check(P, 'B\'s second client joined the private channel (broadcast acked)', FB.status === 'SUBSCRIBED' && B3.uid === B.uid, joined(FB));
+  const LS = [['A', JA], ['B', JB], ['B\'', FB]], kPre = 'ctl-pre-' + rand(4), kPost = 'ctl-post-' + rand(4);
+  const sPre = await send(A, topic, 'c', { k: kPre }), pre = await until(() => LS.every(([, J]) => of(J, kPre).length === 1), 6000);
   let r3 = 'not joined';
   if (FB.status === 'SUBSCRIBED') r3 = await FB.ch.send({ type: 'broadcast', event: 's', payload: { k: k3, _by: A.uid, d: JSON.stringify({ k: k3 }) } });
-  const RB = JB.ch;
-  let r4 = null; try { r4 = await RB.httpSend('s', { k: k3, _by: A.uid, d: JSON.stringify({ k: k3 }) }); r4 = r4?.success ? 'accepted (202)' : JSON.stringify(r4); } catch (e) { r4 = 'refused: ' + String(e.message).slice(0, 80); }
-  let r5 = null; try {
+  let r4 = null; try { r4 = await JB.ch.httpSend('s', { k: k3, _by: A.uid, d: JSON.stringify({ k: k3 }) }); r4 = r4?.success ? 'accepted (202)' : JSON.stringify(r4); } catch (e) { r4 = 'refused: ' + String(e.message).slice(0, 80); }
+  let r5 = null, r5s = 0; try {
     const res = await fetch(URL_ + '/realtime/v1/api/broadcast', { method: 'POST', headers: { apikey: KEY, Authorization: 'Bearer ' + (await B.c.auth.getSession()).data.session.access_token, 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: [{ topic, event: 's', payload: { k: k3, _by: A.uid, d: JSON.stringify({ k: k3 }) }, private: true }] }) });
-    r5 = res.status + ' ' + (await res.text()).slice(0, 80);
+    r5s = res.status; r5 = res.status + ' ' + (await res.text()).slice(0, 80);
   } catch (e) { r5 = 'thrown: ' + e.message; }
   await sleep(3000);
-  check(P, 'a page\'s own broadcast on the private channel (socket, httpSend, REST): never delivered', !anyK(JA, k3).length && !anyK(JB, k3).length, 'socket: ' + r3 + '; httpSend: ' + r4 + '; REST: ' + r5 + '; heard by A ' + anyK(JA, k3).length);
-  info(P, 'the server\'s answer to the socket broadcast', String(r3));
+  const sPost = await send(A, topic, 'c', { k: kPost }), post = await until(() => LS.every(([, J]) => of(J, kPost).length === 1), 6000);
+  const hears = (k) => LS.map(([n, J]) => n + ' ' + of(J, k).length).join(', ');
+  check(P, 'the listeners were there throughout: a stamped message before the three and one after heard once on each', !sPre.err && !sPost.err && pre && post, 'before: ' + (sPre.err || hears(kPre)) + '; after: ' + (sPost.err || hears(kPost)));
+  check(P, 'a page\'s own broadcast by the socket (acked): refused, error', r3 === 'error', r3);
+  check(P, 'by httpSend: refused, Unauthorized', typeof r4 === 'string' && r4.startsWith('refused: Unauthorized'), r4);
+  check(P, 'by REST (/realtime/v1/api/broadcast): taken, 202', r5s === 202, r5);
+  check(P, 'and none of the three delivered, on any listener', LS.every(([, J]) => !anyK(J, k3).length), LS.map(([n, J]) => n + ' ' + anyK(J, k3).length).join(', '));
   if (PUB) {
     let r6 = 'not joined';
     if (PB.status === 'SUBSCRIBED') r6 = await PB.ch.send({ type: 'broadcast', event: 's', payload: { k: k3 + 'p', _by: A.uid, d: '{}' } });
@@ -260,15 +269,19 @@ async function main() {
   const seeAll = () => ch.every((c, i) => users.every((U, j) => i === j || c.peers().some((p) => p.peer === U.uid && p.by === U.uid && p.presence.r)));
   const tp0 = now(), seen = await until(seeAll, 15000);
   check(Q, 'every page lists every other, named by the server, with its presence', seen, Math.round(now() - tp0) + ' ms; ' + ch.map((c) => c.peers().length).join(','));
-  const heard = ch.map(() => []), own = [];
+  const heard = ch.map(() => []), own = [], echo = new Set();
   ch.forEach((c, i) => { c.on('s', (m) => heard[i].push({ t: now(), m })); c.on('f', (m) => heard[i].push({ t: now(), m })); });
   ch[0].on('s', (m) => { if (m.peer === A.uid) own.push(m); });
+  // (what the host's socket brings in of its own: a listener of this test's on the transport's own channel, the one
+  // supabase-js holds for the topic. A broadcast listener may be added after subscribe())
+  const rawA = A.c.getChannels().find((c) => c.topic === 'realtime:skotos:' + room2);
+  rawA?.on('broadcast', { event: 's' }, (m) => { if (m.payload?._by !== A.uid) return; try { const i = JSON.parse(m.payload.d)?.i; if (Number.isInteger(i)) echo.add(i); } catch (e) { /* not ours */ } });
   const sentT = new Map();
   for (let i = 0; i < 20; i++) { sentT.set(i, now()); await ch[0].emit('s', { i, a: Array.from({ length: 30 }, (_, j) => [j, 12, 1234, 2345, 51]) }); await sleep(100); }
   await sleep(2500);
   const lt = [], okAll = ch.slice(1).every((c, gi) => { const h = heard[gi + 1].filter((x) => x.m.topic === 's'); for (const x of h) lt.push(x.t - sentT.get(x.m.data.i)); return h.length === 20 && h.every((x, j) => x.m.peer === A.uid && x.m.data.i === j); });
   check(Q, 'the host\'s 20 snapshots (10 a second): every guest hears all, in order, from the host', okAll, ch.slice(1).map((c, gi) => heard[gi + 1].filter((x) => x.m.topic === 's').length).join(','));
-  check(Q, 'its own, back from the server, passed over', own.length === 0 && !heard[0].some((x) => x.m.peer === A.uid), own.length);
+  check(Q, 'its own, back from the server: all 20 came to the host\'s socket, and the transport passed them over', !!rawA && echo.size === 20 && own.length === 0 && !heard[0].some((x) => x.m.peer === A.uid), (rawA ? 'came back ' + echo.size + ' of 20' : 'no channel of the topic on the host\'s client') + ', heard by the transport as the host\'s ' + own.length);
   info(Q, 'transport: emit to heard by a guest', st(lt));
   await ch[1].emit('f', { k: 'forged', _by: A.uid, f: A.uid });
   await until(() => heard[0].some((x) => x.m.topic === 'f'), 5000);

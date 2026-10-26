@@ -9,7 +9,7 @@ Two tools, both in `tools/net/`:
 
 ## Results
 
-### Node, supabase-js and the transport (`live-supabase.mjs`, 44 checks, all pass)
+### Node, supabase-js and the transport (`live-supabase.mjs`, 49 checks, all pass)
 
 | | check | result |
 |---|---|---|
@@ -19,7 +19,7 @@ Two tools, both in `tools/net/`:
 | 1 | `host_game` of the same room by B | pass: `taken` |
 | 1 | `game_host` (asked by B) is A | pass |
 | 1 | `game_host` of a room with no game | pass: `null` |
-| 1 | signed in: the game's private channel and the lobby joined | pass: `SUBSCRIBED` in 290-410 ms |
+| 1 | signed in: the game's private channel and the lobby joined | pass: `SUBSCRIBED` in 290-410 ms (1.1 s in the last run) |
 | 1 | and at the first try | pass (the very first run did not: below) |
 | 1 | no session: the private channels refused | pass: `Unauthorized: You do not have permissions to read from this Channel topic` |
 | 1 | `skotos.send` by the host taken | pass |
@@ -29,7 +29,12 @@ Two tools, both in `tools/net/`:
 | 1 | a fourth element, or data not a string: `invalid_argument` | pass |
 | 1 | the page with no session heard none of it | pass: 0 |
 | 1 | the lobby heard none of the game's | pass |
-| 1 | a page's own broadcast on the private channel: never delivered | pass: by the socket (acked) `error`; `httpSend` refused `Unauthorized`; REST `/realtime/v1/api/broadcast` answered 202 and delivered nothing |
+| 1 | a second client of B's joined the private channel (broadcast acked), to try a page's own broadcast | pass: `SUBSCRIBED` |
+| 1 | the listeners were there throughout: a stamped message (`skotos.send`) just before the three tries below and one just after, each heard once by A's, B's and that client's channel | pass |
+| 1 | a page's own broadcast by the socket (acked) | pass: refused, `error` |
+| 1 | by `httpSend` | pass: refused, `Unauthorized` |
+| 1 | by REST, `/realtime/v1/api/broadcast` | pass: taken, 202 |
+| 1 | and none of the three delivered, on any listener | pass: 0, 0, 0 |
 | 1 | presence tracked on the private channel, seen by the other | pass |
 | 1 | 4096 bytes of data taken and heard, 4097 refused | pass: `too_big` |
 | 1 | data that is not JSON | pass: `invalid input syntax for type json` |
@@ -49,7 +54,7 @@ Two tools, both in `tools/net/`:
 | 2 | every channel connected (private, signed in) | pass |
 | 2 | every page lists every other, named by the server, with its presence | pass: in 2-3 s (the `_p` beat) |
 | 2 | the host's 20 snapshots: every guest hears all, in order, from the host | pass |
-| 2 | its own, back from the server, passed over | pass |
+| 2 | its own, back from the server: all came to the host's socket, and the transport passed them over | pass: 20 of 20 came back, none heard as the host's |
 | 2 | a guest's forged `_by` and `f`: the host hears it from the guest | pass |
 | 2 | a 5 KB message refused before the wire | pass |
 | 2 | five seconds of a party of four (gentle rates): nothing refused | pass |
@@ -58,14 +63,14 @@ Two tools, both in `tools/net/`:
 | 2 | and the game's row is ended | pass |
 | 2 | a guest's send after it: `no_game`, the game ended for that page | pass |
 
-Measured (the last run, after the changes below; over the three full runs the medians were 139-163 ms, the p95s 167-441 ms):
+Measured (the last run, after the changes below; over the four full runs the medians were 139-163 ms, the p95s 167-441 ms):
 
 | | min | median | p95 |
 |---|---|---|---|
-| the call (`skotos.send` round trip), a pair | 132 ms | 139 ms | 167 ms |
-| send to heard by the other, a pair | 136 ms | 142 ms | 171 ms |
-| send to heard by another, four | 137 ms | 150 ms | 373 ms |
-| the transport: `emit` to heard by a guest | 135 ms | 156 ms | 441 ms |
+| the call (`skotos.send` round trip), a pair | 135 ms | 143 ms | 171 ms |
+| send to heard by the other, a pair | 138 ms | 148 ms | 173 ms |
+| send to heard by another, four | 136 ms | 158 ms | 436 ms |
+| the transport: `emit` to heard by a guest | 134 ms | 161 ms | 359 ms |
 
 - **Latency**: a message is heard by the others about when its call returns (the commit, then Realtime reading the WAL, adds a few ms). From here that is one transatlantic round trip and a little; for players near Frankfurt it should be some 30-60 ms, not measured. A message that waits for the call before it (one call on its way at a time) waits up to one more round trip.
 - **Deliveries**: every message reaches every member of the channel, **its sender too** (2.00 deliveries a message in a pair, 4.00 in four), whatever `broadcast.self` says: a broadcast from the database has no sender's socket to leave out. As `supabase.md` (Costs) counted it.
@@ -93,7 +98,7 @@ Measured (the last run, after the changes below; over the three full runs the me
 | the monster B struck is dead on A | pass |
 | and dead on B, the kill counted on B's own hero | pass |
 | every message the host said came to the guest and back to the host itself, once | pass |
-| nothing the server refused, no drops | pass |
+| after the walk, on both pages: nothing the server refused, nothing given up (each page's transport's own counters, its game's channel and its lobby's), no call to the project answered 4xx or 5xx | pass: no drop, no reason counted, no refused call |
 | A ended the game from its panel | pass |
 | B is back in its own town, its own hero | pass |
 | B was told the host has gone (`coop.hostLeft`) | pass |
@@ -104,14 +109,17 @@ Measured (the last run, after the changes below; over the three full runs the me
 - **Start**: co-op is ready 1.3-2.7 s after the title shows (the supabase-js chunk loaded, the anonymous sign-in, the lobby joined; in the runs with software compositing, where the title's drawing took the cores, 5-10 s).
 - **A pair at the game's rates** (both heroes walking, 60 frames a second, 10 s on the wire): the host 10.1 messages a second (9.0 snapshots, 1.0 presence, the world now and then) in 4.1 calls; the guest 9.2 presences in 4.1 calls; each page's socket brought in 19.3 broadcasts a second (the other's and its own), 6.8 KB a second. So **19.3 messages sent and 38.6 delivered: 58 Realtime events a second**, as `supabase.md` estimated (about 60), under the Free plan's 100. A guest standing still says about one presence a second (its heartbeat field), the host still 9-10 snapshots.
 - **Frame rate in this container**: with the default flags (SwiftShader, GPU compositing in software on four cores) the two pages ran at 60 frames a second standing and at 5-6 while both walked, so the host sent 5-6 snapshots a second, not 10. The pages' own scripts were 93-95% idle meanwhile (`PROFILE=1`: supabase-js's `fetch` 46-61 ms and its decoding of broadcasts 9-14 ms in 10 s); one headless GPU process used about three cores. With `--disable-gpu-compositing` both pages walk at 60 and the game sends at its rates. Single-player pages, and two pages over LocalTransport in one context, walk at 60 with the default flags. What holds the frames there is this container's software compositing, not the co-op's script; how a party over Supabase runs on a phone is for a phone to show.
+- **The last run** (after the review's changes below, the default flags): both pages walked at 6 frames a second (the host 5.8 snapshots a second), the host said 6.7 messages a second in 3.7 calls, the guest 5.7 in 4.0, so 12.4 sent, 24.8 delivered, 37 Realtime events a second; after the walk neither page's transport had dropped anything, on the game's channel or the lobby's, and no call to the project was answered 4xx or 5xx.
 
 ## What failed, and what was changed
 
-1. **A host's last messages could be refused `no_game`** (`src/net/transport.js`). One browser run logged a console error on the host's page as A ended the game: a call to the project refused, 400. That run did not record the call's answer (the tool does now); the one refusal the code allows at that moment is this. The host's page sends its last messages (the game's end, told to its guests, and whatever presence was waiting), then its channel's `leave()` called `end_game` at once, while the poster's next call could still be on its way: two requests side by side, and `end_game` could commit first, so that call's messages were refused `no_game`. The guests were told all the same (the end message itself is awaited before the leave), but a message was lost and the browser logged the refusal. Now the poster says when everything said so far has had its answer (`post.settled()`), and the host's row is ended only then. `tools/net/test-transport.mjs` has the race (a send on its way and one behind it when the host leaves); it fails without the change, 3 runs of 3. Not seen live since (one run at 60 frames a second, one at the default flags, no refused call).
+1. **A host's last messages could be refused `no_game`** (`src/net/transport.js`). One browser run logged a console error on the host's page as A ended the game: a call to the project refused, 400. That run did not record the call's answer (the tool does now); the one refusal the code allows at that moment is this. The host's page sends its last messages (the game's end, told to its guests, and whatever presence was waiting), then its channel's `leave()` called `end_game` at once, while the poster's next call could still be on its way: two requests side by side, and `end_game` could commit first, so that call's messages were refused `no_game`. The guests were told all the same (the end message itself is awaited before the leave), but a message was lost and the browser logged the refusal. Now the poster says when everything said so far has had its answer (`post.settled()`), and the host's row is ended only then. `tools/net/test-transport.mjs` has the race (a send on its way and one behind it when the host leaves). As first committed it did not always catch it: its fake server answered each call after a random delay below 80 ms, so the old code failed only when `end_game` happened to be answered before the send, 33 runs of 40 (this page said "3 runs of 3": three runs that happened to; the message of commit b394d5f, "the race, which fails without it", overstated it too). Now the fake answers each function after a fixed time where the test asks (`o.lagOf`): sends after exactly 80 ms, `end_game` at once, so an `end_game` sent beside a send on its way is always committed first. Run against a copy of `transport.js` with the fix taken out (`end_game` straight from the leave: `TRANSPORT=<the copy> node tools/net/test-transport.mjs leave`), the check fails 5 runs of 5; on the fixed code it passes 5 of 5. Not seen live since (three runs, no refused call).
 2. **The channel's meter counted presences never sent** (`src/net/transport.js`). The Supabase wire passes over a presence unchanged since it was said a moment ago (one that says nothing new costs Realtime events), but the channel had counted it and taken a token for it first: a guest standing still showed 9 messages a second on its meter (the Co-op panel's numbers) where the wire carried one. The wire now says beforehand that it would not send (`wire.idle`), and such a presence costs nothing and is not counted; one said again by another, the same, is counted as heard. Measured after: what each page's meter says it sent agrees with the wire within 0.2 messages a second.
-3. **Nothing in the migration had to change.** Every refusal, cap and stamp the SQL promises held on the project, and the join checks (a signed-in page may hear and track presence on `skotos:` topics, never broadcast there; the key alone gets nothing) behave as `test-migration.mjs` modelled them. No new migration file.
+3. **A renewal on its way could bring an ended game back** (`src/net/transport.js`; found in review, not seen live). The host's page renews its game's row every half hour (`host_game`). If the host left while a renewal was on its way, `end_game` (sent once the last sends had their answers, as 1.) went beside it and could be committed first; the renewal, committed after, made the row live again for four hours: the code taken for anyone else and a guest told its host is a page that has gone (until that user hosts again, one game a user). Now the last renewal's promise is kept and the host's `end_game` waits for its answer too. `test-transport.mjs` has it, certain as 1. (the renewal answered 150 ms after it goes, `end_game` at once): on the transport before this change (commit 2439f49's) it fails 5 runs of 5, the server committing `host_game`, `end_game`, `host_game` and the row live; now it passes 5 of 5, the renewal committed before the end. (A renewal given up at its 5 s deadline is waited for no longer; one the server took and answered later than that could still come after the end, as any call past its deadline may.)
+4. **Two of the live checks proved less than they said** (`tools/net/`). `live-web.mjs`'s "nothing the server refused, no drops" read the pages' meters from before the 10 s walk, looked at the host's drops only, and its error field is set only for the codes that end a game (a `rate_limited` or a `timeout` sets nothing). Now the transport counts every message it gives up by why (`meter.tx.why`: the server's code, `rate_limited`, `too_big`, `no_game`, `quota`..., or the page's own, `big`, `offline`, `budget`, `timeout`, `busy`; `test-transport.mjs` checks the counts), and the check reads both pages' counters, their game's channel and their lobby's, after the walk, and asks that no call the browser made to the project was answered 4xx or 5xx. In `live-supabase.mjs`, "a page's own broadcast on the private channel: never delivered" passed had the extra client never joined or had the tries thrown, and did not look at the answers it printed; it is now six checks (the client joined; a stamped message before the tries and one after heard on every listener; each refusal the one expected; nothing delivered). And "its own, back from the server, passed over" passed had the server sent nothing back: a listener of the test's on the host's own channel now counts the echoes (20 of 20 came back) beside the transport hearing none of them as the host's.
+5. **Nothing in the migration had to change.** Every refusal, cap and stamp the SQL promises held on the project, and the join checks (a signed-in page may hear and track presence on `skotos:` topics, never broadcast there; the key alone gets nothing) behave as `test-migration.mjs` modelled them. No new migration file.
 
-After the changes: `node tools/net/test-transport.mjs` (100 checks), `node tools/net/test-migration.mjs` on PGlite 0.5.8 (72 checks), `npx vite build`, `npm run build:artifact` (no supabase-js in it: none of its library's code in `dist-artifact/`, only the transport's own word `supabase`, as before) and `npm run build:web`, then both live tools again: all pass.
+After the changes (3. and 4. after a review of commits b9e5dbb..2439f49): `node tools/net/test-transport.mjs` (102 checks), `node tools/net/test-migration.mjs` on PGlite 0.5.8 (72 checks), `npx vite build`, `npm run build:artifact` (no supabase-js in it: none of its library's code in `dist-artifact/`, only the transport's own word `supabase`, as before) and `npm run build:web`, then both live tools again, once each: all pass (49 and 24 checks).
 
 ## What still needs a person
 
