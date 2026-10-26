@@ -176,6 +176,8 @@ try {
   ok(seeB.mode === 'guest' && seeB.n === 2 && seeB.remotes === 1 && seeB.frame === 1, 'B sees A: its party frame and A\'s hero', seeB);
   const near = await until(A, (bp) => { const r = window.__NET.NET.remotes[0]; return !!r && Math.hypot(r.x - bp.x, r.z - bp.z) < 3; }, await ev(B, () => ({ x: window.__G.player.x, z: window.__G.player.z })), 10000, 'B\'s stand-in by B');
   ok(near, 'B\'s hero on A\'s page stands where B put it');
+  // (a page's first steps in a zone may open its help: closed for the pictures)
+  await ev(A, () => window.__D.closePanel()); await ev(B, () => window.__D.closePanel());
   await shot(A, 'a-party.png'); await shot(B, 'b-party.png');
   // a monster of A's beside B, its life 1; B strikes it (the game's own blow: a guest's hit goes to its host)
   const bp = await ev(B, () => ({ x: window.__G.player.x, z: window.__G.player.z }));
