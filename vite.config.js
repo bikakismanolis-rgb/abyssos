@@ -52,8 +52,9 @@ export default defineConfig(({ mode }) => {
             workbox: {
               globPatterns: ['**/*.{js,css,html,png,svg,webmanifest}'],
               navigateFallback: 'index.html',
-              // downloads next to the site (the APK) must reach the server, not the app shell
-              navigateFallbackDenylist: [/\.apk$/i, /\.zip$/i]
+              // downloads next to the site (the APK) must reach the server, not the app shell; and Skotos, the other
+              // game the Pages site carries at skotos/ (its own app, built by the Pages workflow), is never this one
+              navigateFallbackDenylist: [/\.apk$/i, /\.zip$/i, /\/skotos(\/|$)/]
             }
           })
         ]

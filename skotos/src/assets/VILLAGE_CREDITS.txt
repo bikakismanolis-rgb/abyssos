@@ -1,0 +1,20 @@
+Skotos village buildings (src/assets/village.glb) - CC-BY 4.0, from sketchfab.com.
+Packed by tools/pack-village.mjs: rescaled, decimated, textures re-encoded as WebP; the windmill without its base and rocks.
+
+  hTall: "Medieval House 1" by Animau3D - https://sketchfab.com/3d-models/medieval-house-1-0bbda345359349ea95280f597c8a4bd4
+  hStilt: "Medieval House 2" by Animau3D - https://sketchfab.com/3d-models/medieval-house-2-bc9272b74e544db1b93b0ebee8689bf4
+  hLong: "Medieval House 3" by Animau3D - https://sketchfab.com/3d-models/medieval-house-3-cf179aa6dc0944f1974ce3f7812031a6
+  hInn: "Medieval House 4" by Animau3D - https://sketchfab.com/3d-models/medieval-house-4-b42578994a334bb1a544c51043276f85
+  hManor: "Medieval house | Generic Textures | Game ready" by by__Rx - https://sketchfab.com/3d-models/medieval-house-generic-textures-game-ready-3eb9e3b600264e2f99100fc43619497e
+  hMarket: "Medieval house" by Young_Wizard - https://sketchfab.com/3d-models/medieval-house-4ec56df1c24d422ea85d1cfbf21bbe8c
+  hHall: "Medieval Warehouse" by timowes - https://sketchfab.com/3d-models/medieval-warehouse-570438bab7f94bbba71fb86b8a89bde6
+  hMill: "Windmill" by KaramellGlass - https://sketchfab.com/3d-models/windmill-92f751dab03e4a2792348a21b3673ec1
+  sStall: "Medieval Tents" by AnyRPG - https://sketchfab.com/3d-models/medieval-tents-eaa80cf29ceb4c0099698a5f5c7aea8d
+  sAwning: "Medieval Tents" by AnyRPG - https://sketchfab.com/3d-models/medieval-tents-eaa80cf29ceb4c0099698a5f5c7aea8d
+  sTent: "Medieval Tents" by AnyRPG - https://sketchfab.com/3d-models/medieval-tents-eaa80cf29ceb4c0099698a5f5c7aea8d
+  sForge: "Forge And Bellow" by RBG_illustrations - https://sketchfab.com/3d-models/forge-and-bellow-e4b8f1ae6d6744da863812a5081b941e
+  sAnvil: "Anvil, Water Bucket And Water Trough" by RBG_illustrations - https://sketchfab.com/3d-models/anvil-water-bucket-and-water-trough-fddb4946ae574427a2d4ccc1fb17e33a
+  sTrough: "Anvil, Water Bucket And Water Trough" by RBG_illustrations - https://sketchfab.com/3d-models/anvil-water-bucket-and-water-trough-fddb4946ae574427a2d4ccc1fb17e33a
+  sBucket: "Anvil, Water Bucket And Water Trough" by RBG_illustrations - https://sketchfab.com/3d-models/anvil-water-bucket-and-water-trough-fddb4946ae574427a2d4ccc1fb17e33a
+  sGrind: "Medieval Grindstone" by Thangzy - https://sketchfab.com/3d-models/medieval-grindstone-eb2ae5a1c1014ee989339ef8325ed804
+  sWell: "Well" by FlukierJupiter - https://sketchfab.com/3d-models/well-d8442bc92f224f0ebfa8446a1bca836d

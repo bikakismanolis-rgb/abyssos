@@ -1,0 +1,1509 @@
+diff --git a/skotos/src/audio/audio.js b/skotos/src/audio/audio.js
+index 62c403b..fa70841 100644
+--- a/skotos/src/audio/audio.js
++++ b/skotos/src/audio/audio.js
+@@ -2046,7 +2046,7 @@ const THEMES = {
+     },
+     step(S) {
+       const th = S.th;
+-      if (MOOD.breath) { MOOD.breath = 0; if (MOOD.heat >= 0) inhale(nv(th), S.t, 2.0); }
++      if (MOOD.breath) { MOOD.breath = 0; if (MOOD.heat >= 0) inhale(nv(th), S.t, 2.8); } // (forge.js BREATH.inhale)
+       if (MOOD.roar) { MOOD.roar = 0; if (MOOD.heat >= 0) { exhale(nv(th), S.t); for (const k of [0, 3]) metal(nv(th), S.t + k * S.sd, 330, [1, 2.76, 5.4, 8.93, 13.3], 1, 0.07); } }
+       if (S.lvl > 0.3 && MOOD.heat >= 0 && S.i % 3 === 0) INS.ost(nv(th), S.t, bassNote(S.ch, 36), S.sd * 2.6, 0.07 * S.lvl, { br: 6 });
+     },
+diff --git a/skotos/src/game/ai.js b/skotos/src/game/ai.js
+index acb70b4..d0a0812 100644
+--- a/skotos/src/game/ai.js
++++ b/skotos/src/game/ai.js
+@@ -17,6 +17,7 @@ import { rand, angleTo, angleDiff, dampAngle, damp, clamp } from '../core/util.j
+ import { has } from '../i18n/i18n.js';
+ import { sapAt, addSapPool, addSapRing, sapPools, startDrips } from './sap.js';
+ import { grantBuff } from './stats.js';
++import { dropGlobe } from './pickups.js';
+ 
+ const ATK_SFX = { goblin: 'goblinAttack', wolf: 'wolfAttack', spider: 'spiderHiss', orc: 'orcAttack', troll: 'trollRoar', skeleton: 'skeletonRattle', wraith: 'wraithWail', hound: 'houndGrowl', bat: 'batScreech', worm: 'wormRumble', dwarf: 'dwarfAttack', golem: 'golemStep', moth: 'batScreech', bear: 'bearRoar', hart: 'hartBellow' };
+ // attack timing per animation: speed, hit time (s), total (s)
+@@ -69,6 +70,7 @@ export function updateActors(dt) {
+     if (a.revealed > 0) a.revealed -= dt;
+     if (a.unshroud > 0) a.unshroud -= dt;
+     if (a.shroudTxt > 0) a.shroudTxt -= dt;
++    if (a.blockTxt > 0) a.blockTxt -= dt;
+     if (a.immT > 0) a.immT -= dt;
+     if (a.guardDown > 0 && (a.guardDown -= dt) <= 0) restoreRim(a);
+     a.t += dt; a.cd -= dt;
+@@ -86,8 +88,9 @@ export function updateActors(dt) {
+     else if (a.status.fear > 0) speed = flee(a, dt, pl);
+     else {
+       speed = (AI[a.def.ai] || AI.melee)(a, dt, pl, d);
+-      // no affix from what cannot be struck yet: a rootling still underground, an archer in the trees, a Rootwarden asleep
+-      if (a.affixes.length && !(a.under && a.def.burst) && !a.hidden && !(a.def.ai === 'rooted' && !a.awake)) elite(a, dt, pl, d);
++      // no affix from what cannot be struck yet: a rootling still underground, an archer in the trees, a Rootwarden asleep,
++      // an Ember Tick on her back, an Ashwing on the wing
++      if (a.affixes.length && !(a.under && a.def.burst) && !a.hidden && !a.cling && !a.airborne && !(a.def.ai === 'rooted' && !a.awake)) elite(a, dt, pl, d);
+     }
+     // knockback, separation, walls
+     if (a.kx || a.kz) { a.x += a.kx * dt; a.z += a.kz * dt; const k = Math.exp(-dt * 7); a.kx *= k; a.kz *= k; if (Math.abs(a.kx) + Math.abs(a.kz) < 0.05) a.kx = a.kz = 0; }
+@@ -118,7 +121,7 @@ export function updateActors(dt) {
+ // the Shrouded look smoky and dim outside light, and show a pale rim while revealed
+ function shroudLook(a, av) {
+   const on = (a.def.shroud || a.shrouded) && !(a.unshroud > 0) && lightOn();
+-  const st = !on ? 0 : a.revealed > 0 || lightAt(a.x, a.z) ? 1 : 2;
++  const st = !on ? 0 : a.revealed > 0 || lightAt(a.x, a.z, a.radius * 0.5) ? 1 : 2;
+   if (st === 2 && Math.random() < 0.25) P({ add: false, x: a.x + rand.range(-0.4, 0.4), y: rand.range(0.3, 1.8) * (a.scale || 1), z: a.z + rand.range(-0.4, 0.4), vy: 0.4, life: 1.1, size: 0.5, size1: 1.0, color: 0x14161c, alpha: 0.35, alpha1: 0 });
+   if (st === (a.shLook ?? 0)) return;
+   a.shLook = st;
+@@ -544,7 +547,7 @@ const AI = {
+     }
+     if (d > 5 && d < 14 && a.chargeCd <= 0 && G.zone.map.clear(a.x, a.z, pl.x, pl.z)) {
+       a.state = 'rear'; a.atkT = 0; a.rot = a.chargeDir = angleTo(a.x, a.z, pl.x, pl.z); a.chargeLen = Math.min(18, d + 4);
+-      a.tele = teleLine(a.x, a.z, a.rot, a.chargeLen, 2.4, 0.9, 0xff9020);
++      a.tele = teleLine(a.x, a.z, a.rot, a.chargeLen, Math.max(2.4, 2 * (a.radius + 1.05)), 0.9, 0xff9020);
+       a.avatar?.play('rear', 1, { hitIn: 0.9 }); Audio.sfx('bearRoar', { x: a.x, z: a.z }); tally(a, 'rear');
+       return 0;
+     }
+@@ -781,7 +784,8 @@ function dazedTick(a, dt) {
+ // A charge in progress: straight on, trampling whatever is in the way, until something stops it. Shared by the
+ // bosses and the Amberback Bear. D = { vx, vz, t, hit, probe (how far ahead the front is), daze (seconds dazed on
+ // hitting something solid), sapDaze (seconds dazed on running into fresh sap), trail (sap left behind), crack (stones
+-// crack), dmg / hitO (what trampling the hero does), dust, end(a, D) }. Returns the speed, for the gait.
++// crack), dmg / hitO (what trampling the hero does), w (the drawn line's width: no hit wider than it), dust, end(a, D) }.
++// Returns the speed, for the gait.
+ export function dashStep(a, dt, pl = G.player) {
+   const D = a.dash, map = G.zone.map, st = Math.min(dt, D.t);
+   D.t -= dt;
+@@ -794,7 +798,8 @@ export function dashStep(a, dt, pl = G.player) {
+   if (D.trail && (D.run || 0) - (D.lastPool ?? -9) > 3.2) { D.lastPool = D.run; addSapPool(a.x - ux, a.z - uz, 1.5, 5, D); }
+   if (Math.random() < 0.7) puff(a.x, 0.3, a.z, 2, D.dust ?? 0x8a8680, 0.8, 0.8, 0.8);
+   if (D.drop && (D.run || 0) - (D.lastDrop ?? -9) > D.drop.every) { D.lastDrop = D.run; D.drop.fn(a.x - ux, a.z - uz); }
+-  if (!D.hit && Math.hypot(pl.x - a.x, pl.z - a.z) < a.radius + pl.radius + 0.6) { D.hit = true; hitHero(a, pl, D.dmg ?? 1.5, D.hitO ?? { stun: 0.5 }); D.onHit?.(a, pl); shake(0.4); }
++  const hitR = D.w != null ? Math.min(a.radius + pl.radius + 0.6, D.w / 2 + pl.radius * 0.5) : a.radius + pl.radius + 0.6;
++  if (!D.hit && Math.hypot(pl.x - a.x, pl.z - a.z) < hitR) { D.hit = true; hitHero(a, pl, D.dmg ?? 1.5, D.hitO ?? { stun: 0.5 }); D.onHit?.(a, pl); shake(0.4); }
+   if (D.t <= 0) {
+     a.dash = null;
+     if (D.end) D.end(a, D);
+@@ -1011,7 +1016,7 @@ const STONEWARDEN = {
+     { id: 'charge', when: (a, d) => d > 5 && d < 18, cd: 9, phaseCd: [10, 8, 6.5], run(a, pl) {
+       a.rot = angleTo(a.x, a.z, pl.x, pl.z);
+       const len = Math.min(18, Math.hypot(pl.x - a.x, pl.z - a.z) + 3);
+-      a.tele = teleLine(a.x, a.z, a.rot, len, 3.2, 0.9, 0xffa040);
++      a.tele = teleLine(a.x, a.z, a.rot, len, Math.max(3.2, 2 * (a.radius + 1.05)), 0.9, 0xffa040);
+       a.avatar?.play('warcry', 1.4); Audio.sfx('stoneCrack', { x: a.x, z: a.z });
+       return { t: 0.9, fn() { a.dash = { vx: Math.sin(a.rot) * 20, vz: Math.cos(a.rot) * 20, t: len / 20, hit: false }; a.avatar?.play('slash1', 1.3); }, after: len / 20 + 0.4 };
+     } },
+@@ -1145,7 +1150,7 @@ const HART = {
+ function hartCharge(a, pl, wind, sp, last) {
+   const dir = angleTo(a.x, a.z, pl.x, pl.z), len = Math.min(26, Math.hypot(pl.x - a.x, pl.z - a.z) + 4);
+   a.rot = dir;
+-  a.tele = teleLine(a.x, a.z, dir, len, 3, wind, last ? 0xffd040 : 0xffc040);
++  a.tele = teleLine(a.x, a.z, dir, len, Math.max(3, 2 * (a.radius + 1.05)), wind, last ? 0xffd040 : 0xffc040);
+   a.avatar?.play('paw', 1.2, { loop: true }); Audio.sfx('golemStep', { x: a.x, z: a.z, vol: 0.5 });
+   return { t: wind, noFace: true, stall: true, fn() {
+     a.avatar?.anim.stop?.(0.1);
+@@ -1275,8 +1280,8 @@ function thornspear(a, pl) {
+     return { t: 0.5, fn() { Audio.sfx('swingHeavy', { x: a.x, z: a.z }); if (meleeLands(a, G.player, 4.6, 1.0)) hitHero(a, G.player, 1.0); a.combo++; }, after: 0.2, chain: Math.hypot(G.player.x - a.x, G.player.z - a.z) < 7, chainFn: thornspear };
+   }
+   const len = a.phase >= 2 ? 8 : 6, dir = a.rot;
+-  // drawn as wide as it strikes (dashStep: her body and 0.6 m either side)
+-  a.tele = teleLine(a.x, a.z, dir, len, 2 * (a.radius + 0.6), 0.5, 0xffa020);
++  // drawn as wide as it strikes (dashStep: her body, 0.6 m and the hero's own 0.45 m either side)
++  a.tele = teleLine(a.x, a.z, dir, len, 2 * (a.radius + 1.05), 0.5, 0xffa020);
+   a.avatar?.play('heavyStab', 1.1);
+   return { t: 0.5, noFace: true, fn() { startDash(a, dir, 26, len - 1, { probe: 0.6, dmg: 1.5, hitO: { push: 12 }, end() {} }); Audio.sfx('swingHeavy', { x: a.x, z: a.z }); a.combo++; }, after: 0.5 };
+ }
+@@ -1557,7 +1562,7 @@ function snuffer(a, dt, pl, d) {
+     a.atkT += dt;
+     if (a.atkT >= 0.7) {
+       a.state = 'chase'; killTele(a.tele); a.tele = null;
+-      startDash(a, a.grabDir, 13, 4, { probe: 0.4, dmg: 0.9, hitO: { burn: a.gorged > 0 ? a.dmg * 0.6 : 0 }, onHit: () => { halveCradle(4); tally(a, 'grabbed'); Audio.sfx('smokeGulp', { x: a.x, z: a.z }); }, end: () => { a.avatar?.anim.stop?.(0.2); } });
++      startDash(a, a.grabDir, 13, 4, { probe: 0.4, w: 1.4, dmg: 0.9, hitO: { burn: a.gorged > 0 ? a.dmg * 0.6 : 0 }, onHit: () => { halveCradle(4); tally(a, 'grabbed'); Audio.sfx('smokeGulp', { x: a.x, z: a.z }); }, end: () => { a.avatar?.anim.stop?.(0.2); } });
+     }
+     return 0;
+   }
+@@ -1669,7 +1674,7 @@ function diver(a, dt, pl, d) {
+     if (a.atkT < 1.0) return a.speed * 0.5;
+     killTele(a.tele); a.tele = null;
+     a.x = T.x; a.z = T.z; a.rot = T.dir; a.airborne = false; a.fly = 'dive'; a.dives = (a.dives || 0) + 1;
+-    const D = startDash(a, T.dir, 22, 14, { probe: 0.6, dmg: 1.3, hitO: { push: 22 }, end: land });
++    const D = startDash(a, T.dir, 22, 14, { probe: 0.6, w: 2.4, dmg: 1.3, hitO: { push: 22 }, end: land });
+     D.t0 = D.t; D.y0 = a.y; D.low = clamp(T.reach / 14, 0.3, 0.9);
+     a.avatar?.play('dive', 1, { loop: true }); Audio.sfx('ashwingScreech', { x: a.x, z: a.z, vol: 0.8 }); tally(a, 'dive');
+     return 22;
+@@ -1914,7 +1919,7 @@ function hammerhorn(a, dt, pl, d) {
+     a.atkT += dt;
+     if (a.atkT >= 0.9) {
+       killTele(a.tele); a.tele = null; a.state = 'chase';
+-      startDash(a, a.rushDir, 15, a.rushLen, { dmg: 1.3, hitO: { push: 20 }, dust: 0x4a4038, daze: 2, yank: a.rushYank, end: rushEnd });
++      startDash(a, a.rushDir, 15, a.rushLen, { w: 2.6, dmg: 1.3, hitO: { push: 20 }, dust: 0x4a4038, daze: 2, yank: a.rushYank, end: rushEnd });
+       a.avatar?.play('Shield_Dash', 1.3); Audio.sfx('bearCharge', { x: a.x, z: a.z }); if (P0) Audio.sfx('chainRattle', { x: a.x, z: a.z }); tally(a, 'rush');
+     }
+     return 0;
+@@ -2011,7 +2016,7 @@ const IVAR = {
+   tick(a, dt) {
+     // his dark and his son's light hold for as long as he does (a hero back from the waypoint finds them again); the dark
+     // is the fight's, not the whole field's
+-    if (a.dark) setHeroLight(heroNear(a) ? 2.5 : null, a);
++    if (a.dark) setHeroLight(heroNear(a) ? 3.5 : null, a);
+     else if (a.phase === 2 && !getLightPool('ivarGold')) { a.dark = true; ivarEndDark(a); }
+     // the dark: three braziers lit at once blind him (dazed 4 s), and his shroud stays broken (8 s at least) while all three burn
+     if (a.dark) {
+@@ -2039,10 +2044,10 @@ const IVAR = {
+     { id: 'staff', basic: true, when: (a, d) => d < 4.6, cd: 1.6, run(a, pl) { a.combo = 0; return staffCombo(a, pl); } }
+   ]
+ };
+-// phase 2, The Dark: the braziers go out, the Cradle shrinks to 2.5 m, and he is Shrouded
++// phase 2, The Dark: the braziers go out, the Cradle shrinks to 3.5 m, and he is Shrouded
+ function ivarDark(a) {
+   a.dark = true; a.shrouded = true; a.hpFloor = a.hpMax * 0.299;
+-  setHeroLight(2.5, a);
++  setHeroLight(3.5, a);
+   for (const b of braziers(a)) snuffLamp(b, a);
+   glowBurst(a.x, 2, a.z, 0x8a98b0, 40, 4, 0.35, 0.8); Audio.sfx('wraithWail', { vol: 0.8 });
+   say('d.ivar.dark'); emit('ivarDark', a); tally(a, 'dark');
+@@ -2075,15 +2080,16 @@ function staffCombo(a, pl) {
+   return { t: 0.6, fn() { Audio.sfx('swingHeavy', { x: a.x, z: a.z }); if (meleeLands(a, G.player, 4.5, 1.0)) hitHero(a, G.player, 1.0, step ? { push: 16 } : {}); a.combo++; }, after: 0.2, chain: step === 0 && Math.hypot(G.player.x - a.x, G.player.z - a.z) < 7, chainFn: staffCombo };
+ }
+ // Lantern Sweep: the dead lantern raised, a pale 10 m cone; she is Seen, and in the dark it puts out the braziers it finds
++// (not the one she stands by)
+ function lanternSweep(a, pl) {
+   const rot = angleTo(a.x, a.z, pl.x, pl.z);
+   a.rot = rot;
+-  a.tele = teleCone(a.x, a.z, rot, 10, 1.1, 1.0, 0xb8d0ff);
++  a.tele = teleCone(a.x, a.z, rot, 10, 0.8, 1.0, 0xb8d0ff);
+   a.avatar?.play('castUp', 1, { hitIn: 1.0 }); Audio.sfx('wraithWail', { x: a.x, z: a.z, vol: 0.4 });
+   return { t: 1.0, noFace: true, fn() {
+-    for (let i = 0; i < 30; i++) { const ang = rot + rand.range(-1.1, 1.1), sp = rand.range(6, 12); P({ x: a.x, y: 1.8, z: a.z, vx: Math.sin(ang) * sp, vy: rand.range(-0.5, 0.5), vz: Math.cos(ang) * sp, life: 0.7, size: 0.4, size1: 0.05, color: 0xe0ecff, color1: 0x6a88c0, drag: 1.5 }); }
+-    const p = G.player; if (inCone(a.x, a.z, rot, 10, 1.1, p)) hitHero(a, p, 1.0, { seen: 6 });
+-    if (a.dark) for (const b of braziers(a)) if (b.lit && inCone(a.x, a.z, rot, 10.5, 1.1, b)) { snuffLamp(b, a); tally(a, 'sweepSnuff'); }
++    for (let i = 0; i < 30; i++) { const ang = rot + rand.range(-0.8, 0.8), sp = rand.range(6, 12); P({ x: a.x, y: 1.8, z: a.z, vx: Math.sin(ang) * sp, vy: rand.range(-0.5, 0.5), vz: Math.cos(ang) * sp, life: 0.7, size: 0.4, size1: 0.05, color: 0xe0ecff, color1: 0x6a88c0, drag: 1.5 }); }
++    const p = G.player; if (inCone(a.x, a.z, rot, 10, 0.8, p)) hitHero(a, p, 1.0, { seen: 4 });
++    if (a.dark) for (const b of braziers(a)) if (b.lit && inCone(a.x, a.z, rot, 10.5, 0.8, b) && Math.hypot(b.x - G.player.x, b.z - G.player.z) > 3) { snuffLamp(b, a); tally(a, 'sweepSnuff'); }
+   }, after: 0.5 };
+ }
+ // The Long Road: a 16 m line, then a dash that throws her down and leaves ash that slows (twice in a row when he remembers)
+@@ -2094,7 +2100,7 @@ function longRoad(a, pl) {
+   a.avatar?.play('block', 1); Audio.sfx('hornCall', { x: a.x, z: a.z, vol: 0.6, pitch: 0.8 });
+   return { t: 0.9, noFace: true, fn() {
+     a.avatar?.play('Shield_Dash', 1.3);
+-    startDash(a, dir, 24, len, { probe: 0.6, dmg: 1.4, hitO: { push: 24 }, end() { a.avatar?.anim.stop?.(0.2); }, drop: { every: 2.4, fn: (x, z) => area('ash', x, z, 1.4, 3, { team: 'foe', src: a }) } });
++    startDash(a, dir, 24, len, { probe: 0.6, w: 2.6, dmg: 1.4, hitO: { push: 24 }, end() { a.avatar?.anim.stop?.(0.2); }, drop: { every: 2.4, fn: (x, z) => area('ash', x, z, 1.4, 3, { team: 'foe', src: a }) } });
+     Audio.sfx('swingHeavy', { x: a.x, z: a.z });
+   }, after: 0.35, chain: a.phase >= 2 && n < 1, chainFn: longRoad };
+ }
+@@ -2204,14 +2210,14 @@ const KARTHAX = {
+     // every 15 s (cooldowns run a quarter faster in a last phase)
+     { id: 'dark', when: (a) => a.phase >= 2 && heroNear(a), cd: 18.75, run: (a) => theDark(a) },
+     { id: 'breath', when: (a, d) => a.phase >= 2 && !!getLightPool('isarn'), cd: 10, run: (a, pl) => ashBreath(a, pl) },
+-    // behind the cages one every 5 s, wherever she is in the arena (the statues break only to it); never far out of it.
+-    // Statues risen whole (gifts taken) take more blows, so he strikes faster: 5 s for three blows, 3.2 s for six (~30 s)
+-    { id: 'hammerfall', when: (a, d) => (a.phase === 1 && heroInArena(a)) || (d > 3 && d < 16), phaseCd: [9, 5, 8], cdOf: (a, ph) => (ph === 1 && a.cageBlows ? 5 - 0.6 * (a.cageBlows - 3) : null), run: (a, pl) => hammerfall(a, pl) },
++    // behind the cages one every 3.8 s, wherever she is in the arena (the statues break only to it); never far out of it.
++    // Statues risen whole (gifts taken) take more blows, so he strikes faster: 3.8 s for three blows, 3.2 s for six
++    { id: 'hammerfall', when: (a, d) => (a.phase === 1 && heroInArena(a)) || (d > 3 && d < 16), phaseCd: [9, 5, 9], cdOf: (a, ph) => (ph === 1 && a.cageBlows ? 3.8 - 0.2 * (a.cageBlows - 3) : null), run: (a, pl) => hammerfall(a, pl) },
+     { id: 'kneel', when: (a, d) => a.phase === 1 && cageUp(a, 'lord') && d < 8.5, cd: 12, run: (a) => kneel(a) },
+     { id: 'rain', when: (a) => a.phase === 1 && cageUp(a, 'king') && heroInArena(a), cd: 10, run: (a, pl) => moltenRain(a, pl) },
+     { id: 'host', when: (a) => a.phase === 0 && alive(a.host).length < 4, cd: 22, run: (a) => raiseHost(a) },
+     { id: 'tongs', when: (a, d) => a.phase !== 1 && d > 3.5 && d < 10, cd: 12, run: (a, pl) => tongs(a, pl) },
+-    { id: 'gaze', when: (a, d) => a.phase !== 1 && d > 4, phaseCd: [9, 9, 8], run: (a, pl) => gaze(a, pl) },
++    { id: 'gaze', when: (a, d) => a.phase !== 1 && d > 4, phaseCd: [9, 9, 10], run: (a, pl) => gaze(a, pl) },
+     { id: 'combo', basic: true, when: (a, d) => d < 5.2, cd: 1.6, run(a, pl) { a.combo = 0; return emberCombo(a, pl); } }
+   ]
+ };
+@@ -2224,7 +2230,7 @@ function threeCages(a) {
+     if (Object.values(gifts).includes('taken')) later(3.2, inZone(a, () => say('d.karthax.take')));
+     F.giftsTaken = true; refreshStats();
+   }
+-  a.lockPhase = 1; a.hpFloor = a.hpMax * 0.3; a.misses = 0;
++  a.lockPhase = 1; a.hpFloor = a.hpMax * 0.2; a.misses = 0;
+   a.crown?.userData?.setSockets?.(1);
+   const c = arena(a), spots = G.zone.L.spots?.cages || [];
+   a.cages = KEEPERS.map((k) => {
+@@ -2238,13 +2244,13 @@ function threeCages(a) {
+     return m;
+   });
+   a.cageBlows = a.cages.reduce((n, s) => n + s.blows, 0);
+-  a.mcd.hammerfall = 2;
++  a.mcd.hammerfall = 1.2;
+   emit('karthaxCages', a, a.cages);
+ }
+ function crackLook(s) { s.avatar?.setRim(0xff5a18, 0.9); s.baseTint = 0x9a948c; s.statueTint = 0x9a948c; for (let i = 0; i < 12; i++) sparks(s.x, rand.range(0.5, 2.5), s.z, 1, 0xff8030, 2); }
+-// a Hammerfall in the cages' phase: every statue within 4.5 m of the blow (6 m after three misses running) takes it
++// a Hammerfall in the cages' phase: every statue within 4.5 m of the blow (6 m after two misses running) takes it
+ function cageBlow(a, x, z) {
+-  const R0 = a.misses >= 3 ? 6 : 4.5;
++  const R0 = a.misses >= 2 ? 6 : 4.5;
+   let hit = false;
+   for (const s of a.cages || []) {
+     if (s.dead || Math.hypot(s.x - x, s.z - z) > R0 + s.radius * 0.5) continue;
+@@ -2254,20 +2260,22 @@ function cageBlow(a, x, z) {
+     else { s.cracked = true; crackLook(s); emit('cageCracked', s, s.keeper, a); tally(a, 'cageCracked'); }
+   }
+   if (hit) a.misses = 0;
+-  else if (++a.misses === 3) { say('d.karthax.hint'); emit('cageHint', a); tally(a, 'hint'); }
++  else if (++a.misses === 2) { say('d.karthax.hint'); emit('cageHint', a); tally(a, 'hint'); }
+ }
+ function breakCage(a, s) {
+   s.dead = true; s.deadT = 0; s.hp = 0;
+   explosion(s.x, s.z, 2.6, 0xb0a898, { smoke: 0x7a7670, shake: 0.6 }); puff(s.x, 1.5, s.z, 26, 0x8a8680, 2.2, 2.4, 1.8);
+   glowBurst(s.x, 2.4, s.z, s.keeper === 'lady' ? 0xffb040 : s.keeper === 'king' ? 0xff6a20 : 0x7ad0ff, 40, 4, 0.35, 1);
+   Audio.sfx('statueBreak', { x: s.x, z: s.z }); Audio.sfx('crownCrack');
++  dropGlobe(s.x, s.z);
+   // the shard cracks and speaks the wish it held; then the keeper, for one breath, is himself
+   say('d.cage.' + s.keeper);
+   later(2.6, () => say('d.cage.' + s.keeper + '2'));
+   emit('cageBroken', s, s.keeper, a); tally(a, 'cageBroken:' + s.keeper);
+ }
++// (what she did to him behind the cages counts: he enters the last fire at 20-29.9%)
+ function cagesBroken(a) {
+-  a.cages = null; a.hpFloor = a.hpMax * 0.2; a.hp = Math.min(a.hp, a.hpMax * 0.299); a.ward = 0; restoreRim(a);
++  a.cages = null; a.hp = Math.min(a.hp, a.hpMax * 0.299); a.hpFloor = a.hpMax * 0.2; a.ward = 0; restoreRim(a);
+   tally(a, 'cagesBroken'); daze(a, 3.4);
+   // he staggers while the last keeper says her piece (no blow ends him there); then the last fire
+   later(3.4, () => { a.lockPhase = null; a.hpFloor = 0; });
+@@ -2291,38 +2299,40 @@ function ghostPools(a) {
+   const c = arena(a), R0 = arenaR(16) - 3, gs = G.zone.L.spots?.ghosts || [0, 1, 2, 3].map((i) => ({ x: c.x + Math.sin(i * 1.571 + 0.785) * R0, z: c.z + Math.cos(i * 1.571 + 0.785) * R0 }));
+   for (const g of gs) addLightPool(g.x, g.z, 4, Infinity, 'ghost', { owner: a, color: 0xc8d8ff, intensity: 14 });
+ }
+-// Ember Combo: three blows (0.6, 0.5, 0.8 s; quicker in the last fire), the third leaves fire
++// Ember Combo: three blows (0.8, 0.5, 0.8 s; 0.7, 0.45, 0.7 in the last fire), the third leaves fire. The aim is taken for the
++// first; the second and third strike along the same line, and a step out of it ends the combo. The hammer cools after the third
+ function emberCombo(a, pl) {
+-  const step = a.combo, W = a.phase >= 2 ? [0.5, 0.45, 0.7] : [0.6, 0.5, 0.8], t = W[step];
+-  a.rot = angleTo(a.x, a.z, pl.x, pl.z);
++  const step = a.combo, W = a.phase >= 2 ? [0.7, 0.45, 0.7] : [0.8, 0.5, 0.8], t = W[step];
++  if (step === 0) a.rot = angleTo(a.x, a.z, pl.x, pl.z);
+   a.tele = teleCone(a.x, a.z, a.rot, 5, 1.0, t, 0xff5010);
+   a.avatar?.play(['slash1', 'slash2', 'slam'][step], 1.2, { hitIn: t });
+-  return { t, fn() {
+-    if (meleeLands(a, G.player, 5, 1.0)) hitHero(a, G.player, step === 2 ? 1.4 : 1, { burn: a.dmg * 0.4 });
++  return { t, noFace: step > 0, fn() {
++    if (meleeLands(a, G.player, 5, 1.0)) hitHero(a, G.player, step === 2 ? 1.15 : 1, { burn: a.dmg * 0.4 });
+     Audio.sfx('swingHeavy', { x: a.x, z: a.z }); shake(step === 2 ? 0.35 : 0.12);
+     if (step === 2) { const x = a.x + Math.sin(a.rot) * 3, z = a.z + Math.cos(a.rot) * 3; explosion(x, z, 1.8, 0xff6a10, { smoke: 0x2a1a10, shake: 0.3 }); area('fire', x, z, 1.5, 4, { team: 'foe', src: a, dmg: a.dmg * 0.3, tick: 0.5 }); }
+     a.combo++;
+-  }, after: 0.25, chain: step < 2 && Math.hypot(pl.x - a.x, pl.z - a.z) < 6.5, chainFn: emberCombo };
++  }, after: step === 2 ? 0.9 : 0.25, chain: step < 2 && inCone(a.x, a.z, a.rot, 5.5, 1.0, G.player), chainFn: emberCombo };
+ }
+-// Hammerfall: a 4.5 m circle on the hero (1.6 s while the cages stand, else 1.0 s); he leaps to bring the hammer down on it
++// Hammerfall: a circle on the hero, 4.5 m in 1.6 s while the cages stand, else 3.5 m in 1.4 s (a walk out of it); he leaps
++// to bring the hammer down on it, and wrenches it free after (an opening)
+ function hammerfall(a, pl) {
+-  const caged = !!a.cages, wind = caged ? 1.6 : 1.0, tx = pl.x, tz = pl.z, d = Math.hypot(tx - a.x, tz - a.z), dir = angleTo(a.x, a.z, tx, tz);
+-  // after three misses running the statues break within 6 m (cageBlow), and the circle shows it; she is still hit within 4.5 m
+-  const R0 = caged && a.misses >= 3 ? 6 : 4.5;
++  const caged = !!a.cages, wind = caged ? 1.6 : 1.4, tx = pl.x, tz = pl.z, d = Math.hypot(tx - a.x, tz - a.z), dir = angleTo(a.x, a.z, tx, tz);
++  // after two misses running the statues break within 6 m (cageBlow), and the circle shows it; she is still hit within 4.5 m
++  const R0 = caged ? (a.misses >= 2 ? 6 : 4.5) : 3.5;
+   a.rot = dir;
+   a.tele = teleCircle(tx, tz, R0, wind, 0xff5010);
+   const leap = d > 4.8;
+-  if (leap) { const k = d - 2.6, f = G.zone.map.nearestFloor(a.x + Math.sin(dir) * k, a.z + Math.cos(dir) * k, 3); a.lx = a.x; a.lz = a.z; a.leapTo = f; }
++  if (leap) { const k = d - 3.2, f = G.zone.map.nearestFloor(a.x + Math.sin(dir) * k, a.z + Math.cos(dir) * k, 3); a.lx = a.x; a.lz = a.z; a.leapTo = f; }
+   a.avatar?.play('chop', 1, { hitIn: wind }); Audio.sfx('swingHeavy', { x: a.x, z: a.z });
+   return { t: wind, leap, noFace: true, fn() {
+     explosion(tx, tz, R0, 0xff6a10, { smoke: 0x2a1a10, shake: 0.7 }); ring(tx, tz, R0 + 0.3, 0xffa040, 0.6);
+     Audio.sfx('slam'); Audio.sfx('anvil', { x: tx, z: tz });
+-    const p = G.player; if (Math.hypot(p.x - tx, p.z - tz) < 4.5 + p.radius * 0.5) hitHero(a, p, 1.5, { stun: 0.4, burn: a.dmg * 0.5 });
+-    for (let i = 0; i < 3; i++) { const ang = i * 2.094 + rand.range(0, 1), r = rand.range(1.2, 3), x = tx + Math.sin(ang) * r, z = tz + Math.cos(ang) * r; if (G.zone.map.walkable(x, z)) area('fire', x, z, 1.3, 4, { team: 'foe', src: a, dmg: a.dmg * 0.3, tick: 0.5 }); }
++    const p = G.player; if (Math.hypot(p.x - tx, p.z - tz) < (caged ? 4.5 : R0) + p.radius * 0.5) hitHero(a, p, 1.15, { stun: 0.4, burn: a.dmg * 0.4 });
++    for (let i = 0; i < 2; i++) { const ang = i * 2.094 + rand.range(0, 1), r = rand.range(1.2, 3), x = tx + Math.sin(ang) * r, z = tz + Math.cos(ang) * r; if (G.zone.map.walkable(x, z)) area('fire', x, z, 1.3, 4, { team: 'foe', src: a, dmg: a.dmg * 0.3, tick: 0.5 }); }
+     if (caged) cageBlow(a, tx, tz);
+-  }, after: 0.7 };
++  }, after: caged ? 0.7 : 1.1 };
+ }
+-// Tongs: a 10 m line; caught (no dodge during the wind-up), she is dragged to the anvil and hammered (1.8x and burn)
++// Tongs: a 10 m line; caught (no dodge during the wind-up), she is dragged to the anvil and hammered (1.3x and burn)
+ function tongs(a, pl) {
+   const dir = angleTo(a.x, a.z, pl.x, pl.z), stamp = pl.dodgeStamp || 0;
+   a.rot = dir;
+@@ -2336,10 +2346,10 @@ function tongs(a, pl) {
+     const to = near ? (() => { const k = Math.atan2(p.x - an.x, p.z - an.z); return G.zone.map.nearestFloor(an.x + Math.sin(k) * 1.8, an.z + Math.cos(k) * 1.8, 3); })() : G.zone.map.nearestFloor(a.x + ux * (a.radius + 1.2), a.z + uz * (a.radius + 1.2), 3);
+     p.pull = { x: to.x, z: to.z, sx: p.x, sz: p.z, t: 0.45, t0: 0.45 }; p.act = null;
+     tally(a, 'tongsCaught'); Audio.sfx('chainRattle', { x: p.x, z: p.z });
+-    later(0.5, inZone(a, () => { a.avatar?.play('slam', 1.4); const q = G.player; explosion(q.x, q.z, 1.6, 0xff6a10, { smoke: 0x2a1a10, shake: 0.5 }); Audio.sfx('anvil', { x: q.x, z: q.z }); hitHero(a, q, 1.8, { burn: a.dmg * 0.6 }); }));
++    later(0.5, inZone(a, () => { a.avatar?.play('slam', 1.4); const q = G.player; explosion(q.x, q.z, 1.6, 0xff6a10, { smoke: 0x2a1a10, shake: 0.5 }); Audio.sfx('anvil', { x: q.x, z: q.z }); hitHero(a, q, 1.3, { burn: a.dmg * 0.6 }); }));
+   }, after: 1.0 };
+ }
+-// Gaze of the Brow-stone: a white-gold 20 m line that burns on for 4 s; in the last fire two crossing lines, never into Isarn's light
++// Gaze of the Brow-stone: a white-gold 20 m line that burns on for 3 s; in the last fire two crossing lines, never into Isarn's light
+ function gaze(a, pl) {
+   const wind = a.phase >= 2 ? 1.2 : 1.1, I = a.phase >= 2 ? getLightPool('isarn') : null;
+   let rays = [angleTo(a.x, a.z, pl.x, pl.z)];
+@@ -2353,8 +2363,8 @@ function gaze(a, pl) {
+     for (const r of rays) {
+       const ux = Math.sin(r), uz = Math.cos(r);
+       for (let d = 1; d < 20; d += 0.6) P({ x: a.x + ux * d, y: 1.2, z: a.z + uz * d, vy: rand.range(0.5, 2), life: 0.5, size: 0.8, size1: 0.1, color: 0xfff0c0, color1: 0xff7020 });
+-      for (let d = 3; d < 20; d += 3.5) { const x = a.x + ux * d, z = a.z + uz * d; if (G.zone.map.walkable(x, z)) area('fire', x, z, 1.2, 4, { team: 'foe', src: a, dmg: a.dmg * 0.3, tick: 0.5 }); }
+-      if (!p.dead && inLine(a.x, a.z, r, 20, 2.4, p)) hitHero(a, p, 1.6, { burn: a.dmg * 0.6 });
++      for (let d = 3; d < 20; d += 5) { const x = a.x + ux * d, z = a.z + uz * d; if (G.zone.map.walkable(x, z)) area('fire', x, z, 1.2, 3, { team: 'foe', src: a, dmg: a.dmg * 0.2, tick: 0.5 }); }
++      if (!p.dead && inLine(a.x, a.z, r, 20, 2.4, p)) hitHero(a, p, 1.15, { burn: a.dmg * 0.6 });
+     }
+     Audio.sfx('explosion', { x: a.x, z: a.z, vol: 0.6 }); shake(0.3);
+   }, after: 0.6 };
+@@ -2385,16 +2395,16 @@ function kneel(a) {
+   a.avatar?.play('slam', 1, { hitIn: 1.3 }); Audio.sfx('wraithWail', { vol: 0.6 });
+   return { t: 1.3, noFace: true, fn() { ring(a.x, a.z, 8, 0x9ad0ff, 0.6); glowBurst(a.x, 1, a.z, 0x9ad0ff, 30, 6, 0.3, 0.6); const p = G.player; if (Math.hypot(p.x - a.x, p.z - a.z) < 8 + p.radius * 0.5) { hitHero(a, p, 1.0); rootHero(1.5); } tally(a, 'kneelHit'); }, after: 0.6 };
+ }
+-// Molten Rain (Durgan's statue stands): five drops on and around the hero, 1.1 to 2.1 s, each leaving fire
++// Molten Rain (Durgan's statue stands): three drops on and around the hero, 1.0 to 1.5 s, each leaving fire
+ function moltenRain(a, pl) {
+   a.avatar?.play('castUp', 1); Audio.sfx('lavaBurst', { vol: 0.7 });
+-  for (let i = 0; i < 5; i++) {
++  for (let i = 0; i < 3; i++) {
+     const x = pl.x + (i ? rand.range(-4.5, 4.5) : 0), z = pl.z + (i ? rand.range(-4.5, 4.5) : 0);
+     if (!G.zone.map.walkable(x, z)) continue;
+-    const dl = 1.1 + i * 0.25;
++    const dl = 1.0 + i * 0.25;
+     teleCircle(x, z, 1.8, dl, 0xff5010);
+     later(dl - 0.32, inZone(a, () => fall(x, z, 0xffa040, true)));
+-    later(dl, inZone(a, () => { explosion(x, z, 1.8, 0xff7a20, { smoke: 0x2a1a10, shake: 0.1 }); area('fire', x, z, 1.4, 4, { team: 'foe', src: a, dmg: a.dmg * 0.3, tick: 0.5 }); Audio.sfx('lavaBurst', { x, z, vol: 0.6 }); const p = G.player; if (Math.hypot(p.x - x, p.z - z) < 1.9) hitHero(a, p, 1.1, { burn: a.dmg * 0.5 }); }));
++    later(dl, inZone(a, () => { explosion(x, z, 1.8, 0xff7a20, { smoke: 0x2a1a10, shake: 0.1 }); area('fire', x, z, 1.4, 3, { team: 'foe', src: a, dmg: a.dmg * 0.2, tick: 0.5 }); Audio.sfx('lavaBurst', { x, z, vol: 0.6 }); const p = G.player; if (Math.hypot(p.x - x, p.z - z) < 1.9) hitHero(a, p, 1.0, { burn: a.dmg * 0.5 }); }));
+   }
+   return { t: 0.6, fn() {}, after: 0.4 };
+ }
+@@ -2409,7 +2419,7 @@ function theDark(a) {
+     for (const s of safes) killTele(s);
+     for (let i = 0; i < 60; i++) { const ang = Math.random() * 6.28, r = Math.random() * R0; P({ x: c.x + Math.sin(ang) * r, y: 0.2, z: c.z + Math.cos(ang) * r, vy: rand.range(2, 5), life: 0.6, size: 0.9, size1: 0.2, color: 0xff6020, color1: 0x300800 }); }
+     shake(0.6); Audio.sfx('explosion', { vol: 0.8 });
+-    const p = G.player; if (!p.dead && Math.hypot(p.x - c.x, p.z - c.z) < R0 && !lightAt(p.x, p.z)) { hitHero(a, p, 2.0, { burn: a.dmg * 0.5 }); tally(a, 'darkHit'); } else tally(a, 'darkSafe');
++    const p = G.player; if (!p.dead && Math.hypot(p.x - c.x, p.z - c.z) < R0 && !lightAt(p.x, p.z)) { hitHero(a, p, 1.3, { burn: a.dmg * 0.5 }); tally(a, 'darkHit'); } else tally(a, 'darkSafe');
+   }, after: 0.6 };
+ }
+ // Ash Breath at the Lantern: an 8 m cone at Isarn; it dims his light to 3 m for 6 s unless the hero stands in it and takes it
+@@ -2422,7 +2432,7 @@ function ashBreath(a, pl) {
+   return { t: 1.0, noFace: true, fn() {
+     for (let i = 0; i < 40; i++) { const ang = rot + rand.range(-0.8, 0.8), sp = rand.range(5, 10); P({ add: false, x: a.x, y: 2, z: a.z, vx: Math.sin(ang) * sp, vy: rand.range(-0.5, 0.5), vz: Math.cos(ang) * sp, life: 0.9, size: 0.6, size1: 1.4, color: 0x4a4642, alpha: 0.6, alpha1: 0, drag: 1.5 }); }
+     const p = G.player;
+-    if (!p.dead && inCone(a.x, a.z, rot, 8, 0.8, p)) { hitHero(a, p, 1.2, { burn: a.dmg * 0.3 }); tally(a, 'breathTaken'); }
++    if (!p.dead && inCone(a.x, a.z, rot, 8, 0.8, p)) { hitHero(a, p, 1.0, { burn: a.dmg * 0.3 }); tally(a, 'breathTaken'); }
+     else if (Math.hypot(I.x - a.x, I.z - a.z) < 8 + I.r * 0.5) { shrinkPool(I, 3, 6); emit('isarnDimmed', a); tally(a, 'breathDimmed'); }
+   }, after: 0.5 };
+ }
+diff --git a/skotos/src/game/boot.js b/skotos/src/game/boot.js
+index 6fee3dc..8a6a19d 100644
+--- a/skotos/src/game/boot.js
++++ b/skotos/src/game/boot.js
+@@ -152,8 +152,13 @@ on('respawn', (town) => {
+   pl.dead = false; pl.hp = pl.hpMax; pl.res = G.hero.cls === 'warden' ? 0 : G.stats.resMax; pl.status = freshStatus();
+   refreshHeroLook();
+   if (town || G.zone.id === 'gate') { G.gate = null; travel('town', { at: 'waypoint' }); }
+-  // Act IV: she wakes at the last waylamp she lit, if there is one
+-  else travel(G.zone.id, { at: G.zone.checkpoint || (G.zone.L.spots.waypoint ? 'waypoint' : 'start') });
++  // Act IV: she wakes at the last waylamp she lit or touched (by the Anvil: on the Great Stair), if there is one; else at
++  // the nearer of the zone's two waypoints, once the second is known (the Field's Elati camp)
++  else {
++    const z = G.zone, S = z.L.spots; let at = z.checkpoint;
++    if (!at && S.camp2 && G.hero.wps.includes(z.id + '@2')) { const d1 = S.waypoint ? Math.hypot(pl.x - S.waypoint.x, pl.z - S.waypoint.z) : 1e9, d2 = Math.hypot(pl.x - S.camp2.x, pl.z - S.camp2.z); at = d2 < d1 ? 'waypoint2' : 'waypoint'; }
++    travel(z.id, { at: at || (S.waypoint ? 'waypoint' : 'start') });
++  }
+ });
+ on('heroDeath', () => {
+   const pl = G.player; if (pl.dead) return;
+diff --git a/skotos/src/game/combat.js b/skotos/src/game/combat.js
+index babe4d1..6a5a3b1 100644
+--- a/skotos/src/game/combat.js
++++ b/skotos/src/game/combat.js
+@@ -132,8 +132,8 @@ function hurtHero(src, amount, o) {
+   number(p.x, 2.2, p.z, amount, 'hurt');
+   emit('hurt', amount / p.hpMax);
+   if (!o.dot) {
+-    // blows that reached her life, counted (a touch that takes a moment is broken by a blow, not by a burn: world.js)
+-    p.blows = (p.blows || 0) + 1;
++    // blows that reached her life, counted (a touch that takes a moment is broken by a blow, not by a burn or a chip: world.js)
++    if (amount >= p.hpMax * 0.04) p.blows = (p.blows || 0) + 1;
+     if (amount > p.hpMax * 0.08) { shake(0.25); vibrate(40); Audio.sfx('playerHurt', { vol: 0.8 }); }
+     if (src && s.thorns && !src.dead && src.team === 'foe') damage(p, src, s.thorns, { noFx: true, quiet: true, noLoh: true, noRes: true });
+     if (src?.affixes?.includes('vampiric')) { src.hp = Math.min(src.hpMax, src.hp + amount * 2); }
+@@ -176,8 +176,9 @@ export function freeHero(crack = true) {
+ 
+ // ---------- Act IV: the dead in the dark, the shield line, the Seen and the Clinging ----------
+ // what a blow is worth against an Act IV rule (1 = full): a Lampless struck unaware from outside its cone takes double;
+-// a guarding Ash-Fallen takes 15% from the front unless the blow is an area one, and a breaking blow (a stun, a freeze, a
+-// hard knock, o.breakGuard) drops its shield for 3 s; the Shrouded take 30% outside light, and a blow in light reveals them
++// a guarding Ash-Fallen takes 25% from the front unless the blow is an area one (the hero's says "Blocked"), and a breaking
++// blow (a stun, a freeze, a hard knock, o.breakGuard) drops its shield for 3 s; the Shrouded take 30% outside light, and a
++// blow in light (reaching the body) reveals them
+ function act4Hit(src, a, o, fromHero) {
+   let k = 1;
+   const def = a.def, pl = G.player;
+@@ -199,11 +200,12 @@ function act4Hit(src, a, o, fromHero) {
+         if (!o.quiet) Audio.sfx('shieldBlock', { x: a.x, z: a.z, vol: 0.8 });
+         if (a.state !== 'attack' && a.state !== 'wind') a.avatar?.play('blockHit', 1.3);
+         a.blocks = (a.blocks || 0) + 1;
++        if (fromHero && !(a.blockTxt > 0)) { a.blockTxt = 0.8; number(a.x, 2.6, a.z, t('hud.block'), 'text', '#c8d0e0'); }
+       }
+     }
+   }
+   if ((def.shroud || a.shrouded) && !(a.unshroud > 0) && lightOn()) {
+-    if (lightAt(a.x, a.z)) a.revealed = 3;
++    if (lightAt(a.x, a.z, a.radius * 0.5)) a.revealed = 3;
+     else if (!(a.revealed > 0)) {
+       k *= 0.3;
+       if (!o.dot && !(a.shroudTxt > 0)) { a.shroudTxt = 0.8; number(a.x, 2.7 * (a.scale || 1), a.z, tx('hud.shrouded', 'Σκιασμένος', 'Shrouded'), 'text', '#9aa8c0'); }
+diff --git a/skotos/src/game/data.js b/skotos/src/game/data.js
+index 788a935..099741c 100644
+--- a/skotos/src/game/data.js
++++ b/skotos/src/game/data.js
+@@ -88,8 +88,8 @@ export const MONSTERS = {
+   // Act IV: the Field of Ash and the Ashen Forge. shroud: 30% damage outside light (light.js); guard: a shield arc in
+   // front (combat.js); wake: lies in the ash until the hero is close; fireproof: the Forge's Breath passes over it
+   lampless: { model: 'lampless', hp: 1.3, dmg: 1.15, speed: 3.8, radius: 0.5, ai: 'watch', reach: 2.2, atk: 'heavyStab', atkTime: 1.3, flesh: 'spirit', xp: 2, weapon: 'lanternStaff', wlook: { glow: 0.05, lamp: 0x6a7684 }, style: 'staff', animSet: 'formal', shroud: true, dieSfx: 'wraithDie', look: { rim: 0xb0c0d8, rimI: 0.35 } },
+-  ashSpear: { model: 'ashSpear', hp: 1.6, dmg: 1.2, speed: 3.2, radius: 0.5, ai: 'melee', reach: 2.0, atk: 'heavyStab', atkTime: 1.3, flesh: 'ash', xp: 2, weapon: 'spear', wlook: { len: 2.0, blade: 0x6a645c, glow: 0, wood: 0x2a2420 }, style: 'heavy', guard: { arc: 1.05, k: 0.15 }, bashEvery: 3, shield: { face: 0x3a3632, rim: 0x6a645c, emblem: 0x8a3a20, r: 0.32 }, dieSfx: 'skeletonDie', wake: { d: 6, clip: 'rise', pose: 'bonePile', sfx: 'skeletonRattle', t: 2.0, speed: 1 } },
+-  ashDwarf: { model: 'ashDwarf', hp: 1.7, dmg: 1.25, speed: 3.0, radius: 0.5, ai: 'melee', reach: 1.8, atk: 'chop', atkTime: 1.35, flesh: 'ash', xp: 2, weapon: 'axe', wlook: { blade: 0x6a5a48 }, style: 'sword', guard: { arc: 1.05, k: 0.15 }, bashEvery: 3, shield: { face: 0x4a3a28, rim: 0x9a7a40, emblem: 0xb07a30, r: 0.3 }, dieSfx: 'dwarfDie', wake: { d: 6, clip: 'rise', pose: 'bonePile', sfx: 'skeletonRattle', t: 2.0, speed: 1 } },
++  ashSpear: { model: 'ashSpear', hp: 1.6, dmg: 1.2, speed: 3.2, radius: 0.5, ai: 'melee', reach: 2.0, atk: 'heavyStab', atkTime: 1.3, flesh: 'ash', xp: 2, weapon: 'spear', wlook: { len: 2.0, blade: 0x6a645c, glow: 0, wood: 0x2a2420 }, style: 'heavy', guard: { arc: 1.05, k: 0.25 }, bashEvery: 3, shield: { face: 0x3a3632, rim: 0x6a645c, emblem: 0x8a3a20, r: 0.32 }, dieSfx: 'skeletonDie', wake: { d: 6, clip: 'rise', pose: 'bonePile', sfx: 'skeletonRattle', t: 2.0, speed: 1 } },
++  ashDwarf: { model: 'ashDwarf', hp: 1.7, dmg: 1.25, speed: 3.0, radius: 0.5, ai: 'melee', reach: 1.8, atk: 'chop', atkTime: 1.35, flesh: 'ash', xp: 2, weapon: 'axe', wlook: { blade: 0x6a5a48 }, style: 'sword', guard: { arc: 1.05, k: 0.25 }, bashEvery: 3, shield: { face: 0x4a3a28, rim: 0x9a7a40, emblem: 0xb07a30, r: 0.3 }, dieSfx: 'dwarfDie', wake: { d: 6, clip: 'rise', pose: 'bonePile', sfx: 'skeletonRattle', t: 2.0, speed: 1 } },
+   ashBow: { model: 'ashBow', hp: 0.9, dmg: 1.0, speed: 3.4, radius: 0.48, ai: 'ranged', reach: 12, atk: 'shoot', atkTime: 1.9, flesh: 'ash', xp: 1.5, weapon: 'bow', wlook: { blade: 0x3a3028 }, style: 'bow', proj: 'fireArrow', dieSfx: 'skeletonDie', wake: { d: 7, clip: 'rise', pose: 'bonePile', sfx: 'skeletonRattle', t: 2.0, speed: 1 } },
+   smokeEater: { model: 'smokeEater', hp: 0.7, dmg: 0.8, speed: 5.8, radius: 0.55, ai: 'snuffer', reach: 1.5, atk: 'claw', atkTime: 1.1, flesh: 'ash', xp: 1.4, dieSfx: 'wraithDie', look: { rim: 0x8a7a6a, rimI: 0.25 } },
+   ashwing: { model: 'ashwing', hp: 2.0, dmg: 1.4, speed: 7.5, radius: 1.0, ai: 'diver', reach: 2.2, atk: 'bite', atkTime: 1.2, flesh: 'bone', xp: 3, big: true, float: true, sfx: 'bat', dieSfx: 'skeletonDie', fireproof: true, look: { rim: 0xff7a30, rimI: 0.45 } },
+@@ -99,7 +99,7 @@ export const MONSTERS = {
+   // a keeper's statue in Karthax's second phase: the real model (o.model), frozen and ash-grey; only his Hammerfall breaks it
+   keeperStatue: { model: 'barrowLord', hp: 1, dmg: 0, speed: 0, radius: 1.0, ai: 'node', reach: 0, atk: 'cast', atkTime: 9, flesh: 'stone', xp: 0, big: true, anchored: true, fireproof: true },
+   ivar: { model: 'ivar', hp: 58, dmg: 2.3, speed: 4.4, radius: 0.6, ai: 'ivar', reach: 4.4, atk: 'heavyStab', atkTime: 1.5, flesh: 'spirit', xp: 130, boss: true, weapon: 'lanternStaff', wlook: { glow: 0.05, lamp: 0x6a7684 }, style: 'staff', dieClip: 'kneel', dieSfx: 'wraithDie', look: { scale: 1.25, rim: 0xb0b8c8, rimI: 0.5 } },
+-  karthax: { model: 'karthax', hp: 95, dmg: 2.7, speed: 4.0, radius: 1.3, ai: 'karthax', reach: 4.8, atk: 'smash', atkTime: 1.5, flesh: 'magma', xp: 220, boss: true, weapon: 'hammer', wlook: { len: 1.6, ember: 0xff5a10 }, style: 'heavy', dieClip: 'kneel', sfx: 'golem', fireproof: true, look: { scale: 1.5, rim: 0xff5a18, rimI: 0.6 } },
++  karthax: { model: 'karthax', hp: 95, dmg: 2.1, speed: 4.0, radius: 1.3, ai: 'karthax', reach: 4.8, atk: 'smash', atkTime: 1.5, flesh: 'magma', xp: 220, boss: true, weapon: 'hammer', wlook: { len: 1.6, ember: 0xff5a10 }, style: 'heavy', dieClip: 'kneel', sfx: 'golem', fireproof: true, look: { scale: 1.5, rim: 0xff5a18, rimI: 0.6 } },
+   // the ranger's companion
+   spiritWolf: { model: 'spiritWolf', hp: 2, dmg: 1, speed: 7.5, radius: 0.55, ai: 'pet', reach: 1.7, atk: 'bite', atkTime: 0.8, flesh: 'spirit', xp: 0, pet: true }
+ };
+diff --git a/skotos/src/game/forge.js b/skotos/src/game/forge.js
+index 6b3a4b4..9093779 100644
+--- a/skotos/src/game/forge.js
++++ b/skotos/src/game/forge.js
+@@ -1,10 +1,10 @@
+-// The Forge's Breath (Act IV, the Ashen Forge). Each flue (L.flues: mouth x, z, dir, len, w, period, phase, gallery)
+-// breathes: a 2.0 s inhale (a telegraph down the whole flue, the grate glowing, embers drawn in; never shortened), then
+-// 1.2 s of fire roaring down it (a sheet of fire on the floor behind the front) that hits once per breath for 20% of max
+-// life plus burn (12% on the first difficulty). Anything solid between the mouth and the hero is cover (map.los).
+-// Fireproof monsters ignore it; the rest take a quarter.
+-// Periods: 10 s, 5 s while a Hammerhorn pumps its station (setFluePumping), 1.5 s less per stage of the Forge Heat, never
+-// under 4.5 s. Only flues within 40 m breathe. Also here: slag dripping from the dark over the Slag Rivers, and the vents of
++// The Forge's Breath (Act IV, the Ashen Forge). Each flue (L.flues: mouth x, z, dir, len, w, period, phase, gallery, cover)
++// breathes: a 2.8 s inhale (a telegraph down the whole flue, the grate glowing, embers drawn in, blue marks on the cover of
++// the flue she is in; never shortened), then 1.2 s of fire roaring down it (a sheet of fire on the floor behind the front)
++// that hits once per breath for a share of max life plus burn by difficulty (2.5, 5, 9, 13, 20%). Anything solid between the
++// mouth and the hero is cover (map.los). Fireproof monsters ignore it; the rest take a quarter of 20% of her life.
++// Periods: 10 s, 6.5 s while a Hammerhorn pumps its station (setFluePumping), 0.75 s less per stage of the Forge Heat,
++// never under 6 s. Only flues within 40 m breathe. Also here: slag dripping from the dark over the Slag Rivers, and the vents of
+ // a Great Bellows chamber that has breathed. startFlues(L.flues) / stopFlues() from world.js; ticked from updateAreas.
+ import { G, later } from './state.js';
+ import { DIFFS, monsterDmg } from './data.js';
+@@ -16,13 +16,19 @@ import { emit } from '../ui/bus.js';
+ import Audio from '../audio/audio.js';
+ import { rand } from '../core/util.js';
+ 
+-export const BREATH = { inhale: 2.0, fire: 1.2, base: 10, pumped: 5, perHeat: 1.5, floor: 4.5, reach: 40, hit: 0.2, hitEasy: 0.12, monsters: 0.25 };
++// hitBy / burnBy: shares of max life by difficulty (G.hero.diff); the vents' likewise
++export const BREATH = { inhale: 2.8, fire: 1.2, base: 10, pumped: 6.5, perHeat: 0.75, floor: 6.0, reach: 40,
++  hitBy: [0.025, 0.05, 0.09, 0.13, 0.20], burnBy: [0.005, 0.01, 0.015, 0.02, 0.03], monsterHit: 0.2, monsters: 0.25 };
++const VENT = { hitBy: [0.025, 0.05, 0.065, 0.08, 0.10], burnBy: [0.005, 0.01, 0.012, 0.015, 0.02] };
++const di = () => Math.max(0, Math.min(G.hero.diff | 0, 4));
+ const F = { list: null, zone: null, heat: 0, pumping: new Set(), dripT: 6, ventT: 12 };
+ 
+ export function startFlues(list) {
+   F.zone = G.zone; F.pumping.clear();
+   F.heat = G.hero?.flags?.heat || 0;
+-  F.list = (list || []).map((f, i) => ({ ...f, i, st: 'idle', t: f.phase ?? rand.range(1, 6), tele: null, sheet: null, light: null, hit: new Set() }));
++  F.list = (list || []).map((f, i) => ({ ...f, i, st: 'idle', t: f.phase ?? rand.range(1, 6), tele: null, sheet: null, light: null, hit: new Set(), coverShown: false }));
++  // the cover marks: only spots the fire cannot see (gen4.js lays them by the alcoves, the bays and the pillars' lee)
++  for (const f of F.list) f.cover = (f.cover || []).filter((c) => !inFlue(f, c.x, c.z, 0));
+   F.dripT = rand.range(4, 7); F.ventT = 6;
+   // the Hammerhorns still at their stations from the last visit (G.actors is already the Forge's) go on pumping
+   for (const a of G.actors || []) if (a.post && a.pumping && !a.dead) F.pumping.add(a.post.flue);
+@@ -32,7 +38,7 @@ export function stopFlues() {
+   F.list = null; F.zone = null; F.pumping.clear();
+ }
+ export function setFlueHeat(k) { F.heat = Math.max(0, Math.min(3, k | 0)); }
+-// a Hammerhorn at its station (ai.js): that gallery's flue breathes twice as often
++// a Hammerhorn at its station (ai.js): that gallery's flue breathes faster (BREATH.pumped)
+ export function setFluePumping(i, on) { if (i == null) return; if (on) F.pumping.add(i); else F.pumping.delete(i); }
+ export const fluePeriod = (f) => Math.max(BREATH.floor, (F.pumping.has(f.i) || F.pumping.has(f.gallery) ? BREATH.pumped : f.period || BREATH.base) - BREATH.perHeat * F.heat);
+ export const flues = () => F.list;
+@@ -60,6 +66,8 @@ export function tickFlues(dt) {
+       // embers and soot drawn up the flue into the grate
+       if (Math.random() < 0.6) { const u = rand.range(1, f.len), v = rand.range(-f.w / 2, f.w / 2), x = f.x + ux * u - uz * v, z = f.z + uz * u + ux * v; P({ x, y: rand.range(0.2, 1.6), z, vx: -ux * 6, vy: 0.2, vz: -uz * 6, life: Math.min(0.9, u / 6), size: 0.12, size1: 0.03, color: 0xffa040, color1: 0xff3000 }); }
+       if (pl && !pl.dead && inFlue(f, pl.x, pl.z, pl.radius)) emit('flueWarn', k);
++      // the first frame she is in this flue's path during the inhale: its cover shows blue until the fire has passed
++      if (!f.coverShown && f.cover.length && pl && !pl.dead && inFlue(f, pl.x, pl.z, 2)) { f.coverShown = true; for (const c of f.cover) teleCircle(c.x, c.z, c.r, f.t + BREATH.fire, 0x60c0ff); }
+       if (f.t <= 0) roar(f);
+     } else if (f.st === 'fire') {
+       const u = 1 - f.t / BREATH.fire, front = Math.min(f.len, f.len * (u / 0.33)), ux = Math.sin(f.dir), uz = Math.cos(f.dir);
+@@ -73,10 +81,11 @@ export function tickFlues(dt) {
+   vents(dt, pl);
+ }
+ function inhale(f) {
+-  f.st = 'inhale'; f.t = BREATH.inhale; f.hit.clear();
++  f.st = 'inhale'; f.t = BREATH.inhale; f.hit.clear(); f.coverShown = false;
+   f.tele = teleLine(f.x, f.z, f.dir, f.len, f.w, BREATH.inhale, 0xff6a10);
+   f.light = addLight({ x: f.x, y: 1.2, z: f.z, color: 0xff7020, intensity: 6, range: 9, flicker: 0.3 });
+-  Audio.sfx('bellowsInhale', { x: f.x, z: f.z });
++  // (the sound is two seconds of drawn air: it starts so as to end on the roar)
++  later(BREATH.inhale - 2, () => { if (f.st === 'inhale' && F.list?.includes(f)) Audio.sfx('bellowsInhale', { x: f.x, z: f.z }); });
+   emit('flueInhale', f);
+ }
+ function roar(f) {
+@@ -94,18 +103,19 @@ function burn(f, front) {
+   const reached = (x, z) => (x - f.x) * ux + (z - f.z) * uz <= front;
+   if (pl && !pl.dead && !f.hit.has(pl) && pl.iframes <= 0 && reached(pl.x, pl.z) && inFlue(f, pl.x, pl.z, pl.radius * 0.5)) {
+     f.hit.add(pl);
+-    const k = G.hero.diff === 0 ? BREATH.hitEasy : BREATH.hit, v = pl.hpMax * k;
+-    damage(null, pl, v, { pure: true, burn: pl.hpMax * 0.03, kx: ux, kz: uz });
++    const d = di(), v = pl.hpMax * BREATH.hitBy[d];
++    damage(null, pl, v, { pure: true, burn: pl.hpMax * BREATH.burnBy[d], kx: ux, kz: uz });
+     emit('flueHit', f);
+   }
+   for (const a of G.actors) {
+     if (a.dead || a.team !== 'foe' || f.hit.has(a) || a.def.fireproof || a.def.flesh === 'magma' || a.airborne || a.prop) continue;
+     if (!reached(a.x, a.z) || !inFlue(f, a.x, a.z, a.radius * 0.5)) continue;
+     f.hit.add(a);
+-    damage(null, a, (pl ? pl.hpMax : 100) * BREATH.hit * BREATH.monsters, { burn: a.hpMax * 0.03 });
++    damage(null, a, (pl ? pl.hpMax : 100) * BREATH.monsterHit * BREATH.monsters, { burn: a.hpMax * 0.03 });
+   }
+ }
+-// slag drips from the dark over the Slag Rivers: near lava, now and then, a drop where the hero stands
++// slag drips from the dark over the Slag Rivers: near lava, now and then, a drop where the hero stands (never at the Anvil
++// of the Crown, its moat and the Forge Mouth, nor in the Hall of Moulds by its brood pools)
+ function drips(dt, pl) {
+   const L = G.zone.L;
+   if (!L.lava || pl.dead) return;
+@@ -116,13 +126,16 @@ function drips(dt, pl) {
+   let near = false;
+   for (let dz = -6; dz <= 6 && !near; dz++) for (let dx = -6; dx <= 6; dx++) { const x = ix + dx, z = iz + dz; if (x >= 0 && z >= 0 && x < L.w && z < L.h && L.lava[z * L.w + x]) { near = true; break; } }
+   if (!near) return;
++  const S = L.spots || {}, B = L.boss;
++  if (B && Math.hypot(pl.x - B.x, pl.z - B.z) < B.r + 5) return;
++  if (S.hall && Math.hypot(pl.x - S.hall.x, pl.z - S.hall.z) < S.hall.r + 4) return;
+   const x = pl.x + rand.range(-1.5, 1.5), z = pl.z + rand.range(-1.5, 1.5);
+   if (!G.zone.map.walkable(x, z)) return;
+   slag(x, z, 1.6, 1.0, 1.0);
+ }
+ export function slag(x, z, r, dur, mult) {
+   const zone = G.zone;
+-  teleCircle(x, z, r, dur, 0xff5010);
++  teleCircle(x, z, r, dur, 0xffa040); // amber: not the Hammerfall's red
+   for (let k = 0; k < 8; k++) later(dur * (0.5 + k * 0.06), () => { if (G.zone === zone) P({ x, y: 9 - k, z, vy: -14, life: 0.12, size: 0.5, size1: 0.3, color: 0xffb040, color1: 0xff3000 }); });
+   later(dur, () => {
+     if (G.zone !== zone) return;
+@@ -154,6 +167,6 @@ function vent(f) {
+     for (let d = 0; d < f.len; d += 1.5) P({ x: f.x + ux * d, y: 0.3, z: f.z + uz * d, vy: rand.range(4, 8), life: 0.5, size: 0.9, size1: 0.2, color: 0xffd070, color1: 0xff3000 });
+     Audio.sfx('bellowsRoar', { x: f.x, z: f.z, vol: 0.6 });
+     const dx = pl.x - f.x, dz = pl.z - f.z, u = dx * ux + dz * uz, v = -dx * uz + dz * ux;
+-    if (!pl.dead && pl.iframes <= 0 && u > 0 && u < f.len && Math.abs(v) < f.w / 2 + pl.radius * 0.5) damage(null, pl, pl.hpMax * (G.hero.diff === 0 ? 0.07 : 0.1), { pure: true, burn: pl.hpMax * 0.02 });
++    if (!pl.dead && pl.iframes <= 0 && u > 0 && u < f.len && Math.abs(v) < f.w / 2 + pl.radius * 0.5) damage(null, pl, pl.hpMax * VENT.hitBy[di()], { pure: true, burn: pl.hpMax * VENT.burnBy[di()] });
+   });
+ }
+diff --git a/skotos/src/game/light.js b/skotos/src/game/light.js
+index ef3dd0d..279f524 100644
+--- a/skotos/src/game/light.js
++++ b/skotos/src/game/light.js
+@@ -24,21 +24,22 @@ const FLARE = 0.5;
+ export const lightOn = () => LIGHT.force || ZONES.has(G.zone?.id);
+ 
+ // ---------- queries ----------
+-// is (x, z) in light? Everywhere is, outside the Act IV zones
+-export function lightAt(x, z) {
++// is (x, z) in light? Everywhere is, outside the Act IV zones. pad: a body's half-width (a light that reaches the body
++// lights it: combat.js, the Shroud's look); 0 for a point (the hero in the Dark)
++export function lightAt(x, z, pad = 0) {
+   if (!lightOn()) return true;
+-  for (const p of S.pools) if (p.r > 0 && (p.x - x) ** 2 + (p.z - z) ** 2 < p.r * p.r) return true;
++  for (const p of S.pools) if (p.r > 0 && (p.x - x) ** 2 + (p.z - z) ** 2 < (p.r + pad) ** 2) return true;
+   // Karthax has drunk every fire: only the pools are left (Isarn's lantern, the ghosts)
+   if (S.dark) return false;
+   const pl = G.player, hr = heroLightR();
+-  if (pl && !pl.dead && hr > 0 && (pl.x - x) ** 2 + (pl.z - z) ** 2 < hr * hr) return true;
+-  if (lampAt(x, z)) return true;
+-  for (const a of G.areas) if (a.kind === 'fire' && a.t <= a.dur && !(S.over != null && a.team === 'hero' && a.t > FLARE) && (a.x - x) ** 2 + (a.z - z) ** 2 < (a.r + 1.5) ** 2) return true;
++  if (pl && !pl.dead && hr > 0 && (pl.x - x) ** 2 + (pl.z - z) ** 2 < (hr + pad) ** 2) return true;
++  if (lampAt(x, z, pad)) return true;
++  for (const a of G.areas) if (a.kind === 'fire' && a.t <= a.dur && !(S.over != null && a.team === 'hero' && a.t > FLARE) && (a.x - x) ** 2 + (a.z - z) ** 2 < (a.r + 1.5 + pad) ** 2) return true;
+   return false;
+ }
+ // lit by a lamp, a brazier or a fire-pit (what blinds a landing Ashwing)
+-export function lampAt(x, z) {
+-  for (const it of G.zone?.interact || []) if (it.lit && it.lightR && (it.x - x) ** 2 + (it.z - z) ** 2 < it.lightR * it.lightR) return it;
++export function lampAt(x, z, pad = 0) {
++  for (const it of G.zone?.interact || []) if (it.lit && it.lightR && (it.x - x) ** 2 + (it.z - z) ** 2 < (it.lightR + pad) ** 2) return it;
+   return null;
+ }
+ // the Cradle's ring: 6 m, 9 m while swollen, halved for a while when a Smoke-eater gets a claw in it; a boss may set it
+@@ -46,7 +47,7 @@ export function heroLightR() {
+   if (S.over != null) return S.over;
+   return (S.swellT > 0 ? LIGHT.swell : LIGHT.base) * (S.halfT > 0 ? 0.5 : 1);
+ }
+-// a boss's darkness: r metres (2.5 in Ivar's dark, 0 in Karthax's last fire) until null, or until the owner dies
++// a boss's darkness: r metres (3.5 in Ivar's dark, 0 in Karthax's last fire) until null, or until the owner dies
+ export function setHeroLight(r, owner = null) { S.over = r; S.owner = r == null ? null : owner; }
+ // only the pools give light (Karthax's Last Fire), until off or the owner dies
+ export function setLightDark(on, owner = null) { S.dark = on ? owner || true : null; }
+@@ -222,10 +223,11 @@ export function tickLight(dt) {
+     else if (U.flame) { const s = (0.8 + Math.sin(R.time * 13) * 0.08 + Math.sin(R.time * 31) * 0.05) * k; U.flame.scale.set(0.22 * s, 0.3 * s, 1); }
+     if (Math.random() < 0.25 * k) { const c = cradlePoint(V); FXM.P({ x: c.x + rand.range(-0.04, 0.04), y: c.y + 0.1, z: c.z + rand.range(-0.04, 0.04), vy: rand.range(0.5, 1.1), life: 0.4, size: 0.07, size1: 0.01, color: 0xffd080, color1: 0xff4010 }); }
+   }
+-  // the warm light it throws follows the ring (the atmosphere's reach at 6 m)
+-  const kk = clamp(S.ringR / LIGHT.base, 0, 1.5);
+-  R.heroLight.distance = Math.max(2, S.range0 * Math.max(0.3, kk));
+-  R.heroLight.intensity *= Math.max(0.12, Math.min(1.25, kk));
++  // the warm light it throws follows the ring (the atmosphere's reach at 6 m); in a boss's darkness enough is left to read
++  // the floor by (a look only: what is lit is still lightAt's)
++  const kk = clamp(S.ringR / LIGHT.base, 0, 1.5), dim = S.over != null || !!S.dark;
++  R.heroLight.distance = Math.max(dim ? 6 : 2, S.range0 * Math.max(dim ? 0.45 : 0.3, kk));
++  R.heroLight.intensity *= Math.max(dim ? 0.4 : 0.12, Math.min(1.25, kk));
+ }
+ // on leaving a zone (projectiles.js clearProjs) and on entering one: no pools, no darkness, the Cradle at rest
+ export function clearLight() {
+diff --git a/skotos/src/game/skills.js b/skotos/src/game/skills.js
+index 74fbe05..b20e4bd 100644
+--- a/skotos/src/game/skills.js
++++ b/skotos/src/game/skills.js
+@@ -105,7 +105,7 @@ function basicWarden(aim) {
+     name: 'basic', anim, speed: attackSpeed(third ? 1.25 : 1.15), face: aim.dir, cut, trail: [impact - 0.15, impact + 0.12],
+     events: [[impact, () => {
+       const mult = skillMult(sk) * (third ? 1.5 : 1);
+-      const n = arcHit(third ? 3.0 : 2.6, third ? Math.PI * 2 : Math.PI * 0.8, (f) => damage(pl, f, heroHit(mult, { area: third }), { knock: third ? 7 : 2.5, kx: f.x - pl.x, kz: f.z - pl.z }));
++      const n = arcHit(third ? 3.0 : 2.6, third ? Math.PI * 2 : Math.PI * 0.8, (f) => damage(pl, f, heroHit(mult, { area: third }), { knock: third ? 7 : 2.5, kx: f.x - pl.x, kz: f.z - pl.z, area: third }));
+       swingFx(n, third);
+       if (third) {
+         ring(pl.x, pl.z, 3, 0xffe0b0, 0.3);
+@@ -264,7 +264,7 @@ const SKILL_FN = {
+     const pl = p();
+     const volley = () => {
+       const o = handPoint(V), n = sk.count + (rank >= 3 ? 1 : 0) + (rank >= 5 ? 1 : 0), spread = 1.1;
+-      for (let i = 0; i < n; i++) { const a = pl.rot - spread / 2 + (spread * i) / (n - 1); fire('bolt', pl, o.x, o.z, a, { y: 1.25, dmg: heroHit(mult, { area: true }), opts: { knock: 1.5 } }); }
++      for (let i = 0; i < n; i++) { const a = pl.rot - spread / 2 + (spread * i) / (n - 1); fire('bolt', pl, o.x, o.z, a, { y: 1.25, dmg: heroHit(mult, { area: true }), opts: { knock: 1.5, area: true } }); }
+       Audio.sfx('arrowShoot');
+     };
+     act({ name: 'multi', anim: 'volley', speed: 1.7, face: aim.dir, cut: 0.42, events: [[0.15, () => { volley(); if (G.stats.legs.has('windQuiver')) later(0.22, volley); }]] });
+diff --git a/skotos/src/game/story.js b/skotos/src/game/story.js
+index 5f2cba5..b6887f1 100644
+--- a/skotos/src/game/story.js
++++ b/skotos/src/game/story.js
+@@ -599,7 +599,8 @@ function endLampMemory(it, z, figs) {
+   document.body.classList.remove('memory-ash');
+   for (const a of figs) vanish(z, a, 1.4);
+   F['mem_' + it.id] = true;
+-  it.used = true;
++  // still a place to wake (world.js lampUse)
++  it.used = false; it.prompt = 'lamp.wake';
+   grantBuff('memory');
+   const p = G.player;
+   if (p) { glowBurst(p.x, 1.2, p.z, 0xf0e8d8, 26, 3, 0.25, 0.8); ring(p.x, p.z, 2.6, 0xffe8c0, 0.6); }
+diff --git a/skotos/src/game/world.js b/skotos/src/game/world.js
+index 63c6af7..189d5db 100644
+--- a/skotos/src/game/world.js
++++ b/skotos/src/game/world.js
+@@ -598,13 +598,13 @@ function act4Zone(z) {
+       it.use = () => emit('altar', it, z);
+       z.interact.push(it); A.altars.push(it);
+     }
+-    // Ivar's three braziers on the rim of the Anvil Gate plaza: put out in his dark, lit again by a 1 s touch
++    // Ivar's three braziers on the rim of the Anvil Gate plaza: put out in his dark, lit again by a 0.7 s touch
+     A.braziers = (S.braziers || []).map((b, i) => {
+       const mesh = put(z, act4Prop('brazier'), b.x, b.z);
+       const it = { kind: 'brazier', i, x: b.x, z: b.z, r: 2.3, lightR: 6, mesh, lit: false, prompt: 'brazier.light' };
+       it.snuff = () => setBrazier(z, it, false);
+       it.relight = () => setBrazier(z, it, true);
+-      it.use = () => { if (!it.lit) touch(1, it, mesh.userData.fireY || 1.2, () => { setBrazier(z, it, true); Audio.sfx('lampLight', { x: it.x, z: it.z }); }); };
++      it.use = () => { if (!it.lit) touch(0.7, it, mesh.userData.fireY || 1.2, () => { setBrazier(z, it, true); Audio.sfx('lampLight', { x: it.x, z: it.z }); }); };
+       z.interact.push(it); return it;
+     });
+     // the Last Lamp in the middle of the plaza: Ivar's lantern hangs there once he is at rest (a light, not a lamp to eat)
+@@ -670,6 +670,8 @@ function act4Enter(z) {
+     for (const it of A.braziers) setBrazier(z, it, dark ? it.lit : mode !== 'stars', true);
+     for (const it of A.altars) { const st = F.gifts?.[it.id]; it.mesh.userData.setState(st || 'idle'); it.used = !!st || !!F.giftsTaken || !!F.crownUnmade; }
+     setLastLamp(z, !!F.ivar);
++    // the place to wake: the last waylamp she lit or touched, if it burns (kept in the save; the zone is rebuilt on a Continue)
++    const ll = F.lastLamp && A.lamps.find((l) => l.id === F.lastLamp); if (ll?.lit) lampCheckpoint(z, ll);
+     // the Lampless are released after the Unmaking: none walk the Graves any more
+     if (F.crownUnmade) { z.packs = z.packs.filter((p) => p.tag !== 'lamplessPatrol'); for (const a of z.actors.slice()) if (a.kind === 'lampless' && !a.dead) release(z, a, false); }
+   } else {
+@@ -680,6 +682,8 @@ function act4Enter(z) {
+     for (const it of A.bellows) setPit(z, it, k >= 0, true);
+     if (A.mouth) { A.mouth.userData.setWhite(0); mouthHalo(A.mouth, k >= 0); }
+     if (k >= 0) { startFlues(L.flues); setFlueHeat(k); } else stopFlues();
++    // once she has come up to the Anvil, she wakes on the Great Stair (until the crown is unmade)
++    if (F.anvilWake && !F.crownUnmade) forgeCheckpoint(z);
+     // Isarn's lantern in Karthax's last fire walks on after a death and a respawn here (pools are cleared on leaving)
+     const W = z.isarnWalk;
+     if (W?.a && !W.a.removed && z.boss && !z.boss.dead) W.pool = addLightPool(W.a.x, W.a.z, 6, Infinity, 'isarn', { color: 0xfff0c8, intensity: 26 });
+@@ -714,21 +718,26 @@ function setLamp(z, it, on) {
+   const tag = 'lamp:' + it.id;
+   removeLightPool(tag);
+   if (on && G.zone === z) addLightPool(it.x, it.z, it.lightR, Infinity, tag, { color: LAMP_C, intensity: 24 });
+-  // dark: light it (again); lit with its memory unseen: remember. Nothing to do once the Night Without Fires has come
+-  it.used = !ash || (on && !(it.memory && !F['mem_' + it.id]));
+-  it.prompt = on ? 'lamp.remember' : F['lamp_' + it.id] ? 'lamp.relight' : 'lamp.light';
++  // dark: light it (again); lit with its memory unseen: remember; lit: wake here. Nothing to do once the Night Without Fires
++  // has come
++  it.used = !ash;
++  it.prompt = on ? (it.memory && !F['mem_' + it.id] ? 'lamp.remember' : 'lamp.wake') : F['lamp_' + it.id] ? 'lamp.relight' : 'lamp.light';
+ }
++// the place to wake if she falls: by the last lamp she lit or touched (G.hero.flags.lastLamp)
++function lampCheckpoint(z, it) { const r = it.spot.r || 0; z.checkpoint = z.map.nearestFloor(it.x + Math.sin(r) * 1.6, it.z + Math.cos(r) * 1.6, 3); G.hero.flags.lastLamp = it.id; }
+ function lampUse(z, it) {
+   const F = G.hero.flags;
+-  if (it.lit) { if (it.memory && !F['mem_' + it.id]) emit('lamp', it, z); return; }
++  if (it.lit) {
++    lampCheckpoint(z, it); ring(it.x, it.z, 1.6, LAMP_C, 0.5);
++    if (it.memory && !F['mem_' + it.id]) emit('lamp', it, z); else emit('toast', t('lamp.lit'), 'quest');
++    return;
++  }
+   const f = worldAt(it.mesh, it.mesh.userData.flameAt || { y: 2 });
+   touch(F['lamp_' + it.id] ? 1 : 0.8, it, f.y, () => {
+     const first = !F['lamp_' + it.id];
+     F['lamp_' + it.id] = true;
+     setLamp(z, it, true);
+-    // the place to wake if she falls
+-    const r = it.spot.r || 0;
+-    z.checkpoint = z.map.nearestFloor(it.x + Math.sin(r) * 1.6, it.z + Math.cos(r) * 1.6, 3);
++    lampCheckpoint(z, it);
+     glowBurst(f.x, f.y, f.z, 0xffd080, 26, 2.5, 0.3, 0.8); ring(it.x, it.z, it.lightR, LAMP_C, 0.9);
+     Audio.sfx('lampLight', { x: it.x, z: it.z }); Audio.sting('lantern');
+     emit('lampLit', it, first, z);
+@@ -758,9 +767,10 @@ function setPit(z, it, on, quiet) {
+   it.prompt = on ? 'bellows.use' : 'bellows.relight';
+   setEmit(z, tag, on ? { x: p.x, y: 0.4, z: p.z, type: 'fire', s: 1 } : null, quiet);
+ }
+-// a touch that takes a moment (a waylamp, a brazier, a fire-pit): the Cradle's fire streams across; a blow breaks it
++// a touch that takes a moment (a waylamp, a brazier, a fire-pit): the Cradle's fire streams across; a blow breaks it. It
++// takes the place of a basic attack held down, not of a skill
+ function touch(dur, it, y, done) {
+-  const pl = G.player; if (!pl || pl.dead || pl.act) return;
++  const pl = G.player; if (!pl || pl.dead || (pl.act && pl.act.name !== 'basic')) return;
+   pl.rot = angleTo(pl.x, pl.z, it.x, it.z);
+   const c = new THREE.Vector3();
+   pl.act = { name: 'touch', t: 0, dur, ev: [], clip: dur, move: 0, blows: pl.blows || 0, st: 0,
+@@ -952,6 +962,8 @@ function tickFades(dt) {
+ }
+ 
+ // ---------- per frame (boot.js, with the packs): walks, fades, the bellows, the heat, the flues' glow, Karthax's arrival ----------
++// the Forge's place to wake by the Anvil: the Great Stair, 6 m past its last bridge (~23 m out, outside the arena)
++function forgeCheckpoint(z) { const b = z.L.bridges?.find((q) => q.stair); if (!b) return; const s = Math.sign(b.x - z.L.boss.x) || 1; z.checkpoint = z.map.nearestFloor(b.x + s * 6, b.z, 4); }
+ const _fg = [0, 0, 0];
+ export function updateAct4(dt) {
+   tickWalks(dt); tickFades(dt);
+@@ -978,13 +990,16 @@ export function updateAct4(dt) {
+   // Karthax waits in the slag until the hero comes up to the Anvil (story.js plays his arrival)
+   const b = z.boss;
+   if (b && b.kind === 'karthax' && b.holdWake && !z.karthaxArrived && !b.dead && Math.hypot(b.x - pl.x, b.z - pl.z) < 13.5) { z.karthaxArrived = true; emit('karthaxArrive', z, b); }
+-  // Isarn's lantern walks toward the Ash King in his last fire, a 6 m light, and stops 4 m short
++  // come up to the Anvil, she wakes on the Great Stair from now on, not back through the galleries (act4Enter keeps it)
++  const AN = z.L.boss;
++  if (AN && !z.checkpoint && F.plug && !F.crownUnmade && Math.hypot(pl.x - AN.x, pl.z - AN.z) < AN.r + 8) { F.anvilWake = true; forgeCheckpoint(z); }
++  // Isarn's lantern walks toward the Ash King in his last fire, a 6 m light, and stops 3 m short (it keeps up with him)
+   const I = z.isarnWalk;
+   if (I && I.a && !I.a.removed) {
+     const t0 = b && !b.dead ? b : null;
+     if (t0) {
+       const d = Math.hypot(t0.x - I.a.x, t0.z - I.a.z);
+-      if (d > 4.3 && !I.a.walking) { const s = Math.min(1.2 * dt, d - 4.2); I.a.x += ((t0.x - I.a.x) / d) * s; I.a.z += ((t0.z - I.a.z) / d) * s; I.a.home = I.a.rot = angleTo(I.a.x, I.a.z, t0.x, t0.z); if (!I.moving) { I.moving = true; I.a.avatar?.play('Walk_Loop', 0.8, { loop: true, fade: 0.3 }); } }
++      if (d > 3.1 && !I.a.walking) { const s = Math.min(2.0 * dt, d - 3.0); I.a.x += ((t0.x - I.a.x) / d) * s; I.a.z += ((t0.z - I.a.z) / d) * s; I.a.home = I.a.rot = angleTo(I.a.x, I.a.z, t0.x, t0.z); if (!I.moving) { I.moving = true; I.a.avatar?.play('Walk_Loop', 0.8, { loop: true, fade: 0.3 }); } }
+       else if (I.moving) { I.moving = false; I.a.avatar?.anim.stop?.(0.3); }
+       if (I.a.it) { I.a.it.x = I.a.x; I.a.it.z = I.a.z; }
+     }
+diff --git a/skotos/src/i18n/text.js b/skotos/src/i18n/text.js
+index 4e9bad7..14a4502 100644
+--- a/skotos/src/i18n/text.js
++++ b/skotos/src/i18n/text.js
+@@ -434,7 +434,7 @@ export const TEXT = {
+   'npc.ivar': ['Ίβαρ', 'Ivar'], 'npc.ivarGhost': ['Ίβαρ', 'Ivar'], 'npc.wayfarerGhost': ['Οδοιπόρος', 'Wayfarer'],
+   'npc.barrowLord': ['Ο Άρχων του Τύμβου', 'The Barrow Lord'], 'npc.moltenKing': ['Δούργκαν', 'Durgan'], 'npc.karthax': ['Κάρθαξ', 'Karthax'],
+   // what the hero touches
+-  'lamp.light': ['Άναψε το φανάρι', 'Light the lamp'], 'lamp.relight': ['Ξανάναψε το φανάρι', 'Relight the lamp'], 'lamp.remember': ['Θυμήσου', 'Remember'],
++  'lamp.light': ['Άναψε το φανάρι', 'Light the lamp'], 'lamp.relight': ['Ξανάναψε το φανάρι', 'Relight the lamp'], 'lamp.remember': ['Θυμήσου', 'Remember'], 'lamp.wake': ['Ξύπνα εδώ', 'Wake here'],
+   'lamp.lit': ['Το φανάρι καίει. Αν πέσεις, εδώ θα ξυπνήσεις.', 'The lamp burns. If you fall, you will wake here.'],
+   'lamp.buff': ['Μνήμη των Οδοιπόρων: +12% ζημιά, +8% ταχύτητα για 60 δευτ.', 'Memory of the Wayfarers: +12% damage, +8% speed for 60s'],
+   'brazier.light': ['Άναψε το μαγκάλι', 'Light the brazier'], 'bellows.use': ['Ξύπνα το Φυσερό', 'Wake the Bellows'], 'bellows.relight': ['Ξανάναψε τη φωτιά', 'Relight the fire'],
+diff --git a/skotos/src/world/gen4.js b/skotos/src/world/gen4.js
+index b662f37..abe8002 100644
+--- a/skotos/src/world/gen4.js
++++ b/skotos/src/world/gen4.js
+@@ -595,6 +595,8 @@ function tryForge(seed, o, last) {
+     const slots = [4.5, 11.5, 18.5, 25.5];
+     const nSt = i === 2 ? 2 : rng.int(1, 2), stSlots = rng.shuffle([1, 2]).slice(0, nSt), stSide = rng.sign();
+     g.stations = [];
++    // the Breath's cover (forge.js shows it blue during an inhale): the alcoves, the stokers' bays, the pillars' lee
++    g.cover = [];
+     slots.forEach((u0, k) => {
+       for (const sv of [-1, 1]) {
+         const j = stSlots.indexOf(k), st = j >= 0 && sv === (j ? -stSide : stSide);
+@@ -603,11 +605,16 @@ function tryForge(seed, o, last) {
+           gbox(g, u0 - 1.5, u0 + 3.5, sv * 2.5, sv * 6.5, 2);
+           const post = gcell(g, u0 + 1, sv * 5), bel = gcell(g, u0 + 1, sv * 5.9);
+           g.stations.push({ x: snap(post.x), z: snap(post.z), flue: i, r: Math.atan2(-g.px * sv, -g.pz * sv), bel });
+-        } else gbox(g, u0 - 0.5, u0 + 1.5, sv * 2.5, sv * 4.5, 2);
++          g.cover.push({ ...gcell(g, u0 + 0.5, sv * 3.6), r: 1.0 });
++        } else { gbox(g, u0 - 0.5, u0 + 1.5, sv * 2.5, sv * 4.5, 2); g.cover.push({ ...gcell(g, u0 + 0.5, sv * 3.6), r: 0.95 }); }
+       }
+     });
+-    // one or two pillars to hide behind
+-    for (const [u, v] of [[8.5, rng.sign()], [21.5, rng.sign()]].slice(0, rng.int(1, 2))) pillars.push(gcell(g, u, v));
++    // one or two pillars to hide behind (the lee: 1.2 m behind it on the line from the mouth, as wide as its shadow)
++    const mo = gcell(g, g.len - 0.5, 0);
++    for (const [u, v] of [[8.5, rng.sign()], [21.5, rng.sign()]].slice(0, rng.int(1, 2))) {
++      const q = gcell(g, u, v), px = snap(q.x), pz = snap(q.z), k = 1 + 1.2 / Math.hypot(px - mo.x, pz - mo.z);
++      pillars.push(q); g.cover.push({ x: mo.x + (px - mo.x) * k, z: mo.z + (pz - mo.z) * k, r: 0.55 });
++    }
+   });
+   // ---- the Great Bellows: round chambers, the bellows against the back wall, two doors for what comes ----
+   CH.forEach((c, i) => {
+@@ -748,7 +755,7 @@ function tryForge(seed, o, last) {
+   // ---- galleries: flues, grates, pillars, stations ----
+   G3.forEach((g, i) => {
+     const mouth = gcell(g, g.len - 0.5, 0), dir = Math.atan2(-g.d[0], -g.d[1]);
+-    L.flues.push({ x: mouth.x, z: mouth.z, dir, len: g.len - 0.5, w: 5, period: 10, phase: rng.range(0, 10), gallery: i });
++    L.flues.push({ x: mouth.x, z: mouth.z, dir, len: g.len - 0.5, w: 5, period: 10, phase: rng.range(0, 10), gallery: i, cover: g.cover });
+     L.props.push({ t: 'flueMouth', x: mouth.x, z: mouth.z, r: dir, g: i });
+     L.grates.push({ x: mouth.x + Math.sin(dir) * 1.2, z: mouth.z + Math.cos(dir) * 1.2, r: dir, w: 4.2, l: 2.4, g: i });
+     for (const u of [8, 15, 22]) { const p = gcell(g, u, 0); L.grates.push({ x: p.x, z: p.z, r: dir, w: 2.4, l: 1.4, g: i }); }
+diff --git a/skotos/tools/balance-act.mjs b/skotos/tools/balance-act.mjs
+new file mode 100644
+index 0000000..a7c7d7a
+--- /dev/null
++++ b/skotos/tools/balance-act.mjs
+@@ -0,0 +1,648 @@
++// Simulated play, to measure how hard a zone or a boss is: a bot hero (to the nearest foe, attacks, skills on cooldown, out of
++// red telegraphs, into blue safe circles, a potion under 35% life) with the gear a normal play-through would give fights a
++// fixed route of packs (the N nearest the zone's start by walking distance) or a boss, and reports what it cost.
++//
++//   node tools/balance-act.mjs --zone ashfield --cls warden --lvl 23 --diff 1 --runs 3 [--packs 8] [--out f.jsonl]
++//   node tools/balance-act.mjs --boss ivar --cls mage --lvl 23 --diff 0 --runs 5
++//   node tools/balance-act.mjs --plan plan.json --out results.jsonl     (a list of jobs; jobs already in the output are skipped)
++//
++// A job: { id, zone, boss, cls, lvl, diff, packs, seed, gearK, skill, heat }. env BASE (default http://localhost:5199/), SIM (game
++// steps per frame, default 8), SKILL (the bot's chance to notice a telegraph, default 0.6), REACT (seconds before it does, 0.45),
++// HEAT (the Forge Heat of a forge zone run, 0-3, default 1; job.heat wins).
++// The bot runs inside the game: it reads the frame's input from a getter on IN.events (takeEvents in updatePlayer), so it
++// decides every fixed step, whatever the browser's frame rate. A death is counted, and the hero gets up where she fell.
++// A page is reloaded after GROUP jobs (default 40) to keep memory down. --packs 99: every pack reachable from the start.
++import { createRequire } from 'node:module';
++import fs from 'node:fs';
++const require = createRequire(import.meta.url);
++const { chromium } = require('/opt/node22/lib/node_modules/playwright');
++
++const args = {};
++for (let i = 2; i < process.argv.length; i++) { const k = process.argv[i]; if (k.startsWith('--')) { const v = process.argv[i + 1]; if (v == null || v.startsWith('--')) args[k.slice(2)] = true; else { args[k.slice(2)] = v; i++; } } }
++const BASE = process.env.BASE || 'http://localhost:5199/';
++const SIM = +(process.env.SIM || 8);
++const OUT = args.out || null;
++const GROUP = +(process.env.GROUP || 40);
++
++// the order the bosses fall in, where they live, and the story a normal hero has behind her when she meets them
++export const BOSSES = ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn', 'amaranthe', 'ivar', 'karthax'];
++export const ZONES = { forest: 1, crypt: 4, pass: 10, halls: 13, weep: 16, heart: 19, ashfield: 22, forge: 25 };
++export const BOSS_ZONE = { weaver: 'forest', barrowLord: 'crypt', stonewarden: 'pass', moltenKing: 'halls', silverhorn: 'weep', amaranthe: 'heart', ivar: 'ashfield', karthax: 'forge' };
++const ACT = { forest: 1, crypt: 1, pass: 2, halls: 2, weep: 3, heart: 3, ashfield: 4, forge: 4 };
++
++function jobsFromArgs() {
++  if (args.plan) return JSON.parse(fs.readFileSync(args.plan, 'utf8'));
++  const boss = args.boss || null, zone = boss ? BOSS_ZONE[boss] : args.zone || 'forest';
++  const out = [];
++  for (let r = 0; r < +(args.runs || 1); r++) out.push({ id: `${boss || zone}-${args.cls || 'warden'}-L${args.lvl || ZONES[zone] + 1}-d${args.diff ?? 1}-r${r}`, zone, boss, cls: args.cls || 'warden', lvl: +(args.lvl || ZONES[zone] + 1), diff: +(args.diff ?? 1), packs: +(args.packs || 8), seed: 1000 + r * 7919, gearK: +(args.gearK || 4), ...(args.heat != null ? { heat: +args.heat } : {}) });
++  return out;
++}
++
++// ---------------------------------------------------------------------------------------------------------------------
++// the page side: installed once per page (a self-contained function, serialised by Playwright)
++async function installBot(cfg) {
++  const G = window.__G, D = window.__D, IN = D.IN;
++  const [data, items, stats, world, actors, fx, bus, hud, light, forge, state] = await Promise.all(['/src/game/data.js', '/src/game/items.js', '/src/game/stats.js', '/src/game/world.js', '/src/game/actors.js', '/src/gfx/fx.js', '/src/ui/bus.js', '/src/ui/hud.js', '/src/game/light.js', '/src/game/forge.js', '/src/game/state.js'].map((p) => import(p)));
++  const { CLASSES, SKILLS, SLOTS, MONSTERS } = data;
++  const B = window.__bal = { st: null, done: null, err: null, log: [] };
++  const OWN = new Set([0xffb040, 0xffe0a0, 0xff6a20]);      // the hero's own telegraphs: leap, arrow rain, meteor
++  const SAFE = 0x60c0ff;                                      // a blue safe circle (the Stonewarden's pulse, Ivar's nova, Karthax's dark)
++  const angleTo = (ax, az, bx, bz) => Math.atan2(bx - ax, bz - az);
++  const angDiff = (a, b) => { let d = (b - a) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; };
++  const rnd = (a, b) => a + Math.random() * (b - a);
++
++  // ---------- the hero a normal player brings ----------
++  const PRIO = { warden: ['whirl', 'leap', 'quake', 'cry'], ranger: ['multi', 'pierce', 'rain', 'wolf'], mage: ['fireball', 'meteor', 'chain', 'nova'] };
++  function skillRanks(cls, lvl) {
++    const sk = {}; let pts = lvl - 1;
++    for (const id of PRIO[cls]) { const def = SKILLS[cls].find((s) => s.id === id); if (lvl < def.lvl) continue; sk[id] = 1; }
++    for (const id of PRIO[cls]) { if (!sk[id]) continue; while (pts > 0 && sk[id] < 5) { sk[id]++; pts--; } }
++    return { sk, pts };
++  }
++  const BOSS_LV = { weaver: 3, barrowLord: 7, stonewarden: 12, moltenKing: 16, silverhorn: 18, amaranthe: 22, ivar: 24, karthax: 28 };
++  const BEFORE = { forest: [], crypt: ['weaver'], pass: ['weaver', 'barrowLord'], halls: ['weaver', 'barrowLord', 'stonewarden'], weep: ['weaver', 'barrowLord', 'stonewarden', 'moltenKing'], heart: ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn'], ashfield: ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn', 'amaranthe'], forge: ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn', 'amaranthe', 'ivar'] };
++  // per slot: the best (by damage x toughness) of K drops round the item level a normal player wears there (job.ilvl, +-2;
++  // default L-4..L), one of them an elite's, and the first-kill legendary of every boss already beaten (at that boss's
++  // level: job.legLv, else BOSS_LV)
++  function gear(h, job) {
++    const L = h.level, cls = h.cls, C = CLASSES[cls], K = job.gearK ?? 4;
++    const ilvl = () => Math.max(1, job.ilvl != null ? Math.round(job.ilvl + (Math.random() * 4 - 2)) : L - Math.floor(Math.random() * 5));
++    const bases = { weapon: cls === 'warden' ? ['sword', 'axe', 'mace'] : [C.weapon], offhand: [C.off], helm: ['helm'], chest: ['chest'], gloves: ['gloves'], boots: ['boots'], amulet: ['amulet'], ring1: ['ring'], ring2: ['ring'] };
++    const cand = {}; for (const s of SLOTS) cand[s] = [];
++    for (const s of SLOTS) for (let k = 0; k < K + 1; k++) {
++      const il = ilvl();
++      cand[s].push(items.makeItem(il, { base: bases[s][Math.floor(Math.random() * bases[s].length)], cls, elite: k === K }));
++    }
++    const legs = [];
++    for (const b of BEFORE[job.zone]) {
++      const pool = data.LEGENDARIES.filter((l) => !l.cls || l.cls === cls), id = pool[Math.floor(Math.random() * pool.length)].id;
++      const it = items.makeItem(Math.min(L + 1, job.legLv?.[b] ?? BOSS_LV[b]), { rar: 3, cls, leg: id });
++      if (it.rar !== 3 || !items.usable(it, cls)) continue;
++      legs.push(it.leg);
++      for (const s of items.equipSlots(it)) cand[s].push(it);
++    }
++    const equip = {};
++    const score = (e) => { const S = stats.computeStats(h, e); return Math.log(S.dps) + Math.log(S.toughness); };
++    for (let pass = 0; pass < 2; pass++) for (const s of SLOTS) {
++      let best = equip[s] || null, bs = -1e9;
++      for (const it of cand[s]) { if ((s === 'ring1' && equip.ring2 === it) || (s === 'ring2' && equip.ring1 === it)) continue; const e = Object.assign({}, equip, { [s]: it }); const v = score(e); if (v > bs) { bs = v; best = it; } }
++      equip[s] = best;
++    }
++    return { equip, legs };
++  }
++
++  const ZFLAGS = {
++    forest: { quest: 1, acts: 0, flags: {} },
++    crypt: { quest: 3, acts: 0, flags: { weaver: true } },
++    pass: { quest: 6, acts: 1, flags: {} },
++    halls: { quest: 8, acts: 1, flags: { stonewarden: true } },
++    weep: { quest: 13, acts: 2, flags: { metElati: true } },
++    heart: { quest: 14, acts: 2, flags: { metElati: true, hart: true, thorn0: true, thorn1: true, thorn2: true } },
++    // a zone run clears the whole zone: the Anvil Gate and the Great Stair open (Ivar at rest, the slag plug melted), the
++    // Forge's heat at its middle stage
++    ashfield: { quest: 18, acts: 3, flags: { after3: true, fireTaken: true, ivar: true } },
++    forge: { quest: 20, acts: 3, flags: { after3: true, fireTaken: true, ivar: true, bellows0: true, heat: 1, plug: true } }
++  };
++  const BFLAGS = {
++    ivar: { quest: 19, flags: { ...Object.fromEntries(['l1', 'l2', 'l3', 'l4', 'l5'].flatMap((id) => [['lamp_' + id, true], ['mem_' + id, true]])), ivar: false, ivarDown: false } },
++    karthax: { quest: 21, flags: { bellows0: true, bellows1: true, bellows2: true, heat: 3, plug: true, gifts: { throne: 'refused', forge: 'refused', unfading: 'refused' } } }
++  };
++  const BOONS = ['ember', 'forge', 'amber'];
++
++  async function setupHero(job) {
++    let h = G.hero;
++    if (h.cls !== job.cls) {
++      const nh = state.newHero(job.cls, job.diff);
++      if (G.player?.avatar) { G.player.avatar.group.parent?.remove(G.player.avatar.group); }
++      G.hero = h = nh; G.player = null;
++    }
++    const zf = ZFLAGS[job.zone], bf = job.boss ? BFLAGS[job.boss] : null;
++    h.diff = job.diff; h.level = job.lvl; h.xp = 0;
++    const R = skillRanks(h.cls, h.level); h.skills = R.sk; h.points = R.pts;
++    h.quest = bf?.quest ?? zf.quest;
++    h.flags = Object.assign({ tickHint: true, helpSeen: true }, zf.flags, bf?.flags || {});
++    if (job.zone === 'forge' && !job.boss && job.heat != null) h.flags.heat = job.heat;
++    for (let a = 1; a <= 3; a++) { h['act' + a] = a <= zf.acts ? 1 : -1; if (a <= zf.acts) h.flags['act' + a] = true; }
++    h.act4 = -1;
++    h.boons = BOONS.slice(0, zf.acts);
++    h.seeds = {};
++    h.inv = new Array(32).fill(null);
++    const g = gear(h, job); h.equip = g.equip;
++    stats.refreshStats();
++    return g;
++  }
++
++  // ---------- the route ----------
++  // walking distances from the start over the floor (8 ways, no corner cutting)
++  function bfs(map, sx, sz) {
++    const w = map.w, hh = map.h, d = new Int32Array(w * hh).fill(-1), q = new Int32Array(w * hh);
++    const ix = Math.floor(sx), iz = Math.floor(sz); let head = 0, tail = 0;
++    if (map.solid(ix, iz)) return d;
++    d[iz * w + ix] = 0; q[tail++] = iz * w + ix;
++    const DX = [1, -1, 0, 0, 1, 1, -1, -1], DZ = [0, 0, 1, -1, 1, -1, 1, -1];
++    while (head < tail) {
++      const c = q[head++], cx = c % w, cz = (c - cx) / w;
++      for (let k = 0; k < 8; k++) {
++        const nx = cx + DX[k], nz = cz + DZ[k];
++        if (nx < 0 || nz < 0 || nx >= w || nz >= hh || map.solid(nx, nz)) continue;
++        if (k >= 4 && (map.solid(cx + DX[k], cz) || map.solid(cx, cz + DZ[k]))) continue;
++        const n = nz * w + nx; if (d[n] >= 0) continue;
++        d[n] = d[c] + 1; q[tail++] = n;
++      }
++    }
++    return d;
++  }
++  // a point some cells back along the way from the start to (x, z)
++  function backFrom(map, d, x, z, cells) {
++    let f = map.nearestFloor(x, z, 6), cx = Math.floor(f.x), cz = Math.floor(f.z); const w = map.w;
++    if (d[cz * w + cx] < 0) return null;
++    const DX = [1, -1, 0, 0, 1, 1, -1, -1], DZ = [0, 0, 1, -1, 1, -1, 1, -1];
++    for (let s = 0; s < cells; s++) {
++      let best = -1, bd = d[cz * w + cx];
++      for (let k = 0; k < 8; k++) { const nx = cx + DX[k], nz = cz + DZ[k]; if (nx < 0 || nz < 0 || nx >= w || nz >= map.h) continue; const v = d[nz * w + nx]; if (v >= 0 && v < bd) { bd = v; best = k; } }
++      if (best < 0) break; cx += DX[best]; cz += DZ[best];
++    }
++    return { x: cx + 0.5, z: cz + 0.5 };
++  }
++
++  // ---------- the bot ----------
++  const seen = new WeakMap();      // telegraph -> noticed?
++  function teles() {
++    const red = [], blue = [], st = B.st, pl = G.player;
++    const fl = forge.flues() || [], flueT = new Map();
++    for (const f of fl) { if (f.tele) flueT.set(f.tele, f); if (f.sheet) flueT.set(f.sheet, f); }
++    for (const t of fx.FX.teles) {
++      if (!t.alive || t.t > t.dur + 0.05) continue;
++      const m = t.m, u = m.material.uniforms, col = u.uColor.value.getHex(), shape = u.uShape.value;
++      if (OWN.has(col)) continue;
++      let s = seen.get(t);
++      if (s == null) { s = Math.random() < st.skill; seen.set(t, s); }
++      if (!s || t.t < st.react) continue;
++      const x = m.position.x, z = m.position.z, rot = m.rotation.y - Math.PI, left = t.dur - t.t;
++      // (the Forge's blue cover marks are safe from the Breath only, and the bot knows its cover already: inFlue's line of sight)
++      if (shape < 0.5) { if (col === SAFE) { if (!fl.some((f) => f.cover?.some((c) => Math.abs(c.x - x) + Math.abs(c.z - z) < 0.05))) blue.push({ x, z, r: m.scale.x }); } else red.push({ k: 0, x, z, r: m.scale.x, left }); }
++      else if (shape < 1.5) red.push({ k: 1, x, z, rot, range: m.scale.x, arc: u.uArc.value, left });
++      else { const f = flueT.get(t); red.push({ k: 2, x, z, rot, len: m.scale.z * 2, w: m.scale.x * 2, left, flue: f }); }
++    }
++    // standing fire and the like (the foe's): walked out of, not rolled out of
++    for (const a of G.areas) if ((a.team === 'foe' || a.team === 'all') && a.dmg > 0 && a.t < a.dur) red.push({ k: 0, x: a.x, z: a.z, r: a.r, left: 99, soft: true });
++    return { red, blue, pl };
++  }
++  const PAD = 0.75;
++  function inRed(r, x, z, pad = PAD) {
++    if (r.k === 0) return Math.hypot(x - r.x, z - r.z) < r.r + pad;
++    if (r.k === 1) { const d = Math.hypot(x - r.x, z - r.z); return d < r.range + pad && (d < pad || Math.abs(angDiff(r.rot, angleTo(r.x, r.z, x, z))) < r.arc + 0.12); }
++    if (r.flue) return forge.inFlue(r.flue, x, z, pad);
++    const ux = Math.sin(r.rot), uz = Math.cos(r.rot), dx = x - r.x, dz = z - r.z, u = dx * ux + dz * uz, v = dx * uz - dz * ux;
++    return u > -0.5 - pad && u < r.len + pad && Math.abs(v) < r.w / 2 + pad;
++  }
++  const inBlue = (T, x, z) => T.blue.some((b) => Math.hypot(x - b.x, z - b.z) < b.r - 0.6);
++  function danger(T, x, z, hardOnly = false) {
++    if (T.blue.length && inBlue(T, x, z)) return null;
++    let worst = null;
++    for (const r of T.red) { if (hardOnly && r.soft) continue; if (inRed(r, x, z)) { if (!worst || r.left < worst.left) worst = r; } }
++    return worst;
++  }
++  // the nearest place out of every telegraph that can be walked to in a straight line
++  function escape(T, pl) {
++    const map = G.zone.map; let best = null, bd = 1e9;
++    for (const b of T.blue) { const d = Math.hypot(b.x - pl.x, b.z - pl.z); if (d < bd && map.walkable(b.x, b.z) && map.clear(pl.x, pl.z, b.x, b.z)) { bd = d - b.r * 0.5; best = { x: b.x + (pl.x - b.x) * 0.3, z: b.z + (pl.z - b.z) * 0.3 }; } }
++    for (const rr of [1.2, 2, 3, 4.5, 6, 8, 11]) for (let i = 0; i < 16; i++) {
++      const a = (i / 16) * Math.PI * 2, x = pl.x + Math.sin(a) * rr, z = pl.z + Math.cos(a) * rr;
++      if (rr >= bd) break;
++      if (!map.walkable(x, z) || !map.clear(pl.x, pl.z, x, z) || danger(T, x, z)) continue;
++      bd = rr; best = { x, z };
++    }
++    return best;
++  }
++  function attackable(a) { return !a.hidden && !a.airborne && !a.cling && !a.under && !a.disguised && !(a.invuln > 0) && !(a.bondT > 0) && !a.dormant && !(a.rising > 0); }
++  function live(a) { return a.team === 'foe' && !a.dead && !a.removed && !a.prop && !a.keeper && !a.pet && !a.npc; }
++  function count(x, z, r) { let n = 0; for (const a of G.actors) if (live(a) && attackable(a) && Math.hypot(a.x - x, a.z - z) < r + a.radius) n++; return n; }
++  function shrouded(a) { return (a.def.shroud || a.shrouded) && !(a.unshroud > 0) && !(a.revealed > 0) && light.lightOn() && !light.lightAt(a.x, a.z); }
++  // which foe: the boss's nodes or singers first when the boss cannot be hurt; then the nearest by the way there
++  function pickTarget(st, pl) {
++    const map = G.zone.map, b = G.zone.boss;
++    let pool = G.actors.filter((a) => live(a) && (a.aggro || a.dormant || st.mode === 'boss' || (st.pack && a.packId === st.pack.id)) && Math.hypot(a.x - pl.x, a.z - pl.z) < 40);
++    if (st.mode === 'pack') pool = pool.filter((a) => a.aggro || a.packId === st.pack?.id);
++    if (b && !b.dead && b.mourners && b.ward > 0) { const m = b.mourners.filter((x) => live(x) && attackable(x)); if (m.length) pool = m; }
++    pool = pool.filter((a) => !(st.skip.get(a) > st.t));
++    let best = null, bs = 1e9, bestA = null, bsA = 1e9;
++    for (const a of pool) {
++      let d = Math.hypot(a.x - pl.x, a.z - pl.z) - a.radius;
++      if (!map.los(pl.x, pl.z, a.x, a.z)) d += 6;
++      if (a === st.target) d -= 2;
++      if (attackable(a)) { if (d < bsA) { bsA = d; bestA = a; } }
++      else if (d < bs) { bs = d; best = a; }
++    }
++    return bestA || best;
++  }
++  function ready(pl, i) { const sk = SKILLS[G.hero.cls][i]; return sk && G.hero.level >= (sk.lvl || 0) && pl.cds[i] <= 0 && pl.res >= (sk.cost || 0); }
++  function chooseSkill(cls, pl, tg, d) {
++    if (!tg || !attackable(tg)) return 0;
++    if (cls === 'warden') {
++      const n3 = count(pl.x, pl.z, 3.2), n6 = count(pl.x, pl.z, 6);
++      if (ready(pl, 3) && n6 >= 1) return 3;
++      if (ready(pl, 2) && d > 3.5 && d < 9) return 2;
++      if (ready(pl, 4) && d < 7) return 4;
++      if (ready(pl, 1) && pl.res >= 30 && n3 >= 3) return 1;
++      if (ready(pl, 2) && d < 9 && count(tg.x, tg.z, 3.2) >= 3) return 2;
++      return 0;
++    }
++    if (cls === 'ranger') {
++      if (ready(pl, 3) && !G.actors.some((a) => a.kind === 'spiritWolf' && !a.dead)) return 3;
++      if (ready(pl, 4)) return 4;
++      if (ready(pl, 2) && (count(tg.x, tg.z, 3.6) >= 2 || tg.boss || tg.elite)) return 2;
++      if (ready(pl, 1) && pl.res >= 60 && count(tg.x, tg.z, 5) >= 2) return 1;
++      return 0;
++    }
++    if (ready(pl, 2) && count(pl.x, pl.z, 5) >= 1) return 2;
++    if (ready(pl, 4) && d < 12) return 4;
++    if (ready(pl, 3) && count(tg.x, tg.z, 9) >= 2) return 3;
++    if (ready(pl, 1) && pl.res >= 60) return 1;
++    return 0;
++  }
++  const dirT = { x: 0, z: 0 };
++  function moveTo(st, pl, tx, tz) {
++    const map = G.zone.map, d = Math.hypot(tx - pl.x, tz - pl.z);
++    if (d < 0.3) { IN.mx = IN.mz = 0; return; }
++    let dx = (tx - pl.x) / d, dz = (tz - pl.z) / d;
++    if (!map.clear(pl.x, pl.z, tx, tz)) { const f = pathDir(st, map, pl, tx, tz); if (f) { dx = f.x; dz = f.z; } }
++    IN.mx = dx; IN.mz = dz; st.wantMove = true;
++  }
++  // the way to (tx, tz) over the whole map: walking distances from the target's cell (kept while it stays in its cell
++  // area and for a second), then downhill from the hero's cell
++  function pathDir(st, map, pl, tx, tz) {
++    const f = map.nearestFloor(tx, tz, 4), cx = Math.floor(f.x), cz = Math.floor(f.z), P = st.flow;
++    if (!P || Math.abs(P.cx - cx) + Math.abs(P.cz - cz) > 2 || st.t - P.t > 1 || P.ver !== map.ver) st.flow = { cx, cz, t: st.t, ver: map.ver, d: bfs(map, f.x, f.z) };
++    const D = st.flow.d, w = map.w, gx = Math.floor(pl.x), gz = Math.floor(pl.z);
++    let best = D[gz * w + gx]; if (best < 0) best = 1e9;
++    let bx = 0, bz = 0;
++    const DX = [1, -1, 0, 0, 1, 1, -1, -1], DZ = [0, 0, 1, -1, 1, -1, 1, -1];
++    for (let k = 0; k < 8; k++) {
++      const nx = gx + DX[k], nz = gz + DZ[k]; if (nx < 0 || nz < 0 || nx >= w || nz >= map.h) continue;
++      if (k >= 4 && (map.solid(gx + DX[k], gz) || map.solid(gx, gz + DZ[k]))) continue;
++      const v = D[nz * w + nx]; if (v >= 0 && v < best) { best = v; bx = DX[k]; bz = DZ[k]; }
++    }
++    if (!bx && !bz) return null;
++    // aim at the next cell's centre, a little ahead (so the body clears corners)
++    const ax = gx + bx + 0.5, az = gz + bz + 0.5, ddx = ax - pl.x, ddz = az - pl.z, l = Math.hypot(ddx, ddz) || 1;
++    dirT.x = ddx / l; dirT.z = ddz / l; return dirT;
++  }
++  function push(ev) { evq.push(ev); }
++  let evq = IN.events, lastStamp = -1;
++  Object.defineProperty(IN, 'events', { configurable: true, get() { try { tick(); } catch (e) { B.err = String(e.stack || e).slice(0, 800); } return evq; }, set(v) { evq = v; } });
++
++  function tick() {
++    const st = B.st; if (!st || st.over) return;
++    if (G.mode !== 'play' || G.panel || hud.dialogOpen()) return;
++    const stamp = G.hero.stats.time; if (stamp === lastStamp) return;
++    const dt = lastStamp < 0 ? 0 : Math.min(0.034, Math.max(0, stamp - lastStamp)); lastStamp = stamp;
++    const pl = G.player; if (!pl) return;
++    st.t += dt; st.phaseT += dt;
++    if (st.job.trace && st.t - (st.lastTrace || 0) > (st.job.trace || 2)) {
++      st.lastTrace = st.t; const b = G.zone.boss, tg = st.target;
++      st.trace.push({ t: +st.t.toFixed(1), hp: +(pl.hp / pl.hpMax).toFixed(2), act: pl.act?.name || '', why: st.why, x: +pl.x.toFixed(1), z: +pl.z.toFixed(1), tg: tg ? tg.kind + ':' + +Math.hypot(tg.x - pl.x, tg.z - pl.z).toFixed(1) + (attackable(tg) ? '' : '!') : '-', b: b ? +(b.hp / b.hpMax).toFixed(3) + (b.hidden ? 'h' : '') + (b.invuln > 0 ? 'i' : '') + (b.ward > 0 ? 'w' : '') + (b.cages ? ' c' + b.cages.filter((q) => !q.dead).map((q) => q.blows + '@' + Math.round(Math.hypot(q.x - pl.x, q.z - pl.z))).join(',') + ' m' + b.misses : '') + (b.dark ? ' dark' : '') + (shrouded(b) ? ' sh' : '') : '-', res: Math.round(pl.res), n: G.actors.filter((a) => live(a)).length });
++    }
++    IN.mx = IN.mz = 0; st.wantMove = false;
++    // the books: what the foes lost, the hero's lowest
++    for (const a of G.actors) if (a.team === 'foe' && !a.prop && !a.keeper) { const h0 = st.hp.get(a); const h = Math.max(0, a.hp); if (h0 != null && h < h0 && st.counting) st.dealt += h0 - h; st.hp.set(a, h); }
++    if (pl.dead) {
++      if (!st.deadT) { st.deadT = st.t; }
++      if (st.t - st.deadT > 1.0) { pl.dead = false; pl.hp = pl.hpMax; pl.status = actors.freshStatus(); pl.act = null; pl.iframes = 2.5; pl.res = G.hero.cls === 'warden' ? 0 : G.stats.resMax; D.emit('heroLook'); st.deadT = 0; }
++      return;
++    }
++    if (st.counting) st.minHp = Math.min(st.minHp, pl.hp / pl.hpMax);
++    if (st.step) { st.step(st, pl, dt); if (st.over) return; }
++    // between packs (the walk to the next one) she still steps out of the red, the Breath's included, and does nothing else
++    if (st.fight && st.counting) st.ct += dt;
++
++    const T = teles(), cls = G.hero.cls, C = CLASSES[cls];
++    const busy = pl.act && pl.act.name !== 'basic' && pl.act.name !== 'whirl';
++    // a potion under 35%
++    if (pl.hp < pl.hpMax * 0.35 && pl.potionCd <= 0) { push({ t: 'potion' }); st.potions++; }
++    // an Ember Tick on her back: roll it off
++    if (pl.cling?.length && pl.dodgeCd <= 0 && (st.clingT = (st.clingT || 0) + dt) > 0.4) { st.clingT = 0; const a = rnd(0, 6.28); IN.mx = Math.sin(a); IN.mz = Math.cos(a); push({ t: 'dodge' }); st.dodges++; return; }
++    // out of the red
++    let dz = danger(T, pl.x, pl.z);
++    if (dz && dz.soft && pl.hp > pl.hpMax * 0.5 && st.target && live(st.target) && attackable(st.target) && Math.hypot(st.target.x - pl.x, st.target.z - pl.z) - st.target.radius < (cls === 'warden' ? 2.6 : C.range - 1)) dz = null;
++    if (dz) {
++      const e = escape(T, pl);
++      if (e) {
++        const dist = Math.hypot(e.x - pl.x, e.z - pl.z), walk = dist / Math.max(1, pl.speed) + (busy || pl.act?.name === 'basic' ? 0.25 : 0);
++        moveTo(st, pl, e.x, e.z);
++        if (!dz.soft && walk > dz.left - 0.08 && pl.dodgeCd <= 0 && pl.act?.name !== 'leap') { push({ t: 'dodge' }); st.dodges++; }
++        st.evading += dt; st.why = 'evade' + (dz.soft ? 'S' : '');
++        return;
++      }
++    }
++    if (!st.fight) { st.why = 'idle'; return; }
++    if (busy) { st.why = 'busy'; return; }
++    // the fight's own rules
++    const b = G.zone.boss;
++    let goal = null;
++    if (b && !b.dead && b.kind === 'ivar' && b.dark) {
++      // his dark: the adds at her side first (a blow breaks the touch, a Smoke-eater eats the fire), then the nearest dark brazier
++      const add = G.actors.filter((x) => live(x) && attackable(x) && x !== b && Math.hypot(x.x - pl.x, x.z - pl.z) < 7).sort((p, q) => Math.hypot(p.x - pl.x, p.z - pl.z) - Math.hypot(q.x - pl.x, q.z - pl.z))[0];
++      const off = (G.zone.act4?.braziers || []).filter((x) => !x.lit).sort((p, q) => Math.hypot(p.x - pl.x, p.z - pl.z) - Math.hypot(q.x - pl.x, q.z - pl.z))[0];
++      if (add) { st.target = add; st.retarget = 0.4; }
++      else if (off) {
++        if (Math.hypot(off.x - pl.x, off.z - pl.z) < off.r - 0.3) { if (!pl.act) { off.use(); st.touches++; } return; }
++        goal = { x: off.x, z: off.z, near: off.r - 0.6 };
++      }
++    }
++    if (!goal && b && !b.dead && b.cages) {
++      const up = b.cages.filter((s) => !s.dead).sort((p, q) => Math.hypot(p.x - pl.x, p.z - pl.z) - Math.hypot(q.x - pl.x, q.z - pl.z));
++      // 1.8 m from the statue on her side, round his body (the way there does not know him: on his side of it she was pinned
++      // against him), and no shooting until she is there (4 m short of it she stood 5-6 m from the statue, out of the 4.5 m
++      // blow, and each statue waited for the two-miss fail-safe)
++      if (up.length) {
++        const s = up[0], map = G.zone.map; let f = null, fs = 1e9;
++        for (let i = 0; i < 12; i++) { const an = (i / 12) * Math.PI * 2, x = s.x + Math.sin(an) * 1.8, z = s.z + Math.cos(an) * 1.8; if (!map.walkable(x, z)) continue; const db = Math.hypot(x - b.x, z - b.z), sc = Math.hypot(x - pl.x, z - pl.z) + (db < b.radius + 1.6 ? 8 : 0) + (map.clear(pl.x, pl.z, x, z) ? 0 : 4); if (sc < fs) { fs = sc; f = { x, z }; } }
++        f ||= map.nearestFloor(s.x, s.z, 3); goal = { x: f.x, z: f.z, near: 1.0, fight: true, fightIn: 1.6 };
++      }
++    }
++    if (!goal && b && !b.dead && b.awake && shrouded(b)) {
++      // a Shrouded boss takes full damage only in light: wait for it in the nearest pool
++      const pools = light.lightPools().filter((p) => p.r > 1.5).sort((p, q) => Math.hypot(p.x - b.x, p.z - b.z) - Math.hypot(q.x - b.x, q.z - b.z));
++      if (pools.length) { const p = pools[0], to = G.zone.map.nearestFloor(p.x + (b.x - p.x) * 0.25, p.z + (b.z - p.z) * 0.25, 3); goal = { x: to.x, z: to.z, near: Math.max(1, p.r * 0.45), fight: true }; }
++    }
++    // the target
++    if (!st.target || !live(st.target) || st.retarget <= 0) { st.target = pickTarget(st, pl); st.retarget = 0.4; }
++    st.retarget -= dt;
++    const tg = st.target;
++    if (goal && Math.hypot(goal.x - pl.x, goal.z - pl.z) > goal.near) {
++      moveTo(st, pl, goal.x, goal.z); st.why = 'goal';
++      // far from where the fight's rule wants her: on her way, no stopping to shoot
++      if (!goal.fight || !tg || Math.hypot(goal.x - pl.x, goal.z - pl.z) > (goal.fightIn ?? 4)) { unstick(st, pl, dt); return; }
++    }
++    if (!tg) {
++      if (st.walkTo) { moveTo(st, pl, st.walkTo.x, st.walkTo.z); st.why = 'walk'; st.walkS += dt; unstick(st, pl, dt); return; }
++      st.why = 'none'; unstick(st, pl, dt); return;
++    }
++    const d = Math.hypot(tg.x - pl.x, tg.z - pl.z) - tg.radius;
++    const los = G.zone.map.los(pl.x, pl.z, tg.x, tg.z);
++    const ranged = cls !== 'warden';
++    const want = !attackable(tg) ? 1.5 : ranged ? (shrouded(tg) ? 3.5 : 7.5) : 1.4;
++    const reach = ranged ? (shrouded(tg) ? 5 : C.range - 1) : 2.2;
++    // ranged: back away (a roll) from a melee foe at her side when hurting
++    if (ranged && pl.dodgeCd <= 0 && pl.hp < pl.hpMax * 0.7) {
++      const m = G.actors.find((a) => live(a) && attackable(a) && a.def.reach < 3 && Math.hypot(a.x - pl.x, a.z - pl.z) < 1.8 + a.radius);
++      if (m) {
++        const a = angleTo(m.x, m.z, pl.x, pl.z), x = pl.x + Math.sin(a) * 6, z = pl.z + Math.cos(a) * 6;
++        if (G.zone.map.walkable(x, z) && !danger(T, x, z, true)) { IN.mx = Math.sin(a); IN.mz = Math.cos(a); push({ t: 'dodge' }); st.dodges++; return; }
++      }
++    }
++    if (!goal || !goal.fight) {
++      if (d > want || !los || !attackable(tg)) {
++        if (!(pl.act?.name === 'basic' && pl.act.t < pl.act.dur * 0.7)) moveTo(st, pl, tg.x, tg.z);
++        if (!(attackable(tg) && los && d <= reach)) { st.why = 'approach'; unstick(st, pl, dt); return; }
++      }
++    }
++    if (!attackable(tg) || !los || d > reach + (ranged ? 0 : 0.6)) { st.why = 'noreach'; unstick(st, pl, dt); return; }
++    st.stuckT = 0;
++    if (pl.act && pl.act.name === 'whirl') { moveTo(st, pl, tg.x, tg.z); return; }
++    if (pl.act) return;
++    st.why = 'atk';
++    const i = chooseSkill(cls, pl, tg, d);
++    IN.mx = IN.mz = 0;
++    push({ t: 'skill', i, aim: { x: tg.x, z: tg.z } });
++    if (i) st.casts[i] = (st.casts[i] || 0) + 1;
++  }
++  // pinned against something on the way to a foe: a little nudge, and in the end that foe is left for a while
++  function unstick(st, pl, dt) {
++    if (!st.wantMove) { st.stuckT = 0; return; }
++    if (!st.lastPos || Math.hypot(pl.x - st.lastPos.x, pl.z - st.lastPos.z) > 0.8) { st.lastPos = { x: pl.x, z: pl.z }; st.stuckT = 0; return; }
++    st.stuckT += dt;
++    const tg = st.target || st.walkTo;
++    if (st.stuckT > 4 && tg) {
++      st.stuck++; st.stuckT = 0;
++      const a = angleTo(pl.x, pl.z, tg.x, tg.z), f = G.zone.map.nearestFloor(pl.x + Math.sin(a) * 2.5, pl.z + Math.cos(a) * 2.5, 4);
++      if (st.stuck % 3 === 0 && st.target) st.skip.set(st.target, st.t + 10); else { pl.x = f.x; pl.z = f.z; }
++    }
++  }
++
++  // (a diagnostic, job.hpTrace: where the boss's life goes, by the code that took it)
++  function traceHp(st, b) {
++    let v = b.hp; st.bossSrc = {};
++    Object.defineProperty(b, 'hp', { configurable: true, get: () => v, set: (n) => {
++      if (n < v) { let key = '?'; for (const l of (new Error().stack || '').split('\n').slice(2)) { const m = l.match(/at (?:Object\.)?([\w$.]+)? ?\(?.*?\/src\/(?:game|gfx)\/([a-z0-9]+)\.js[^:]*:(\d+)/); if (m && !/combat:(5\d|6\d|7\d)$/.test(m[2] + ':' + m[3]) && m[1] !== 'damage') { key = m[2] + ':' + m[3] + ' ' + (m[1] || ''); break; } } st.bossSrc[key] = Math.round((st.bossSrc[key] || 0) + (v - n)); }
++      v = n; } });
++  }
++  // a zone walked as a player walks it: from the start to the nearest pack not yet cleared (by the way there), fighting
++  // whatever comes on the way (the Forge's Breath, the slag, the Lampless's lanterns, the Ashwings included); every second
++  // of it counts
++  function walkZone(st, z, map, route) {
++    const left = new Set(route), w = map.w, pl = G.player;
++    let cur = null;
++    st.fight = true; st.walkS = 0; st.passed = 0;
++    const pickNext = () => {
++      const dd = bfs(map, pl.x, pl.z); let best = null, bd = 1e9;
++      for (const p of left) { const f = map.nearestFloor(p.x, p.z, 5), v = dd[Math.floor(f.z) * w + Math.floor(f.x)]; if (v >= 0 && v < bd) { bd = v; best = p; } }
++      return best || left.values().next().value;
++    };
++    st.step = (st, pl, dt) => {
++      if (st.t > cfg.zoneMax) { st.over = true; return; }
++      if (!cur) {
++        if (!left.size) { st.over = true; return; }
++        cur = pickNext(); st.pack = cur; st.packT = 0; st.packStart = { taken: st.takenN, deaths: st.deaths, kills: st.kills };
++      }
++      st.packT += dt;
++      // packs cleared on the way leave the list
++      for (const p of left) if (p !== cur && p.spawned && !G.actors.some((a) => a.packId === p.id && live(a))) { left.delete(p); st.passed++; }
++      const mine = G.actors.filter((a) => a.packId === cur.id && live(a));
++      const near = G.actors.some((a) => live(a) && a.aggro && Math.hypot(a.x - pl.x, a.z - pl.z) < 22);
++      if ((cur.spawned && !mine.length && !near) || st.packT > 240) {
++        const s = st.packStart;
++        st.packs.push({ tag: cur.tag, n: cur.n, elite: cur.elite || null, t: +st.packT.toFixed(1), life: +(st.takenN - s.taken).toFixed(2), deaths: st.deaths - s.deaths, kills: st.kills - s.kills, timeout: st.packT > 240 });
++        left.delete(cur); cur = null; st.walkTo = null; st.target = null;
++        return;
++      }
++      // to the pack; once it is up, to its nearest member (a Smoke-eater gone for a lamp, a patrol on its round)
++      if (!mine.length) st.walkTo = { x: cur.x, z: cur.z };
++      else { let m = mine[0], md = 1e9; for (const a of mine) { const d = Math.hypot(a.x - pl.x, a.z - pl.z); if (d < md) { md = d; m = a; } } st.walkTo = { x: m.x, z: m.z }; }
++    };
++  }
++  // ---------- the books ----------
++  const SRC = /\/src\/(?:game|gfx)\/([a-z0-9]+)\.js[^:]*:(\d+)/;
++  bus.on('hurt', (frac) => {
++    const st = B.st; if (!st || !st.counting) return;
++    const pl = G.player, amt = frac * pl.hpMax;
++    st.taken += amt; st.takenN += frac; st.hits++;
++    st.maxHit = Math.max(st.maxHit, frac);
++    // who: the first frame of the stack outside the bus and the damage code; and the nearest foe at work
++    let key = '?';
++    const lines = (new Error().stack || '').split('\n');
++    for (const l of lines) { if ((/bus\.js|combat\.js|<anonymous>|hitHero/.test(l) && !/tickStatus|tickCling|tickBurst/.test(l)) || !/\/src\//.test(l)) continue; const m = l.match(/at (?:Object\.)?([\w$.]+)? ?\(?.*?\/src\/(?:game|gfx)\/([a-z0-9]+)\.js[^:]*:(\d+)/); if (m) { key = m[2] + ':' + m[3] + (m[1] ? ' ' + m[1] : ''); break; } }
++    let who = null, wd = 1e9;
++    for (const a of G.actors) { if (!live(a)) continue; const d = Math.hypot(a.x - pl.x, a.z - pl.z); const busy = a.state === 'attack' || a.move || a.dash ? 0 : 6; if (d + busy < wd && d < 16) { wd = d + busy; who = a; } }
++    const k = (who ? who.kind + (who.elite ? '*' : '') : '-') + ' @' + key;
++    const e = st.src[k] ||= { n: 0, life: 0 }; e.n++; e.life += frac;
++    const bb = G.zone.boss; if (bb && st.mode === 'boss') st.byPhase[bb.phase ?? 0] = (st.byPhase[bb.phase ?? 0] || 0) + frac;
++  });
++  bus.on('kill', (a) => { const st = B.st; if (st?.counting && a.team === 'foe') { st.kills++; if (a.elite) st.eliteKills++; } });
++  // a death: counted, and she gets up where she fell a second later (game time: updatePlayer does not run for the dead, so
++  // the bot's own tick cannot do it)
++  const revive = () => { const pl = G.player; if (!pl || !pl.dead || !B.st) return; pl.dead = false; pl.hp = pl.hpMax; pl.status = actors.freshStatus(); pl.act = null; pl.iframes = 2.5; pl.res = G.hero.cls === 'warden' ? 0 : G.stats.resMax; D.emit('heroLook'); B.st.deadT = 0; };
++  bus.on('heroDeath', () => { const st = B.st; if (!st) return; if (st.counting) { st.deaths++; st.deathAt.push(+st.t.toFixed(1)); } st.diedAt = performance.now(); G.timers.push({ t: 1.0, fn: revive }); });
++  bus.on('bossPhase', (a, ph) => { const st = B.st; if (st?.counting && a === G.zone.boss) st.phases.push([ph, +st.ct.toFixed(1)]); });
++
++  // keep the game moving: dialogs advanced, the death panel and any other panel closed
++  setInterval(() => {
++    if (!B.st || B.st.over) return;
++    if (hud.dialogOpen()) D.emit('key', 'enter');
++    if (G.panel) D.closePanel();
++    if (G.player?.dead && performance.now() - (B.st.diedAt || 0) > 2500) revive();
++  }, 120);
++
++  // ---------- a job ----------
++  B.run = async (job) => {
++    B.done = null; B.err = null; B.st = null;
++    const g = await setupHero(job);
++    await world.zoneReady(job.zone);
++    G.timers.length = 0; G.cine = null; G.mode = 'play'; document.getElementById('letterbox')?.classList.remove('on');
++    if (G.panel) D.closePanel();
++    const z = world.enterZone(job.zone, { fresh: true, seed: job.seed });
++    const pl = G.player;
++    Object.assign(pl, { dead: false, hp: pl.hpMax, res: G.hero.cls === 'warden' ? 0 : G.stats.resMax, potionCd: 0, dodgeCd: 0, buffs: {}, status: actors.freshStatus(), act: null, iframes: 0, cling: [] });
++    pl.cds = pl.cds.map(() => 0);
++    D.emit('heroLook');
++    const st = B.st = {
++      job, mode: job.boss ? 'boss' : 'pack', skill: job.skill ?? cfg.skill, react: job.react ?? cfg.react, t: 0, ct: 0, phaseT: 0, counting: false, fight: false, over: false, hp: new Map(), skip: new Map(), path: {},
++      trace: [], why: '', walkTo: null, walkS: 0, passed: 0, dealt: 0, taken: 0, takenN: 0, hits: 0, maxHit: 0, kills: 0, eliteKills: 0, deaths: 0, deathAt: [], potions: 0, dodges: 0, evading: 0, touches: 0, stuck: 0, stuckT: 0, casts: {}, src: {}, phases: [], byPhase: [],
++      minHp: 1, target: null, retarget: 0, packs: [], step: null, gear: Object.fromEntries(Object.entries(g.equip).map(([s, it]) => [s, it ? it.rar + ':' + it.ilvl : '-'])), legs: g.legs,
++      hero: { lvl: G.hero.level, life: G.stats.lifeMax, armor: G.stats.armor, red: +G.stats.red.toFixed(3), dps: Math.round(G.stats.dps), block: G.stats.block }
++    };
++    lastStamp = -1;
++    const map = z.map, L = z.L;
++    if (!job.boss) {
++      z.bossSpawned = true;
++      const d = bfs(map, L.start.x, L.start.z), w = map.w;
++      const reach = z.packs.map((p) => { const f = map.nearestFloor(p.x, p.z, 5); return { p, d: d[Math.floor(f.z) * w + Math.floor(f.x)] }; }).filter((q) => q.d >= 0).sort((a, b) => a.d - b.d);
++      const route = reach.slice(0, job.packs).map((q) => q.p);
++      st.route = route.map((p) => ({ tag: p.tag, n: p.n, elite: p.elite || null, d: reach.find((q) => q.p === p).d }));
++      if (job.walk) walkZone(st, z, map, route);
++      let i = -1, wait = 0;
++      const next = () => {
++        i++;
++        if (i >= route.length) { st.over = true; return; }
++        const p = route[i], at = backFrom(map, d, p.x, p.z, 9) || map.nearestFloor(p.x, p.z + 7);
++        pl.x = at.x; pl.z = at.z; pl.kx = pl.kz = 0;
++        st.pack = p; st.packT = 0; st.packStart = { ct: st.ct, taken: st.takenN, dealt: st.dealt, deaths: st.deaths, kills: st.kills, min: 1 }; st.fight = true; st.target = null;
++      };
++      st.counting = true;
++      if (!job.walk) st.step = (st, pl, dt) => {
++        if (wait > 0) { wait -= dt; if (wait <= 0) next(); return; }
++        if (i < 0) { next(); return; }
++        st.packT += dt;
++        const p = st.pack, mine = G.actors.filter((a) => a.packId === p.id && live(a));
++        const near = G.actors.some((a) => live(a) && a.aggro && Math.hypot(a.x - pl.x, a.z - pl.z) < 22);
++        if ((p.spawned && !mine.length && !near) || st.packT > 150) {
++          const s = st.packStart;
++          st.packs.push({ tag: p.tag, n: p.n, elite: p.elite || null, t: +st.packT.toFixed(1), life: +(st.takenN - s.taken).toFixed(2), deaths: st.deaths - s.deaths, kills: st.kills - s.kills, timeout: st.packT > 150 });
++          st.fight = false; wait = cfg.walk; IN.mx = IN.mz = 0;
++          if (i + 1 >= route.length) { st.over = true; }
++        }
++        if (st.t > cfg.zoneMax) st.over = true;
++      };
++    } else {
++      for (const p of z.packs) p.spawned = true;
++      z.bossSpawned = false;
++      const c = z.bossSpot || L.boss, want = job.boss === 'karthax' ? 8 : 9;
++      const db = bfs(map, map.nearestFloor(c.x, c.z, 6).x, map.nearestFloor(c.x, c.z, 6).z);
++      let at = null, ad = 1e9;
++      for (let k = 0; k < db.length; k++) { const v = db[k]; if (v < 0) continue; const x = (k % map.w) + 0.5, zz = Math.floor(k / map.w) + 0.5, e = Math.abs(Math.hypot(x - c.x, zz - c.z) - want) + Math.abs(v - want) * 0.5 + (zz < c.z ? 0.6 : 0); if (e < ad && map.los(x, zz, c.x, c.z)) { ad = e; at = { x, z: zz }; } }
++      at ||= map.nearestFloor(c.x, c.z + want, 6);
++      pl.x = at.x; pl.z = at.z;
++      st.fight = true;
++      if (!z.bossSpot) B.err = 'no boss spot (story flags?)';
++      st.step = (st, pl, dt) => {
++        const b = z.boss;
++        if (st.t > cfg.bossMax + 120) st.over = true;
++        if (!b) { if (st.t > 60) { B.err = 'the boss never came'; st.over = true; } return; }
++        if (!st.counting && b.awake) { st.counting = true; st.bossLvl = b.level; st.bossHp = Math.round(b.hpMax); st.bossDmg = +b.dmg.toFixed(1); if (st.job.hpTrace) traceHp(st, b); }
++        if (b.dead) { st.killed = true; st.over = true; }
++        if (st.ct > cfg.bossMax || st.deaths >= cfg.maxDeaths) st.over = true;
++        // still asleep (the Hart before its time, Karthax under the slag): walk up to it
++        if (!b.awake && !b.holdWake && Math.hypot(b.x - pl.x, b.z - pl.z) > 10 && !st.counting) { st.target = b; }
++      };
++    }
++    // wait for the end (real time), reporting
++    const w0 = performance.now();
++    await new Promise((ok) => { const iv = setInterval(() => { if (st.over || B.err || performance.now() - w0 > cfg.realMax * 1000) { clearInterval(iv); ok(); } }, 250); });
++    st.over = true; IN.mx = IN.mz = 0;
++    const min = Math.max(st.ct, 1e-6) / 60;
++    const b = z.boss;
++    const res = {
++      ...job, ok: !B.err && (job.boss ? !!st.killed : true), err: B.err, realS: Math.round((performance.now() - w0) / 1000),
++      hero: st.hero, endLvl: G.hero.level, gear: st.gear, legs: st.legs,
++      combatS: +st.ct.toFixed(1), totalS: +st.t.toFixed(1), deaths: st.deaths, deathAt: st.deathAt, minLife: +st.minHp.toFixed(3),
++      takenPerMin: Math.round(st.taken / min), lifePerMin: +(st.takenN / min).toFixed(2), dealtPerMin: Math.round(st.dealt / min), killsPerMin: +(st.kills / min).toFixed(2),
++      kills: st.kills, eliteKills: st.eliteKills, potions: st.potions, dodges: st.dodges, evadingS: +st.evading.toFixed(1), touches: st.touches, stuck: st.stuck, hits: st.hits, maxHit: +st.maxHit.toFixed(3), lifeTaken: +st.takenN.toFixed(2),
++      ...(job.trace ? { trace: st.trace } : {}), casts: st.casts, src: Object.fromEntries(Object.entries(st.src).sort((a, b) => b[1].life - a[1].life).slice(0, 14).map(([k, v]) => [k, { n: v.n, life: +v.life.toFixed(2) }])),
++      ...(st.bossSrc ? { bossSrc: Object.fromEntries(Object.entries(st.bossSrc).sort((p, q) => q[1] - p[1]).slice(0, 15)) } : {}),
++      ...(job.boss ? { killed: !!st.killed, killS: st.killed ? +st.ct.toFixed(1) : null, bossLvl: st.bossLvl, bossHp: st.bossHp, bossDmg: st.bossDmg, bossLeft: b && !b.dead ? +(b.hp / b.hpMax).toFixed(3) : 0, phases: st.phases, byPhase: st.byPhase.map((v) => +(v || 0).toFixed(3)) } : { route: st.route, packList: st.packs, packsDone: st.packs.length + (st.passed || 0), walk: !!job.walk, walkS: +(st.walkS || 0).toFixed(1), passed: st.passed || 0 })
++    };
++    B.st = null;
++    return res;
++  };
++  return true;
++}
++
++// ---------------------------------------------------------------------------------------------------------------------
++const jobs = jobsFromArgs();
++const done = new Set();
++// (a job whose page died under it is not done)
++if (OUT && fs.existsSync(OUT)) for (const l of fs.readFileSync(OUT, 'utf8').split('\n')) { if (!l.trim()) continue; try { const r = JSON.parse(l); if (!String(r.err || '').startsWith('evaluate:')) done.add(r.id); } catch {} }
++const todo = jobs.filter((j) => !done.has(j.id));
++if (process.env.HEAT != null) for (const j of todo) j.heat ??= +process.env.HEAT;
++console.error(`balance-act: ${todo.length} jobs (${jobs.length - todo.length} already done)`);
++const cfg = { skill: +(process.env.SKILL || 0.6), react: +(process.env.REACT || 0.45), walk: +(process.env.WALK || 8), zoneMax: +(process.env.ZONEMAX || 1500), bossMax: +(process.env.BOSSMAX || 900), maxDeaths: +(process.env.MAXDEATHS || 12), realMax: +(process.env.REALMAX || 400) };
++// a page for GROUP jobs (a job of another class makes a new hero in place)
++const groups = [];
++for (const j of todo) { const g = groups[groups.length - 1]; if (g && g.length < GROUP) g.push(j); else groups.push([j]); }
++const launch = () => chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'] });
++let browser = await launch();
++try {
++  const logs = [];
++  const openPage = async (j0) => {
++    // the browser itself gone (killed from outside, out of memory): a new one
++    if (!browser.isConnected()) { console.error('  the browser died: a new one'); await browser.close().catch(() => {}); browser = await launch(); }
++    const page = await browser.newPage({ viewport: { width: 640, height: 400 } });
++    page.on('pageerror', (e) => logs.push('pageerror: ' + e.message));
++    page.on('console', (m) => { if (m.type() === 'error') logs.push('console: ' + m.text().slice(0, 200)); });
++    await page.goto(`${BASE}?auto=${j0.zone}&lvl=${j0.lvl}&cls=${j0.cls}&diff=${j0.diff}&sim=${SIM}&q=0&norender`);
++    await page.waitForFunction(() => window.__ready && window.__G?.player, null, { timeout: 240000 });
++    await page.evaluate(installBot, cfg);
++    return page;
++  };
++  for (const grp of groups) {
++    let page = await openPage(grp[0]).catch(async (e) => { console.error('  page failed: ' + e.message.slice(0, 120)); await browser.close().catch(() => {}); browser = await launch(); return openPage(grp[0]); });
++    for (const job of grp) {
++      const t0 = Date.now();
++      let res;
++      // a watchdog: what the page is doing when a job runs long
++      const dog = setInterval(async () => {
++        const w = await page.evaluate(() => { const G = window.__G, st = window.__bal.st, b = G.zone?.boss, pl = G.player; return { mode: G.mode, panel: G.panel, cine: !!G.cine, dialog: !document.querySelector('#dialog')?.hidden, t: st && +st.t.toFixed(1), ct: st && +st.ct.toFixed(1), fight: st?.fight, why: st?.why, boss: b && { kind: b.kind, hp: +(b.hp / b.hpMax).toFixed(3), awake: b.awake, hold: b.holdWake, hidden: b.hidden, d: +Math.hypot(b.x - pl.x, b.z - pl.z).toFixed(1) }, pl: pl && { x: +pl.x.toFixed(1), z: +pl.z.toFixed(1), dead: pl.dead, act: pl.act?.name }, err: window.__bal.err }; }).catch((e) => ({ e: e.message }));
++        console.error('  watchdog', job.id, JSON.stringify(w));
++      }, 60000);
++      try {
++        res = await page.evaluate((j) => window.__bal.run(j), job);
++      } catch (e) { res = { ...job, ok: false, err: 'evaluate: ' + e.message.slice(0, 300) }; }
++      clearInterval(dog);
++      // the page died under the job (memory, a crash): a new page, and the job once more
++      if (String(res.err || '').startsWith('evaluate:') && !job.retried) {
++        console.error(`  ${job.id}: ${res.err.slice(0, 120)}; a new page`);
++        await page.close().catch(() => {});
++        page = await openPage(job).catch(async (e) => { console.error('  a new page failed: ' + e.message.slice(0, 120)); return openPage(grp[0]); });
++        grp.splice(grp.indexOf(job) + 1, 0, { ...job, retried: true });
++        continue;
++      }
++      res.wallS = Math.round((Date.now() - t0) / 1000);
++      if (logs.length) { res.logs = logs.splice(0).slice(0, 6); }
++      const line = JSON.stringify(res);
++      if (OUT) fs.appendFileSync(OUT, line + '\n'); else console.log(line);
++      console.error(`${job.id}: ${res.ok ? 'ok' : 'FAIL'} ${res.combatS}s deaths ${res.deaths} min ${res.minLife} life/min ${res.lifePerMin} kills/min ${res.killsPerMin}${job.boss ? ' kill ' + res.killS + 's left ' + res.bossLeft : ' packs ' + res.packsDone} (wall ${res.wallS}s)${res.err ? ' ERR ' + res.err.slice(0, 200) : ''}`);
++    }
++    await page.close();
++  }
++} finally { await browser.close(); }
