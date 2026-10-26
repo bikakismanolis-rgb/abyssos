@@ -40,6 +40,19 @@ jobs:
         run: npm run build && cp abyssos.apk dist/abyssos.apk
         env:
           BASE_PATH: /abyssos/
+      # 3. Skotos, the other game in this repository (skotos/, its own app): its web build, co-op over Supabase
+      #    (skotos/docs/coop/supabase.md), in the site's skotos/ folder. The URL and the publishable key are public (they
+      #    are in the page). A failure here leaves Abyssos's own site to deploy as ever, without skotos/.
+      - name: Build Skotos
+        continue-on-error: true
+        working-directory: skotos
+        env:
+          VITE_SUPABASE_URL: https://twabjiurbqhqmxzcokqj.supabase.co
+          VITE_SUPABASE_ANON_KEY: sb_publishable_A4_6wAoE8hvOBtIWBVp2Tw_vrry83yH
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build:web
+          cp -r dist-web ../dist/skotos
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
