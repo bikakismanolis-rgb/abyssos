@@ -4,3 +4,6 @@ release/
 shots/
 dist-artifact/
 artifact/
+graphify-out/cache/
+graphify-out/graph.html
+dist-web/

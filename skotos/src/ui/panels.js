@@ -1,37 +1,58 @@
 // Modal panels: inventory, skills, shops, stash, waypoints, gates, pause, settings, credits, death, act end, map.
 import { G } from '../game/state.js';
-import { CLASSES, SKILLS, DIFFS, SLOTS, SKILL_MAX_RANK, BASES, DODGE } from '../game/data.js';
+import { CLASSES, SKILLS, DIFFS, SLOTS, SKILL_MAX_RANK, BASES, DODGE, BOONS, GIFTS } from '../game/data.js';
 import { computeStats, skillRank, skillUnlocked, refreshStats } from '../game/stats.js';
 import { itemName, statLines, sellValue, equipSlots, usable, withItem, bestSlotFor, itemClass } from '../game/items.js';
 import { equip, unequip, sell, sellJunk, toStash, fromStash, gamble, gambleCost, reforge, reforgeCost } from '../game/inventory.js';
 import { writeSave } from '../game/save.js';
 import { on, emit } from './bus.js';
 import { ICON, SLOT_ICON } from './icons.js';
-import { t, setLang, lang } from '../i18n/i18n.js';
+import { t, has, setLang, lang } from '../i18n/i18n.js';
+import { npcName } from '../game/story.js';
 import { fmt, fmtK } from '../core/util.js';
 import { drawBigMap } from './hud.js';
 import Audio from '../audio/audio.js';
 import { CREDITS, MIT_ROCKETBOX } from './credits.js';
+import { renderSkills, skillsClick } from './progpanel.js';
 
 const $ = (id) => document.getElementById(id);
+// panels other modules add: { name: { render(P), click(a, x, y, el, P) -> true when done } } (the co-op lobby, ui/coopui.js)
+export const EXTRA = {};
 const P = { name: null, sel: null, tab: 0, ctx: null, delSure: null };
 const ICON_OF = { sword: 'sword', axe: 'sword', mace: 'sword', crossbow: 'bolt', staff: 'flame', shield: 'shield', quiver: 'bolt', orb: 'orb', helm: 'skull', chest: 'shield', gloves: 'hand', boots: 'roll', amulet: 'star', ring: 'orb' };
+// the Act IV blessing reads as it counts: half again for a hero the crown never held (Unbound)
+const unboundBoon = (id) => !!G.hero?.flags?.unbound && BOONS[4].some((b) => b.id === id);
+// (and Act V's, for a hero who lit all four Name-stones: Memory of the Lost)
+const rememberedBoon = (id) => !!G.hero?.flags?.remembered && !!BOONS[5]?.some((b) => b.id === id);
+const boonDesc = (id) => t('boon.' + id + (unboundBoon(id) || (rememberedBoon(id) && has('boon.' + id + '.du')) ? '.du' : '.d'));
+// a difficulty's colour as text: a dark one (Skotos's night blue) is lifted toward white so it reads on the panels
+function diffText(d) {
+  const c = parseInt(d.color.slice(1), 16), r = c >> 16, g = (c >> 8) & 255, b = c & 255;
+  if (0.2126 * r + 0.7152 * g + 0.0722 * b > 110) return d.color;
+  const m = (x) => Math.round(x + (255 - x) * 0.45);
+  return `rgb(${m(r)},${m(g)},${m(b)})`;
+}
+// the Crown's Offers: each altar's gift and the keeper whose shard offers it
+const ALTAR_ICON = { throne: 'shield', forge: 'flame', unfading: 'potion' };
 
 export function initPanels() {
   const p = document.createElement('div'); p.id = 'panel'; p.hidden = true; document.getElementById('app').appendChild(p);
-  p.addEventListener('pointerdown', (e) => { if (e.target === p && P.name !== 'dead' && P.name !== 'act') close(); });
+  p.addEventListener('pointerdown', (e) => { if (e.target === p && P.name !== 'dead' && P.name !== 'act' && P.name !== 'boon') close(); });
   p.addEventListener('click', onClick);
   p.addEventListener('input', onInput);
 }
 on('openPanel', (name, ctx) => open(name, ctx));
 export function open(name, ctx) {
-  P.name = name; P.sel = null; P.tab = 0; P.ctx = ctx || null;
-  G.panel = name;
+  P.name = name; P.sel = null; P.tab = 0; P.ctx = ctx || null; P.sure = false; P.msel = null;
+  if (name === 'skills' && ctx?.tab) P.tab = ctx.tab;
+  G.panel = name; render.key = null;
   $('panel').hidden = false;
   render();
 }
 export function close() {
   if (!P.name) return;
+  // a blessing has to be chosen
+  if (P.name === 'boon' && !G.hero?.boons?.[(P.ctx?.act || 1) - 1]) return;
   if (P.name === 'act') emit('actClosed');
   P.name = null; G.panel = null; $('panel').hidden = true;
   for (const it of G.hero?.inv || []) if (it) it.isNew = false;
@@ -56,10 +77,13 @@ function isUpgrade(item) {
 }
 function compare(item) {
   const h = G.hero;
-  if (!usable(item, h.cls)) return null;
-  const slot = bestSlotFor(h, item);
-  const cur = G.stats, nxt = computeStats(h, withItem(h.equip, item, slot));
-  return { dps: ((nxt.dps - cur.dps) / cur.dps) * 100, tough: ((nxt.toughness - cur.toughness) / cur.toughness) * 100, life: nxt.lifeMax - cur.lifeMax };
+  // (a comparison that cannot be made shows none: a bad item never takes the bag, the shops or the stash with it)
+  try {
+    if (!usable(item, h.cls)) return null;
+    const slot = bestSlotFor(h, item);
+    const cur = G.stats, nxt = computeStats(h, withItem(h.equip, item, slot));
+    return { dps: ((nxt.dps - cur.dps) / cur.dps) * 100, tough: ((nxt.toughness - cur.toughness) / cur.toughness) * 100, life: nxt.lifeMax - cur.lifeMax };
+  } catch (e) { console.error(e); return null; }
 }
 function tip(item, actions) {
   if (!item) return '';
@@ -94,7 +118,8 @@ const R = {
       <div><span>${t('stat.life')}</span><b>${fmt(s.lifeMax)}</b></div><div><span>${t('stat.armor')}</span><b>${fmt(s.armor)}</b></div>
       <div><span>${t('main.' + C.main)}</span><b>${fmt(s.main)}</b></div><div><span>${t('stat.reduction')}</span><b>${red}%</b></div>
       <div><span>${t('stat.crit')}</span><b>${s.critC.toFixed(1)}% · ${fmt(s.critD)}%</b></div><div><span>${t('stat.speed')}</span><b>${s.aps.toFixed(2)}</b></div>
-      <div><span>${t('stat.kills')}</span><b>${fmt(h.stats.kills)}</b></div><div><span>${t('diff.' + DIFFS[h.diff].id)}</span><b style="color:${DIFFS[h.diff].color}">●</b></div></div>`;
+      <div><span>${t('stat.kills')}</span><b>${fmt(h.stats.kills)}</b></div><div><span>${t('diff.' + DIFFS[h.diff].id)}</span><b style="color:${diffText(DIFFS[h.diff])}">●</b></div>
+      ${(h.boons || []).filter(Boolean).map((id) => `<div style="grid-column:1/-1"><span>${ICON.flame} ${t('boon.' + id)}</span><b style="font-size:12px;color:var(--gold2)">${boonDesc(id)}</b></div>`).join('')}</div>`;
     let tp = '';
     if (P.sel) {
       const [w, k] = P.sel.split(':');
@@ -103,18 +128,8 @@ const R = {
     }
     return `<div class="pn">${head(t('hud.inventory'))}<div class="pn-b"><div class="inv"><div><div class="doll">${doll}</div>${stats}</div><div><div class="bag">${bag}</div>${tp}</div></div></div></div>`;
   },
-  skills() {
-    const h = G.hero, list = SKILLS[h.cls];
-    const rows = list.map((sk, i) => {
-      const r = skillRank(sk.id), un = skillUnlocked(sk);
-      const pips = sk.basic ? '' : `<div class="pips">${Array.from({ length: SKILL_MAX_RANK }, (_, j) => `<i class="${j < Math.max(r, un ? 1 : 0) ? 'on' : ''}"></i>`).join('')}</div>`;
-      const meta = [sk.dmg ? t('sk.dmg', Math.round(sk.dmg * (1 + 0.15 * Math.max(0, r - 1)) * 100)) : '', sk.cost ? t('sk.cost', sk.cost, t('res.' + CLASSES[h.cls].res)) : '', sk.cd ? t('sk.cd', sk.cd) : '', !un ? t('sk.unlock', sk.lvl) : ''].filter(Boolean).join(' · ');
-      const can = !sk.basic && un && h.points > 0 && r < SKILL_MAX_RANK;
-      return `<div class="skr ${un ? '' : 'lock'}"><div class="ic">${ICON[sk.icon]}</div><div><h4>${t('sk.' + sk.id)}${sk.basic ? '' : ` <span class="muted">· ${t('sk.rank', Math.max(r, un ? 1 : 0), SKILL_MAX_RANK)}</span>`}</h4><p>${t('sk.' + sk.id + '.d')}</p><div class="meta">${meta}</div>${pips}</div>${can ? `<button class="btn" data-a="rank:${sk.id}">${t('sk.up')}</button>` : '<span></span>'}</div>`;
-    }).join('');
-    const D = DODGE[h.cls];
-    return `<div class="pn narrow">${head(t('hud.skills'), false)}<div class="pn-b"><div class="row" style="justify-content:space-between;margin-bottom:8px"><b class="r-2" style="font-family:var(--display)">${t('sk.points', h.points)}</b><span class="muted">${t('sk.' + D.kind)} · ${t('sk.cd', D.cd)}</span></div><div class="skl">${rows}</div><p class="muted">${t('sk.help')}</p></div></div>`;
-  },
+  // ranks, variants, the loadout and the Mastery (progpanel.js)
+  skills() { return renderSkills(P, head); },
   vendor() {
     const h = G.hero;
     const tabs = `<div class="tabs"><button class="tab ${P.tab === 0 ? 'on' : ''}" data-a="tab:0">${t('item.sell')}</button><button class="tab ${P.tab === 1 ? 'on' : ''}" data-a="tab:1">${t('shop.gamble')}</button></div>`;
@@ -130,7 +145,7 @@ const R = {
       const baseFor = (ty) => ty === 'weapon' ? CLASSES[h.cls].weapon : ty === 'offhand' ? CLASSES[h.cls].off : ty;
       body = `<p class="muted">${t('shop.gamble.d')}</p><div class="doll" style="grid-template-columns:repeat(4,1fr)">${types.map((ty) => `<button class="cell" data-a="gamble:${baseFor(ty)}">${ICON[ICON_OF[baseFor(ty)]]}<span class="lbl">${t('base.' + baseFor(ty))}</span></button>`).join('')}</div><p class="r-2" style="font-family:var(--display);text-align:center">${t('shop.cost', fmt(cost))}</p>${P.last ? tip(P.last, '') : ''}`;
     }
-    return `<div class="pn">${head(t('npc.healer') + ' · ' + t('shop.vendor'))}<div class="pn-b">${tabs}<div style="margin-top:10px">${body}</div></div></div>`;
+    return `<div class="pn">${head(npcName(P.ctx?.npc || 'healer') + ' · ' + t('shop.vendor'))}<div class="pn-b">${tabs}<div style="margin-top:10px">${body}</div></div></div>`;
   },
   smith() {
     const h = G.hero;
@@ -151,9 +166,14 @@ const R = {
   },
   waypoints() {
     const h = G.hero, inTown = G.zone?.id === 'town';
-    const list = ['town', 'forest', 'crypt'].filter((z) => h.wps.includes(z)).map((z) => `<button class="wp ${G.zone?.id === z ? 'here' : ''}" data-a="wp:${z}">${ICON.portal}<b>${t('zone.' + z)}</b><span class="muted">${t('zone.' + z + '.s')}</span></button>`).join('');
+    // Act IV's Field has a second waypoint, at Elati's camp at the mouth of the Lantern Graves ('ashfield@2'); Act V's are
+    // named for their place (the Landing, the Icebound Ship)
+    const list = ['town', 'forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'ashfield@2', 'forge', 'coast', 'farlight'].filter((z) => h.wps.includes(z)).map((w) => {
+      const z = w.split('@')[0], sub = w.endsWith('@2') ? t('wp.graves') : z === 'coast' || z === 'farlight' ? t('wp.' + z) : t('zone.' + z + '.s');
+      return `<button class="wp ${G.zone?.id === z ? 'here' : ''}" data-a="wp:${w}">${ICON.portal}<b>${t('zone.' + z)}</b><span class="muted">${sub}</span></button>`;
+    }).join('');
     const gates = h.quest >= 5 ? `<button class="wp" data-a="gates">${ICON.gate}<b>${t('gate.title')}</b><span class="muted">${t('gate.best', h.gateBest)}</span></button>` : '';
-    const diffs = DIFFS.map((d, i) => { const lock = !diffUnlocked(i); return `<button class="chip ${h.diff === i ? 'on' : ''} ${lock ? 'lock' : ''}" data-a="diff:${i}" style="${h.diff === i ? 'color:' + d.color : ''}">${t('diff.' + d.id)}</button>`; }).join('');
+    const diffs = DIFFS.map((d, i) => { const lock = !diffUnlocked(i); return `<button class="chip ${h.diff === i ? 'on' : ''} ${lock ? 'lock' : ''}" data-a="diff:${i}" style="${h.diff === i ? 'color:' + diffText(d) : ''}">${t('diff.' + d.id)}</button>`; }).join('');
     return `<div class="pn narrow">${head(t('wp.title'), false)}<div class="pn-b"><div style="display:grid;gap:6px">${list}${gates}</div><div class="logo-rule"></div><b style="font-family:var(--display);color:var(--gold)">${t('pick.diff')}</b><div class="chips" style="justify-content:flex-start;margin-top:6px">${diffs}</div><p class="muted">${inTown ? t('diff.' + DIFFS[h.diff].id + '.d') : t('wp.diffNote')}</p></div></div>`;
   },
   gates() {
@@ -168,8 +188,17 @@ const R = {
       <button class="btn" data-a="close">${t('pause.resume')}</button>
       ${inTown ? '' : `<button class="btn ghost" data-a="portal">${t('pause.town')}</button>`}
       <button class="btn ghost" data-a="map">${t('hud.map')}</button>
+      ${EXTRA.coop?.avail?.() ? `<button class="btn ghost" data-a="coop">${t('coop.title')}</button>` : ''}
       <button class="btn ghost" data-a="settings">${t('menu.settings')}</button>
+      <button class="btn ghost" data-a="help">${t('help.title')}</button>
       <button class="btn ghost" data-a="quit">${t('pause.quit')}</button></div></div></div>`;
+  },
+  // how to play: touch, keyboard and a few tips
+  help() {
+    const list = (pre, n) => `<ul class="help">${Array.from({ length: n }, (_, i) => `<li>${t(pre + (i + 1))}</li>`).join('')}</ul>`;
+    return `<div class="pn narrow">${head(t('help.title'), false)}<div class="pn-b">
+      <h4>${t('help.touch')}</h4>${list('help.t', 7)}<h4>${t('help.keys')}</h4>${list('help.k', 6)}<h4>${t('help.tips')}</h4>${list('help.p', 6)}
+      <button class="btn" data-a="close" style="width:100%">${t('panel.close')}</button></div></div>`;
   },
   settings() {
     const s = G.settings, q = s.quality;
@@ -198,22 +227,49 @@ const R = {
   act() {
     const h = G.hero;
     const mins = Math.round((Date.now() - h.created) / 60000);
-    const next = DIFFS[h.diff + 1];
-    return `<div class="pn narrow" style="text-align:center"><div class="pn-b" style="padding:22px"><div class="act-h">${t('act.done')}</div><p style="font-style:italic;color:var(--ink2)">${t('act.sub')}</p><div class="logo-rule"></div>
+    // (the next difficulty only once this act has opened it: Skotos asks for Act V on Ash, not Act I)
+    const next = DIFFS[h.diff + 1] && diffUnlocked(h.diff + 1) ? DIFFS[h.diff + 1] : null;
+    // act 1 shows what it unlocked; later acts their own title, line and what comes next
+    const n = G.flags.actDone || 1, a2 = n > 1, k = n > 1 ? 'act' + n : 'act';
+    // (a later act: the difficulty it leaves open, as act 1 shows it; the Frozen Coast also the names said into the dark)
+    const later = a2 ? `${n === 5 ? `<p class="names5">${t('q.names', (h.flags.names || []).length)}</p>` : ''}${next ? `<p style="color:${diffText(next)}">${t('act.unlocks')} · ${t('pick.diff')}: ${t('diff.' + next.id)}</p>` : ''}` : '';
+    return `<div class="pn narrow" style="text-align:center"><div class="pn-b" style="padding:22px"><div class="act-h">${t(k + '.done')}</div><p style="font-style:italic;color:var(--ink2)">${t(k + '.sub')}</p><div class="logo-rule"></div>
       <div class="stats" style="text-align:left"><div><span>${t('hud.level', '')}</span><b>${h.level}</b></div><div><span>${t('stat.kills')}</span><b>${fmt(h.stats.kills)}</b></div><div><span>${t('stat.time')}</span><b>${mins}′</b></div><div><span>${t('rar.legendary')}</span><b class="r-3">${h.stats.legs}</b></div></div>
-      <div class="logo-rule"></div><b style="font-family:var(--display);color:var(--gold)">${t('act.unlocks')}</b><p>${t('act.gates')}</p>${next ? `<p style="color:${next.color}">${t('pick.diff')}: ${t('diff.' + next.id)}</p>` : ''}
-      <p class="muted">${t('act.next')}</p><button class="btn" data-a="close">${t('act.cont')}</button></div></div>`;
+      ${a2 ? later : `<div class="logo-rule"></div><b style="font-family:var(--display);color:var(--gold)">${t('act.unlocks')}</b><p>${t('act.gates')}</p>${next ? `<p style="color:${diffText(next)}">${t('pick.diff')}: ${t('diff.' + next.id)}</p>` : ''}`}
+      <p class="muted">${t(k + '.next')}</p><button class="btn" data-a="close">${t('act.cont')}</button></div></div>`;
+  },
+  boon() {
+    const act = P.ctx?.act || 1, ub = act === 4 && !!G.hero.flags.unbound;
+    const cards = BOONS[act].map((b) => `<button class="pcard boon" data-a="boon:${b.id}"><div class="bi">${ICON[b.icon]}</div><h3>${t('boon.' + b.id)}</h3><p>${boonDesc(b.id)}</p><p class="bq">${t('boon.' + b.id + '.q')}</p></button>`).join('');
+    // Unbound: Isarn's words, and what they are worth
+    const note = ub ? `<p class="unbound">${t('d.isarn.unbound')}</p><p class="unbound-k">${t(G.hero.cls === 'ranger' ? 'boon.unbound.f' : 'boon.unbound')}</p>`
+      : act === 5 && G.hero.flags.remembered && has('boon.remembered') ? `<p class="unbound-k ice">${t('boon.remembered')}</p>` : '';
+    return `<div class="pn" style="text-align:center"><div class="pn-b" style="padding:20px"><div class="act-h">${t('boon.h' + act)}</div><p style="font-style:italic;color:var(--ink2)">${t('boon.sub')}</p>${note}<div class="logo-rule"></div><div class="boons">${cards}</div></div></div>`;
+  },
+  // an Altar of the Wish: a shard offers its gift, with the cage that comes with it; or let it sleep
+  altar() {
+    const id = GIFTS[P.ctx?.id] ? P.ctx.id : 'throne';
+    const take = `<button class="pcard boon altar-take" data-a="gift:taken"><div class="bi">${ICON[ALTAR_ICON[id]] || ICON.star}</div><h3>${t('altar.accept')}: ${t('gift.' + id)}</h3><p><b class="r-2">${t('altar.gift')}</b> ${t('gift.' + id + '.d')}</p><p><b class="cage">${t('altar.cage')}</b> ${t('gift.' + id + '.c')}</p></button>`;
+    const refuse = `<button class="pcard boon altar-refuse" data-a="gift:refused"><div class="bi">${ICON.close}</div><h3>${t('altar.refuse')}</h3><p class="bq">${t('altar.refuse.d')}</p></button>`;
+    return `<div class="pn narrow" style="text-align:center"><div class="pn-b" style="padding:20px"><div class="act-h">${t('altar.title')}</div><p style="font-style:italic;color:var(--ink2)">${t('altar.sub')}</p><div class="logo-rule"></div><div class="boons">${take}${refuse}</div></div></div>`;
   },
   map() { return `<div class="pn" style="height:100%">${head(t('zone.' + G.zone.id), false)}<div class="pn-b" style="display:flex;align-items:center;justify-content:center"><canvas id="bigmap" width="800" height="800" style="max-width:100%;max-height:100%;aspect-ratio:1"></canvas></div></div>`; }
 };
+// a difficulty opens with an act finished on the one before it: 'any:<diff>' any act, 'actN:<diff>' that act
 export function diffUnlocked(i) {
   const d = DIFFS[i]; if (!d.unlock) return true;
-  const need = DIFFS.findIndex((x) => x.id === d.unlock.split(':')[1]);
-  return (G.hero?.act1 ?? -1) >= need;
+  const [a, id] = d.unlock.split(':'), need = DIFFS.findIndex((x) => x.id === id), h = G.hero;
+  const best = a === 'any' ? Math.max(...[1, 2, 3, 4, 5].map((n) => h?.['act' + n] ?? -1)) : h?.[a] ?? -1;
+  return best >= need;
 }
 function render() {
   if (!P.name) return;
-  $('panel').innerHTML = R[P.name]();
+  // the same panel and tab drawn again (a tap in it): it stays scrolled where it was
+  const key = P.name + ':' + P.tab, body = $('panel').querySelector('.pn-b'), top = key === render.key && body ? body.scrollTop : 0;
+  // (a panel that cannot be drawn still shows its close button: it never stays open and empty)
+  try { $('panel').innerHTML = R[P.name] ? R[P.name]() : EXTRA[P.name]?.render(P) || ''; } catch (e) { console.error(e); $('panel').innerHTML = `<div class="pn narrow"><div class="pn-h"><h2></h2><button class="x" data-a="close" aria-label="${t('panel.close')}">${ICON.close}</button></div></div>`; }
+  render.key = key;
+  if (top) { const b = $('panel').querySelector('.pn-b'); if (b) b.scrollTop = top; }
   if (P.name === 'map') drawBigMap($('bigmap'));
 }
 
@@ -223,6 +279,7 @@ function onClick(e) {
   const [a, x, y] = b.dataset.a.split(':');
   const h = G.hero;
   Audio.sfx('click', { vol: 0.5 });
+  if (P.name === 'skills' && skillsClick(a, x, y, P)) { render(); return; }
   switch (a) {
     case 'close': close(); return;
     case 'inv': case 'eq': P.sel = P.sel === a + ':' + x ? null : a + ':' + x; if (a === 'inv' && h.inv[+x]) h.inv[+x].isNew = false; break;
@@ -236,29 +293,35 @@ function onClick(e) {
     case 'reforge': { const it = reforge(x, x === 'inv' ? +y : y); if (!it && h.gold < 1e9) emit('toast', t('shop.noGold')); if (x === 'eq') emit('heroLook'); break; }
     case 'st': fromStash(+x); break;
     case 'tostash': toStash(+x); break;
-    case 'rank': { h.skills[x] = Math.max(1, (h.skills[x] || 1)) + 1; h.points--; refreshStats(); Audio.sfx('equip'); break; }
-    case 'wp': close(); if (x !== G.zone.id) emit('travel', x, { at: 'waypoint' }); return;
+    // (in a zone with two waypoints, either one can be the way across it)
+    case 'wp': { close(); const [zid, n] = x.split('@'); if (zid !== G.zone.id || n || G.zone.L.spots.camp2) emit('travel', zid, { at: n ? 'waypoint' + n : 'waypoint' }); return; }
     case 'gates': open('gates'); return;
     case 'tier': P.tier = +x; break;
     case 'gateGo': close(); emit('startGate', P.tier); return;
     case 'diff': {
       const i = +x;
       if (G.zone.id !== 'town') { emit('toast', t('wp.diffNote')); break; }
-      if (!diffUnlocked(i)) { emit('toast', t('pick.locked', t('diff.' + DIFFS[DIFFS.findIndex((d) => d.id === DIFFS[i].unlock.split(':')[1])].id))); break; }
+      if (G.hero.__real) { emit('toast', t('coop.hostLeads')); break; }
+      if (!diffUnlocked(i)) { const [a, id] = DIFFS[i].unlock.split(':'); emit('toast', t(a === 'any' ? 'pick.locked' : 'pick.locked' + a.slice(3), t('diff.' + id))); break; }
       if (h.diff !== i) { h.diff = i; emit('diffChanged'); }
       break;
     }
     case 'portal': close(); emit('townPortal'); return;
     case 'map': open('map'); return;
+    case 'coop': open('coop'); return;
     case 'settings': open('settings'); return;
+    case 'help': open('help'); return;
     case 'credits': open('credits'); return;
     case 'quit': close(); emit('quit'); return;
     case 'q': G.settings.quality = +x; emit('settings'); break;
     case 'lang': setLang(x); G.settings.lang = x; emit('settings'); break;
     case 'vib': G.settings.vibrate = x === '1'; break;
     case 'num': G.settings.numbers = x === '1'; break;
+    case 'boon': { const act = P.ctx?.act || 1; h.boons ||= []; h.boons[act - 1] = x; refreshStats(); writeSave(); close(); emit('boonTaken', x); return; }
+    case 'gift': { const id = P.ctx?.id; close(); if (id) emit('altarChoice', id, x); return; }
     case 'respawn': close(); emit('respawn', false); return;
     case 'respawnTown': close(); emit('respawn', true); return;
+    default: if (EXTRA[P.name]?.click?.(a, x, y, b, P)) return;
   }
   render();
 }

@@ -1,0 +1,9 @@
+Skotos trees (src/assets/trees.glb) - CC-BY 4.0, by evolveduk (https://sketchfab.com/evolveduk).
+Packed by tools/pack-trees.mjs: trunks decimated, rescaled, textures re-encoded as WebP.
+
+  treePine: "Pine Tree" by evolveduk - https://sketchfab.com/3d-models/pine-tree-d45218a3fab349e5b1de040f29e7b6f9
+  treeFir: "Fir tree" by evolveduk - https://sketchfab.com/3d-models/fir-tree-3f39aa5485e94477a36b435f7a1a8b54
+  treeSpruce: "Spruce" by evolveduk - https://sketchfab.com/3d-models/spruce-a50a5df3164246a5af97992cec33a143
+  treeOak: "Oak tree" by evolveduk - https://sketchfab.com/3d-models/oak-tree-6468dd4d3eb240ef902b9057d9913606
+  treeBeech: "Beech tree" by evolveduk - https://sketchfab.com/3d-models/beech-tree-0983d8933531491f9be71c669e8a907b
+  treeDead: "Old tree" by evolveduk - https://sketchfab.com/3d-models/old-tree-3cb4d59eb4844dc4802480e9ee53785e

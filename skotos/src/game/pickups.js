@@ -57,6 +57,8 @@ function launch(x, z, spread = 1.4) {
 }
 
 export function dropGold(x, z, amount) {
+  // (a pile is a whole, finite number of coins: no level or roll can take gold away or make it endless)
+  if (!(amount >= 1 && amount < 1e9)) return null;
   const p = launch(x, z, 1.2);
   const mesh = kitMesh('dungeon', amount > 60 ? 'coin_stack_medium' : 'coin_stack_small', 0.38);
   return add(Object.assign(p, { kind: 'gold', amount, mesh, t: 0 }));
@@ -99,6 +101,18 @@ function removePickup(p, i) {
   G.pickups.splice(i, 1);
 }
 export function clearPickups() { for (let i = G.pickups.length - 1; i >= 0; i--) removePickup(G.pickups[i], i); }
+// what lies here taken at once (a co-op guest that follows its host away, net/coop.js): the gold, and the items while the
+// bag has room; what is left stays where it fell
+export function gatherPickups() {
+  const out = { gold: 0, items: 0, left: 0 };
+  for (let i = G.pickups.length - 1; i >= 0; i--) {
+    const p = G.pickups[i];
+    if (p.kind === 'gold') { G.hero.gold += p.amount; out.gold += p.amount; removePickup(p, i); }
+    else if (p.kind === 'item') { if (addToBag(p.item)) { out.items++; emit('itemPicked', p.item); removePickup(p, i); } else out.left++; }
+  }
+  if (out.gold) emit('gold');
+  return out;
+}
 
 let fullWarn = 0;
 export function updatePickups(dt) {
