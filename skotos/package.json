@@ -8,9 +8,11 @@
     "build": "vite build",
     "build:single": "vite build --mode single",
     "build:artifact": "vite build --mode artifact && node tools/make-artifact.mjs",
+    "build:web": "vite build --mode web",
     "preview": "vite preview --host"
   },
   "dependencies": {
+    "@supabase/supabase-js": "2.117.3",
     "three": "^0.186.1"
   },
   "devDependencies": {
