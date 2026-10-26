@@ -8,12 +8,19 @@
 // 4. The room's refusals and ends (contract 0.2.89): a Viewer's sends refused not_permitted and told, a view the room
 //    cannot connect (not_granted) and a grant withdrawn mid-game (revoked) told once as the room's end, a name joined
 //    twice at once joined once.
+// node tools/net/test-transport.mjs [part ...]: only those parts (room ends local supa stamped limits leave lobby).
+// TRANSPORT=<file>: that copy of transport.js instead of src/net/transport.js (to show a check fails without a fix:
+// docs/coop/supabase-live.md).
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { Hub } from './fakeroom.mjs';
-import { RoomTransport, LocalTransport, SupabaseTransport, pickTransport, bytesOf, BUDGET } from '../../src/net/transport.js';
+const { RoomTransport, LocalTransport, SupabaseTransport, pickTransport, bytesOf, BUDGET } = await import(process.env.TRANSPORT ? pathToFileURL(path.resolve(process.env.TRANSPORT)).href : '../../src/net/transport.js');
+if (process.env.TRANSPORT) console.log('     the transport of ' + path.resolve(process.env.TRANSPORT));
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function until(fn, ms = 2000, step = 5) { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (fn()) return true; await sleep(step); } return !!fn(); }
 let fails = 0;
-const ok = (c, m) => { console.log((c ? 'ok   ' : 'FAIL ') + m); if (!c) fails++; };
+const ok = (c, m, v) => { console.log((c ? 'ok   ' : 'FAIL ') + m + (v === undefined ? '' : '  ' + JSON.stringify(v))); if (!c) fails++; };
 
 async function roomTest() {
   const hub = new Hub({ loss: 0.1, topics: { s: 'interact', f: 'interact', c: 'interact' } });
@@ -51,7 +58,7 @@ async function roomTest() {
   ok(pres[0] > 150, 'the host saw the guests\' presence move: ' + pres[0] + ' updates');
   // the limits
   const big = await chs[0].emit('s', { pad: 'x'.repeat(5000) });
-  ok(big === false && chs[0].meter.tx.big === 1, 'a 5 KB message is refused before the room sees it');
+  ok(big === false && chs[0].meter.tx.big === 1 && chs[0].meter.tx.why.big === 1, 'a 5 KB message is refused before the room sees it (a drop, why: big)');
   const bp = await chs[1].presence({ junk: 'y'.repeat(5000) });
   ok(bp === false, 'a presence over 4 KiB is refused');
   ok(!hub.log.rejects.invalid_argument, 'and the room never saw either');
@@ -59,7 +66,7 @@ async function roomTest() {
   pages[2].setConnected(false); await sleep(30);
   ok(!chs[2].connected(), 'a page knows it lost the room');
   const dc = await chs[2].emit('s', { x: 1 });
-  ok(dc === false, 'an emit while disconnected is dropped and said so');
+  ok(dc === false && chs[2].meter.tx.why.offline === 1, 'an emit while disconnected is dropped and said so (why: offline)');
   chs[2].presence({ h: [9, 9, 9] }); pages[2].setConnected(true); await sleep(200); chs[2].pump(); await sleep(200);
   const seen = chs[0].peers().find((p) => p.peer === chs[2].me);
   ok(seen && JSON.stringify(seen.presence.h) === '[9,9,9]', 'its presence arrives once back');
@@ -136,13 +143,15 @@ async function localTest() {
 // (bus.srv.quota, counted exactly here: the migration's count lags by 64 KiB a user); then each as { d, _by }, d the
 // page's text as it came, to every member of the private channel, its sender too: a broadcast from the database knows
 // no self), host_game / game_host / end_game (the games rows: one a user, 'quota' for a new game past the day's cap).
-// An RPC answers after o.lag ms (random below it: calls that overlap may be answered out of order, as HTTP may); its
-// builder takes abortSignal() as supabase-js's does; o.hang: that many of the client's sends never answered (a request
-// lost on a dead connection). o.auth: the client's auth options (its session kept in o.auth.storage, as supabase-js
-// keeps it). bus.srv.log counts the calls, refusals, aborts and stamped deliveries
+// An RPC answers after o.lag ms (random below it: calls that overlap may be answered out of order, as HTTP may), or
+// after exactly o.lagOf[fn] ms where that is given (a race made certain); it is committed as it answers. Its builder
+// takes abortSignal() as supabase-js's does; o.hang: that many of the client's sends never answered (a request lost on
+// a dead connection). o.auth: the client's auth options (its session kept in o.auth.storage, as supabase-js keeps it).
+// bus.srv.log counts the calls (and each function's: fn), refusals, aborts and stamped deliveries, and keeps the order
+// in which the games' calls were committed (games: 'host_game <room>', 'end_game <room>')
 function fakeSupabase(bus, o = {}) {
   const log = (bus.log ||= { events: 0, tracks: 0, closed: 0 }), tracks = [];
-  const srv = (bus.srv ||= { users: 0, ids: 0, games: new Map(), rates: new Map(), quota: { bytes: 0, day_cap: 48 * 1048576, user_cap: 48 * 1048576 }, log: { calls: 0, refused: {}, signIns: 0, aborted: 0, hung: 0 } });
+  const srv = (bus.srv ||= { users: 0, ids: 0, games: new Map(), rates: new Map(), quota: { bytes: 0, day_cap: 48 * 1048576, user_cap: 48 * 1048576 }, log: { calls: 0, fn: {}, games: [], refused: {}, signIns: 0, aborted: 0, hung: 0 } });
   const store = o.auth?.storage, key = o.auth?.storageKey || 'sb-auth';
   let uid = o.uid || null, hang = o.hang || 0;
   if (!uid && store) { try { uid = JSON.parse(store.getItem(key) || 'null')?.user?.id || null; } catch (e) { uid = null; } }
@@ -211,9 +220,13 @@ function fakeSupabase(bus, o = {}) {
       rpc: (fn, args) => {
         let signal = null;
         const run = () => new Promise((res) => {
-          srv.log.calls++;
+          srv.log.calls++; srv.log.fn[fn] = (srv.log.fn[fn] || 0) + 1;
           if (fn === 'send' && hang > 0) { hang--; srv.log.hung++; signal?.addEventListener('abort', () => srv.log.aborted++); return; }
-          setTimeout(() => res(sch === 'skotos' && fns[fn] ? fns[fn](args || {}) : { data: null, error: { message: 'not found', code: 'PGRST202' } }), Math.random() * (o.lag ?? 20));
+          const ms = o.lagOf && fn in o.lagOf ? o.lagOf[fn] : Math.random() * (o.lag ?? 20);
+          setTimeout(() => {
+            if (fn === 'host_game' || fn === 'end_game') srv.log.games.push(fn + ' ' + args?.room);
+            res(sch === 'skotos' && fns[fn] ? fns[fn](args || {}) : { data: null, error: { message: 'not found', code: 'PGRST202' } });
+          }, ms);
         });
         const b = { abortSignal(sg) { signal = sg; return b; }, then: (f, r) => run().then(f, r) };
         return b;
@@ -475,7 +488,7 @@ async function stampedLimits() {
   await A.T.join('skotos-du02', { host: true });
   ok(!bus.srv.games.has('skotos-du01') && bus.srv.games.get('skotos-du02')?.host === A.c.uid, 'a user hosts one game: its second lets the first row go');
   const s1 = await a1.emit('s', { n: 1 }); await sleep(30);
-  ok(s1 === false && e1.includes('no_game:room'), 'the first game\'s send is refused (no_game), and its channel is told its game ended: ' + e1);
+  ok(s1 === false && e1.includes('no_game:room') && a1.meter.tx.why.no_game === 1, 'the first game\'s send is refused (no_game, counted), and its channel is told its game ended: ' + e1);
   // a renewal that finds the row another's (run out and taken) tells the game; while the row is its own, nothing
   const B = await mk({ renew: 120 }), b1 = await B.T.join('skotos-rn01', { host: true }), e2 = ends(b1);
   await sleep(200);
@@ -491,7 +504,7 @@ async function stampedLimits() {
   const s3 = await c1.emit('s', { n: 1 }); await sleep(30);
   const rq = await C.c.schema('skotos').rpc('host_game', { room: 'skotos-qu02' }), rr = await C.c.schema('skotos').rpc('host_game', { room: 'skotos-qu01' });
   bus.srv.quota.day_cap = cap0;
-  ok(s3 === false && e3.includes('quota:room') && rq.data === 'quota' && rr.data === 'ok', 'the project\'s day spent: a send refused quota (the game\'s channel told), a new game refused quota, a renewal still ok');
+  ok(s3 === false && e3.includes('quota:room') && c1.meter.tx.why.quota === 1 && rq.data === 'quota' && rr.data === 'ok', 'the project\'s day spent: a send refused quota (counted; the game\'s channel told), a new game refused quota, a renewal still ok');
   // the user's day: what one user may send, whatever the project has left
   const U = await mk(); bus.srv.rates.set(U.c.uid, { tok: 80, game: 65536, lobby: 8192, at: Date.now(), gat: Date.now(), lat: Date.now(), spent: bus.srv.quota.user_cap - 500 });
   const sendU = (msgs) => U.c.schema('skotos').rpc('send', { msgs }), x198 = JSON.stringify('x'.repeat(196));
@@ -504,7 +517,13 @@ async function stampedLimits() {
   await sleep(60);
   const t0 = Date.now(), p1 = d1.emit('s', { n: 1 }), p2 = d1.emit('s', { n: 2 }), r1 = await p1, r2 = await p2, dt = Date.now() - t0;
   await sleep(40);
-  ok(r1 === false && r2 === true && got.join() === '2' && dt >= 180 && dt < 1000 && bus.srv.log.hung === 1 && bus.srv.log.aborted === 1, 'a send whose request never answers is given up at its deadline (' + dt + ' ms, aborted) and the one said after it goes: heard ' + got);
+  ok(r1 === false && r2 === true && got.join() === '2' && dt >= 180 && dt < 1000 && bus.srv.log.hung === 1 && bus.srv.log.aborted === 1 && JSON.stringify(d1.meter.tx.why) === '{"timeout":1}', 'a send whose request never answers is given up at its deadline (' + dt + ' ms, aborted; counted, why: timeout) and the one said after it goes: heard ' + got);
+  // every message given up is counted by why: seventy at once behind a call that never answers (a bucket that takes
+  // them all): one in the call (timeout), sixty-four waiting for the next (they go), five more refused busy
+  const Y = await mk({ hang: 1, callMs: 200, burst: 100 }), y1 = await Y.T.join('skotos-hg02', { host: true });
+  await sleep(40);
+  const ys = await Promise.all(Array.from({ length: 70 }, (_, i) => y1.emit('f', { i })));
+  ok(ys.filter((v) => v).length === 64 && y1.meter.tx.drops === 6 && JSON.stringify(y1.meter.tx.why) === '{"busy":5,"timeout":1}', 'seventy at once behind a call that never answers: 64 go after its deadline, the drops counted by why: ' + JSON.stringify(y1.meter.tx.why));
   // a duplicated tab: its sessionStorage copied, the same user; asked of the other tabs, it lets the copy go and signs in
   // anew. A tab no other holds keeps its user (a reload)
   const mem = () => { const m = new Map(); return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => { m.set(k, String(v)); }, removeItem: (k) => { m.delete(k); } }; };
@@ -527,17 +546,37 @@ async function stampedLimits() {
   const t1 = Date.now(); let seenAt = 0;
   while (Date.now() - t1 < 4500 && !seenAt) { await sleep(100); if (O.T.lobby.peers().some((p) => p.presence?.g?.c === 'pq01')) seenAt = Date.now() - t1; }
   ok((bus.srv.log.refused.rate_limited || 0) > r0 && seenAt > 0 && seenAt < 3500, 'a lobby listing the server refused (its bytes) is said again within the lobby\'s look (2.5 s): heard after ' + seenAt + ' ms');
-  // a host that leaves with a send on its way and another waiting behind it (its guests told the game is over, a last
-  // presence): its game's row ends only once both have had their answer. An end_game sent beside them could be
-  // committed first, and they refused no_game (seen on the live project: docs/coop/supabase-live.md)
-  const L = await mk({ lag: 80 }), l1 = await L.T.join('skotos-lv01', { host: true });
-  await sleep(120);
-  const ng0 = bus.srv.log.refused.no_game || 0, q1 = l1.emit('s', { n: 1 }), q2 = l1.emit('c', { op: 'end' });
-  await sleep(5); l1.leave();
-  const [v1, v2] = await Promise.all([q1, q2]); await sleep(250);
-  ok(v1 === true && v2 === true && (bus.srv.log.refused.no_game || 0) === ng0 && !bus.srv.games.has('skotos-lv01'), 'a host leaving with a send on its way and one behind it: both go while its game is there, then its row ends');
-  for (const x of [A, B, C, U, D, Gd, P, O, L]) { x.T.lobby.leave(); for (const c of x.T.rooms.values()) await c.leave(); }
+  for (const x of [A, B, C, U, D, Gd, Y, P, O]) { x.T.lobby.leave(); for (const c of x.T.rooms.values()) await c.leave(); }
   for (const t of [TA, TB, TC]) t.lobby.leave();
+  await sleep(50);
+}
+
+// a host's leave and what is still on its way: its game's row ends only once every call it waits for has its answer.
+// Certain, not likely: the fake answers each function after a fixed time (o.lagOf) and end_game at once, so an end_game
+// sent beside a call on its way is always committed first (each check fails on a transport that sends end_game straight
+// from the leave, run with TRANSPORT=<that copy>: docs/coop/supabase-live.md)
+async function leaveTest() {
+  const bus = {};
+  const mk = async (o = {}) => { const c = fakeSupabase(bus, o); if (!c.uid) await c.auth.signInAnonymously(); return { c, T: SupabaseTransport(c, Object.assign({ stamped: true, me: c.uid }, o)) }; };
+  // its last sends: one on its way (answered 80 ms after) and one behind it (its guests told the game is over, a last
+  // presence). An end_game sent beside them is committed first and they are refused no_game (seen on the live project)
+  const L = await mk({ lagOf: { send: 80, host_game: 0, end_game: 0 } }), l1 = await L.T.join('skotos-lv01', { host: true });
+  await sleep(60);
+  const ng0 = bus.srv.log.refused.no_game || 0, s0 = bus.srv.log.fn.send || 0, q1 = l1.emit('s', { n: 1 }), q2 = l1.emit('c', { op: 'end' });
+  await sleep(5);
+  const inFlight = (bus.srv.log.fn.send || 0) === s0 + 1;
+  l1.leave();
+  const [v1, v2] = await Promise.all([q1, q2]); await sleep(60);
+  ok(inFlight && v1 === true && v2 === true && (bus.srv.log.refused.no_game || 0) === ng0 && !bus.srv.games.has('skotos-lv01'), 'a host leaving with a send on its way and one behind it: both go while its game is there, then its row ends', { inFlight, v1, v2, no_game: (bus.srv.log.refused.no_game || 0) - ng0, row: bus.srv.games.has('skotos-lv01') });
+  // its row's renewal (host_game every 30 min) on its way, answered 150 ms after: committed after an end_game sent beside
+  // it, it would make the row live again for four hours, a game nobody hosts
+  const R = await mk({ renew: 100, lagOf: { send: 0, host_game: 150, end_game: 0 } }), r1 = await R.T.join('skotos-lv02', { host: true });
+  const h0 = bus.srv.log.fn.host_game, sent = await until(() => bus.srv.log.fn.host_game === h0 + 1, 1000);
+  r1.leave();
+  await sleep(250);
+  const order = bus.srv.log.games.filter((x) => x.endsWith(' skotos-lv02'));
+  ok(sent && !bus.srv.games.has('skotos-lv02') && order.join() === 'host_game skotos-lv02,host_game skotos-lv02,end_game skotos-lv02', 'a host leaving with its row\'s renewal on its way: end_game goes after the renewal\'s answer, and the row stays ended', { renewalOnItsWay: sent, row: bus.srv.games.has('skotos-lv02'), committed: order.map((x) => x.split(' ')[0]) });
+  for (const x of [L, R]) { x.T.lobby.leave(); for (const c of x.T.rooms.values()) await c.leave(); }
   await sleep(50);
 }
 
@@ -581,12 +620,9 @@ async function lobbyTest() {
   console.log('     stamped, the lobby\'s events a second with twelve hosts and 48 pages (the sender\'s own echo too): ' + twelveS.evs);
 }
 
-await roomTest();
-await endsTest();
-await localTest();
-await supaTest();
-await stampedTest();
-await stampedLimits();
-await lobbyTest();
+const parts = { room: roomTest, ends: endsTest, local: localTest, supa: supaTest, stamped: stampedTest, limits: stampedLimits, leave: leaveTest, lobby: lobbyTest };
+const only = process.argv.slice(2);
+for (const k of only) if (!parts[k]) { console.log('no part ' + k + ' (' + Object.keys(parts).join(' ') + ')'); process.exit(2); }
+for (const [k, f] of Object.entries(parts)) if (!only.length || only.includes(k)) await f();
 console.log(fails ? fails + ' FAILED' : 'all passed');
 process.exit(fails ? 1 : 0);

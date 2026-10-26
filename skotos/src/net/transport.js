@@ -10,7 +10,9 @@
 //   ch.presenceDue()            true when a presence given now would go at once (a page builds its own no oftener)
 //   ch.onError(fn)              fn(code, how): a send the room refused ('send': not_permitted, or a terminal code) or the
 //                               room ended for this page ('room': what its listeners heard)
-//   ch.meter                    what went out and came in: { tx: { msgs, bytes, drops }, rx: { msgs, bytes }, rate() }
+//   ch.meter                    what went out and came in: { tx: { msgs, bytes, drops, big, why }, rx: { msgs, bytes },
+//                               rate() }; tx.why: each drop by its reason, the room's or server's code (rate_limited,
+//                               too_big, no_game, ...) or the page's own (big, offline, budget, timeout, busy)
 //   ch.host                     (a game's channel, on a transport whose server keeps the games: Supabase, stamped) the
 //                               peer the server says hosts it; undefined elsewhere, where the game finds its host itself
 // A transport: { kind, lobby: Channel | null, join(name, { host }) -> Promise<Channel> } (host: this page hosts the
@@ -34,9 +36,13 @@ const now = () => (typeof performance !== 'undefined' ? performance.now() : Date
 
 // what a channel sent and heard: the totals, and the rates over the last 5 whole seconds (a count for each second, six
 // kept: nothing grows with the session). What is heard is not stringified again only to be counted: each kind's size
-// (a topic from a peer, a peer's presence) is measured once in eight and the others taken as that size
+// (a topic from a peer, a peer's presence) is measured once in eight and the others taken as that size. Every message
+// given up is a drop, counted by why (tx.why: sixteen reasons at most, the rest as 'other'): what the room or the server
+// refused, by its code, and what the page gave up itself ('big' over the cap, 'offline' not connected, 'budget' over
+// its bucket, 'timeout' a call past its deadline, 'busy' too many waiting for a call)
 export function makeMeter() {
-  const M = { tx: { msgs: 0, bytes: 0, drops: 0, big: 0 }, rx: { msgs: 0, bytes: 0 }, peak: 0 }, W = Array.from({ length: 6 }, () => [-1, 0, 0, 0, 0]), est = new Map();
+  const M = { tx: { msgs: 0, bytes: 0, drops: 0, big: 0, why: {} }, rx: { msgs: 0, bytes: 0 }, peak: 0 }, W = Array.from({ length: 6 }, () => [-1, 0, 0, 0, 0]), est = new Map();
+  M.drop = (e) => { M.tx.drops++; let k = String((typeof e === 'string' ? e : e?.code) || 'upstream_error').slice(0, 64); const y = M.tx.why; if (!(k in y) && Object.keys(y).length >= 16) k = 'other'; y[k] = (y[k] || 0) + 1; };
   const sec = () => { const s = Math.floor(now() / 1000), w = W[s % 6]; if (w[0] !== s) { w[0] = s; w[1] = w[2] = w[3] = w[4] = 0; } return w; };
   M.out = (b) => { M.tx.msgs++; M.tx.bytes += b; const w = sec(); w[1]++; w[2] += b; };
   M.in = (b) => { M.rx.msgs++; M.rx.bytes += b; const w = sec(); w[3]++; w[4] += b; };
@@ -68,18 +74,18 @@ export function makeChannel(name, wire, o = {}) {
     emit(topic, data, eo = {}) {
       if (left || !TOPIC.test(topic)) return Promise.resolve(false);
       const b = bytesOf(data);
-      if (b > MAX_MSG) { meter.tx.big++; meter.tx.drops++; return Promise.resolve(false); }
-      if (!conn) { meter.tx.drops++; return Promise.resolve(false); }
-      if (!bucket.take()) { if (eo.must && queue.length < 32) { queue.push([topic, data, b]); return Promise.resolve(true); } meter.tx.drops++; return Promise.resolve(false); }
+      if (b > MAX_MSG) { meter.tx.big++; meter.drop('big'); return Promise.resolve(false); }
+      if (!conn) { meter.drop('offline'); return Promise.resolve(false); }
+      if (!bucket.take()) { if (eo.must && queue.length < 32) { queue.push([topic, data, b]); return Promise.resolve(true); } meter.drop('budget'); return Promise.resolve(false); }
       meter.out(b);
-      return Promise.resolve(wire.send(topic, data)).then(() => true, (e) => { meter.tx.drops++; ch._err(e, 'send'); return false; });
+      return Promise.resolve(wire.send(topic, data)).then(() => true, (e) => { meter.drop(e); ch._err(e, 'send'); return false; });
     },
     on(topic, fn) { (H[topic] ||= []).push(fn); return () => { const l = H[topic]; const i = l ? l.indexOf(fn) : -1; if (i >= 0) l.splice(i, 1); }; },
     presence(patch) {
       const next = Object.assign({}, mine);
       for (const k in patch) { if (patch[k] === null) delete next[k]; else next[k] = patch[k]; }
       const b = bytesOf(next);
-      if (b > MAX_PRES) { meter.tx.big++; return Promise.resolve(false); }
+      if (b > MAX_PRES) { meter.tx.big++; meter.drop('big'); return Promise.resolve(false); }
       mine = next; mineB = b; dirty = true; ch.pump();
       return Promise.resolve(true);
     },
@@ -95,14 +101,14 @@ export function makeChannel(name, wire, o = {}) {
     // rate or the budget holds back is tried again on a timer, so a channel nobody pumps, the lobby, still sends its last)
     pump() {
       if (left || !conn) return;
-      while (queue.length && bucket.level >= 1) { const [t, d, b] = queue.shift(); bucket.take(); meter.out(b); Promise.resolve(wire.send(t, d)).catch((e) => { meter.tx.drops++; ch._err(e, 'send'); }); }
+      while (queue.length && bucket.level >= 1) { const [t, d, b] = queue.shift(); bucket.take(); meter.out(b); Promise.resolve(wire.send(t, d)).catch((e) => { meter.drop(e); ch._err(e, 'send'); }); }
       const t = now(), wait = gap - (t - presT);
       // (a presence the wire would not send (wire.idle: Supabase's, the same as the one it said a moment ago) takes no
       // token and is not counted: the meter is what went out)
       if (dirty && wait <= 0 && wire.idle?.(mine)) { dirty = false; presT = t; }
       else if (dirty && wait <= 0 && bucket.take()) {
         dirty = false; presT = t; meter.out(mineB);
-        Promise.resolve(wire.sendPresence(mine)).catch((e) => { meter.tx.drops++; dirty = true; ch._err(e, 'send'); });
+        Promise.resolve(wire.sendPresence(mine)).catch((e) => { meter.drop(e); dirty = true; ch._err(e, 'send'); });
       }
       if ((dirty || queue.length) && !retry) retry = setTimeout(() => { retry = 0; ch.pump(); }, Math.max(1, dirty && wait > 0 ? wait : 1000 / (o.rate || BUDGET)));
     },
@@ -382,15 +388,22 @@ export function SupabaseTransport(client, o = {}) {
       const ch = open(name); ch.host = host;
       // (the row of a game this page hosts is renewed while the game is open, and let go when it leaves. A renewal answered
       // with anything but 'ok' is the row lost (run out and another's): the game is told, as a room that ended. One that
-      // got no answer is tried again in a minute)
-      let renew = 0, done = false;
+      // got no answer is tried again in a minute. The last renewal sent is kept: renewing, settled once it has its answer)
+      let renew = 0, renewing = null, done = false;
       const every = o.renew || RENEW;
-      const keep = (ms) => { renew = setTimeout(() => rpc('host_game', { room: name }).then((r) => { if (done) return; if (r === 'ok') keep(every); else ch._err(typeof r === 'string' && r ? r : 'upstream_error', 'room'); }, () => { if (!done) keep(Math.min(every, 60000)); }), ms); };
+      const keep = (ms) => { renew = setTimeout(() => { renewing = rpc('host_game', { room: name }).then((r) => { if (done) return; if (r === 'ok') keep(every); else ch._err(typeof r === 'string' && r ? r : 'upstream_error', 'room'); }, () => { if (!done) keep(Math.min(every, 60000)); }); }, ms); };
       if (hosting) keep(every);
       const l0 = ch.leave;
       // (the game's row ends once what this page said before has had its answer: its last messages, the end of the game
-      // its guests are told among them, go while the row is there)
-      ch.leave = () => { if (!done) { done = true; T.rooms.delete(name); clearTimeout(renew); if (hosting) post.settled().then(() => rpc('end_game', { room: name })).catch(() => {}); } return l0(); };
+      // its guests are told among them, go while the row is there. And once a renewal on its way has had its answer: one
+      // committed after the end would make the row live again, for four hours, a game nobody hosts)
+      ch.leave = () => {
+        if (!done) {
+          done = true; T.rooms.delete(name); clearTimeout(renew);
+          if (hosting) Promise.all([post.settled(), renewing]).then(() => rpc('end_game', { room: name })).catch(() => {});
+        }
+        return l0();
+      };
       T.rooms.set(name, ch); return ch;
     }).finally(() => pending.delete(name));
     pending.set(name, p);

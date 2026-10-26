@@ -8,10 +8,11 @@
 // skipped), opens Co-op from the HUD and hosts; page B makes a Mage, opens Co-op, finds A's game in the lobby's list,
 // types A's code and joins; A presses Start. Then: each sees the other (the party frame, the other hero's actor, the
 // host's monsters on the guest), a monster B strikes dead is dead on A, ten seconds of both walking measured on the wire
-// (each skotos.send call and its messages, each broadcast the sockets brought in, a page's own among them), and A ends
-// the game from its panel: B is told and is back in its own town. The #fatal box and the console errors of both pages
-// are reported. On the project: two anonymous sign-ins (a context each), a game hosted and ended, about a minute of a
-// pair's traffic (some 40 Realtime events a second). Screenshots in outdir (default /tmp/skotos-live-web).
+// (each skotos.send call and its messages, each broadcast the sockets brought in, a page's own among them; after it,
+// what each page had refused or gave up, by its transport's counters), and A ends the game from its panel: B is told
+// and is back in its own town. The #fatal box and the console errors of both pages are reported. On the project: two
+// anonymous sign-ins (a context each), a game hosted and ended, about a minute of a pair's traffic (some 60 Realtime
+// events a second while both walk). Screenshots in outdir (default /tmp/skotos-live-web).
 import { createRequire } from 'node:module';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -195,7 +196,11 @@ try {
   await ev(A, () => window.__D.closePanel()); await ev(B, () => window.__D.closePanel());
   await sleep(5000);
   info('frames a second, the panels closed, and the busiest processes', { A: await fps(A), B: await fps(B), panels: [await ev(A, () => window.__G.panel || null), await ev(B, () => window.__G.panel || null)], ps: execSync('ps -eo pcpu,comm --sort=-pcpu | head -4 | tail -3').toString().trim().split('\n').map((l) => l.trim()) });
-  const meter = (pg) => ev(pg, () => { const r = window.__NET.S.ch.meter.rate(); return { out: +r.msgsOut.toFixed(1), outKB: +(r.bytesOut / 1024).toFixed(1), in: +r.msgsIn.toFixed(1), inKB: +(r.bytesIn / 1024).toFixed(1), drops: window.__NET.S.ch.meter.tx.drops, err: window.__NET.S.ch.error || null }; });
+  const meter = (pg) => ev(pg, () => { const r = window.__NET.S.ch.meter.rate(); return { out: +r.msgsOut.toFixed(1), outKB: +(r.bytesOut / 1024).toFixed(1), in: +r.msgsIn.toFixed(1), inKB: +(r.bytesIn / 1024).toFixed(1), drops: window.__NET.S.ch.meter.tx.drops }; });
+  // (what a page had refused or gave up, by the transport's own counters, since each channel was opened: every message
+  // dropped, by why: the server's code (rate_limited, too_big, no_game, quota, ...) or the page's own (big, offline,
+  // budget, timeout, busy); the game's channel and the lobby's, one poster carrying both)
+  const tally = (pg) => ev(pg, () => { const S = window.__NET.S, m = (c) => (c ? { drops: c.meter.tx.drops, why: c.meter.tx.why ?? null } : null); return { game: m(S.ch), lobby: m(S.T?.lobby), ended: S.ch?.ended || null }; });
   const ma = await meter(A), mb = await meter(B);
   info('the pair standing, messages and KB a second (the last 5 s, each page\'s meter)', { A: ma, B: mb });
   // ten seconds of both heroes walking about (each moved every 50 ms, as tools/coop.mjs ux does): what the wire carries
@@ -222,13 +227,15 @@ try {
     for (const x of f) if (!bc.includes(x)) sys[x.ev] = (sys[x.ev] || 0) + 1;
     return { calls: +(c.length / span).toFixed(1), msgs: +(c.reduce((a, x) => a + x.n, 0) / span).toFixed(1), byEvent: Object.fromEntries(Object.entries(by).map(([k, v]) => [k, +(v / span).toFixed(1)])), KBout: +(c.reduce((a, x) => a + x.b, 0) / span / 1024).toFixed(1), heard: +((bc.length - own) / span).toFixed(1), ownBack: +(own / span).toFixed(1), KBin: +(f.reduce((a, x) => a + x.b, 0) / span / 1024).toFixed(1), other: sys };
   };
-  const sa = sum('A'), sbw = sum('B'), ma2 = await meter(A), mb2 = await meter(B);
+  const sa = sum('A'), sbw = sum('B'), ma2 = await meter(A), mb2 = await meter(B), ta2 = await tally(A), tb2 = await tally(B);
   info('the pair walking, on the wire, a second (10 s): skotos.send calls and messages, and the broadcasts each socket brought in', { A: sa, B: sbw });
   info('the same 10 s by each page\'s own meter', { A: ma2, B: mb2 });
   const sends = sa.msgs + sbw.msgs, dels = sa.heard + sa.ownBack + sbw.heard + sbw.ownBack;
   info('the pair\'s Realtime events a second (each message sent, each delivered)', { sent: +sends.toFixed(1), delivered: +dels.toFixed(1), events: +(sends + dels).toFixed(1) });
   ok(sa.heard > 0 && sbw.heard > 0 && Math.abs(sa.ownBack - sa.msgs) <= Math.max(1.5, sa.msgs * 0.15) && Math.abs(sbw.heard - sa.msgs) <= Math.max(1.5, sa.msgs * 0.15), 'every message the host said came to the guest and back to the host itself, once', { said: sa.msgs, heardByB: sbw.heard, backToA: sa.ownBack });
-  ok(!ma.err && !mb.err && ma.drops === 0, 'nothing the server refused, no host drops', { A: [ma.drops, ma.err], B: [mb.drops, mb.err] });
+  const clean = (x) => !!(x.game?.why && x.lobby?.why) && x.game.drops === 0 && x.lobby.drops === 0 && !Object.keys(x.game.why).length && !Object.keys(x.lobby.why).length && !x.ended;
+  const http = [...(net.A.refused || []), ...(net.B.refused || [])];
+  ok(clean(ta2) && clean(tb2) && !http.length, 'after the walk, on both pages: nothing the server refused, nothing given up (the transport\'s counters, the game\'s channel and the lobby\'s), no call to the project answered 4xx or 5xx', { A: ta2, B: tb2, http });
   // A ends the game from its panel: B is told, and is home
   const lvl0 = await ev(B, () => window.__G.hero.__real?.level ?? window.__G.hero.level);
   await click(A, '#h-coop'); await sleep(500);
