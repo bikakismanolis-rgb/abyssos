@@ -125,20 +125,81 @@ async function localTest() {
 // a fake supabase-js v2 client: channels by name share a bus; broadcast (self: false), presence track/sync (a key is in
 // presenceState once it has tracked). Realtime's limits, as its docs give them: a client's 6th track() or untrack() within
 // 30 s shuts its channel (ClientPresenceRateLimitReached: CLOSED, broadcast with it), and bus.log counts the project's
-// events (each message sent and each delivered: the project's messages a second)
-function fakeSupabase(bus) {
+// events (each message sent and each delivered: the project's messages a second).
+// And the stamped path, the project as supabase/migrations/*_skotos_coop.sql makes it (tools/net/test-migration.mjs
+// tries that SQL itself): auth (signInAnonymously gives a user id, getSession keeps it), private channels (another
+// channel than the public one of the same name; joined only signed in and only on a 'skotos:' topic; a client's own
+// broadcast on one is refused, as the policies refuse its write), and schema('skotos').rpc: send (signed in, the topic,
+// the event, 4096 bytes of the data's JSON text, the user's bucket of 40 a second and 80 at once, n tokens for n; then
+// each as { d, _by } to every member of the private channel, its sender too: a broadcast from the database knows no
+// self), host_game / game_host / end_game (the games rows). An RPC answers after o.lag ms (random below it: calls that
+// overlap may be answered out of order, as HTTP may). bus.srv.log counts the calls, refusals and stamped deliveries
+function fakeSupabase(bus, o = {}) {
   const log = (bus.log ||= { events: 0, tracks: 0, closed: 0 }), tracks = [];
-  return {
+  const srv = (bus.srv ||= { users: 0, ids: 0, games: new Map(), rates: new Map(), log: { calls: 0, refused: {}, signIns: 0 } });
+  let uid = o.uid || null;
+  const RX = { topic: /^skotos:[a-z0-9][a-z0-9_.-]{0,47}$/, event: /^(_p|[a-z][a-z0-9_.-]{0,47})$/, room: /^[a-z0-9][a-z0-9_.-]{0,47}$/ };
+  const utf8 = (x) => new TextEncoder().encode(x).length;
+  const refuse = (m) => { srv.log.refused[m] = (srv.log.refused[m] || 0) + 1; return { data: null, error: { message: m, code: 'P0001' } }; };
+  const live = (room) => { const g = srv.games.get(room); return g && g.exp > Date.now() ? g : null; };
+  const fns = {
+    send({ msgs }) {
+      if (!uid) return refuse('not_signed_in');
+      if (!Array.isArray(msgs) || msgs.length < 1 || msgs.length > 16) return refuse('invalid_argument');
+      for (const m of msgs) {
+        if (!Array.isArray(m) || m.length !== 3 || m.some((x) => typeof x !== 'string') || !RX.topic.test(m[0]) || !RX.event.test(m[1])) return refuse('invalid_argument');
+        if (utf8(m[2]) > 4096) return refuse('too_big');
+      }
+      const t = Date.now(), r = srv.rates.get(uid) || { tok: 80, at: t }, tok = Math.min(80, r.tok + (t - r.at) / 1000 * 40);
+      if (tok < msgs.length) return refuse('rate_limited');
+      srv.rates.set(uid, { tok: tok - msgs.length, at: t });
+      let ds; try { ds = msgs.map((m) => JSON.parse(m[2])); } catch (e) { return refuse('invalid json'); }
+      // (realtime.send adds an id of its own to the payload)
+      msgs.forEach((m, i) => bus.stamp(m[0], m[1], { d: ds[i], _by: uid, id: 'm' + ++srv.ids }));
+      return { data: msgs.length, error: null };
+    },
+    host_game({ room }) {
+      if (!uid) return refuse('not_signed_in');
+      if (typeof room !== 'string' || !RX.room.test(room)) return refuse('invalid_argument');
+      for (const [k, g] of srv.games) if (g.exp < Date.now()) srv.games.delete(k);
+      const g = srv.games.get(room);
+      if (g && g.host !== uid) return { data: 'taken', error: null };
+      if ([...srv.games.entries()].filter(([k, x]) => x.host === uid && k !== room).length >= 4) return { data: 'too_many', error: null };
+      srv.games.set(room, { host: uid, exp: Date.now() + 4 * 3600e3 });
+      return { data: 'ok', error: null };
+    },
+    game_host({ room }) { return { data: uid ? live(room)?.host ?? null : null, error: null }; },
+    end_game({ room }) { const g = srv.games.get(room); if (g && g.host === uid) srv.games.delete(room); return { data: null, error: null }; }
+  };
+  // (what the server broadcasts, stamped: to every member of the private channel, the sender too)
+  bus.stamp ||= (topic, event, payload) => {
+    const c = bus['priv:' + topic]; log.events++;
+    if (c) for (const [, mm] of c.members) { log.events++; srv.log.delivered = (srv.log.delivered || 0) + 1; setTimeout(() => mm.L.b.forEach(([ev, f]) => { if (ev === '*' || ev === event) f({ event, payload }); }), 5); }
+  };
+  const client = {
+    auth: {
+      getSession: async () => ({ data: { session: uid ? { user: { id: uid } } : null }, error: null }),
+      signInAnonymously: async () => { if (bus.noAnon) return { data: null, error: { message: 'Anonymous sign-ins are disabled' } }; srv.log.signIns++; uid = 'u' + String(++srv.users).padStart(3, '0') + '-' + Math.random().toString(16).slice(2, 10); return { data: { user: { id: uid }, session: { user: { id: uid } } }, error: null }; }
+    },
+    realtime: { setAuth: async () => {} },
+    schema: (sch) => ({ rpc: (fn, args) => new Promise((res) => { srv.log.calls++; setTimeout(() => res(sch === 'skotos' && fns[fn] ? fns[fn](args || {}) : { data: null, error: { message: 'not found', code: 'PGRST202' } }), Math.random() * (o.lag ?? 20)); }) }),
     channel(name, opts) {
-      const key = opts?.config?.presence?.key, L = { b: [], p: [] };
-      const c = bus[name] ||= { members: new Map() };
+      const key = opts?.config?.presence?.key, L = { b: [], p: [] }, priv = !!opts?.config?.private;
+      const c = bus[(priv ? 'priv:' : '') + name] ||= { members: new Map() };
       let status = null, cb0 = null;
       const sync = () => setTimeout(() => { for (const m of c.members.values()) m.L.p.forEach((f) => f()); }, 5);
       const ch = {
         on(type, filter, fn) { if (type === 'broadcast') L.b.push([filter.event, fn]); if (type === 'presence') L.p.push(fn); return ch; },
-        subscribe(cb) { cb0 = cb; c.members.set(key, { L, state: null }); setTimeout(() => { status = 'SUBSCRIBED'; cb('SUBSCRIBED'); sync(); }, 5); return ch; },
+        subscribe(cb) {
+          cb0 = cb;
+          // (a private channel: joined signed in, on a skotos topic, or not at all)
+          if (priv && (!uid || !name.startsWith('skotos:'))) { setTimeout(() => cb('CHANNEL_ERROR'), 5); return ch; }
+          c.members.set(key, { L, state: null }); setTimeout(() => { if (status === 'CLOSED') return; status = 'SUBSCRIBED'; cb('SUBSCRIBED'); sync(); }, 5); return ch;
+        },
         send(m) {
           if (status !== 'SUBSCRIBED') return Promise.resolve('error');
+          // (no client broadcasts on a private skotos channel: the policies give it no write)
+          if (priv) { srv.log.refused.clientBroadcast = (srv.log.refused.clientBroadcast || 0) + 1; return Promise.resolve('error'); }
           log.events++;
           for (const [k, mm] of c.members) if (k !== key) { log.events++; setTimeout(() => mm.L.b.forEach(([ev, f]) => { if (ev === '*' || ev === m.event) f({ event: m.event, payload: m.payload }); }), 5); }
           return Promise.resolve('ok');
@@ -148,15 +209,18 @@ function fakeSupabase(bus) {
           const t = Date.now(); tracks.push(t); while (tracks[0] < t - 30000) tracks.shift(); log.tracks++;
           if (tracks.length > 5) { status = 'CLOSED'; log.closed++; c.members.delete(key); cb0?.('CLOSED'); sync(); return Promise.resolve('error'); }
           // (a track is sent, and its presence diff delivered to every other member)
-          log.events += c.members.size; c.members.get(key).state = p; sync(); return Promise.resolve('ok');
+          const mm = c.members.get(key); if (!mm) return Promise.resolve('error');
+          log.events += c.members.size; mm.state = p; sync(); return Promise.resolve('ok');
         },
         presenceState() { const o = {}; for (const [k, m] of c.members) if (m.state) o[k] = [Object.assign({ presence_ref: 'r' }, m.state)]; return o; },
         unsubscribe() { status = 'CLOSED'; if (c.members.delete(key)) log.events += c.members.size; sync(); return Promise.resolve('ok'); }
       };
       return ch;
     },
-    removeChannel(ch) { return ch.unsubscribe(); }
+    removeChannel(ch) { return ch.unsubscribe(); },
+    get uid() { return uid; }
   };
+  return client;
 }
 async function supaTest() {
   const bus = {};
@@ -221,13 +285,131 @@ async function supaTest() {
   for (const t of [...T, late]) t.lobby.leave();
 }
 
+// the stamped path (release.md step 5, docs/coop/supabase.md): each page signed in anonymously, the server's '_by' the
+// only sender a page believes, the games row the only host. What a forger signed in as itself can try: its own data
+// naming the host, a broadcast of its own on the private channel, a message with no stamp, a presence or a listing
+// that says it hosts, hosting the same room, a flood; and the cap
+async function stampedTest() {
+  const bus = {}, q0 = new URLSearchParams('');
+  const cfg = { url: 'https://x.supabase.co', anonKey: 'k', stamped: true, createClient: () => fakeSupabase(bus) };
+  const H = await pickTransport(q0, cfg), G1 = await pickTransport(q0, cfg);
+  ok(H?.stamped && G1?.stamped && H.me && G1.me && H.me !== G1.me && bus.srv.log.signIns === 2, 'pickTransport signs each page in (anonymously) and takes the stamped transport; a peer is its user id: ' + H?.me);
+  ok(await pickTransport(q0, Object.assign({}, cfg, { createClient: () => fakeSupabase({ noAnon: true }) })) === null, 'a project that does not allow anonymous sign-ins: no transport, the single-player game');
+  const busK = {}, K = await pickTransport(q0, Object.assign({}, cfg, { createClient: () => fakeSupabase(busK, { uid: 'u-kept' }) }));
+  ok(K?.me === 'u-kept' && busK.srv.log.signIns === 0, 'a session kept (a reload of the tab) is the same user, signed in again by nobody');
+  K.lobby.leave();
+  ok(SupabaseTransport(fakeSupabase(bus), { stamped: true }) === null, 'stamped with no user: no transport');
+  // (the web build's createClient loads supabase-js first: it gives a promise of the client)
+  const busA = {}, KA = await pickTransport(q0, Object.assign({}, cfg, { createClient: async () => fakeSupabase(busA) }));
+  ok(KA?.stamped && busA.srv.log.signIns === 1, 'a createClient that gives a promise of the client (the web build\'s, loading supabase-js) is waited for');
+  KA.lobby.leave();
+  const hc = await H.join('skotos-ab12', { host: true });
+  ok(hc.host === H.me && bus.srv.games.get('skotos-ab12')?.host === H.me, 'hosting makes the game\'s row; the host\'s channel says it hosts');
+  const gc = await G1.join('skotos-ab12');
+  ok(gc.host === H.me, 'a guest is told its host by the row');
+  let nog = null; await G1.join('skotos-zz99').catch((e) => { nog = e.code; });
+  ok(nog === 'no_game', 'a code with no game is refused: no_game');
+  await sleep(60);
+  ok(hc.connected() && gc.connected() && H.lobby.connected(), 'private channels joined, signed in');
+  const pub = fakeSupabase(bus), pc = pub.channel('skotos:lobby', { config: { private: true, presence: { key: 'x' } } }); let pst = null; pc.subscribe((st) => { pst = st; });
+  await sleep(30);
+  ok(pst === 'CHANNEL_ERROR', 'a page not signed in cannot join a private channel');
+  const heard = [], own = [];
+  gc.on('s', (m) => heard.push(m)); gc.on('c', (m) => heard.push(m)); hc.on('s', (m) => own.push(m));
+  hc.presence({ r: 'h', c: 'ab12', v: 3 }); gc.presence({ r: 'g', c: 'ab12', v: 3 }); hc.pump(); gc.pump();
+  await hc.emit('s', { n: 1 }); await sleep(80);
+  ok(heard.length === 1 && heard[0].peer === H.me && heard[0].by === H.me && heard[0].data?.n === 1, 'the host\'s snapshot arrives, its sender the server\'s word');
+  ok(own.length === 0, 'its own comes back from the server and is passed over');
+  ok(gc.peers().some((p) => p.peer === H.me && p.presence.r === 'h') && hc.peers().some((p) => p.peer === G1.me && p.presence.r === 'g'), 'each sees the other\'s presence, named by the server');
+  // the forger, signed in as itself, in the game's channel
+  const E = fakeSupabase(bus); await E.auth.signInAnonymously();
+  const ET = SupabaseTransport(E, { stamped: true, me: E.uid }), ec = await ET.join('skotos-ab12');
+  await sleep(60);
+  const send = (msgs) => E.schema('skotos').rpc('send', { msgs });
+  heard.length = 0;
+  await send([['skotos:skotos-ab12', 'c', JSON.stringify({ op: 'end', f: H.me, _by: H.me })]]); await sleep(40);
+  ok(heard.length === 1 && heard[0].peer === E.uid && heard[0].peer !== H.me && heard[0].data._by === H.me, 'a forged "f" and "_by" in its data: heard as itself, the stamp wins (the game, believing only its host, drops it)');
+  heard.length = 0;
+  const sc = E.channel('skotos:skotos-ab12', { config: { private: true, presence: { key: 'evil-2' } } }); sc.subscribe(() => {}); await sleep(20);
+  const own2 = await sc.send({ type: 'broadcast', event: 'c', payload: { _by: H.me, d: { op: 'end' } } }); await sleep(30);
+  ok(own2 === 'error' && heard.length === 0 && bus.srv.log.refused.clientBroadcast >= 1, 'its own broadcast on the private channel, any "_by" in it: refused, nothing heard');
+  bus.stamp('skotos:skotos-ab12', 'c', { d: { op: 'end' }, f: H.me }); bus.stamp('skotos:skotos-ab12', 's', { d: { n: 9 } }); await sleep(30);
+  ok(heard.length === 0, 'a message without the server\'s stamp (one naming the host in "f", one naming nobody) is dropped');
+  // it says it hosts: in the game's presence, in the lobby, and by hosting the same room
+  ec.presence({ r: 'h', c: 'ab12', v: 3 }); ec.pump(); ET.lobby.presence({ g: { c: 'ab12', cls: 'mage', l: 40, z: 'town', n: 1, d: 0, v: 3, on: 1 } }); ET.lobby.pump();
+  await sleep(80);
+  const claims = gc.peers().filter((p) => p.presence.r === 'h').map((p) => p.peer);
+  ok(claims.includes(E.uid) && gc.host === H.me, 'its presence says it hosts: shown (named as itself), and the game\'s host is still the row\'s: ' + claims.length + ' claim it');
+  ok(G1.lobby.peers().some((p) => p.peer === E.uid && p.presence.g?.c === 'ab12'), 'a listing of the code in the lobby is its own (a guest picking it is refused for its host: coop.js pickHost)');
+  let tk = null; await ET.join('skotos-ab12', { host: true }).catch((e) => { tk = e.code; });
+  ok(tk === null && ec.host === H.me, 'joined already, a join to host is the same channel, its host still the row\'s');
+  const E2 = fakeSupabase(bus); await E2.auth.signInAnonymously();
+  const E2T = SupabaseTransport(E2, { stamped: true, me: E2.uid });
+  await E2T.join('skotos-ab12', { host: true }).catch((e) => { tk = e.code; });
+  ok(tk === 'taken' && bus.srv.games.get('skotos-ab12').host === H.me, 'hosting a room another hosts: taken, the row unchanged');
+  // a presence key alone (the client's own word) is no peer
+  const gh = E.channel('skotos:skotos-ab12', { config: { private: true, presence: { key: 'ghost' } } });
+  gh.subscribe((st) => { if (st === 'SUBSCRIBED') gh.track({ k: 'ghost' }); }); await sleep(60);
+  ok(!gc.peers().some((p) => p.peer === 'ghost'), 'a presence key with no stamped presence is not listed');
+  // the cap: before the wire, and at the server
+  ok((await hc.emit('s', { pad: 'x'.repeat(5000) })) === false, 'a 5 KB message is refused before the wire');
+  const r1 = await send([['skotos:skotos-ab12', 'f', JSON.stringify('x'.repeat(4094))]]), r2 = await send([['skotos:skotos-ab12', 'f', JSON.stringify('x'.repeat(4095))]]);
+  ok(!r1.error && r2.error?.message === 'too_big', 'the server takes 4096 bytes of data and refuses 4097: too_big');
+  // the rate: a flood by RPC, past the page's own bucket
+  await sleep(2000);
+  const f0 = bus.srv.log.refused.rate_limited || 0, flood = await Promise.all(Array.from({ length: 100 }, () => send([['skotos:lobby', 'f', '1']])));
+  const went = flood.filter((r) => !r.error).length;
+  ok(went >= 80 && went <= 84 && (bus.srv.log.refused.rate_limited || 0) - f0 === 100 - went, 'a hundred sends at once: 80 go (and what 40 a second refills meanwhile), the rest refused: ' + went);
+  // order and batching: thirty at once from the host arrive in order, in fewer calls
+  const seen = [], c0 = bus.srv.log.calls; gc.on('f', (m) => { if (m.peer === H.me) seen.push(m.data.i); });
+  await Promise.all(Array.from({ length: 30 }, (_, i) => hc.emit('f', { i })));
+  await sleep(80);
+  ok(seen.length === 30 && seen.every((v, i) => v === i), 'thirty at once arrive in the order they were said (one call on its way at a time)');
+  ok(bus.srv.log.calls - c0 < 30, 'in ' + (bus.srv.log.calls - c0) + ' calls, not thirty');
+  // the host leaves: its row goes, the code is free
+  for (const t of [ET, E2T]) { t.lobby.leave(); for (const c of t.rooms.values()) await c.leave(); }
+  await hc.leave(); await sleep(60);
+  ok(!bus.srv.games.has('skotos-ab12'), 'a host that leaves ends its game\'s row');
+  let nog2 = null; const G2 = await pickTransport(q0, cfg); await G2.join('skotos-ab12').catch((e) => { nog2 = e.code; });
+  ok(nog2 === 'no_game', 'and a guest coming after is told there is no game');
+  await gc.leave(); for (const t of [H, G1, G2]) t.lobby.leave();
+  await sleep(50);
+
+  // four stamped pages at the game's own rates for 8 s: the server refuses none of them, and what it costs
+  const bus2 = {}, cfg2 = Object.assign({}, cfg, { createClient: () => fakeSupabase(bus2, { lag: 60 }) });
+  const T = await Promise.all([0, 1, 2, 3].map(() => pickTransport(q0, cfg2)));
+  const chs = [await T[0].join('skotos-rate', { host: true })];
+  for (let g = 1; g < 4; g++) chs.push(await T[g].join('skotos-rate'));
+  await sleep(150);
+  const snap = { a: Array.from({ length: 60 }, (_, i) => [i, 12, 1234, 2345, 51, 200, 3, 4, 1]), pad: 'x'.repeat(800) };
+  const t0 = Date.now(), e0 = bus2.log.events, k0 = bus2.srv.log.calls, d0 = bus2.srv.log.delivered || 0; let k = 0;
+  const got = [0, 0, 0, 0]; chs.forEach((c, i) => c.on('s', () => got[i]++));
+  while (Date.now() - t0 < 8000) {
+    if (k % 6 === 0) chs[0].emit('s', snap);
+    for (let g = 1; g < 4; g++) { chs[g].presence({ h: [k, g, 1000 + k], hb: (k / 60) | 0 }); if (k % 12 === 0) chs[g].emit('f', [[1, 2, 3]]); }
+    for (const c of chs) c.pump();
+    k++; await sleep(16);
+  }
+  const secs = (Date.now() - t0) / 1000;
+  await sleep(300);
+  const evs = (bus2.log.events - e0) / secs, calls = (bus2.srv.log.calls - k0) / secs, del = ((bus2.srv.log.delivered || 0) - d0) / secs, exp = 8000 / (6 * 16);
+  ok(!bus2.srv.log.refused.rate_limited && !bus2.srv.log.refused.too_big && chs.every((c) => c.connected()), 'eight seconds at the game\'s rates over RPC (60 ms a call): nothing refused by the server');
+  ok(got.slice(1).every((g) => g > exp * 0.9), 'the guests heard the snapshots: ' + got.slice(1) + ' of ~' + Math.round(exp));
+  ok(chs[0].peers().length === 4 && chs.slice(1).every((c) => (chs[0].peers().find((p) => p.peer === c.me)?.presence?.h?.[0] ?? -1) >= k - 20), 'the host has every guest\'s presence of the last frames');
+  console.log('     stamped, a party of four: ' + calls.toFixed(1) + ' RPC calls a second (each a transaction), ' + Math.round(del) + ' deliveries a second, ' + Math.round(evs) + ' events a second (each sent and each delivered, the sender\'s own echo too)');
+  for (const c of chs) await c.leave();
+  for (const t of T) t.lobby.leave();
+}
+
 // the lobby: every page that loads the game is in it (a single-player one too), so what it costs grows with the pages
 // open, project-wide. A page with nothing to show says nothing; a host's listing is said when it changes, again every
 // 10 s and once for those who come in; a listing reaches every page however many there are
 async function lobbyTest() {
-  const room = async (M, H, secs) => {
+  // (stamped: each page signed in as its own user, everything said through skotos.send and heard back by its sender too)
+  const page = (bus, me, stamped) => SupabaseTransport(fakeSupabase(bus, stamped ? { uid: me } : {}), stamped ? { stamped: true, me } : { me });
+  const room = async (M, H, secs, stamped) => {
     const bus = {};
-    const T = Array.from({ length: M }, (_, i) => SupabaseTransport(fakeSupabase(bus), { me: 'l' + i }));
+    const T = Array.from({ length: M }, (_, i) => page(bus, 'l' + i, stamped));
     await sleep(300);
     // (the hosts list their games, and say it again every 2.5 s as the game's lobbyPresence does, unchanged)
     const card = (i) => ({ g: { c: 'c' + String(i).padStart(3, '0'), cls: 'warden', l: 10, z: 'forest', n: 1, d: 1, v: 2, on: 1 } });
@@ -239,7 +421,7 @@ async function lobbyTest() {
     const evs = (bus.log.events - e0) / ((Date.now() - t0) / 1000);
     const reach = T.slice(H).map((t) => t.lobby.peers().filter((p) => p.presence?.g).length);
     // (one more page comes in: it has every listing at once)
-    const late = SupabaseTransport(fakeSupabase(bus), { me: 'late' });
+    const late = page(bus, 'late', stamped);
     await sleep(600);
     const lateN = late.lobby.peers().filter((p) => p.presence?.g).length;
     clearInterval(re);
@@ -254,12 +436,16 @@ async function lobbyTest() {
   const twelve = await room(48, 12, 21);
   ok(twelve.reach === 12 && twelve.lateN === 12 && twelve.closed === 0, 'twelve parties\' pages (48) in the lobby, twelve hosts listed on every page');
   console.log('     the lobby\'s events a second with twelve hosts and 48 pages (each sent and each delivered): ' + twelve.evs);
+  const idleS = await room(32, 0, 4, true), twelveS = await room(48, 12, 10, true);
+  ok(idleS.evs === 0 && twelveS.reach === 12 && twelveS.lateN === 12 && twelveS.closed === 0, 'stamped, the same: an idle lobby costs nothing, and twelve hosts among 48 pages are listed on every page, a newcomer\'s too');
+  console.log('     stamped, the lobby\'s events a second with twelve hosts and 48 pages (the sender\'s own echo too): ' + twelveS.evs);
 }
 
 await roomTest();
 await endsTest();
 await localTest();
 await supaTest();
+await stampedTest();
 await lobbyTest();
 console.log(fails ? fails + ' FAILED' : 'all passed');
 process.exit(fails ? 1 : 0);
