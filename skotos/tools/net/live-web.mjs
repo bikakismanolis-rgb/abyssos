@@ -48,7 +48,8 @@ const server = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': TYPES[path.extname(f)] || 'application/octet-stream' });
   fs.createReadStream(f).pipe(res);
 }).listen(PORT);
-const BASE = 'http://localhost:' + PORT + '/';
+// (LIVE_BASE=<url>: a site already deployed, e.g. the Pages one, in place of this server's dist-web/)
+const BASE = process.env.LIVE_BASE || 'http://localhost:' + PORT + '/';
 
 // (LIVE_PROXY=<http://host:port>: the project reached through that proxy, this server directly)
 const proxy = process.env.LIVE_PROXY;
