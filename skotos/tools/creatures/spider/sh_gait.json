@@ -1,0 +1,17 @@
+{"model":"prev.glb","out":"r_gait1.png","cell":[340,300],"cols":5,"frames":[
+{"clip":"idle","t":0,"view":"34","dist":3.4,"center":[0,0.3,0]},
+{"clip":"idle","t":0.18,"view":"34","dist":3.4,"center":[0,0.3,0]},
+{"clip":"idle","t":0.42,"view":"34","dist":3.4,"center":[0,0.3,0]},
+{"clip":"idle","t":0.52,"view":"side","dist":3.4,"center":[0,0.3,0]},
+{"clip":"idle","t":0.8,"view":"34","dist":3.4,"center":[0,0.3,0]},
+{"clip":"walk","t":0,"view":"side","dist":3.4,"center":[0,0.3,0]},
+{"clip":"walk","t":0.25,"view":"side","dist":3.4,"center":[0,0.3,0]},
+{"clip":"walk","t":0.5,"view":"side","dist":3.4,"center":[0,0.3,0]},
+{"clip":"walk","t":0.75,"view":"side","dist":3.4,"center":[0,0.3,0]},
+{"clip":"walk","t":0.3,"view":"top","dist":3.4,"center":[0,0.3,0]},
+{"clip":"run","t":0,"view":"34","dist":3.4,"center":[0,0.3,0]},
+{"clip":"run","t":0.25,"view":"34","dist":3.4,"center":[0,0.3,0]},
+{"clip":"run","t":0.5,"view":"side","dist":3.4,"center":[0,0.3,0]},
+{"clip":"run","t":0.75,"view":"side","dist":3.4,"center":[0,0.3,0]},
+{"clip":"run","t":0.1,"view":"top","dist":3.4,"center":[0,0.3,0]}
+]}

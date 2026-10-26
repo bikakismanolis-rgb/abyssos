@@ -1,0 +1,8 @@
+# graphify: the game's code and tools; the asset builders' scratch scripts and generated output stay out
+tools/creatures/
+graphify-out/
+artifact/
+dist/
+node_modules/
+src/assets/
+src/gfx/anims.data.js

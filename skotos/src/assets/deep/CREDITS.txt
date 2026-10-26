@@ -1,0 +1,30 @@
+Skotos Act II environment assets - all CC0 (public domain), from Poly Haven (https://polyhaven.com).
+Packed by tools/pack-deep.mjs: resized, WebP-encoded, ambient occlusion baked into the diffuse layers; props decimated and re-centred.
+
+Tiling layers (src/assets/deep/*.webp):
+  snow: snow_02 by Rob Tuytel - https://polyhaven.com/a/snow_02
+  scree: rocks_ground_05 by Rob Tuytel - https://polyhaven.com/a/rocks_ground_05
+  gravel: rocks_ground_02 by Rob Tuytel - https://polyhaven.com/a/rocks_ground_02
+  cliff: dark_rock_02 by Amal Kumar - https://polyhaven.com/a/dark_rock_02
+  dslab: rock_tile_floor_02 by Charlotte Baglioni - https://polyhaven.com/a/rock_tile_floor_02
+  cave: dark_rock by Amal Kumar - https://polyhaven.com/a/dark_rock
+  herring: volcanic_herringbone_01 by Charlotte Baglioni - https://polyhaven.com/a/volcanic_herringbone_01
+  dwall: stone_wall_04 by Amal Kumar - https://polyhaven.com/a/stone_wall_04
+  cavewall: rock_wall_10 by Amal Kumar - https://polyhaven.com/a/rock_wall_10
+  lava: slab_tiles by Dario Barresi, Dimitrios Savva - https://polyhaven.com/a/slab_tiles
+
+Props (src/assets/deep.glb):
+  cliffA: namaqualand_cliff_02 by Dario Barresi, Rico Cilliers - https://polyhaven.com/a/namaqualand_cliff_02
+  cliffB: namaqualand_cliff_01 by Jenelle van Heerden, Rico Cilliers - https://polyhaven.com/a/namaqualand_cliff_01
+  faceA: rock_face_01 by Dario Barresi - https://polyhaven.com/a/rock_face_01
+  faceB: rock_face_02 by Dario Barresi, Rico Cilliers - https://polyhaven.com/a/rock_face_02
+  mount: mountainside by Dario Barresi, Rico Cilliers - https://polyhaven.com/a/mountainside
+  boulderD: namaqualand_boulder_05 by Jenelle van Heerden, Dario Barresi - https://polyhaven.com/a/namaqualand_boulder_05
+  rockD: rock_07 by Jenelle van Heerden - https://polyhaven.com/a/rock_07
+  rockE: rock_09 by Jenelle van Heerden - https://polyhaven.com/a/rock_09
+  rockF: moon_rock_03 by Greg Zaal, Rico Cilliers, Jenelle van Heerden - https://polyhaven.com/a/moon_rock_03
+  irongate: large_iron_gate by Josh Dean - https://polyhaven.com/a/large_iron_gate
+  door: large_castle_door by Tina - https://polyhaven.com/a/large_castle_door
+  chandelier: lantern_chandelier_01 by Kirill Sannikov - https://polyhaven.com/a/lantern_chandelier_01
+  crane: overhead_crane by Timothy3D - https://polyhaven.com/a/overhead_crane
+  ladder: wooden_ladder by Miroslav Turura - https://polyhaven.com/a/wooden_ladder

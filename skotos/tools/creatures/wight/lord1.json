@@ -1,0 +1,134 @@
+{
+"name": "lord",
+"out": "/tmp/claude-0/-home-user-abyssos/e4e75481-4d08-5796-9dcc-333c3ebca4db/scratchpad/creatures/wight/lord_base.glb",
+"targets_dir": "/tmp/claude-0/-home-user-abyssos/e4e75481-4d08-5796-9dcc-333c3ebca4db/scratchpad/research/tooling/blender_user/extensions/user_default/mpfb/data/targets",
+"macro": {
+"gender": 1.0,
+"age": 0.8,
+"muscle": 0.8,
+"weight": 0.55,
+"height": 1.0,
+"proportions": 0.7,
+"caucasian": 1.0,
+"african": 0.0,
+"asian": 0.0
+},
+"targets": {
+"cheek/l-cheek-volume-decr": 1.0,
+"cheek/r-cheek-volume-decr": 1.0,
+"cheek/l-cheek-bones-incr": 0.6,
+"cheek/r-cheek-bones-incr": 0.6,
+"forehead/forehead-temple-decr": 1.0,
+"head/head-fat-decr": 0.8,
+"mouth/mouth-angles-down": 0.6,
+"chin/chin-prominent-incr": 0.5
+},
+"skin": "/tmp/claude-0/-home-user-abyssos/e4e75481-4d08-5796-9dcc-333c3ebca4db/scratchpad/research/tooling/blender_user/extensions/.user/user_default/mpfb/data/skins/old_caucasian_male/old_caucasian_male.mhmat",
+"assets": [
+[
+"/tmp/claude-0/-home-user-abyssos/e4e75481-4d08-5796-9dcc-333c3ebca4db/scratchpad/research/tooling/blender_user/extensions/.user/user_default/mpfb/data/eyes/low-poly/low-poly.mhclo",
+"Eyes"
+],
+[
+"/tmp/claude-0/-home-user-abyssos/e4e75481-4d08-5796-9dcc-333c3ebca4db/scratchpad/research/tooling/blender_user/extensions/.user/user_default/mpfb/data/clothes/rehmanpolanski_viking_tunic/rehmanpolanski_viking_tunic.mhclo",
+"Clothes"
+],
+[
+"/tmp/claude-0/-home-user-abyssos/e4e75481-4d08-5796-9dcc-333c3ebca4db/scratchpad/research/tooling/blender_user/extensions/.user/user_default/mpfb/data/clothes/rehmanpolanski_viking_pants/rehmanpolanski_viking_pants.mhclo",
+"Clothes"
+],
+[
+"/tmp/claude-0/-home-user-abyssos/e4e75481-4d08-5796-9dcc-333c3ebca4db/scratchpad/research/tooling/blender_user/extensions/.user/user_default/mpfb/data/clothes/matcreator_mc-scifi-armor_helios/matcreator_mc-scifi-armor_helios.mhclo",
+"Clothes"
+],
+[
+"/tmp/claude-0/-home-user-abyssos/e4e75481-4d08-5796-9dcc-333c3ebca4db/scratchpad/research/tooling/blender_user/extensions/.user/user_default/mpfb/data/clothes/culturalibre_hero-heroine_gloves_3/culturalibre_hero-heroine_gloves_3.mhclo",
+"Clothes"
+],
+[
+"/tmp/claude-0/-home-user-abyssos/e4e75481-4d08-5796-9dcc-333c3ebca4db/scratchpad/research/tooling/blender_user/extensions/.user/user_default/mpfb/data/clothes/donitz_monk_robe/donitz_monk_robe.mhclo",
+"Clothes"
+],
+[
+"/tmp/claude-0/-home-user-abyssos/e4e75481-4d08-5796-9dcc-333c3ebca4db/scratchpad/research/tooling/blender_user/extensions/.user/user_default/mpfb/data/clothes/donitz_monk_robe_hood/donitz_monk_robe_hood.mhclo",
+"Clothes"
+]
+],
+"tatter": [
+[
+"robe_export",
+{
+"mode": "cape",
+"ztop": 2.4,
+"yback": -0.02,
+"slope": 0.025,
+"amp": 0,
+"strips": 1,
+"arm_thr": 0.35,
+"arm_rules": [
+[
+[
+"lowerarm",
+"hand"
+],
+0.25
+],
+[
+[
+"upperarm"
+],
+0.55
+]
+]
+}
+],
+[
+"robe_export",
+{
+"mode": "hem",
+"z": 0.077,
+"amp": 0.3,
+"strips": 22,
+"center": [
+0,
+-0.08
+]
+}
+]
+],
+"push": {
+"helios": 0.028,
+"gloves": 0.004,
+"robe_export": 0.05
+},
+"blend": "/tmp/claude-0/-home-user-abyssos/e4e75481-4d08-5796-9dcc-333c3ebca4db/scratchpad/creatures/wight/lord_base.blend",
+"drop_faces": [
+[
+"helios",
+{
+"zmin": 1.45,
+"ymin": 0.02,
+"nymin": 0.3,
+"xmax": 0.5
+}
+]
+],
+"occluders": [
+"tunic",
+"pants",
+"helios",
+"gloves",
+"robe_export"
+],
+"cover_dist": 0.12,
+"decimate": {
+"human_export": 1600,
+"tunic": 2000,
+"pants": 700,
+"helios": 5600,
+"gloves": 1000,
+"robe_export": 2800,
+"hood_export": 1300
+},
+"height": 2.1
+}

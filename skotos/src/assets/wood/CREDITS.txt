@@ -1,0 +1,25 @@
+Skotos Act III environment assets (the Weeping Woods and the Heartwood).
+Packed by tools/pack-wood.mjs: resized, WebP-encoded, ambient occlusion baked into the diffuse layers (all but stonemoss
+also colour-graded; stonemoss re-tiled from random patches of its source so its features do not repeat); props
+decimated, re-centred and re-scaled, scanned ground patches, loose fragments and plants removed, the fallen trunk
+levelled, the willow's, shrub's and fern's leaves recoloured to autumn (the fern taken out of its pot).
+
+Tiling layers (src/assets/wood/*.webp) - Poly Haven (https://polyhaven.com), CC0 (public domain):
+  goldleaf: leaves_forest_ground by Dario Barresi, Dimitrios Savva - https://polyhaven.com/a/leaves_forest_ground (CC0)
+  moss: forest_leaves_02 by Rob Tuytel - https://polyhaven.com/a/forest_leaves_02 (CC0)
+  peat: mud_forest by eye-candy.xyz - https://polyhaven.com/a/mud_forest (CC0)
+  rootwall: bark_willow by Dario Barresi, Dimitrios Savva - https://polyhaven.com/a/bark_willow (CC0)
+  stonemoss: mossy_rock by Rob Tuytel - https://polyhaven.com/a/mossy_rock (CC0)
+  dryleaf: dry_decay_leaves by Amal Kumar - https://polyhaven.com/a/dry_decay_leaves (CC0)
+
+Props (src/assets/wood.glb):
+  standingStone: rock_07 by Jenelle van Heerden - https://polyhaven.com/a/rock_07 (CC0)
+  standingStoneB: rock_09 by Jenelle van Heerden - https://polyhaven.com/a/rock_09 (CC0)
+  fallenTrunk: dead_tree_trunk_02 by Jenelle van Heerden, Rico Cilliers - https://polyhaven.com/a/dead_tree_trunk_02 (CC0)
+  giantRoot: "Tree Stump with big Roots [Free]" by RodoxDE - https://sketchfab.com/3d-models/tree-stump-with-big-roots-free-bd60213e01574f94a715d01936f4ee82 (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  stumpOld: "Old Oak Stump Obora" by 3dhdscan - https://sketchfab.com/3d-models/old-oak-stump-obora-5f5bb2305d534283be08f534ece9c9db (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  rootCluster: "Crazy Tree Roots Scan" by evan4129 (EFX) - https://sketchfab.com/3d-models/crazy-tree-roots-scan-be10284b4c6e426a914bf10ba6641a08 (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  shrub: "Realistic HD Rosemary willow (63/99)" by PlantCatalog - https://sketchfab.com/3d-models/realistic-hd-rosemary-willow-6399-6d25c2941dae4065b9476f0705b4f0d3 (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  fern: "Bracken Fern Low Poly" by Marcin.Kwiatkowski - https://sketchfab.com/3d-models/bracken-fern-low-poly-b64381d3ea9547b88581f98178800627 (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  mushrooms: "Realistic Mushroom - 01" by SanForge - https://sketchfab.com/3d-models/realistic-mushroom-01-aededce1ec0f48f8b0f50cc1762a3f86 (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  willow: "Willow" by evolveduk - https://sketchfab.com/3d-models/willow-422de2372f3d46dfb314a0cd5da512fe (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)

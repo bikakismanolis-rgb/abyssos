@@ -1,0 +1,51 @@
+Skotos Act IV environment assets (the Field of Ash and the Ashen Forge).
+Packed by tools/pack-cinder.mjs: resized, WebP-encoded, ambient occlusion baked into the diffuse layers, colour-graded to the
+act's ash and iron (ashTrod and rust re-tiled from random patches of their sources, ashGround and cliffRock flattened, the
+road's normal map decoded from sRGB); the grate layer and its glow mask are drawn by the packer (bars, slots, frame) over the
+iron plate and rust scans. Props decimated, re-centred, re-scaled and re-graded: the trees charred (the second stood upright),
+the rocks taken to black, the statue beheaded at the neck and both cuts capped, the bull's head taken off its pedestal, the
+brass lantern's flame and most of its chain removed, the lanterns' glass made an emissive "glow", the brazier given a bed
+of coals, the bellows posed static, the blacksmith pack split and its tools laid on the workbench, the bones made matte.
+
+Tiling layers (src/assets/cinder/*.webp) - Poly Haven (https://polyhaven.com), CC0 (public domain):
+  ashGround: burned_ground_01 by Rob Tuytel - https://polyhaven.com/a/burned_ground_01 (CC0)
+  ashTrod: moon_footprints_01 by Greg Zaal, Rico Cilliers, Jenelle van Heerden, Dario Barresi - https://polyhaven.com/a/moon_footprints_01 (CC0)
+  scree: gray_rocks by Dimitrios Savva - https://polyhaven.com/a/gray_rocks (CC0)
+  road: rocks_ground_09 by Rob Tuytel - https://polyhaven.com/a/rocks_ground_09 (CC0)
+  cliffRock: dark_rock_02 by Amal Kumar - https://polyhaven.com/a/dark_rock_02 (CC0)
+  forgeTiles: volcanic_rock_tiles by Charlotte Baglioni - https://polyhaven.com/a/volcanic_rock_tiles (CC0)
+  forgeHerring: volcanic_herringbone_01 by Charlotte Baglioni - https://polyhaven.com/a/volcanic_herringbone_01 (CC0)
+  ironPlate: metal_plate_02 by Rob Tuytel - https://polyhaven.com/a/metal_plate_02 (CC0)
+  grate (and grateGlow): metal_plate_02 by Rob Tuytel - https://polyhaven.com/a/metal_plate_02 (CC0); rust_coarse_01 by Dimitrios Savva, Rico Cilliers - https://polyhaven.com/a/rust_coarse_01 (CC0)
+  rust: rust_coarse_01 by Dimitrios Savva, Rico Cilliers - https://polyhaven.com/a/rust_coarse_01 (CC0)
+
+Props (src/assets/cinder.glb):
+  deadTree: dead_quiver_trunk by James Ray Cock, Dario Barresi, Rico Cilliers - https://polyhaven.com/a/dead_quiver_trunk (CC0)
+  deadTreeB: dead_tree_trunk_02 by Jenelle van Heerden, Rico Cilliers - https://polyhaven.com/a/dead_tree_trunk_02 (CC0)
+  rockA: moon_rock_01 by Greg Zaal, Rico Cilliers, Jenelle van Heerden, Dario Barresi - https://polyhaven.com/a/moon_rock_01 (CC0)
+  rockB: moon_rock_04 by Greg Zaal, Rico Cilliers, Jenelle van Heerden - https://polyhaven.com/a/moon_rock_04 (CC0)
+  rockC: moon_rock_06 by Greg Zaal, Jenelle van Heerden, Rico Cilliers - https://polyhaven.com/a/moon_rock_06 (CC0)
+  rockD: moon_rock_05 by Greg Zaal, Rico Cilliers, Jenelle van Heerden - https://polyhaven.com/a/moon_rock_05 (CC0)
+  boulder: namaqualand_boulder_02 by Greg Zaal, Rico Cilliers - https://polyhaven.com/a/namaqualand_boulder_02 (CC0)
+  shield: kite_shield by Ulan Cabanilla - https://polyhaven.com/a/kite_shield (CC0)
+  sword: antique_estoc by James Ray Cock, Ulan Cabanilla - https://polyhaven.com/a/antique_estoc (CC0)
+  warhammer: ornate_war_hammer by James Ray Cock, Ulan Cabanilla - https://polyhaven.com/a/ornate_war_hammer (CC0)
+  mace: ornate_medieval_mace by Ulan Cabanilla - https://polyhaven.com/a/ornate_medieval_mace (CC0)
+  statue: gothic_statue by Benny Weimer - https://polyhaven.com/a/gothic_statue (CC0)
+  statueHead: gothic_statue by Benny Weimer - https://polyhaven.com/a/gothic_statue (CC0)
+  lantern: Lantern_01 by Rajil Jose Macatangay - https://polyhaven.com/a/Lantern_01 (CC0)
+  cagedLight: brass_diya_lantern by Bhargav Kubal - https://polyhaven.com/a/brass_diya_lantern (CC0)
+  barrel: wine_barrel_01 by James Ray Cock - https://polyhaven.com/a/wine_barrel_01 (CC0)
+  crossPein: cross_pein_hammer by Tics - https://polyhaven.com/a/cross_pein_hammer (CC0)
+  bullHead: bull_head by Tina - https://polyhaven.com/a/bull_head (CC0)
+  drakeRibs: "Ribs" by Bregorn - https://sketchfab.com/3d-models/ribs-328309ecbdef4e9ebd148d4b730aab35 (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  drakeSpine: "Spine" by Bregorn - https://sketchfab.com/3d-models/spine-c5512ed80ce442aca263cc43585c7d0d (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  drakeSkull: "Dragon Skull" by Bregorn - https://sketchfab.com/3d-models/dragon-skull-326d0f7359af43c995217f654aba0fec (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  ruinedTower: "Ruined Tower" by Cianon - https://sketchfab.com/3d-models/ruined-tower-a345f230525a43749f97927b3429e734 (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  brazier: "Medieval Brazier" by Sky_Hunter - https://sketchfab.com/3d-models/medieval-brazier-cff29e533e3a4298a5d112cf7bb2558c (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  bellows: "Medieval Blacksmith Bellows" by TomasKiniulis - https://sketchfab.com/3d-models/medieval-blacksmith-bellows-b9eaf7057b194e36b73da1f49cf49886 (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  anvil: "PBR Anvil" by NOT_Lonely (not_lonely) - https://sketchfab.com/3d-models/pbr-anvil-3529b9ef4e2c4a32add55948b5361609 (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  tongs: "Asset Pack - Blacksmith Equipment" by Mike Farrant (MikeFarrant) - https://sketchfab.com/3d-models/asset-pack-blacksmith-equipment-0f358eaab21d4e70836ad855de34c423 (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  quench: "Asset Pack - Blacksmith Equipment" by Mike Farrant (MikeFarrant) - https://sketchfab.com/3d-models/asset-pack-blacksmith-equipment-0f358eaab21d4e70836ad855de34c423 (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  toolRack: "Asset Pack - Blacksmith Equipment" by Mike Farrant (MikeFarrant) - https://sketchfab.com/3d-models/asset-pack-blacksmith-equipment-0f358eaab21d4e70836ad855de34c423 (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
+  stump: "Asset Pack - Blacksmith Equipment" by Mike Farrant (MikeFarrant) - https://sketchfab.com/3d-models/asset-pack-blacksmith-equipment-0f358eaab21d4e70836ad855de34c423 (CC-BY 4.0, https://creativecommons.org/licenses/by/4.0/)
