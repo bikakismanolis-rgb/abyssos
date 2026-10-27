@@ -14,8 +14,7 @@ session_01PwjhM4jRXTtNyMawnxVoaV when done (send_message).
 - `src/ui/cloudui.js`: settings row + cloud panel.
 - tests: `tools/cloud/test-sync.mjs`, `tools/cloud/test-saves-migration.mjs` (PGlite); scenario `cloud`.
 
-## Done
-- engine, backends, glue, UI, text, migration; `node tools/cloud/test-sync.mjs` 60/60, `node tools/cloud/test-saves.mjs`
-  84/84 (PGlite: `npm i --no-save @electric-sql/pglite@0.5.8`).
-## Next
-- scenario `cloud` (fake claude db in page), run save13/save14/title/panels/combat/coast, builds, README, report.
+## Done (27 October)
+- Everything in README.md. Tests: test-sync 60/60, test-saves 86/86, scenarios cloud, cloudweb, save13, save14, title,
+  panels, combat, coast pass; vite build, build:artifact (no supabase-js), build:web OK.
+- Reported to the lead (send_message).
