@@ -15,4 +15,7 @@ session_01PwjhM4jRXTtNyMawnxVoaV when done (send_message).
 - tests: `tools/cloud/test-sync.mjs`, `tools/cloud/test-saves-migration.mjs` (PGlite); scenario `cloud`.
 
 ## Done
-- (nothing yet)
+- engine, backends, glue, UI, text, migration; `node tools/cloud/test-sync.mjs` 60/60, `node tools/cloud/test-saves.mjs`
+  84/84 (PGlite: `npm i --no-save @electric-sql/pglite@0.5.8`).
+## Next
+- scenario `cloud` (fake claude db in page), run save13/save14/title/panels/combat/coast, builds, README, report.
