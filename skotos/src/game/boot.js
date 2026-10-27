@@ -32,6 +32,8 @@ import { clamp, rand } from '../core/util.js';
 import { NET, MIRROR } from '../net/state.js';
 import { initNet, netTick, leaveGame } from '../net/coop.js';
 import { initCoopUi } from '../ui/coopui.js';
+import { initCloud } from './cloud.js';
+import { initCloudUi } from '../ui/cloudui.js';
 
 function fatal(msg) {
   let el = document.getElementById('fatal');
@@ -53,7 +55,7 @@ export async function boot(q) {
   initGfx(G.settings.quality, { mobile, lost: (hidden) => { if (!hidden) G.settings.quality = Math.max(0, G.settings.quality - 1); writeSave(); G.mode = 'lost'; } });
   initFX(G.settings.quality);
   initInput(); G.input = IN;
-  initOverlay(); buildHud(); initPanels(); initCoopUi();
+  initOverlay(); buildHud(); initPanels(); initCoopUi(); initCloudUi();
   const fade = document.createElement('div'); fade.id = 'fade'; document.getElementById('app').appendChild(fade);
   const scr = document.createElement('div'); scr.id = 'screen'; scr.hidden = true; document.getElementById('app').appendChild(scr);
   const parts = 5 + creatureCount('act1');
@@ -69,6 +71,8 @@ export async function boot(q) {
   B?.done();
   // co-op: a room to play in, if this page has one (the artifact's, a test's, Supabase's); none: the game as ever
   initNet(q);
+  // cloud saves: the artifact's db or the web build's Supabase, when this page has one (game/cloud.js)
+  initCloud(q).catch(() => {});
   window.__ready = true; window.__G = G; window.__R = R;
   window.__D = { emit, enterZone, refreshStats, openPanel, closePanel, IN, spawnMonster, t, kill: (a) => damage(G.player, a, 1e9, { crit: false }) };
   if (q.has('auto')) { // test hook: jump straight into a zone

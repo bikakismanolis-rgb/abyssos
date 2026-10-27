@@ -5,7 +5,12 @@ import { BOON, MAX_LEVEL, INV_SIZE, STASH_SIZE, xpToNext } from './data.js';
 
 // (?slot=name: a save of its own, for tests that run several heroes in one browser: tools/coop.mjs)
 const SLOT = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('slot') : null;
-const KEY = 'skotos.save.v1' + (SLOT && /^[a-z0-9]{1,12}$/.test(SLOT) ? '.' + SLOT : '');
+const SUF = SLOT && /^[a-z0-9]{1,12}$/.test(SLOT) ? '.' + SLOT : '';
+const KEY = 'skotos.save.v1' + SUF;
+// (the cloud's own record and the backups of what it replaced: game/cloud.js, docs/cloudsave/README.md)
+// (game/cloud.js: told of every write, and of a change it should sync at once, a deletion or a backup taken back)
+export const saveHooks = { written: null, changed: null };
+const CLOUD_KEY = 'skotos.cloud.v1' + SUF, BAK_KEY = 'skotos.cloud.bak.v1' + SUF, BAK_MAX = 6;
 export function loadSave() {
   let s = null;
   try { s = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { s = null; }
@@ -46,6 +51,7 @@ export function writeSave() {
     G.save.last = hero.id;
   }
   try { localStorage.setItem(KEY, JSON.stringify(G.save)); } catch (e) { /* private mode or full storage: keep playing */ }
+  saveHooks.written?.();
 }
 // a hero taken up from the title as it is stored now (another page of this browser may have played it since this page
 // read the save): the stored record, made whole, in the list in its place; the hero itself when it is not stored
@@ -61,9 +67,14 @@ export function freshHero(h) {
 }
 export function deleteHero(id) {
   gone.add(id);
+  // (a tombstone: the cloud's copy goes too, and no copy from it brings the hero back. The record goes to the backups)
+  const d = readDisk()?.heroes?.find((h) => h && h.id === id) || G.save.heroes.find((h) => h.id === id);
+  if (d) backupHero(d, 'deleted');
+  const m = cloudMeta(); m.tomb = m.tomb && typeof m.tomb === 'object' ? m.tomb : {}; m.tomb[id] = Date.now(); setCloudMeta(m);
   G.save.heroes = G.save.heroes.filter((h) => h.id !== id);
   if (G.save.last === id) G.save.last = null;
   writeSave();
+  saveHooks.changed?.();
 }
 // a hero as a bad page may have left it (a co-op host's item with a stat no item has, gold or XP no number can be): made
 // whole again, its items rebuilt as items are (items.js cleanItem), so Continue, the bag, the shops and the stash work
@@ -85,4 +96,59 @@ export function repairHero(h) {
   const st = h.stats && typeof h.stats === 'object' ? h.stats : (h.stats = {});
   for (const k of ['kills', 'deaths', 'time', 'legs', 'elites']) if (!fin(st[k]) || st[k] < 0) st[k] = 0;
   return h;
+}
+
+// ---------- for the cloud (game/cloud.js) ----------
+function readDisk() { try { const d = JSON.parse(localStorage.getItem(KEY) || 'null'); return d && Array.isArray(d.heroes) ? d : null; } catch (e) { return null; } }
+// the heroes as stored now, as they are (not made whole: what goes up is what is kept)
+export function storedHeroes() { return (readDisk()?.heroes || []).filter((h) => h && typeof h === 'object'); }
+// the hero this page plays (a co-op guest's own record), whose stored record only this page writes
+export const playingId = () => (G.hero?.__real || G.hero)?.id ?? null;
+// a hero from the cloud put in the stored list in its place (or first), and in this page's list made whole; never the
+// hero this page plays (false)
+export function putStored(h) {
+  if (!h || h.id === playingId()) return false;
+  const disk = readDisk() || { heroes: [], settings: G.save?.settings || {}, last: G.save?.last ?? null };
+  const i = disk.heroes.findIndex((x) => x && x.id === h.id);
+  if (i >= 0) disk.heroes[i] = h; else disk.heroes.push(h);
+  gone.delete(h.id);
+  try { localStorage.setItem(KEY, JSON.stringify(disk)); } catch (e) { return false; }
+  if (G.save) {
+    const c = repairHero(JSON.parse(JSON.stringify(h)));
+    const j = G.save.heroes.findIndex((x) => x.id === h.id);
+    if (j >= 0) G.save.heroes[j] = c; else G.save.heroes.push(c);
+  }
+  return true;
+}
+// a hero the cloud says was deleted on another device, out of the stored list and this page's (never the one it plays)
+export function dropStored(id) {
+  if (id === playingId()) return false;
+  gone.add(id);
+  const disk = readDisk();
+  if (disk) { disk.heroes = disk.heroes.filter((h) => !h || h.id !== id); if (disk.last === id) disk.last = null; try { localStorage.setItem(KEY, JSON.stringify(disk)); } catch (e) { return false; } }
+  if (G.save) { G.save.heroes = G.save.heroes.filter((h) => h.id !== id); if (G.save.last === id) G.save.last = null; }
+  return true;
+}
+export function cloudMeta() { try { const m = JSON.parse(localStorage.getItem(CLOUD_KEY) || 'null'); return m && typeof m === 'object' ? m : {}; } catch (e) { return {}; } }
+export function setCloudMeta(m) { try { localStorage.setItem(CLOUD_KEY, JSON.stringify(m)); } catch (e) { /* full: the next sync agrees again */ } }
+// the last BAK_MAX copies a cloud copy or a deletion replaced, newest first ({ at, why, hero }); one the same as the
+// newest is not kept twice. Storage too full for them drops the oldest first
+export function backups() { try { const b = JSON.parse(localStorage.getItem(BAK_KEY) || '[]'); return Array.isArray(b) ? b.filter((x) => x && x.hero && typeof x.hero === 'object') : []; } catch (e) { return []; } }
+export function backupHero(h, why) {
+  const list = backups(), text = JSON.stringify(h);
+  if (list.some((x) => x.hero.id === h.id && JSON.stringify(x.hero) === text)) return;
+  list.unshift({ at: Date.now(), why, hero: JSON.parse(text) });
+  for (let n = Math.min(list.length, BAK_MAX); n > 0; n--) { try { localStorage.setItem(BAK_KEY, JSON.stringify(list.slice(0, n))); return; } catch (e) { /* full: one fewer */ } }
+}
+// a backup taken back: the hero as it was, in the list in its place (what is there now goes to the backups first)
+export function restoreBackup(i) {
+  const b = backups()[i];
+  if (!b || b.hero.id === playingId()) return false;
+  const cur = storedHeroes().find((h) => h.id === b.hero.id);
+  if (cur) backupHero(cur, 'restored');
+  const h = JSON.parse(JSON.stringify(b.hero)); h.played = Date.now();
+  const m = cloudMeta(); if (m.tomb) delete m.tomb[h.id]; setCloudMeta(m);
+  const ok = putStored(h);
+  if (ok) saveHooks.changed?.();
+  return ok;
 }
