@@ -146,6 +146,8 @@ if (process.env.NET === 'supa' && name !== 'room' && name !== 'access') {
 const NETQ = name === 'room' || name === 'access' ? '' : SUPA ? 'net=supabase&' : 'net=local&';
 async function open(peer, q) {
   const pg = await ctx.newPage();
+  // (THROTTLE=<n>: the page's CPU n times slower, as a busy phone, or four pages on a few cores)
+  if (+process.env.THROTTLE > 1) { const c = await ctx.newCDPSession(pg); await c.send('Emulation.setCPUThrottlingRate', { rate: +process.env.THROTTLE }); }
   pg.on('pageerror', (e) => console.log('[' + peer + '] pageerror', e.message.slice(0, 300)));
   pg.on('console', (m) => { if (m.type() === 'error') console.log('[' + peer + '] console', m.text().slice(0, 300)); });
   await pg.goto(BASE + '?' + NETQ + 'peer=' + peer + '&slot=' + peer + '&q=0&' + (q.includes('render') ? '' : 'norender&') + q);
@@ -1119,6 +1121,7 @@ const SC = {
     console.log('     guests\' kills', gk.join(' '));
     // the guests' mixed classes in the HUD
     ok(await ev(guests[0], () => window.__NET.party().length) === 3, 'a guest\'s party list holds the other three');
+    for (const [i, pg] of [host, ...guests].entries()) console.log('     page ' + i + ': role ' + (await ev(pg, () => window.__NET.S.role)) + ', n ' + (await ev(pg, () => window.__NET.NET.n)));
   },
 
   // the lobby and the HUD on a phone (844 x 390, touch), drawn

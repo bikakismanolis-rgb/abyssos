@@ -30,6 +30,12 @@ Cost model: a message by `realtime.send` = 1 sent + 1 per member of its channel 
   (ECON=0: 156, CPU-bound pages). feel (calls 110-170 ms): host by guest 381 ms cv .31 (before 374, cv 1.28), guest by
   host 422 (369, 1.2), guest by guest 667 (379, 1.24); local 143 ms cv .22
 - [x] builds: vite build, build:artifact (no supabase-js), build:web (.env.web.local made, git-ignored)
-- [ ] all co-op scenarios (local, room), single-player regressions, builds
-- [ ] live-supabase, live-web (four pages)
-- [ ] diet.md, supabase.md costs
+- [x] all co-op scenarios local/room: 15/15 pass; NET=supa 12/13 (ux: one check fails the same with ECON=0, not ours)
+- [x] single-player combat panels ashfield coast pass; vite build, build:artifact, build:web
+- [x] live-supabase 51/51 (+ econ 10 s: four 63.7 ev/s, pair 30.0 with --two), live-web pair 25/25, PAGES=4 pass (after
+  loading all four pages first; an earlier run with the 4th page loading beside 3 playing at 2 fps lost guest B: cause
+  not found, noted in diet.md)
+- [x] diet.md, supabase.md costs, supabase-live.md, README
+- [x] report sent to the lead
+
+Done. Left for whoever follows: phones/cellular feel; a by-eye fight; the ux scenario's no_game wording on Supabase.

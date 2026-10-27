@@ -30,7 +30,10 @@ What a party sends and what Realtime counts (each message sent, each delivered).
 
 **The game in a fight** (`NET=supa node tools/coop.mjs four`: four pages of the real game in one headless browser, three guests striking a pack for 15 s, the fake project's calls answering in 110-170 ms, about the live project's from here): **57 events a second** (19 messages in 19 calls, 38 deliveries); the host 6.2 messages a second (23 KB), each guest 3.4-3.8 (0.8-0.9 KB); the host's snapshots average 2.5 KB; nothing dropped, nothing refused. The same with `ECON=0` (the channels as before): 156, but four pages on this container's few cores ran the old rates at half speed (the guests 4.8-7.8 messages a second where the game says 9), so that number is low; the live pair and the model give the old cost.
 
-**Live** (the project **skotos**, `tools/net/live-web.mjs`, the web build, headless pages each a context, both heroes walking 10 s): LIVE_RESULTS
+**Live** (the project **skotos**, from this container: calls 126-190 ms, median 130-135):
+
+- `node tools/net/live-supabase.mjs` (the game's transport in node over supabase-js 2.117.3, ten seconds at the game's economy rates, every send and every broadcast every socket brought in counted, the outboxes' too): **a party of four 63.7 events a second** (6.9 + 4.8 × 3 = 21.3 messages sent, 42.4 delivered; the host 6.8 snapshots a second), **a pair 30.0** (11.6 sent, 18.4 delivered). Nothing given up, nothing refused. Each guest's outbox was made by `host_game` and heard by the host on the project as it is (no SQL changed).
+- `PAGES=4 node tools/net/live-web.mjs` (the web build, four headless pages each a context: four anonymous users, a Warden hosting, a Mage, a Ranger and a Warden joining by its code): all four in the game, every party frame holding the other three, every guest on its outbox, a monster a guest struck dead on the host and paid on the guest, the host's end sending all three home; nothing refused, given up or answered 4xx/5xx. Its rate is no measure: four game pages on this container's four cores ran at 1-2 frames a second while walking (the host made 0.4 snapshots a second), so it counted 9.3 events a second. The pair (`live-web.mjs`): 15.4, at 11-12 frames a second, all 25 checks passed.
 
 So a party of four is under the Free plan's 100 a second with room for a pair beside it, not two parties of four.
 
@@ -67,10 +70,11 @@ The day's caps (`skotos.quota`, bytes, not events) come close to the same: a par
 ## Checked
 
 - `node tools/net/test-transport.mjs`: all parts, all pass, the new ones too: the party model above, and `econ` (a guest's outbox row made and ended; the host takes in an outbox only that guest's stamp; another's bundle naming a sender, a host's entry naming the host or the page or a host-only topic, another's outbox list, a bundle of more than 80 entries, more than six outboxes: all refused; a guest whose host has gone refused `no_game`). The old checks of the poster (a call that never answers) run on a channel with `economy: false`, and a new one on a bundling channel.
-- `node tools/coop.mjs` on LocalTransport and the fake room, unchanged: SCENARIOS_LOCAL. On the fake Supabase (`NET=supa`): SCENARIOS_SUPA.
-- Single-player: SINGLE.
+- `node tools/coop.mjs` on LocalTransport and the fake room, unchanged: join, pack, loot, revive, churn, hostleave, world, cheat, act5, four, bosses, room, ui, ux, access: all passed. On the fake Supabase (`NET=supa`): join, pack, loot, revive, churn, hostleave, world, cheat, act5, four, bosses, ui passed; `ux` fails one check, as it does with `ECON=0` (the channels as before): a mistyped code is refused `no_game` by the server and shown in the panel, where the LocalTransport test waits for the "no host" toast. Not the economy's; the scenario's wording for the local path.
+- Single-player: `tools/scenario.mjs` combat, panels, ashfield, coast: passed.
 - `npx vite build`, `npm run build:artifact` (no supabase-js in it), `npm run build:web`: built.
-- Live: LIVE_CHECKS
+- Live: `live-supabase.mjs` (51 checks, and 49 with `--two`), `live-web.mjs` (25 checks) and `PAGES=4 live-web.mjs` (all passed): above. Only what the game does was done there: anonymous sign-ins (eight users), the game's RPCs, `skotos:` private channels, rooms `skotos-test-...` and the game's own codes, every game ended.
+- Not verified: phones and cellular links; a fight's feel by eye; the live party of four at its full rate in browsers (the four pages were too slow here; the node run gives the rate). One earlier `PAGES=4` run, with the fourth page loading the game beside three playing it (2 frames a second), lost a guest from the game; the cause was not found (the run after it loaded all four first and passed, and a party of four throttled six times over in `coop.mjs four` held together).
 
 ## For the owner
 
