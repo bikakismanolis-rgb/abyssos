@@ -21,7 +21,7 @@ const PUSH = 120, NUDGE = 20, POLL = 600, AWAY = 60;
 // older viewer, the project down), 'error' (the last sync failed: why in err; nothing local changed)
 export const CLOUD = { kind: null, state: 'off', why: null, last: 0, err: null, busy: false, notes: [], code: null };
 const store = { heroes: storedHeroes, current: playingId, put: putStored, drop: dropStored, meta: cloudMeta, setMeta: setCloudMeta, backup: backupHero };
-let B = null, running = null, lastTry = 0, hiddenAt = 0;
+let B = null, running = null, lastTry = 0, hiddenAt = 0, SB = SUPABASE;
 const now = () => Date.now();
 const tell = () => emit('cloud', CLOUD);
 
@@ -30,11 +30,13 @@ const tell = () => emit('cloud', CLOUD);
 export async function initCloud(q) {
   if (q?.get?.('cloud') === 'off') return;
   saveHooks.written = written; saveHooks.changed = changed;
-  const inClaude = typeof window !== 'undefined' && !!window.claude?.use;
+  // (?cloud=fake: a test's stand-in for the web build's Supabase, window.__cloudFake: tools/scenario.mjs cloudweb)
+  if (q?.get?.('cloud') === 'fake' && window.__cloudFake) SB = window.__cloudFake;
+  const inClaude = SB === SUPABASE && typeof window !== 'undefined' && !!window.claude?.use;
   if (inClaude) { CLOUD.kind = 'artifact'; await start(() => artifactBackend(window.claude)); return; }
-  if (SUPABASE.url && SUPABASE.anonKey && SUPABASE.createClient) {
+  if (SB.url && SB.anonKey && SB.createClient) {
     CLOUD.kind = 'supabase';
-    if (storedHeroes().length || codeKept()) await start(() => supabaseBackend(SUPABASE));
+    if (storedHeroes().length || codeKept()) await start(() => supabaseBackend(SB));
     else { CLOUD.state = 'idle'; tell(); }
   }
 }
@@ -53,7 +55,7 @@ async function start(make) {
 export function syncNow(why = 'manual') {
   if (!B) {
     // (a web build not signed in yet: the first hero kept signs it in)
-    if (CLOUD.kind === 'supabase' && CLOUD.state === 'idle' && storedHeroes().length) { CLOUD.state = 'starting'; return start(() => supabaseBackend(SUPABASE)); }
+    if (CLOUD.kind === 'supabase' && CLOUD.state === 'idle' && storedHeroes().length) { CLOUD.state = 'starting'; return start(() => supabaseBackend(SB)); }
     return Promise.resolve(null);
   }
   if (running) return running;
@@ -82,7 +84,7 @@ function written() {
   if (!B) {
     if (CLOUD.state === 'idle' && G.hero) syncNow('first');
     // (a web build that could not sign in or reach the project: tried again now and then)
-    else if (CLOUD.kind === 'supabase' && CLOUD.state === 'unavailable' && due(300)) { lastTry = now(); start(() => supabaseBackend(SUPABASE)); }
+    else if (CLOUD.kind === 'supabase' && CLOUD.state === 'unavailable' && due(300)) { lastTry = now(); start(() => supabaseBackend(SB)); }
     return;
   }
   if (CLOUD.state !== 'on') return;
@@ -104,8 +106,8 @@ function flush() { const id = playingId(); if (B && id && !running) pushOne(B, s
 export async function claimCode(code) {
   if (CLOUD.kind !== 'supabase') return { ok: false, code: 'off' };
   try {
-    if (!B) { B = await supabaseBackend(SUPABASE); CLOUD.state = 'on'; }
-    await B.claim(code); CLOUD.code = B.code(); tell();
+    if (!B) B = await supabaseBackend(SB, { claim: code }); else await B.claim(code);
+    CLOUD.state = 'on'; CLOUD.why = null; CLOUD.err = null; CLOUD.code = B.code(); tell();
     await syncNow('claim');
     return { ok: true };
   } catch (e) { return { ok: false, code: e?.code || 'unavailable' }; }
