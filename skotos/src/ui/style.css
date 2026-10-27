@@ -600,3 +600,14 @@ body:not(.desk) .sk .key { display: none; }
 }
 /* the narrowest phones: a little smaller, so a two-word name keeps to two lines (after the max-height block, which it overrides) */
 @media (max-width: 700px) { .pg-tile .nm { font-size: 9.8px; letter-spacing: -.1px; } }
+/* cloud saves (ui/cloudui.js) */
+.cl-row { width: 100%; text-align: left; white-space: normal; }
+.cl-state { font: 700 14px var(--body); color: var(--gold2); margin: 4px 0 8px; }
+.cl-state.bad, .cl-msg { color: #ffb8a0; }
+.cl-msg { font-size: 13px; }
+.cl-code { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
+.cl-code span { font: 700 16px ui-monospace, monospace; letter-spacing: 1px; color: var(--ink); }
+.cl-code input { flex: 1; min-width: 0; padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: #0c0e12; color: var(--ink); font: 700 15px ui-monospace, monospace; letter-spacing: 1px; text-transform: uppercase; }
+.cl-bk { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(214, 178, 94, .12); }
+.cl-bk .muted { grid-column: 1; font-size: 12px; }
+.cl-bk .btn { grid-column: 2; grid-row: 1 / span 2; }
