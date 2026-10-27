@@ -275,7 +275,8 @@ async function main() {
   // (what the host's socket brings in of its own: a listener of this test's on the transport's own channel, the one
   // supabase-js holds for the topic. A broadcast listener may be added after subscribe())
   const rawA = A.c.getChannels().find((c) => c.topic === 'realtime:skotos:' + room2);
-  rawA?.on('broadcast', { event: 's' }, (m) => { if (m.payload?._by !== A.uid) return; try { const i = JSON.parse(m.payload.d)?.i; if (Number.isInteger(i)) echo.add(i); } catch (e) { /* not ours */ } });
+  // (a game's channel bundles (the economy, docs/coop/diet.md): a snapshot comes back inside a 'b', or as its own 's')
+  rawA?.on('broadcast', { event: '*' }, (m) => { if (m.payload?._by !== A.uid) return; try { const d = JSON.parse(m.payload.d), l = m.event === 'b' && Array.isArray(d) ? d.filter((e) => e?.[0] === 's').map((e) => e[1]) : m.event === 's' ? [d] : []; for (const x of l) if (Number.isInteger(x?.i)) echo.add(x.i); } catch (e) { /* not ours */ } });
   const sentT = new Map();
   for (let i = 0; i < 20; i++) { sentT.set(i, now()); await ch[0].emit('s', { i, a: Array.from({ length: 30 }, (_, j) => [j, 12, 1234, 2345, 51]) }); await sleep(100); }
   await sleep(2500);
@@ -303,6 +304,7 @@ async function main() {
   const gotS = heard.map((h, i) => h.length - got0[i]), drops = ch.map((c, i) => c.meter.tx.drops - tx0[i]);
   check(Q, 'five seconds of a party (' + ch.length + ' pages): the guests hear the host\'s ' + k + ' snapshots, nothing refused', gotS.slice(1).every((n) => n >= k) && !errs.length && drops.every((d) => d === 0), 'heard ' + gotS.slice(1).join(',') + ', drops ' + drops.join(',') + (errs.length ? ', errors ' + errs.join(',') : ''));
   check(Q, 'the host has every guest\'s last presence', ch.slice(1).every((c) => (ch[0].peers().find((p) => p.peer === c.me)?.presence?.h?.[0] ?? -99) >= k - 3), ch.slice(1).map((c) => ch[0].peers().find((p) => p.peer === c.me)?.presence?.h?.[0]).join(',') + ' of ' + (k - 1));
+  check(Q, 'each guest says it by its outbox (its own topic, heard by the host alone), once the host lists it', ch.slice(1).every((c) => c._boxLive?.()), ch.slice(1).map((c) => !!c._boxLive?.()).join(','));
   const rates = ch.map((c) => c.meter.rate());
   info(Q, 'what each page sent a second (the last 5 s)', rates.map((r) => r.msgsOut.toFixed(1) + ' msgs ' + Math.round(r.bytesOut) + ' B').join('; '));
   // the host leaves: its row ends, the guests see it go, a guest's send is no_game and ends the game for it
