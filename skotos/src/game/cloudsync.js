@@ -65,14 +65,16 @@ export function further(a, b) {
 // is the cloud's record not one written over the copy agreed on (base b)? At the rev agreed on, another hero; or, where
 // the record carries its chain (the artifact backend: the sums of its last revs), another hero at that rev: two writes
 // made from the same rev (a db with no transactions), the other's landed, and what came after built on it
-// (a base ahead of the cloud's record is one too. A rev the chain no longer reaches proves nothing: a device away for
-// long; its copy, if unchanged since, takes the cloud's as any change of one side, so that no backup kept for a real
-// conflict is pushed out by ones that were none)
+// (a base ahead of the cloud's record is one too. A rev the chain no longer reaches, 'unknown', proves neither: a device
+// away for long, or one whose write did not stand long ago; its copy, if unchanged since, takes the cloud's as a routine
+// change only when the cloud's is not behind it, else the two are weighed (syncAll): no further copy is ever replaced
+// as a mere change, and no backup kept for a real conflict is pushed out by ones that were none)
 export function forked(b, c) {
   if (b.rev === c.rev) return b.sum !== c.sum;
   if (typeof b.rev === 'number' && typeof c.rev === 'number' && b.rev > c.rev) return true;
-  const ch = c.chain && typeof c.chain === 'object' ? c.chain[b.rev] : undefined;
-  return typeof ch === 'string' && ch !== b.sum;
+  if (!c.chain || typeof c.chain !== 'object') return false;
+  const ch = c.chain[b.rev];
+  return typeof ch === 'string' ? ch !== b.sum : 'unknown';
 }
 
 // the module's record, made whole: { who, base: { id: { rev, sum, work } | { rev, del, at } | { lost: mark } }, tomb: { id:
@@ -224,13 +226,22 @@ export async function syncAll(backend, store, o = {}) {
     // (the base: none (or lost: another page wrote over its record) says nothing. Nor does one the cloud's record was not
     // written over (forked: two writes made from the same rev, the other's landed); weighed then as changed on both
     // sides, never as a change of one side only)
-    const known = !!b && !b.del && typeof b.sum === 'string' && !forked(b, c);
+    const fk = !!b && !b.del && typeof b.sum === 'string' ? forked(b, c) : true;
+    const known = fk !== true;
     const cloudSame = known && b.rev === c.rev, localSame = known && b.sum === sumL;
     // (a copy here that only sat open since the cloud last agreed with it, its clock running and nothing done: the
     // same, whatever its autosaves did to `played`; and no change to put up, the clock goes with the next real one)
     const localIdle = known && typeof b.work === 'string' && b.work === workSum(l);
     if (cloudSame) { if (!localIdle) await push(id, l, c); continue; }
-    if (localSame || localIdle) { await pull(id, l, 'cloud'); continue; }
+    if ((localSame || localIdle) && fk !== 'unknown') { await pull(id, l, 'cloud'); continue; }
+    if (localSame || localIdle) {
+      // (a base the chain no longer reaches: the cloud's copy taken as routine only if it is not behind this one)
+      const got = await fetch(id);
+      if (!got) continue;
+      if (further(got.h, l) >= 0) await pull(id, l, 'cloud', got);
+      else if (!ro) { store.backup(got.h, 'conflict'); await push(id, l, got.rec); }
+      continue;
+    }
     // changed on both sides, or never agreed on: the copy further on wins, then the later played (then the larger sum,
     // so that two devices choose alike); the other copy is kept as a backup. (A cloud copy that, like an open page's,
     // only moved its clock since the base is no change there: this one goes up over it)

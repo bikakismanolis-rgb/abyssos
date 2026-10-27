@@ -629,7 +629,7 @@ await T('two writes from one rev, then the page-hide push of the device whose wr
 
 await T('a base ahead of the cloud is weighed as a conflict; one the chain no longer reaches is not', async () => {
   const chain = {}; for (let i = 5; i <= 20; i++) chain[i] = 's' + i;
-  ok(forked({ rev: 1, sum: 'a' }, { rev: 20, sum: 's20', chain }) === false, 'rev 1 past the chain proves nothing (a device away for long)');
+  ok(forked({ rev: 1, sum: 'a' }, { rev: 20, sum: 's20', chain }) === 'unknown', 'rev 1 past the chain: unknown (weighed by which copy is further)');
   ok(forked({ rev: 19, sum: 's19' }, { rev: 20, sum: 's20', chain }) === false, 'rev 19 in the chain, its own sum: not forked');
   ok(forked({ rev: 19, sum: 'x' }, { rev: 20, sum: 's20', chain }) === true, 'rev 19 in the chain, another sum: forked');
   ok(forked({ rev: 3, sum: 'a' }, { rev: 2, sum: 'b', chain: { 2: 'b' } }) === true, 'a base ahead of the cloud');
@@ -671,6 +671,42 @@ await T('taking up repaired: never a class this version has not; the mark made w
   const before = SV.backups().length;
   const r = await syncAll(LB, real(SV));
   ok(r.pushed.includes('hX') && SV.backups().some((b) => b.hero.id === 'hX' && JSON.parse(JSON.stringify(b.hero)).diff === 9), 'weighed as a conflict, the cloud\'s copy kept (as its repaired backup)', { r, before, bk: bk() });
+  G.hero = null;
+});
+
+await T('a fork lost long ago: the further copy of the device whose write did not stand is never replaced as routine', async () => {
+  for (const writes of [20, 140]) {
+    const A = artifactDb(); A.net.leases = false;
+    const phone = device(), pc = device();
+    phone.B = await artifactBackend(A.claude('u1')); pc.B = await artifactBackend(A.claude('u1'));
+    phone.add(hero('h1', { level: 10, xp: 100 }));
+    await sync(phone); await sync(pc);
+    phone.play('h1', (h) => { h.level = 40; h.xp = 90000; }, 3000);
+    pc.play('h1', (h) => { h.gold += 5; }, 3001);
+    // both push from rev 1 at once; the PC's set lands last (its write stands)
+    A.net.delay = 5;
+    const p1 = sync(phone); await new Promise((r) => setTimeout(r, 1)); const p2 = sync(pc);
+    await Promise.all([p1, p2]); A.net.delay = 0;
+    const lv = () => JSON.parse(A.docs.get('data/users/u1/h-h1').data).level;
+    ok(lv() === 10, 'the PC\'s write stood', { writes, lv: lv() });
+    for (let i = 0; i < writes; i++) { pc.play('h1', (h) => { h.xp += 1; }, 4000 + i); await sync(pc); }
+    const r = await sync(phone);
+    ok(r.pushed.includes('h1') && lv() === 40 && phone.hero('h1').level === 40, 'the phone\'s level 40 goes up over the PC\'s 10', { writes, r, lv: lv() });
+    ok(phone.D.bak.some((x) => x.why === 'conflict' && x.hero.level === 10), 'the PC\'s copy kept as a conflict backup', { writes, bak: phone.D.bak.map((x) => x.why + ':' + x.hero.level) });
+  }
+});
+
+await T('taking up repaired with storage full: the mark is still made by the first write that lands', async () => {
+  fresh([hero('hX', { level: 20, equip: { amulet: { id: 'a', base: 'amulet', rar: 2, ilvl: 30, stats: {}, leg: 7 } } })], 'hX');
+  const A = artifactDb(); const LB = await artifactBackend(A.claude('u1'));
+  await syncAll(LB, real(SV));
+  const taken = SV.freshHero(G.save.heroes.find((h) => h.id === 'hX'), true);
+  const set = localStorage.setItem;
+  localStorage.setItem = (k, v) => { if (k.startsWith('skotos.save.v1') || k.startsWith('skotos.cloud.v1')) throw new Error('QuotaExceededError'); return set(k, v); };
+  try { G.hero = taken; SV.writeSave(); } finally { localStorage.setItem = set; }
+  ok(!SV.cloudMeta().base.hX?.lost, 'nothing written while full');
+  SV.writeSave();
+  ok(!!SV.cloudMeta().base.hX?.lost, 'the next write that lands makes the mark', SV.cloudMeta().base.hX);
   G.hero = null;
 });
 
