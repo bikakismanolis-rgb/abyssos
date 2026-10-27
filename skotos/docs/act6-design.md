@@ -59,6 +59,14 @@ The new code is mostly data and rules over systems that already pass their scena
 
 ---
 
+## The owner's decisions (27 October)
+All five questions of `act6-briefs/owner-questions-el.md` answered with the recommendation:
+1. **The ending:** no one stays below alone: Glaukos comes back up the rope; the names said every night above hold the First's fire.
+2. **The tyrant's ember:** it does not speak (it glows, waits for a name, is told nothing, and goes out).
+3. **The dark:** as designed (the Carried Fire's ring, drained by some foes, refilled at true fires; false light still and cold; the Faded seen faintly until they enter the light).
+4. **The Shadow Gates after the act:** nearly as they are (the depth line, and from tier 10 a rare forgotten one asleep by a dark lamp); Drowned tiers stay a later option.
+5. **The Lamplight Mastery track:** yes, with the Acts IV-V re-balance at rank 40.
+
 ## Decisions
 Where the two judges disagree, this design decides as follows.
 
