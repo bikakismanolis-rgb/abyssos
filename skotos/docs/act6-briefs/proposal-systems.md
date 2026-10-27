@@ -174,9 +174,9 @@ Three blows, each built from shipped lines, at three points in the act.
 - q34 [hollows] q.34 «Λιώσε τις τρεις Μεγάλες Καρίνες ({0}/3)» / "Melt the three Great Keels ({0}/3)". Progress toast q.keelMelt «Μια Μεγάλη Καρίνα έλιωσε ({0}/3)» / "A Great Keel melts ({0}/3)"; per stage q.keelStage «Η Καρίνα λεπταίνει» / "The keel thins".
 
 **The Great Keels** (mechanics: the Breathing Ice). Three walls of ice from roof to seabed across the main way north, each frozen to its ridge so deep that no tide lifts it. Each has a Saltborn oil-pot on a dry pad at its south foot (interact «Άναψε το λάδι» / "Light the oil", 1.5 s from the Cradle). Each melts in three stages.
-- Keel 1, the teaching keel: Nameless only, at the edge of a skylight. Alkyone: d.alk.k1 «Φωτιά λιώνει, φως κρατά. Το έμαθες πάνω στον πάγο· ισχύει κι από κάτω.» / "Fire melts, light holds. You learned it on top of the ice; it holds underneath too."
-- Keel 2: a Siphon in the trough beside it and Rime-hangers on the roof over the pad. Alkyone: d.alk.k2 «Άναψέ το στην πλημμυρίδα και το λάδι θα κολυμπήσει κάτω απ' όλη την Καρίνα. Μόνο μη μείνεις πολύ στο νερό.» / "Light it at the flood and the oil will float under the whole keel. Just don't stay in the water long."
-- Keel 3, the Throat's door: a flooded basin where Lightdrinkers bloom at high water, an Icemaw in the deep sump. Alkyone, as it falls: d.alk.k3 «Τρεις. Μέτρησα κάθε σταγόνα.» / "Three. I counted every drop."
+- Keel 1, the teaching keel: Nameless only, at the edge of a skylight. Alkyone: d.alk.m1 «Φωτιά λιώνει, φως κρατά. Το έμαθες πάνω στον πάγο· ισχύει κι από κάτω.» / "Fire melts, light holds. You learned it on top of the ice; it holds underneath too."
+- Keel 2: a Siphon in the trough beside it and Rime-hangers on the roof over the pad. Alkyone: d.alk.m2 «Άναψέ το στην πλημμυρίδα και το λάδι θα κολυμπήσει κάτω απ' όλη την Καρίνα. Μόνο μη μείνεις πολύ στο νερό.» / "Light it at the flood and the oil will float under the whole keel. Just don't stay in the water long."
+- Keel 3, the Throat's door: a flooded basin where Lightdrinkers bloom at high water, an Icemaw in the deep sump. Alkyone, as it falls: d.alk.m3 «Τρεις. Μέτρησα κάθε σταγόνα.» / "Three. I counted every drop."
 - Flags `keel0`-`keel2`, each saved as its keel falls (the cells open with map.open, the Act V slag-plug pattern). Stages are runtime: a keel left half-melted is whole again on the next entry.
 
 **Optional along the way: the six Forgotten (Οι Ξεχασμένοι).** Six air-bells across the Hollows each hold a frozen figure under clear ice: someone the dark took and the world forgot. Interact «Θυμήσου» / "Remember", 1 s: the narrator npc.iceMemory «Μνήμη από πάγο» / "A memory in ice" says one line; a lamp lights in the niche above the window (lamp light r 4, a warm pool, a checkpoint); the id is appended to `h.flags.names6` in the order found; toast q.names6 «Ονόματα: {0}/6» / "Names: {0}/6". The lamp holds the keels near it (a pinch inside lamp light never grounds), so each name opens a route for good. All six set `allNames`: toast «Μνήμη των Ξεχασμένων: η ευλογία του βυθού δυναμώνει» / "Memory of the Forgotten: the blessing of the deep grows stronger". The names count again in No One's second phase.
@@ -440,7 +440,7 @@ SET PIECES:
 - The old Landing's nine dead light-stumps in a row, and a shadow the size of a ship turning under the harbour ice.
 
 ### floor (37) Ο Πάτος / The Floor
-LAYOUT: genFloor(seed) in gen6.js, 96 × 96. `ZONES.floor = { level: 37, music: 'floor', ambient: 'floor', atmos: 'floor', act: 6, pack: 'seabed', light: 'under', ring: 3, tier: 5 }`; zone.floor.s «Εκεί που τελειώνουν οι Σκιοπύλες» / "Where the Shadow Gates end".
+LAYOUT: genFloor(seed) in gen6.js, 96 × 96. `ZONES.floor = { level: 37, music: 'tiers', ambient: 'floor', atmos: 'floor', act: 6, pack: 'seabed', light: 'under', ring: 3, tier: 5 }`; zone.floor.s «Εκεί που τελειώνουν οι Σκιοπύλες» / "Where the Shadow Gates end".
 - **The approach:** the last ladder's foot (entry) in the south-west, a short rock shelf (15-20 m) with two dead lamps, then the arena.
 - **The arena, the Bed's Edge,** centred at (48, 44), r 18:
   - the south terrace: rock, `BED_DRY` in its upper ring (r 12-18 for z > cz − 2) and a lower ring of bed 0.3-0.6 (r 8-12) that the Bed's breathing floods in phase 2;
@@ -591,22 +591,22 @@ CONCEPT: **The tide is its breath.** A long-necked sea-reptile older than the Sa
 **Arena:** the Throat, r 18.
 - **The well** at the centre: open water, r 4, always closed; its **lip** a thick ring from r 4 to 5 (always dry, never wet: every drift stops there).
 - **Three side wells** at r 11, 120° apart, r 2: open water joined to the well below; Charybdis can rise in any of them.
-- **The floor:** an inner ring (r 5-9, bed 0.3-0.6) that floods first; a middle ring (r 9-13, bed 0.9) and three spokes of bed 1.4 running out between the side wells, each crossed by a pinch keel (lift 0.6).
+- **The floor:** an inner ring (r 5-9, bed 0.3-0.6) that floods first and closes at high water; a middle ring (r 9-13, bed 0.9) that is wading at high water; three spokes of bed 1.4 running from the lip out between the side wells to the ledges: lip, spokes and ledges are a dry wheel at every level, and the hero is never stranded on the lip. The arena has no keels: its water is the boss's breath, and the high ground is the spokes and the ledges.
 - **Three ledges** (r 15, between the side wells, r 3, BED_DRY): the air-bells of the arena, each with a dead ledge-lamp (1 s touch, lamp light r 5) and a whale-oil cask.
 - **The sill:** a ring of bed ≥ 1.5 at the entry closes the arena from the zone's tide; while it is awake `TIDE.force` owns the water; on a reset the water returns to low.
 - Aktaios's bell on the south rim; Alkyone on the north ledge (untouchable).
 PHASES: **Phase 1, «Η Ανάσα» / "The Breath" (100-65%).** The thing to do: **stand at the lip when it draws in, and strike the neck when it lies there gorged; get high when it breathes out.**
 - It breathes on a 30 s cycle (the environment's telegraph):
   - **Inhale, 12 s:** the arena's water falls to 0 (h 1.2 → 0 at 0.3 m/s) and everything on a wet cell drifts toward the well at 1.2 m/s (heroes, monsters, floating fire); the water whirls (`uWhirl`). At the end the neck lies over the lip for 4 s, **Gorged** (×1.25), swallowing what the pull brought.
-  - **Exhale, 10 s:** the arena floods to 1.2 in 4 steps over 4 s (the lane and its 6 s grace protect the hero); the inner and middle rings close; the spoke keels lift and open; it strikes from the water at whoever stands low.
-  - **Hold, 8 s:** the water stays; the keels stay up.
+  - **Exhale, 10 s:** the arena floods to 1.2 in 4 steps over 4 s (the lane and its 6 s grace protect the hero); the inner ring closes, the middle ring is wading (Cold +4/s); the spokes and ledges stay dry; it strikes from the water at whoever stands low.
+  - **Hold, 8 s:** the water stays.
 - Moves: Neck Strike, Snap, Spout. Nameless climb out of the inner ring at each Exhale (2, at most 4).
 - Alkyone: d.alk.x1.
 
 **The turn (at 65%).** It sinks, holds the 65% floor for 3 s (immune; the bar shimmers), and the arena floods for the phase.
 
 **Phase 2, «Η Πλημμυρίδα» / "The Flood" (65-30%).** The thing to do: **light the ledge-lamps to close the wells near you, so it must rise where you are waiting.**
-- The water stays at 1.2 but for a short Inhale every 25 s (8 s, no drift: just the water going down and back); the hero holds the spokes and the ledges; the keels are up.
+- The water stays at 1.2 but for a short Inhale every 25 s (8 s, no drift: just the water going down and back); the hero holds the spokes and the ledges, or wades the middle ring.
 - **The light drowns:** 'throatNight' eases in over 2 s; the skylights are gone; the Nameless come up out of the water unseen (2 per call, at most 4), and Lightdrinkers bloom in the flood (4, at most 6) and drift to any lamp lit.
 - **Rise:** it travels under the floor and comes up at a side well near the hero: TELEGRAPH that well boils, 1.2 s | a Neck Strike at once, then 4 s **Exposed** (×1.25) at that well. **It cannot rise at a well inside lamp light** (the Icemaw's rule). Light two ledge-lamps and it can rise only at the third: stand there. Lightdrinkers drink the lamps out (4 s each): kill them, or let one burst beside a lamp to light it back.
 - **Fail-safe:** if no lamp has been lit after 40 s, Alkyone lights the north ledge's lamp herself.
@@ -628,7 +628,7 @@ MOVES:
 - Neck Strike (all phases): TELEGRAPH a red teleLine 12 m × 2 m from the well through the hero, 1.0 s, the neck drawing back | EFFECT 1.3× and knockback 10. Cooldown 5 s; twice in a row in phase 3.
 - Snap: TELEGRAPH a teleCone 5 m, arc 1.0, at the lip, 0.8 s | EFFECT 1.1×. Cooldown 3 s; only at a hero within 6 m of the well it is in.
 - Inhale (phases 1-3; the environment's telegraph): TELEGRAPH a deep intake roar, the water drawing back from the walls and a sea-green whirl on the water, 1.5 s, a HUD tide pulse | EFFECT the water falls; everything on a wet cell drifts toward the well (1.2 m/s, 2.0 m/s in phase 3) until it stands on a dry cell or the lip; floating fire drifts with it. Phase 1 ends it Gorged 4 s.
-- Exhale (phase 1, and the turn): TELEGRAPH bubbles up out of all four wells, a rising rumble, 1.5 s | EFFECT the arena floods to 1.2 in 4 steps over 4 s; the keels lift at 0.6.
+- Exhale (phase 1, and the turn): TELEGRAPH bubbles up out of all four wells, a rising rumble, 1.5 s | EFFECT the arena floods to 1.2 in 4 steps over 4 s; the inner ring closes, the middle ring wades.
 - Spout (phases 1-2): TELEGRAPH three lobbed globs of brine, teleCircles 2 m landing at 1.0, 1.2 and 1.4 s | EFFECT 0.9× each, slush pools for 6 s (Act V's 'slush': `inWater`, Cold +4/s). Cooldown 10 s.
 - Rise (phase 2): TELEGRAPH the chosen side well boils, teleCircle r 2.5, 1.2 s | EFFECT a Neck Strike from it at once; then Exposed 4 s. Never at a well inside lamp light; never twice in a row at the same well if another is dark.
 - Call of the Throat (phases 1-2): TELEGRAPH the inner ring's water heaves at two points, 1.0 s | EFFECT two Nameless climb out (at most 4; +1 per call on Nightmare and above). Cooldown 18 s.
@@ -650,7 +650,7 @@ CONCEPT: **What the dark holds that has no name.** A figure of rime and black wa
 
 **Arena:** the Bed's Edge, r 18 (zones, floor): the south terrace (its lower ring floods in phase 2), the Bed to the north (always closed; the Skotos's shadow turns in it and never strikes), the collapse ring (r 4-7), four dead braziers at r 10, the First's hearth-stone on the south rim. The camera zooms out to 1.2.
 PHASES: **Phase 1, «Κανείς δεν απαντά» / "No One Answers" (100-65%).** The thing to do: **light the braziers and fight it in the light.** Narration on the phase: d.k6.p1 «Μόνο ό,τι φωτίζεις υπάρχει εδώ κάτω.» / "Down here, only what you light is there."
-- The Floor is dark (ring 3 m). No One is **unseen** outside light: its body, its bar's tick marks and its figures vanish; its telegraphs show.
+- The Floor is dark (ring 3 m). No One is **unseen** outside light: its body and its figures vanish (the boss bar stays); its telegraphs show.
 - The four braziers light with a 1 s touch (any hero; see Co-op); each is lamp light r 5.
 - **Startled:** when it glides from the dark into a lit pool, it is dazed 1.5 s (×1.25): the light hurts what was unseen. A hero who keeps two braziers lit and kites it between them gets a window each crossing.
 - **Snuff:** it glides to a lit brazier and drinks it (2 s channel, a dark vortex; any hit worth 6% of its life breaks it).
@@ -669,12 +669,12 @@ PHASES: **Phase 1, «Κανείς δεν απαντά» / "No One Answers" (100-
 - Moves: Robe Sweep, Cold Hands, Grief, the Faces.
 
 **Phase 3, «Φαρώ» / "Pharo" (30-0%), d.kaneis.p3.** The thing to do: **light the First's hearth, drive it into the fire, and say her name.** Narration: d.k6.p3 «Το τελευταίο πρόσωπο το φορά ακόμα. Στον νότο, η εστία της περιμένει φωτιά.» / "It still wears the last face. To the south, her hearth is waiting for fire."
-- The collapse ring opens (the hero pushed clear first): the centre of the arena is black water. Two Hands of the Skotos rise from it (Act V's skotosHand nodes) and Sweep: the dark twitching in its sleep.
+- The collapse ring opens (the hero pushed clear first): the centre of the arena is black water. Two of No One's own arms rise from it (Act V's skotosHand nodes in the rime tint) and Sweep. The Skotos's shadow turns beneath them and does not wake.
 - **The hearth:** «Άναψε την εστία» / "Light the hearth", a 2.0 s channel from the Cradle, broken by any blow that reaches her life. Lit, it is a fire (light r 7, warmth −12/s Cold, permanent): every time No One is inside the hearth's light it is **Seared** (×1.5, 4 s).
 - **Forgetting** (every 15 s; the environment's telegraph): TELEGRAPH a pale violet ring racing out from it to r 16 over 2.0 s, with blue safe circles on every lit lamp, brazier and the hearth | EFFECT outside the light 1.2× and **one loadout skill Forgotten for 6 s** (the Forgetter's rule; lamp light brings it back), and every lamp pool shrinks by 1 m for 10 s.
 - **At 10%** it sinks to its knees at the edge of the open ring and holds (hpFloor 0.10): the prompt «Πες το όνομά της» / "Say her name" (1.5 s) on it ends the fight: the naming (ending).
 - **Fail-safe:** if the hearth is still dark 45 s into the phase, a named figure's light drifts to it and lights it; if no figure was named, the hearth catches from a rising spark of the Bed.
-- Moves: Robe Sweep, Cold Hands twice in a row, Forgetting, the Hands' Sweep.
+- Moves: Robe Sweep, Cold Hands twice in a row, Forgetting, the Arms' Sweep.
 
 **The naming** (cine `kaneisDown`, flag saved first; see ending): Pharo's name in narration, No One's last two lines, «Κανείς δεν απαντά. Αυτή τη φορά είναι μόνο ησυχία.», the First at her fire, the lights rising. Its first-kill legendary drops at the hearth.
 
@@ -688,7 +688,7 @@ MOVES:
 - The Faces (phase 2): TELEGRAPH a figure's ice shard cracks, 0.8 s, and it is flung to a terrace cell (a white teleCircle r 1.2 where it lands) | EFFECT 0.8× to anyone under it; the Face crawls to a light.
 - Grief (phase 2): TELEGRAPH a red teleCircle r 9 with blue safe circles r 4 on the lit lamps and braziers, 1.4 s | EFFECT 1.3× and Cold +20 outside the light. Cooldown 14 s.
 - Forgetting (phase 3; the environment's telegraph): TELEGRAPH a pale violet ring racing to r 16 over 2.0 s, blue safe circles on the lights | EFFECT outside the light 1.2×, one skill Forgotten for 6 s, lamp pools −1 m for 10 s. Every 15 s.
-- The Hands' Sweep (phase 3): TELEGRAPH a Hand rises from the open ring (Act V's Hand Rise, 1.6 s) | EFFECT each Hand Sweeps (teleCone 6 m, 1.2 s, 1.1×) every 6 s, staggered; at most 2; never inside lamp light.
+- The Arms' Sweep (phase 3): TELEGRAPH an arm rises from the open ring (Act V's Hand Rise, 1.6 s) | EFFECT each arm Sweeps (teleCone 6 m, 1.2 s, 1.1×) every 6 s, staggered; at most 2; never inside lamp light.
 
 ## Mechanics
 **Systems are taught one at a time, then combined** (Act V's rule), and each one grows out of a system the engine already runs:
@@ -856,7 +856,7 @@ The six difficulties keep their names. On top of the existing hp, damage, elite 
 2. **Telegraph palette:** Act V's (red and orange harm; sea-green a pull, Cold Hands included; white crack-stars ice; blue safe circles) plus **pale violet: a forgetting** (the Forgetter's Unmind and No One's Forgetting). Lights never draw rings: skylights are soft caustic discs, lamps and fires warm pools, beams light only.
 3. **At most two big telegraphs at once,** the environment (a flood, an Inhale, a Surge ring, Grief, the Forgetting) always counting as one.
 4. **One clock, one dial, one bell:** the tide dial with its keel tick; Tern's three strokes before each turn; the creak of keels before they settle.
-5. **The dark is never blind:** telegraphs always; breath, footprints, footsteps and the edge pulse for the unseen; the striker revealed; area blows always land; the ring never under 3 m.
+5. **The dark is never blind:** telegraphs always; breath, footprints, footsteps and the edge pulse for the unseen; the striker revealed; area blows always land; the ring never under 3 m but while a Lightdrinker clings to her (2 m at the least).
 6. **A forgotten skill is obvious and short:** its button frosted with «;», a dull note when pressed, 5 s on Warden, back at once in lamp light, never the basic attack, never two at once.
 7. **Never unfair:** the tide's and the keels' 6 s grace and lane; the flood and ebb reach rules; every enemy pull stops at the first deep cell; fail-safes for each boss phase that needs one; plunges as Act V's (never under 10% of life).
 8. **Test at quality 0 and gate at quality 1** (perf6).
@@ -875,7 +875,7 @@ Co-op is host-led (docs/coop/README.md): the world and the story are the host's;
 
 ### Progression beneath the ice (Mastery, variants, later skills)
 - **A 13th Mastery track, «Λύχνος» / "Lamplight":** the hero's light radius +% (max 50, k 40: rank 1 +1.2%, rank 10 +11%, rank 40 +32%), the wolf's lantern with it. It counts wherever a zone has light rules (Acts IV-VI and the Drowned tiers) and says so on its tile; elsewhere it does nothing. The owner's complaint was points with nowhere to go: this one has a place to go that the act makes worth it. Respec returns it like the others.
-- **The class hooks** (What Is Not Lit Is Forgotten, above) touch every base skill that makes, carries or uses light, and five of the later skills:
+- **The class hooks** (What Is Not Lit Is Forgotten, above) touch every base skill that makes, carries or uses light or water, and eight of the nine later skills (all but the Vault):
 
 | skill (variant) | Act VI rule |
 |---|---|
@@ -982,7 +982,7 @@ Three for Act VI: what the deep gives back. The header is boon.h6 «Τα ονό�
 - **Phase 2:** the drums stop; a heartbeat thump and a low choir; each lamp lit adds a held note; a Rise is a single taiko hit.
 - **Phase 3:** the drums back, faster; each Choke a cymbal-and-steam swell and two bars of the sea-light motif on brass.
 
-**'tiers'.** Each tier plays its source's theme slowed to two thirds, low-passed and detuned, with notes dropping out (`MOOD.forget` at 0.3 + 0.1·k): tier 1 'crypt', tier 2 'forest', tier 3 'halls', tier 4 the coast's Saltborn bells. Depth adds a sub drone at A1 rising in level per tier. When a Tier-lamp is lit the dropped notes come back for eight bars.
+**'tiers'.** Each tier plays its source's theme slowed to two thirds, low-passed and detuned, with notes dropping out (`MOOD.forget` at 0.3 + 0.1·k): tier 1 'crypt', tier 2 'forest', tier 3 'halls', tier 4 the coast's Saltborn bells; the Floor, before the fight, only the sub drone and the Bed's breathing. Depth adds a sub drone at A1 rising in level per tier. When a Tier-lamp is lit the dropped notes come back for eight bars.
 
 **'kaneis'.**
 - **Phase 1:** near silence, the ice-song, a sub drone and a heartbeat; a single choir note each time it is Startled.
@@ -1034,8 +1034,8 @@ The Ranger has the act's best light tools in her skills (the wolf's lantern, the
   - Every φρυκτωρία is still the brow-stone's fire; φάρος, the Act V word, is the one whose meaning grows.
   - Elianthe's origin stays open: she played in a Whisperwood glade as a girl; nothing says what people she is.
   - Kranea comes from Act V's stretch Name-stone, never shipped: no shipped line is changed by using her.
-- **The twist in English.** «ΦΑΡΩ» reads at once as «ΦΑΡΟΣ» in Greek; in English it rests on "pharos" (the English word players know from Alexandria and "pharology"). Selna's English line says it plainly ("we have called every light of ours a pharos"). If the owner wants the English to land harder, the English sea-light word could become "pharos" in Act VI's text only; recommended: no, keep Act V's "sea-light" and let Selna make the link.
-- **The unseen frustrating on a phone** (the act's biggest design risk). Telegraphs always drawn; area blows always land; breath, footprints, steps and the edge pulse in the dark; the striker revealed; a 2 s linger; rings never under 3 m; Lamplight Mastery; the `unseen` scenario asserts that no aimed skill locks onto nothing. If a real-phone test still finds it unfair, the fallback keeps a faint silhouette (10% opacity) within 4 m.
+- **The twist in English.** «ΦΑΡΩ» reads at once as «ΦΑΡΟΣ» in Greek; in English it rests on "pharos" (the word English players know from the Pharos of Alexandria). Selna's English line says it plainly ("we have called every light of ours a pharos"). If the owner wants the English to land harder, the English sea-light word could become "pharos" in Act VI's text only; recommended: no, keep Act V's "sea-light" and let Selna make the link.
+- **The unseen frustrating on a phone** (the act's biggest design risk). Telegraphs always drawn; area blows always land; breath, footprints, steps and the edge pulse in the dark; the striker revealed; a 2 s linger; rings never under 3 m but under a Lightdrinker; Lamplight Mastery; the `unseen` scenario asserts that no aimed skill locks onto nothing. If a real-phone test still finds it unfair, the fallback keeps a faint silhouette (10% opacity) within 4 m.
 - **Two tide bosses in a row** (Act V's Walking Tower, Act VI's Charybdis). They are built to play apart: the Tower hunted from the water and beached itself; Charybdis never leaves its wells, pulls the hero toward it, is denied by lamps and is beaten by fire carried on the pull. The Tower taught "dry ground"; Charybdis teaches "low at the ebb, high at the flood, light the other wells".
 - **A skill taken away.** The Forgetter is the boldest hook into the progression: short (5 s), one skill, never the basic attack, never during a red boss telegraph, cured by lamp light, and the Forgetter is always visible. The cut order replaces it with a slow if play tests dislike it.
 - **No One and a famous film spirit.** A faceless dark figure that gathers others' voices recalls the masked spirit of a well-known animated film. Kept apart on purpose: no mask anywhere (a void hood), a pale rime robe rather than a black one, the faces as small frozen figures around it rather than worn, and no eating, no gold, no voice-stealing. The Forgetter has no mask either.
@@ -1069,7 +1069,7 @@ Every third-party asset Act VI uses, with its uid or id, author, licence, what i
 | Charybdis (boss) and the Siphon | Pistosaur Animated (pistosaur.glb) | 773667575a264c7baa4ec404115a044b | RickStikkelorum (ricksticky) | CC-BY 4.0 | 16.7k → 9k | 1024 d, 512 n | 2.8 |
 | Rime-hanger | Scorpion | 4c0fd62d33ab4d2592ee0a1d985a480d | anthonyvanoo | CC-BY 4.0 | 7.3k (5 clips) | 512 d, 256 n | 1.8 |
 | No One (boss) | Cloaked Figure (shipped skotos.glb) | f4e2c262ed4e456484f232d6afa99629 | MysteryPancake | CC-BY 4.0 | shipped (13.4k, 14 clips) | shipped | 0 (in act5's group; on a cold start 1.4) |
-| Hands in No One's phase 3 | Tentacle (rigged) (shipped tentacle.glb) | 8fcc783af94246a0b8febf424a4b96b9 | CG Daniel Glebinski | CC-BY 4.0 | shipped | code material | 0 |
+| No One's arms in phase 3 | Tentacle (rigged) (shipped tentacle.glb) | 8fcc783af94246a0b8febf424a4b96b9 | CG Daniel Glebinski | CC-BY 4.0 | shipped | code material | 0 |
 | Lightdrinker | code-built jelly | | made for Skotos | | ~1k | none | 0 |
 | Icemaw, Hull-louse (reused) | shipped (act5) | 3f4a2090598b4741ac38e0d255ece191; 3979c291d1f9454c90851efe291eab60 | Grace Belt; ffish.asia / floraZia.com | CC-BY 4.0; CC0 1.0 | shipped | shipped | 0 |
 | tier Guardians (reused) | the Barrow Lord, the Weaver (spider.glb), the troll | shipped | as credited | as credited | shipped | shipped | 0 |

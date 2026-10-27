@@ -9,9 +9,9 @@ Act VI begins from a save at quest 31 (`seaLit`, `h.act5 >= 0`): the Skotos is n
 **The villain.** Κήυκας ο Αλησμόνητος / Keyx the Unforgotten: Alkyone's husband, Tern's father, the fisherman who "rowed out one moonless night and did not come back" (d.stone.keyx). He did not drown. Every night his wife said his name, so the dark could not take him and the sea could not keep him. For seven winters he hung beneath the ice, held, and in the dark he found the Skotos's other hand and held it. On the Night Without Fires he opened his hand, and that is why the Skotos rose in Act V. Now he means to make the First let go too, so that the dark rises up the Shadow Gates, the whole North forgets, and everyone, living and dead, can rest. His argument is the Skotos's own offer with a human face, and he takes Isarn's last word for his banner: «Ξεκουράσου.»
 
 **The twists, in three blows.**
-1. **The voice below is real.** The game has trained the player to distrust a beloved voice from the dark: Karthax spoke to Isarn in Ivar's voice. The light Alkyone followed did flicker, so it was fire, and the voice after the Ketos falls is really Keyx's. It also speaks in capital letters, not the Skotos's lowercase. The lure that does not flicker is a separate danger, and the act teaches the difference: «Ποτέ μην τραβάς κουπί προς φως που δεν τρέμει.» / "Never row toward a light that doesn't flicker."
+1. **The voice below is real.** The game has trained the player to distrust a beloved voice from the dark: Karthax spoke to Isarn in Ivar's voice. The light Alkyone followed did flicker, so it was fire, and the voice after the Ketos falls is really Keyx's. It is also written in ordinary sentence case, not the Skotos's lowercase. The lure that does not flicker is a separate danger, and the act teaches the difference: «Ποτέ μην τραβάς κουπί προς φως που δεν τρέμει.» / "Never row toward a light that doesn't flicker."
 2. **Remembering can be a cage.** Act V's tenderest line, d.alk.b5 «Ακόμα λέω τ' όνομά του. Γι' αυτό είναι ακόμα δικός μου.» / "I still say his name. That's why he's still mine.", turns out to be the game's oldest rule: every gift has its cage (altar.sub). Amaranthe wished that nothing of hers would fade. Alkyone has done the same to Keyx without a shard.
-3. **The rite was a lullaby, and the Gates are the dark's dreams.** The First did not lose her name to the sea. She went down after the dark empty-handed, because it was weeping like a child sent away from the fire, and she gave it her hand. Her people said the names every night so she would know she was not forgotten, and said its name last "so it would know it was ours as well". Over the ages they forgot why, and came to say it "so it cannot hide" (d.glaukos.r2). The Skotos sleeps and dreams of everything it took: barrows, woods, fears, the first ones first (that is why the Gate Guardian is always an Act I foe). Its dreams rise into the North as the Shadow Gates. They have no bottom because dreams have none. They do have a floor: a hand held at the bottom of the sea.
+3. **The rite was a lullaby, and the Gates are the dark's dreams.** The First did not lose her name to the sea. She went down after the dark empty-handed, because it was weeping like a child sent away from the fire, and she gave it her hand. Her people said the names every night so she would know she was not forgotten, and said its name last "so it would know it was ours as well". Over the ages they forgot why, and came to say it "so it cannot hide" (d.glaukos.r2). The Skotos sleeps and dreams of everything it took: barrows, woods, fears, the first ones first (that is why the Gate Guardian is always one of the hero's first foes: the Weaver, the Barrow Lord, a troll). Its dreams rise into the North as the Shadow Gates. They have no bottom because dreams have none. They do have a floor: a hand held at the bottom of the sea.
 
 **The ending.** Keyx is beaten but not killed. Tern, who has just made his forgetting mother remember him by telling her every name, his own and the hero's among them, walks to the edge of the black water and says «Καληνύχτα, Σκότος.» / "Good night, Skotos." The dark answers in lowercase («...καληνύχτα...») and falls asleep. The First lets go at last. Her ice turns to water "and the water stays water" (the Saltborn creed, d.ice.i1.3). Before it does, she tells Tern her name, which the player never hears. Alkyone lets Keyx go: «Θα λέω τ' όνομά σου κάθε βράδυ. Όχι για να σε κρατήσω. Για να σου πω καληνύχτα.» / "I'll say your name every night. Not to hold you. To say good night." He walks into the black water, and a small blue bird flies low over it and is gone. Selna says their names from above, and the ice opens for whoever comes up with a name. At home the hero hangs Tern's lamp on Isarn's staff, beside the lantern that "went out quietly, as if falling asleep" (d.answer.0). One lantern sleeps and one burns. Then, as on the night before the game began, «Κοίτα βόρεια.» / "Look north.": on the six dark peaks fires catch, one after another, lit by hands you know. Every watcher in this game kept watch alone: Isarn at ten (d.lamp.m5.2 «Μη με αφήσεις μόνο μαζί του.»), Arna, Ivar, the Lampless, the Saltborn, the First. Act VI ends the lonely watch. The last line is «Ο Βορράς κοιμάται με τα φώτα αναμμένα.» / "The North sleeps with the lights on."
 
@@ -45,7 +45,7 @@ Act VI begins from a save at quest 31 (`seaLit`, `h.act5 >= 0`): the Skotos is n
   - two echoes ("the Skotos dreams the fight");
   - two first-kill legendaries;
   - one small addition to the Shadow Gates.
-- **Budget:** about 3.2 MB raw new and about 33 MB of new phone texture. The act leans on the shipped `rime` pack, the `frost` people set and the `act5` creatures, so a cold start into Act VI stays near 100 MB, under the 110 MB bar (itemised under Assets).
+- **Budget:** about 3.1 MB raw new and about 29 MB of new phone texture. The act leans on the shipped `rime` pack, the `frost` people set and four `act5` creatures, so a cold start into Act VI is about 108 MB against the 110 MB bar, and about 37 MB after a session that played Act V (itemised under Assets; the levers under Risks).
 
 **The look in one idea: the ice is the sky.** Under the sea ice the ceiling glows faint green-white from the aurora above. The gameplay camera never sees it, so, as in Act V, the sky goes on the floor:
 - black-water pools mirror the ceiling's glow;
@@ -71,7 +71,7 @@ Act VI pulls all four threads at once.
 - **In the dark he felt for something to hold.** He found a hand as big as a boat and held it, the way the First holds the other: «Δεν είσαι μόνο σου. Ούτε εγώ.» / "You're not alone. Nor am I."
 - **On the Night Without Fires** (d.u.night) the hand in his tightened and wanted to rise. Keyx, tired past bearing, opened his hand: «Πήγαινε. Ας ξεχάσουν. Ας ξεκουραστούμε.» / "Go. Let them forget. Let us rest." That is why, after a thousand years, "it rose" (d.alk.t1). Alkyone's explanation in Act V (the tyrant's remembering fire was gone) stays true; this is the hand that let go.
 - **After the naming** the Skotos sank, and it now has an "I" (d.skotos.die2 «...ναι... αυτό... είμαι...»). A thing with an "I" can listen. Keyx talks to it. He has walked its roots for years and knows the Shadow Gates are its dreams. Now he means to make the First let go too, so that it rises up every Gate at once and the whole North forgets. The forgetting at Whitecliff is the first of it, coming up through the Gate at Isarn's staff.
-- **Alkyone**, keeping the nightly watch at the Farthest Light, saw through the clear ice of the Skotos's sealed hole (Act V: "The hole freezes clear") a light far below that **flickered**. She knew Keyx's lantern. She cut through and went down. «Ο πάγος κλείνει πάνω από ό,τι κατεβαίνει.» / "The ice closes over whatever goes down." Below she found him, took his hand, and is forgetting everything else.
+- **Alkyone**, keeping the nightly watch at the Farthest Light, saw through the clear ice of the Skotos's sealed hole (Act V: "The hole freezes clear") a light far below that **flickered**. She knew Keyx's lantern. She cut through and went down. «Ο πάγος κλείνει πάνω από ό,τι κατεβαίνει.» / "The ice closes over whatever goes down." Below she found him and would not leave his side, and she is forgetting everything else.
 
 **The hook.** Tern and Tamarisk come to Whitecliff. Before Alkyone went down she told Tern what she had told the hero (d.alk.gates): if she did not come back, the southerners' gates have a bottom, under our ice. Tamarisk brings him because a boy should not walk the Field of Ash alone. Her Act V farewell to the Ranger was «Έλα να με βρίσκεις, αδελφή.» (d.tam.k.r); now she is the one who came.
 
@@ -80,7 +80,7 @@ Act VI pulls all four threads at once.
 ### villain
 **Κήυκας ο Αλησμόνητος / Keyx the Unforgotten.** The epithet's form is Amaranthe's («Αμαράνθη η Αμάραντη», no comma), and on purpose: both are caged by "nothing must fade". Boss tagline mon.keyx.t «Τον φώναζαν κάθε βράδυ, κι έτσι δεν έφυγε ποτέ» / "They called him every night, so he never left".
 
-**Who he is.** A Saltborn fisherman and keeper, about fifty, salt-white beard. His oilskin has rotted to kelp. He trails a net cloak heavy with forgotten things he has gathered in the dark: lanterns, a child's shoe, oars, bones. In one hand is his own lantern, true fire that still flickers after seven winters below (it is what Alkyone saw). With the other he holds the dark's second Hand, a black arm rising out of the abyss behind him that moves as he moves, like a puppeteer whose puppet is bigger than the stage. He is not a monster. He is a man holding a monster's hand.
+**Who he is.** A Saltborn fisherman and keeper, about fifty, salt-white beard. His oilskin has rotted to kelp. He trails a net cloak heavy with forgotten things he has gathered in the dark: lanterns, a child's shoe, oars, bones. In one hand is his boat-hook with his own lantern hung from it, true fire that still flickers after seven winters below (it is what Alkyone saw). With the other he holds the dark's second Hand, a black arm rising out of the abyss behind him that moves as he moves, like a puppeteer whose puppet is bigger than the stage. He is not a monster. He is a man holding a monster's hand.
 
 **What he wants.** Rest, for everyone. He has seen what the dark keeps: the forgotten of every age wandering its dreams, the First worn to almost nothing, himself woken every night by a voice he loves. His conclusion is the Skotos's offer from Act V («...ξεκουράσου... αυτό δεν σου είπε;...», d.skotos.w4), made by a man, out of love:
 - «Αν ξεχάσουν όλοι, δεν θα πονάει κανείς. Ούτε εσύ.» / "If everyone forgets, no one will hurt. Not even you."
@@ -109,7 +109,7 @@ Three blows, each built from shipped lines, at three points in the act.
 **2. Remembering can be a cage, and Act V's rising was a hand that let go (q34 memories, q36).**
 - Black-Water Memory 2: «Κάθε φορά που ακούει τ' όνομά του, ξυπνάει.» / "Every time he hears his name, he wakes."
 - Black-Water Memory 3: on the Night Without Fires, «Ο ψαράς ανοίγει το χέρι του.» / "The fisherman opens his hand."
-- At the bottom Keyx says it himself: d.keyx.a1 «Κι εγώ κρατούσα το άλλο του χέρι, εφτά χειμώνες, χωρίς να το ξέρω. Όταν έσβησαν οι φωτιές σας, άνοιξα το χέρι μου.» / "And I held its other hand, seven winters, without knowing. When your fires went out, I opened my hand." Then d.keyx.a2 «Ανέβηκε. Το είδατε.» / "It rose. You saw it."
+- At the bottom Keyx says it himself: d.keyx.a1 «Κι εγώ κρατούσα το άλλο του χέρι, εφτά χειμώνες, χωρίς να ξέρω τίνος ήταν. Όταν έσβησαν οι φωτιές σας, άνοιξα το χέρι μου.» / "And I held its other hand, seven winters, not knowing whose it was. When your fires went out, I opened my hand." Then d.keyx.a2 «Ανέβηκε. Το είδατε.» / "It rose. You saw it."
 - d.alk.b5 "That's why he's still mine" now reads as the act's cage. The house's oldest rule, «κάθε δώρο έχει το κλουβί του», needs no shard.
 
 **3. The rite was a lullaby; the Gates are its dreams; the bottom is a hand (q34 Memory 4, q36 at the bottom).**
@@ -202,7 +202,7 @@ Three blows, each built from shipped lines, at three points in the act.
 **The hook.**
 - **Who sees it:** a save with `h.act5 >= 0`, quest 31 and `seaLit`.
 - **When:** on the next zone entry into town. For a hero finishing Act V after the update, 2 s after the Act V blessing panel closes.
-- **What happens:** town already loads `frost` ad hoc after Act V (the q30 child wears the frost child scene), so Tern and Tamarisk cost no new load.
+- **What happens:** town loads `frost` ad hoc from q24 on (Act V: Alkyone, then the q30 child in the frost child scene), so Tern and Tamarisk cost no new load. If a build ever stops loading it after Act V, the hook calls `loadFolk('frost')` first, as Act V's hook did.
   - A short cine at pitch 0.3 on the beacon. The child stands by the staff: d.child6.1 «Αλι... Αλι... Το ήξερα. Πώς τους λένε, αυτούς με τα φανάρια;» / "Sal... Sal... I knew it. What are they called, the ones with the lanterns?"
   - Tern and Tamarisk walk up the beacon path (walkTo). Tern, to the child: d.tern6.0 «Αλιγενείς. Εμείς είμαστε. Μην το ξεχνάς.» / "Saltborn. That's us. Don't forget it." The child: «Αλιγενείς.»
   - Flag `tern6` (saved first), toast «Νέα αποστολή», and the "!" over Tern (npcHasNews).
@@ -340,7 +340,7 @@ Three blows, each built from shipped lines, at three points in the act.
   - w6.4 «...φοβάμαι το φως σου... λίγο...» / "...i am afraid of your light... a little..."
   - w6.5.r (Ranger only) «...παιδί του δάσους... κι εσένα σε έστειλαν μακριά από τη φωτιά;...» / "...child of the wood... did they send you away from the fire too?..."
 
-**The Hand Held** (Το Κρατημένο Χέρι). Entering the arena plays cine `bottom` (flag `alkFound` saved first; pitch 0.35; Tern beside the hero). At the north edge a small woman of clear ice kneels on a rock tongue with one arm in the black water. A Hand as big as a boat holds her hand. To the north-east a second Hand rises behind a gaunt man with a lantern. Alkyone kneels beside him, holding his other hand.
+**The Hand Held** (Το Κρατημένο Χέρι). Entering the arena plays cine `bottom` (flag `alkFound` saved first; pitch 0.35; Tern beside the hero). At the north edge a small woman of clear ice kneels on a rock tongue with one arm in the black water. A Hand as big as a boat holds her hand. To the north-east a second Hand rises behind a gaunt man with a lantern on a boat-hook, and his free hand is in its grip. Alkyone kneels beside him, her hand on his arm.
 - Alkyone, not knowing them:
   - d.alk.x1 «...Ποιος είσαι; Δεν σε ξέρω. Φύγε με τη φωτιά σου.» (.r «...Ποια είσαι;...») / "...Who are you? I don't know you. Go away with your fire."
   - d.alk.x2 «Κι εσύ, μικρέ; Τίνος είσαι;» / "And you, little one? Whose are you?"
@@ -360,7 +360,7 @@ Three blows, each built from shipped lines, at three points in the act.
 - a10 «Όχι, μικρέ. Όσους θυμάστε, δεν κατεβαίνουν ποτέ εδώ.» / "No, little one. Those you remember never come down here."
 
 **Keyx, d.keyx.a1-a5** (he rises; his Hand rises with him):
-- a1 «Κι εγώ κρατούσα το άλλο του χέρι, εφτά χειμώνες, χωρίς να το ξέρω. Όταν έσβησαν οι φωτιές σας, άνοιξα το χέρι μου.» / "And I held its other hand, seven winters, without knowing. When your fires went out, I opened my hand."
+- a1 «Κι εγώ κρατούσα το άλλο του χέρι, εφτά χειμώνες, χωρίς να ξέρω τίνος ήταν. Όταν έσβησαν οι φωτιές σας, άνοιξα το χέρι μου.» / "And I held its other hand, seven winters, not knowing whose it was. When your fires went out, I opened my hand."
 - a2 «Ανέβηκε. Το είδατε.» / "It rose. You saw it."
 - a3 «Εφτά χειμώνες με φωνάζει κάθε βράδυ. Κάθε βράδυ ξυπνάω. Ξέρεις πώς είναι να σε φωνάζουν και να μην μπορείς να γυρίσεις;» / "Seven winters she's called me every night. Every night I wake. Do you know what it is to be called and not be able to come home?"
 - a4 «Τώρα θ' αφήσει κι αυτή. Θ' ανέβει απ' όλες τις πύλες σας μαζί, κι ύστερα θα ξεχάσουν όλοι, και θα ξεκουραστούμε όλοι.» / "Now she'll let go too. It'll rise up all your gates at once, and then everyone will forget, and we'll all rest."
@@ -379,7 +379,7 @@ Three blows, each built from shipped lines, at three points in the act.
   - Alkyone: d.alk.x2 again, «Κι εσύ, μικρέ; Τίνος είσαι;»
   - d.tern6.r2 «Δικός σου. Σε λένε Αλκυόνη. Τη γιαγιά Σέλνα. Τον μπαμπά Κήυκα.» / "Yours. Your name's Alkyone. Grandmother's is Selna. Dad's is Keyx."
   - narration d.tern6.r3 «Και της λέει τ' όνομά σου.» / "And he tells her your name."
-  - Alkyone: d.alk.r1 «...Γλαρόνι μου.» / "...My little tern." (Her Act V line d.alk.i1, word for word.) Then d.alk.r2 «Και σένα σε ξέρω. Σ' έφερα εγώ στον βορρά.» / "And I know you. I'm the one who brought you north."
+  - Alkyone: d.alk.r1 «...Γλαρόνι μου.» / "...My little tern." (Her Act V line d.alk.i1, word for word.) Then d.alk.r2 «Κι εσένα σε ξέρω. Σ' έφερα εγώ στον βορρά.» / "And I know you. I'm the one who brought you north."
   - Toast q.alkBack «Η Αλκυόνη θυμήθηκε» / "Alkyone remembers". Keyx, hearing his son: d.keyx.r1 «...Γλαρόνι;» / "...Tern?"
 - Phase 3, in capitals: d.keyx.p3 «ΑΣ' ΤΟ Ν' ΑΝΕΒΕΙ. ΑΣ' ΤΑ ΣΚΕΠΑΣΕΙ ΟΛΑ.» / "LET IT RISE. LET IT COVER EVERYTHING."
 - Phase 3, the rite. Alkyone: d.alk.j6 «Τα λυχνάρια! Κράτα τα αναμμένα, φρυκτωρέ. Θα του τραγουδήσουμε.» / "The lamps! Keep them lit, beacon-keeper. We're going to sing to it." Tamarisk: d.tam6.j1 «Για το δέντρο, και για τη θάλασσα, κι ας είναι για το σκοτάδι.» / "For the tree, and for the sea, and for the dark if it must be."
@@ -464,7 +464,7 @@ The act's people come from three places:
 - runtime tints of shipped scenes;
 - a small new set **`hush`** (folk.mjs --set=hush) of **three scenes**: keyx, nameless, leif. The set is gated on **16 measured textures or fewer**, by the Act V lesson that shipped sets measure 5-7 textures a scene.
 
-Both Act VI zones load `frost` and `hush`. Whitecliff loads `frost` already after Act V; it loads `hush` ad hoc only from `leifName`, when Leif comes home.
+Both Act VI zones load `frost` and `hush`. Whitecliff loads `frost` ad hoc from q24 on (Act V); it loads `hush` ad hoc only from `leifName`, when Leif comes home.
 
 - tern Γλαρόνι / Tern, ten: the act's quest-giver and heart.
   - **Who he is.** Alkyone's son, Keyx's, Selna's grandson. He kept one lamp at the foot of the dark Farthest Light in Act V. He knows every name the Saltborn say, the hero's too.
@@ -483,7 +483,7 @@ Both Act VI zones load `frost` and `hush`. Whitecliff loads `frost` already afte
   - **Fail-safes:** in the Ketos fight she throws oil; in Keyx's phase 2 she carries Tern.
   - **Model:** the shipped frost 'tamarisk' scene.
 - alkyone Αλκυόνη / Alkyone: the one who went down.
-  - **Where she is:** found at the bottom forgetting, kneeling by Keyx with her hand in his. Remembered in the fight; then the rite, the farewell, the climb out. Post-game at the Landing with Keyx's lantern on the post.
+  - **Where she is:** found at the bottom forgetting, kneeling by Keyx with her hand on his arm. Remembered in the fight; then the rite, the farewell, the climb out. Post-game at the Landing with Keyx's lantern on the post.
   - **Voice** as shipped. While forgetting she speaks in fragments, without her usual counting. She needs one .r (d.alk.x1, «Ποιος/Ποια είσαι»).
   - **Model:** the shipped frost 'alkyone' scene. While she is forgetting, a runtime violet tint at amount 0.4 and a guttering lantern.
 - keyx Κήυκας / Keyx: the boss.
@@ -530,7 +530,7 @@ Both Act VI zones load `frost` and `hush`. Whitecliff loads `frost` already afte
 **Old zones:**
 - **Whitecliff** gains the «…» row in the Gates panel, the frost in the staff's lantern, Tern's lamp after `lampHung`, and six far fires: FAR_BEACONS 7-12, `{ seed: true }`. Like Act V's sea-lights they need `seed: true`, so townBeyond carves no hilltop and no hero's horizon changes before `lampHung`. Each is placed by hand on an existing distant ridge in the world viewer at a height of 10-16; any that floats gets a code cairn under it.
 - **farlight** brightens its under-ice Drowned-Light windows by `drowned0`-`drowned3` and holds the `upward` arrival spot at the ice edge.
-- **weep** loads `frost` ad hoc for Tamarisk after `act6`.
+- **weep** loads `frost` ad hoc for Tamarisk after `upThrough`.
 - No old zone's layout changes.
 
 ### under (34) Κάτω από τον Πάγο / Beneath the Ice
@@ -629,7 +629,7 @@ South to north:
 - the neck laid down as an arch.
 
 **GROUND/PROPS:** **The 'murk' pack** (tools/pack-murk.mjs, `loadPack('murk')`, PACK_ORDER gains it after 'rime'), and rime loaded with it.
-- **GROUND.under:** A `seabed` (shell_floor_01), B `shingle` (pebbles, graded near-black), P rime's `snowTrod` regraded grey as the trodden road, W `basalt` (rock_wall_02).
+- **GROUND.under:** A `shells` (shell_floor_01, new), B `shingle` (pebbles, new, graded near-black), P `shingle` at a larger scale and a lighter grade (the trodden road), W rime's `seaCliff` (dark_rock_02, shipped) as basalt.
 - **Props:**
   - rime's wrecks, boats, towers, anchors, whale skeleton, kelp, barnacle rocks, casks, crates and oil lamps (shipped);
   - the Smithsonian's fossil whale in a slab (CC0) as a basin-wall landmark;
@@ -700,7 +700,7 @@ South to north:
 - the good night: a Hand loosening on black glass, the Skotos's whole sleeping shape below, the First's ice turning to water, a blue bird over the water.
 
 **GROUND/PROPS:**
-- **GROUND.floor:** A `basalt`, B `shingle`, P `seabed` regraded ash-grey as the road, W `basalt`.
+- **GROUND.floor:** A rime's `seaCliff` as a basalt floor, B `shingle`, P `shells` graded ash-grey (the road), W `seaCliff`.
 - **Props:** shipped env, cinder and rime props regraded (statues, lanterns, oars, cradles, doors from the cinder Forge set); tentacle.glb instanced; the First on the selna scene; skotos.glb.
 
 ### The look: what each image costs
@@ -721,7 +721,7 @@ The Act V engine rules hold: one scene straight to the screen, ACES and exponent
 | the blue bird | a code bird of 12 triangles with an emissive blue streak, flying a spline over the water for 2 s | the same | trivial |
 
 ## Enemies
-**The Nameless.** Act VI's humanoid family name is «Ανώνυμος» / "Nameless", after the Ashbound, the Rootsworn, the Ash-Fallen and the Sunken. They are the forgotten of every age and people who wander the dark's dreams: Men, Stoneborn, Evergreen and Saltborn silhouettes. Their faces are worn smooth like stones in a river. They are not dead (the dead the North remembers are not here); they are only forgotten. They wake when light touches them, which is the cruellest thing about them.
+**The Nameless.** Act VI's humanoid family name is «Ανώνυμος» / "Nameless", after the Ashbound, the Rootsworn, the Ash-Fallen and the Sunken. They are the forgotten of every age and people who wander the dark's dreams: Men, Stoneborn, Evergreen and Saltborn silhouettes. Their faces are worn smooth like stones in a river. Some died long ago and some, like Leif, only wandered in; what they share is that no one remembers them, which is why they are here (the remembered never come down). They wake when light touches them, which is the cruellest thing about them.
 
 **Two traits run through the roster:**
 - `unlit` (Act V's, unchanged): a beam crossing it dazes it for 1.5 s and leaves it Revealed for 3 s; inside lamp light it cannot wake or rise.
@@ -868,7 +868,7 @@ CONCEPT: **The sea-beast of the old vases**: a serpent neck, a long blind jaw, a
 PHASES: **Phase 1, «Το Δόλωμα» / "The Lure" (100-65%).** The thing to do: **stand by a true lamp and let it strike the fire.**
 - Its body stays under. The head and lure move over the water to the hero's side.
 - **Lure Drift** builds a false pool beside her. Standing in it brings a Neck Strike at the pool.
-- **Every Neck Strike aims at the light nearest the hero.** If that is a true lamp's pool, the head strikes the flame and is **Seared** for 3 s (×1.5), lying on the shore and targetable. If that is a false pool, it strikes her.
+- **Every Neck Strike aims at the light nearest the hero.** If that is a true lamp's pool, the head strikes the flame and is **Seared** for 3 s (×1.5), lying on the shore and targetable. If it is a false pool or her own ring, it strikes her.
 - So the player learns to keep a lamp lit and stand in its pool when the line comes. Ketlings come to gnaw the lamps.
 - Tern: d.tern6.k1.
 
@@ -902,14 +902,14 @@ MOVES:
 - Dive (phase 3): TELEGRAPH it sinks into the core pool; bubbles at the last sound | EFFECT it rises there 1.2 s later in a teleCircle of r 4 (1.2 s tell, overlapping the bubbles), 1.7×. Cooldown 14 s.
 
 ### keyx Κήυκας ο Αλησμόνητος / Keyx the Unforgotten
-CONCEPT: **A man holding a monster's hand.** A gaunt Saltborn fisherman, ×1.7 (about 3 m), salt-white beard, a net cloak heavy with forgotten things, a true lantern that still flickers in his left hand. With his right he holds the dark's second Hand, a black arm rising from the abyss behind him that moves as he moves. Across the arena the First kneels holding the other.
+CONCEPT: **A man holding a monster's hand.** A gaunt Saltborn fisherman, ×1.7 (about 3 m), salt-white beard, a net cloak heavy with forgotten things, and in his left hand his boat-hook with his true lantern hung from its hook, still flickering. With his right he holds the dark's second Hand, a black arm rising from the abyss behind him that moves as he moves. Across the arena the First kneels holding the other.
 
 **Lines** (normal case, contractions in English, one line in capitals):
 - Title, mon.keyx: «Κήυκας ο Αλησμόνητος» / "Keyx the Unforgotten".
 - Tagline, mon.keyx.t: «Τον φώναζαν κάθε βράδυ, κι έτσι δεν έφυγε ποτέ» / "They called him every night, so he never left".
 - The intro is d.keyx.a1-a5 and b1; phase 2 d.keyx.p2; phase 3 d.keyx.p3 (caps); the good night d.keyx.die0-die2 (beats and ending).
 
-**Data:** hp 200, dmg 2.4, speed 4.2, radius 0.6 (pre-scale: ×1.7 makes 1.02 m), reach 3.2, atk 'heavyChop', atkTime 1.4, flesh 'drowned', xp 300, boss, weapon 'boathook' (Act V's code weapon) with his lantern in the off hand, style 'heavy', S.phases [0.65, 0.3], dieClip 'kneel', look { scale 1.7, rim 0x9ab0d0, rimI 0.4 }. Level: max(zone 37 + 3, hero + 1).
+**Data:** hp 200, dmg 2.4, speed 4.2, radius 0.6 (pre-scale: ×1.7 makes 1.02 m), reach 3.2, atk 'heavyChop', atkTime 1.4, flesh 'drowned', xp 300, boss, weapon 'lanternHook' (Act V's code boat-hook with rime's oil lamp hung from the hook), style 'heavy', S.phases [0.65, 0.3], dieClip 'kneel', look { scale 1.7, rim 0x9ab0d0, rimI 0.4 }. Level: max(zone 37 + 3, hero + 1).
 
 **The hp holds** (Karthax's and the Skotos's pattern, ai.js):
 - hpFloor 0.649 at spawn;
@@ -976,3 +976,591 @@ MOVES:
 - Forgetting Wave (phase 2): TELEGRAPH every 15 s, a lavender teleCircle over the whole arena for 2.0 s, with blue safe circles on the lit lamps (r 4.5), the burning patches (r 2.5) and Tern (r 3) | EFFECT 1.6× and +3 Forgetting outside them. Tern, caught in it, stops and says a name.
 - Path Hands (phase 2): TELEGRAPH a ring of cracks in the floor ahead of Tern, r 1.5, 1.2 s | EFFECT a node Hand rises and blocks his way (hp 4% of Keyx's max), at most two at a time.
 - Smother (phase 3): TELEGRAPH a lavender teleLine from the free Hand to a lit lamp, 1.5 s | EFFECT the lamp goes out unless the hero stands on the line (0.8× and +1 Forgetting to her; the lamp holds). Cooldown 9 s.
+
+## Mechanics
+**Systems are taught one at a time, then combined** (Act V's rule):
+- **`under`:** black water and light first (the moat lamps); the beam from above second (the first Ship Floor crossing); false light third (the first Falselight post); Forgetting from the first Nameless on. Names from above tick under all of it.
+- **The Ketos:** true against false light (phase 1), the drain (phase 2), sound and fire (phase 3).
+- **`floor`:** Forgetting stronger, no beam from above, the Hands reaching for light.
+- **Keyx:** Forgetting and lamps; the walk; the rite.
+- **No new buttons:** lighting, ringing, hanging, giving and staying use interact; escaping a pull uses the dodge. Everything else is positional.
+
+### Forgetting (Η Λήθη): both zones and both fights
+The dark does what it does to the North to the hero too, and it touches the system the player has invested most in: the four-button loadout of the progression.
+
+**The rule.**
+- **Stacks:** 0 to 3, shown as three lavender pips beside the life orb, with the chip hud.forget «Λήθη» / "Forgetting".
+- **At 3 stacks, the skill button the hero used most recently** (buttons 1-4 only) is **Forgotten for 4 s**: its icon becomes «…» on a lavender frost. A tap does nothing but a soft chime (sfx forgetChime), with the toast q.forgotten «Ξέχασες: {0}» at most once per 30 s. The stacks reset to 0.
+  - "You forget what you just did": predictable, never random.
+  - The basic attack, the dodge and the potion are never forgotten.
+  - Cooldowns keep running while a button is forgotten.
+- **Decay:** −1 stack every 4 s outside true light. Inside any true light (lamps, pools, beams, a burning cask, Keyx's burning patch, the camps) stacks never build and fall by 1 every 0.8 s. The Cradle's own ring is the hero's own light and does not cure (Act V's rule for the Skuas).
+- **Cleared at once by** each window of names from above (and immune for it), and by Tern, who says a name every 20 s for every hero within 6 m.
+
+**Sources** (each scales with nothing but the difficulty table):
+
+| source | stacks |
+|---|---|
+| a Nameless blow (its fourth-blow clutch adds one more) | +1 |
+| the Falselight's snap; the Ketos's Lure strike | +2 |
+| a black plunge | +2 |
+| the Ketos's Black Spray landing on you | +1 |
+| Keyx's Net Cast / Hand Sweep / a shielded Smother | +1 / +2 / +1 |
+| a Forgetting Wave outside a safe circle | +3 |
+
+**Never:** on enemies or bosses; from falling damage or ordinary blows; in town or the Gates.
+**Co-op:** per player; each hero's forgotten button is its own.
+IMPL: a small src/game/forget.js:
+- `forgetAdd(pl, n, src)`, the decay tick, and `pl.forgot = { slot: t }`;
+- skills.js `canUse` gains `!pl.forgot[slot]`;
+- hud.js draws the «…» state, the pips and the chip;
+- the true-light test is `lightAt(x, z, { ring: false, fake: false })`.
+
+### True and False Light, and the Black Water (Το Φως που Τρέμει και το Μαύρο Νερό): both zones and both fights
+**The creed made playable:** «Φως στο νερό, για να μείνει το νερό νερό.» / "Light on the water, so the water stays water." (d.ice.i1.3, d.alk.s1).
+
+**Black water** (`L.ink == 1`).
+- **Closed by default**, like Act V's deep water: a wall.
+- **Where true light falls it clears to water:** walkable shallows (`inWater` ×0.7 and Cold +4/s as on the coast; no Forgetting builds while lit).
+- **What clears it:**
+  - lamp pools (the moat lamps and the Mere's lamps r 4.5, the camps r 8);
+  - a lit Drowned Light's pool (r 7) and its beam (a strip 2.5 m wide out to 24 m);
+  - the beam from above (a strip 4 m wide);
+  - a burning whale-oil cask (r 3 for 8 s);
+  - fire-skill areas that are not `dim` (the progression's rule) at r 2 for their life.
+  - **The Cradle's ring does not clear it**, or the hero could walk anywhere.
+- **Re-closing:** a cleared cell closes again 2.5 s after the last light leaves it. A white shimmer runs along its edge for the last 0.6 s.
+  - Act V's tide grace holds for every slow closer: a lamp put out or a cask burnt down gives 6 s, with the BFS escape lane closing last.
+  - A hero still standing on a beam's strip when it closes takes a **black plunge**: she is put on the nearest dry cell within 3 m, or where she stood 2 s before (ice.js's ring buffer), for 6% of max life and +2 Forgetting. It never kills and never takes her under 10%.
+- **Monsters:** the Nameless avoid it; the Icemaw swims it; the Hands live in it; a Hull-louse that rolls in sinks.
+- **Batching** (ice.js's lesson): changes coalesce into one batch every 0.25 s through `map.open`/`GridMap.close`. `map.ver` bumps at most 4 times a second, and only cells within 30 m of a hero update.
+
+**True and false light.**
+- **True lights flicker.** Every lamp, fire and beam pulses ±12% at 6-10 Hz, warm white with a few sparks, and its sound has vibrato.
+- **False lights do not** (the Falselight's tail, the Ketos's lure): dead still, cold white-blue (0xd8f0ff), a hard rim, no sparks, a steady pure tone.
+- A false pool is a `fake` pool in light.js. It counts as light for nothing (no Forgetting cure, no warmth, no clearing, no denial of `unlit` spawns) and is bait for its owner.
+- The proverb: «Ποτέ μην τραβάς κουπί προς φως που δεν τρέμει.» It is taught by Black-Water Memory 1, the first Falselight (hint.flicker) and Tern's calls.
+
+**The beam from above** (`under` only).
+- The Farthest Light turns above the ice at its Act V period of 12 s. Below, it crosses the floor as a band of real light 4 m wide, swept through ±35° from a pivot due north off the map (`L.beam`, at about (64, −220)).
+- It **clears ink** in its strip (2.5 s linger), **reveals** Falselights and Brooder eggs, and **dazzles** `unlit` foes (1.5 s, then Revealed 3 s).
+- It is an ally that comes on a clock: wait for it to cross a channel, or to show what sits beside a dead lamp.
+- Each pass sounds the sea-light motif's last note, faint, from above.
+
+**The light causeway.** The four Drowned Lights' beams are placed so that their sweeps all cross the Mere's mouth at one point on the road. With all four lit, the crossing holds steady and opens the causeway for good (`mereOpen`, map.open, saved).
+
+### Names from Above (Τα Ονόματα από Πάνω): both zones and the Keyx fight
+Selna's nightly rite at the Farthest Light (Act V's `nightRite`) is heard below the ice.
+- **When:** every 90 s in `under` and every 120 s in `floor` (Warden; see Difficulty).
+- **Tell:** a low bell from above, 1.5 s, and the names dial filling (HUD, by the minimap, where Act V's tide dial sat).
+- **The names fall** as pale floating `say` lines from the top of the screen, 0.8 s apart: name.first, name.einar, name.arna, every Name-stone the hero lit in Act V (`h.flags.names`, in order), name.ivar, name.isarn, every Forgotten freed, Selna's own two additions while they are below («Αλκυόνη.», «Γλαρόνι.»), and name.skotos last.
+- **The window:** 5 s plus 0.5 s for every name beyond the six base names, capped at 9 s (Warden; 1 s less in `floor`). During it:
+  - every hero in the zone has Forgetting cleared and is immune to it;
+  - every `listens` enemy stands still with its face up for 3 s, Revealed (×1.25), taking no action (once per window);
+  - in Keyx's phase 3, the rite's progress gains 10%.
+- **Act V reactivity:** every Name-stone the hero lit on the coast makes every window longer. The optional stones of Act V become a reward in Act VI.
+- **Co-op:** shared.
+IMPL: the shipped `rollNames` list (story.js) and its `say` chain; a timer in `act6Tick`; the dial in hud.js; the `listens` trait in ai.js.
+
+### Black-Water Memories (Μνήμες από μαύρο νερό): the four Drowned Lights
+**Where they are.** A still black pool of 2 × 2 cells at each Drowned Light's door, drawn with the `INK` water as a mirror and never walkable.
+
+**When they play.** On lighting a tower, the beam's first sweep crosses the pool, and the next memory in count order plays through the Lamp Memory flow (story.js `on('lamp')`, Act V's `playIce`):
+- the body class 'memory-ink';
+- the narrator npc.inkMemory «Μνήμη από μαύρο νερό» / "A memory in black water";
+- the people of the memory rise as pale figures out of the pool: Keyx's scene unscaled, Alkyone's, the selna scene as the First, shorefolk;
+- BUFFS.memory, toasted as lamp.buff6 «Μνήμη των Ξεχασμένων».
+
+Flags `mem_k1`-`mem_k4` mean "seen", with Act V's unseen-memory guard. Text keys d.ink.k1-k4. The last line of Memory 3 is blow 2; Memory 4 sets up blow 3.
+
+### The Forgotten (Οι Ξεχασμένοι): four souls to remember (optional)
+Four people the dark has kept, each freed a different way. Each freed one grants BUFFS.memory (lamp.buff6), joins Selna's rite and the names from above, and shows q.freed. All four set `lostNamed`: the Act VI blessing is worth ×1.25 (toast q.lostAll). They can be finished in the post-game.
+
+| who | where | how | what it pays off |
+|---|---|---|---|
+| Leif, the woodcutter's son | `floor` (C), by a dead fire | take his axe; give it to his father in Whitecliff, who says the name; the next time names fall below, «Λέιφ.» falls among them in his father's voice, and he walks up (he is home from then on) | d.v.3, Act I's first open thread |
+| the Sailor | `under` (C), the Dalarö wreck's deck | if the hero lit his Name-stone in Act V he knows his given name at once; otherwise Tern tells him | d.stone.sailor |
+| Asger of the Order of the Flame | `floor` (C), in an ice window | light his cold brazier from the Cradle (1 s) | class.mage.d and Act V's a5.m ("Then they forgot the way") |
+| Kymo the twin | `under` (E), at a black pool | stand with her in a Drowned Light's beam (2 s, while it crosses her pool) | the twins' line Act V's design kept ready for a stretch Name-stone (never shipped; Act VI makes it canon), and forgiveness |
+
+**Lines.**
+- **Leif:**
+  - d.leif.1 «Πήγα για ξύλα. Βρήκα μια πόρτα στο δάσος, χωρίς τοίχο γύρω της. Από τότε κατεβαίνω.» / "I went for wood. I found a door in the forest with no wall round it. I've been going down ever since." (A Shadow Gate, opened in the wood.)
+  - d.leif.2 «Ξέρω πως έχω πατέρα. Τ' όνομά μου όμως το άφησα κάπου πιο πάνω.» / "I know I've got a father. My name, though, I left somewhere higher up."
+  - d.leif.3 (giving the axe) «Πάρ' το. Εκείνος θα το γνωρίσει.» / "Take it. He'll know it."
+  - His father (talk with the axe): d.v.son2 «Το τσεκούρι του... Λέιφ! Λέιφ τον λέγαμε! Λέιφ!» / "His axe... Leif! Leif, we called him! Leif!" Then d.v.son3 «Θα το λέω κάθε βράδυ. Να μ' ακούει από κάτω.» / "I'll say it every night. So he hears me down there."
+  - Home: d.leif.home «Πατέρα. Άργησα λίγο με τα ξύλα.» / "Father. I was a bit late with the wood."
+- **The Sailor:**
+  - d.sailor.0 «Είχα όνομα, πριν. Το λιμάνι μου ξέχασε το καράβι μου, κι εμένα μαζί.» / "I had a name, once. My port forgot my ship, and me with it."
+  - Tern: d.tern6.s1 «Ναύτη σε λένε. Σ' το 'δωσαν οι δικοί μου. Το λέμε κάθε βράδυ.» / "Your name's Sailor. My people gave it to you. We say it every night."
+  - d.sailor.1 «Ναύτης. Ναι. Τ' ακούω κάθε βράδυ από πάνω. Είναι καλό όνομα.» / "Sailor. Yes. I hear it every night from above. It's a good name."
+  - With the stone lit in Act V, d.sailor.1 plays at once, then d.sailor.2 «Εσύ άναψες το λυχνάρι μου στην ακτή. Το είδα από δω κάτω.» / "You lit my lamp on the coast. I saw it from down here." He lies down on the deck at rest.
+- **Asger** (when the brazier catches, the ice window clears):
+  - d.asger.1 «Ζεστό... Ήρθα να μάθω πώς κρατιέται μια φλόγα ζωντανή μέσα στο χιόνι. Κατέβηκα πολύ βαθιά για να τη βρω.» / "Warm... I came to learn how a flame is kept alive in the snow. I went too far down looking for it."
+  - d.asger.2 «Πες στο Τάγμα πως ο δρόμος για τον βορρά υπάρχει ακόμα. Τον ξέχασαν. Δεν χάθηκε.» / "Tell the Order the road north is still there. They forgot it. It isn't lost."
+  - .m, the Mage only: d.asger.2.m «Τα χρώματά σου... Μαθητής, ε; Πες στους δασκάλους σου: ο δρόμος για τον βορρά υπάρχει ακόμα. Τον ξέχασαν. Δεν χάθηκε.» / "Your colours... a student, eh? Tell your masters: the road north is still there. They forgot it. It isn't lost."
+- **Kymo:**
+  - Tern: d.tern6.y0 «Αυτή είναι η Κυμώ. Η γιαγιά λέει πως κατέβηκε στον πάγο με την αδελφή της να του πουν τ' όνομά του. Γύρισε μόνο η Γλαύκη.» / "That's Kymo. Grandmother says she went down onto the ice with her sister to say its name. Only Glauke came back."
+  - d.kymo.0 «Γλαύκη... Γλαύκη... Ποια είμαι εγώ;» / "Glauke... Glauke... Who am I?"
+  - d.kymo.1 (in the beam) «Το πρόσωπό μου... Κυμώ. Με λένε Κυμώ. Πες στη Γλαύκη πως δεν θύμωσα ποτέ.» / "My face... Kymo. My name is Kymo. Tell Glauke I was never angry."
+
+### The vulnerability rule
+Act V's rule, unchanged: one multiplier per target, the largest of its statuses, and bosses capped at ×1.6 outside one scripted window per phase.
+
+| status | × | who |
+|---|---|---|
+| Revealed (a beam; listening to names), Exposed (the Ketos's head after a slam) | 1.25 (1.35 on Wanderer) | unlit foes; listening foes; the Ketos |
+| Seared (the Ketos striking a true flame) | 1.5 | the Ketos |
+| Blinded (a lure segment cut) | 1.6 | the Ketos |
+| "hears the names" (three or more lamps lit in phase 3) | 1.25 | Keyx |
+| Stunned by his son's voice (the scripted window) | 2.0 | Keyx |
+
+The `ketos` and `keyx` scenarios assert the time-to-kill targets under Bosses.
+
+### World-state: the Forgetting at Home, the Drowned Lights, the Mere Drained, the Sleep, the Seven Peaks (Το Ξέχασμα, Τα Πνιγμένα Φώτα, Η Λίμνη Αδειάζει, Ο Ύπνος, Οι Εφτά Κορυφές)
+One more chain after Act V's `coastCall` → `frozen` → `seaLit`. Every flag is saved before its scene plays (the exception is `alkBack`, saved with `keyxDown`), and read on zone build, on every zone entry (zones are cached) and on load.
+1. **`tern6` (q32).**
+   - Whitecliff: the forgetting barks; frost in the staff's lantern (a white emissive rime on its glass); Tern and Tamarisk at the staff; the «…» row in the Gates panel.
+   - Deepstone and the Lanternglade: Brokka's and Elati's v6a lines (the peaks being lit).
+2. **`descent`, `underSeen` (q33).** The `under` zone exists.
+3. **`boatLit`.** The `under` waypoint and camp.
+4. **`drowned0`-`drowned3` (q34).**
+   - `under`: each tower lit, with its beam and pool.
+   - `farlight`: the matching under-ice windows brighten (as many as its seed has, in order), and Selna remarks on them later (d.selna6.u4).
+5. **`mereOpen`.** The causeway into the Mere.
+6. **`ketosDown` (q35).** `under` becomes mode 'drained': the Mere a dry bed with a core pool, the neck arch over the stair, the `floor` exit open.
+7. **`keyxDown`, `alkBack`, `asleep` (q37).**
+   - `floor` becomes mode 'asleep': ATMOS floorAsleep; the abyss is black glass with the Skotos's sleeping shape under it; the First is gone; on her rock tongue a small sea-lantern Alkyone leaves there, relightable by anyone who passes.
+   - The Hands' Forest sleeps but still wakes to light, for farming.
+   - Whitecliff: the forgetting barks end.
+   - The Gates panel: gate.d6.
+8. **`upThrough` (q38).**
+   - `farlight`: the arrival scene at the ice edge (once); then Selna's rite sung to the lullaby.
+   - The Landing: Alkyone, Tern and Keyx's lantern on the post.
+   - The Lanternglade: Tamarisk.
+9. **`lampHung` (q38 end).**
+   - Whitecliff: Tern's lamp lit on the staff; FAR_BEACONS 7-12 (the six peaks) lit every night; the child's new bark; Leif at home if `leifHome`.
+   - Then `act6`.
+- **Packs stay for farming** in every state.
+- **Old saves** without these flags read as the Act V end state (quest 31, `seaLit`). `hero.act6 ??= −1`.
+IMPL:
+- `act6Zone(z)`, `act6Enter(z)` and `act6Presence(z)` in world.js, mirroring Act V's trio.
+- Derived modes: `underMode() = ketosDown ? 'drained' : 'mere'` and `floorMode() = asleep ? 'asleep' : 'pull'`. `enterZone` rebuilds the zone (`fresh: true`) when its mode differs from `z.mode`.
+- `townFires` reads `lampHung`; farlight's act5Zone reads `drownedN` and `upThrough`.
+- The title screen reads `save.heroes.some(h => (h.act6 ?? −1) >= 0)` for game.sub6.
+
+**Flags** (hero.flags; each saved before its scene unless noted):
+
+| flag | set |
+|---|---|
+| `tern6` | Tern at the staff (q32) |
+| `ternTalk` | Tern's dialog ends (→ q33) |
+| `descent`, `underSeen` | before the descent cine; before the arrival cine |
+| `boatLit` | the Upturned Boat's fire (camp, waypoint `under`) |
+| `drowned0`-`drowned3` | each Drowned Light lit |
+| `mem_k1`-`mem_k4` | each Black-Water Memory seen |
+| `mereOpen` | the light causeway |
+| `ketosWake`, `ketosDown` | before the Ketos wakes; at its death |
+| `alkFound`, `firstSpoke` | the bottom cine; the First's dialog |
+| `keyxWake` | before the fight |
+| `alkBack` | written only with `keyxDown`; during the fight the runtime `G.alkBack` (cleared on a reset) |
+| `keyxDown`, `asleep` | first, at the good night |
+| `upThrough`, `ternLamp` | before `upward`; Tern's lamp given |
+| `lampHung` | the lamp on the staff, before `beaconScene(6, 'peaks')`; then `actComplete(6)` |
+| `leifAxe`, `leifName`, `leifHome` | the axe taken; given to his father; Leif home |
+| `sailorRest`, `asgerRest`, `kymoRest` | each Forgotten freed |
+| `lostNamed` | all four |
+| `unanswered` | the ember heard |
+| `act6` | `actComplete(6)` |
+| `legFrom_ketos`, `legFrom_keyx` | first kills |
+
+Hero fields: `act6` (the best difficulty completed, −1 if not) and `gateNamed` (forgotten freed in the Shadow Gates).
+
+### Difficulty: what each level does to Act VI
+The six difficulties keep their names. **Telegraph durations never change**: difficulty scales damage, cooldowns, adds and the act's hazards (a new `HAZ6` table in data.js, indexed like DIFFS, after `HAZ5`).
+
+| | Wanderer | Warden | Hero | Nightmare | Ash | Skotos |
+|---|---|---|---|---|---|---|
+| monster hp / dmg (existing) | 0.65 / 0.55 | 1 / 1 | 1.9 / 1.55 | 3.6 / 2.4 | 7 / 3.8 | 11 / 5.4 |
+| Forgetting: stacks to forget | 4 | 3 | 3 | 3 | 3 | 3 |
+| a forgotten button lasts | 3 s | 4 s | 4 s | 4 s | 5 s | 5 s |
+| buttons a Forgetting Wave forgets | 1 | 1 | 1 | 1 | 1 | 2 |
+| black plunge (% max life) | 4 | 6 | 6 | 8 | 10 | 12 |
+| beam strip linger | 4 s | 2.5 s | 2.5 s | 2.5 s | 2 s | 2 s |
+| names from above: period (`under`) | 75 s | 90 s | 90 s | 90 s | 100 s | 110 s |
+| names window (base, before extra names) | 7 s | 5 s | 5 s | 5 s | 4.5 s | 4 s |
+| Revealed / Exposed | ×1.35 | ×1.25 | ×1.25 | ×1.25 | ×1.25 | ×1.25 |
+| Tern's walk fail-safe | 45 s | 70 s | 70 s | 80 s | 90 s | 90 s |
+| the rite (four lamps) | 30 s | 40 s | 40 s | 45 s | 50 s | 55 s |
+| boss cooldowns | ×1 | ×1 | ×1 | ×0.9 | ×0.85 | ×0.8 |
+| adds per boss call | +0 | +0 | +0 | +1 | +1 | +2 |
+| telegraph durations | never change | | | | | |
+
+- On «Σκότος» alone a Forgetting Wave forgets two buttons: «Εδώ ξεχνιούνται και οι ήρωες.» (diff.skotos.d), paid off. It is the one exception to "one button at a time", only on the hardest difficulty and only from the Wave, whose safe circles always exist.
+- **No seventh difficulty.** **Seeds keyed by difficulty** as in Act V (`under@<diff>`, `floor@<diff>`): the layout only; the story state is the hero's own on every difficulty. `diffChanged` already disposes dropped zones.
+
+### Touch and phone readability (rules the act keeps)
+1. **No new buttons.**
+2. **Telegraph palette:**
+   - Act V's: red and orange harm; sea-green a pull; white a cell about to change (here a cleared cell about to close); blue a safe zone;
+   - plus **lavender for forgetting** (the Wave, the Hand Sweep, Smother, the Nameless clutch, the Calling's line). Lavender always means "this makes you forget", and it is never used for anything else.
+3. **At most two big telegraphs at once,** with the environment (a Forgetting Wave, the drain, a Smother at a lamp) counted as one.
+4. **True against false light** is carried by three channels at once:
+   - motion (flicker against dead still);
+   - colour (warm against cold);
+   - sound (vibrato against a pure tone).
+
+   Colour alone is never the cue.
+5. **Danger at the hero's feet:** the three pips; a forgotten button's «…»; the names dial; black water near-black with a violet sheen against cleared water blue-green; the white shimmer before a cleared cell closes.
+6. **Audio carries timing:** the bell from above before names fall; the beam's note as it passes; the lure's tone; the forget chime; the Ketos's listening ping.
+7. **Never unfair:**
+   - a cleared cell never closes under the hero without its linger and shimmer, and slow closers give Act V's 6 s grace lane;
+   - a black plunge never kills;
+   - Forgetting takes one button, the one just used, never the attack, dodge or potion;
+   - Tern is untouchable and never fails the walk;
+   - every boss rule has a fail-safe.
+8. **Test at quality 0 and gate at quality 1:** ink is Act V's opaque water path with one define; the beam from above is one light and one sheet; at most 4 real point lights (the beam's spot is one). `perf6` gates at quality 1.
+
+### Engine work Act VI needs
+Act VI stands on Act V's systems: water and its chunked mesh (sea.js), the closing grid (`GridMap.close`, tide.js), beams and pools (light.js), Cold (cold.js), frozen statues and ice windows, the memory flow, the 'node' Hands, the 'singer' AI, and `rl()` with `.m`. The days are focused days for one agent who knows the code, in build order.
+IMPL:
+1. **Sixth-act plumbing (1.5-2 d, low).**
+   - world.js: `ZONES.under` and `ZONES.floor`; `READY.murk = { folk: ['frost', 'hush'], creatures: 'act6' }`; the first-boss list; the champion chain; `ECHO_PROMPT`; the `why` map (`ketosDown`); town's ad hoc `loadFolk('hush')` from `leifName`; weep's ad hoc `loadFolk('frost')` after `upThrough`.
+   - boot.js: `hero.act6 ??= −1`, `flags.act6`; updateAct(6); moods. state.js: `act6: −1`.
+   - story.js: the questText clamp to 39 with q34's counter; `actComplete` branch 6; `offerBoons` over [1..6]; the echo tints.
+   - stats.js: BOONS[6] ×1.25 with `lostNamed`.
+   - panels.js: waypoints; act6.*; boon.h6 and its note; the Gates «…» row and gate.d6.
+   - hud.js `questGoal`; viewer generators; env.js `PACK_ORDER` gains 'murk'; creatures.js `ACT_FILES.act6 = ketos, falselight, brooder` plus the four Act V files it reuses (skotos, tentacle, icemaw, louse; loadFile's cache keeps one copy); screens.js game.sub6.
+2. **gen6.js, both zones (3.5-4.5 d, medium).** genUnder and genFloor on genlib (`reach`, `terrain`, `groundY`), with `L.ink`, the beam pivot, the Drowned Lights and their crossings, the Mere and its causeway, the drained reading from the same seed, and the arena. **tools/check-act6.mjs (1 d):** check-act5's shape, 300 seeds, the reach checks above, hard and soft sets.
+3. **ink.js (2-2.5 d, medium).** The black water at runtime:
+   - light → clear/close in 0.25 s batches through `map.open`/`GridMap.close`;
+   - the linger and the shimmer; the grace lane (tide.js's BFS); the black plunge (ice.js's ring buffer);
+   - the Cold in cleared water; `z.ink` reset on every entry.
+4. **Visuals (3-3.5 d, medium).**
+   - sea.js's `INK` define and the cleared-cell lerp attribute; the ice-sky plane for cines; the beam from above (one pooled spot along the band and one shaft sheet); marine snow;
+   - light.js `fake` pools (hard rim, no flicker) and the true lights' flicker;
+   - the First's ice material on a skinned mesh; the sleeping Skotos; the arch statue;
+   - ATMOS under, underCine, floor, floorPull, floorAsleep; the 'memory-ink' body class; the blue bird.
+5. **forget.js and the HUD (1.5 d, low).** Stacks, decay, the forgotten slot, `canUse`, the «…» buttons, pips and chip, the names dial.
+6. **Names from above (0.5-1 d, low).** A timer reusing `rollNames`, the window's effects, `listens`.
+7. **Tern the follower (1-1.5 d, low-medium).**
+   - a pet-style follower NPC (raiseAlly's follow path with no combat and no hp);
+   - the light-only rule, the calls and the 20 s cleanse;
+   - zone arrival beside the hero; co-op: he follows the host.
+8. **AIs and traits (3-3.5 d, medium).**
+   - 'lure' (the Falselight); `brood` and the eggs; `snuffer` and `guardsLight`; `dreamWake`; `forget`; `listens`;
+   - `reachLight` for the Hands; the Calling on 'singer'; the Icemaw on ink; the Ketling's snuff;
+   - flesh 'nameless'.
+9. **Two bosses (5.5-6.5 d, medium).** KETOS and KEYX tables in `boss()` (ai.js), every radius pre-scale.
+   - **The Ketos:** its anchored water body, the lure node, the Neck Strike aimed at the nearest light, Seared at true lamps, the drain (Act V's `TIDE.force` run downward), the stalk segments, the sound-hunting phase and the bells, the death arch.
+   - **Keyx:** the Hand puppet (a node bound to his position), the net weights, the turn and the slip ring, the Tern walk inside the fight (path Hands, the Wave with Tern's safe circle), the remembering cine with the lockPhase release, phase 3's Smother and rite with both end conditions, the good-night cine.
+10. **Story (4-4.5 d).**
+    - Quests 32-39; the hook and the forgetting barks; the «…» row; the descent and arrival; the camp.
+    - The Drowned Lights and their memories; `mereOpen`; the Ketos's cines; the stair; the Hall (the ember, the Forgotten); the bottom cine and the First's dialog; the fight's beats; the good night; `upward` and the farlight scene; home, the lamp and `beaconScene(6, 'peaks')`.
+    - The catch-ups; `npcHasNews`; `spawnNpc` for tern (follower), tamarisk, first, keyx, leif, sailor, asger and kymo; the home lines; game.sub6; about 230 bilingual lines.
+11. **Audio (1.5-2 d, low).** Five themes, the lullaby and the rowing song, about 16 sound effects.
+12. **Assets (3.5-4.5 d; see Assets).** The `hush` set first, gated on 16 measured textures; tools/pack-murk.mjs; tools/creatures/act6/{ketos, falselight, brooder}.mjs, each behind its provenance gate.
+13. **Scenarios (2.5-3 d).** In tools/scenario.mjs:
+
+    | scenario | what it covers |
+    |---|---|
+    | hook6 | from an Act V-end save in the shipped format without `act6`: the migration, the hook cine (the child, Tern, Halda's line), the «…» row, the descent into `under` |
+    | catch6 | for every row of the catch-up table: set the state just after that flag's save, reload, assert the quest, the scene replayed and the memories seen |
+    | under | the arrival, the camp, a moat crossing by lamp, one Drowned Light, its memory, a Falselight revealed by the beam from above |
+    | ink | a 10-minute soak: lamps lit and snuffed, the beam's strips, casks; no actor inside a closed cell, the hero never stuck, every black plunge landing within 3 m or on the ring buffer, `map.ver` bumps ≤ 4/s, frame time with about 30 actors |
+    | forget6 | Forgetting sources and decay; the forgotten slot is the last used; time forgotten per minute ≤ 12% of fight time on Warden in the Hall and in the Keyx fight |
+    | ketos | the boss through all phases; Seared at a lamp, a lure segment cut, a bell rung by a lamp; the arch at its spot; the time-to-kill target |
+    | floor | the stair, the Threshold, the ember (no name printed anywhere: a text assertion), the Hands' grove waking to light |
+    | walk6 | Tern's walk: he stops in the dark, calls, cleanses, is blocked by path Hands, the fail-safe carry; never harmed |
+    | keyx | all phases; the net weights; the remembering; lockPhase released by the runtime count; hp never below 30% before it; die after it and retry (Alkyone forgetting again); the rite's both end orders; the time-to-kill target |
+    | ending6 | the good night, `upward` at the Farthest Light, the lamp on the staff, the six peaks lit, actComplete(6), game.sub6 |
+    | lost6 | the four Forgotten, each way; `lostNamed` and the ×1.25 |
+    | cast6 | every new model real or its stand-in, in a cold session that follows the real route (town → the Gate → `under`) and one that starts at the `floor` waypoint |
+    | echo6 | both echoes |
+    | perf6 | quality 1 under mobile emulation on the Ship Floor with two beams and the beam from above crossing ink, and in the Hall with a full pack, within the Field of Ash + 15%; quality 0 as a floor |
+
+    `window.__act6` in ai.js for what the scenarios read.
+
+**Total: about 33-41 focused days**, story, assets and music included. That is smaller than Act V (47-58) because the water, the closing grid, the beams, the Cold, the statues, the windows and the memory flow already exist. The new systems are ink.js, forget.js and the two bosses.
+
+**Ship first:** ink.js with its quality-0 look and the perf gate; forget.js; the beam from above; then both bosses.
+
+**If the act runs late, cut in this order:**
+1. The blue bird and marine snow (quality 0 only).
+2. The Mage's `.m` line.
+3. Kymo (three Forgotten, with `lostNamed` needing three).
+4. The Brooder (its nests hold hull swarms).
+5. The Ketos's bells (phase 3 keeps its sound strikes, with Seared at lamps only).
+6. The ice sky in cines (fog only).
+7. The sleeping Skotos's shape.
+
+**Never cut:** the forgetting at home and Tern's correction of the child; Tern following; the four Drowned Lights with Memories 3 and 4; «Δεν τρέμει»; the ember; the First's dialog; the walk and the remembering; the good night; Tern's lamp on the staff; the seven peaks.
+
+## Blessings
+Three for Act VI: lights to sleep by. The header is boon.h6 «Φώτα για τη νύχτα» / "Lights for the night", after «Τα φώτα της θάλασσας» (Act V).
+
+**The Forgotten remembered.** A hero who freed all four Forgotten (`flags.lostNamed`), at any time including the post-game, has the Act VI blessing worth ×1.25. This is a new constant `NAMED = 1.25` beside `UNBOUND` and `REMEMBERED` in data.js; `.du` shows the rounded values. Each blessing uses existing stat keys and sits in Act V's band (two stats each).
+- tern Το Λυχνάρι του Γλαρονιού / Tern's Lamp: { crit: 5, critDmg: 20 } (icon 'star'). ×1.25: 6 / 25. — «Ένα μόνο φως. Φτάνει για να βρεις τον δρόμο.» / "Just one light. It's enough to find the way."
+- halcyon Οι Αλκυονίδες / The Halcyon Days: { move: 8, cdr: 8 } (icon 'roll'). ×1.25: 10 / 10. — «Στην καρδιά του χειμώνα, μέρες που η θάλασσα σωπαίνει.» / "In the heart of winter, days when the sea is still."
+- hand Το Χέρι της Πρώτης / The First's Hand: { lifePct: 12, block: 10 } (icon 'shield'). ×1.25: 15 / 12. — «Ένα χέρι στο σκοτάδι, για να μην είναι μόνο του.» / "A hand in the dark, so it isn't alone."
+
+## Music
+**Five new procedural THEMES in audio.js and two motifs,** in the house style: modal harmony, drones, no samples.
+
+**The First's lullaby** («Το νανούρισμα της Πρώτης»), the act's motif. In 3/4, falling like a breath: A, F♯, G, E, D, as [69, 1], [66, 0.5], [67, 0.5], [64, 1], [62, 2]. It is the rite's original tune, to which the names were once sung. It is set apart from the Wayfarers' lantern motif (A, C, B, E) and Einar's sea-light motif (D, A, G, D′), and it resolves both.
+- Under the arrival.
+- In fragments on a music-box bell in `under`.
+- Rising against the rowing song in Keyx's phases 2 and 3.
+- Whole at the good night.
+- Sung by Selna in the post-game rite.
+
+**Keyx's rowing song.** 6/8, D Dorian, a shanty's lift: [62, 0.5], [65, 0.25], [67, 0.25], [69, 0.75], [67, 0.25], [65, 0.5], [62, 1]. Tern remembers his father's voice singing it at the oars (d.tern6.c2). It is the boss theme, so the player hears Keyx before the twist names him.
+
+**'under'.** About 50 bpm, 3/4, B Aeolian.
+- A low drone through a low-pass, as if heard through ice; the lullaby's fragments on a very soft high bell.
+- Every 12 s, as the beam passes overhead, a soft bright chord and the sea-light motif's last note far above.
+- Act V's ice song rarely. In a fight, a low taiko on beat one.
+- While names fall (`MOOD.names`), a hushed choir.
+
+**'ketos'.** 7/8 at 96 bpm, C♯ Phrygian.
+- Low brass and slow falling whale-calls (pitch-bent sines).
+- **The lure's tone:** a pure sine with no vibrato under phase 1. Every true light in the act has vibrato in its sound; the lure has none.
+- Phase 2: drums and the roar of the rising column.
+- Phase 3: near silence; a sonar-like ping on each sound it hears, and a bell's toll when one is rung.
+
+**'floor'.** No beat, E Locrian.
+- A low humming choir on the lullaby's first two notes only, never resolving.
+- Act V's forgetting melody returns with notes dropping out, more of them the deeper the hero goes (`MOOD.depth`).
+
+**'keyx'.** 6/8 at 104 bpm, D Dorian, with heavy drums.
+- The rowing song in the low strings and brass.
+- Phase 2: the drums thin; the lullaby enters high against it, one voice per lamp lit.
+- Phase 3: the rowing song slows and the lullaby takes over.
+- At the good night everything stops but one bell playing the lullaby, which resolves to D major on «Καληνύχτα, Σκότος.».
+
+**'goodnight'** replaces 'sealit' for the end, under `upward` and again at actComplete(6) in Whitecliff. 60 bpm, 3/4, D major: the lullaby harmonised and slow, answered by the sea-light motif, the lantern motif and a phrase of the town tune. Each peak catching adds a bell and a voice; on «Ο Βορράς κοιμάται με τα φώτα αναμμένα.», a held chord.
+
+**Ambients:**
+- 'under': a faint hiss of marine snow, the ice's ticks, the far bell of the beam;
+- 'floor': near silence, the Hands' slow creak, a sub drone that falls away after `asleep`.
+
+**SFX (about 16 new):** forgetChime, forgetTick, inkClear, inkClose, blackPlunge, lureHum, falselightSnap, eggPulse, eggHatch, ketosCall, neckStrike, stalkSnap, netCast, handHeave, namesFall (a bell and a whisper), kingfisher. Bells reuse Act V's towerBell at other pitches.
+
+## Echoes and post-game
+**Echo refights,** once a day each, with normal loot and no story consequences. Act VI's echoes are not memories in a material. They are the sleeping dark's dreams:
+- **The Ketos:** «Θυμήσου το Κήτος» / "Remember the Ketos", at the neck arch, after `asleep`.
+- **Keyx:** «Πες του καληνύχτα» / "Say good night to him", at the abyss edge, after `asleep`.
+- **Toasts:** echo.rise6 «Το Σκότος ονειρεύεται τη μάχη...» / "The Skotos dreams the fight..."; echo.done6 «Το όνειρο σβήνει. Θα το ξαναδεί αύριο.» / "The dream fades. It will dream it again tomorrow."
+- **Look:** the dream tint (baseTint 0x2a3448 at amount 1.2, rim 0xb0c8ff); story.js's echo branch gains both.
+- **Level** as the story fights. The echo variants are given under each boss.
+
+**Two Act VI legendaries,** the bosses' first-kill drops (data.js `LEGENDARIES`, dropped through `legFrom_<boss>` with `leg: LEG_FROM[a.kind]`, as Act V's).
+
+| id | name | base | class | what it does | where |
+|---|---|---|---|---|---|
+| ketosLure | «Το Δόλωμα του Κήτους» / "The Ketos's Lure" | amulet | any | your light ring is +1.5 m, and Forgetting builds 40% slower on you | the Ketos's first kill (`LEG_FROM.ketos`) |
+| fishersNet | «Το Δίχτυ του Ψαρά» / "The Fisherman's Net" | chest | any | +armour; every 8 s your next hit nets a non-boss foe: pulled 2 m toward you and slowed 30% for 2 s | Keyx's first kill (`LEG_FROM.keyx`) |
+
+**What stays to play.**
+- **Both zones stay farmable** on the hero's seeds, keyed by difficulty. The packs, the Falselights, the Brooders and the Hands respawn on each build.
+- **The four Forgotten** for the ×1.25, and every one of them in Selna's rite.
+- **The bottom after `asleep`:** the abyss as black glass with the sleeping shape under it, and a small night-lamp on the First's empty rock. Any visitor can relight it («Άναψε το λυχνάρι»), for BUFFS.memory once a day: a night-light kept by whoever passes.
+- **Class play:**
+  - the Mage clears ink with real fire (Fireball and Meteor impacts, not the `dim` variant fires);
+  - the Ranger shoots lures out from range;
+  - the Warden's shield and Challenge hold a Smother line.
+
+**The Shadow Gates** stay the post-game, opened from Isarn's planted staff: endless tiers, the Gate Guardian, the rewards and the scaling unchanged. Act VI explains them (the dark's dreams; the Guardians are the fears it dreams first) and adds three small things:
+1. **Tern's lamp** burns on the staff beside Isarn's sleeping lantern, and the panel reads gate.d6 «Τα όνειρα του Σκότους. Δεν έχουν πάτο· ο πάτος κοιμάται.» / "The Skotos's dreams. They have no bottom; the bottom is asleep."
+2. **The forgotten in the dream** (from `asleep`, tiers ≥ 10). Each Gate level has a 12% chance of one Nameless sitting asleep by a dead lamp (not hostile, untargetable). Lighting the lamp (1 s) frees it: q.freed, BUFFS.memory, `h.gateNamed += 1`, and Selna's rite says «Κάποιος.» / "Someone." for each, capped at three in the roll. The endless post-game gains one story verb, and nothing about its difficulty changes.
+3. **Alkyone's Landing line** becomes d.alk6.gates «Οι πύλες σας είναι τα όνειρά του. Μη φοβάσαι. Όποιος ονειρεύεται, κοιμάται.» / "Your gates are its dreams. Don't be afraid. Whoever dreams is asleep." d.alk.gates stays until `asleep`.
+
+**After the act, people keep their word:** the seven peaks every night; Tern's lamp; Alkyone's good night to Keyx's lantern; Selna's rite sung; Glaukos's halcyon line; Tamarisk by her sapling; Leif at home; Brokka's and Elati's v6b lines.
+
+## Risks
+- **Continuity fixes applied** (canon brief §4, and Act V's own):
+  - **The hero never speaks.** Every word the hero "says" is second-person narration, and in Act VI the hero says less than ever: Tern speaks for the hero, and Tern tells Alkyone the hero's name (d.tern6.r3) without the player ever reading it. The name stays unwritten. Tern's knowing it (d.tern.again) is paid off without breaking that rule.
+  - **Isarn and Ivar stay dead and are not below.** "Those you remember never come down here" (d.first.a10) keeps the dead remembered ones out of the dark, which keeps faith with d.u.walk.
+  - **The tyrant's name is never said** in game text, text keys or code comments (this design names him only in its own prose, as Act V's did). The ember is called "the ember" and nothing else. Tamarisk answers «Κανείς πια.» Nothing of him fights or speaks above a whisper, and his last image is the Breaking's own (iron in water).
+  - **The Skotos is not killed and not made evil** (canon §4.2, Act V's naming): it is put to sleep. Its new lines keep the lowercase and the ellipses; its "I" is the one Act V gave it.
+  - **Act V's explanation of the rising stands** (d.alk.t2-t5); Keyx's open hand is a second cause, not a replacement.
+  - **Selna's remembered name and `selnaBack` are untouched.** Alkyone is forgetting, never written out of a save. Her blank-name state does not exist (the act does not repeat Act V's «…» trick on a quest giver).
+  - **Every φρυκτωρία is still the brow-stone's fire, or a hand-lit one after the Night Without Fires.** The six peaks are hand-lit beacons, as Act IV's four were. The Drowned Lights are φάροι (Act V's word).
+  - **Glaukos's nine lights are now all accounted for:** five lit in Act V, four drowned. The `farlight` zone shows three or four under-ice windows per seed. Act VI brightens as many as that seed has, in order; a seed with three hides the fourth under a berg. No farlight layout changes.
+  - **The Field of Three Banners, the Field and the Forge are not touched.**
+  - **Timeline words** stay «χίλια χρόνια», «εκατό χρόνια», and now «εφτά χειμώνες» for Keyx, the Saltborn's way of counting (Act V: «σαράντα χειμώνες»).
+- **Dark Souls is the nearest trap: a fire at the bottom of the world, kept by someone who must take it up when the old keeper fails.** It is designed out:
+  - **there is no fire at the bottom**: the First went down empty-handed and held a hand;
+  - **no one takes her place**: the ending shares the watch among everyone with a light;
+  - no "First Flame", no "linking", no "Abyss", no "Age of" anything;
+  - the bottom is called «Ο Πάτος» / "the Nethermost";
+  - the vocabulary stays plain Greek: χέρι, φως, όνομα, καληνύχτα.
+- **The escort.** Escorts are disliked, so Tern's walk is built to be short and kind:
+  - he cannot be hurt;
+  - he walks fast (3 m/s) in any light, the hero's own ring included;
+  - he only stops in the dark or at a Hand;
+  - he helps (he cleanses Forgetting and is a safe circle in the Wave);
+  - a fail-safe carries him at 70 s.
+
+  Outside the fight he follows on pet pathing, never through walls. `walk6` asserts he is never stuck for more than 3 s in light.
+- **Forgetting could frustrate.** It takes one button (the last one used) for 4 s; never the attack, dodge or potion; never randomly; it is cured by light, names from above and Tern. `forget6` asserts that buttons are forgotten for no more than 12% of fight time on Warden, and tuning follows that bar. **Fallback:** a forgotten button keeps working at half damage instead of failing.
+- **Black water and the beam strips on phones.**
+  - Fill rate: ink is Act V's opaque water path with one define.
+  - Grid churn: batched at 0.25 s, at most 4 `map.ver` bumps a second, only near heroes.
+  - Fairness: the shimmer, the linger, the grace lane, plunges that never kill.
+  - `ink` (soak) and `perf6` (gate) run before the bosses are built.
+- **The ember might read as the tyrant coming back.** It is optional, one interact, unnamed, unfought, and it goes out. If the owner prefers, the cut keeps the narration alone: the two ember lines become «...» and the hero's silence and the quench remain.
+- **Sentiment.** A lonely dark, a child's good night, a father's farewell, a hidden name: the act could tip into sweetness. The guard is the house voice: one image per line, short lines, understatement.
+  - The dark still drinks light, makes Whitecliff forget and frightens a child. The First's "It is not evil. It is alone." is her view, which the act never forces on the player in play.
+  - Keyx is not redeemed by speech; he is beaten and let go.
+  - The First's name is never told to the player.
+- **The forgetting at home could read as a bug.** The hook cine shows the child forgetting and Tern correcting him. The barks are flagged and change back at the end, and the toast «Νέα αποστολή» lands on the same beat.
+- **Keyx's arm and the "one boss actor" rule.** His Hand is a node bound to his position with no bar of its own. The `keyx` scenario asserts one boss bar, his.
+- **Saves and state.**
+  - Every flag is derived on load and saved before its scene plays, except `alkBack` (saved with `keyxDown`); during the fight the remembering is runtime (`G.alkBack`).
+  - Test quitting during: the hook, the descent, the arrival, between a Drowned Light's flag and its memory, `mereOpen`, the Ketos's turn and drain, the bottom cine, the First's dialog, mid-walk, after the remembering, the good night, `upward`, the lamp.
+  - Old saves without the flags read as quest 31 with `seaLit`; `hero.act6 ??= −1`.
+- **Co-op.**
+  - The story is the host's: only the host can open the «…» gate, light towers, ring bells, hang the lamp or talk with the First.
+  - Tern follows the host, and his walk counts any hero's light.
+  - Forgetting is per player, and each guest's forgotten button is its own.
+  - Names from above and the Gates' «Κάποιος.» are shared.
+  - `tools/coop.mjs act6` (a new case after `act5`) covers it.
+- **Memory.**
+  - The act reuses the measured `frost` set (30.7 MB of phone texture) and `rime` (24.8 + 16.7 MB) whole.
+  - A cold start into Act VI is about 108 MB against the 110 MB bar (itemised under Assets). Measure it before the bosses.
+  - The levers, in order: Leif's secondary maps at 256 px; one new ground layer instead of two (rime's `shore` graded dark for the shells); the hush set's enemy maps at 256 (done); then Act V's contingency (engine brief §5.4: unload Acts II-IV packs on entering an Act VI zone; the trigger is the existing context-loss reload).
+  - The `act6` creature group lists only the four Act V files it uses (skotos, tentacle, icemaw, louse), not the whole `act5` group: no crab, skua or bear.
+- **Asset provenance** (each gated before download, results saved beside the source in /tmp/claude-0/sf/act6):
+
+  | asset | check | fallback |
+  |---|---|---|
+  | Pistosaur Animated (the Ketos) | reverse-image search and storefront check; re-read the licence; confirm the rig exports as plain skinned bones | Spinnee's Pliosaur, then the Icemaw ×3.4 with the code lure |
+  | Scorpion (the Falselight) | the same; its description says it was made for the author's own game "All That's Left" | the .hapto Pseudoscorpion (a Senckenberg Museum scan), then the spider ×0.8 |
+  | Pale Blight Queen (the Brooder) | the licence re-read; a storefront check; the read beside the Weaver's spider and the Reefback | the Hull-louse ×3.2 with a code ridge |
+  | Fossil Whale MPC 677 (dressing) | CC0 from the Smithsonian: credit it anyway | the shipped rime whale skeleton |
+  | shell_floor_01, pebbles (layers) | Poly Haven API, CC0 | rime's `shore` and `seaCliff` regraded |
+
+  Every STAND_IN list ends in a boot-loaded or code-built model, and `cast6` runs in cold sessions.
+- **IP hygiene.**
+
+  | avoid | because of | here instead |
+  |---|---|---|
+  | a fire at the bottom, rekindling it with a life, "First Flame", "Abyss", "linking" | Dark Souls | an empty-handed woman holding a hand; a shared watch; «Ο Πάτος» |
+  | "Night Watch", "Night's Watch", "the watch does not end" | George R. R. Martin | "watch" only as a common noun, as Act V's d.selna.rest |
+  | sleeping guardians who seal a horror, "Dreamers", "the Void" | Hollow Knight | the First is awake and holding a hand, not sealing; the dreams are the Skotos's own; no proper nouns |
+  | "Lethe", "Oblivion" as names | The Elder Scrolls | «λήθη» only as a common noun (the HUD chip «Λήθη» is the ordinary word); English "Forgetting" |
+  | "the Nameless One"; "the Nameless King" | Planescape: Torment; Dark Souls III | the family is plural, «Ανώνυμοι» / "the Nameless", with singular forms only as "a Nameless" or "Nameless Caller" |
+  | "let it go" anywhere in English; ice queens | Disney's *Frozen* | Keyx "opens his hand"; Alkyone "lets him leave"; the First is a fisherwoman in ice, kneeling, with no crown |
+  | Sirens singing sailors to forget home | Homer (public domain, but a famous image) | the Callers call names, they do not sing men to death; no birds, no meadow of bones |
+  | the Upside Down | Stranger Things | a dry sea floor under ice, never a mirror of Whitecliff |
+  | No-Face | Spirited Away | the Nameless's faces are smooth stones, not masks with features; they never take, eat or grow |
+  | the Watcher in the Water; Ungoliant | Tolkien | the Hands stay Act V's Hands; the dark forgets, it does not devour light |
+  | "Kraken", squid silhouettes | Act V's look gate | the sleeping Skotos is the shipped cloaked figure (Act V's MysteryPancake build) |
+
+  The Ketos (Κήτος) and the halcyon days (αλκυονίδες) are Greek myth and common Greek words: public domain, and native to the game's language.
+- **Scope.** About 33-41 days in all: two new runtime systems (ink.js, forget.js), one new AI ('lure'), five traits, two bosses. Smaller than Act V, larger than Act IV. The cut order and the never-cut list are under Engine work.
+- **CREDITS.txt additions** (CC-BY 4.0): RickStikkelorum (ricksticky); anthonyvanoo; HighPolyDensity (already credited); Spinnee and .hapto GmbH only if their fallbacks are used. CC0, credited all the same: the Smithsonian Institution; Poly Haven and Rob Tuytel (shell_floor_01, pebbles). Quaternius is already credited, and so is every reused Act V asset.
+
+## Assets
+Every third-party asset Act VI uses, with its uid or id, author, licence, what it becomes and its budget. The three new Sketchfab models were checked by the Act V scout (assets.json verdict 'ok', downloadable, CC-BY 4.0). They are re-queried through the API and gated before download. "Phone MB" uses the engine brief's rule (RGBA8 × 1.33 for mips, maps of 1024 px and more halved on phones: a 1024 or 512 map ≈ 1.4 MB, a 256 map ≈ 0.35 MB). Shipped files use the figures measured in docs/act5-briefs/assets-built.md.
+
+### Creatures (group `act6`, tools/creatures/act6/*.mjs, `ACT_FILES.act6`)
+| role | asset | uid | author | licence | faces → game | maps | phone MB |
+|---|---|---|---|---|---|---|---|
+| the Ketos (boss) and the Ketlings (×0.6) | Pistosaur Animated (ketos.glb) | 773667575a264c7baa4ec404115a044b | RickStikkelorum (ricksticky) | CC-BY 4.0 | 16,664 (kept) | 1024 d, 512 n | 2.8 |
+| the Falselight | Scorpion (falselight.glb) | 4c0fd62d33ab4d2592ee0a1d985a480d | anthonyvanoo | CC-BY 4.0 | 7,290 (kept), 5 clips | 512 d, 256 n | 1.8 |
+| the Brooder | Pale Blight Queen (brooder.glb) | 61cf19ab28224a199ded284a98f09ce0 | HighPolyDensity | CC-BY 4.0 | 22,976 → 9k, 11 clips | 1024 d, 512 n | 2.8 |
+| reused: the sleeping Skotos | "Cloaked Figure" (shipped skotos.glb) | f4e2c262ed4e456484f232d6afa99629 | MysteryPancake | CC-BY 4.0 | as shipped | as shipped | shipped |
+| reused: the Hands, the First's Hand, Keyx's Hand | "Tentacle (rigged)" (shipped tentacle.glb) | 8fcc783af94246a0b8febf424a4b96b9 | CG Daniel Glebinski | CC-BY 4.0 | as shipped | code material | 0 |
+| reused: the Icemaw | "Leopard Seal" (shipped icemaw.glb) | 3f4a2090598b4741ac38e0d255ece191 | Grace Belt (neatGrace) | CC-BY 4.0 | as shipped | as shipped | shipped |
+| reused: the Hull-lice | "CC0 Giant Isopod" (shipped louse.glb) | 3979c291d1f9454c90851efe291eab60 | ffish.asia / floraZia.com | CC0 1.0 | as shipped | as shipped | shipped |
+| *fallback* the Ketos | Pliosaur | d90f30fd8ae9488ba8186a4572c9cf4f | Spinnee | CC-BY 4.0 | 13,182 | 1024 d | 1.4 |
+| *fallback* the Falselight | Pseudoscorpion | 60a474f1f87040f38e073f87a63b7548 | .hapto GmbH | CC-BY 4.0 | 51,008 → 6k | 512 d | 1.4 |
+
+**Totals:** about 1.4 MB raw new; **7.4 MB phone new.** The four reused Act V files add about 7 MB on a cold start (of the 11.5 MB measured for Act V's six), and nothing if Act V loaded them this session.
+
+### People (set `hush`, folk.mjs --set=hush; Quaternius Universal Base Characters and Modular Outfits, CC0, already shipped in people.glb and moves.bin; no download)
+| recipe | source scene | table | maps | role |
+|---|---|---|---|---|
+| keyx | villager1 | GAUNT, runtime ×1.7 | 512 | boss; himself in Black-Water Memories 1-3 at ×1.0 |
+| nameless | villager0 | GAUNT; a second body by runtime scale and cloth tint | 256 | enemy (the Nameless); the Gates' forgotten |
+| leif | villager2 | TEEN (len 0.92, girth 0.8) | 512 (secondary 256 if the gate needs it) | npc (the Forgotten), at home after |
+| (from frost, shipped) | alkyone, tern, tamarisk, selna (also the First, in ice), glaukos (also the Lampman), sunken (also the Sailor), icesinger (also the Caller) | as shipped | as shipped | runtime variants and tints, no new scene |
+| (from people.glb, shipped) | villager1 (Asger), healer (Kymo) | none: runtime tints and code parts | as shipped | npc ×2, no scene |
+
+**Three scenes, gated on a measured count of 16 textures or fewer** (Act V's lesson: 5-7 a scene). About 0.9 MB raw; **about 14 MB phone.** `frost` (shipped) is 30.7 MB on a cold start (measured), and nothing if Act V loaded it.
+
+### Props (pack `murk`, tools/pack-murk.mjs; ≤ 10k triangles new; rime loaded beside it)
+| prop | asset | uid / id | author | licence | faces → game | maps | phone MB |
+|---|---|---|---|---|---|---|---|
+| the whale in the basin wall | Fossil Whale MPC 677 | 8207cc8744824d42b8da248d3ced9a4f | The Smithsonian Institution | CC0 1.0 | 149,999 → 4k, slab cut | 512 d | 1.4 |
+| everything else | the shipped rime pack: wrecks, keel-boats (the Upturned Boat), rowboats, towers A-C (the Drowned Lights, drawn taller), anchors, the whale skeleton, kelp, barnacle rocks, casks, crates, oil lamps (Keyx's lantern, the shore lamps), cliffs | see rime/CREDITS.txt | as credited | CC-BY 4.0 / CC0 | as shipped | as shipped | 24.8 (measured; shipped) |
+| statues, lanterns, doors, the cradle | the shipped env and cinder packs, regraded | see env/ and cinder/ CREDITS | Poly Haven authors; Act IV's credited authors | CC0 / CC-BY 4.0 | as shipped | as shipped | resident or small |
+
+**Made in code** (no third-party asset): the Nameless masks; the Falselight's and the Ketos's lures and the false pools; the Brooder's eggs; the bells; the dead lamps on posts; the lantern rooms in the ice; the net cloak and its caught things; the ice-sky plane; the beam's shaft sheet; the blue bird; the frost in Isarn's lantern; Tern's lamp on the staff.
+
+### Ground layers (pack `murk`, d 1024 / n 512)
+| layer | source id | author | licence |
+|---|---|---|---|
+| shells (the dry sea floor) | shell_floor_01 (Poly Haven) | Rob Tuytel | CC0 1.0 |
+| shingle (black shingle, the road at a lighter grade) | pebbles (Poly Haven) | Rob Tuytel | CC0 1.0 |
+| basalt (walls) | rime's `seaCliff` (dark_rock_02, shipped) | Amal Kumar | CC0 1.0 |
+
+**Totals:** about 0.5 MB raw new; **5.6 MB phone new.** rime's 12 layer maps (16.7 MB measured) come with the rime pack.
+
+### Totals for the act
+| | raw new | phone GPU new | phone GPU on a cold start into Act VI |
+|---|---|---|---|
+| creatures | 1.4 MB | 7.4 MB | about 14.4 MB (with the four Act V files) |
+| people | 0.9 MB | about 14 MB | about 44.7 MB (with frost) |
+| props | 0.3 MB | 1.4 MB | about 26.2 MB (with rime) |
+| layers | 0.5 MB | 5.6 MB | about 22.3 MB (with rime's) |
+| code textures | | 0.4 MB | 0.4 MB |
+| **total** | **about 3.1 MB (≈ 4.2 MiB of artifact)** | **about 29 MB** | **about 108 MB**, within the ≤ 110 MB bar; about 37 MB after a session that played Act V |
+
+The budget is ≤ 9 MB raw and ≤ 110 MB phone GPU (engine brief §5.3). The new files are about a third of Act V's. The cold-start figure is tight because Act VI reuses Act V's two largest files whole, so the levers under Risks are ordered and measured before the bosses.
+
+## Asset audit
+- ketos 773667575a264c7baa4ec404115a044b ok=gated lic=CC Attribution 4.0 faces=16664 anims=1: 'own sculpt (describes his process). No duplicate found.' (Act V scout). Reverse-image and storefront checks before download; the rig must export as plain skinned bones; lib.mjs makes every clip but the swim. | REPLACEMENT: Pliosaur d90f30fd8ae9488ba8186a4572c9cf4f (Spinnee, CC-BY 4.0), then the shipped Icemaw ×3.4.
+- falselight 4c0fd62d33ab4d2592ee0a1d985a480d ok=gated lic=CC Attribution 4.0 faces=7290 anims=5: 'made for the game All That's Left (own work)'. The same checks. | REPLACEMENT: Pseudoscorpion 60a474f1f87040f38e073f87a63b7548 (.hapto GmbH, CC-BY 4.0, a Senckenberg Museum scan), then the spider.
+- brooder 61cf19ab28224a199ded284a98f09ce0 ok=True lic=CC Attribution 4.0 faces=22976 anims=11: an already-credited author's original series; the licence re-read at download; the read beside the spider and the Reefback in the creature viewer. | REPLACEMENT: the shipped Hull-louse ×3.2.
+- fossilWhale 8207cc8744824d42b8da248d3ced9a4f ok=True lic=CC0 1.0 faces=149999 anims=0: a Smithsonian scan. | REPLACEMENT: the rime whale skeleton.
+- keyx / nameless / leif None ok=True lic=CC0: people re-proportions of shipped people.glb scenes; never a player class's body; three scenes, gated on 16 measured textures. | REPLACEMENT: the boot-loaded people.glb scenes (villager1, villager0, villager2), tinted.
+- caller / lampman / sailor / first / asger / kymo None ok=True lic=CC0: runtime variants of shipped frost and people.glb scenes with code parts; no scene. | REPLACEMENT: the boot-loaded people.glb scenes.
+- Layers: shell_floor_01 and pebbles resolve through the Poly Haven API (scouted for Act V, verdict ok, CC0).
+- **Not used, though scouted:**
+  - Kaan Tezcan's Ancient Titan (no role in this story);
+  - the Cursed Knight and the Stelae knight (a fisherman, not a knight);
+  - the Lotus Siren (a mantis, and the Sirens are avoided);
+  - every Purple.Point model (unverified AI origin, Act V's rule).
+
+## The payoffs, act by act
+What Act VI picks up from each earlier act, by shipped key, for the judges.
+
+| from | the line or thing | how Act VI pays it off |
+|---|---|---|
+| intro.3 | «Όσο καίνε, ο Βορράς είναι ασφαλής.» | true a third time: night-lights for a sleeping dark (the seven peaks) |
+| intro.4 | «Απόψε σβήνουν, η μία μετά την άλλη.» | d.peaks.2 «Στις κορυφές πιάνουν φωτιές, η μία μετά την άλλη.» |
+| Act I, d.isarn.2 / r4 | seven fires; "six still dark" | Halda's «Εφτά. Οι έξι σβηστές.» and the six peaks relit at the end; «Κοίτα βόρεια.» |
+| Act I, d.v.3 | "My son went for wood in the forest. He didn't come back." | Leif, found below (he walked through a door in the wood) and brought home |
+| Act I-V, the Shadow Gates | "have no bottom" (d.isarn.after) | they are the Skotos's dreams; the bottom is a hand held; the Gate Guardians are the fears it dreams first; one new verb (the forgotten by a dead lamp) |
+| Act II, d.halda.2 | «Οι Λιθογενείς δεν ξεχνούν.» | Halda forgets, then lights the peaks: «Οι Λιθογενείς δεν ξεχνούν.» again, earned |
+| Act III, Amaranthe's wish | "let nothing of ours fade", a cage | Alkyone's "That's why he's still mine": the same cage without a shard; the First's middle way |
+| Act III, the nursery | the Evergreen children sent away | the Skotos as a child sent away from the fire; its line to the Ranger (w6.5.r); Tamarisk by her sapling |
+| Act IV, d.answer.0 | the lantern "as if falling asleep" | why the Gates open at Isarn's staff; Tern's lamp hung beside it: one sleeps, one burns |
+| Act IV, d.isarn.u3 | «...μην πεις ποτέ το όνομά του σε κανένα παιδί. Έτσι πεθαίνουν οι τύραννοι.» | the ember asks its name and «Δεν του λες τίποτα.» |
+| Act IV, d.lamp.m4.2 | «Κάποιος πρέπει να φυλάει και την πύλη» | the watch is kept by everyone with a light, not one; Keyx's and the First's opposite readings of "rest" |
+| Act IV, d.lamp.m5.2 | «Μη με αφήσεις μόνο μαζί του.» (Isarn at ten) | Tern, ten, «Μη μ' αφήσεις μόνο!», and the hero doesn't |
+| Act IV, d.staff | «Ξεκουράσου.» | argued over: Keyx's banner; the First's answer «Η ανάπαυση είναι να κοιμάσαι κι άλλος να κρατά το φως.» |
+| Act IV, d.answer.4 | «Κανείς που ξέρουμε δεν την άναψε.» | d.peaks.3 «Τις ανάβουν χέρια που ξέρεις.» |
+| Act V, d.alk.gates | "They do. It's under our ice." | the act's whole premise; Tern repeats it at the hook |
+| Act V, d.stone.keyx / d.alk.b5 | Keyx "did not come back"; "That's why he's still mine." | the villain; the cage; the good night |
+| Act V, Ice Memory 1, d.glaukos.r1-r2 | the First "whose name the sea took"; "so it cannot hide" | Black-Water Memory 4 and the First's dialog: the rite was a lullaby; she kept her name, and tells only Tern |
+| Act V, d.skotos.die2 | its first "I" | a dark with an "I" can listen: Keyx talks to it, Tern wishes it good night, it answers |
+| Act V, d.tern.again | "I know them all already. Yours too." | Tern tells his forgetting mother the hero's name |
+| Act V, d.glaukos.2 | nine lights | four Drowned Lights relit from below; all nine burn |
+| Act V, d.stone.sailor / a5.m / the twins | the Sailor; the Order's lost way; Glauke and Kymo | three of the four Forgotten |
+| Act V, `nightRite` | Selna says the names every 90 s | heard below as Names from Above; sung to the lullaby after the act |
+| diff.skotos.d | «Εδώ ξεχνιούνται και οι ήρωες.» | Alkyone forgets the hero; on «Σκότος» a Forgetting Wave takes two buttons |
+| game.sub / game.sub5 | «Οι φρυκτωρίες σβήνουν» → «Το σκοτάδι έχει όνομα» | game.sub6 «Ακόμα και το σκοτάδι κοιμάται» |
