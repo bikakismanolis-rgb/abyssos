@@ -4,7 +4,7 @@
 // pages of one browser as two instances of it): backups, a newer version's records, a restore against another page's
 // deletion; and game/cloud.js's triggers for a view-only visitor. The Supabase backend and the migration:
 // tools/cloud/test-saves.mjs.
-import { syncAll, pushOne, dirty, heroSum, MAX_HERO, MAX_HEROES } from '../../src/game/cloudsync.js';
+import { syncAll, pushOne, dirty, heroSum, forked, MAX_HERO, MAX_HEROES } from '../../src/game/cloudsync.js';
 import { artifactBackend } from '../../src/net/cloudart.js';
 import { device, hero, artifactDb } from './fakes.mjs';
 
@@ -513,7 +513,7 @@ await T('a tab\'s base drop is not undone by a sync in another tab (the stale op
     // tab B (at the title) syncs: it takes the 35; while Y's copy is on its way, tab A autosaves X
     const r = await syncAll(gated(LB, 'get:hY', () => inTab('A', () => { G.hero.stats.time += 20; SA.writeSave(); })), tabStore('B', SB));
     ok(r.pulled.includes('hX') && SV.backups().some((b) => b.why === 'conflict' && b.hero.level === 35), 'B took the 35; A\'s autosave kept it as a conflict backup', { first: firstMeeting, r, bk: bk() });
-    ok(SV.cloudMeta().base.hX?.lost === true, 'the base A marked lost stands after B\'s sync', { first: firstMeeting, base: SV.cloudMeta().base.hX });
+    ok(!!SV.cloudMeta().base.hX?.lost, 'the base A marked lost stands after B\'s sync', { first: firstMeeting, base: SV.cloudMeta().base.hX });
     inTab('A', () => { G.hero.stats.time += 20; SA.writeSave(); });
     const s = await syncAll(LB, tabStore('A', SA));
     ok(!s.pushed.includes('hX') && await lvl(LB, 'hX') === 35 && s.behind.includes('hX'), 'the next sync does not push the 30 over the 35 (told behind)', { first: firstMeeting, s });
@@ -601,6 +601,63 @@ await T('two writes from one rev: the copy further on is never overwritten by th
     idle.D.cur = null; await sync(idle);
     ok(idle.hero('h1').xp === 900 && idle.D.bak.some((b) => b.hero.xp === 500 && b.why === 'conflict'), 'the laptop takes it once put down, its own kept as a conflict backup', { ...tag, bak: idle.D.bak.map((b) => b.why + ':' + b.hero.xp) });
   }
+});
+
+// ---------- the third review's findings ----------
+await T('two writes from one rev, then the page-hide push of the device whose write did not stand: refused', async () => {
+  const A = artifactDb(); A.net.leases = false;
+  const far = device(), idle = device();
+  far.B = await artifactBackend(A.claude('u1')); idle.B = await artifactBackend(A.claude('u1'));
+  far.add(hero('h1', { level: 10, xp: 500, stats: { kills: 100, deaths: 0, time: 1000, legs: 0, elites: 0 } }));
+  await sync(far); await sync(idle);
+  far.play('h1', (h) => { h.xp = 900; h.stats.kills = 140; }, 5000);
+  idle.D.cur = 'h1'; idle.play('h1', (h) => { h.gold += 1; }, 5001);
+  // both push from rev 1 at once; the phone's set lands last
+  A.net.delay = 5;
+  const p1 = sync(idle); await new Promise((r) => setTimeout(r, 1)); const p2 = sync(far);
+  await Promise.all([p1, p2]); A.net.delay = 0;
+  const xp = () => JSON.parse(A.docs.get('data/users/u1/h-h1').data).xp;
+  ok(xp() === 900, 'the phone\'s write stood', { xp: xp() });
+  // the laptop's page goes on and is hidden: its push names the sum it agreed on, which is not the cloud's
+  idle.play('h1', (h) => { h.gold += 1; }, 5100);
+  let r = null, code = null;
+  try { r = await pushOne(idle.B, idle.store, 'h1'); } catch (e) { code = e.code; }
+  ok(code === 'conflict' && xp() === 900, 'refused conflict; the cloud keeps the further copy', { r, code, xp: xp() });
+  await sync(far);
+  ok(far.hero('h1').xp === 900, 'the phone keeps its copy', { xp: far.hero('h1').xp });
+});
+
+await T('a base the chain no longer reaches, or one ahead of the cloud, is weighed as a conflict', async () => {
+  const chain = {}; for (let i = 5; i <= 20; i++) chain[i] = 's' + i;
+  ok(forked({ rev: 1, sum: 'a' }, { rev: 20, sum: 's20', chain }) === true, 'rev 1 past a 16-rev chain');
+  ok(forked({ rev: 19, sum: 's19' }, { rev: 20, sum: 's20', chain }) === false, 'rev 19 in the chain, its own sum: not forked');
+  ok(forked({ rev: 19, sum: 'x' }, { rev: 20, sum: 's20', chain }) === true, 'rev 19 in the chain, another sum: forked');
+  ok(forked({ rev: 3, sum: 'a' }, { rev: 2, sum: 'b', chain: { 2: 'b' } }) === true, 'a base ahead of the cloud');
+  ok(forked({ rev: 1, sum: 'a' }, { rev: 5, sum: 'x', chain: null }) === false, 'no chain (Supabase, a row lock): a plain later write');
+});
+
+await T('a lost mark made again during a sync whose base began lost stands (the stale copy never goes up as a change)', async () => {
+  const A = artifactDb();
+  const P = device(); P.B = await artifactBackend(A.claude('u1'));
+  const LB = await artifactBackend(A.claude('u1'));
+  twoTabs([hero('hX', { level: 30, played: 1000 }), hero('hY', { cls: 'mage', level: 10, played: 1000 })], 'hX');
+  await syncAll(LB, tabStore('B', SB));
+  await sync(P);
+  inTab('A', () => { G.hero = SA.freshHero(G.save.heroes.find((h) => h.id === 'hX')); SA.writeSave(); });
+  P.play('hX', (h) => { h.level = 35; h.stats.kills += 200; }, Date.now() + 1000);
+  P.play('hY', (h) => { h.level = 11; }, Date.now() + 1000);
+  await sync(P);
+  // an earlier round left the base lost (the mark as an older page wrote it)
+  const m = SV.cloudMeta(); m.base.hX = { lost: true }; SV.setCloudMeta(m);
+  // tab B syncs: it takes the 35 by the conflict rule; while Y's copy is on its way, tab A autosaves X (and marks it
+  // lost again)
+  const r = await syncAll(gated(LB, 'get:hY', () => inTab('A', () => { G.hero.stats.time += 20; SA.writeSave(); })), tabStore('B', SB));
+  ok(r.pulled.includes('hX'), 'B took the 35', r);
+  ok(!!SV.cloudMeta().base.hX?.lost, 'the mark A made again stands', { base: SV.cloudMeta().base.hX });
+  inTab('A', () => { G.hero.stats.time += 20; SA.writeSave(); });
+  const s = await syncAll(LB, tabStore('B', SB));
+  ok(!s.pushed.includes('hX') && await lvl(LB, 'hX') === 35, 'the next sync does not push the 30 over the 35', s);
+  inTab('A', () => { G.hero = null; });
 });
 
 await T('a restore of a deleted hero holds against a tombstone dated ahead of this clock', async () => {

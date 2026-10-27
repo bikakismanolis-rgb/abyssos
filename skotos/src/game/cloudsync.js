@@ -27,7 +27,7 @@
 // autosaved, deleted, a backup taken back). A sync reads the record after the heroes (a deletion recorded before the
 // heroes were read is honoured), takes or drops a hero only while its stored record is still the one it read, and at its
 // end puts only its own changes on the record as it is then: a base or tombstone another page changed meanwhile stands
-// (a base marked lost, { lost: true }, by a page that found its hero's record written over: game/save.js).
+// (a base marked lost, { lost: <a mark of its own> }, by a page that found its hero's record written over: game/save.js).
 
 export const MAX_HERO = 96 * 1024, MAX_HEROES = 12, MAX_TOMBS = 32, MAX_AWAY = 4;
 
@@ -65,13 +65,17 @@ export function further(a, b) {
 // is the cloud's record not one written over the copy agreed on (base b)? At the rev agreed on, another hero; or, where
 // the record carries its chain (the artifact backend: the sums of its last revs), another hero at that rev: two writes
 // made from the same rev (a db with no transactions), the other's landed, and what came after built on it
+// (a rev the chain no longer reaches, or a base ahead of the cloud's record, cannot be told apart from one: weighed the
+// same way, the copy further on kept, the other a backup)
 export function forked(b, c) {
   if (b.rev === c.rev) return b.sum !== c.sum;
-  const ch = c.chain && typeof c.chain === 'object' ? c.chain[b.rev] : undefined;
-  return typeof ch === 'string' && ch !== b.sum;
+  if (typeof b.rev === 'number' && typeof c.rev === 'number' && b.rev > c.rev) return true;
+  if (!c.chain || typeof c.chain !== 'object') return false;
+  const ch = c.chain[b.rev];
+  return typeof ch === 'string' ? ch !== b.sum : true;
 }
 
-// the module's record, made whole: { who, base: { id: { rev, sum, work } | { rev, del, at } | { lost } }, tomb: { id:
+// the module's record, made whole: { who, base: { id: { rev, sum, work } | { rev, del, at } | { lost: mark } }, tomb: { id:
 // at }, away: { who: { tomb, at } }, last }. tomb is the account who's (the deletions made here while it was this
 // browser's account, and those it told); away holds other accounts' tombstones, kept for them (a browser two accounts
 // share)
@@ -88,7 +92,7 @@ export function cleanMeta(m) {
 export function forAccount(meta, who, at = Date.now()) {
   meta = cleanMeta(meta);
   if (meta.who === who) return meta;
-  const lost = Object.fromEntries(Object.entries(meta.base).filter(([, b]) => b && b.lost === true));
+  const lost = Object.fromEntries(Object.entries(meta.base).filter(([, b]) => b && b.lost));
   const away = { ...meta.away };
   if (meta.who != null && Object.keys(meta.tomb).length) away[meta.who] = { tomb: meta.tomb, at };
   const mine = away[who]?.tomb || {};
@@ -149,7 +153,7 @@ export async function syncAll(backend, store, o = {}) {
     if (data.length > MAX_HERO) { fail(id, { code: 'too_big' }); return; }
     if (!c || c.del) { if (live >= MAX_HEROES) { fail(id, { code: 'too_many' }); return; } }
     try {
-      const r = await backend.put(id, { data, sum, played: num(h.played) }, c ? c.rev : null);
+      const r = await backend.put(id, { data, sum, played: num(h.played) }, c ? c.rev : null, c ? c.sum : null);
       if (!c || c.del) live++;
       meta.base[id] = { rev: r.rev, sum, work: workSum(h) }; R.pushed.push(id);
     } catch (e) { fail(id, e); }
@@ -196,7 +200,7 @@ export async function syncAll(backend, store, o = {}) {
           store.backup(l, 'deleted'); store.drop(id);
         }
         if (c && !c.del) {
-          if (!ro) try { const r = await backend.remove(id, t, c.rev); meta.base[id] = { rev: r.rev, del: true, at: t }; R.removed.push(id); live--; } catch (e) { fail(id, e); }
+          if (!ro) try { const r = await backend.remove(id, t, c.rev, c.sum); meta.base[id] = { rev: r.rev, del: true, at: t }; R.removed.push(id); live--; } catch (e) { fail(id, e); }
         } else if (c) agree(id, c);
         else meta.base[id] = { rev: null, del: true, at: t };
         continue;
@@ -256,7 +260,7 @@ export async function pushOne(backend, store, id) {
   if (sum === b.sum) return false;
   const data = JSON.stringify(h);
   if (data.length > MAX_HERO) return false;
-  const r = await backend.put(id, { data, sum, played: num(h.played) }, b.rev);
+  const r = await backend.put(id, { data, sum, played: num(h.played) }, b.rev, b.sum);
   const m2 = cleanMeta(store.meta());
   m2.base[id] = { rev: r.rev, sum, work: workSum(h) };
   store.setMeta(m2);

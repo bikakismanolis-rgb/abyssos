@@ -58,10 +58,13 @@ export async function artifactBackend(claude, o = {}) {
     try { r = await timed(d.acquire({ holder, ttlMs: LEASE_MS })); } catch (e) { if (e?.raw === 'capability_removed') return; throw e; }
     if (r && r.acquired === false) throw conflict();
   };
-  const write = async (id, rev, body) => {
+  // (expect: the sum the caller agreed on at that rev; another one there is a write made from the same rev that landed
+  // instead of the one the caller agreed on: refused too, and the sync weighs the two)
+  const write = async (id, rev, body, expect) => {
     await lease(id);
     const cur = await read(id), now = cur ? num(cur.rev) : null;
     if ((now ?? null) !== (rev ?? null)) throw conflict();
+    if (cur && typeof expect === 'string' && (typeof cur.sum === 'string' ? cur.sum : '') !== expect) throw conflict();
     const next = (now || 0) + 1;
     await timed(doc(id).set({ k: 'hero', id, rev: next, ...body, chain: chainOf(cur, next, body.sum) }));
     try { Promise.resolve(doc(id).acquire?.({ holder, ttlMs: LEASE_MIN })).catch(() => {}); } catch (e) { /* it lapses by itself */ }
@@ -74,7 +77,7 @@ export async function artifactBackend(claude, o = {}) {
       return (s?.docs || []).filter((d) => d.exists && d.id.startsWith('h-')).map((d) => { const x = d.data() || {}; return x.k === 'hero' && x.id === d.id.slice(2) ? head(x.id, x) : null; }).filter(Boolean);
     },
     async get(id) { const x = await read(id); return x && x.id === id ? { ...head(id, x), data: typeof x.data === 'string' ? x.data : null } : null; },
-    put: (id, { data, sum, played }, rev) => write(id, rev, { played: num(played), sum, del: false, at: 0, data }),
-    remove: (id, at, rev) => write(id, rev, { played: 0, sum: '', del: true, at: num(at), data: null })
+    put: (id, { data, sum, played }, rev, expect) => write(id, rev, { played: num(played), sum, del: false, at: 0, data }, expect),
+    remove: (id, at, rev, expect) => write(id, rev, { played: 0, sum: '', del: true, at: num(at), data: null }, expect)
   };
 }
