@@ -81,6 +81,8 @@ export function showTitle() {
   mainMenu();
 }
 // (co-op becomes possible once the page has a room, a moment after the title: the menu is drawn again with it)
+// (and when a cloud sync brought heroes from another device, or took one deleted there: game/cloud.js)
+on('cloudHeroes', () => { if (G.mode === 'title' && TS.menu && document.getElementById('m-new')) mainMenu(); });
 on('netReady', (ok) => { TS.net = ok; if (G.mode === 'title' && TS.menu && document.getElementById('m-new')) mainMenu(); });
 function mainMenu() {
   const heroes = G.save.heroes;
