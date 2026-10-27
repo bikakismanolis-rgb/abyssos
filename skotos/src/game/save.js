@@ -22,6 +22,9 @@ const RAW = new WeakMap();
 // puts this page's copy over a further one as a mere change. The base is marked lost, not just dropped: a sync running in
 // another page meanwhile puts on the record only what it changed, and leaves a base changed since it began as it is)
 const MINE = new WeakMap();
+// (heroes taken up repaired (freshHero force) whose repaired copy is not written yet: their base is marked lost by the
+// write that first puts that copy in storage, in the same step, so that no sync reads the record and the mark apart)
+const FORCED = new Set();
 function foreign(d) {
   backupHero(d, 'conflict');
   markLost(d.id);
@@ -90,6 +93,7 @@ export function writeSave() {
     if (out && !out.includes(hero)) out.unshift(hero);
     G.save.last = hero.id;
   }
+  if (hero && FORCED.has(hero.id)) { markLost(hero.id); FORCED.delete(hero.id); }
   try {
     localStorage.setItem(KEY, JSON.stringify(out ? { ...G.save, heroes: out } : G.save));
     if (hero) MINE.set(hero, JSON.stringify(hero));
@@ -105,23 +109,41 @@ export function heroBlocked(h) {
   try { const text = RAW.get(h); d = text !== undefined ? JSON.parse(text) : readDisk()?.heroes.find((x) => x && typeof x === 'object' && x.id === h.id) || null; } catch (e) { d = null; }
   return d ? heroFits(d) : null;
 }
+// can a hero heroBlocked refuses be taken up repaired? Only one of a class this version has (repairHero mends items,
+// level, gold and the like, never a class): a newer version's class is only ever "reload the page"
+export function heroRepairable(h) {
+  if (!h) return false;
+  let d = null;
+  try { const text = RAW.get(h); d = text !== undefined ? JSON.parse(text) : readDisk()?.heroes.find((x) => x && typeof x === 'object' && x.id === h.id) || null; } catch (e) { d = null; }
+  return !!d && typeof d === 'object' && Object.prototype.hasOwnProperty.call(CLASSES, d.cls);
+}
 // a hero taken up from the title as it is stored now (another page of this browser may have played it since this page
 // read the save): the stored record, made whole, in the list in its place; the hero itself when it is not stored; null
 // for one this page cannot take up (heroBlocked: a newer version's record, or a record broken or tampered with, which
 // no version reads). force: the player chose to take it up anyway, made whole: its record as stored is kept first (a
-// backup, 'repaired', kept like a lost conflict's), and what this browser agreed with the cloud on it is marked lost, so
-// the next sync weighs the two as a conflict and never carries the repaired copy over the cloud's as a mere change
+// backup, 'repaired', kept like a lost conflict's), and what this browser agreed with the cloud on it is marked lost (by
+// the write that first stores the repaired copy, FORCED), so the next sync weighs the two as a conflict and never
+// carries the repaired copy over the cloud's as a mere change. Never a hero of a class this version has not
+// (heroRepairable: null)
 export function freshHero(h, force = false) {
   const d = readDisk()?.heroes.find((x) => x && typeof x === 'object' && x.id === h.id);
+  let forced = false;
   if (force && (d ? heroFits(d) : heroBlocked(h))) {
+    if (!heroRepairable(h)) return null;
     let raw = d;
     try { raw = raw || JSON.parse(RAW.get(h)); } catch (e) { raw = null; }
     if (raw) backupHero(raw, 'repaired');
-    markLost(h.id);
+    FORCED.add(h.id); forced = true;
   } else {
     if (d && heroFits(d)) return null;
     if (!d && heroBlocked(h)) return null;
   }
+  const out = taken(h, d);
+  // (a difficulty this version has not: the nearest it has)
+  if (forced && !DIFFS[out.diff]) out.diff = Math.max(0, Math.min(DIFFS.length - 1, Math.round(Number(out.diff)) || 0));
+  return out;
+}
+function taken(h, d) {
   if (!d || isGone(d)) return h;
   const text = JSON.stringify(d);
   if (RAW.get(h) === text) return h;

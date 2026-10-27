@@ -23,7 +23,7 @@ const num = (v) => (typeof v === 'number' && isFinite(v) ? v : 0);
 // (chain: the sums of the document's last CHAIN revs, { rev: sum }, each write's own added to the one it was written
 // over: a device that agreed on a rev whose write did not stand tells it however many writes came after (cloudsync.js
 // forked))
-const CHAIN = 16;
+const CHAIN = 128;
 const chainOf = (cur, next, sum) => {
   const out = {}, prev = cur?.chain && typeof cur.chain === 'object' && !Array.isArray(cur.chain) ? cur.chain : {};
   for (const [k, v] of Object.entries(prev)) if (/^[0-9]{1,9}$/.test(k) && +k > next - CHAIN && +k < next && typeof v === 'string') out[k] = v;

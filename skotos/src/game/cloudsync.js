@@ -65,14 +65,14 @@ export function further(a, b) {
 // is the cloud's record not one written over the copy agreed on (base b)? At the rev agreed on, another hero; or, where
 // the record carries its chain (the artifact backend: the sums of its last revs), another hero at that rev: two writes
 // made from the same rev (a db with no transactions), the other's landed, and what came after built on it
-// (a rev the chain no longer reaches, or a base ahead of the cloud's record, cannot be told apart from one: weighed the
-// same way, the copy further on kept, the other a backup)
+// (a base ahead of the cloud's record is one too. A rev the chain no longer reaches proves nothing: a device away for
+// long; its copy, if unchanged since, takes the cloud's as any change of one side, so that no backup kept for a real
+// conflict is pushed out by ones that were none)
 export function forked(b, c) {
   if (b.rev === c.rev) return b.sum !== c.sum;
   if (typeof b.rev === 'number' && typeof c.rev === 'number' && b.rev > c.rev) return true;
-  if (!c.chain || typeof c.chain !== 'object') return false;
-  const ch = c.chain[b.rev];
-  return typeof ch === 'string' ? ch !== b.sum : true;
+  const ch = c.chain && typeof c.chain === 'object' ? c.chain[b.rev] : undefined;
+  return typeof ch === 'string' && ch !== b.sum;
 }
 
 // the module's record, made whole: { who, base: { id: { rev, sum, work } | { rev, del, at } | { lost: mark } }, tomb: { id:

@@ -627,13 +627,51 @@ await T('two writes from one rev, then the page-hide push of the device whose wr
   ok(far.hero('h1').xp === 900, 'the phone keeps its copy', { xp: far.hero('h1').xp });
 });
 
-await T('a base the chain no longer reaches, or one ahead of the cloud, is weighed as a conflict', async () => {
+await T('a base ahead of the cloud is weighed as a conflict; one the chain no longer reaches is not', async () => {
   const chain = {}; for (let i = 5; i <= 20; i++) chain[i] = 's' + i;
-  ok(forked({ rev: 1, sum: 'a' }, { rev: 20, sum: 's20', chain }) === true, 'rev 1 past a 16-rev chain');
+  ok(forked({ rev: 1, sum: 'a' }, { rev: 20, sum: 's20', chain }) === false, 'rev 1 past the chain proves nothing (a device away for long)');
   ok(forked({ rev: 19, sum: 's19' }, { rev: 20, sum: 's20', chain }) === false, 'rev 19 in the chain, its own sum: not forked');
   ok(forked({ rev: 19, sum: 'x' }, { rev: 20, sum: 's20', chain }) === true, 'rev 19 in the chain, another sum: forked');
   ok(forked({ rev: 3, sum: 'a' }, { rev: 2, sum: 'b', chain: { 2: 'b' } }) === true, 'a base ahead of the cloud');
   ok(forked({ rev: 1, sum: 'a' }, { rev: 5, sum: 'x', chain: null }) === false, 'no chain (Supabase, a row lock): a plain later write');
+});
+
+// ---------- the last check's findings (the lead's own fixes) ----------
+await T('a device away for a long evening takes the cloud\'s copy as a routine one; a real conflict backup stays', async () => {
+  const A = artifactDb();
+  const far = device(), away = device();
+  far.B = await artifactBackend(A.claude('u1')); away.B = await artifactBackend(A.claude('u1'));
+  far.add(hero('h1', { level: 30, xp: 100 }));
+  await sync(far); await sync(away);
+  away.D.bak.push({ at: 1, why: 'conflict', hero: hero('h1', { level: 29, gold: 4242 }) });
+  for (let i = 0; i < 140; i++) { far.play('h1', (h) => { h.xp += 10; }, 2000 + i); await sync(far); }
+  const r = await sync(away);
+  ok(r.pulled.includes('h1') && away.hero('h1').xp === 1500, 'the away device takes the further copy', r);
+  ok(!away.D.bak.some((b) => b.why === 'conflict' && b.hero.level === 30) && away.D.bak.some((b) => b.why === 'cloud' && b.hero.level === 30), 'its own unchanged copy kept as routine, not as a conflict', away.D.bak.map((b) => b.why + ':' + b.hero.level));
+});
+
+await T('taking up repaired: never a class this version has not; the mark made with the first write of the repaired copy', async () => {
+  fresh([hero('hX', { level: 20, cls: 'bard' })], 'hX');
+  const hx = G.save.heroes.find((h) => h.id === 'hX');
+  ok(!!SV.heroBlocked(hx) && SV.heroRepairable(hx) === false && SV.freshHero(hx, true) === null, 'an unknown class: refused even when forced, no backup', SV.backups().length);
+  fresh([hero('hX', { level: 20, diff: 9, equip: { amulet: { id: 'a', base: 'amulet', rar: 2, ilvl: 30, stats: {}, leg: 7 } } })], 'hX');
+  const A = artifactDb(); const LB = await artifactBackend(A.claude('u1'));
+  await syncAll(LB, real(SV));
+  const h2 = G.save.heroes.find((h) => h.id === 'hX');
+  ok(!!SV.heroBlocked(h2) && SV.heroRepairable(h2) === true, 'a damaged record of a known class can be repaired');
+  const taken = SV.freshHero(h2, true);
+  ok(taken && Number.isInteger(taken.diff) && taken.diff >= 0 && taken.diff < 9 && SV.backups().some((b) => b.why === 'repaired'), 'taken up, its difficulty one this version has, its record kept', { diff: taken?.diff });
+  ok(!SV.cloudMeta().base.hX?.lost, 'no mark until the repaired copy is written');
+  // a sync that read the store before the first write (its list on its way while startHero writes) agrees on the raw
+  // record; the mark comes with the write, and stands after that sync
+  SV.putStored(hero('hY', { cls: 'mage', level: 3 }));
+  await syncAll(gated(LB, 'put:hY', () => { G.hero = taken; SV.writeSave(); }), real(SV));
+  ok(!!SV.cloudMeta().base.hX?.lost, 'the mark made by the first write of the repaired copy stands after the sync', SV.cloudMeta().base.hX);
+  G.hero.stats.time += 30; SV.writeSave();
+  const before = SV.backups().length;
+  const r = await syncAll(LB, real(SV));
+  ok(r.pushed.includes('hX') && SV.backups().some((b) => b.hero.id === 'hX' && JSON.parse(JSON.stringify(b.hero)).diff === 9), 'weighed as a conflict, the cloud\'s copy kept (as its repaired backup)', { r, before, bk: bk() });
+  G.hero = null;
 });
 
 await T('a lost mark made again during a sync whose base began lost stands (the stale copy never goes up as a change)', async () => {
