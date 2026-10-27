@@ -357,7 +357,7 @@ export function SupabaseTransport(client, o = {}) {
         if (k === me) continue;
         const L = last.get(k);
         if (L ? t - L.t > gone : stamped) continue;
-        const c = memo.get(k), v = c && c.src === L ? c.v : { peer: k, by: stamped ? k : null, isMe: false, presence: L?.p || {}, updatedAt: L?.t || t };
+        const c = memo.get(k), v = c && c.src === L ? c.v : { peer: k, by: stamped ? k : null, isMe: false, presence: L?.p || {}, updatedAt: L?.t || t, ago: L?.ago || 0 };
         memo.set(k, { src: L, v }); next.push(v);
       }
       for (const k of memo.keys()) if (!now0.has(k)) memo.delete(k);
@@ -367,17 +367,17 @@ export function SupabaseTransport(client, o = {}) {
       ch._peers(next);
     };
     // what a peer said: its presence (raw: its JSON text, to tell a presence said again from a new one), or a topic's
-    const hearP = (k, p, raw) => {
+    const hearP = (k, p, raw, ago) => {
       if (!p || typeof p !== 'object' || Array.isArray(p)) return;
       const L = last.get(k);
       // (said again, the same: heard, counted, nothing new to tell the game)
       if (L && L.raw === raw) { L.t = Date.now(); ch.meter.in(raw.length); return; }
       // (any member's is kept; of senders not yet members, as many as there are members and 64 more)
       if (!L && !members.has(k) && last.size > members.size + 64) return;
-      last.set(k, { p, raw, t: Date.now() }); sync();
+      last.set(k, { p, raw, t: Date.now(), ago: ago || 0 }); sync();
     };
-    const hear1 = (t, d, k, raw) => {
-      if (t === '_p') { hearP(k, d, raw ?? JSON.stringify(d)); return; }
+    const hear1 = (t, d, k, raw, ago) => {
+      if (t === '_p') { hearP(k, d, raw ?? JSON.stringify(d), ago); return; }
       if (t === '_o') { if (E) E.heardO(k, d); return; }
       if (!TOPIC.test(t)) return;
       ch._hear({ topic: t, data: d, peer: k, by: stamped ? k : null });
@@ -391,7 +391,8 @@ export function SupabaseTransport(client, o = {}) {
         if (e.length > 2) {
           const f = e[2];
           if (box || k !== ch.host || typeof f !== 'string' || !f || f === k || f === me || (e[0] !== '_p' && e[0] !== 'f')) continue;
-          hear1(e[0], e[1], f);
+          // (and how long the host held it before it went: the game dates the sample back by as much)
+          hear1(e[0], e[1], f, undefined, typeof e[3] === 'number' && e[3] > 0 ? Math.min(e[3], 500) : 0);
         } else { hear1(e[0], e[1], k); if (box) E.relay(e[0], e[1], k); }
       }
     };
@@ -422,7 +423,7 @@ export function SupabaseTransport(client, o = {}) {
       put(ev, d, from) {
         return new Promise((ok, no) => {
           const s = JSON.stringify(from === undefined ? [ev, d ?? null] : [ev, d ?? null, from]);
-          const e = { ev, d, from, s, b: utf8(s), ok, no, key: ev === '_p' || ev === '_o' ? ev + ' ' + (from || '') : null };
+          const e = { ev, d, from, s, b: utf8(s) + (from === undefined ? 0 : 4), ok, no, key: ev === '_p' || ev === '_o' ? ev + ' ' + (from || '') : null, at: Date.now() };
           const i = e.key ? E.q.findIndex((x) => x.key === e.key) : -1;
           if (i >= 0) { E.q[i].ok('ok'); E.q[i] = e; } else E.q.push(e);
           // (what is passed on is look and presence: the oldest fx let go past eight of them waiting)
@@ -439,7 +440,9 @@ export function SupabaseTransport(client, o = {}) {
         E.want = false; clearTimeout(E.timer); E.timer = 0;
         const box = E.live(), to = box ? E.out : topic;
         if (E.out && !box && !E.q.some((x) => x.ev === '_o')) { const s = '["_o",1]'; E.q.push({ ev: '_o', d: 1, s, b: s.length, ok() {}, no() {} }); }
-        const q = E.q.splice(0), msgs = [];
+        const q = E.q.splice(0), msgs = [], t = Date.now();
+        // (a presence passed on says how long it waited here, at most 999 ms)
+        for (const e of q) if (e.from !== undefined && e.ev === '_p') { e.s = e.s.slice(0, -1) + ',' + Math.min(999, t - e.at) + ']'; e.b = utf8(e.s); }
         let cur = [], cb = 2;
         for (const e of q) {
           // (one that cannot go in a bundle goes as its own message, as before; one passed on is let go)
@@ -614,13 +617,16 @@ export async function pickTransport(q, cfg = {}) {
   if (want !== 'supabase' && typeof window !== 'undefined' && window.claude?.use) {
     try { const room = await window.claude.use('room'); if (room) return RoomTransport(room); } catch (e) { /* no room here */ }
   }
+  // (the tests' stand-in for a project, tools/coop.mjs NET=supa: ?net=supabase and a config the page was given by its
+  // own test, window.__skotosSupa, its client reaching a fake project in the test's process)
+  if (want === 'supabase' && typeof window !== 'undefined' && window.__skotosSupa) cfg = window.__skotosSupa;
   if (cfg.url && cfg.anonKey && cfg.stamped === true) {
     try {
       const make = cfg.createClient || (typeof window !== 'undefined' && window.supabase?.createClient);
       if (make) {
         const opts = clientOpts(); await unclone(opts.auth.storage);
         const client = await make(cfg.url, cfg.anonKey, opts), me = await signIn(client);
-        if (me) { claim(me); return SupabaseTransport(client, { stamped: true, me }); }
+        if (me) { claim(me); return SupabaseTransport(client, { stamped: true, me, economy: cfg.economy }); }
       }
     } catch (e) { /* not this build, or no sign-in: single-player */ }
   }

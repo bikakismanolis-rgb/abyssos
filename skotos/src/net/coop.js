@@ -299,7 +299,7 @@ function peersChanged(c) {
     let P = S.peers.get(p.peer);
     if (!P) S.peers.set(p.peer, (P = { peer: p.peer, by: p.by, buf: [], seq: -1, actor: null, joined: now(), hbT: now() }));
     const moved = P.src !== p.presence && (!fresh || fresh.has(p.peer));
-    P.src = p.presence; P.pres = p.presence || {}; P.by = p.by;
+    P.src = p.presence; P.pres = p.presence || {}; P.by = p.by; P.ago = p.ago || 0;
     readPeer(P, moved);
   }
   for (const [k, P] of S.peers) if (!seen.has(k)) { if (P.actor) dropRemote(P.actor); S.peers.delete(k); S.done.delete(k); if (S.role === 'host') emit('toast', t('coop.left', nameOf(P)), 'quest'); if (k === S.hostPeer) S.hostGone = now(); }
@@ -350,7 +350,7 @@ function readPeer(P, moved) {
     // (a stand-in put somewhere new starts there: no slide from where it was)
     if (S.role === 'host' && heldMove(P, st)) P.buf.length = 0;
     P.state = st;
-    pushSample(P.buf, P.state);
+    pushSample(P.buf, P.state, P.ago);
   }
   if (Array.isArray(p.c2) && typeof p.c2[0] === 'string' && p.c2[0].length < 48) P.clip = { name: p.c2[0], spd: num(p.c2[1], 0.05, 5, 1), seq: p.c2[2] | 0 };
   P.ack = p.ak | 0;
@@ -407,11 +407,13 @@ function landsAt(st, fell) {
 // (a sample after a gap longer than the lag: the one before is put at the lag's edge, where it is shown now, so the hero
 // or the monster goes on from where it stood, not a leap ahead)
 // Where the channel bundles (S.econ) the samples come 5-7 a second and unevenly (a guest's passed on by the host, a
-// call's round trip): each buffer measures the gaps it gets (j: the longest of late, fading) and is shown that much
+// call's round trip): a guest's sample passed on by the host is dated back by the time the host held it (back), and
+// each buffer measures the gaps it gets (j: the longest of late, fading) and is shown that much
 // behind and a little more (buf.lag, which moves at most an eighth as fast as time, so nothing jumps)
-const pushSample = (buf, s) => {
-  const t = now(), l = buf[buf.length - 1];
-  if (S.econ && l) { const g = t - l.at; if (g < 800) buf.j = Math.max(g, (buf.j ?? g) * 0.92); }
+const pushSample = (buf, s, back = 0) => {
+  const t0 = now(), t = t0 - (S.econ ? back : 0), l = buf[buf.length - 1];
+  // (the wait this sample ended, from the one before it to now: what the lag must cover)
+  if (S.econ && l) { const g = t0 - l.at; if (g < 800) buf.j = Math.max(g, (buf.j ?? g) * 0.92); }
   const lag = buf.lag || LAG;
   if (l && l.t < t - lag) l.t = t - lag;
   buf.push({ t, at: t, x: s.x, z: s.z, r: s.r, y: s.y || 0 }); if (buf.length > 6) buf.shift();
