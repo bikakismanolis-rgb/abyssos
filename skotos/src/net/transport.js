@@ -295,7 +295,7 @@ const RENEW = 30 * 60 * 1000, CALL_MAX = 16, WAIT_MAX = 64, CALL_MS = 5000;
 //   waiting), when its carrier is given (the host's snapshot 's' or end 'c', a guest's presence) and no call is on its
 //   way, the rest at most HOLD ms after it was given (HOLD_C while carriers flow, so it rides with the next). The game
 //   holds itself to ECON's rates (ch.econ) and builds its next only when it would go at once (ch.ready, presenceDue).
-// - A guest says it into its outbox, a topic that only its host hears (2 events, not 5): '<room>.<its id>', a games
+// - A guest says it into its outbox, a topic that only its host hears (2 events, not 5): '<room>.<its id>' (boxOf), a games
 //   row the guest holds as a host holds its game's (skotos.host_game: no page can fill a topic nobody holds), joined
 //   by the host alone, with no presence. The host takes there only what the server stamped with that id, and passes the
 //   guest's presence (less what only the host reads: ch.relayOmit) and fx on to the others in its own message, as
@@ -304,6 +304,9 @@ const RENEW = 30 * 60 * 1000, CALL_MAX = 16, WAIT_MAX = 64, CALL_MS = 5000;
 // - A guest says ['_o', 1] in the game's channel while its outbox is not heard; the host says ['_o', [the guests whose
 //   outbox it hears]] when that changes and every 3 s, and a guest uses its outbox only while its host lists it (its
 //   last list at most OUT_FRESH old); else it says everything in the game's channel, bundled, as it did before.
+// (a guest's outbox: the room and the first 24 hex digits of its user id, 96 bits, so that a room of up to 23
+// characters has one within the 48 a room may have)
+const boxOf = (room, uid) => room + '.' + String(uid).replace(/-/g, '').slice(0, 24);
 const ECON = Object.freeze({ snap: 7, pres: 5 }), HOLD = 200, HOLD_C = 400, OUTBOXES = 6, OUT_FRESH = 8000, BUNDLE_MAX = 80;
 const coded = (code) => Object.assign(new Error(code), { code });
 const BAD = Symbol('not json');
@@ -432,7 +435,8 @@ export function SupabaseTransport(client, o = {}) {
           else if (!E.timer) E.timer = setTimeout(() => { E.timer = 0; E.want = true; E.go(); }, Date.now() - E.carT < 1000 ? HOLD_C : HOLD);
         });
       },
-      live: () => !!E.out && Date.now() - E.outT < OUT_FRESH,
+      // (and only while the host is there: a guest whose host has left says it in the game's channel, refused no_game)
+      live: () => !!E.out && Date.now() - E.outT < OUT_FRESH && members.has(ch.host),
       // (what waits goes, as few messages as hold it: when a carrier wants it or its time came, and no call is on its
       // way, or at once (force: the page leaving))
       go(force) {
@@ -478,8 +482,8 @@ export function SupabaseTransport(client, o = {}) {
       },
       // (the host hears a guest's outbox: joined, no presence; only what the server stamped with that guest's id)
       openBox(k) {
-        if (E.ob.has(k) || E.ob.size >= OUTBOXES || !ROOM.test(name + '.' + k)) return;
-        const oc = client.channel('skotos:' + name + '.' + k, { config: { private: true, broadcast: { self: false, ack: false } } }), rec = { oc, ok: false, t: Date.now() };
+        if (E.ob.has(k) || E.ob.size >= OUTBOXES || !ROOM.test(boxOf(name, k))) return;
+        const oc = client.channel('skotos:' + boxOf(name, k), { config: { private: true, broadcast: { self: false, ack: false } } }), rec = { oc, ok: false, t: Date.now() };
         E.ob.set(k, rec);
         oc.on('broadcast', { event: '*' }, (m) => {
           const pl = m.payload || {}; if (pl._by !== k) return;
@@ -535,7 +539,7 @@ export function SupabaseTransport(client, o = {}) {
       // game is told, as a room that ended (an outbox lost: the game's channel from then on). One that got no answer is
       // tried again in a minute. The last renewal sent is kept: renewing, settled once it has its answer)
       let renew = 0, renewing = null, done = false;
-      const every = o.renew || RENEW, box = !hosting && ch.econ && ROOM.test(name + '.' + me) ? name + '.' + me : null, row = hosting ? name : box;
+      const every = o.renew || RENEW, box = !hosting && ch.econ && ROOM.test(boxOf(name, me)) ? boxOf(name, me) : null, row = hosting ? name : box;
       const lost = (r) => { if (hosting) ch._err(typeof r === 'string' && r ? r : 'upstream_error', 'room'); else ch._box(null); };
       const keep = (ms) => { renew = setTimeout(() => { renewing = rpc('host_game', { room: row }).then((r) => { if (done) return; if (r === 'ok') keep(every); else lost(r); }, () => { if (!done) keep(Math.min(every, 60000)); }); }, ms); };
       if (hosting) keep(every);

@@ -8,7 +8,7 @@
 // 4. The room's refusals and ends (contract 0.2.89): a Viewer's sends refused not_permitted and told, a view the room
 //    cannot connect (not_granted) and a grant withdrawn mid-game (revoked) told once as the room's end, a name joined
 //    twice at once joined once.
-// node tools/net/test-transport.mjs [part ...]: only those parts (room ends local supa stamped limits leave lobby).
+// node tools/net/test-transport.mjs [part ...]: only those parts (room ends local supa stamped limits leave lobby econ).
 // TRANSPORT=<file>: that copy of transport.js instead of src/net/transport.js (to show a check fails without a fix:
 // docs/coop/supabase-live.md).
 import path from 'node:path';
@@ -526,7 +526,80 @@ async function lobbyTest() {
   console.log('     stamped, the lobby\'s events a second with twelve hosts and 48 pages (the sender\'s own echo too): ' + twelveS.evs);
 }
 
-const parts = { room: roomTest, ends: endsTest, local: localTest, supa: supaTest, stamped: stampedTest, limits: stampedLimits, leave: leaveTest, lobby: lobbyTest };
+// the economy (docs/coop/diet.md): a stamped game's channel says a page's moment as one message; a guest says it into
+// its outbox (a games row of its own, heard by its host alone), and the host passes its presence (less what only the
+// host reads) and its fx on. What a forger signed in as itself can try against that: a bundle that names another
+// sender, a host's entry naming the host or the page itself or a topic only a host says, its own words in a guest's
+// outbox, the host's list of outboxes said by another, outboxes beyond the host's few, a bundle too long; and what
+// leaving does (a guest's outbox row ended; a guest whose host has gone says it in the game's channel, refused)
+async function econTest() {
+  const bus = {};
+  const mk = async (o = {}) => { const c = fakeSupabase(bus, o); await c.auth.signInAnonymously(); return { c, T: SupabaseTransport(c, Object.assign({ stamped: true, me: c.uid }, o)) }; };
+  const raw = (U, topic, arr) => U.c.schema('skotos').rpc('send', { msgs: [[topic, 'b', JSON.stringify(arr)]] });
+  const H = await mk(), G1 = await mk(), G2 = await mk(), E = await mk(), room = 'skotos-ec01', topic = 'skotos:' + room;
+  const hc = await H.T.join(room, { host: true }), g1 = await G1.T.join(room), g2 = await G2.T.join(room), ec = await E.T.join(room);
+  hc.relayOmit = ['ev'];
+  ok(hc.econ?.snap === 7 && hc.econ?.pres === 5 && g1.econ && !H.T.lobby.econ, 'a stamped game\'s channel bundles, the game held to 7 snapshots and 5 presences a second (the lobby\'s does not)');
+  const heard = { h: [], g2: [] };
+  hc.on('f', (m) => heard.h.push(m)); g2.on('f', (m) => heard.g2.push(m)); g2.on('s', (m) => heard.g2.push(m)); g2.on('c', (m) => heard.g2.push(m));
+  hc.presence({ r: 'h' }); g1.presence({ r: 'g', h: [1], ev: [[1, 'h', 5, 9]] }); g2.presence({ r: 'g', h: [2] }); ec.presence({ r: 'g', h: [3] });
+  const live = await until(() => [g1, g2, ec].every((c) => c._boxLive()), 4000);
+  const rows = [...bus.srv.games].filter(([k]) => k.startsWith(room + '.')).map(([k, g]) => [k, g.host]);
+  ok(live && rows.length === 3 && [G1, G2, E].every((U) => rows.some(([k, h]) => h === U.c.uid && k === room + '.' + U.c.uid.replace(/-/g, '').slice(0, 24))), 'each guest holds its outbox (a games row: the room and its id), and says it there once its host lists it', rows.map(([k]) => k));
+  const pres = (c, U) => c.peers().find((p) => p.peer === U.c.uid)?.presence;
+  g1.presence({ r: 'g', h: [11], ev: [[2, 'h', 5, 9]] });
+  await until(() => pres(g2, G1)?.h?.[0] === 11 && pres(hc, G1)?.h?.[0] === 11, 2000);
+  ok(pres(hc, G1)?.h?.[0] === 11 && pres(hc, G1)?.ev?.length === 1 && pres(g2, G1)?.h?.[0] === 11 && !('ev' in pres(g2, G1)), 'a guest\'s presence: whole on the host (by its outbox), passed on to another guest less what only the host reads', { host: pres(hc, G1), g2: pres(g2, G1) });
+  await g1.emit('f', [[7, 1, 1]]);
+  await until(() => heard.h.some((m) => m.data?.[0]?.[0] === 7) && heard.g2.some((m) => m.data?.[0]?.[0] === 7), 2000);
+  ok(heard.h.some((m) => m.peer === G1.c.uid && m.data[0][0] === 7) && heard.g2.some((m) => m.peer === G1.c.uid && m.data[0][0] === 7), 'a guest\'s fx: heard by the host, and by another guest as the guest\'s (passed on by the host)');
+  // a forger, a member, not the host: a bundle naming another as the sender of its entries
+  heard.g2.length = 0;
+  await raw(E, topic, [['f', [[8]], G1.c.uid], ['_p', { r: 'h', h: [99] }, G1.c.uid], ['f', [[9]]]]);
+  await sleep(80);
+  ok(!heard.g2.some((m) => m.peer === G1.c.uid) && pres(g2, G1)?.h?.[0] === 11 && heard.g2.some((m) => m.peer === E.c.uid && m.data[0][0] === 9), 'a bundle from another than the host naming a sender: those entries dropped (its own heard as its own)');
+  // the host's own entries naming the host, the page itself, or a topic only the host says: dropped
+  heard.g2.length = 0;
+  await raw(H, topic, [['s', { n: 1 }, G1.c.uid], ['c', { op: 'end' }, G1.c.uid], ['_p', { r: 'x' }, H.c.uid], ['_p', { r: 'x' }, G2.c.uid], ['f', [[10]], G1.c.uid, 50]]);
+  await sleep(80);
+  ok(heard.g2.length === 1 && heard.g2[0].peer === G1.c.uid && heard.g2[0].data[0][0] === 10 && pres(g2, H)?.r === 'h' && !g2.peers().find((p) => p.isMe)?.presence?.r?.startsWith('x'), 'the host\'s entries: only a presence or fx, of another than the host and the page itself, taken as that one\'s', heard.g2.map((m) => m.topic));
+  // its own words in a guest's outbox (the server takes them: the topic is a live game's): the host drops them
+  heard.h.length = 0;
+  const box1 = 'skotos:' + room + '.' + G1.c.uid.replace(/-/g, '').slice(0, 24);
+  await E.c.schema('skotos').rpc('send', { msgs: [[box1, 'f', JSON.stringify([[11]])], [box1, 'b', JSON.stringify([['f', [[12]]], ['_p', { r: 'g', h: [77] }]])]] });
+  await sleep(80);
+  ok(!heard.h.length && pres(hc, G1)?.h?.[0] === 11, 'another\'s words in a guest\'s outbox: the host takes nothing there but what the server stamped with that guest\'s id');
+  // the host's list of outboxes, said by another: a guest goes on as its host says
+  await raw(E, topic, [['_o', []]]);
+  await sleep(80);
+  ok(g1._boxLive() && g2._boxLive(), 'a list of outboxes from another than the host: not taken (the guests still say it by theirs)');
+  // too long a bundle: dropped whole
+  heard.g2.length = 0;
+  await raw(E, topic, Array.from({ length: 81 }, () => ['f', [[13]]]));
+  await sleep(80);
+  ok(!heard.g2.length, 'a bundle of more than 80 entries: dropped whole');
+  // outboxes beyond the host's few: seven more members say they have one; the host hears at most six
+  const X = []; for (let i = 0; i < 7; i++) { const U = await mk(); X.push(U); await U.T.join(room); }
+  await sleep(100);
+  for (const U of X) await raw(U, topic, [['_o', 1]]);
+  await sleep(150);
+  const heardBoxes = Object.keys(bus).filter((k) => k.startsWith('priv:' + topic + '.') && bus[k].members.size > 0).length;
+  ok(heardBoxes === 6, 'outboxes said by many: the host hears six at most: ' + heardBoxes);
+  for (const U of X) { for (const c of U.T.rooms.values()) await c.leave(); U.T.lobby.leave(); }
+  // a guest leaving: its outbox row ended once what it said has had its answer
+  const box2 = room + '.' + G2.c.uid.replace(/-/g, '').slice(0, 24);
+  await g2.leave(); await sleep(150);
+  ok(!bus.srv.games.has(box2), 'a guest that leaves ends its outbox\'s row');
+  // the host leaving: a guest's next word goes in the game's channel, refused no_game, and the game ends for it
+  const errs = []; g1.onError((c, how) => errs.push(c + ':' + how));
+  await hc.leave(); await until(() => !g1.peers().some((p) => p.peer === H.c.uid), 3000);
+  await g1.emit('f', [[14]]); await until(() => errs.length, 2000);
+  ok(!g1._boxLive() && errs.includes('no_game:room'), 'its host gone, a guest says it in the game\'s channel: no_game, the game ended for it', errs);
+  for (const c of [g1, ec]) await c.leave();
+  for (const U of [H, G1, G2, E]) U.T.lobby.leave();
+}
+
+const parts = { room: roomTest, econ: econTest, ends: endsTest, local: localTest, supa: supaTest, stamped: stampedTest, limits: stampedLimits, leave: leaveTest, lobby: lobbyTest };
 const only = process.argv.slice(2);
 for (const k of only) if (!parts[k]) { console.log('no part ' + k + ' (' + Object.keys(parts).join(' ') + ')'); process.exit(2); }
 for (const [k, f] of Object.entries(parts)) if (!only.length || only.includes(k)) await f();
