@@ -1,0 +1,158 @@
+// Cloud saves, the game's side: which cloud this page has (the claude.ai artifact's db, the web build's Supabase, or
+// none), when to sync (game/cloudsync.js does the sync itself), and what the settings show (CLOUD, ui/cloudui.js).
+// docs/cloudsave/README.md.
+//
+// When: once the page is up (the title), and then only when something stored changed: a hero played (its autosave)
+// goes up at most every PUSH s while it is played, and on leaving a zone at most every NUDGE s; other devices' changes
+// are heard every POLL s, when the page comes back to view after a while, and from Settings (Sync now). As the page is
+// hidden or closed, the hero it plays goes up on its own if it changed (best effort). One page of the browser syncs at
+// a time (a Web Lock); a page that finds another syncing leaves it to that one. A view that may not write (a write
+// refused read_only) stops writing for the rest of the visit: no sync on its changes, only copies taken (pull only) as
+// it comes back to view, every POLL s and from Settings. A sync that finds the hero this page plays further on in the
+// cloud says so ('cloudBehind': ui/cloudui.js tells the player, back to the title to take it up).
+import { G } from './state.js';
+import { storedHeroes, playingId, putStored, dropStored, cloudMeta, setCloudMeta, backupHero, heroFits, saveHooks, writeSave } from './save.js';
+import { syncAll, pushOne, dirty } from './cloudsync.js';
+import { artifactBackend } from '../net/cloudart.js';
+import { supabaseBackend } from '../net/cloudsb.js';
+import { SUPABASE } from '../net/netcfg.js';
+import { emit, on } from '../ui/bus.js';
+import { t } from '../i18n/i18n.js';
+
+const PUSH = 120, NUDGE = 20, POLL = 600, AWAY = 60;
+// state: 'off' (no cloud in this build), 'starting', 'on', 'unavailable' (this view cannot: signed out, view-only, an
+// older viewer, the project down), 'error' (the last sync failed: why in err; nothing local changed)
+export const CLOUD = { kind: null, state: 'off', why: null, last: 0, err: null, busy: false, notes: [], code: null };
+const store = { heroes: storedHeroes, current: playingId, put: putStored, drop: dropStored, meta: cloudMeta, setMeta: setCloudMeta, backup: backupHero, check: heroFits };
+// RO: this view may not write (read_only seen)
+let B = null, running = null, lastTry = 0, hiddenAt = 0, SB = SUPABASE, RO = false;
+const now = () => Date.now();
+const tell = () => emit('cloud', CLOUD);
+
+// the page's cloud: the artifact's db in claude.ai, Supabase in a web build that has it, none elsewhere. A web build
+// signs in only once there is a hero to keep (a visitor who never plays makes no user)
+export async function initCloud(q) {
+  if (q?.get?.('cloud') === 'off') return;
+  saveHooks.written = written; saveHooks.changed = changed;
+  // (?cloud=fake: a test's stand-in for the web build's Supabase, window.__cloudFake: tools/scenario.mjs cloudweb)
+  if (q?.get?.('cloud') === 'fake' && window.__cloudFake) SB = window.__cloudFake;
+  const inClaude = SB === SUPABASE && typeof window !== 'undefined' && !!window.claude?.use;
+  if (inClaude) { CLOUD.kind = 'artifact'; await start(() => artifactBackend(window.claude)); return; }
+  if (SB.url && SB.anonKey && SB.createClient) {
+    CLOUD.kind = 'supabase';
+    if (storedHeroes().length || codeKept()) await start(() => supabaseBackend(SB));
+    else { CLOUD.state = 'idle'; tell(); }
+  }
+}
+const codeKept = () => { try { return !!localStorage.getItem('skotos.cloud.code'); } catch (e) { return false; } };
+async function start(make) {
+  CLOUD.state = 'starting'; tell();
+  try { B = await make(); } catch (e) { B = null; CLOUD.why = e?.code || 'unavailable'; }
+  if (!B) { CLOUD.state = 'unavailable'; CLOUD.why ||= CLOUD.kind === 'artifact' ? 'no_db' : 'unavailable'; tell(); return false; }
+  CLOUD.state = 'on'; CLOUD.why = null; CLOUD.code = B.code?.() || null; CLOUD.last = cloudMeta().who === B.who ? (cloudMeta().last || 0) : 0;
+  tell();
+  await syncNow('start');
+  return true;
+}
+
+// one sync, unless one is on its way here or in another page of this browser
+export function syncNow(why = 'manual') {
+  if (!B) {
+    // (a web build not signed in yet: the first hero kept signs it in)
+    if (CLOUD.kind === 'supabase' && CLOUD.state === 'idle' && storedHeroes().length) { CLOUD.state = 'starting'; return start(() => supabaseBackend(SB)); }
+    return Promise.resolve(null);
+  }
+  if (running) return running;
+  lastTry = now();
+  // (busy only while this page syncs: a page that finds another one syncing leaves it to that one, and says nothing)
+  running = withLock(true, (got) => (got ? run() : null))
+    .catch((e) => { CLOUD.busy = false; CLOUD.err = e?.code || 'unavailable'; tell(); return null; })
+    .finally(() => { running = null; });
+  return running;
+}
+// the sync itself (the page holding the lock 'skotos-cloud')
+async function run() {
+  CLOUD.busy = true; tell();
+  let r;
+  try { r = await syncAll(B, store, { readOnly: RO }); } finally { CLOUD.busy = false; }
+  if (r.ok) { CLOUD.last = now(); CLOUD.err = r.errors.length ? r.errors[0].code : null; if (!RO) CLOUD.state = 'on'; }
+  else { CLOUD.err = r.code; if (r.code === 'revoked') CLOUD.state = 'unavailable'; }
+  if (r.code === 'read_only' || r.errors.some((e) => e.code === 'read_only')) RO = true;
+  if (RO) { CLOUD.state = 'unavailable'; CLOUD.why = 'read_only'; if (r.ok && r.errors.every((e) => e.code === 'read_only')) CLOUD.err = null; }
+  // (the server has this user on another player than the backend had (a code taken in another tab, a claim whose answer
+  // was lost): the backend took the new one; the sync ended before it changed anything, and runs again)
+  if (r.code === 'moved') { CLOUD.err = null; setTimeout(() => syncNow('moved'), 300); }
+  CLOUD.code = B?.code?.() || null;
+  for (const id of r.replaced) CLOUD.notes.push({ id, at: now() });
+  if (r.pulled.length || r.dropped.length) emit('cloudHeroes', r);
+  if (r.replaced.length) emit('toast', t('cloud.replaced'), 'quest');
+  tell();
+  const id = playingId();
+  if (id && r.behind?.includes(id)) emit('cloudBehind', id);
+  return r;
+}
+// f(true) while this page holds the lock 'skotos-cloud' (one page of the browser syncs at a time); ifAvailable: f(false)
+// at once when another page holds it, else this one waits for it. Without Web Locks: f(true)
+function withLock(ifAvailable, f) {
+  const locks = typeof navigator !== 'undefined' && navigator.locks;
+  if (!locks) return Promise.resolve().then(() => f(true));
+  return locks.request('skotos-cloud', ifAvailable ? { ifAvailable: true } : {}, (lk) => f(!!lk));
+}
+const due = (s) => now() - Math.max(CLOUD.last, lastTry) > s * 1000;
+// (every save the page writes: a sync if something changed and it is time, or if other devices have not been heard for long)
+function written() {
+  if (!B) {
+    if (CLOUD.state === 'idle' && G.hero) syncNow('first');
+    // (a web build that could not sign in or reach the project: tried again now and then)
+    else if (CLOUD.kind === 'supabase' && CLOUD.state === 'unavailable' && due(300)) { lastTry = now(); start(() => supabaseBackend(SB)); }
+    return;
+  }
+  // (a view that may not write: only other devices' copies, now and then)
+  if (RO) { if (due(POLL)) syncNow('poll'); return; }
+  if (CLOUD.state !== 'on') return;
+  if ((due(PUSH) && dirty(store, B.who)) || due(POLL)) syncNow('auto');
+}
+// (only a cloud that takes writes: not a view-only one, nor one whose access went)
+const writable = () => !!B && !RO && CLOUD.state === 'on';
+on('travel', () => { if (writable() && due(NUDGE) && dirty(store, B.who)) setTimeout(() => syncNow('zone'), 1500); });
+// a hero deleted, a backup taken back: told at once
+function changed() { if (B) { if (writable()) setTimeout(() => syncNow('change'), 200); } else syncNow('first'); }
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { hiddenAt = now(); flush(); } else if (B && (writable() || RO) && now() - hiddenAt > AWAY * 1000) syncNow('back');
+  });
+  window.addEventListener('pagehide', flush);
+}
+// the hero this page plays, up as the page goes (no list first; refused if the cloud changed meanwhile)
+// (its record written first: this listener may run before the game's own save on hiding)
+function flush() {
+  const id = playingId(); if (!writable() || !id) return;
+  writeSave();
+  if (!running) pushOne(B, store, id).then((ok) => { if (ok) { CLOUD.last = now(); tell(); } }, () => {});
+}
+
+// another device's save code (the web build): this browser's heroes and that player's, both ways from now on. The claim
+// and the sync after it hold the lock: no sync of this browser runs meanwhile with the player it had before
+export async function claimCode(code) {
+  if (CLOUD.kind !== 'supabase') return { ok: false, code: 'off' };
+  if (running) await running.catch(() => null);
+  let out = null;
+  const go = async () => {
+    try {
+      if (!B) B = await supabaseBackend(SB, { claim: code }); else await B.claim(code);
+    } catch (e) { CLOUD.code = B?.code?.() || null; tell(); return { ok: false, code: e?.code || 'unavailable' }; }
+    CLOUD.state = 'on'; CLOUD.why = null; CLOUD.err = null; CLOUD.code = B.code(); tell();
+    lastTry = now();
+    try { await run(); } catch (e) { CLOUD.err = e?.code || 'unavailable'; tell(); }
+    return { ok: true };
+  };
+  running = withLock(false, () => go().then((r) => { out = r; return null; }));
+  try { await running; } catch (e) { out ||= { ok: false, code: e?.code || 'unavailable' }; } finally { running = null; }
+  return out || { ok: false, code: 'unavailable' };
+}
+export async function newCode() {
+  if (!B?.newCode) return null;
+  try { CLOUD.code = await B.newCode(); tell(); return CLOUD.code; } catch (e) { CLOUD.code = B.code?.() || null; CLOUD.err = e?.code || 'unavailable'; tell(); return null; }
+}
+// (tests: the backend in use)
+export const cloudBackend = () => B;

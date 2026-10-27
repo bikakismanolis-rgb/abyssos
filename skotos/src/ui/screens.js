@@ -7,7 +7,7 @@ import { buildLevel } from '../world/build.js';
 import { ATMOS } from '../world/atmos.js';
 import { setEmitters, setAmbient, glowBurst, ring } from '../gfx/fx.js';
 import { makeAvatar } from '../game/actors.js';
-import { deleteHero } from '../game/save.js';
+import { deleteHero, heroBlocked } from '../game/save.js';
 import { emit, on } from './bus.js';
 import { ICON } from './icons.js';
 import { t } from '../i18n/i18n.js';
@@ -81,16 +81,22 @@ export function showTitle() {
   mainMenu();
 }
 // (co-op becomes possible once the page has a room, a moment after the title: the menu is drawn again with it)
+// (and when a cloud sync brought heroes from another device, or took one deleted there: game/cloud.js)
+on('cloudHeroes', () => { if (G.mode === 'title' && TS.menu && document.getElementById('m-new')) mainMenu(); });
 on('netReady', (ok) => { TS.net = ok; if (G.mode === 'title' && TS.menu && document.getElementById('m-new')) mainMenu(); });
 function mainMenu() {
   const heroes = G.save.heroes;
-  const last = heroes.find((h) => h.id === G.save.last) || heroes[0];
-  const slots = heroes.map((h) => `<div class="slot" data-id="${h.id}"><span style="color:${CLASSES[h.cls].color}">${ICON[h.cls === 'warden' ? 'shield' : h.cls === 'ranger' ? 'bolt' : 'flame']}</span><span class="nm">${t('menu.slot', t('class.' + h.cls), h.level + (h.mlvl ? ' ✦' + h.mlvl : ''), t('diff.' + DIFFS[h.diff].id))}</span><span class="dl" data-del="${h.id}">${TS.delSure === h.id ? t('menu.deleteSure') : t('menu.delete')}</span></div>`).join('');
+  // (a hero a newer version of the game wrote is shown, greyed, and not taken up here: "reload the page" (save.js
+  // heroBlocked); Continue offers the last one this page can play)
+  const off = new Set(heroes.filter((h) => heroBlocked(h)).map((h) => h.id));
+  const can = heroes.filter((h) => !off.has(h.id));
+  const last = can.find((h) => h.id === G.save.last) || can[0];
+  const slots = heroes.map((h) => `<div class="slot${off.has(h.id) ? ' off' : ''}" data-id="${h.id}"><span style="color:${CLASSES[h.cls]?.color || '#999'}">${ICON[h.cls === 'warden' ? 'shield' : h.cls === 'ranger' ? 'bolt' : 'flame']}</span><span class="nm">${off.has(h.id) ? t('menu.newer') : t('menu.slot', t('class.' + h.cls), h.level + (h.mlvl ? ' ✦' + h.mlvl : ''), (DIFFS[h.diff] ? t('diff.' + DIFFS[h.diff].id) : ''))}</span><span class="dl" data-del="${h.id}">${TS.delSure === h.id ? t('menu.deleteSure') : t('menu.delete')}</span></div>`).join('');
   const s = screen(`<div class="logo">${t('game.title')}</div><div class="logo-rule"></div><div class="logo-sub">${t(sub5())}</div>
     <div class="menu">${last ? `<button class="btn" id="m-cont">${t('menu.continue')} · ${t('class.' + last.cls)} ${t('hud.level', last.level)}</button>` : ''}
     ${last && TS.net ? `<button class="btn ghost" id="m-coop">${t('coop.title')}</button>` : ''}
     <button class="btn ${last ? 'ghost' : ''}" id="m-new">${t('menu.new')}</button>
-    ${heroes.length > 1 ? `<div class="slots">${slots}</div>` : ''}
+    ${heroes.length > 1 || off.size ? `<div class="slots">${slots}</div>` : ''}
     <button class="btn ghost" id="m-set">${t('menu.settings')}</button>
     <button class="btn ghost" id="m-help">${t('help.title')}</button></div><div class="credit">${t('menu.credits')}</div>`);
   s.onpointerdown = null; s.onclick = null;
@@ -107,7 +113,7 @@ function mainMenu() {
     if (!ready()) return;
     const del = e.target.closest('[data-del]');
     if (del) { if (TS.delSure === del.dataset.del) { deleteHero(del.dataset.del); TS.delSure = null; } else TS.delSure = del.dataset.del; mainMenu(); return; }
-    const h = G.save.heroes.find((x) => x.id === el.dataset.id); if (h) emit('startHero', h, false);
+    const h = G.save.heroes.find((x) => x.id === el.dataset.id); if (h && !off.has(h.id)) emit('startHero', h, false);
   });
 }
 export function showPick() {
