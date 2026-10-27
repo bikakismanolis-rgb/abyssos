@@ -1,7 +1,7 @@
 // Local saves: every hero and the settings, in one localStorage entry.
 import { G } from './state.js';
 import { cleanItem } from './items.js';
-import { BOON, MAX_LEVEL, INV_SIZE, STASH_SIZE, xpToNext } from './data.js';
+import { BOON, MAX_LEVEL, INV_SIZE, STASH_SIZE, xpToNext, CLASSES, DIFFS } from './data.js';
 
 // (?slot=name: a save of its own, for tests that run several heroes in one browser: tools/coop.mjs)
 const SLOT = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('slot') : null;
@@ -108,6 +108,9 @@ export const playingId = () => (G.hero?.__real || G.hero)?.id ?? null;
 // hero this page plays (false)
 export function putStored(h) {
   if (!h || h.id === playingId()) return false;
+  // (a record no page of this game could have written, a class or difficulty it does not know, is not taken: the title
+  // could not show it)
+  if (typeof h.id !== 'string' || !Object.prototype.hasOwnProperty.call(CLASSES, h.cls) || !DIFFS[h.diff]) return false;
   const disk = readDisk() || { heroes: [], settings: G.save?.settings || {}, last: G.save?.last ?? null };
   const i = disk.heroes.findIndex((x) => x && x.id === h.id);
   if (i >= 0) disk.heroes[i] = h; else disk.heroes.push(h);

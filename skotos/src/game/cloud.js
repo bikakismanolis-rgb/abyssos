@@ -8,7 +8,7 @@
 // hidden or closed, the hero it plays goes up on its own if it changed (best effort). One page of the browser syncs at
 // a time (a Web Lock); a page that finds another syncing leaves it to that one.
 import { G } from './state.js';
-import { storedHeroes, playingId, putStored, dropStored, cloudMeta, setCloudMeta, backupHero, saveHooks } from './save.js';
+import { storedHeroes, playingId, putStored, dropStored, cloudMeta, setCloudMeta, backupHero, saveHooks, writeSave } from './save.js';
 import { syncAll, pushOne, dirty } from './cloudsync.js';
 import { artifactBackend } from '../net/cloudart.js';
 import { supabaseBackend } from '../net/cloudsb.js';
@@ -100,7 +100,12 @@ if (typeof document !== 'undefined') {
   window.addEventListener('pagehide', flush);
 }
 // the hero this page plays, up as the page goes (no list first; refused if the cloud changed meanwhile)
-function flush() { const id = playingId(); if (B && id && !running) pushOne(B, store, id).then((ok) => { if (ok) { CLOUD.last = now(); tell(); } }, () => {}); }
+// (its record written first: this listener may run before the game's own save on hiding)
+function flush() {
+  const id = playingId(); if (!B || !id) return;
+  writeSave();
+  if (!running) pushOne(B, store, id).then((ok) => { if (ok) { CLOUD.last = now(); tell(); } }, () => {});
+}
 
 // another device's save code (the web build): this browser's heroes and that player's, both ways from now on
 export async function claimCode(code) {
