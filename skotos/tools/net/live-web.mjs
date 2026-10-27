@@ -91,7 +91,7 @@ async function open(who, q) {
     });
   });
   pg.on('requestfailed', (r) => { net[who].failed.push(r.url().replace(/\?.*/, '').slice(0, 100) + ' ' + (r.failure()?.errorText || '')); });
-  await pg.goto(BASE + '?' + q);
+  await pg.goto(BASE + '?' + q, { timeout: 180000 });
   await pg.waitForFunction(() => window.__ready && window.__G && window.__G.mode === 'title' && document.getElementById('screen') && !document.getElementById('screen').hidden, null, { timeout: 240000 });
   // (a page that draws nothing still needs its frames: a tick of DOM, as tools/coop.mjs)
   await pg.evaluate(() => { const d = document.createElement('div'); d.style.cssText = 'position:fixed;left:0;bottom:0;width:2px;height:2px;z-index:99;font-size:1px'; document.body.appendChild(d); let k = 0; setInterval(() => { d.textContent = k++ % 2 ? '.' : ':'; }, 20); });
@@ -133,6 +133,9 @@ const more = [];
 try {
   A = await open('A', 'q=0&norender');
   B = await open('B', 'q=0&norender');
+  // (a party of four: C and D load now, while the others idle at the title: four pages loading the game beside three
+  // playing it on a few cores time out)
+  for (const w of WHO.slice(2)) more.push(await open(w, 'q=0&norender'));
   const tr = (pg) => ev(pg, () => ({ ready: window.__NET?.S.ready, avail: window.__NET?.S.avail, kind: window.__NET?.S.T?.kind, stamped: window.__NET?.S.T?.stamped, me: window.__NET?.S.me }));
   // (how long from the page's start to its transport: supabase-js loaded, the user signed in, the lobby joined)
   const readyIn = async (pg) => { await until(pg, () => window.__readyAt != null, null, 120000, 'net'); return ev(pg, () => ({ title: window.__titleAt, coop: window.__readyAt })); };
@@ -183,7 +186,7 @@ try {
   ok(near, 'B\'s hero on A\'s page stands where B put it');
   // (a party of four: C and D open, make their heroes, and join A's game by its code; each by A)
   for (const [w, cls] of [['C', 'ranger'], ['D', 'warden']].slice(0, WHO.length - 2)) {
-    const pg = await open(w, 'q=0&norender'); more.push(pg);
+    const pg = more['CD'.indexOf(w)];
     await until(pg, () => window.__readyAt != null, null, 120000, 'net');
     uid[w] = await ev(pg, () => window.__NET.S.me);
     ok(await newHero(pg, cls), w + ' made a ' + cls + ' and is in its town');
@@ -199,6 +202,8 @@ try {
     const n = WHO.length;
     const all4 = await until(A, (n) => window.__NET.NET.n === n && window.__NET.S.roster.length === n - 1, n, 30000, 'A counts ' + n);
     ok(all4, 'A counts ' + n + ' players', await ev(A, () => ({ n: window.__NET.NET.n, roster: window.__NET.S.roster.length })));
+    // (what each page holds of the others: its role, its toasts, each peer's role and how long ago it last said its presence)
+    for (const [w, pg] of [['A', A], ['B', B], ...more.map((p, i) => ['CD'[i], p])]) info(w + ' holds', await ev(pg, () => { const S = window.__NET.S; return { role: S.role, toasts: window.__toasts.slice(-5), roster: S.roster.map((x) => x.slice(0, 4)), box: !!S.ch?._boxLive?.(), peers: (S.ch?.peers() || []).map((p) => p.peer.slice(0, 4) + ':' + (p.presence?.r || '-') + ':' + Math.round((Date.now() - p.updatedAt) / 100) / 10) }; }).catch((e) => String(e)));
     for (const [i, pg] of [B, ...more].entries()) ok(await until(pg, (n) => window.__NET.NET.n === n && window.__NET.party().length === n - 1, n, 30000, 'party'), 'BCD'[i] + '\'s party frames hold the other ' + (n - 1), await ev(pg, () => window.__NET.party().map((p) => p.cls)));
     // (the guests' outboxes: each guest's own topic, heard by A alone, once A lists it)
     const boxes = await until(A, (n) => window.__NET.S.ch?.econ ? true : false, n, 5000, 'econ');
