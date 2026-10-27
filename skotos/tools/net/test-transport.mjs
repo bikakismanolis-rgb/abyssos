@@ -369,6 +369,8 @@ async function stampedTest() {
   await hc.emit('s', { n: 1 }); await sleep(80);
   ok(heard.length === 1 && heard[0].peer === H.me && heard[0].by === H.me && heard[0].data?.n === 1, 'the host\'s snapshot arrives, its sender the server\'s word');
   ok(own.length === 0, 'its own comes back from the server and is passed over');
+  // (a game's channel bundles: a presence goes at most 5 a second, so one given just after the empty one waits its turn)
+  await until(() => gc.peers().some((p) => p.peer === H.me && p.presence.r === 'h'), 1000);
   ok(gc.peers().some((p) => p.peer === H.me && p.presence.r === 'h') && hc.peers().some((p) => p.peer === G1.me && p.presence.r === 'g'), 'each sees the other\'s presence, named by the server');
   // the forger, signed in as itself, in the game's channel
   const E = fakeSupabase(bus); await E.auth.signInAnonymously();
@@ -442,30 +444,65 @@ async function stampedTest() {
   await gc.leave(); for (const t of [H, G1, G2]) t.lobby.leave();
   await sleep(50);
 
-  // four stamped pages at the game's own rates for 8 s: the server refuses none of them, and what it costs
-  const bus2 = {}, cfg2 = Object.assign({}, cfg, { createClient: () => fakeSupabase(bus2, { lag: 60 }) });
-  const T = await Promise.all([0, 1, 2, 3].map(() => pickTransport(q0, cfg2)));
-  const chs = [await T[0].join('skotos-rate', { host: true })];
-  for (let g = 1; g < 4; g++) chs.push(await T[g].join('skotos-rate'));
-  await sleep(150);
-  const snap = { a: Array.from({ length: 60 }, (_, i) => [i, 12, 1234, 2345, 51, 200, 3, 4, 1]), pad: 'x'.repeat(800) };
-  const t0 = Date.now(), e0 = bus2.log.events, k0 = bus2.srv.log.calls, d0 = bus2.srv.log.delivered || 0; let k = 0;
-  const got = [0, 0, 0, 0]; chs.forEach((c, i) => c.on('s', () => got[i]++));
+  // a party at the game's own rates for 8 s, stamped: the server refuses none of it, and what it costs. Each page does
+  // what the game does: the host a snapshot (2.5 KB, the game's are 1.9-2.8 in a fight) at its rate, its presence once
+  // a second (its hero moved); each guest its presence (its hero moved, its beat each second) when it would go at once,
+  // its fx every 200 ms. The rate is the room's (10 snapshots a second, a presence each frame coalesced to 10) where
+  // the channel does not bundle (o.economy false: as every game's channel was before), ch.econ's where it does
+  for (const [n, eo, what] of [[4, { economy: false }, 'before (no bundles, the room\'s rates)'], [2, {}, 'economy'], [3, {}, 'economy'], [4, {}, 'economy'], [4, { lag: 300 }, 'economy, calls of 0-300 ms']]) {
+    const r = await partyRun(n, eo);
+    console.log('     stamped, a party of ' + n + ', ' + what + ': ' + r.msgs.toFixed(1) + ' messages a second (' + r.per.map((x) => x.toFixed(1)).join(' + ') + '), ' + r.calls.toFixed(1) + ' RPC calls, ' + Math.round(r.del) + ' deliveries: ' + Math.round(r.evs) + ' events a second');
+    ok(r.clean, n + ' pages, ' + what + ': nothing refused by the server, nothing dropped, every channel connected', r.why);
+    ok(r.snaps.every((g) => g >= r.expSnaps * 0.85), 'the guests heard the snapshots: ' + r.snaps + ' of ~' + Math.round(r.expSnaps));
+    ok(r.fresh, 'the host has every guest\'s presence of the last moments' + (n > 2 ? ', and each guest every other guest\'s' : ''), r.ages);
+    if (n > 2) ok(r.fx.every((x) => x > 0), 'a guest\'s fx reaches the other guests' + (eo.economy === false ? '' : ' (passed on by the host)') + ': ' + r.fx);
+    if (eo.economy !== false && n === 4 && !eo.lag) {
+      ok(r.evs < 75, 'a party of four, bundled and by outboxes: under 75 events a second (the free plan: 100 for the project): ' + Math.round(r.evs));
+      ok(r.boxes === n - 1, 'every guest says it by its outbox, heard by its host: ' + r.boxes);
+    }
+    if (eo.economy !== false && n === 2) ok(r.evs < 40, 'a pair: under 40: ' + Math.round(r.evs));
+  }
+}
+async function partyRun(n, eo = {}) {
+  const bus2 = {}, T = [];
+  for (let i = 0; i < n; i++) { const c = fakeSupabase(bus2, { lag: eo.lag ?? 60 }); await c.auth.signInAnonymously(); T.push(SupabaseTransport(c, { stamped: true, me: c.uid, economy: eo.economy })); }
+  const chs = [];
+  for (let i = 0; i < n; i++) chs.push(await T[i].join('skotos-rate', { host: i === 0 }));
+  await sleep(600);
+  const snap = { a: Array.from({ length: 40 }, (_, i) => [i, 12, 1234, 2345, 51, 200, 3, 4, 1, 22, 0, 12, 100, 900]), pad: 'x'.repeat(380) };
+  const ec = chs[0].econ, sHz = ec?.snap || 10;
+  const got = chs.map(() => 0), fx = chs.map(() => 0);
+  chs.forEach((c, i) => { c.on('s', () => got[i]++); c.on('f', (m) => { if (m.peer !== chs[0].me) fx[i]++; }); });
+  if (ec) chs[0].relayOmit = ['ev'];
+  const t0 = Date.now(), e0 = bus2.log.events, k0 = bus2.srv.log.calls, d0 = bus2.srv.log.delivered || 0, m0 = chs.map((c) => c.meter.tx.msgs);
+  let k = 0, snapT = 0, presT = 0, fxT = 0, ns = 0;
   while (Date.now() - t0 < 8000) {
-    if (k % 6 === 0) chs[0].emit('s', snap);
-    for (let g = 1; g < 4; g++) { chs[g].presence({ h: [k, g, 1000 + k], hb: (k / 60) | 0 }); if (k % 12 === 0) chs[g].emit('f', [[1, 2, 3]]); }
+    const t = Date.now();
+    if (t - snapT >= 1000 / sHz && (chs[0].ready?.() ?? true)) { snapT = t; ns++; chs[0].emit('s', snap); }
+    if (t - presT >= 1000) { presT = t; chs[0].presence({ r: 'h', z: { x: k } }); }
+    for (let g = 1; g < n; g++) {
+      if (chs[g].presenceDue()) chs[g].presence({ r: 'g', h: [k, g, 1000 + k, 50, 900, 1000, 0, 0], hb: (t / 1000) & 1023, lk: { c: 'mage', l: 12 }, ev: [[k, 'h', 100 + g, 55]] });
+    }
+    if (t - fxT >= 200) { fxT = t; for (let g = 1; g < n; g++) chs[g].emit('f', [[1, 2, 3, k]]); }
     for (const c of chs) c.pump();
     k++; await sleep(16);
   }
   const secs = (Date.now() - t0) / 1000;
-  await sleep(300);
-  const evs = (bus2.log.events - e0) / secs, calls = (bus2.srv.log.calls - k0) / secs, del = ((bus2.srv.log.delivered || 0) - d0) / secs, exp = 8000 / (6 * 16);
-  ok(!bus2.srv.log.refused.rate_limited && !bus2.srv.log.refused.too_big && chs.every((c) => c.connected()), 'eight seconds at the game\'s rates over RPC (60 ms a call): nothing refused by the server');
-  ok(got.slice(1).every((g) => g > exp * 0.9), 'the guests heard the snapshots: ' + got.slice(1) + ' of ~' + Math.round(exp));
-  ok(chs[0].peers().length === 4 && chs.slice(1).every((c) => (chs[0].peers().find((p) => p.peer === c.me)?.presence?.h?.[0] ?? -1) >= k - 20), 'the host has every guest\'s presence of the last frames');
-  console.log('     stamped, a party of four: ' + calls.toFixed(1) + ' RPC calls a second (each a transaction), ' + Math.round(del) + ' deliveries a second, ' + Math.round(evs) + ' events a second (each sent and each delivered, the sender\'s own echo too)');
+  const r = { evs: (bus2.log.events - e0) / secs, calls: (bus2.srv.log.calls - k0) / secs, del: ((bus2.srv.log.delivered || 0) - d0) / secs, per: chs.map((c, i) => (c.meter.tx.msgs - m0[i]) / secs) };
+  r.msgs = r.per.reduce((a, b) => a + b, 0);
+  await sleep(400);
+  const L = bus2.srv.log.refused, drops = chs.map((c) => c.meter.tx.drops);
+  r.why = { refused: L, drops };
+  r.clean = !Object.keys(L).length && drops.every((d) => d === 0) && chs.every((c) => c.connected());
+  r.snaps = got.slice(1); r.expSnaps = ns; r.fx = fx.slice(1);
+  // (each page's newest view of each other page's hero: the host of every guest, a guest of every other guest)
+  const age = (c, g) => k - (c.peers().find((p) => p.peer === chs[g].me)?.presence?.h?.[0] ?? -1e9);
+  r.ages = chs.map((c, i) => chs.map((_, g) => (g === 0 || g === i ? null : age(c, g))));
+  r.fresh = r.ages.every((row) => row.every((a) => a === null || a < 45));
+  r.boxes = chs.slice(1).filter((c) => c._boxLive?.()).length;
   for (const c of chs) await c.leave();
-  for (const t of T) t.lobby.leave();
+  for (const t of T) t.lobby?.leave();
+  return r;
 }
 
 // the stamped path's limits and its pages' own failures: a tab copied from the host's (the same user), one row a user,
@@ -511,7 +548,8 @@ async function stampedLimits() {
   const u1 = await sendU([['skotos:lobby', 'f', x198]]), u2 = await sendU([['skotos:lobby', 'f', x198]]);
   ok(!u1.error && u2.error?.message === 'quota', 'a user past its own day (user_cap) is refused quota: each message its bytes and 256');
   // a request that never answers holds nothing back: past its deadline it is given up (aborted) and the next goes
-  const D = await mk({ hang: 1, callMs: 200 }), d1 = await D.T.join('skotos-hg01', { host: true });
+  // (the poster's own: messages one by one, as a channel that does not bundle sends them; a bundle's, after the next)
+  const D = await mk({ hang: 1, callMs: 200, economy: false }), d1 = await D.T.join('skotos-hg01', { host: true });
   const Gd = await mk(), g1 = await Gd.T.join('skotos-hg01'), got = [];
   g1.on('s', (m) => got.push(m.data.n));
   await sleep(60);
@@ -520,10 +558,19 @@ async function stampedLimits() {
   ok(r1 === false && r2 === true && got.join() === '2' && dt >= 180 && dt < 1000 && bus.srv.log.hung === 1 && bus.srv.log.aborted === 1 && JSON.stringify(d1.meter.tx.why) === '{"timeout":1}', 'a send whose request never answers is given up at its deadline (' + dt + ' ms, aborted; counted, why: timeout) and the one said after it goes: heard ' + got);
   // every message given up is counted by why: seventy at once behind a call that never answers (a bucket that takes
   // them all): one in the call (timeout), sixty-four waiting for the next (they go), five more refused busy
-  const Y = await mk({ hang: 1, callMs: 200, burst: 100 }), y1 = await Y.T.join('skotos-hg02', { host: true });
+  const Y = await mk({ hang: 1, callMs: 200, burst: 100, economy: false }), y1 = await Y.T.join('skotos-hg02', { host: true });
   await sleep(40);
   const ys = await Promise.all(Array.from({ length: 70 }, (_, i) => y1.emit('f', { i })));
   ok(ys.filter((v) => v).length === 64 && y1.meter.tx.drops === 6 && JSON.stringify(y1.meter.tx.why) === '{"busy":5,"timeout":1}', 'seventy at once behind a call that never answers: 64 go after its deadline, the drops counted by why: ' + JSON.stringify(y1.meter.tx.why));
+  // and a game's channel that bundles: its snapshot in a call that never answers is given up at the deadline, the next
+  // snapshot waits for no call on its way and then goes, in a message of its own
+  const DB = await mk({ hang: 1, callMs: 200 }), db1 = await DB.T.join('skotos-hg03', { host: true });
+  const GB = await mk(), gb1 = await GB.T.join('skotos-hg03'), gotB = [];
+  gb1.on('s', (m) => gotB.push(m.data.n));
+  await sleep(60);
+  const tb = Date.now(), q1 = db1.emit('s', { n: 1 }); await sleep(20); const q2 = db1.emit('s', { n: 2 }), rb1 = await q1, rb2 = await q2, dtb = Date.now() - tb;
+  await sleep(40);
+  ok(db1.econ && rb1 === false && rb2 === true && gotB.join() === '2' && dtb >= 180 && dtb < 1000 && db1.meter.tx.why.timeout === 1, 'bundled: a snapshot whose call never answers is given up at its deadline (' + dtb + ' ms), the next goes after it: heard ' + gotB);
   // a duplicated tab: its sessionStorage copied, the same user; asked of the other tabs, it lets the copy go and signs in
   // anew. A tab no other holds keeps its user (a reload)
   const mem = () => { const m = new Map(); return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => { m.set(k, String(v)); }, removeItem: (k) => { m.delete(k); } }; };
