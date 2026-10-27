@@ -99,6 +99,12 @@ export async function startViewer(q) {
     const a = make[n](); const c = i % cols, r = Math.floor(i / cols);
     a.group.position.set((c - (cols - 1) / 2) * gap, 0, (r - 1) * gap);
     a.group.rotation.y = +(q.get('rot') || 0.5);
+    // one value per item, as creatureview.js ('-' skips): &scales=0.92,- &tints=9ab8d0:2.1,- (tint:tintAmt) &rims=8a9ab8:0.3,-
+    const per = (k) => { const v = q.get(k)?.split(',')[i]; return v && v !== '-' ? v.split(':') : null; };
+    const sc = per('scales'), ti = per('tints'), ri = per('rims');
+    if (sc) a.group.scale.setScalar(+sc[0]);
+    if (ti) a.setTint(parseInt(ti[0], 16), +(ti[1] ?? 0.3));
+    if (ri) a.setRim(parseInt(ri[0], 16), +(ri[1] ?? 0.6));
     R.scene.add(a.group); avs.push(a);
     if (a.kind === 'wraith') a.float = true;
   });

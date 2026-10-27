@@ -404,7 +404,7 @@ Glaukos: d.glaukos.f3 «Κατεβαίνω κι εγώ. Είμαι τυφλός.
     - d.stone.kranea «Κρανιά. Ήρθε από το δάσος, παιδί ακόμα, πριν από εκατό χειμώνες. Δεν είδε ποτέ ξανά φθινόπωρο.» / "Kranea. She came from the wood, still a child, a hundred winters ago. She never saw another autumn." (+ .r «Κρανιά. Ήρθε από το δάσος, παιδί ακόμα. Τ' όνομά της είναι χαραγμένο και στις πέτρες του δικού σου δάσους.» / "Kranea. She came from the wood, still a child. Her name is cut in the stones of your wood too.")
     - new: d.stone.psamathe «Ψαμάθη. Κράτησε τον Φάρο της Άμμου ώσπου η άμμος τον σκέπασε. Είπε πως θα τον ξεθάψει την άνοιξη.» / "Psamathe. Kept the Sand Light till the sand covered it. She said she'd dig it out in spring."
   - **The Sand Light alone sets `nineLit`** (its own flag `lost3`, independent of the other three and of any seed): toast «Εννιά φάροι καίνε» / "Nine lights burn", and the farlight zone's Drowned Lights, however many its seed placed, glow at full from above (`uGlowOn`, shipped): one uniform, no layout change, nothing counted. The other three count only toward the Lost.
-- **The Sailor (Ο Ναύτης)**, on the deck of a keel-boat beached on the Old Shore, sitting with his knees up (people.glb 'villager0', the Faded's tint at 0.9 without the veil, Sit_Floor_Idle).
+- **The Sailor (Ο Ναύτης)**, on the deck of a keel-boat beached on the Old Shore, sitting with his knees up (people.glb 'villager0', tintAmt 1.4 (G0) without the veil, Sit_Floor_Idle).
   - d.sailor.0 «Είχα όνομα, πριν. Το λιμάνι μου ξέχασε το καράβι μου, κι εμένα μαζί.» / "I had a name, once. My port forgot my ship, and me with it."
   - **If the hero lit his Name-stone in Act V** (`h.flags.names` holds 'sailor'), he knows them at once: d.sailor.2 «Εσύ άναψες το λυχνάρι μου στην ακτή. Το είδα από δω κάτω.» / "You lit my lamp on the coast. I saw it from down here." Then d.sailor.1.
   - **If not**, he asks, and Glaukos (at the Rope camp) knows: d.glaukos.y1 «Ένας απ' τον νότο, σε καράβι που ξεχάστηκε; Ναύτη τον είπαμε. Πες του το.» / "One from the south, on a ship that was forgotten? Sailor, we called him. Tell him." Back on the deck, narration d.sailor.n «Του λες τ' όνομα που του έδωσαν οι Αλιγενείς: Ναύτης.» / "You tell him the name the Saltborn gave him: Sailor."
@@ -466,7 +466,7 @@ Glaukos: d.glaukos.f3 «Κατεβαίνω κι εγώ. Είμαι τυφλός.
     - d.ember.n3 «Η θράκα σβήνει, σαν πυρωμένο σίδερο στο νερό.» / "The ember goes out, like red-hot iron dropped in water." (d.tear.breaking.1)
     - *If the owner chooses the spoken version,* two pale red `say` lines come between n1 and n2, formal, with no contractions, broken by ellipses: d.ember.1 «...εσύ... σε ξέρω... πες μου... πώς με έλεγαν;...» / "...you... I know you... tell me... what was my name?..."; d.ember.2 «...είχα ένα στέμμα... ένα όνομα... κάποτε το φώναζαν σε κάθε κορυφή...» / "...I had a crown... a name... once they shouted it on every peak..."
 - **The Drowned Wood (Το Πνιγμένο Δάσος):** a `genForest` patch of black, leafless trees standing in the black water, with Falselights, the Faded and an Icemaw. **Black lamp 2** at its south end, with a Falselight matriarch and her lures.
-  - **Leif (Ο Λέιφ)**, the woodcutter's son of d.v.3, sits by a dead campfire in a clearing (people.glb 'villager2' at ×0.92 with a code hood and axe; shown as «…» until `leifName`). Interact «Άναψε τη φωτιά του» / "Light his fire", 1 s:
+  - **Leif (Ο Λέιφ)**, the woodcutter's son of d.v.3, sits by a dead campfire in a clearing (people.glb 'villager0' at ×0.92 with a code hood and axe, G0: villager2 is a woman; shown as «…» until `leifName`). Interact «Άναψε τη φωτιά του» / "Light his fire", 1 s:
     - d.leif.1 «Πήγα για ξύλα. Βρήκα μια πόρτα στο δάσος, χωρίς τοίχο γύρω της. Από τότε κατεβαίνω.» / "I went for wood. I found a door in the forest with no wall round it. I've been going down ever since." (A Shadow Gate, opened in the wood.)
     - d.leif.2 «Ξέρω πως έχω πατέρα. Τ' όνομά μου όμως το άφησα κάπου πιο πάνω.» / "I know I've got a father. My name, though, I left somewhere higher up."
     - d.leif.3 «Πάρε το τσεκούρι μου. Εκείνος θα το γνωρίσει.» / "Take my axe. He'll know it." Interact «Πάρε το τσεκούρι του» / "Take his axe". Flag `leifAxe`. He stays by the fire, which now burns (a true lamp of r 3).
@@ -616,13 +616,13 @@ Quitting mid-cine never strands a save. A Black Water cycle, a black lamp's chan
   | model | |
   |---|---|
   | source | people.glb 'villager1' (boot), runtime grade and code parts |
-  | notes | The Faded's void grade at half strength (tint 0x1a1c24 at 1.1, so his face and hands keep their colour while his clothes go grey), a code beard (six white-grey cones on the jaw bone, Act V's frost-beard builder), his oilskin as a kelp-green cloth tint, the black lamp in his raised right hand (Idle_Lantern_Loop), then his own lantern (the code true-flicker lantern). In the Ketos's memory he is the same body in the memory material. **Look gate:** beside the Faded and the Sunken in the people viewer: he must read as a man among shadows, and not as a Sunken. |
+  | notes | The Faded's void tint at tintAmt 0.6 (G0: at 1.1 his face went as dark as theirs; at 0.6 his face and hands keep their colour while his clothes go grey), a code beard (six white-grey cones on the jaw bone, Act V's frost-beard builder), his oilskin as a kelp-green cloth tint, the black lamp in his raised right hand (Idle_Lantern_Loop), then his own lantern (the code true-flicker lantern). In the Ketos's memory he is the same body in the memory material. **Look gate:** beside the Faded and the Sunken in the people viewer: he must read as a man among shadows, and not as a Sunken. |
 - leif Λέιφ / Leif: the woodcutter's son of d.v.3, by a dead fire in the Drowned Wood; at home after the act.
 
   | model | |
   |---|---|
-  | source | people.glb 'villager2' (boot), runtime scale and code parts |
-  | notes | ×0.92 (a young man), a code hood (models.js veilParts in brown), a code wood-axe at the hip. Below: the Faded's grade at 0.6 until his fire is lit, then normal. At home: plain. Clips: Sit_Floor_Idle, Idle_Talking_Loop, Walk_Loop. |
+  | source | people.glb 'villager0' (boot; G0: villager2 is a woman), runtime scale and code parts |
+  | notes | ×0.92 (a young man), a code hood (models.js veilParts in brown), a code wood-axe at the hip. Below: tintAmt 0.85 (G0) until his fire is lit, then normal. At home: plain. Clips: Sit_Floor_Idle, Idle_Talking_Loop, Walk_Loop. |
 - sailor Ναύτης / The Sailor; asger Άσγκερ / Asger: two of the Lost, one scene each (people.glb 'villager0' and 'wayfarer', runtime tints, code parts); see beats.
 - selna Σέλνα / Selna: at the Farthest Light (q33), and post-game keeping the rite with the First's name at its head. Existing scene (frost.glb 'selna'), no change.
 - alkyone Αλκυόνη / Alkyone: at the Light's Skerry (q33); post-game at the Landing, keeping the rite, Keyx's lantern on the post. Existing scene (frost.glb 'alkyone'), no change.
@@ -1780,7 +1780,7 @@ Every third-party asset Act VI uses, new or reused, with its id, author, licence
 | the First | selna | frost.glb | a runtime void-ice tint, a code icicle crown and brand |
 | the Faded | villager0-2 | people.glb (boot) | a runtime void tint and a code veil |
 | Keyx | villager1 | people.glb (boot) | half the void tint, a code beard, the black lamp and his lantern |
-| Leif | villager2 | people.glb (boot) | ×0.92, a code hood and axe |
+| Leif | villager0 | people.glb (boot) | ×0.92, a code hood and axe |
 | the Sailor; Asger | villager0; wayfarer | people.glb (boot) | tints; a code hood; Asger behind the keel's icy material |
 | the Shade's form 4 | warden, ranger, mage | people.glb (boot) | the skin patch and a near-black grade |
 | Halda, Elianthe, the villagers, Leif's father, the child | as shipped | people.glb, frost.glb | none |
@@ -1866,7 +1866,7 @@ Act V added about 10 MiB to the artifact and about 93 MB of phone texture. Act V
 | Keyx's thread: Black-Water Memory 1 at the lair; his lantern found and carried up; Alkyone's line at the Landing; the blue bird (1); one Faded keeps his face, light frees him, he walks into the black water (2) | beats q35-q36; ending, After the act | one beat: he holds the village's black lamp, and his own lantern puts it out |
 | The hook's forgetting at home, reversed at the end (1) | beats q32; Lines at home | the Skotos's hunt for names pulls them down the nearest Gate |
 | The seven peaks ending; Tamarisk's custom and Halda's «Εφτά. Οι έξι σβηστές.» (1, 2) | beats q32; ending, Home | six peaks (Decisions); «Κοίτα βόρεια.» in Halda's mouth; then «Από πολύ βαθιά...» and the last line «Ο Βορράς κοιμάται με τα φώτα αναμμένα.» |
-| Leif, the woodcutter's son (1, 2) | beats q36 (the Drowned Wood); Lines at home | in the wood (2's place); people.glb villager2 |
+| Leif, the woodcutter's son (1, 2) | beats q36 (the Drowned Wood); Lines at home | in the wood (2's place); people.glb villager0 |
 | Asger and the Sailor join the Lost Lights as one optional set (1) | the Lost (Mechanics) | seven in all; each leaves a named lamp at the Hearth |
 | The ember in the ice (1) | beats q36 (the Drowned Barrow) | narration only by default; the spoken lines for the owner |
 | Names from Above (1, 2) | Mechanics (the Names from Above) | the Drained Sea only (2), 5 s + 0.5 s a Name-stone (2), the ring refills and the Faded listen (1, 2) |
