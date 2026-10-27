@@ -24,9 +24,14 @@ const RAW = new WeakMap();
 const MINE = new WeakMap();
 function foreign(d) {
   backupHero(d, 'conflict');
+  markLost(d.id);
+}
+// (each mark its own: a sync that began with the base already lost and agreed on it meanwhile puts on the record only
+// what it changed, and tells a mark made again since by its being another)
+function markLost(id) {
   const m = cloudMeta();
   m.base = m.base && typeof m.base === 'object' && !Array.isArray(m.base) ? m.base : {};
-  m.base[d.id] = { lost: true }; setCloudMeta(m);
+  m.base[id] = { lost: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10) }; setCloudMeta(m);
 }
 const ownCopy = (h, text = JSON.stringify(h)) => { const c = repairHero(JSON.parse(text)); RAW.set(c, text); return c; };
 export function loadSave() {
@@ -112,9 +117,7 @@ export function freshHero(h, force = false) {
     let raw = d;
     try { raw = raw || JSON.parse(RAW.get(h)); } catch (e) { raw = null; }
     if (raw) backupHero(raw, 'repaired');
-    const m = cloudMeta();
-    m.base = m.base && typeof m.base === 'object' && !Array.isArray(m.base) ? m.base : {};
-    m.base[h.id] = { lost: true }; setCloudMeta(m);
+    markLost(h.id);
   } else {
     if (d && heroFits(d)) return null;
     if (!d && heroBlocked(h)) return null;

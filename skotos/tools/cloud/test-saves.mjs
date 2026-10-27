@@ -144,10 +144,13 @@ await T('caps', async () => {
   ok(n === 20 && last.error === 'rate_limited', 'the 21st write in a moment: rate_limited', { n, last });
   // the project's bytes
   await fill();
-  await admin('update skotos.save_quota set bytes_cap = bytes + 100');
-  ok((await put(U, 'k2', { rev: 1, h: { gold: 1, flags: { pad: 'y'.repeat(4000) } } })).error === 'quota', 'past the project\'s bytes: quota');
-  ok((await put(U, 'k2', { rev: 1, data: '{"id":"k2"}' })).rev === 2, 'a write that shrinks is let through');
-  await admin('update skotos.save_quota set bytes_cap = 67108864');
+  await admin('update skotos.save_quota set bytes_cap = bytes + 100, reserve = 2000');
+  ok((await put(U, 'k2', { rev: 1, h: { gold: 1, flags: { pad: 'y'.repeat(4000) } } })).error === 'quota', 'past the project\'s bytes and the reserve: quota');
+  ok((await put(U, 'k2', { rev: 1, h: { gold: 1, flags: { pad: 'y'.repeat(1000) } } })).rev === 2, 'a hero already kept grows into the reserve');
+  await call(U, 'save_delete', { hero_id: 'k3', at: 1, base_rev: 1 });
+  ok((await put(U, 'k13', { h: { gold: 1, flags: { pad: 'y'.repeat(1000) } } })).error === 'quota', 'a new hero past the cap: quota, the reserve is not its');
+  ok((await put(U, 'k2', { rev: 2, data: '{"id":"k2"}' })).rev === 3, 'a write that shrinks is let through');
+  await admin('update skotos.save_quota set bytes_cap = 67108864, reserve = 16777216');
   // the project's players
   await admin('update skotos.save_quota set players_cap = players');
   const capped = await call(randomUUID(), 'save_hello');

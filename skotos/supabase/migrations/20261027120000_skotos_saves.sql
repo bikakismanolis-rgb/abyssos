@@ -17,8 +17,10 @@
 -- 20 writes at once and one every 5 s (12 a minute) a user, 5 code tries at once and one every 2 minutes a user, and
 -- for the whole project (skotos.save_quota) the bytes kept (64 MiB as made, each row counted as its data and 200 bytes)
 -- and the players (20,000). Past a cap the call is refused and the page keeps its local copy: the database is never
--- filled by saves. The caps are the owner's to set: update skotos.save_quota set bytes_cap = ..., players_cap = ...;
--- running this file again keeps them.
+-- filled by saves. Past the bytes cap a hero already kept may still grow, into a reserve above it (16 MiB as made), so
+-- that visitors who fill the project never stop the players already here from saving; only new heroes are refused. The
+-- caps are the owner's to set: update skotos.save_quota set bytes_cap = ..., reserve = ..., players_cap = ...; running
+-- this file again keeps them.
 --
 -- Run it again and it leaves the same state (an earlier version of it, applied before, is brought to this one: its
 -- functions of other arguments dropped, the write buckets moved from the players to the users). Every function:
@@ -84,8 +86,10 @@ create table if not exists skotos.save_quota (
   bytes bigint not null default 0,
   bytes_cap bigint not null default 67108864,
   players integer not null default 0,
-  players_cap integer not null default 20000
+  players_cap integer not null default 20000,
+  reserve bigint not null default 16777216
 );
+alter table skotos.save_quota add column if not exists reserve bigint not null default 16777216;
 insert into skotos.save_quota (id) values (true) on conflict (id) do nothing;
 
 alter table skotos.save_players enable row level security;
@@ -367,6 +371,7 @@ declare
   j jsonb;
   delta bigint;
   q skotos.save_quota%rowtype;
+  had boolean;
 begin
   if p is null or p is distinct from p_player then
     return jsonb_build_object('error', 'moved', 'player', p);
@@ -389,6 +394,7 @@ begin
     return jsonb_build_object('error', 'rate_limited');
   end if;
   select * into r from skotos.saves s where s.player = p and s.hero = hero_id for update;
+  had := found and not r.deleted;
   if found then
     if r.rev is distinct from base_rev then
       return jsonb_build_object('error', 'conflict', 'rev', r.rev);
@@ -396,12 +402,13 @@ begin
   elsif base_rev is not null then
     return jsonb_build_object('error', 'conflict', 'rev', null);
   end if;
-  if (not found or r.deleted) and (select count(*) from skotos.saves s where s.player = p and not s.deleted) >= 12 then
+  if not had and (select count(*) from skotos.saves s where s.player = p and not s.deleted) >= 12 then
     return jsonb_build_object('error', 'too_many');
   end if;
   delta := n + 200 - coalesce(r.bytes, 0);
   select * into q from skotos.save_quota where id for update;
-  if delta > 0 and q.bytes + delta > q.bytes_cap then
+  -- (past the cap a hero already kept grows into the reserve; a new one is refused)
+  if delta > 0 and q.bytes + delta > q.bytes_cap + (case when had then q.reserve else 0 end) then
     return jsonb_build_object('error', 'quota');
   end if;
   insert into skotos.saves as s (player, hero, rev, played, sum, deleted, at, data, bytes, updated_at)
