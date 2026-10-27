@@ -7,7 +7,7 @@ import { buildLevel } from '../world/build.js';
 import { ATMOS } from '../world/atmos.js';
 import { setEmitters, setAmbient, glowBurst, ring } from '../gfx/fx.js';
 import { makeAvatar } from '../game/actors.js';
-import { deleteHero, heroBlocked } from '../game/save.js';
+import { deleteHero, heroBlocked, heroRepairable } from '../game/save.js';
 import { emit, on } from './bus.js';
 import { ICON } from './icons.js';
 import { t } from '../i18n/i18n.js';
@@ -92,10 +92,14 @@ function mainMenu() {
   const off = new Set(heroes.filter((h) => heroBlocked(h)).map((h) => h.id));
   const can = heroes.filter((h) => !off.has(h.id));
   const last = can.find((h) => h.id === G.save.last) || can[0];
-  const cont = heroes.find((h) => h.id === G.save.last) || last || heroes[0];
+  // (one of a class this version has not cannot be repaired: only "reload the page")
+  const fix = new Set([...off].filter((id) => heroRepairable(heroes.find((h) => h.id === id))));
+  const usable = (h) => h && (!off.has(h.id) || fix.has(h.id));
+  const lastOne = heroes.find((h) => h.id === G.save.last);
+  const cont = usable(lastOne) ? lastOne : last || heroes.find((h) => fix.has(h.id));
   const sure = (h) => off.has(h.id) && TS.forceSure === h.id;
-  const take = (h) => { if (off.has(h.id) && !sure(h)) { TS.forceSure = h.id; mainMenu(); return; } TS.forceSure = null; emit('startHero', h, false, off.has(h.id)); };
-  const slots = heroes.map((h) => `<div class="slot${off.has(h.id) ? ' off' : ''}" data-id="${h.id}"><span style="color:${CLASSES[h.cls]?.color || '#999'}">${ICON[h.cls === 'warden' ? 'shield' : h.cls === 'ranger' ? 'bolt' : 'flame']}</span><span class="nm">${sure(h) ? t('menu.newerSure') : off.has(h.id) ? t('menu.newer') : t('menu.slot', t('class.' + h.cls), h.level + (h.mlvl ? ' ✦' + h.mlvl : ''), (DIFFS[h.diff] ? t('diff.' + DIFFS[h.diff].id) : ''))}</span><span class="dl" data-del="${h.id}">${TS.delSure === h.id ? t('menu.deleteSure') : t('menu.delete')}</span></div>`).join('');
+  const take = (h) => { if (!usable(h)) return; if (off.has(h.id) && !sure(h)) { TS.forceSure = h.id; mainMenu(); return; } TS.forceSure = null; emit('startHero', h, false, off.has(h.id)); };
+  const slots = heroes.map((h) => `<div class="slot${off.has(h.id) ? ' off' : ''}" data-id="${h.id}"><span style="color:${CLASSES[h.cls]?.color || '#999'}">${ICON[h.cls === 'warden' ? 'shield' : h.cls === 'ranger' ? 'bolt' : 'flame']}</span><span class="nm">${sure(h) ? t('menu.newerSure') : off.has(h.id) ? t(fix.has(h.id) ? 'menu.newer' : 'menu.newerOnly') : t('menu.slot', t('class.' + h.cls), h.level + (h.mlvl ? ' ✦' + h.mlvl : ''), (DIFFS[h.diff] ? t('diff.' + DIFFS[h.diff].id) : ''))}</span><span class="dl" data-del="${h.id}">${TS.delSure === h.id ? t('menu.deleteSure') : t('menu.delete')}</span></div>`).join('');
   const s = screen(`<div class="logo">${t('game.title')}</div><div class="logo-rule"></div><div class="logo-sub">${t(sub5())}</div>
     <div class="menu">${cont ? `<button class="btn" id="m-cont">${sure(cont) ? t('menu.newerSure') : `${t('menu.continue')} · ${CLASSES[cont.cls] ? t('class.' + cont.cls) : ''} ${t('hud.level', cont.level)}`}</button>` : ''}
     ${last && TS.net ? `<button class="btn ghost" id="m-coop">${t('coop.title')}</button>` : ''}

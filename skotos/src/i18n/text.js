@@ -14,6 +14,7 @@ export const TEXT = {
   'menu.slot': ['{0} · Επίπεδο {1} · {2}', '{0} · Level {1} · {2}'],
   'menu.delete': ['Διαγραφή', 'Delete'],
   'menu.newer': ['Ήρωας από νεότερη έκδοση του παιχνιδιού ή χαλασμένος: ανανέωσε τη σελίδα για να τον παίξεις, ή πάτα για να τον φορτώσεις επιδιορθωμένο', 'A hero from a newer version of the game, or a damaged one: reload the page to play it, or tap to load it repaired'],
+  'menu.newerOnly': ['Ήρωας από νεότερη έκδοση του παιχνιδιού: ανανέωσε τη σελίδα για να τον παίξεις', 'A hero from a newer version of the game: reload the page to play it'],
   'menu.newerSure': ['Φόρτωση επιδιορθωμένου; Ό,τι δεν διαβάζει αυτή η έκδοση θα χαθεί από τον ήρωα· το αρχικό κρατιέται στα αντίγραφα ασφαλείας. Πάτα ξανά', 'Load it repaired? Whatever this version cannot read is lost from the hero; the original is kept in Backups. Tap again'],
   'menu.deleteSure': ['Σίγουρα; Πάτα ξανά.', 'Sure? Tap again.'],
   'pick.title': ['Διάλεξε ήρωα', 'Choose your hero'],
