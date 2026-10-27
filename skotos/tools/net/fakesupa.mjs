@@ -71,6 +71,8 @@ export function fakeSupabase(bus, o = {}) {
     game_host({ room }) { return { data: uid ? live(room)?.host ?? null : null, error: null }; },
     end_game({ room }) { const g = srv.games.get(room); if (g && g.host === uid) srv.games.delete(room); return { data: null, error: null }; }
   };
+  // (the server shuts every channel of a topic, private or not (bus.shut('skotos:...', true)): a test's lost channel)
+  bus.shut ||= (topic, priv = true) => { for (const x of [...(bus[(priv ? 'priv:' : '') + topic]?.chans || [])]) x._shut(); };
   // (what the server broadcasts, stamped: to every member of the private channel, the sender too)
   bus.stamp ||= (topic, event, payload) => {
     const c = bus['priv:' + topic]; log.events++;
@@ -133,8 +135,11 @@ export function fakeSupabase(bus, o = {}) {
           log.events += c.members.size; mm.state = p; sync(); return Promise.resolve('ok');
         },
         presenceState() { const o = {}; for (const [k, m] of c.members) if (m.state) o[k] = [Object.assign({ presence_ref: 'r' }, m.state)]; return o; },
-        unsubscribe() { status = 'CLOSED'; if (c.members.delete(key)) log.events += c.members.size; sync(); return Promise.resolve('ok'); }
+        unsubscribe() { status = 'CLOSED'; c.chans?.delete(ch); if (c.members.get(key)?.L === L && c.members.delete(key)) log.events += c.members.size; sync(); return Promise.resolve('ok'); },
+        // (the server shuts the channel: CLOSED, told to its subscriber, as realtime-js tells it; it is not joined again)
+        _shut() { if (status === 'CLOSED') return; status = 'CLOSED'; c.chans?.delete(ch); if (c.members.get(key)?.L === L) c.members.delete(key); cb0?.('CLOSED'); sync(); }
       };
+      (c.chans ||= new Set()).add(ch);
       return ch;
     },
     removeChannel(ch) { return ch.unsubscribe(); },

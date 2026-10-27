@@ -1119,6 +1119,17 @@ const SC = {
     ok(all[0].snaps > 0 && all[0].snapBytes / all[0].snaps < 3900, 'the host\'s snapshots average ' + Math.round(all[0].snapBytes / all[0].snaps) + ' bytes');
     const gk = []; for (const g of guests) gk.push(await ev(g, () => window.__G.hero.stats.kills));
     console.log('     guests\' kills', gk.join(' '));
+    // (NET=supa, the economy: every guest on its outbox; what the host passed on of theirs, as the game rebuilds it
+    // (coop.js relayOf: no blows, acks or finds), within each guest's share of the host's bytes)
+    if (SUPA && process.env.ECON !== '0') {
+      const rs = await ev(host, () => ({ ...window.__NET.S.ch.relayStats }));
+      const boxes = []; for (const g of guests) boxes.push(await ev(g, () => !!window.__NET.S.ch._boxLive?.()));
+      const others = await ev(guests[0], () => [...window.__NET.S.peers.values()].filter((P) => P.role === 'guest').map((P) => ({ moving: !!P.state, keys: Object.keys(P.pres).sort().join() })));
+      console.log('     the host passed on ' + rs.n + ' of its guests\' entries (' + rs.bytes + ' bytes, ' + Math.round(rs.bytes / 15) + ' a second), let go ' + rs.cut);
+      ok(boxes.every(Boolean), 'every guest says it by its outbox', boxes);
+      ok(others.length === 2 && others.every((p) => p.moving && !/\b(ev|ak|nd|mf|gf|dm|cd)\b/.test(p.keys)), 'a guest has the other two guests\' heroes, passed on by the host as the game rebuilds them (no blows, acks, finds)', others);
+      ok(rs.n > 0 && rs.cut <= Math.max(3, rs.n * 0.1), 'a fight\'s presence and fx passed on within the guests\' share (at most a tenth let go)', rs);
+    }
     // the guests' mixed classes in the HUD
     ok(await ev(guests[0], () => window.__NET.party().length) === 3, 'a guest\'s party list holds the other three');
     for (const [i, pg] of [host, ...guests].entries()) console.log('     page ' + i + ': role ' + (await ev(pg, () => window.__NET.S.role)) + ', n ' + (await ev(pg, () => window.__NET.NET.n)));
