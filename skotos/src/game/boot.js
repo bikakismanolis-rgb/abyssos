@@ -104,10 +104,11 @@ async function starterGear(hero) {
   if (hero.cls === 'warden') hero.equip.offhand ||= makeItem(1, { base: 'shield', rar: 0, cls: hero.cls });
   hero.equip.chest ||= makeItem(1, { base: 'chest', rar: 0, cls: hero.cls });
 }
-async function startHero(hero, isNew, zone = 'town') {
+async function startHero(hero, isNew, zone = 'town', force = false) {
   if (!isNew) {
-    // (a hero a newer version of the game wrote: not taken up here, so that its record is never written back stripped)
-    const h = freshHero(hero);
+    // (a hero a newer version of the game wrote: not taken up here, so that its record is never written back stripped,
+    // unless the player chose to take it up anyway (force: its record kept in the backups first, save.js freshHero))
+    const h = freshHero(hero, force);
     if (!h) { emit('toast', t('menu.newer'), 'big'); return; }
     hero = h;
   }
@@ -142,7 +143,7 @@ async function startHero(hero, isNew, zone = 'town') {
   // a hero taken up again: any blessing still owed
   if (!isNew) later(1.5, offerBoons);
 }
-on('startHero', (h, isNew) => { startHero(h, isNew).catch((e) => fatal(e.stack || e)); });
+on('startHero', (h, isNew, force) => { startHero(h, isNew, 'town', !!force).catch((e) => fatal(e.stack || e)); });
 let travelling = false;
 function travel(zone, o = {}) {
   if (travelling) return;

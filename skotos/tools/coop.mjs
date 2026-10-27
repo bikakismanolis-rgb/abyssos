@@ -698,7 +698,14 @@ const SC = {
     await sleep(600); await ev(g, () => document.getElementById('screen').click());
     await g.waitForFunction(() => !!document.getElementById('m-cont'), null, { timeout: 30000 });
     await sleep(700); await ev(g, () => document.getElementById('m-cont').click());
+    // (a record no version reads as it is: the title asks once more, then takes it up repaired, the record as stored
+    // kept in the backups first)
+    await sleep(700);
+    const asked = await ev(g, () => window.__G.mode === 'title' && document.getElementById('m-cont')?.textContent || '');
+    if (asked) await ev(g, () => document.getElementById('m-cont').click());
     const cont = await until(g, () => window.__G.mode === 'play' && window.__G.zone, null, 90000, 'continue');
+    const kept = await ev(g, () => { const b = JSON.parse(localStorage.getItem('skotos.cloud.bak.v1.g1') || '[]'); const x = b.find((e) => e.why === 'repaired'); return x ? { gold: x.hero.gold, leg: x.hero.equip?.amulet?.leg ?? null } : null; });
+    ok(!!asked && kept?.gold === -5e10 && kept.leg === 7, 'a damaged record is asked about first, and kept as stored in the backups', { asked, kept });
     const rep = await ev(g, () => { const h = window.__G.hero, find = (id) => h.inv.find((it) => it?.id === id); return { gold: h.gold, xp: h.xp, boons: h.boons, old1: find('old1')?.stats, v1: find('old1')?.value, old2: find('old2') && { dmg: find('old2').dmg, stats: find('old2').stats }, amulet: h.equip.amulet && { stats: h.equip.amulet.stats, leg: h.equip.amulet.leg ?? null }, dps: window.__G.stats.dps }; });
     ok(cont && !(await fatal(g)), 'Continue takes the repaired hero up', { cont, fatal: await fatal(g) });
     ok(rep.gold === 0 && rep.xp < 2e4 && Array.isArray(rep.boons) && !('legs' in (rep.old1 || {})) && rep.v1 < 100 && Array.isArray(rep.old2?.dmg) && !rep.old2.stats.skill && rep.amulet && !('legs' in rep.amulet.stats) && rep.amulet.stats.crit <= 10 && isFinite(rep.dps), 'its save repaired on load: items rebuilt, gold, XP and blessings sound', rep);

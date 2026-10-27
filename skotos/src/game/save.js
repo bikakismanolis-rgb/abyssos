@@ -102,11 +102,23 @@ export function heroBlocked(h) {
 }
 // a hero taken up from the title as it is stored now (another page of this browser may have played it since this page
 // read the save): the stored record, made whole, in the list in its place; the hero itself when it is not stored; null
-// for one this page cannot take up (heroBlocked: a newer version's record)
-export function freshHero(h) {
+// for one this page cannot take up (heroBlocked: a newer version's record, or a record broken or tampered with, which
+// no version reads). force: the player chose to take it up anyway, made whole: its record as stored is kept first (a
+// backup, 'repaired', kept like a lost conflict's), and what this browser agreed with the cloud on it is marked lost, so
+// the next sync weighs the two as a conflict and never carries the repaired copy over the cloud's as a mere change
+export function freshHero(h, force = false) {
   const d = readDisk()?.heroes.find((x) => x && typeof x === 'object' && x.id === h.id);
-  if (d && heroFits(d)) return null;
-  if (!d && heroBlocked(h)) return null;
+  if (force && (d ? heroFits(d) : heroBlocked(h))) {
+    let raw = d;
+    try { raw = raw || JSON.parse(RAW.get(h)); } catch (e) { raw = null; }
+    if (raw) backupHero(raw, 'repaired');
+    const m = cloudMeta();
+    m.base = m.base && typeof m.base === 'object' && !Array.isArray(m.base) ? m.base : {};
+    m.base[h.id] = { lost: true }; setCloudMeta(m);
+  } else {
+    if (d && heroFits(d)) return null;
+    if (!d && heroBlocked(h)) return null;
+  }
   if (!d || isGone(d)) return h;
   const text = JSON.stringify(d);
   if (RAW.get(h) === text) return h;
@@ -211,7 +223,7 @@ export function setCloudMeta(m) { try { localStorage.setItem(CLOUD_KEY, JSON.str
 // a routine place, and goes only for room, told. Storage too full for them drops routine ones first. Whatever goes for
 // room is told (backupsGone: the panel says so)
 export const BAK_MAX = 6, BAK_KEEP = 12;
-const KEEP_WHY = new Set(['conflict', 'deleted', 'restored']);
+const KEEP_WHY = new Set(['conflict', 'deleted', 'restored', 'repaired']);
 export function backups() { try { const b = JSON.parse(localStorage.getItem(BAK_KEY) || '[]'); return Array.isArray(b) ? b.filter((x) => x && x.hero && typeof x.hero === 'object') : []; } catch (e) { return []; } }
 // the backups no longer kept, newest first (at most 8): { at (when dropped), why, id, cls, level, diff }
 export function backupsGone() { try { const b = JSON.parse(localStorage.getItem(BAK_GONE_KEY) || '[]'); return Array.isArray(b) ? b.filter((x) => x && typeof x === 'object') : []; } catch (e) { return []; } }

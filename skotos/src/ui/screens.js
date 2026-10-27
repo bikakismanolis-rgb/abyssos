@@ -86,14 +86,18 @@ on('cloudHeroes', () => { if (G.mode === 'title' && TS.menu && document.getEleme
 on('netReady', (ok) => { TS.net = ok; if (G.mode === 'title' && TS.menu && document.getElementById('m-new')) mainMenu(); });
 function mainMenu() {
   const heroes = G.save.heroes;
-  // (a hero a newer version of the game wrote is shown, greyed, and not taken up here: "reload the page" (save.js
-  // heroBlocked); Continue offers the last one this page can play)
+  // (a hero this page cannot read as it is (a newer version of the game wrote it, or its record is broken) is shown,
+  // greyed: "reload the page" (save.js heroBlocked). A second tap takes it up anyway, made whole, its record kept in the
+  // backups first (freshHero force); Continue does the same for the last hero. Co-op offers only one this page can play)
   const off = new Set(heroes.filter((h) => heroBlocked(h)).map((h) => h.id));
   const can = heroes.filter((h) => !off.has(h.id));
   const last = can.find((h) => h.id === G.save.last) || can[0];
-  const slots = heroes.map((h) => `<div class="slot${off.has(h.id) ? ' off' : ''}" data-id="${h.id}"><span style="color:${CLASSES[h.cls]?.color || '#999'}">${ICON[h.cls === 'warden' ? 'shield' : h.cls === 'ranger' ? 'bolt' : 'flame']}</span><span class="nm">${off.has(h.id) ? t('menu.newer') : t('menu.slot', t('class.' + h.cls), h.level + (h.mlvl ? ' ✦' + h.mlvl : ''), (DIFFS[h.diff] ? t('diff.' + DIFFS[h.diff].id) : ''))}</span><span class="dl" data-del="${h.id}">${TS.delSure === h.id ? t('menu.deleteSure') : t('menu.delete')}</span></div>`).join('');
+  const cont = heroes.find((h) => h.id === G.save.last) || last || heroes[0];
+  const sure = (h) => off.has(h.id) && TS.forceSure === h.id;
+  const take = (h) => { if (off.has(h.id) && !sure(h)) { TS.forceSure = h.id; mainMenu(); return; } TS.forceSure = null; emit('startHero', h, false, off.has(h.id)); };
+  const slots = heroes.map((h) => `<div class="slot${off.has(h.id) ? ' off' : ''}" data-id="${h.id}"><span style="color:${CLASSES[h.cls]?.color || '#999'}">${ICON[h.cls === 'warden' ? 'shield' : h.cls === 'ranger' ? 'bolt' : 'flame']}</span><span class="nm">${sure(h) ? t('menu.newerSure') : off.has(h.id) ? t('menu.newer') : t('menu.slot', t('class.' + h.cls), h.level + (h.mlvl ? ' ✦' + h.mlvl : ''), (DIFFS[h.diff] ? t('diff.' + DIFFS[h.diff].id) : ''))}</span><span class="dl" data-del="${h.id}">${TS.delSure === h.id ? t('menu.deleteSure') : t('menu.delete')}</span></div>`).join('');
   const s = screen(`<div class="logo">${t('game.title')}</div><div class="logo-rule"></div><div class="logo-sub">${t(sub5())}</div>
-    <div class="menu">${last ? `<button class="btn" id="m-cont">${t('menu.continue')} · ${t('class.' + last.cls)} ${t('hud.level', last.level)}</button>` : ''}
+    <div class="menu">${cont ? `<button class="btn" id="m-cont">${sure(cont) ? t('menu.newerSure') : `${t('menu.continue')} · ${CLASSES[cont.cls] ? t('class.' + cont.cls) : ''} ${t('hud.level', cont.level)}`}</button>` : ''}
     ${last && TS.net ? `<button class="btn ghost" id="m-coop">${t('coop.title')}</button>` : ''}
     <button class="btn ${last ? 'ghost' : ''}" id="m-new">${t('menu.new')}</button>
     ${heroes.length > 1 || off.size ? `<div class="slots">${slots}</div>` : ''}
@@ -102,7 +106,7 @@ function mainMenu() {
   s.onpointerdown = null; s.onclick = null;
   // and the menu ignores touches for a moment after it appears, whatever brought it up
   const at = performance.now(), ready = () => performance.now() - at > 450;
-  if (last) $('m-cont').onclick = () => { if (!ready()) return; Audio.sfx('click'); emit('startHero', last, false); };
+  if (cont) $('m-cont').onclick = () => { if (!ready()) return; Audio.sfx('click'); take(cont); };
   // co-op: the hero taken up, then the lobby (ui/coopui.js)
   if (last && TS.net) $('m-coop').onclick = () => { if (!ready()) return; Audio.sfx('click'); G.flags.coopOpen = true; emit('startHero', last, false); };
   TS.menu = true;
@@ -113,7 +117,7 @@ function mainMenu() {
     if (!ready()) return;
     const del = e.target.closest('[data-del]');
     if (del) { if (TS.delSure === del.dataset.del) { deleteHero(del.dataset.del); TS.delSure = null; } else TS.delSure = del.dataset.del; mainMenu(); return; }
-    const h = G.save.heroes.find((x) => x.id === el.dataset.id); if (h && !off.has(h.id)) emit('startHero', h, false);
+    const h = G.save.heroes.find((x) => x.id === el.dataset.id); if (h) take(h);
   });
 }
 export function showPick() {
