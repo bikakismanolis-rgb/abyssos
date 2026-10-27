@@ -1,0 +1,279 @@
+{
+ "ketos": {
+  "uid": "773667575a264c7baa4ec404115a044b",
+  "url": "https://sketchfab.com/3d-models/pistosaur-animated-773667575a264c7baa4ec404115a044b",
+  "title": "Pistosaur Animated",
+  "author": "RickStikkelorum (ricksticky), https://sketchfab.com/ricksticky",
+  "license": "CC-BY 4.0 (Sketchfab 'CC Attribution', slug by); re-read 27 Oct 2026 in the public API record, in the authenticated record at download time, in the archive's license.txt and in the glTF asset.extras",
+  "downloadable": true,
+  "role": "the Ketos (boss) and, at x0.6, the Ketling",
+  "verdict": "pass",
+  "checked": "2026-10-27",
+  "evidence": [
+   "API: CC-BY 4.0, isDownloadable true, 16,664 faces, 8,676 vertices, 1 clip, 6 textures, 4 materials; created and published 2019-11-26; 3,745 downloads",
+   "Description: 'This model is far from perfect, but still worth to share. I took a lot of time in sculpting the thing. I have got 2k normals for the body group'; the file agrees (the body material's normal map is 2048 px, every other map 1024 or 512)",
+   "Author: Haarlem (NL) freelance paleoartist, 'Specialized in ZBrush and extinct animals that are not dinosaurs'; 58 uploads read through the API, a consistent body of his own paleoart, most of it sold on the Sketchfab store; a local news story (NH Nieuws) names Rick Stikkelorum as a Haarlem paleoartist who 3D-printed a life-size Tanystropheus, which is also on his Sketchfab",
+   "One IP flag on another model: 'Alfred J. Kwak' (CC-BY), his own sculpt of the Dutch cartoon character, crediting its designers; fan art, not a rip, and irrelevant to an extinct animal",
+   "Pipeline: three of his own November 2019 rigs fetched as references (Cute T-rex, Alien Insect, Mutated Plesiosaur): the first two share the Pistosaur's Maya conventions (joint1..N, lambert/defaultMat, ZBrush group names, 2.042 s / 4.125 s clips; the Pistosaur's clip is 2.042 s)",
+   "Yandex reverse-image (thumbnail URL): exact copies only on Sketchfab, a Pinterest pin crediting RickStikkelorum, and Fab's gallery image for listing 598befa6-26c2-4c38-a63a-b38cfea23106; no storefront, no other author",
+   "Fab listing 598befa6-26c2-4c38-a63a-b38cfea23106 'Pistosaur Animated': the search index shows the author's own description word for word and 'FBX plus converted GLB/glTF/USDZ', the form of Fab's migrated Sketchfab models; the page is Cloudflare-blocked here, so its seller and licence were not seen first-hand",
+   "No listing on CGTrader, TurboSquid, the Unity Asset Store or Cults3D by web search",
+   "Sketchfab: two later uncredited re-uploads of this exact mesh (MASONJAR1753 f0b29d92a7534324a18690ce6029365a, 2023-03-08, view-only; VioletBovid2302 583aa3d2214d40ba92c79f8175eaaa04, 2026-09-18, CC-BY) with identical counts and default thumbnails; both post-date the 2019 original and copy it. jdwebprogrammer's Pistosaurus (2023) is another mesh",
+   "File: no watermark, vendor name or foreign credit; hand-named meshes (Total_BodySurface, Tongue, Upper_Teeth, Eyes); the rest-pose render matches the thumbnail"
+  ],
+  "files": {
+   "dir": "/tmp/claude-0/sf/act6/ketos/",
+   "archive": {
+    "path": "/tmp/claude-0/sf/act6/ketos/archive.zip",
+    "bytes": 5183198,
+    "extractedTo": "/tmp/claude-0/sf/act6/ketos/gltf/",
+    "contents": [
+     {
+      "file": "license.txt",
+      "bytes": 700
+     },
+     {
+      "file": "scene.bin",
+      "bytes": 863008
+     },
+     {
+      "file": "scene.gltf",
+      "bytes": 84380
+     },
+     {
+      "file": "textures/blinn2_baseColor.png",
+      "bytes": 167359
+     },
+     {
+      "file": "textures/blinn3_baseColor.png",
+      "bytes": 227697
+     },
+     {
+      "file": "textures/blinn3_normal.png",
+      "bytes": 527571
+     },
+     {
+      "file": "textures/blinn4_baseColor.png",
+      "bytes": 405294
+     },
+     {
+      "file": "textures/blinn4_normal.png",
+      "bytes": 2544586
+     },
+     {
+      "file": "textures/lambert2_normal.png",
+      "bytes": 778619
+     }
+    ]
+   },
+   "glb": {
+    "path": "/tmp/claude-0/sf/act6/ketos/model.glb",
+    "bytes": 3740352
+   },
+   "offeredBytes": {
+    "source": 21886616,
+    "gltf": 5183198,
+    "usdz": 2529846,
+    "glb": 3740352
+   },
+   "provenance": "/tmp/claude-0/sf/act6/provenance/ketos/"
+  },
+  "tris": {
+   "total": 16664,
+   "byMesh": {
+    "Total_BodySurface_blinn4_0": 10748,
+    "Tongue_blinn3_0": 996,
+    "polySurface50_lambert2_0": 1872,
+    "Eyes_blinn2_0": 1176,
+    "Upper_Teeth_lambert2_0": 1872
+   },
+   "skinned": [
+    "Total_BodySurface_blinn4_0",
+    "Tongue_blinn3_0"
+   ],
+   "rigid": {
+    "Upper_Teeth_lambert2_0": "parented to joint19_044 (skull)",
+    "Eyes_blinn2_0": "parented to joint19_044 (skull)",
+    "polySurface50_lambert2_0": "lower teeth, parented to joint27_036 (lower jaw)"
+   }
+  },
+  "anims": [
+   {
+    "name": "SwimmingBiting",
+    "seconds": 2.042,
+    "channels": 57,
+    "inPlace": true
+   }
+  ],
+  "rig": {
+   "joints": 51,
+   "deforming": 50,
+   "names": "Maya joint1..joint51",
+   "skull": "joint19_044 (eyes and upper teeth hang from it; snout tip joint20_045)",
+   "lowerJaw": "joint27_036 (lower teeth)",
+   "neck": "joint13_029, joint14_030, joint15_031, joint16_032, joint17_033, joint21_034 (about a quarter of the body length)",
+   "tail": "joint2_03 .. joint12_018",
+   "flippers": "four chains: joint36-38, joint42-44 (hind), joint45-48, joint29/33-35 (fore)",
+   "tongue": "joint51_038, joint23_039 (under a scaleCompensation node with a constant scale key 1.119), joint24-26",
+   "restSize": "3.02 x 2.64 x 6.05 file units, head toward +z, posed mid-swim with the jaw open"
+  },
+  "maps": {
+   "body (blinn4)": "base 1024, normal 2048 (1024 in the GLB)",
+   "tongue (blinn3)": "base 1024, normal 1024",
+   "teeth (lambert2)": "normal 1024, no base colour",
+   "eyes (blinn2)": "base 512 (orange iris, black pupil)",
+   "pbr": "metallic 0 on all four; roughness 0.62 body, 0 tongue and teeth, default 1 eyes"
+  },
+  "notes": [
+   "Decimation to <= 15k (the design's limit): cut >= 1,664 tris. Cheapest without touching the silhouette: the two teeth rows 2 x 1,872 -> about 2 x 700 and the two eye spheres 1,176 -> about 400 gives about 13.5k with the body (10,748) whole; a uniform x0.9 on the body is the alternative. Measure the cost before and after, as the design asks",
+   "The teeth and eyes are rigid meshes parented to joints, not skinned: the build keeps that parenting (or skins them at weight 1 to joint19_044 / joint27_036). The code lure's bone chain hangs from joint19_044",
+   "Phone budget (design: 1024 d, 512 n, 2.79 MB) holds only if the build keeps the body's two maps and drops the other four: teeth plain white, tongue a flat colour, eyes the design's white film as a flat or code material; the body normal comes down from 2048 to 512",
+   "Set roughness on the tongue and teeth (0 reads as mirror) and on the eyes",
+   "Clips: one in-place swim 'SwimmingBiting' (2.042 s, 57 channels on 35 nodes) kept as idle-in-water; rise, lure-drift, strike, slam, thrash, dive, surface, blind-listen, seared, settle, and the Ketling's crawl and gnaw are all procedural in lib.mjs, as the design says. The neck is six joints and short (a pistosaur, not a plesiosaur), so 'rise' must lift the whole fore-body to read as a neck out of the water; check it at pitch 0.95 and in the cine",
+   "The Ketling's crawl drags four flipper chains (3-4 joints each); the gnaw uses joint27_036",
+   "Regrade from the hand-painted blue-grey with dark stripes to the design's pale hide with barnacle patches and filmed white eyes"
+  ],
+  "fallbacks": {
+   "named": [
+    "Pliosaur by Spinnee d90f30fd8ae9488ba8186a4572c9cf4f (CC-BY 4.0, to verify)",
+    "icemaw.glb x3.4 with the code lure (no download)"
+   ],
+   "taken": null
+  }
+ },
+ "falselight": {
+  "uid": "4c0fd62d33ab4d2592ee0a1d985a480d",
+  "url": "https://sketchfab.com/3d-models/scorpion-4c0fd62d33ab4d2592ee0a1d985a480d",
+  "title": "Scorpion",
+  "author": "anthonyvanoo (Anthony Vanoostendorp), https://sketchfab.com/anthonyvanoo",
+  "license": "CC-BY 4.0 (Sketchfab 'CC Attribution', slug by); re-read 27 Oct 2026 in the public API record, in the authenticated record at download time, in the archive's license.txt and in the glTF asset.extras",
+  "downloadable": true,
+  "role": "the Falselight (and its matriarch at x1.25)",
+  "verdict": "pass",
+  "checked": "2026-10-27",
+  "evidence": [
+   "API: CC-BY 4.0, isDownloadable true, 7,290 faces (7,288 triangles in the file), 3,647 vertices, 5 clips, 4 textures, 1 material; created and published 2019-05-07; 6,379 downloads",
+   "Description: modelled, rigged, weight-painted and animated in Blender, high-poly in ZBrush, baked and textured in Substance Painter; 'Used as an enemy for a game I helped create: All That's Left'. The file agrees: a Blender armature with its IK and pole controllers exported as bones, baked maps",
+   "Author: a TAMK game-development student (Tampere, Finland), 9 uploads read through the API; credits a teammate when he remodels another's design (Spiked Frog Enemy: 'based on a frog Nikolai Jonasson created'); two labelled view-only fan pieces (Clunk from Awesomenauts '2D to 3D', a Lego figure), neither a rip nor downloadable",
+   "The game: itch.io 'All That's Left by Instance Games' (28 May 2019) is a free download (price 0; a Play Finland newsletter calls it free with an optional tip); its team list names 'Anthony Vanoostendorp - Project Manager, Artist'; the page sells nothing, claims no asset and does not mention the scorpion",
+   "Yandex reverse-image (thumbnail URL): no exact copy of the image anywhere; 100 similar-image pages are other scorpions. The nearest (a $8 CGTrader 'Scorpion' via 3dmdb 3562342, RIG-IT's black scorpion, kenan.pawley123's low-poly scorpion) compared side by side with a rest-pose render of the downloaded file: different meshes (leg thickness, chela and telson shape)",
+   "No listing on Fab, CGTrader, TurboSquid, the Unity Asset Store or itch.io by web search (store pages are Cloudflare-blocked here, so this rests on the index and Yandex's previews); the only Sketchfab upload of this mesh ('Scorpion Enemy' by eggiscool6253, 7,310 faces, is a cowboy character)",
+   "File: no watermark, vendor name or foreign credit; hand-named English rig ('Stringer' for the sting, sic); the render matches the thumbnail"
+  ],
+  "files": {
+   "dir": "/tmp/claude-0/sf/act6/falselight/",
+   "archive": {
+    "path": "/tmp/claude-0/sf/act6/falselight/archive.zip",
+    "bytes": 2922975,
+    "extractedTo": "/tmp/claude-0/sf/act6/falselight/gltf/",
+    "contents": [
+     {
+      "file": "license.txt",
+      "bytes": 668
+     },
+     {
+      "file": "scene.bin",
+      "bytes": 892356
+     },
+     {
+      "file": "scene.gltf",
+      "bytes": 670352
+     },
+     {
+      "file": "textures/scorpion_baseColor.png",
+      "bytes": 1004925
+     },
+     {
+      "file": "textures/scorpion_emissive.png",
+      "bytes": 9867
+     },
+     {
+      "file": "textures/scorpion_metallicRoughness.png",
+      "bytes": 8238
+     },
+     {
+      "file": "textures/scorpion_normal.png",
+      "bytes": 1365515
+     }
+    ]
+   },
+   "glb": {
+    "path": "/tmp/claude-0/sf/act6/falselight/model.glb",
+    "bytes": 3653564
+   },
+   "offeredBytes": {
+    "source": 6912056,
+    "gltf": 2922975,
+    "usdz": 1477073,
+    "glb": 3653564
+   },
+   "provenance": "/tmp/claude-0/sf/act6/provenance/falselight/"
+  },
+  "tris": {
+   "total": 7288,
+   "byMesh": {
+    "scorpion_scorpion_0": 7288
+   }
+  },
+  "anims": [
+   {
+    "name": "Area Attack",
+    "seconds": 2.333,
+    "channels": 137
+   },
+   {
+    "name": "Death",
+    "seconds": 0.7,
+    "channels": 229
+   },
+   {
+    "name": "Defend",
+    "seconds": 0.867,
+    "channels": 124
+   },
+   {
+    "name": "Idle",
+    "seconds": 2.633,
+    "channels": 109
+   },
+   {
+    "name": "Walk",
+    "seconds": 0.6,
+    "channels": 130
+   }
+  ],
+  "rig": {
+   "joints": 123,
+   "deforming": 71,
+   "unweightedHelpers": 52,
+   "body": "control_01 > body_00 > bodySeg1-6",
+   "tail": "tailBase_08, tailSeg1-5 (09-013), Stringer_014 (the sting; lure anchor Stringer_end_0103)",
+   "pedipalps": "armBase > armMid > armEnd > pincerMain > pincer (movable finger), L and R",
+   "legs": "8 walking legs, 4 pairs: A (L/R_A1-A5, the small front pair, 5 bones), B, C, D (6 bones each); all 46 leg bones deform and are keyed in all 5 clips",
+   "helpers": "8 leg IK targets, 2 pincer IK targets, 10 poles, every chain's _end bone, _rootJoint and control_01: 52 bones with no weight, their IK baked into the FK keys. One exception: pincerIK_R_077 carries a little weight (12.8 vertex-weight units on the right pincer, a weight-paint slip)",
+   "restSize": "2.11 x 1.37 x 4.13 file units, head toward +z, feet on y = 0 (the D pair 0.10-0.14 up), the tail curled over the back with the sting tip at y 1.25"
+  },
+  "maps": {
+   "base": "1024 (dark brown, baked)",
+   "normal": "1024",
+   "metallicRoughness": "1024, flat (roughness 1 x factor 0.42, metal ~0)",
+   "emissive": "1024, only the sting tip in yellow, emissiveFactor 1"
+  },
+  "notes": [
+   "Faces: keep the 7.3k as the design says; no decimation",
+   "The legs: all eight walking legs and both pedipalps are full FK chains that deform and are keyed in every clip, so the shipped Walk (0.6 s, in place, control_01 static) gives the skitter and, at a higher timeScale, the flee; fit the timeScale to speed 4.6 at scale 1.6 in the viewer to avoid foot-slide. Idle keys the legs too, so idle-lure is Idle with the tail chain (tailBase..Stringer, 7 bones) overridden high and still. Death (0.7 s) already drops the body (control_01 moves); the design's 'die (curl)' can fold the leg chains (B2-B6, C2-C6, D2-D6, A2-A5) on top of it",
+   "Look gate: the legs are long and thin; at x1.6 and the gameplay pitch on a phone at quality 0 they may read as hairlines; the pale bone-grey regrade helps, check it in the viewer before the build is final",
+   "Strip the 52 unweighted helper joints (123 -> 71, or 70 once pincerIK_R_077's few right-pincer vertices are reassigned to pincerMain_R/pincer_R) and the dead scale keys (all within 0.999-1.001; 31-67 scale channels per clip) in the build",
+   "Phone budget (design: 512 d, 256 n, 1.74 MB): drop the flat metallicRoughness map (set roughness 0.42, metal 0) and the emissive map (its warm yellow sting tip would read as true light; the code lure's cold glow replaces it)",
+   "Clip mapping to check in the viewer: Area Attack (2.33 s) for the sting, Defend (0.87 s) as hit or guard; the design's snap, flee, hit and die are added in lib.mjs over these"
+  ],
+  "fallbacks": {
+   "named": [
+    "Pseudoscorpion by .hapto GmbH 60a474f1f87040f38e073f87a63b7548 (CC-BY 4.0, a Senckenberg Museum scan, to verify)",
+    "spider.glb x0.8, regraded pale, with the code lure on a stalk (no download)"
+   ],
+   "taken": null,
+   "rule": "any doubt takes fallback 2 from the start (Decisions); no doubt was found"
+  }
+ }
+}
