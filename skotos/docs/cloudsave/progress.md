@@ -18,3 +18,17 @@ session_01PwjhM4jRXTtNyMawnxVoaV when done (send_message).
 - Everything in README.md. Tests: test-sync 60/60, test-saves 86/86, scenarios cloud, cloudweb, save13, save14, title,
   panels, combat, coast pass; vite build, build:artifact (no supabase-js), build:web OK.
 - Reported to the lead (send_message).
+
+## Second review fixed (27 October)
+- Sync and other tabs: the record read after the heroes, a hero replaced or dropped only while its stored record is the
+  one read, and at the end only the sync's own base and tombstone changes merged onto the record as it is then; a page
+  that finds its hero written over marks the base lost (`{ lost: true }`), which no sync puts back.
+- Artifact writes leased (`acquire`, shortened after the write), and each document carries a chain of its last 16
+  (rev, sum): a base whose write did not stand is weighed as a conflict, never a one-sided change.
+- A page left open writes nothing (clock-only changes neither dirty nor pushed); `CLOUD.busy` only while this page syncs.
+- Restore: dated after a standing tombstone; `restored` backups protected. A newer version's hero greyed on the title and
+  refused by `startHero`.
+- Supabase: `p_player` on every call of the player's saves (`moved`), `save_hello(p_code)` with `code_ok`, the code kept
+  as `{ player, code }` and shown only once confirmed, New code lets go every other user, write buckets per user, the
+  players cap no longer locks out a kept code. Claim under the `skotos-cloud` lock. README: `db: {}`, who can save.
+- Tests: test-sync 167/167, test-saves 126/126; scenarios cloud, cloudweb, title, save13, save14, panels, combat pass.

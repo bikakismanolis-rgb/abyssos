@@ -63,27 +63,40 @@ export function syncNow(why = 'manual') {
     return Promise.resolve(null);
   }
   if (running) return running;
-  lastTry = now(); CLOUD.busy = true; tell();
-  const run = async () => {
-    const r = await syncAll(B, store, { readOnly: RO });
-    CLOUD.busy = false;
-    if (r.ok) { CLOUD.last = now(); CLOUD.err = r.errors.length ? r.errors[0].code : null; if (!RO) CLOUD.state = 'on'; }
-    else { CLOUD.err = r.code; if (r.code === 'revoked') CLOUD.state = 'unavailable'; }
-    if (r.code === 'read_only' || r.errors.some((e) => e.code === 'read_only')) RO = true;
-    if (RO) { CLOUD.state = 'unavailable'; CLOUD.why = 'read_only'; if (r.ok && r.errors.every((e) => e.code === 'read_only')) CLOUD.err = null; }
-    for (const id of r.replaced) CLOUD.notes.push({ id, at: now() });
-    if (r.pulled.length || r.dropped.length) emit('cloudHeroes', r);
-    if (r.replaced.length) emit('toast', t('cloud.replaced'), 'quest');
-    tell();
-    const id = playingId();
-    if (id && r.behind?.includes(id)) emit('cloudBehind', id);
-    return r;
-  };
-  const locks = typeof navigator !== 'undefined' && navigator.locks;
-  running = (locks ? locks.request('skotos-cloud', { ifAvailable: true }, (lk) => (lk ? run() : null)) : run())
+  lastTry = now();
+  // (busy only while this page syncs: a page that finds another one syncing leaves it to that one, and says nothing)
+  running = withLock(true, (got) => (got ? run() : null))
     .catch((e) => { CLOUD.busy = false; CLOUD.err = e?.code || 'unavailable'; tell(); return null; })
     .finally(() => { running = null; });
   return running;
+}
+// the sync itself (the page holding the lock 'skotos-cloud')
+async function run() {
+  CLOUD.busy = true; tell();
+  let r;
+  try { r = await syncAll(B, store, { readOnly: RO }); } finally { CLOUD.busy = false; }
+  if (r.ok) { CLOUD.last = now(); CLOUD.err = r.errors.length ? r.errors[0].code : null; if (!RO) CLOUD.state = 'on'; }
+  else { CLOUD.err = r.code; if (r.code === 'revoked') CLOUD.state = 'unavailable'; }
+  if (r.code === 'read_only' || r.errors.some((e) => e.code === 'read_only')) RO = true;
+  if (RO) { CLOUD.state = 'unavailable'; CLOUD.why = 'read_only'; if (r.ok && r.errors.every((e) => e.code === 'read_only')) CLOUD.err = null; }
+  // (the server has this user on another player than the backend had (a code taken in another tab, a claim whose answer
+  // was lost): the backend took the new one; the sync ended before it changed anything, and runs again)
+  if (r.code === 'moved') { CLOUD.err = null; setTimeout(() => syncNow('moved'), 300); }
+  CLOUD.code = B?.code?.() || null;
+  for (const id of r.replaced) CLOUD.notes.push({ id, at: now() });
+  if (r.pulled.length || r.dropped.length) emit('cloudHeroes', r);
+  if (r.replaced.length) emit('toast', t('cloud.replaced'), 'quest');
+  tell();
+  const id = playingId();
+  if (id && r.behind?.includes(id)) emit('cloudBehind', id);
+  return r;
+}
+// f(true) while this page holds the lock 'skotos-cloud' (one page of the browser syncs at a time); ifAvailable: f(false)
+// at once when another page holds it, else this one waits for it. Without Web Locks: f(true)
+function withLock(ifAvailable, f) {
+  const locks = typeof navigator !== 'undefined' && navigator.locks;
+  if (!locks) return Promise.resolve().then(() => f(true));
+  return locks.request('skotos-cloud', ifAvailable ? { ifAvailable: true } : {}, (lk) => f(!!lk));
 }
 const due = (s) => now() - Math.max(CLOUD.last, lastTry) > s * 1000;
 // (every save the page writes: a sync if something changed and it is time, or if other devices have not been heard for long)
@@ -118,19 +131,28 @@ function flush() {
   if (!running) pushOne(B, store, id).then((ok) => { if (ok) { CLOUD.last = now(); tell(); } }, () => {});
 }
 
-// another device's save code (the web build): this browser's heroes and that player's, both ways from now on
+// another device's save code (the web build): this browser's heroes and that player's, both ways from now on. The claim
+// and the sync after it hold the lock: no sync of this browser runs meanwhile with the player it had before
 export async function claimCode(code) {
   if (CLOUD.kind !== 'supabase') return { ok: false, code: 'off' };
-  try {
-    if (!B) B = await supabaseBackend(SB, { claim: code }); else await B.claim(code);
+  if (running) await running.catch(() => null);
+  let out = null;
+  const go = async () => {
+    try {
+      if (!B) B = await supabaseBackend(SB, { claim: code }); else await B.claim(code);
+    } catch (e) { CLOUD.code = B?.code?.() || null; tell(); return { ok: false, code: e?.code || 'unavailable' }; }
     CLOUD.state = 'on'; CLOUD.why = null; CLOUD.err = null; CLOUD.code = B.code(); tell();
-    await syncNow('claim');
+    lastTry = now();
+    try { await run(); } catch (e) { CLOUD.err = e?.code || 'unavailable'; tell(); }
     return { ok: true };
-  } catch (e) { return { ok: false, code: e?.code || 'unavailable' }; }
+  };
+  running = withLock(false, () => go().then((r) => { out = r; return null; }));
+  try { await running; } catch (e) { out ||= { ok: false, code: e?.code || 'unavailable' }; } finally { running = null; }
+  return out || { ok: false, code: 'unavailable' };
 }
 export async function newCode() {
   if (!B?.newCode) return null;
-  try { CLOUD.code = await B.newCode(); tell(); return CLOUD.code; } catch (e) { CLOUD.err = e?.code || 'unavailable'; tell(); return null; }
+  try { CLOUD.code = await B.newCode(); tell(); return CLOUD.code; } catch (e) { CLOUD.code = B.code?.() || null; CLOUD.err = e?.code || 'unavailable'; tell(); return null; }
 }
 // (tests: the backend in use)
 export const cloudBackend = () => B;

@@ -105,7 +105,12 @@ async function starterGear(hero) {
   hero.equip.chest ||= makeItem(1, { base: 'chest', rar: 0, cls: hero.cls });
 }
 async function startHero(hero, isNew, zone = 'town') {
-  if (!isNew) hero = freshHero(hero);
+  if (!isNew) {
+    // (a hero a newer version of the game wrote: not taken up here, so that its record is never written back stripped)
+    const h = freshHero(hero);
+    if (!h) { emit('toast', t('menu.newer'), 'big'); return; }
+    hero = h;
+  }
   await starterGear(hero);
   // saves from before the progression: a loadout, nothing learnt, the points kept spendable (progression.js)
   migrateHero(hero);

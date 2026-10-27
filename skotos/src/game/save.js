@@ -19,12 +19,14 @@ const RAW = new WeakMap();
 // the one the page took it up from was written by another page meanwhile (a cloud copy another tab took, or took while
 // this page was still loading the hero). This page's own goes over it, so that copy is kept first (a backup), and what
 // this browser had agreed with the cloud on that hero is no more: the next sync weighs the two as a conflict, and never
-// puts this page's copy over a further one as a mere change)
+// puts this page's copy over a further one as a mere change. The base is marked lost, not just dropped: a sync running in
+// another page meanwhile puts on the record only what it changed, and leaves a base changed since it began as it is)
 const MINE = new WeakMap();
 function foreign(d) {
   backupHero(d, 'conflict');
   const m = cloudMeta();
-  if (m.base && typeof m.base === 'object' && m.base[d.id]) { delete m.base[d.id]; setCloudMeta(m); }
+  m.base = m.base && typeof m.base === 'object' && !Array.isArray(m.base) ? m.base : {};
+  m.base[d.id] = { lost: true }; setCloudMeta(m);
 }
 const ownCopy = (h, text = JSON.stringify(h)) => { const c = repairHero(JSON.parse(text)); RAW.set(c, text); return c; };
 export function loadSave() {
@@ -89,10 +91,22 @@ export function writeSave() {
   } catch (e) { /* private mode or full storage: keep playing */ }
   saveHooks.written?.();
 }
+// can this page take a hero up? null, or why not: 'newer' for one whose stored record a newer version of the game wrote
+// (heroFits): this page would play its copy made whole (repairHero strips what it cannot read) and write that back over
+// the record as its own, and the sync would carry it stripped to every device. The title shows it, "reload the page"
+export function heroBlocked(h) {
+  if (!h) return null;
+  let d = null;
+  try { const text = RAW.get(h); d = text !== undefined ? JSON.parse(text) : readDisk()?.heroes.find((x) => x && typeof x === 'object' && x.id === h.id) || null; } catch (e) { d = null; }
+  return d ? heroFits(d) : null;
+}
 // a hero taken up from the title as it is stored now (another page of this browser may have played it since this page
-// read the save): the stored record, made whole, in the list in its place; the hero itself when it is not stored
+// read the save): the stored record, made whole, in the list in its place; the hero itself when it is not stored; null
+// for one this page cannot take up (heroBlocked: a newer version's record)
 export function freshHero(h) {
   const d = readDisk()?.heroes.find((x) => x && typeof x === 'object' && x.id === h.id);
+  if (d && heroFits(d)) return null;
+  if (!d && heroBlocked(h)) return null;
   if (!d || isGone(d)) return h;
   const text = JSON.stringify(d);
   if (RAW.get(h) === text) return h;
@@ -190,12 +204,14 @@ export function dropStored(id) {
 export function cloudMeta() { try { const m = JSON.parse(localStorage.getItem(CLOUD_KEY) || 'null'); return m && typeof m === 'object' ? m : {}; } catch (e) { return {}; } }
 export function setCloudMeta(m) { try { localStorage.setItem(CLOUD_KEY, JSON.stringify(m)); } catch (e) { /* full: the next sync agrees again */ } }
 // The copies a sync, a deletion or a restore replaced, newest first ({ at, why, hero }); a copy the same as one kept is
-// not kept twice. What a sync replaces with the newer copy it took ('cloud', and 'restored') is routine: of those the
-// newest of each hero, at most BAK_MAX in all. The only copy left of a hero a conflict lost or a deletion took
-// ('conflict', 'deleted') is not: the newest of each hero is never pushed out by routine ones, at most BAK_KEEP of them.
-// Storage too full for them drops routine ones first. Whatever goes for room is told (backupsGone: the panel says so)
+// not kept twice. What a sync replaces with the newer copy it took ('cloud') is routine: of those the newest of each
+// hero, at most BAK_MAX in all. The only copy left of a hero a conflict lost, a deletion took or a restore replaced
+// ('conflict', 'deleted', 'restored': the copy the player had, which a restore promised to keep) is not: the newest of
+// each hero is never pushed out by routine ones, at most BAK_KEEP of them; an older one of the same hero and reason takes
+// a routine place, and goes only for room, told. Storage too full for them drops routine ones first. Whatever goes for
+// room is told (backupsGone: the panel says so)
 export const BAK_MAX = 6, BAK_KEEP = 12;
-const KEEP_WHY = new Set(['conflict', 'deleted']);
+const KEEP_WHY = new Set(['conflict', 'deleted', 'restored']);
 export function backups() { try { const b = JSON.parse(localStorage.getItem(BAK_KEY) || '[]'); return Array.isArray(b) ? b.filter((x) => x && x.hero && typeof x.hero === 'object') : []; } catch (e) { return []; } }
 // the backups no longer kept, newest first (at most 8): { at (when dropped), why, id, cls, level, diff }
 export function backupsGone() { try { const b = JSON.parse(localStorage.getItem(BAK_GONE_KEY) || '[]'); return Array.isArray(b) ? b.filter((x) => x && typeof x === 'object') : []; } catch (e) { return []; } }
@@ -245,14 +261,20 @@ export function backupHero(h, why) {
   bakGone(t.told);
 }
 // a backup taken back, the one with that hero id and time (the list may have changed since it was shown): the hero as
-// it was, in the list in its place (what is there now goes to the backups first)
+// it was, in the list in its place (what is there now goes to the backups first). Played now, or just after the hero's
+// deletion where that stands later (a tombstone dated after a record from a device whose clock is ahead, or made on a
+// device whose clock is ahead of this one): only a copy played after a deletion outlives it
 export function restoreBackup(id, at) {
   const b = backups().find((x) => x.hero.id === id && x.at === +at);
   if (!b || b.hero.id === playingId() || heroFits(b.hero)) return false;
   const cur = storedHeroes().find((h) => h.id === b.hero.id);
   if (cur) backupHero(cur, 'restored');
-  const h = JSON.parse(JSON.stringify(b.hero)); h.played = Date.now();
-  const m = cloudMeta(); if (m.tomb) delete m.tomb[h.id]; setCloudMeta(m);
+  const m = cloudMeta(), fin = (v) => (typeof v === 'number' && isFinite(v) ? v : 0);
+  let t = fin(m.tomb?.[id]);
+  for (const a of Object.values(m.away && typeof m.away === 'object' ? m.away : {})) t = Math.max(t, fin(a?.tomb?.[id]));
+  if (m.base?.[id]?.del) t = Math.max(t, fin(m.base[id].at));
+  const h = JSON.parse(JSON.stringify(b.hero)); h.played = Math.max(Date.now(), t + 1);
+  if (m.tomb) delete m.tomb[h.id]; setCloudMeta(m);
   const ok = putStored(h);
   if (ok) saveHooks.changed?.();
   return ok;
