@@ -27,6 +27,19 @@ Read this first when picking the project up in a new session.
 - Assets: CC-BY 4.0 or CC0 only, credited everywhere; no rips of commercial games or films (the owner wants a Play Store release). Builders live in `tools/creatures/**` and `tools/pack-*.mjs`; sources are downloaded to `/tmp/claude-0/sf` and `/tmp/claude-0/ph` (not in the repo).
 - Commit messages end with the session's Co-Authored-By and Claude-Session lines; never put a model name in commits or code.
 
+## Where everything stopped (27 October)
+
+The owner asked for three things on 27 October («κάνε 1 2 και 4»): (1) a party of four on Supabase's free plan, (2) cloud saves, (4) new content, which the owner chose to be **Act VI «Κάτω από τον Πάγο» / "Beneath the Ice"**. The owner's hard stop was 17:00 Athens (15:00 UTC); the new week starts after it.
+
+- **(1) The co-op traffic diet: merged** (b43f8c6, protocol 4). A party of four now costs about 64 events a second on Supabase (the free plan allows 100). `docs/coop/diet.md`.
+- **(2) Cloud saves: merged** (8c35fce, then the fixes below). localStorage stays the primary copy; the cloud is a backup and the way across devices. `docs/cloudsave/README.md` has every rule.
+  - **claude.ai:** automatic, on the signed-in account, in the artifact's `db` (capabilities now room + user + `db: {}`; the README says why not to lock the root). Only `interact` and above can write (the owner, org members, Contributors); a visitor from outside the organization through the public link holds `view` and keeps their heroes in the browser only.
+  - **The web build:** an anonymous Supabase session per browser plus a **save code** (Settings › Cloud save) that carries the heroes to another device. Its migration `supabase/migrations/20261027120000_skotos_saves.sql` is **not applied yet** (27 October, 11:00 UTC): the `Supabase_Game` connector's apply_migration asked the owner to confirm and got no answer. The owner approves it or pastes the file into the SQL Editor of project skotos; it can run again safely. `main` (the Pages build) is not merged with the cloud line either: it waits on the migration, since without it the web build's cloud save cannot work (co-op is unaffected).
+  - Four review passes, every finding checked by two skeptics: pass 1 (8 fixed, 35a3cae), pass 2 (16 fixed, 1a8cd5c), pass 3 (4 confirmed and 1 split, fixed at f9ea239: lost marks of their own, every artifact write names the sum it agreed on, forks past the 16-rev chain weighed as conflicts, a 16 MiB byte reserve for heroes already kept), and the lead's own fix: a hero `heroFits` refuses (a newer build's, or a damaged/tampered record) is never locked out; a second tap on the title loads it repaired, its record kept first as a protected `repaired` backup (`coop.mjs cheat` caught the lockout). A last check of the lead's own fixes (two lenses, two skeptics each) ran on 27 October; its outcome is under Open items.
+  - **Not checked on the real platform:** whether `acquire` refuses a view-only visitor as a write does, whether a lease on a missing document creates one, whether the 1 s renewal shortens a lease (README). A griefer with many anonymous sessions can still fill `players_cap` or the byte cap for new heroes; CAPTCHA on sign-ins is the owner's lever (README, Limits).
+- **(4) Act VI: stage 0 done.** The plan `docs/act6-design.md` (with the owner's five decisions), the contract `docs/act6-contract.md` (file ownership, shared names, flags, events, protocol 5, save format `SAVE_FMT`, the gates G0-G5 and every scenario), the provenance gates of the two downloads (both passed, `docs/act6-briefs/asset-gates.json`, `reports/stage0-assets.md`) and the look gates (7453ef6: Keyx tintAmt 0.6, Leif on villager0 because villager2 is a woman, the Sailor 1.4, the Shade's weapons need their own regrade, the First passes only with her icicle crown; shots in `docs/act6-briefs/reports/g0/`). viewer.js's people view takes `&tints=`, `&rims=`, `&scales=` per figure. **Next: the owner's go on G0, then stage A (the ground), lanes as the contract's table.**
+- **Still waiting on the owner:** how the coast and the Farthest Light run on a real phone (perf5 is 1.17-1.20 of the Field on SwiftShader; the bar is 1.15).
+
 ## Where everything stopped (24 October)
 
 **All four lines of work are merged into this branch**: Act V (stages A-C, look rounds, the release fixes of
@@ -90,6 +103,8 @@ them; one headless browser at a time (two at once also skew perf ratios), and a 
 kill by PIDs from `ps`.
 
 ## Open items
+
+- **Cloud saves (27 October):** the Supabase saves migration and the merge to `main` wait on the owner (above). The last check of the lead's own fixes: see the 27 October section's last report, `docs/cloudsave/README.md`.
 
 - perf5 at the coast (above). Two review findings judged not worth their code: the delayed blows of the base skills
   (only the later skills are guarded), and two pages playing the same hero (the last write wins).
