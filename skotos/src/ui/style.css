@@ -603,8 +603,8 @@ body:not(.desk) .sk .key { display: none; }
 /* cloud saves (ui/cloudui.js) */
 .cl-row { width: 100%; text-align: left; white-space: normal; }
 .cl-state { font: 700 14px var(--body); color: var(--gold2); margin: 4px 0 8px; }
-.cl-state.bad, .cl-msg { color: #ffb8a0; }
-.cl-msg { font-size: 13px; }
+.cl-state.bad { color: #ffb8a0; }
+.cl-msg { font-size: 13px; color: var(--gold2); }
 .cl-code { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
 .cl-code span { font: 700 16px ui-monospace, monospace; letter-spacing: 1px; color: var(--ink); }
 .cl-code input { flex: 1; min-width: 0; padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: #0c0e12; color: var(--ink); font: 700 15px ui-monospace, monospace; letter-spacing: 1px; text-transform: uppercase; }

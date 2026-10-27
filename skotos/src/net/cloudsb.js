@@ -51,7 +51,13 @@ export async function supabaseBackend(cfg, o = {}) {
   // (a new session with a code kept here: the code's player again, not a new one)
   const kept = getCode();
   let hello = null;
-  if (fresh && kept) { try { hello = take(await rpc('save_claim', { code: kept })); } catch (e) { if (e.code === 'offline') throw e; hello = null; } }
+  // (a device with nothing yet that takes another's code: that player at once, none made for it)
+  if (o.claim != null) {
+    const want = normCode(o.claim);
+    if (!CODE_RE.test(want)) throw coded('bad_code');
+    hello = take(await rpc('save_claim', { code: want })); setCode(want);
+  }
+  if (!hello && fresh && kept) { try { hello = take(await rpc('save_claim', { code: kept })); } catch (e) { if (e.code === 'offline') throw e; hello = null; } }
   if (!hello) {
     // (a user the server tied to no player, with a code kept here: that code's player, the one just made let go by it)
     const h = await rpc('save_hello');

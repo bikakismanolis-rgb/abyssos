@@ -1102,6 +1102,184 @@ const S = {
     const pass = gear.chest === 'vampiricMail' && gear.offhand === 'lastBastion' && gear.weapon && gear.bagWeapon && two.me === 4242 && two.other === 777 && two.otherLvl === 21 && two.made && two.inMemory === 777 && two.deletedStays && two.count === 2;
     return { pass, gear, two };
   } },
+  // cloud saves in claude.ai (game/cloud.js over net/cloudart.js), the artifact's db stood in for by a fake kept in the
+  // page's localStorage ('__fakecloud', as the server: it outlives the game's own save). Heroes go up untouched; a new
+  // device (the game's keys cleared) takes them from the title; a newer copy from another device replaces an idle hero
+  // (the old kept as a backup), never the hero being played; a deletion goes up as a tombstone; Settings shows the
+  // state and the backups; a signed-out view and a page with no claude.ai are the game as before
+  cloud: { q: 'q=0&sim=2&norender', init: () => {
+    const mode = localStorage.getItem('__fakecloud_mode');
+    if (mode === 'none') return;
+    const K = '__fakecloud', load = () => JSON.parse(localStorage.getItem(K) || '{}'), save = (d) => localStorage.setItem(K, JSON.stringify(d));
+    const cp = (v) => JSON.parse(JSON.stringify(v));
+    const snap = (id, v) => ({ id, exists: !!v, data: () => (v ? cp(v) : undefined), metadata: { fromCache: false, hasPendingWrites: false } });
+    const doc = (path) => ({ id: path.split('/').pop(), path, async get() { return snap(path.split('/').pop(), load()[path]); }, async set(v) { const d = load(); d[path] = cp(v); save(d); window.__cloudSets = (window.__cloudSets || 0) + 1; }, async delete() { const d = load(); delete d[path]; save(d); } });
+    const db = { doc, collection: (path) => ({ path, doc: (id) => doc(path + '/' + id), async get() { const d = load(), n = path.split('/').length + 1; const docs = Object.keys(d).filter((p) => p.startsWith(path + '/') && p.split('/').length === n).sort().map((p) => snap(p.split('/').pop(), d[p])); return { docs, size: docs.length, empty: !docs.length }; } }) };
+    const user = { id: async () => 'u-test', canEdit: async () => true, can: async () => true };
+    window.claude = { use: async (n) => (mode === 'out' ? null : n === 'db' ? db : n === 'user' ? user : null) };
+  }, run: async (pg, shot) => {
+    const base = A5.base, r = {};
+    const ready = async (q = 'q=0&sim=2&norender') => { await pg.goto(base + '?' + q); await pg.waitForFunction(() => window.__ready && window.__G?.save, null, { timeout: 240000 }); };
+    const cloudOn = () => pg.waitForFunction(async () => { const C = (await import('/src/game/cloud.js')).CLOUD; return C.state === 'on' && C.last > 0 && !C.busy; }, null, { timeout: 60000 });
+    const sync = () => pg.evaluate(async () => { const r = await (await import('/src/game/cloud.js')).syncNow('test'); return r && { ok: r.ok, pushed: r.pushed, pulled: r.pulled, removed: r.removed, dropped: r.dropped, kept: r.kept, errors: r.errors }; });
+    const docs = () => pg.evaluate(() => JSON.parse(localStorage.getItem('__fakecloud') || '{}'));
+    const stored = () => pg.evaluate(() => JSON.parse(localStorage.getItem('skotos.save.v1') || 'null'));
+    // two heroes as an older version left them (a field this version never heard of, Act V's fields absent)
+    await pg.evaluate(() => {
+      for (const k of Object.keys(localStorage)) if (k.startsWith('skotos.') || k.startsWith('__fakecloud')) localStorage.removeItem(k);
+      const h = (id, cls, lvl, o) => Object.assign({ id, cls, level: lvl, xp: 0, gold: 100, diff: 0, skills: {}, points: lvl - 1, inv: new Array(32).fill(null), equip: {}, stash: new Array(48).fill(null), quest: 2, flags: {}, wps: ['town'], act1: -1, act2: -1, act3: -1, act4: -1, gateBest: 0, boons: [], stats: { kills: 3, deaths: 0, time: 60, legs: 0, elites: 0 }, created: 1, played: 1000, oldField: { keep: [1.5, 'x'] } }, o);
+      localStorage.setItem('skotos.save.v1', JSON.stringify({ heroes: [h('hA', 'warden', 10), h('hB', 'mage', 4)], settings: { helpSeen: true }, last: 'hA' }));
+      window.__G.save = null;
+    });
+    await ready(); await cloudOn();
+    const d1 = await docs(), s1 = await stored();
+    const up = (id) => d1['data/users/u-test/h-' + id];
+    r.up = { docs: Object.keys(d1).sort(), untouched: ['hA', 'hB'].every((id) => up(id)?.data === JSON.stringify(s1.heroes.find((h) => h.id === id))) };
+    // another device: the game's own keys gone, the cloud kept; the title fills from it
+    await pg.evaluate(() => { window.__G.save = null; for (const k of Object.keys(localStorage)) if (k.startsWith('skotos.')) localStorage.removeItem(k); });
+    await ready('sim=1&q=0&norender');
+    await pg.waitForTimeout(1200); await pg.mouse.click(300, 200); await pg.waitForTimeout(800);
+    await cloudOn();
+    await pg.waitForFunction(() => window.__G.save.heroes.length === 2 && document.querySelectorAll('#screen .slot').length === 2, null, { timeout: 30000 }).catch(() => {});
+    r.newDevice = await pg.evaluate(() => ({ heroes: window.__G.save.heroes.map((h) => h.id).sort(), slots: document.querySelectorAll('#screen .slot').length, cont: !!document.getElementById('m-cont'), oldField: JSON.parse(localStorage.getItem('skotos.save.v1')).heroes.find((h) => h.id === 'hA')?.oldField?.keep?.[0] }));
+    await shot();
+    // a newer copy of hA from another device: taken while hA rests, the old one kept as a backup
+    await pg.evaluate(() => { const d = JSON.parse(localStorage.getItem('__fakecloud')), p = 'data/users/u-test/h-hA', x = d[p], h = JSON.parse(x.data); h.gold = 999; h.played = Date.now() + 5000; x.data = JSON.stringify(h); x.played = h.played; x.sum = 'other'; x.rev++; localStorage.setItem('__fakecloud', JSON.stringify(d)); });
+    r.newer = await sync();
+    r.newerLocal = await pg.evaluate(async () => ({ gold: JSON.parse(localStorage.getItem('skotos.save.v1')).heroes.find((h) => h.id === 'hA').gold, mem: window.__G.save.heroes.find((h) => h.id === 'hA').gold, backups: (await import('/src/game/save.js')).backups().map((b) => [b.hero.id, b.hero.gold, b.why]) }));
+    // play hA: its change goes up; a cloud copy arriving meanwhile is not taken under it
+    await pg.evaluate(() => window.__D.emit('startHero', window.__G.save.heroes.find((h) => h.id === 'hA'), false));
+    await pg.waitForFunction(() => window.__G?.zone && window.__G.mode === 'play', null, { timeout: 240000 });
+    await A5.tick(pg);
+    r.playGold = await pg.evaluate(() => window.__G.hero.gold);
+    await pg.evaluate(async () => { window.__G.hero.gold = 4321; (await import('/src/game/save.js')).writeSave(); });
+    r.pushPlay = await sync();
+    r.pushedGold = JSON.parse((await docs())['data/users/u-test/h-hA'].data).gold;
+    // the page going away: the hero played goes up on its own
+    await pg.evaluate(async () => { window.__G.hero.gold = 5555; (await import('/src/game/save.js')).writeSave(); window.dispatchEvent(new Event('pagehide')); });
+    await pg.waitForTimeout(800);
+    r.flushGold = JSON.parse((await docs())['data/users/u-test/h-hA'].data).gold;
+    await pg.evaluate(() => { const d = JSON.parse(localStorage.getItem('__fakecloud')), x = d['data/users/u-test/h-hA'], h = JSON.parse(x.data); h.gold = 1; h.played = Date.now() + 60000; x.data = JSON.stringify(h); x.played = h.played; x.sum = 'other2'; x.rev++; localStorage.setItem('__fakecloud', JSON.stringify(d)); });
+    r.whilePlayed = await sync();
+    r.heroKept = await pg.evaluate(() => ({ gold: window.__G.hero.gold, stored: JSON.parse(localStorage.getItem('skotos.save.v1')).heroes.find((h) => h.id === 'hA').gold }));
+    // a co-op guest's G.hero is a view over its own record: that record's id is the one being played
+    r.guest = await pg.evaluate(async () => { const SV = await import('/src/game/save.js'), G = window.__G, real = G.hero; G.hero = Object.create(real); G.hero.__real = real; G.hero.id = 'hostsView'; const id = SV.playingId(); G.hero = real; return id; });
+    // hB deleted here: its cloud copy becomes a tombstone, and a sync does not bring it back
+    await pg.evaluate(async () => (await import('/src/game/save.js')).deleteHero('hB'));
+    await pg.waitForTimeout(800);
+    r.del = await sync();
+    r.tomb = await pg.evaluate(() => { const x = JSON.parse(localStorage.getItem('__fakecloud'))['data/users/u-test/h-hB']; return { del: x?.del, data: x?.data }; });
+    r.afterDel = (await stored()).heroes.map((h) => h.id);
+    // Settings: the cloud row and its panel with the backups
+    await pg.evaluate(() => window.__D.openPanel('settings')); await pg.waitForTimeout(300);
+    r.row = await pg.evaluate(() => document.querySelector('#panel .cl-row')?.textContent || null);
+    await pg.click('#panel .cl-row'); await pg.waitForTimeout(400);
+    r.panel = await pg.evaluate(() => ({ state: document.getElementById('cl-state')?.textContent, backups: document.querySelectorAll('#panel .cl-bk').length, sync: !!document.querySelector('[data-a="clsync"]'), code: !!document.querySelector('[data-a="clcopy"]') }));
+    await shot();
+    await pg.click('[data-a="clsync"]'); await pg.waitForTimeout(800);
+    r.syncMsg = await pg.evaluate(() => document.getElementById('cl-msg')?.textContent || null);
+    await pg.evaluate(() => window.__D.closePanel());
+    // a signed-out view: no cloud, the game as before, the settings say so
+    await pg.evaluate(() => localStorage.setItem('__fakecloud_mode', 'out'));
+    await ready();
+    await pg.waitForFunction(async () => (await import('/src/game/cloud.js')).CLOUD.state === 'unavailable', null, { timeout: 30000 }).catch(() => {});
+    await pg.evaluate(() => window.__D.openPanel('settings')); await pg.waitForTimeout(300);
+    r.out = await pg.evaluate(async () => ({ state: (await import('/src/game/cloud.js')).CLOUD.state, row: document.querySelector('#panel .cl-row')?.textContent || null, heroes: window.__G.save.heroes.length }));
+    await pg.evaluate(() => window.__D.closePanel());
+    // no claude.ai at all (the dev build): off, no row
+    await pg.evaluate(() => localStorage.setItem('__fakecloud_mode', 'none'));
+    await ready(); await pg.waitForTimeout(1500);
+    await pg.evaluate(() => window.__D.openPanel('settings')); await pg.waitForTimeout(300);
+    r.none = await pg.evaluate(async () => ({ state: (await import('/src/game/cloud.js')).CLOUD.state, row: !!document.querySelector('#panel .cl-row'), heroes: window.__G.save.heroes.length }));
+    await pg.evaluate(() => { window.__D.closePanel(); for (const k of Object.keys(localStorage)) if (k.startsWith('__fakecloud')) localStorage.removeItem(k); });
+    const checks = {
+      up: r.up.untouched && r.up.docs.length === 2,
+      newDevice: r.newDevice.heroes.join() === 'hA,hB' && r.newDevice.slots === 2 && r.newDevice.cont && r.newDevice.oldField === 1.5,
+      newer: r.newer?.pulled?.includes('hA') && r.newerLocal.gold === 999 && r.newerLocal.mem === 999 && r.newerLocal.backups.some((b) => b[0] === 'hA' && b[1] === 100),
+      play: r.playGold === 999 && r.pushPlay?.pushed?.includes('hA') && r.pushedGold === 4321,
+      whilePlayed: r.whilePlayed?.kept?.includes('hA') && r.heroKept.gold === 5555 && r.heroKept.stored === 5555,
+      guest: r.guest === 'hA',
+      tomb: r.tomb.del === true && r.tomb.data === null && !r.afterDel.includes('hB'),
+      settings: !!r.row && r.panel.backups >= 1 && r.panel.sync && !r.panel.code && !!r.syncMsg,
+      flush: r.flushGold === 5555,
+      signedOut: r.out.state === 'unavailable' && !!r.out.row && r.out.heroes >= 1,
+      none: r.none.state === 'off' && !r.none.row && r.none.heroes >= 1
+    };
+    return { pass: Object.values(checks).every(Boolean), checks, r };
+  } },
+  // cloud saves on the web build (net/cloudsb.js), the project stood in for by a fake supabase-js client in the page
+  // (?cloud=fake: its server kept in localStorage '__fakesb', the rules of supabase/migrations/*_skotos_saves.sql in
+  // short; the SQL itself: tools/cloud/test-saves.mjs). A hero goes up under a player whose code Settings shows; another
+  // browser (the game's keys and the save session cleared) with no hero types the code in Settings and gets the hero
+  cloudweb: { q: 'q=0&sim=2&norender&cloud=fake', init: () => {
+    const S = () => JSON.parse(localStorage.getItem('__fakesb') || '{"players":{},"users":{},"saves":{}}'), W = (x) => localStorage.setItem('__fakesb', JSON.stringify(x));
+    const A = '0123456789ABCDEFGHJKMNPQRSTVWXYZ', mk = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => A[b & 31]).join('');
+    const norm = (c) => String(c || '').toUpperCase().replace(/O/g, '0').replace(/[IL]/g, '1').replace(/[^0-9A-Z]/g, '');
+    const fns = {
+      save_hello(uid, a, x) { if (x.users[uid]) return { player: x.users[uid] }; const p = 'p' + mk(), code = mk(); x.players[p] = { code }; x.users[uid] = p; x.saves[p] = {}; return { player: p, code, new: true }; },
+      save_claim(uid, a, x) { const c = norm(a.code), p = Object.keys(x.players).find((k) => x.players[k].code === c); if (!p) return { error: 'bad_code' }; x.users[uid] = p; return { player: p }; },
+      save_new_code(uid, a, x) { const p = x.users[uid]; x.players[p].code = mk(); return { code: x.players[p].code }; },
+      save_list(uid, a, x) { const p = x.users[uid]; if (!p) return { error: 'no_player' }; return Object.values(x.saves[p]).map(({ data, ...m }) => m); },
+      save_get(uid, a, x) { return x.saves[x.users[uid]]?.[a.hero_id] || null; },
+      save_put(uid, a, x) { const p = x.users[uid], r = x.saves[p][a.hero_id]; if ((r ? r.rev : null) !== (a.base_rev ?? null)) return { error: 'conflict' }; const rev = (r?.rev || 0) + 1; x.saves[p][a.hero_id] = { id: a.hero_id, rev, played: a.played, sum: a.sum, del: false, at: 0, data: a.data }; return { rev }; },
+      save_delete(uid, a, x) { const p = x.users[uid], r = x.saves[p][a.hero_id]; if ((r ? r.rev : null) !== (a.base_rev ?? null)) return { error: 'conflict' }; const rev = (r?.rev || 0) + 1; x.saves[p][a.hero_id] = { id: a.hero_id, rev, played: 0, sum: '', del: true, at: a.at, data: null }; return { rev }; }
+    };
+    const createClient = async (url, key, opts) => {
+      const st = opts.auth.storage, sk = opts.auth.storageKey, sess = () => JSON.parse(st.getItem(sk) || 'null');
+      window.__saveAuth = { key: sk, local: st === localStorage };
+      return {
+        auth: { getSession: async () => ({ data: { session: sess() } }), signInAnonymously: async () => { const s = { user: { id: 'u' + mk() } }; st.setItem(sk, JSON.stringify(s)); return { data: { user: s.user, session: s }, error: null }; } },
+        schema: () => ({ rpc: (fn, a) => { const pr = (async () => { const x = S(), uid = sess()?.user?.id; if (!uid) return { data: null, error: { message: 'not_signed_in' } }; const d = fns[fn](uid, a, x); W(x); return { data: d, error: null }; })(); pr.abortSignal = () => pr; return pr; } })
+      };
+    };
+    window.__cloudFake = { url: 'https://fake.supabase.co', anonKey: 'k', createClient, stamped: true };
+  }, run: async (pg, shot) => {
+    const base = A5.base, r = {};
+    const ready = async () => { await pg.goto(base + '?q=0&sim=2&norender&cloud=fake'); await pg.waitForFunction(() => window.__ready && window.__G?.save, null, { timeout: 240000 }); };
+    const C = () => pg.evaluate(async () => { const c = (await import('/src/game/cloud.js')).CLOUD; return { state: c.state, kind: c.kind, code: c.code, last: c.last, err: c.err, busy: c.busy }; });
+    await pg.evaluate(() => {
+      for (const k of Object.keys(localStorage)) if (k.startsWith('skotos') || k.startsWith('__fake')) localStorage.removeItem(k);
+      const h = { id: 'hW', cls: 'ranger', level: 7, xp: 0, gold: 321, diff: 0, skills: {}, points: 6, inv: new Array(32).fill(null), equip: {}, stash: new Array(48).fill(null), quest: 2, flags: {}, wps: ['town'], act1: -1, act2: -1, act3: -1, act4: -1, act5: -1, gateBest: 0, boons: [], stats: { kills: 3, deaths: 0, time: 60, legs: 0, elites: 0 }, created: 1, played: 1000 };
+      localStorage.setItem('skotos.save.v1', JSON.stringify({ heroes: [h], settings: { helpSeen: true }, last: 'hW' })); window.__G.save = null;
+    });
+    await ready();
+    await pg.waitForFunction(async () => { const c = (await import('/src/game/cloud.js')).CLOUD; return c.state === 'on' && c.last > 0 && !c.busy; }, null, { timeout: 60000 });
+    r.one = await C();
+    r.auth = await pg.evaluate(() => window.__saveAuth);
+    r.upped = await pg.evaluate(() => { const x = JSON.parse(localStorage.getItem('__fakesb')), p = Object.values(x.users)[0]; return x.saves[p]?.hW?.data === JSON.stringify(JSON.parse(localStorage.getItem('skotos.save.v1')).heroes[0]); });
+    await pg.evaluate(() => window.__D.openPanel('settings')); await pg.waitForTimeout(300);
+    await pg.click('#panel .cl-row'); await pg.waitForTimeout(300);
+    r.hidden = await pg.evaluate(() => document.getElementById('cl-code')?.textContent);
+    await pg.click('[data-a="clshow"]'); await pg.waitForTimeout(300);
+    r.shown = await pg.evaluate(() => document.getElementById('cl-code')?.textContent);
+    await shot();
+    await pg.click('[data-a="clcopy"]'); await pg.waitForTimeout(500);
+    r.copyMsg = await pg.evaluate(() => document.getElementById('cl-msg')?.textContent);
+    await pg.evaluate(() => window.__D.closePanel());
+    // another browser: the game's keys and the save session gone, the server kept; nothing to play yet: no sign-in
+    await pg.evaluate(() => { window.__G.save = null; for (const k of Object.keys(localStorage)) if (k.startsWith('skotos')) localStorage.removeItem(k); });
+    await ready(); await pg.waitForTimeout(800);
+    r.two = await C();
+    await pg.evaluate(() => window.__D.openPanel('settings')); await pg.waitForTimeout(300);
+    await pg.click('#panel .cl-row'); await pg.waitForTimeout(300);
+    await pg.fill('#cl-in', r.shown.toLowerCase());
+    await pg.click('[data-a="clclaim"]');
+    await pg.waitForFunction(() => window.__G.save.heroes.some((h) => h.id === 'hW'), null, { timeout: 30000 }).catch(() => {});
+    await pg.waitForTimeout(400);
+    r.claimMsg = await pg.evaluate(() => document.getElementById('cl-msg')?.textContent);
+    r.after = await pg.evaluate(() => ({ heroes: window.__G.save.heroes.map((h) => [h.id, h.gold]), stored: JSON.parse(localStorage.getItem('skotos.save.v1') || 'null')?.heroes?.map((h) => h.id) }));
+    r.three = await C();
+    await shot();
+    await pg.evaluate(() => { window.__D.closePanel(); for (const k of Object.keys(localStorage)) if (k.startsWith('__fake') || k.startsWith('skotos.cloud') || k === 'skotos-save-auth') localStorage.removeItem(k); });
+    const checks = {
+      up: r.one.state === 'on' && r.one.kind === 'supabase' && /^[0-9A-Z]{16}$/.test(r.one.code || '') && r.upped,
+      ownSession: r.auth?.key === 'skotos-save-auth' && r.auth.local === true,
+      code: r.hidden.includes('•') && r.shown === r.one.code.match(/.{4}/g).join('-') && !!r.copyMsg,
+      idle: r.two.state === 'idle',
+      claimed: r.after.heroes.some(([id, g]) => id === 'hW' && g === 321) && r.after.stored?.includes('hW') && r.three.state === 'on' && r.three.code === r.one.code && !!r.claimMsg
+    };
+    return { pass: Object.values(checks).every(Boolean), checks, r };
+  } },
   // levels past the old skill cap, Mastery past 50, and a save from before the progression taken up from the title
   progress: { q: 'auto=town&sim=2&q=1&lvl=1&cls=' + (process.env.CLS || 'ranger'), run: async (pg, shot) => {
     const r = {};
@@ -2227,6 +2405,8 @@ page.on('pageerror', (e) => logs.push('pageerror: ' + e.message + ' ' + (e.stack
 // huge pool whenever the stats are recounted, as when Karthax takes the gifts back)
 // (and with window.__immortal no single blow takes her under 1: her life cannot be set below it while it holds)
 await page.addInitScript(() => { setInterval(() => { const G = window.__G; if (G?.player && !G.player.__hpTrap) { const p = G.player; let v = p.hp; Object.defineProperty(p, 'hp', { get() { return v; }, set(x) { v = window.__immortal && !(x >= 1) ? 1 : x; }, configurable: true, enumerable: true }); p.__hpTrap = true; } if (G?.player && window.__tough && G.player.hpMax < 99999) G.player.hpMax = 99999; if (G?.player && G.player.hpMax >= 99999) G.player.hp = G.player.hpMax; if (G?.player && window.__immortal) { G.player.hp = G.player.hpMax; G.player.dead = false; } }, 50); });
+// (a scenario's own script in every page it loads, before the game's: the cloud scenario's stand-in for claude.ai)
+if (sc.init) await page.addInitScript(sc.init);
 await page.goto((process.env.BASE || 'http://localhost:5199/') + '?' + sc.q);
 page.setDefaultTimeout(120000);
 // auto-start runs after __ready: wait for the hero too

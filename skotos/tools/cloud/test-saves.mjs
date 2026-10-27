@@ -241,6 +241,12 @@ await T('backend: two devices joined by a code', async () => {
   ok((await syncAll(a.B, a.store)).pushed.join() === 'ha1', 'back online: it goes');
   let bad = null; try { await a.B.claim('nope'); } catch (x) { bad = x.code; }
   ok(bad === 'bad_code', 'a malformed code refused before the call');
+  await admin('update skotos.save_quota set players_cap = players');
+  const c2 = await supabaseBackend(cfg, { storage: memStorage(), claim: showish(a.B.code()) });
+  ok(c2.who === a.B.who, 'a new device that starts by taking a code: that player, none made for it (the players cap reached holds no claim back)');
+  await admin('update skotos.save_quota set players_cap = 20000');
+  let bc = null; try { await supabaseBackend(cfg, { storage: memStorage(), claim: 'ZZZZ-ZZZZ-ZZZZ-ZZZZ' }); } catch (x) { bc = x.code; }
+  ok(bc === 'bad_code', 'starting with a wrong code: bad_code', bc);
   const nc = await a.B.newCode();
   ok(CODE_RE.test(nc) && a.B.code() === nc, 'a new code kept and shown');
 });
