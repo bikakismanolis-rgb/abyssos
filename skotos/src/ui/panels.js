@@ -210,6 +210,7 @@ const R = {
       <div class="set-row"><span>${t('set.lang')}</span><div class="chips" style="justify-content:flex-start">${chip('lang:el', lang() === 'el', 'Ελληνικά')}${chip('lang:en', lang() === 'en', 'English')}</div></div>
       <div class="set-row"><span>${t('set.vibrate')}</span><div class="chips" style="justify-content:flex-start">${chip('vib:1', s.vibrate, t('set.on'))}${chip('vib:0', !s.vibrate, t('set.off'))}</div></div>
       <div class="set-row"><span>${t('set.numbers')}</span><div class="chips" style="justify-content:flex-start">${chip('num:1', s.numbers, t('set.on'))}${chip('num:0', !s.numbers, t('set.off'))}</div></div>
+      ${EXTRA.cloudRow?.() || ''}
       <p class="muted">${t('set.qnote')}</p><p class="muted">${t('menu.credits')}</p>
       <button class="btn ghost" data-a="credits" style="width:100%">${t('cr.title')}</button></div></div>`;
   },
@@ -310,6 +311,7 @@ function onClick(e) {
     case 'map': open('map'); return;
     case 'coop': open('coop'); return;
     case 'settings': open('settings'); return;
+    case 'cloud': EXTRA.cloud?.reset?.(); open('cloud'); return;
     case 'help': open('help'); return;
     case 'credits': open('credits'); return;
     case 'quit': close(); emit('quit'); return;
