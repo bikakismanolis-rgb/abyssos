@@ -56,10 +56,12 @@ const proxy = process.env.LIVE_PROXY;
 // (CHROME_ARGS: more of Chromium's flags, space-separated, e.g. --disable-gpu-compositing)
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows', ...(process.env.CHROME_ARGS || '').split(' ').filter(Boolean)], ...(proxy ? { proxy: { server: proxy, bypass: 'localhost,127.0.0.1,<-loopback>' } } : {}) });
 const FATAL = watchFatal(browser);
-const logs = { A: [], B: [] }, net = { A: { supa: 0, failed: [] }, B: { supa: 0, failed: [] } };
+// (PAGES=4: two more pages, C a Ranger and D a Warden, join A's game by its code once it has started: a party of four)
+const WHO = +(process.env.PAGES || 2) >= 4 ? ['A', 'B', 'C', 'D'] : ['A', 'B'];
+const logs = Object.fromEntries(WHO.map((w) => [w, []])), net = Object.fromEntries(WHO.map((w) => [w, { supa: 0, failed: [] }]));
 // what each page said on the wire (each skotos.send call and its messages, by event) and what its sockets brought in
 // (every frame, and the broadcasts among them, by event and by whether they were its own coming back)
-const wire = { A: { calls: [], frames: [] }, B: { calls: [], frames: [] } }, uid = { A: null, B: null };
+const wire = Object.fromEntries(WHO.map((w) => [w, { calls: [], frames: [] }])), uid = Object.fromEntries(WHO.map((w) => [w, null]));
 async function open(who, q) {
   const ctx = await browser.newContext({ viewport: { width: 844, height: 390 } });
   // (the toasts a page shows, as text: what it was told)
@@ -89,7 +91,7 @@ async function open(who, q) {
     });
   });
   pg.on('requestfailed', (r) => { net[who].failed.push(r.url().replace(/\?.*/, '').slice(0, 100) + ' ' + (r.failure()?.errorText || '')); });
-  await pg.goto(BASE + '?' + q);
+  await pg.goto(BASE + '?' + q, { timeout: 180000 });
   await pg.waitForFunction(() => window.__ready && window.__G && window.__G.mode === 'title' && document.getElementById('screen') && !document.getElementById('screen').hidden, null, { timeout: 240000 });
   // (a page that draws nothing still needs its frames: a tick of DOM, as tools/coop.mjs)
   await pg.evaluate(() => { const d = document.createElement('div'); d.style.cssText = 'position:fixed;left:0;bottom:0;width:2px;height:2px;z-index:99;font-size:1px'; document.body.appendChild(d); let k = 0; setInterval(() => { d.textContent = k++ % 2 ? '.' : ':'; }, 20); });
@@ -127,9 +129,13 @@ async function newHero(pg, cls) {
 }
 
 let A = null, B = null;
+const more = [];
 try {
   A = await open('A', 'q=0&norender');
   B = await open('B', 'q=0&norender');
+  // (a party of four: C and D load now, while the others idle at the title: four pages loading the game beside three
+  // playing it on a few cores time out)
+  for (const w of WHO.slice(2)) more.push(await open(w, 'q=0&norender'));
   const tr = (pg) => ev(pg, () => ({ ready: window.__NET?.S.ready, avail: window.__NET?.S.avail, kind: window.__NET?.S.T?.kind, stamped: window.__NET?.S.T?.stamped, me: window.__NET?.S.me }));
   // (how long from the page's start to its transport: supabase-js loaded, the user signed in, the lobby joined)
   const readyIn = async (pg) => { await until(pg, () => window.__readyAt != null, null, 120000, 'net'); return ev(pg, () => ({ title: window.__titleAt, coop: window.__readyAt })); };
@@ -178,6 +184,33 @@ try {
   ok(seeB.mode === 'guest' && seeB.n === 2 && seeB.remotes === 1 && seeB.frame === 1, 'B sees A: its party frame and A\'s hero', seeB);
   const near = await until(A, (bp) => { const r = window.__NET.NET.remotes[0]; return !!r && Math.hypot(r.x - bp.x, r.z - bp.z) < 3; }, await ev(B, () => ({ x: window.__G.player.x, z: window.__G.player.z })), 10000, 'B\'s stand-in by B');
   ok(near, 'B\'s hero on A\'s page stands where B put it');
+  // (a party of four: C and D open, make their heroes, and join A's game by its code; each by A)
+  for (const [w, cls] of [['C', 'ranger'], ['D', 'warden']].slice(0, WHO.length - 2)) {
+    const pg = more['CD'.indexOf(w)];
+    await until(pg, () => window.__readyAt != null, null, 120000, 'net');
+    uid[w] = await ev(pg, () => window.__NET.S.me);
+    ok(await newHero(pg, cls), w + ' made a ' + cls + ' and is in its town');
+    await sleep(800); await click(pg, '#h-coop'); await sleep(500);
+    await pg.fill('#coop-code', code);
+    await click(pg, '[data-a="cjoin"]:not([data-a^="cjoin:"])');
+    const inw = await until(pg, () => window.__NET.S.zoneKey && window.__NET.S.zoneKey === window.__G.zone?.netKey && window.__G.mode === 'play', null, 90000, w + ' in A\'s world');
+    ok(inw, w + ' joined by the code and is in A\'s world');
+    await ev(pg, () => window.__D.closePanel());
+    await ev(pg, (p) => { const G = window.__G, f = G.zone.map.nearestFloor(p.x - 2, p.z + 1 + Math.random()); G.player.x = f.x; G.player.z = f.z; }, hp);
+  }
+  if (more.length) {
+    const n = WHO.length;
+    const all4 = await until(A, (n) => window.__NET.NET.n === n && window.__NET.S.roster.length === n - 1, n, 30000, 'A counts ' + n);
+    ok(all4, 'A counts ' + n + ' players', await ev(A, () => ({ n: window.__NET.NET.n, roster: window.__NET.S.roster.length })));
+    // (what each page holds of the others: its role, its toasts, each peer's role and how long ago it last said its presence)
+    for (const [w, pg] of [['A', A], ['B', B], ...more.map((p, i) => ['CD'[i], p])]) info(w + ' holds', await ev(pg, () => { const S = window.__NET.S; return { role: S.role, toasts: window.__toasts.slice(-5), roster: S.roster.map((x) => x.slice(0, 4)), box: !!S.ch?._boxLive?.(), peers: (S.ch?.peers() || []).map((p) => p.peer.slice(0, 4) + ':' + (p.presence?.r || '-') + ':' + Math.round((Date.now() - p.updatedAt) / 100) / 10) }; }).catch((e) => String(e)));
+    for (const [i, pg] of [B, ...more].entries()) ok(await until(pg, (n) => window.__NET.NET.n === n && window.__NET.party().length === n - 1, n, 30000, 'party'), 'BCD'[i] + '\'s party frames hold the other ' + (n - 1), await ev(pg, () => window.__NET.party().map((p) => p.cls)));
+    // (the guests' outboxes: each guest's own topic, heard by A alone, once A lists it)
+    const boxes = await until(A, (n) => window.__NET.S.ch?.econ ? true : false, n, 5000, 'econ');
+    const live = [];
+    for (const pg of [B, ...more]) live.push(await until(pg, () => !!window.__NET.S.ch?._boxLive?.(), null, 15000, 'outbox'));
+    ok(boxes && live.every(Boolean), 'every guest says it by its outbox, heard by A (the economy of a stamped game\'s channel)', live);
+  }
   // (a page's first steps in a zone may open its help: closed for the pictures)
   await ev(A, () => window.__D.closePanel()); await ev(B, () => window.__D.closePanel());
   await shot(A, 'a-party.png'); await shot(B, 'b-party.png');
@@ -206,7 +239,8 @@ try {
   info('the pair standing, messages and KB a second (the last 5 s, each page\'s meter)', { A: ma, B: mb });
   // ten seconds of both heroes walking about (each moved every 50 ms, as tools/coop.mjs ux does): what the wire carries
   const walk = (pg) => ev(pg, () => { let k = 0; window.__walk = setInterval(() => { const p = window.__G.player, f = window.__G.zone.map.nearestFloor(p.x + Math.sin(k / 6) * 0.3, p.z + Math.cos(k / 6) * 0.3); p.x = f.x; p.z = f.z; k++; }, 50); });
-  await walk(A); await walk(B); await sleep(2000);
+  for (const pg of [A, B, ...more]) await walk(pg);
+  await sleep(2000);
   const f0 = [await ev(A, () => [window.__frames, window.__NET.S.stats.snaps]), await ev(B, () => window.__frames)];
   // (PROFILE=1: a CPU profile of each page over the ten seconds, its busiest functions by their own time)
   const prof = process.env.PROFILE ? await Promise.all([A, B].map(async (pg) => { const c = await pg.context().newCDPSession(pg); await c.send('Profiler.enable'); await c.send('Profiler.setSamplingInterval', { interval: 1000 }); await c.send('Profiler.start'); return c; })) : null;
@@ -219,7 +253,7 @@ try {
   }
   const f1 = [await ev(A, () => [window.__frames, window.__NET.S.stats.snaps]), await ev(B, () => window.__frames)];
   info('while walking: frames a second, and the host\'s snapshots a second (the game\'s own count; it sends one at most every 100 ms, once a frame)', { A: Math.round((f1[0][0] - f0[0][0]) / ((w1 - w0) / 1000)), B: Math.round((f1[1] - f0[1]) / ((w1 - w0) / 1000)), snaps: +((f1[0][1] - f0[0][1]) / ((w1 - w0) / 1000)).toFixed(1) });
-  await ev(A, () => clearInterval(window.__walk)); await ev(B, () => clearInterval(window.__walk));
+  for (const pg of [A, B, ...more]) await ev(pg, () => clearInterval(window.__walk));
   const span = (w1 - w0) / 1000, inW = (x) => x.t >= w0 && x.t < w1;
   const sum = (who) => {
     const c = wire[who].calls.filter(inW), f = wire[who].frames.filter(inW), by = {};
@@ -228,15 +262,21 @@ try {
     for (const x of f) if (!bc.includes(x)) sys[x.ev] = (sys[x.ev] || 0) + 1;
     return { calls: +(c.length / span).toFixed(1), msgs: +(c.reduce((a, x) => a + x.n, 0) / span).toFixed(1), byEvent: Object.fromEntries(Object.entries(by).map(([k, v]) => [k, +(v / span).toFixed(1)])), KBout: +(c.reduce((a, x) => a + x.b, 0) / span / 1024).toFixed(1), heard: +((bc.length - own) / span).toFixed(1), ownBack: +(own / span).toFixed(1), KBin: +(f.reduce((a, x) => a + x.b, 0) / span / 1024).toFixed(1), other: sys };
   };
-  const sa = sum('A'), sbw = sum('B'), ma2 = await meter(A), mb2 = await meter(B), ta2 = await tally(A), tb2 = await tally(B);
-  info('the pair walking, on the wire, a second (10 s): skotos.send calls and messages, and the broadcasts each socket brought in', { A: sa, B: sbw });
-  info('the same 10 s by each page\'s own meter', { A: ma2, B: mb2 });
-  const sends = sa.msgs + sbw.msgs, dels = sa.heard + sa.ownBack + sbw.heard + sbw.ownBack;
-  info('the pair\'s Realtime events a second (each message sent, each delivered)', { sent: +sends.toFixed(1), delivered: +dels.toFixed(1), events: +(sends + dels).toFixed(1) });
-  ok(sa.heard > 0 && sbw.heard > 0 && Math.abs(sa.ownBack - sa.msgs) <= Math.max(1.5, sa.msgs * 0.15) && Math.abs(sbw.heard - sa.msgs) <= Math.max(1.5, sa.msgs * 0.15), 'every message the host said came to the guest and back to the host itself, once', { said: sa.msgs, heardByB: sbw.heard, backToA: sa.ownBack });
+  const PG = { A, B }; more.forEach((pg, i) => { PG['CD'[i]] = pg; });
+  const S_ = {}, M_ = {}, T_ = {};
+  for (const w of WHO) { S_[w] = sum(w); M_[w] = await meter(PG[w]); T_[w] = await tally(PG[w]); }
+  const sa = S_.A, sbw = S_.B, party = WHO.length === 2 ? 'the pair' : 'the party of ' + WHO.length;
+  info(party + ' walking, on the wire, a second (10 s): skotos.send calls and messages, and the broadcasts each socket brought in', S_);
+  info('the same 10 s by each page\'s own meter', M_);
+  let sends = 0, dels = 0; for (const w of WHO) { sends += S_[w].msgs; dels += S_[w].heard + S_[w].ownBack; }
+  info(party + '\'s Realtime events a second (each message sent, each delivered)', { sent: +sends.toFixed(1), delivered: +dels.toFixed(1), events: +(sends + dels).toFixed(1) });
+  ok(sends + dels < (WHO.length === 2 ? 45 : 85), party + ' under ' + (WHO.length === 2 ? 45 : 85) + ' Realtime events a second (the free plan: 100 for the project)', +(sends + dels).toFixed(1));
+  // (the host's messages reach every member of its channel, itself too; the guests' go by their outboxes to it alone)
+  const heardHost = (w) => S_[w].heard;
+  ok(sa.ownBack > 0 && Math.abs(sa.ownBack - sa.msgs) <= Math.max(1.5, sa.msgs * 0.15) && WHO.slice(1).every((w) => Math.abs(heardHost(w) - sa.msgs) <= Math.max(1.5, sa.msgs * 0.15)), 'every message the host said came to each guest and back to the host itself, once (and nothing else came to a guest)', { said: sa.msgs, heard: WHO.slice(1).map((w) => S_[w].heard), backToA: sa.ownBack });
   const clean = (x) => !!(x.game?.why && x.lobby?.why) && x.game.drops === 0 && x.lobby.drops === 0 && !Object.keys(x.game.why).length && !Object.keys(x.lobby.why).length && !x.ended;
-  const http = [...(net.A.refused || []), ...(net.B.refused || [])];
-  ok(clean(ta2) && clean(tb2) && !http.length, 'after the walk, on both pages: nothing the server refused, nothing given up (the transport\'s counters, the game\'s channel and the lobby\'s), no call to the project answered 4xx or 5xx', { A: ta2, B: tb2, http });
+  const http = WHO.flatMap((w) => net[w].refused || []);
+  ok(WHO.every((w) => clean(T_[w])) && !http.length, 'after the walk, on every page: nothing the server refused, nothing given up (the transport\'s counters, the game\'s channel and the lobby\'s), no call to the project answered 4xx or 5xx', { T: T_, http });
   // A ends the game from its panel: B is told, and is home
   const lvl0 = await ev(B, () => window.__G.hero.__real?.level ?? window.__G.hero.level);
   await click(A, '#h-coop'); await sleep(500);
@@ -248,6 +288,7 @@ try {
   ok(home, 'B is back in its own town, its own hero', await ev(B, () => ({ zone: window.__G.zone?.id, key: window.__G.zone?.netKey || null, role: window.__NET.S.role, lvl: window.__G.hero.level })));
   ok(told.toasts.includes(told.hostLeft), 'B was told the host has gone', told.toasts);
   ok((await ev(B, () => window.__G.hero.level)) === lvl0, 'B\'s hero as it was');
+  for (const [i, pg] of more.entries()) ok(await until(pg, () => !window.__NET.S.role && window.__G.zone?.id === 'town', null, 45000, 'home'), 'CD'[i] + ' is home too');
   await shot(B, 'b-home.png');
 } catch (e) {
   ok(false, 'the run itself', e.stack?.split('\n').slice(0, 3).join(' | '));
@@ -255,11 +296,11 @@ try {
   const fat = await fatalAll(browser, FATAL).catch(() => []);
   ok(!fat.length, 'no #fatal on either page', fat);
   const errs = (w) => logs[w].filter((l) => l.startsWith('error') || l.startsWith('pageerror'));
-  ok(!errs('A').length && !errs('B').length, 'no console errors on either page', { A: errs('A'), B: errs('B') });
-  info('console warnings', { A: logs.A.filter((l) => l.startsWith('warning')).length, B: logs.B.filter((l) => l.startsWith('warning')).length });
-  info('requests to the project (HTTP, finished)', { A: net.A.supa, B: net.B.supa, failed: [...net.A.failed, ...net.B.failed].slice(0, 6), refused: { A: net.A.refused || [], B: net.B.refused || [] } });
-  // (every game hosted here ended: the host's leave does it; a page closed takes its channels)
-  for (const pg of [A, B]) { try { await pg?.evaluate(async () => { const N = window.__NET; if (N?.S.role) await N.leaveGame(null); }); } catch (e) { /* gone */ } }
+  ok(WHO.every((w) => !errs(w).length), 'no console errors on any page', Object.fromEntries(WHO.map((w) => [w, errs(w)])));
+  info('console warnings', Object.fromEntries(WHO.map((w) => [w, logs[w].filter((l) => l.startsWith('warning')).length])));
+  info('requests to the project (HTTP, finished)', { ...Object.fromEntries(WHO.map((w) => [w, net[w].supa])), failed: WHO.flatMap((w) => net[w].failed).slice(0, 6), refused: Object.fromEntries(WHO.map((w) => [w, net[w].refused || []])) });
+  // (every game hosted here ended: the host's leave does it, a guest's leave its outbox; a page closed takes its channels)
+  for (const pg of [A, B, ...more]) { try { await pg?.evaluate(async () => { const N = window.__NET; if (N?.S.role) await N.leaveGame(null); }); } catch (e) { /* gone */ } }
   await sleep(500);
   await browser.close().catch(() => {});
   server.close();
