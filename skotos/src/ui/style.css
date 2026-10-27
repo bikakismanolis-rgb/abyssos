@@ -330,6 +330,8 @@ body.memory-ice #stage::after { opacity: 1; background: radial-gradient(ellipse 
 .slot { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: rgba(12, 13, 17, .85); cursor: pointer; text-align: left; }
 .slot .nm { flex: 1; font: 700 14px var(--display); color: var(--ink); }
 .slot .dl { font-size: 12px; color: #c87a6a; padding: 4px 8px; border: 1px solid rgba(200, 120, 100, .4); border-radius: 6px; }
+.slot.off { opacity: .55; cursor: default; }
+.slot.off .nm { font: 400 13px var(--body); color: var(--ink3); }
 .pick { position: fixed; left: 0; right: 0; bottom: calc(10px + var(--sb)); display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 0 12px; }
 .pick-cards { display: flex; gap: 10px; justify-content: center; width: 100%; max-width: 900px; }
 .pcard { flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: rgba(10, 11, 15, .86); cursor: pointer; text-align: left; transition: transform .15s, border-color .15s; }

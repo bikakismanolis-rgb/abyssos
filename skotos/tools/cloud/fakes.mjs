@@ -30,22 +30,35 @@ export function hero(id, o = {}) {
 }
 
 // the artifact's db: one store shared by every viewer of the artifact; each viewer sees only its own data/users/<id>/.
-// net: { offline, readOnly, failGet, calls } to make it fail
+// net: { offline, readOnly, failGet, calls } to make it fail; delay: ms each call takes (two devices' calls then
+// interleave); leases: false for a runtime without acquire (capability_removed)
 export function artifactDb() {
-  const docs = new Map(), net = { offline: false, readOnly: false, failGet: 0, calls: 0, sets: 0 };
+  const docs = new Map(), leases = new Map(), net = { offline: false, readOnly: false, failGet: 0, calls: 0, sets: 0, delay: 0, leases: true, acquires: 0 };
   const err = (code) => Object.assign(new Error(code), { code });
   const snap = (id, v) => ({ id, exists: !!v, data: () => (v ? clone(v) : undefined), metadata: { fromCache: false, hasPendingWrites: false } });
   const forViewer = (uid) => {
     const mine = (path) => path.startsWith('data/users/' + uid + '/');
-    const check = () => { net.calls++; if (net.offline) throw err('unavailable'); };
+    const check = async () => { net.calls++; if (net.delay) await new Promise((r) => setTimeout(r, net.delay)); if (net.offline) throw err('unavailable'); };
     const docRef = (path) => {
       const segs = path.split('/');
       if (segs.length % 2) throw new TypeError('a document path has an even number of segments: ' + path);
       return {
         id: segs[segs.length - 1], path,
-        async get() { check(); if (net.failGet > 0) { net.failGet--; throw err('unavailable'); } return snap(segs[segs.length - 1], mine(path) ? docs.get(path) : null); },
-        async set(v) { check(); if (net.readOnly || !mine(path)) throw err('invalid_argument'); if (!v || typeof v !== 'object' || Array.isArray(v)) throw err('invalid_argument'); if (JSON.stringify(v).length > 256 * 1024) throw err('invalid_argument'); net.sets++; docs.set(path, clone(v)); },
-        async delete() { check(); if (net.readOnly || !mine(path)) throw err('invalid_argument'); docs.delete(path); }
+        async get() { await check(); if (net.failGet > 0) { net.failGet--; throw err('unavailable'); } return snap(segs[segs.length - 1], mine(path) ? docs.get(path) : null); },
+        async set(v) { await check(); if (net.readOnly || !mine(path)) throw err('invalid_argument'); if (!v || typeof v !== 'object' || Array.isArray(v)) throw err('invalid_argument'); if (JSON.stringify(v).length > 256 * 1024) throw err('invalid_argument'); net.sets++; docs.set(path, clone(v)); },
+        async delete() { await check(); if (net.readOnly || !mine(path)) throw err('invalid_argument'); docs.delete(path); },
+        // (a cooperative lease, db.d.ts: set-if-not-busy; busy resolves { acquired: false }; it lapses by itself)
+        async acquire(o) {
+          if (!net.leases) throw err('capability_removed');
+          await check(); if (net.readOnly || !mine(path)) throw err('invalid_argument');
+          net.acquires++;
+          const t = Date.now(), l = leases.get(path), ttl = Math.min(600000, Math.max(1000, o?.ttlMs || 30000));
+          if (l && l.until > t && l.holder !== o?.holder) return { acquired: false, expiresAt: new Date(l.until).toISOString() };
+          // (a lease shortened to the least there is, as a write ends (cloudart.js): lapsed at once here, where the tests'
+          // devices write a moment apart, not a second)
+          leases.set(path, { holder: o?.holder, until: ttl <= 1000 ? 0 : t + ttl });
+          return { acquired: true, version: 1, expiresAt: new Date(t + ttl).toISOString(), holder: o?.holder };
+        }
       };
     };
     return {
@@ -55,12 +68,12 @@ export function artifactDb() {
         return {
           path,
           doc: (id) => docRef(path + '/' + id),
-          async get() { check(); const out = []; for (const [p, v] of docs) if (p.startsWith(path + '/') && p.split('/').length === path.split('/').length + 1 && mine(p)) out.push(snap(p.split('/').pop(), v)); out.sort((a, b) => (a.id < b.id ? -1 : 1)); return { docs: out, size: out.length, empty: !out.length }; }
+          async get() { await check(); const out = []; for (const [p, v] of docs) if (p.startsWith(path + '/') && p.split('/').length === path.split('/').length + 1 && mine(p)) out.push(snap(p.split('/').pop(), v)); out.sort((a, b) => (a.id < b.id ? -1 : 1)); return { docs: out, size: out.length, empty: !out.length }; }
         };
       }
     };
   };
   // claude for a viewer: uid null (signed out: db and user null), or db null (an older viewer)
   const claude = (uid, o = {}) => ({ use: async (name) => (name === 'db' ? (uid && !o.noDb ? forViewer(uid) : null) : name === 'user' ? (uid ? { id: async () => uid } : null) : null) });
-  return { docs, net, claude };
+  return { docs, net, claude, leases };
 }

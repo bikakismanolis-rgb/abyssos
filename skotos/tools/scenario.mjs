@@ -1144,7 +1144,8 @@ const S = {
     r.newDevice = await pg.evaluate(() => ({ heroes: window.__G.save.heroes.map((h) => h.id).sort(), slots: document.querySelectorAll('#screen .slot').length, cont: !!document.getElementById('m-cont'), oldField: JSON.parse(localStorage.getItem('skotos.save.v1')).heroes.find((h) => h.id === 'hA')?.oldField?.keep?.[0] }));
     await shot();
     // a newer copy of hA from another device: taken while hA rests, the old one kept as a backup
-    await pg.evaluate(() => { const d = JSON.parse(localStorage.getItem('__fakecloud')), p = 'data/users/u-test/h-hA', x = d[p], h = JSON.parse(x.data); h.gold = 999; h.played = Date.now() + 5000; x.data = JSON.stringify(h); x.played = h.played; x.sum = 'other'; x.rev++; localStorage.setItem('__fakecloud', JSON.stringify(d)); });
+    // (written as another device's write is: its sum, and its chain)
+    await pg.evaluate(async () => { const { heroSum } = await import('/src/game/cloudsync.js'); const d = JSON.parse(localStorage.getItem('__fakecloud')), p = 'data/users/u-test/h-hA', x = d[p], h = JSON.parse(x.data); h.gold = 999; h.played = Date.now() + 5000; x.data = JSON.stringify(h); x.played = h.played; x.sum = heroSum(h); x.rev++; x.chain = { ...(x.chain || {}), [x.rev]: x.sum }; localStorage.setItem('__fakecloud', JSON.stringify(d)); });
     r.newer = await sync();
     r.newerLocal = await pg.evaluate(async () => ({ gold: JSON.parse(localStorage.getItem('skotos.save.v1')).heroes.find((h) => h.id === 'hA').gold, mem: window.__G.save.heroes.find((h) => h.id === 'hA').gold, backups: (await import('/src/game/save.js')).backups().map((b) => [b.hero.id, b.hero.gold, b.why]) }));
     // play hA: its change goes up; a cloud copy arriving meanwhile is not taken under it
@@ -1159,7 +1160,7 @@ const S = {
     await pg.evaluate(async () => { window.__G.hero.gold = 5555; (await import('/src/game/save.js')).writeSave(); window.dispatchEvent(new Event('pagehide')); });
     await pg.waitForTimeout(800);
     r.flushGold = JSON.parse((await docs())['data/users/u-test/h-hA'].data).gold;
-    await pg.evaluate(() => { const d = JSON.parse(localStorage.getItem('__fakecloud')), x = d['data/users/u-test/h-hA'], h = JSON.parse(x.data); h.gold = 1; h.played = Date.now() + 60000; x.data = JSON.stringify(h); x.played = h.played; x.sum = 'other2'; x.rev++; localStorage.setItem('__fakecloud', JSON.stringify(d)); });
+    await pg.evaluate(async () => { const { heroSum } = await import('/src/game/cloudsync.js'); const d = JSON.parse(localStorage.getItem('__fakecloud')), x = d['data/users/u-test/h-hA'], h = JSON.parse(x.data); h.gold = 1; h.played = Date.now() + 60000; x.data = JSON.stringify(h); x.played = h.played; x.sum = heroSum(h); x.rev++; x.chain = { ...(x.chain || {}), [x.rev]: x.sum }; localStorage.setItem('__fakecloud', JSON.stringify(d)); });
     r.whilePlayed = await sync();
     r.heroKept = await pg.evaluate(() => ({ gold: window.__G.hero.gold, stored: JSON.parse(localStorage.getItem('skotos.save.v1')).heroes.find((h) => h.id === 'hA').gold }));
     // (and the player is told: a word with the way back to the title, once)
@@ -1233,14 +1234,16 @@ const S = {
     const S = () => JSON.parse(localStorage.getItem('__fakesb') || '{"players":{},"users":{},"saves":{}}'), W = (x) => localStorage.setItem('__fakesb', JSON.stringify(x));
     const A = '0123456789ABCDEFGHJKMNPQRSTVWXYZ', mk = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => A[b & 31]).join('');
     const norm = (c) => String(c || '').toUpperCase().replace(/O/g, '0').replace(/[IL]/g, '1').replace(/[^0-9A-Z]/g, '');
+    // (every call of the player's saves names the player the page means: refused moved when it is not the user's)
+    const moved = (uid, a, x) => (x.users[uid] && x.users[uid] === a.p_player ? null : { error: 'moved', player: x.users[uid] ?? null });
     const fns = {
-      save_hello(uid, a, x) { if (x.users[uid]) return { player: x.users[uid] }; const p = 'p' + mk(), code = mk(); x.players[p] = { code }; x.users[uid] = p; x.saves[p] = {}; return { player: p, code, new: true }; },
+      save_hello(uid, a, x) { if (x.users[uid]) { const p = x.users[uid]; return a.p_code ? { player: p, code_ok: x.players[p].code === norm(a.p_code) } : { player: p }; } const p = 'p' + mk(), code = mk(); x.players[p] = { code }; x.users[uid] = p; x.saves[p] = {}; return { player: p, code, new: true }; },
       save_claim(uid, a, x) { const c = norm(a.code), p = Object.keys(x.players).find((k) => x.players[k].code === c); if (!p) return { error: 'bad_code' }; x.users[uid] = p; return { player: p }; },
-      save_new_code(uid, a, x) { const p = x.users[uid]; x.players[p].code = mk(); return { code: x.players[p].code }; },
-      save_list(uid, a, x) { const p = x.users[uid]; if (!p) return { error: 'no_player' }; return Object.values(x.saves[p]).map(({ data, ...m }) => m); },
-      save_get(uid, a, x) { return x.saves[x.users[uid]]?.[a.hero_id] || null; },
-      save_put(uid, a, x) { const p = x.users[uid], r = x.saves[p][a.hero_id]; if ((r ? r.rev : null) !== (a.base_rev ?? null)) return { error: 'conflict' }; const rev = (r?.rev || 0) + 1; x.saves[p][a.hero_id] = { id: a.hero_id, rev, played: a.played, sum: a.sum, del: false, at: 0, data: a.data }; return { rev }; },
-      save_delete(uid, a, x) { const p = x.users[uid], r = x.saves[p][a.hero_id]; if ((r ? r.rev : null) !== (a.base_rev ?? null)) return { error: 'conflict' }; const rev = (r?.rev || 0) + 1; x.saves[p][a.hero_id] = { id: a.hero_id, rev, played: 0, sum: '', del: true, at: a.at, data: null }; return { rev }; }
+      save_new_code(uid, a, x) { const m = moved(uid, a, x); if (m) return m; const p = x.users[uid]; x.players[p].code = mk(); for (const u of Object.keys(x.users)) if (u !== uid && x.users[u] === p) delete x.users[u]; return { code: x.players[p].code }; },
+      save_list(uid, a, x) { const m = moved(uid, a, x); if (m) return m; return Object.values(x.saves[x.users[uid]]).map(({ data, ...r }) => r); },
+      save_get(uid, a, x) { const m = moved(uid, a, x); if (m) return m; return x.saves[x.users[uid]]?.[a.hero_id] || null; },
+      save_put(uid, a, x) { const m = moved(uid, a, x); if (m) return m; const p = x.users[uid], r = x.saves[p][a.hero_id]; if ((r ? r.rev : null) !== (a.base_rev ?? null)) return { error: 'conflict' }; const rev = (r?.rev || 0) + 1; x.saves[p][a.hero_id] = { id: a.hero_id, rev, played: a.played, sum: a.sum, del: false, at: 0, data: a.data }; return { rev }; },
+      save_delete(uid, a, x) { const m = moved(uid, a, x); if (m) return m; const p = x.users[uid], r = x.saves[p][a.hero_id]; if ((r ? r.rev : null) !== (a.base_rev ?? null)) return { error: 'conflict' }; const rev = (r?.rev || 0) + 1; x.saves[p][a.hero_id] = { id: a.hero_id, rev, played: 0, sum: '', del: true, at: a.at, data: null }; return { rev }; }
     };
     const createClient = async (url, key, opts) => {
       const st = opts.auth.storage, sk = opts.auth.storageKey, sess = () => JSON.parse(st.getItem(sk) || 'null');

@@ -485,6 +485,182 @@ await T('a restore is of the backup tapped, whatever a sync added meanwhile', as
   ok(SV.restoreBackup('hX', 12345) === false, 'a backup no longer there: refused');
 });
 
+// ---------- the review's findings (each of these failed before its fix) ----------
+// (two tabs of one browser: two instances of save.js over the one localStorage; each tab's G swapped in for its calls)
+const SA = await import('../../src/game/save.js?tab=A'), SB = await import('../../src/game/save.js?tab=B');
+const tabs = { A: { save: null, hero: null }, B: { save: null, hero: null } };
+const inTab = (k, f) => { const o = { s: G.save, h: G.hero }; G.save = tabs[k].save; G.hero = tabs[k].hero; try { return f(); } finally { tabs[k].save = G.save; tabs[k].hero = G.hero; G.save = o.s; G.hero = o.h; } };
+const tabStore = (k, S) => ({ heroes: () => inTab(k, S.storedHeroes), current: () => inTab(k, S.playingId), put: (h) => inTab(k, () => S.putStored(h)), drop: (id) => inTab(k, () => S.dropStored(id)), meta: S.cloudMeta, setMeta: S.setCloudMeta, backup: (h, w) => S.backupHero(h, w), check: S.heroFits });
+const twoTabs = (heroes, last = null) => { mem.clear(); localStorage.setItem('skotos.save.v1', JSON.stringify({ heroes, settings: {}, last })); G.hero = null; for (const k of ['A', 'B']) { tabs[k] = { save: null, hero: null }; inTab(k, () => (k === 'A' ? SA : SB).loadSave()); } };
+const storedLvl = (id) => SV.storedHeroes().find((h) => h.id === id)?.level;
+// (a backend whose answers wait on a gate for one call: another tab acts while the sync waits)
+const gated = (B, which, f) => ({ ...B, list: (...a) => B.list(...a), get: async (id) => { const r = await B.get(id); if (which === 'get:' + id) await f(); return r; }, put: async (id, ...a) => { if (which === 'put:' + id) await f(); return B.put(id, ...a); }, remove: (...a) => B.remove(...a) });
+
+await T('a tab\'s base drop is not undone by a sync in another tab (the stale open copy never goes up as a change)', async () => {
+  for (const firstMeeting of [false, true]) {
+    const A = artifactDb();
+    const P = device(); P.B = await artifactBackend(A.claude('u1'));
+    const LB = await artifactBackend(A.claude('u1'));
+    twoTabs([hero('hX', { level: 30, played: 1000 }), hero('hY', { cls: 'mage', level: 10, played: 1000 })], 'hX');
+    if (!firstMeeting) await syncAll(LB, tabStore('B', SB));
+    else { P.add(hero('hX', { level: 30, played: 1000 })); P.add(hero('hY', { cls: 'mage', level: 10, played: 1000 })); }
+    await sync(P);
+    // tab A takes X up (a stale copy: 30); the phone plays X to 35 (and Y, so tab B's sync has a call after X)
+    inTab('A', () => { G.hero = SA.freshHero(G.save.heroes.find((h) => h.id === 'hX')); SA.writeSave(); });
+    P.play('hX', (h) => { h.level = 35; h.stats.kills += 200; }, Date.now() + 1000);
+    P.play('hY', (h) => { h.level = 11; }, Date.now() + 1000);
+    await sync(P);
+    // tab B (at the title) syncs: it takes the 35; while Y's copy is on its way, tab A autosaves X
+    const r = await syncAll(gated(LB, 'get:hY', () => inTab('A', () => { G.hero.stats.time += 20; SA.writeSave(); })), tabStore('B', SB));
+    ok(r.pulled.includes('hX') && SV.backups().some((b) => b.why === 'conflict' && b.hero.level === 35), 'B took the 35; A\'s autosave kept it as a conflict backup', { first: firstMeeting, r, bk: bk() });
+    ok(SV.cloudMeta().base.hX?.lost === true, 'the base A marked lost stands after B\'s sync', { first: firstMeeting, base: SV.cloudMeta().base.hX });
+    inTab('A', () => { G.hero.stats.time += 20; SA.writeSave(); });
+    const s = await syncAll(LB, tabStore('A', SA));
+    ok(!s.pushed.includes('hX') && await lvl(LB, 'hX') === 35 && s.behind.includes('hX'), 'the next sync does not push the 30 over the 35 (told behind)', { first: firstMeeting, s });
+    const t = await sync(P);
+    ok(P.hero('hX').level === 35 && !t.pulled.includes('hX'), 'the phone keeps its 35', { first: firstMeeting, t });
+    inTab('A', () => { G.hero = null; });
+  }
+});
+
+await T('a hero deleted while a sync is on its way stays deleted', async () => {
+  const A = artifactDb();
+  const LB = await artifactBackend(A.claude('u1'));
+  twoTabs([hero('hX', { level: 20 }), hero('hY', { cls: 'mage', level: 9 })]);
+  await syncAll(LB, tabStore('B', SB));
+  // the player deletes Y (this page at the title) while the next sync's list is on its way
+  const slowList = { ...LB, list: async () => { const r = await LB.list(); inTab('B', () => SB.deleteHero('hY')); return r; } };
+  const r = await syncAll(slowList, tabStore('B', SB));
+  ok(!r.pulled.includes('hY') && !SV.storedHeroes().some((h) => h.id === 'hY'), 'not brought back by that sync', r);
+  ok(SV.cloudMeta().tomb.hY && (await LB.get('hY')).del, 'its tombstone stands, and went up', { tomb: SV.cloudMeta().tomb, r });
+  // the same with the deletion in another tab while this tab's sync writes another hero
+  twoTabs([hero('hX', { level: 20 }), hero('hY', { cls: 'mage', level: 9 }), hero('hW', { level: 3 })]);
+  await syncAll(LB, tabStore('B', SB));
+  inTab('B', () => { G.hero = G.save.heroes.find((h) => h.id === 'hW'); G.hero.gold += 5; SB.writeSave(); G.hero = null; });
+  const s = await syncAll(gated(LB, 'put:hW', () => inTab('A', () => SA.deleteHero('hX'))), tabStore('B', SB));
+  ok(s.pushed.includes('hW') && SV.cloudMeta().tomb.hX, 'the tombstone recorded meanwhile is kept', { s, tomb: SV.cloudMeta().tomb });
+  const u = await syncAll(LB, tabStore('B', SB));
+  ok(u.removed.includes('hX') && !SV.storedHeroes().some((h) => h.id === 'hX'), 'and the next sync tells it', u);
+});
+
+await T('a restore made in another tab while a sync fetches the hero is not overwritten', async () => {
+  const A = artifactDb();
+  const D = device(); D.B = await artifactBackend(A.claude('u1'));
+  const LB = await artifactBackend(A.claude('u1'));
+  twoTabs([hero('hX', { level: 20, played: 1000 })]);
+  await syncAll(LB, tabStore('B', SB)); await sync(D);
+  SV.backupHero(hero('hX', { level: 40, played: 500 }), 'conflict');
+  D.play('hX', (h) => { h.level = 25; }, Date.now() + 1000); await sync(D);
+  const pick = SV.backups().find((b) => b.hero.level === 40);
+  const r = await syncAll(gated(LB, 'get:hX', () => inTab('A', () => SA.restoreBackup('hX', pick.at))), tabStore('B', SB));
+  ok(!r.pulled.includes('hX') && storedLvl('hX') === 40, 'the pull decided before the restore is not made: the restored 40 stays', { r, lvl: storedLvl('hX') });
+  const s = await syncAll(LB, tabStore('B', SB));
+  ok(s.pushed.includes('hX') && await lvl(LB, 'hX') === 40 && SV.backups().some((b) => b.hero.level === 25), 'the next sync weighs it: the 40 goes up, the 25 kept', { s, bk: bk() });
+});
+
+await T('a newer version\'s hero is not taken up by this one (Continue, the hero list)', async () => {
+  const x = hero('hX', { level: 50, boons: ['ember', 'forge', 'amber', 'lantern', 'tide', 'frost6'], played: Date.now() });
+  x.equip = { weapon: { id: 'w1', base: 'sword', rar: 0, ilvl: 50, stats: {} }, chest: { id: 'c1', base: 'iceplate', rar: 2, ilvl: 50, stats: {} } };
+  x.inv[0] = { id: 'r1', base: 'runeband', rar: 1, ilvl: 50, stats: {} };
+  const text = JSON.stringify(x);
+  fresh([JSON.parse(text), hero('hY', { cls: 'mage' })], 'hX');
+  const mine = G.save.heroes.find((h) => h.id === 'hX');
+  ok(SV.heroBlocked?.(mine) === 'newer' && SV.heroBlocked?.(G.save.heroes.find((h) => h.id === 'hY')) === null, 'heroBlocked tells it on the title');
+  const got = SV.freshHero(mine);
+  ok(got === null, 'freshHero refuses it (startHero then takes nothing up)', got && { equip: Object.keys(got.equip), boons: got.boons });
+  if (got) { G.hero = got; SV.writeSave(); G.hero = null; }
+  ok(JSON.stringify(SV.storedHeroes().find((h) => h.id === 'hX')) === text, 'its record stays byte for byte');
+});
+
+await T('two writes from one rev: the copy further on is never overwritten by the other', async () => {
+  for (const leases of [false, true]) for (const lastIsFar of [true, false]) {
+    const A = artifactDb(); A.net.leases = leases;
+    const far = device(), idle = device();
+    far.B = await artifactBackend(A.claude('u1')); idle.B = await artifactBackend(A.claude('u1'));
+    far.add(hero('h1', { level: 10, xp: 500, stats: { kills: 100, deaths: 0, time: 1000, legs: 0, elites: 0 } }));
+    await sync(far); await sync(idle);
+    // the phone plays for real; the laptop's page left open on it changed what no level shows (its gold)
+    far.play('h1', (h) => { h.xp = 900; h.stats.kills = 140; h.stats.time = 1600; }, 5000);
+    idle.D.cur = 'h1'; idle.play('h1', (h) => { h.gold += 1; }, 5001);
+    // both push from rev 1 at once (each db call takes a moment; the later starter's set lands last)
+    A.net.delay = 5;
+    const [first, second] = lastIsFar ? [idle, far] : [far, idle];
+    const p1 = sync(first); await new Promise((r) => setTimeout(r, 1)); const p2 = sync(second);
+    const [r1, r2] = await Promise.all([p1, p2]);
+    A.net.delay = 0;
+    const xp = () => JSON.parse(A.docs.get('data/users/u1/h-h1').data).xp;
+    const tag = { leases, lastIsFar, r1: r1.pushed.concat(r1.errors.map((e) => e.code)), r2: r2.pushed.concat(r2.errors.map((e) => e.code)) };
+    if (leases) ok(r1.pushed.length + r2.pushed.length === 1, 'with leases: one of the two writes, the other refused conflict', tag);
+    // the laptop's page stays open (more gold); then the phone at the title; each a few times
+    for (let i = 0; i < 3; i++) {
+      idle.play('h1', (h) => { h.gold += 1; }, 6000 + i); await sync(idle);
+      await sync(far);
+    }
+    ok(xp() === 900, 'the cloud ends with the further copy', { ...tag, xp: xp() });
+    ok(far.hero('h1').xp === 900, 'the phone keeps its further copy', { ...tag, xp: far.hero('h1').xp });
+    idle.D.cur = null; await sync(idle);
+    ok(idle.hero('h1').xp === 900 && idle.D.bak.some((b) => b.hero.xp === 500 && b.why === 'conflict'), 'the laptop takes it once put down, its own kept as a conflict backup', { ...tag, bak: idle.D.bak.map((b) => b.why + ':' + b.hero.xp) });
+  }
+});
+
+await T('a restore of a deleted hero holds against a tombstone dated ahead of this clock', async () => {
+  const A = artifactDb();
+  const LB = await artifactBackend(A.claude('u1'));
+  const ahead = Date.now() + 3600e3;
+  fresh([hero('hX', { level: 12, played: ahead }), hero('hY', { cls: 'mage' })]);
+  await syncAll(LB, real(SV));
+  SV.deleteHero('hX');
+  ok(SV.cloudMeta().tomb.hX > ahead, 'the tombstone stands after the record\'s own played');
+  await syncAll(LB, real(SV));
+  const b = SV.backups().find((x) => x.hero.id === 'hX' && x.why === 'deleted');
+  ok(SV.restoreBackup('hX', b.at) === true, 'restored');
+  const r = await syncAll(LB, real(SV));
+  ok(!r.dropped.includes('hX') && r.pushed.includes('hX') && SV.storedHeroes().some((h) => h.id === 'hX') && !(await LB.get('hX')).del, 'the next sync puts it up, not drops it again', r);
+  // and when the deletion came from a device whose clock is ahead of this one
+  const D = device(); D.B = LB;
+  await sync(D);
+  const realNow = Date.now; Date.now = () => realNow() + 7200e3;
+  try { D.del('hY'); D.D.meta.tomb.hY = Date.now(); await sync(D); } finally { Date.now = realNow; }
+  await syncAll(LB, real(SV));
+  const c = SV.backups().find((x) => x.hero.id === 'hY' && x.why === 'deleted');
+  ok(c && SV.restoreBackup('hY', c.at) === true, 'Y, deleted on the device ahead, restored here');
+  const s = await syncAll(LB, real(SV));
+  ok(!s.dropped.includes('hY') && s.pushed.includes('hY') && SV.storedHeroes().some((h) => h.id === 'hY'), 'and it holds too', s);
+});
+
+await T('a second restore of a hero keeps the copy the first one replaced', async () => {
+  fresh([hero('hX', { level: 40 })]);
+  SV.backupHero(hero('hX', { level: 35 }), 'conflict');
+  SV.backupHero(hero('hX', { level: 30 }), 'cloud');
+  const at = (lv) => SV.backups().find((b) => b.hero.level === lv && b.why !== 'restored').at;
+  ok(SV.restoreBackup('hX', at(30)) === true && storedLvl('hX') === 30, 'restore 30 (the 40 kept as restored)');
+  ok(SV.restoreBackup('hX', at(35)) === true && storedLvl('hX') === 35, 'then restore 35');
+  ok(SV.backups().some((b) => b.hero.level === 40), 'the 40, the hero\'s copy before both, is still kept', bk());
+  ok(SV.backupsGone().length === 0, 'nothing dropped', SV.backupsGone());
+});
+
+await T('a page left open writes nothing: a clock-only change is no change to put up', async () => {
+  const { A, devs: [a] } = await setup(1);
+  a.add(hero('h1')); await sync(a);
+  const s0 = A.net.sets;
+  a.D.cur = 'h1';
+  for (let i = 1; i <= 30; i++) { a.play('h1', (h) => { h.stats.time += 20; }, 1000 + i * 20000); if (dirty(a.store, a.B.who)) await sync(a); }
+  ok(!dirty(a.store, a.B.who), 'only its clock moved: not dirty');
+  const r = await sync(a);
+  ok(A.net.sets === s0 && !r.pushed.length, 'ten minutes open and a sync: nothing written', { sets: A.net.sets - s0, r });
+  a.play('h1', (h) => { h.gold += 1; });
+  ok(dirty(a.store, a.B.who) && (await sync(a)).pushed.join() === 'h1', 'a real change goes up (its clock with it)');
+});
+
+await T('the README publishes rules that keep every player\'s own saves readable, and co-op\'s send advice true', async () => {
+  const { readFileSync } = await import('node:fs');
+  const md = readFileSync(new URL('../../docs/cloudsave/README.md', import.meta.url), 'utf8');
+  const block = (md.match(/```js\n(capabilities:[\s\S]*?)```/) || [])[1] || '';
+  ok(block && /db:/.test(block), 'the capabilities block is there', block.slice(0, 200));
+  ok(!/path: ''[^}]*write: '(owner|admin)'/.test(block), 'no root rule that takes shared writes from Contributors (can(\'data.write\') false)', block);
+  ok(!/\{self\}'[^}]*read: '(interact|admin|owner)'/.test(block), 'a player\'s own subtree readable at view (pull-only reads)', block);
+});
+
 // ---------- game/cloud.js: a view-only visitor ----------
 await T('a view-only visitor: no sync tries writes again', async () => {
   const A = artifactDb(); A.net.readOnly = true;
@@ -511,6 +687,24 @@ await T('a view-only visitor: no sync tries writes again', async () => {
     ok(A.net.calls - c0 === 1 && A.net.sets === s0, 'back to view after a while: one pull-only sync, the list alone', A.net.calls - c0);
     ok(CL.CLOUD.state === 'unavailable' && CL.CLOUD.why === 'read_only', 'and it stays read-only', CL.CLOUD);
   } finally { Date.now = realNow; }
+});
+
+// ---------- game/cloud.js: another tab holds the lock ----------
+await T('a page that finds another one syncing does not say Syncing… for ever', async () => {
+  const A = artifactDb();
+  fresh([hero('h1')]);
+  const had = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  // (Web Locks with 'skotos-cloud' held by another tab: an ifAvailable request gets null)
+  Object.defineProperty(globalThis, 'navigator', { value: { locks: { request: async (name, opts, cb) => cb(null) } }, configurable: true, writable: true });
+  globalThis.window = { claude: A.claude('u8'), addEventListener() {} };
+  try {
+    const CL = await import('../../src/game/cloud.js?held');
+    await CL.initCloud(new URLSearchParams(''));
+    await new Promise((r) => setTimeout(r, 50));
+    ok(CL.CLOUD.state === 'on' && CL.CLOUD.busy === false, 'on, and not busy: the other tab syncs', CL.CLOUD);
+    const r = await CL.syncNow('manual');
+    ok(r === null && CL.CLOUD.busy === false, 'Sync now while the other tab holds it: left to that one, not busy', CL.CLOUD);
+  } finally { if (had) Object.defineProperty(globalThis, 'navigator', had); else delete globalThis.navigator; }
 });
 
 console.log(`test-sync: ${pass} passed, ${fail} failed`);

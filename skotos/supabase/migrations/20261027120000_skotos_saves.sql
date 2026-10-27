@@ -9,17 +9,21 @@
 -- so the code is shown once, when it is made, and the page keeps it to show again.
 --
 -- Nothing is readable by another player: the tables are closed (no grant, row level security on with no policy), and
--- every function finds the caller's player from auth.uid() and touches that player's rows only. A visitor costs nothing
+-- every function finds the caller's player from auth.uid() and touches that player's rows only. The page names the
+-- player it means in every call of the player's saves (p_player), and a call whose player is not the caller's is refused
+-- { error: 'moved', player } (the page then asks save_hello again): no page ever applies one player's base or tombstones
+-- to another player's rows. A new code lets go every other user tied to the player. A visitor costs nothing
 -- to make (an anonymous user), so everything is bounded: 96 KiB a hero, 12 live heroes and 32 tombstones a player,
--- 20 writes at once and one every 5 s (12 a minute) a player, 5 code tries at once and one every 2 minutes a user, and
+-- 20 writes at once and one every 5 s (12 a minute) a user, 5 code tries at once and one every 2 minutes a user, and
 -- for the whole project (skotos.save_quota) the bytes kept (64 MiB as made, each row counted as its data and 200 bytes)
 -- and the players (20,000). Past a cap the call is refused and the page keeps its local copy: the database is never
 -- filled by saves. The caps are the owner's to set: update skotos.save_quota set bytes_cap = ..., players_cap = ...;
 -- running this file again keeps them.
 --
--- Run it again and it leaves the same state. Every function: SECURITY DEFINER, search_path pinned to '' (every name
--- written with its schema), callable by signed-in pages only. The schema 'skotos' must be exposed to the Data API (it
--- already is for co-op).
+-- Run it again and it leaves the same state (an earlier version of it, applied before, is brought to this one: its
+-- functions of other arguments dropped, the write buckets moved from the players to the users). Every function:
+-- SECURITY DEFINER, search_path pinned to '' (every name written with its schema), callable by signed-in pages only. The
+-- schema 'skotos' must be exposed to the Data API (it already is for co-op). Nothing of co-op's is touched.
 
 create schema if not exists skotos;
 grant usage on schema skotos to authenticated;
@@ -30,16 +34,22 @@ create table if not exists skotos.save_players (
   id uuid primary key default gen_random_uuid(),
   code_hash bytea not null unique,
   created_at timestamptz not null default now(),
-  used_at timestamptz not null default now(),
-  -- (the player's writes: a token bucket, 20 at once, one every 5 s)
-  tokens float8 not null default 20,
-  tokens_at timestamptz not null default now()
+  used_at timestamptz not null default now()
 );
 create table if not exists skotos.save_users (
   uid uuid primary key,
   player uuid not null references skotos.save_players (id) on delete cascade,
-  at timestamptz not null default now()
+  at timestamptz not null default now(),
+  -- (the user's writes: a token bucket, 20 at once, one every 5 s. The user's, not the player's: no user tied to a
+  -- player can spend another's)
+  tokens float8 not null default 20,
+  tokens_at timestamptz not null default now()
 );
+-- (an earlier version kept the bucket on the player)
+alter table skotos.save_users add column if not exists tokens float8 not null default 20;
+alter table skotos.save_users add column if not exists tokens_at timestamptz not null default now();
+alter table skotos.save_players drop column if exists tokens;
+alter table skotos.save_players drop column if exists tokens_at;
 create index if not exists save_users_player on skotos.save_users (player);
 -- (each user's tries of a code: 5 at once, one every 2 minutes. Unlogged: a crash forgets them, a bucket full again)
 create unlogged table if not exists skotos.save_claims (
@@ -146,7 +156,8 @@ begin
   return p;
 end;
 $$;
--- one write of the player's: true when its bucket had a token (taken), false when it is empty
+-- one write of the caller's to player p's saves: true when the caller's bucket had a token (taken), false when it is
+-- empty
 create or replace function skotos.save_spend(p uuid)
 returns boolean
 language plpgsql
@@ -156,11 +167,15 @@ as $$
 declare
   t float8;
 begin
-  update skotos.save_players s
-  set tokens = least(20, s.tokens + extract(epoch from (now() - s.tokens_at)) / 5) - 1, tokens_at = now(), used_at = now()
-  where s.id = p and least(20, s.tokens + extract(epoch from (now() - s.tokens_at)) / 5) >= 1
-  returning s.tokens into t;
-  return found;
+  update skotos.save_users u
+  set tokens = least(20, u.tokens + extract(epoch from (now() - u.tokens_at)) / 5) - 1, tokens_at = now()
+  where u.uid = auth.uid() and u.player = p and least(20, u.tokens + extract(epoch from (now() - u.tokens_at)) / 5) >= 1
+  returning u.tokens into t;
+  if not found then
+    return false;
+  end if;
+  update skotos.save_players s set used_at = now() where s.id = p;
+  return true;
 end;
 $$;
 revoke all on function skotos.save_make_code() from public, anon, authenticated;
@@ -170,9 +185,19 @@ revoke all on function skotos.save_player() from public, anon, authenticated;
 revoke all on function skotos.save_spend(uuid) from public, anon, authenticated;
 
 -- ---------- what a page calls ----------
--- skotos.save_hello(): the caller's player, { player }; a user tied to none is given a new one, { player, code, new: true }
--- (the code shown this once). { error: 'quota' } when the project holds players_cap players.
-create or replace function skotos.save_hello()
+-- (an earlier version's functions, of other arguments: dropped, so that no call of the old form still works)
+drop function if exists skotos.save_hello();
+drop function if exists skotos.save_new_code();
+drop function if exists skotos.save_list();
+drop function if exists skotos.save_get(text);
+drop function if exists skotos.save_put(text, text, text, bigint, integer);
+drop function if exists skotos.save_delete(text, bigint, integer);
+
+-- skotos.save_hello(p_code): the caller's player, { player }, and with p_code (the code the page keeps) code_ok: is it
+-- this player's code (only this player's code is compared: no other player's can be tried here). A user tied to none is
+-- given a new one, { player, code, new: true } (the code shown this once); { player: null, quota: true } when the
+-- project holds players_cap players (the page may still claim the code it keeps: a claim makes no player).
+create or replace function skotos.save_hello(p_code text default null)
 returns jsonb
 language plpgsql
 security definer
@@ -185,11 +210,15 @@ declare
   q skotos.save_quota%rowtype;
 begin
   if p is not null then
-    return jsonb_build_object('player', p);
+    if p_code is null then
+      return jsonb_build_object('player', p);
+    end if;
+    return jsonb_build_object('player', p, 'code_ok', exists (select 1 from skotos.save_players s
+      where s.id = p and s.code_hash = skotos.save_hash(skotos.save_norm_code(p_code))));
   end if;
   select * into q from skotos.save_quota where id for update;
   if not found or q.players >= q.players_cap then
-    return jsonb_build_object('error', 'quota');
+    return jsonb_build_object('player', null, 'quota', true);
   end if;
   code := skotos.save_make_code();
   insert into skotos.save_players (code_hash) values (skotos.save_hash(code)) returning id into p;
@@ -252,9 +281,10 @@ begin
 end;
 $$;
 
--- skotos.save_new_code(): a new code for the caller's player, { code }; the old one stops working (the users already
--- tied stay tied)
-create or replace function skotos.save_new_code()
+-- skotos.save_new_code(p_player): a new code for the caller's player, { code, untied }; the old one stops working, and
+-- every other user tied to the player is let go (untied: how many): whoever took the old code from where it was seen
+-- loses the heroes with it, and the player's own other devices type the new code again.
+create or replace function skotos.save_new_code(p_player uuid)
 returns jsonb
 language plpgsql
 security definer
@@ -263,21 +293,26 @@ as $$
 declare
   p uuid := skotos.save_player();
   code text;
+  n int;
 begin
-  if p is null then
-    return jsonb_build_object('error', 'no_player');
+  if p is null or p is distinct from p_player then
+    return jsonb_build_object('error', 'moved', 'player', p);
   end if;
   if not skotos.save_spend(p) then
     return jsonb_build_object('error', 'rate_limited');
   end if;
   code := skotos.save_make_code();
   update skotos.save_players s set code_hash = skotos.save_hash(code) where s.id = p;
-  return jsonb_build_object('code', code);
+  delete from skotos.save_users u where u.player = p and u.uid <> auth.uid();
+  get diagnostics n = row_count;
+  return jsonb_build_object('code', code, 'untied', n);
 end;
 $$;
 
--- skotos.save_list(): the caller's heroes, without their data: [{ id, rev, played, sum, del, at }]
-create or replace function skotos.save_list()
+-- skotos.save_list(p_player): the caller's heroes, without their data: [{ id, rev, played, sum, del, at }]. Every call of
+-- the player's saves names the player the page means: { error: 'moved', player } (the caller's, or null: none) when it
+-- is not the caller's.
+create or replace function skotos.save_list(p_player uuid)
 returns jsonb
 language plpgsql
 stable
@@ -287,17 +322,17 @@ as $$
 declare
   p uuid := skotos.save_player();
 begin
-  if p is null then
-    return jsonb_build_object('error', 'no_player');
+  if p is null or p is distinct from p_player then
+    return jsonb_build_object('error', 'moved', 'player', p);
   end if;
   return coalesce((select jsonb_agg(jsonb_build_object('id', s.hero, 'rev', s.rev, 'played', s.played, 'sum', s.sum, 'del', s.deleted, 'at', s.at) order by s.hero)
     from skotos.saves s where s.player = p), '[]'::jsonb);
 end;
 $$;
 
--- skotos.save_get(hero_id): one of the caller's heroes, its data the text as it was put ({ id, rev, played, sum, del,
--- at, data }), or null
-create or replace function skotos.save_get(hero_id text)
+-- skotos.save_get(p_player, hero_id): one of the caller's heroes, its data the text as it was put ({ id, rev, played,
+-- sum, del, at, data }), or null
+create or replace function skotos.save_get(p_player uuid, hero_id text)
 returns jsonb
 language plpgsql
 stable
@@ -307,19 +342,19 @@ as $$
 declare
   p uuid := skotos.save_player();
 begin
-  if p is null then
-    return jsonb_build_object('error', 'no_player');
+  if p is null or p is distinct from p_player then
+    return jsonb_build_object('error', 'moved', 'player', p);
   end if;
   return (select jsonb_build_object('id', s.hero, 'rev', s.rev, 'played', s.played, 'sum', s.sum, 'del', s.deleted, 'at', s.at, 'data', s.data)
     from skotos.saves s where s.player = p and s.hero = hero_id);
 end;
 $$;
 
--- skotos.save_put(hero_id, data, sum, played, base_rev): the hero written, { rev } (its new rev). base_rev: the rev the
+-- skotos.save_put(p_player, hero_id, data, sum, played, base_rev): the hero written, { rev } (its new rev). base_rev: the rev the
 -- page last saw (null: it expects no row, or a tombstone it saw as such is passed as its rev). Refused { error }:
 -- 'conflict' (and the row's rev) when the row is not at base_rev; 'too_big' past 96 KiB; 'bad_data' when data is not
 -- a JSON object whose id is hero_id; 'too_many' for a 13th live hero; 'rate_limited'; 'quota' past the project's bytes.
-create or replace function skotos.save_put(hero_id text, data text, sum text, played bigint, base_rev integer)
+create or replace function skotos.save_put(p_player uuid, hero_id text, data text, sum text, played bigint, base_rev integer)
 returns jsonb
 language plpgsql
 security definer
@@ -333,8 +368,8 @@ declare
   delta bigint;
   q skotos.save_quota%rowtype;
 begin
-  if p is null then
-    return jsonb_build_object('error', 'no_player');
+  if p is null or p is distinct from p_player then
+    return jsonb_build_object('error', 'moved', 'player', p);
   end if;
   if hero_id is null or hero_id !~ '^[A-Za-z0-9_-]{1,40}$' or sum is null or length(sum) > 16 or played is null or played < 0 then
     return jsonb_build_object('error', 'invalid_argument');
@@ -378,9 +413,9 @@ begin
 end;
 $$;
 
--- skotos.save_delete(hero_id, at, base_rev): the hero's row made a tombstone (deleted at 'at', ms), { rev }; refused
--- 'conflict' as save_put. A player keeps its newest 32 tombstones.
-create or replace function skotos.save_delete(hero_id text, at bigint, base_rev integer)
+-- skotos.save_delete(p_player, hero_id, at, base_rev): the hero's row made a tombstone (deleted at 'at', ms), { rev };
+-- refused 'conflict' as save_put. A player keeps its newest 32 tombstones.
+create or replace function skotos.save_delete(p_player uuid, hero_id text, at bigint, base_rev integer)
 returns jsonb
 language plpgsql
 security definer
@@ -392,8 +427,8 @@ declare
   delta bigint;
   freed bigint;
 begin
-  if p is null then
-    return jsonb_build_object('error', 'no_player');
+  if p is null or p is distinct from p_player then
+    return jsonb_build_object('error', 'moved', 'player', p);
   end if;
   if hero_id is null or hero_id !~ '^[A-Za-z0-9_-]{1,40}$' or at is null or at < 0 then
     return jsonb_build_object('error', 'invalid_argument');
@@ -424,17 +459,17 @@ begin
 end;
 $$;
 
-revoke all on function skotos.save_hello() from public, anon;
+revoke all on function skotos.save_hello(text) from public, anon;
 revoke all on function skotos.save_claim(text) from public, anon;
-revoke all on function skotos.save_new_code() from public, anon;
-revoke all on function skotos.save_list() from public, anon;
-revoke all on function skotos.save_get(text) from public, anon;
-revoke all on function skotos.save_put(text, text, text, bigint, integer) from public, anon;
-revoke all on function skotos.save_delete(text, bigint, integer) from public, anon;
-grant execute on function skotos.save_hello() to authenticated;
+revoke all on function skotos.save_new_code(uuid) from public, anon;
+revoke all on function skotos.save_list(uuid) from public, anon;
+revoke all on function skotos.save_get(uuid, text) from public, anon;
+revoke all on function skotos.save_put(uuid, text, text, text, bigint, integer) from public, anon;
+revoke all on function skotos.save_delete(uuid, text, bigint, integer) from public, anon;
+grant execute on function skotos.save_hello(text) to authenticated;
 grant execute on function skotos.save_claim(text) to authenticated;
-grant execute on function skotos.save_new_code() to authenticated;
-grant execute on function skotos.save_list() to authenticated;
-grant execute on function skotos.save_get(text) to authenticated;
-grant execute on function skotos.save_put(text, text, text, bigint, integer) to authenticated;
-grant execute on function skotos.save_delete(text, bigint, integer) to authenticated;
+grant execute on function skotos.save_new_code(uuid) to authenticated;
+grant execute on function skotos.save_list(uuid) to authenticated;
+grant execute on function skotos.save_get(uuid, text) to authenticated;
+grant execute on function skotos.save_put(uuid, text, text, text, bigint, integer) to authenticated;
+grant execute on function skotos.save_delete(uuid, text, bigint, integer) to authenticated;

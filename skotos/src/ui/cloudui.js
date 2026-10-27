@@ -42,7 +42,8 @@ function render() {
     <p class="muted">${t(CLOUD.kind === 'artifact' ? 'cloud.about.claude' : sb ? 'cloud.about.web' : 'cloud.about.off')}</p>
     ${on ? `<button class="btn" data-a="clsync" style="width:100%">${t('cloud.syncNow')}</button>` : ''}
     ${sb && on ? `<h4>${t('cloud.code')}</h4><p class="muted">${t('cloud.code.d')}</p>
-      <div class="cl-code"><span id="cl-code" class="${UI.shown ? '' : 'hide'}">${UI.shown ? esc(code) : '••••-••••-••••-••••'}</span><button class="btn ghost sm" data-a="clshow">${t(UI.shown ? 'cloud.hide' : 'cloud.show')}</button><button class="btn ghost sm" data-a="clcopy">${t('cloud.copy')}</button></div>
+      ${code ? `<div class="cl-code"><span id="cl-code" class="${UI.shown ? '' : 'hide'}">${UI.shown ? esc(code) : '••••-••••-••••-••••'}</span><button class="btn ghost sm" data-a="clshow">${t(UI.shown ? 'cloud.hide' : 'cloud.show')}</button><button class="btn ghost sm" data-a="clcopy">${t('cloud.copy')}</button></div>`
+        : `<p class="muted" id="cl-nocode">${t('cloud.noCode')}</p>`}
       <button class="btn ghost sm" data-a="clnew">${t('cloud.newCode')}</button>` : ''}
     ${sb && (on || CLOUD.state === 'idle') ? `<h4>${t('cloud.claim')}</h4><p class="muted">${t('cloud.claim.d')}</p>
       <div class="cl-code"><input id="cl-in" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="24" placeholder="XXXX-XXXX-XXXX-XXXX"><button class="btn sm" data-a="clclaim">${t('cloud.claimGo')}</button></div>` : ''}
