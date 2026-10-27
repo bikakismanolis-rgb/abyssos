@@ -8,7 +8,8 @@
 // 4. The room's refusals and ends (contract 0.2.89): a Viewer's sends refused not_permitted and told, a view the room
 //    cannot connect (not_granted) and a grant withdrawn mid-game (revoked) told once as the room's end, a name joined
 //    twice at once joined once.
-// node tools/net/test-transport.mjs [part ...]: only those parts (room ends local supa stamped limits leave lobby econ).
+// node tools/net/test-transport.mjs [part ...]: only those parts (room ends local supa stamped limits leave lobby econ
+// relay oldwire reopen).
 // TRANSPORT=<file>: that copy of transport.js instead of src/net/transport.js (to show a check fails without a fix:
 // docs/coop/supabase-live.md).
 import path from 'node:path';
@@ -599,7 +600,140 @@ async function econTest() {
   for (const U of [H, G1, G2, E]) U.T.lobby.leave();
 }
 
-const parts = { room: roomTest, econ: econTest, ends: endsTest, local: localTest, supa: supaTest, stamped: stampedTest, limits: stampedLimits, leave: leaveTest, lobby: lobbyTest };
+// what the host passes on, on its own budget (the review of the economy, 27 October): only the outboxes of its party
+// (ch.relayTo, the game's roster), each guest within its bytes, the host's own snapshots never refused for it. Each
+// check fails on the transport before (TRANSPORT=<that copy>)
+async function relayTest() {
+  const bus = {};
+  const mk = async (o = {}) => { const c = fakeSupabase(bus, o); await c.auth.signInAnonymously(); return { c, T: SupabaseTransport(c, Object.assign({ stamped: true, me: c.uid }, o)) }; };
+  const boxOf = (U) => 'skotos:' + room + '.' + U.c.uid.replace(/-/g, '').slice(0, 24), room = 'skotos-rl01';
+  const H = await mk(), G1 = await mk(), G2 = await mk(), X = await mk();
+  const hc = await H.T.join(room, { host: true }), party = new Set([G1.c.uid, G2.c.uid]);
+  // (the game's: the roster, and the presence less what only the host reads)
+  hc.relayTo = (k) => party.has(k); hc.relayOmit = ['ev'];
+  const g1 = await G1.T.join(room), g2 = await G2.T.join(room), xc = await X.T.join(room);
+  hc.presence({ r: 'h' }); g1.presence({ r: 'g', h: [1] }); g2.presence({ r: 'g', h: [2] }); xc.presence({ r: 'g', h: [3] });
+  // the host's snapshots at its rate, all along (2.4 KB, as a fight's), and every page pumped as the game does
+  let run = true, sent = 0;
+  const loop = (async () => { while (run) { if (hc.ready()) { sent++; hc.emit('s', { a: 'x'.repeat(2400), t: Date.now() }); } for (const c of [hc, g1, g2, xc]) c.pump(); await sleep(1000 / 7); } })();
+  const live = await until(() => g1._boxLive() && g2._boxLive(), 5000);
+  await sleep(1500);
+  ok(live && !xc._boxLive() && !bus['priv:' + boxOf(X)]?.members.size, 'the host hears the outboxes of its party alone: an outsider\'s (a member holding its own row and saying it has one) is never opened');
+  // what g2 and g1 hear of each other page: fx and presence, in bytes; and the host's snapshots (g2's)
+  const got = new Map(), add = (k, v) => got.set(k, (got.get(k) || 0) + JSON.stringify(v).length);
+  let snaps = 0;
+  for (const [c, U] of [[g2, G1], [g1, G2], [g2, X]]) { c.on('f', (m) => { if (m.peer === U.c.uid) add(m.peer, m.data); }); c.onPeers(({ updated }) => { for (const p of updated) if (p.peer === U.c.uid) add(p.peer, p.presence); }); }
+  g2.on('s', () => snaps++);
+  // a flood said into its own outbox: fx and presences of ~3.6 KB, 13 a second (its own budget takes them: its row)
+  const fx = JSON.stringify(Array.from({ length: 80 }, (_, i) => [1, i, 'y'.repeat(30)]));
+  const flood = async (U, secs) => {
+    const to = boxOf(U), t0 = Date.now(); let i = 0;
+    while (Date.now() - t0 < secs * 1000) {
+      const m = i++ % 3 === 2 ? [to, '_p', JSON.stringify({ r: 'g', h: [i], pad: 'z'.repeat(3500) })] : [to, 'f', fx];
+      await U.c.schema('skotos').rpc('send', { msgs: [m] });
+      await sleep(75);
+    }
+  };
+  // an outsider: none of it passed on, and the host's bytes are its own
+  const hb0 = hc.meter.tx.bytes, t1 = Date.now();
+  await flood(X, 3);
+  const hostRate = (hc.meter.tx.bytes - hb0) / ((Date.now() - t1) / 1000);
+  ok(!got.get(X.c.uid) && hostRate < 24000, 'an outsider flooding its outbox: nothing of it reaches the party by the host, and the host sends its own (' + Math.round(hostRate) + ' bytes a second)', { passedOn: got.get(X.c.uid) || 0 });
+  // a guest of the party flooding its own: the host passes on at most its share (3 KB a second, 6 KB at once), and its
+  // own calls are never refused for their rate, though it starts with its burst spent (24 KB of its 256 left: what
+  // the old relay had left it a few seconds into such a flood)
+  const r = bus.srv.rates.get(H.c.uid); if (r) { r.game = 24576; r.gat = Date.now(); }
+  const rl0 = hc.meter.tx.why.rate_limited || 0, s0 = snaps, n0 = sent, t2 = Date.now();
+  got.delete(G1.c.uid); got.delete(G2.c.uid);
+  await Promise.all([flood(G1, 4), flood(G2, 4)]);
+  await sleep(300);
+  const secs = (Date.now() - t2) / 1000, passed = [got.get(G1.c.uid) || 0, got.get(G2.c.uid) || 0], cap = 6144 + 3072 * secs;
+  ok(passed.every((b) => b > 0 && b <= cap), 'two guests flooding their outboxes (~45 KB a second each): the host passes on each one\'s share and no more: ' + passed.join(', ') + ' bytes in ' + secs.toFixed(1) + ' s (at most ' + Math.round(cap) + ' each)', hc.relayStats);
+  ok((hc.meter.tx.why.rate_limited || 0) === rl0 && snaps - s0 >= 0.8 * (sent - n0), 'and the host\'s own calls are never refused for their rate: the party heard its snapshots, ' + (snaps - s0) + ' of ' + (sent - n0), hc.meter.tx.why);
+  // a guest no longer of the party: its outbox let go (it says it in the game's channel); back in it, opened again
+  party.delete(G2.c.uid);
+  const shut = await until(() => !bus['priv:' + boxOf(G2)]?.members.size && !g2._boxLive(), 5000);
+  party.add(G2.c.uid);
+  const back = await until(() => g2._boxLive(), 6000);
+  ok(shut && back, 'a guest the game no longer takes: its outbox let go at the host\'s next beat; taken again, it is heard there again', { shut, back });
+  run = false; await loop;
+  for (const c of [g1, g2, xc, hc]) await c.leave();
+  for (const U of [H, G1, G2, X]) U.T.lobby.leave();
+  await sleep(50);
+}
+
+// a page of the wire before the economy (a tab opened before the deploy: no bundles, no outbox) and one of this wire in
+// one game: the game's version says they cannot play together (coop.js VER), and each reads the other's presence, so
+// each is told so (coop.version) rather than waiting for a host it cannot hear
+async function oldWireTest() {
+  const bus = {};
+  const mk = async (o = {}) => { const c = fakeSupabase(bus, o); await c.auth.signInAnonymously(); return { c, T: SupabaseTransport(c, Object.assign({ stamped: true, me: c.uid }, o)) }; };
+  const src = (await import('node:fs')).readFileSync(new URL('../../src/net/coop.js', import.meta.url), 'utf8'), ver = +(src.match(/export const VER = (\d+);/)?.[1] || 0);
+  ok(ver >= 4, 'the game\'s version is past the wire before the economy\'s (coop.js VER: ' + ver + ', was 3)');
+  const room = 'skotos-ow01', topic = 'skotos:' + room;
+  let plain = 0; const st0 = bus.stamp || null;
+  const H = await mk(), O = await mk({ economy: false });
+  const s1 = bus.stamp; bus.stamp = (t, e, p) => { if (t === topic && e === '_p' && p._by === H.c.uid) plain++; return s1(t, e, p); };
+  void st0;
+  // a new host, an old guest
+  const hc = await H.T.join(room, { host: true }), oc = await O.T.join(room);
+  hc.presence({ r: 'h', c: 'ow01', v: 4 }); oc.presence({ r: 'g', c: 'ow01', v: 3 });
+  const pump = setInterval(() => { hc.pump(); oc.pump(); }, 50);
+  const seen = await until(() => oc.peers().find((p) => p.peer === H.c.uid)?.presence?.v === 4, 6000);
+  ok(seen && hc.peers().find((p) => p.peer === O.c.uid)?.presence?.v === 3, 'a guest of the wire before (no bundles) hears a host of this wire: its presence, said plainly too while such a page is in its channel, so the guest reads its version (and leaves: coop.version)', { plain });
+  await oc.leave(); O.T.lobby.leave();
+  await until(() => !hc.peers().some((p) => p.peer === O.c.uid), 3000);
+  const p0 = plain;
+  for (let i = 0; i < 3; i++) { hc.presence({ r: 'h', c: 'ow01', v: 4, z: i }); await sleep(400); }
+  ok(plain === p0, 'that page gone, the host says its presence only bundled again: ' + (plain - p0) + ' plain');
+  clearInterval(pump);
+  await hc.leave(); H.T.lobby.leave();
+  // an old host, a new guest: the guest reads the old host's plain presence, and its version
+  const H2 = await mk({ economy: false }), N = await mk(), room2 = 'skotos-ow02';
+  const h2 = await H2.T.join(room2, { host: true }), nc = await N.T.join(room2);
+  h2.presence({ r: 'h', c: 'ow02', v: 3 }); nc.presence({ r: 'g', c: 'ow02', v: 4 });
+  const pump2 = setInterval(() => { h2.pump(); nc.pump(); }, 50);
+  const seen2 = await until(() => nc.peers().find((p) => p.peer === H2.c.uid)?.presence?.v === 3, 4000);
+  ok(seen2, 'a guest of this wire hears a host of the wire before: its presence, and its version (coop.version)');
+  clearInterval(pump2);
+  for (const c of [nc, h2]) await c.leave();
+  for (const U of [H2, N]) U.T.lobby.leave();
+  await sleep(50);
+}
+
+// a guest's outbox lost is made again, and heard again: its first host_game unanswered, its row gone (a send refused
+// no_game), the host's channel for it shut by the server. Each check fails on the transport before
+async function reopenTest() {
+  const bus = {};
+  const mk = async (o = {}) => { const c = fakeSupabase(bus, o); await c.auth.signInAnonymously(); return { c, T: SupabaseTransport(c, Object.assign({ stamped: true, me: c.uid }, o)) }; };
+  const room = 'skotos-ro01', rowOf = (U) => room + '.' + U.c.uid.replace(/-/g, '').slice(0, 24);
+  const H = await mk(), G = await mk(), G2 = await mk();
+  // (the first host_game of G's outbox is not answered well: upstream_error, as a request lost or timed out)
+  let fail = 1; const sch = G.c.schema;
+  G.c.schema = (n) => { const x = sch(n); return { rpc: (fn, a) => (fn === 'host_game' && String(a?.room).includes('.') && fail-- > 0 ? { abortSignal() { return this; }, then: (f, r) => Promise.resolve({ data: null, error: { message: 'upstream_error' } }).then(f, r) } : x.rpc(fn, a)) }; };
+  const hc = await H.T.join(room, { host: true }), gc = await G.T.join(room), g2 = await G2.T.join(room);
+  hc.relayOmit = ['ev'];
+  let run = true, k = 0;
+  const loop = (async () => { while (run) { k++; hc.presence({ r: 'h' }); if (gc.presenceDue()) gc.presence({ r: 'g', h: [k] }); if (g2.presenceDue()) g2.presence({ r: 'g', h: [-k] }); for (const c of [hc, gc, g2]) c.pump(); await sleep(100); } })();
+  const errs = []; gc.onError((c, how) => errs.push(c + ':' + how));
+  const first = await until(() => gc._boxLive() && g2._boxLive(), 8000);
+  ok(first && fail < 0, 'a guest whose outbox\'s first host_game failed makes it again, and says it there once its host lists it');
+  // its row gone (run out): its next send there is refused no_game; made again, and the guest back on it
+  bus.srv.games.delete(rowOf(G));
+  const off = await until(() => !gc._boxLive(), 4000), again = off && await until(() => gc._boxLive() && bus.srv.games.has(rowOf(G)), 8000);
+  ok(off && again && !errs.length, 'a guest\'s outbox row gone (a send to it refused no_game): the game\'s channel meanwhile, the row made again, the outbox heard again; the game goes on', { off, again, errs });
+  // the host's channel for it shut by the server (CLOSED: realtime-js joins it no more): opened anew when the guest asks
+  bus.shut('skotos:' + rowOf(G));
+  const off2 = await until(() => !gc._boxLive(), 6000), again2 = off2 && await until(() => gc._boxLive() && bus['priv:skotos:' + rowOf(G)]?.members.size === 1, 8000);
+  const seen = await until(() => g2.peers().find((p) => p.peer === G.c.uid)?.presence?.h?.[0] > k - 15, 2000);
+  ok(off2 && again2 && seen, 'the host\'s channel for an outbox shut by the server: let go and opened anew when its guest asks again, and the guest\'s presence passed on again', { off2, again2, seen });
+  run = false; await loop;
+  for (const c of [gc, g2, hc]) await c.leave();
+  for (const U of [H, G, G2]) U.T.lobby.leave();
+  await sleep(50);
+}
+
+const parts = { room: roomTest, econ: econTest, relay: relayTest, oldwire: oldWireTest, reopen: reopenTest, ends: endsTest, local: localTest, supa: supaTest, stamped: stampedTest, limits: stampedLimits, leave: leaveTest, lobby: lobbyTest };
 const only = process.argv.slice(2);
 for (const k of only) if (!parts[k]) { console.log('no part ' + k + ' (' + Object.keys(parts).join(' ') + ')'); process.exit(2); }
 for (const [k, f] of Object.entries(parts)) if (!only.length || only.includes(k)) await f();
