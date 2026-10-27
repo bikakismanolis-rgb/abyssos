@@ -93,9 +93,12 @@ export function writeSave() {
     if (out && !out.includes(hero)) out.unshift(hero);
     G.save.last = hero.id;
   }
-  if (hero && FORCED.has(hero.id)) { markLost(hero.id); FORCED.delete(hero.id); }
+  // (the mark kept due until both it and the record are written: storage full now, the next write makes them)
+  const forced = !!hero && FORCED.has(hero.id);
+  if (forced) markLost(hero.id);
   try {
     localStorage.setItem(KEY, JSON.stringify(out ? { ...G.save, heroes: out } : G.save));
+    if (forced && cloudMeta().base?.[hero.id]?.lost) FORCED.delete(hero.id);
     if (hero) MINE.set(hero, JSON.stringify(hero));
   } catch (e) { /* private mode or full storage: keep playing */ }
   saveHooks.written?.();
