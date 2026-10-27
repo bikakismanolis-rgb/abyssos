@@ -15,15 +15,21 @@ Cost model: a message by `realtime.send` = 1 sent + 1 per member of its channel 
   own bundle `[event, data, from]`; a guest believes a relayed entry only from its host (ch.host), only `_p`/`f`.
   Handshake: guest says `['_o', 1]` on the main channel; host opens the listener and lists the outboxes it hears in
   `['_o', [uids]]`; a guest uses its outbox only while its host lists it (else main, as before).
-- Rates (economy): host snapshots 7 Hz, guest presence 5 Hz, presence beat 3 s. Interpolation lag adaptive per buffer.
+- Rates (economy): host snapshots 7 Hz, guest presence 5 Hz, presence beat 3 s. Interpolation lag adaptive per buffer
+  (coop.js lagOf; a relayed sample dated back by the host's hold, sent as the entry's 4th field).
+- Outbox name: boxOf = room + '.' + first 24 hex of the uid (live-supabase's rooms are 18 chars).
 - Budget four: 7 x 5 + 3 x 5 x 2 = 65 + world/ice/lobby. Pair 7 x 3 + 5 x 2 = 31.
 
 ## Steps
 
-- [ ] transport.js economy (bundles, outboxes, relay, meter by wire message)
-- [ ] coop.js: rates from the channel, adaptive lag, snapshot room, relay omit keys
-- [ ] test-transport.mjs: stamped party of four at economy rates, events counted; relay/outbox security checks
-- [ ] coop.mjs: NET=supa (the fake supabase in node via bindings), scenarios on it
+- [x] transport.js economy (bundles, outboxes, relay, meter by wire message)
+- [x] coop.js: rates from the channel, adaptive lag, snapshot room, relay omit keys
+- [x] test-transport.mjs: partyRun (2/3/4 econ, 4 before), econ part (trust checks): all pass. Model: four 64, three 47,
+  pair 30, before 254 events/s
+- [x] coop.mjs: NET=supa (tools/net/fakesupa.mjs in node via bindings), ECON=0, `feel` scenario. four NET=supa: 57 ev/s
+  (ECON=0: 156, CPU-bound pages). feel (calls 110-170 ms): host by guest 381 ms cv .31 (before 374, cv 1.28), guest by
+  host 422 (369, 1.2), guest by guest 667 (379, 1.24); local 143 ms cv .22
+- [x] builds: vite build, build:artifact (no supabase-js), build:web (.env.web.local made, git-ignored)
 - [ ] all co-op scenarios (local, room), single-player regressions, builds
 - [ ] live-supabase, live-web (four pages)
 - [ ] diet.md, supabase.md costs
