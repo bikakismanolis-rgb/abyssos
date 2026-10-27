@@ -263,6 +263,10 @@ function carryLoot() {
 // ---------- the game room's wires ----------
 function wire() {
   const ch = S.ch;
+  // (a channel that bundles (Supabase: docs/coop/diet.md) sets the rates here, and a host passes a guest's presence on
+  // to the others less what only a host reads)
+  S.econ = !!ch.econ;
+  if (S.econ) ch.relayOmit = ['ev', 'ak', 'nd', 'mf', 'gf', 'dm', 'cd'];
   ch.onPeers((c) => { peersChanged(c); resolveNames(); });
   ch.on('s', (m) => { if (S.role === 'guest' && m.peer === S.hostPeer) onSnap(m.data); });
   ch.on('w', (m) => { if (S.role === 'guest' && m.peer === S.hostPeer) chunk(m.data, onWorld); });
@@ -402,7 +406,23 @@ function landsAt(st, fell) {
 }
 // (a sample after a gap longer than the lag: the one before is put at the lag's edge, where it is shown now, so the hero
 // or the monster goes on from where it stood, not a leap ahead)
-const pushSample = (buf, s) => { const t = now(), l = buf[buf.length - 1]; if (l && l.t < t - LAG) l.t = t - LAG; buf.push({ t, x: s.x, z: s.z, r: s.r, y: s.y || 0 }); if (buf.length > 6) buf.shift(); };
+// Where the channel bundles (S.econ) the samples come 5-7 a second and unevenly (a guest's passed on by the host, a
+// call's round trip): each buffer measures the gaps it gets (j: the longest of late, fading) and is shown that much
+// behind and a little more (buf.lag, which moves at most an eighth as fast as time, so nothing jumps)
+const pushSample = (buf, s) => {
+  const t = now(), l = buf[buf.length - 1];
+  if (S.econ && l) { const g = t - l.at; if (g < 800) buf.j = Math.max(g, (buf.j ?? g) * 0.92); }
+  const lag = buf.lag || LAG;
+  if (l && l.t < t - lag) l.t = t - lag;
+  buf.push({ t, at: t, x: s.x, z: s.z, r: s.r, y: s.y || 0 }); if (buf.length > 6) buf.shift();
+};
+const lagOf = (buf) => {
+  if (!S.econ) return LAG;
+  const t = now(), want = clamp((buf.j ?? 150) + 50, LAG, 520);
+  if (!buf.lag) buf.lag = want; else { const st = (t - (buf.lt || t)) / 8; buf.lag += clamp(want - buf.lag, -st, st); }
+  buf.lt = t;
+  return buf.lag;
+};
 // (a zone's key: the same id built once more is another zone, a guest builds it again)
 export const myKey = () => (G.zone ? G.zone.netKey || G.zone.id + ':' + (G.zone.ep || 0) : null);
 
@@ -496,7 +516,7 @@ function hostTick(dt) {
   const I = z.ice;
   if (I && S.roster.length && now() - S.iceT > 500) { const dg = iceDigest(z); if (dg && (dg.key !== S.iceKey || now() - S.iceT > 3000)) { S.iceKey = dg.key; S.iceT = now(); sendBig('i', { k: key, d: dg.d }); } }
   // the snapshot
-  if (S.roster.length && S.started && now() - S.snapT >= 1000 / SNAP_HZ) { S.snapT = now(); sendSnap(); }
+  if (S.roster.length && S.started && now() - S.snapT >= 1000 / (S.ch.econ?.snap || SNAP_HZ) && S.ch.ready?.() !== false) { S.snapT = now(); sendSnap(); }
   if (!S.roster.length || !S.started) S.fxHost = [];
   // each guest's reliable events it has seen are let go (and none kept past 30 s); a guest gone, its queue with it
   const tooOld = now() - 30000;
@@ -550,6 +570,8 @@ function sendSnap() {
   const pl = G.player, gs = S.roster.map((pr) => S.peers.get(pr)).filter((P) => P?.actor);
   if (!gs.length) return;
   const o = { k: myKey(), t: Math.round(now()) };
+  // (where the channel bundles, the room left beside what goes with it, so that it all goes as one message)
+  const MAX = S.ch.room ? clamp(S.ch.room(), 2400, SNAP_MAX) : SNAP_MAX;
   // the host's hero
   const av = pl.avatar;
   o.h = heroState().concat([clipIdx(av?.netClip), (av?.netSeq || 0) & 1023, Math.round((av?.netSpd || 1) * 100)]);
@@ -580,9 +602,9 @@ function sendSnap() {
   let fb = f.length ? bytesOf(f) + 6 : 0;
   const fsb = Object.keys(fs).length ? bytesOf(fs) + 6 : 0;
   // the monsters the guests need, before the fx (which keep at least FX_MIN of their bytes)
-  b += pickActors(o.a = [], gs, SNAP_MAX - b - Math.min(fb + fsb, FX_MIN));
+  b += pickActors(o.a = [], gs, MAX - b - Math.min(fb + fsb, FX_MIN));
   // the fx in what is left, the least important let go first
-  while (f.length && b + fb + fsb > SNAP_MAX) { fb -= bytesOf(f.pop()) + 1; if (!f.length) fb = 0; }
+  while (f.length && b + fb + fsb > MAX) { fb -= bytesOf(f.pop()) + 1; if (!f.length) fb = 0; }
   if (f.length) {
     o.f = f; b += fb;
     for (const pr in fs) { const l = fs[pr].filter((i) => i < f.length); if (l.length) (o.fs ||= {})[pr] = l; }
@@ -1192,7 +1214,7 @@ function puppetEntry(e) {
 }
 const _ip = { x: 0, z: 0, r: 0, y: 0 };
 function interp(buf, out = _ip) {
-  const tt = now() - LAG;
+  const tt = now() - lagOf(buf);
   if (!buf.length) return null;
   let i = buf.length - 1; while (i > 0 && buf[i - 1].t > tt) i--;
   const b = buf[i], a = buf[Math.max(0, i - 1)];
