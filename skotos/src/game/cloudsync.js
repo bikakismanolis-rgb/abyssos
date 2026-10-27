@@ -5,9 +5,12 @@
 // localStorage stays the hero's first copy: nothing here changes it but a cloud copy taken after its call came back, and
 // whatever that replaces is kept first (backups). Each hero is compared three ways: the local record (as stored), the
 // cloud's record, and the base, what this browser and the cloud last agreed on (the cloud's rev, the hero's sum). A hero
-// changed on one side only goes to the other; one changed on both sides (or never agreed on) goes the way of the later
-// `played` (the time it was last played), the other copy kept as a backup. A deleted hero leaves a tombstone, here and
-// in the cloud, so neither side brings it back; only a copy played after the deletion outlives it.
+// changed on one side only goes to the other (a copy here that only sat open since, its clock running and nothing done,
+// is unchanged); one changed on both sides (or never agreed on) goes the way of the copy further on (level, mastery, XP,
+// kills: what only play raises, never `played` or the clock, which every autosave of an open page moves), then of the
+// later `played`; the other copy is kept as a backup. A deleted hero leaves a tombstone, here and in the cloud, so
+// neither side brings it back; only a copy played after the deletion outlives it. Tombstones are the account's that
+// recorded them: another account's are kept aside for it, never told to this one.
 //
 // backend: { who, list() -> [{ id, rev, played, sum, del, at }], get(id) -> { id, rev, played, sum, del, at, data },
 //            put(id, { data, sum, played }, rev) -> { rev }, remove(id, at, rev) -> { rev } }
@@ -15,42 +18,78 @@
 //   record); put and remove refuse { code: 'conflict' } when the cloud's rev is not the one given. Any other refusal
 //   carries its code ('too_big', 'too_many', 'rate_limited', 'quota', 'offline', ...).
 // store: { heroes() -> [hero], current() -> id | null, put(hero), drop(id), meta() -> object, setMeta(object),
-//          backup(hero, why) }
+//          backup(hero, why), check?(hero) -> null | code }
 //   heroes(): the records as stored now (not the page's copies); put/drop change the stored list (never the hero this
-//   page plays: put and drop of it are refused, returning false); meta: this module's own record (base, tombstones).
+//   page plays: put and drop of it are refused, returning false); meta: this module's own record (base, tombstones);
+//   check: a cloud copy this page cannot keep as it is (one a newer version of the game wrote: 'newer') is not taken.
 
-export const MAX_HERO = 96 * 1024, MAX_HEROES = 12, MAX_TOMBS = 32;
+export const MAX_HERO = 96 * 1024, MAX_HEROES = 12, MAX_TOMBS = 32, MAX_AWAY = 4;
 
-// a 53-bit hash of the hero as stored, its `played` left out (a hero only looked at, or autosaved unchanged, is the
-// same hero): cyrb53
-export function heroSum(h) {
-  const { played, ...rest } = h || {};
-  const s = JSON.stringify(rest);
+// cyrb53: a 53-bit hash of a text
+function hash(s) {
   let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
   for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677); }
   h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
   h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
+// the hero as stored, its `played` left out (a hero only looked at, or autosaved unchanged, is the same hero)
+export function heroSum(h) {
+  const { played, ...rest } = h || {};
+  return hash(JSON.stringify(rest));
+}
+// the same with its play time left out too: a page only left open on a hero (its clock running, nothing done) moves
+// stats.time and nothing else, and that is no play
+export function workSum(h) {
+  const { played, stats, ...rest } = h || {};
+  const st = stats && typeof stats === 'object' && !Array.isArray(stats) ? { ...stats, time: 0 } : stats ?? null;
+  return hash(JSON.stringify(rest) + '|' + JSON.stringify(st));
+}
 export const HERO_ID = /^[A-Za-z0-9_-]{1,40}$/;
 const num = (v) => (typeof v === 'number' && isFinite(v) ? v : 0);
+const obj = (x) => (x && typeof x === 'object' && !Array.isArray(x) ? x : {});
+// how far a hero has come, by what only play raises: level, mastery, XP, kills (never `played` or the clock)
+const progress = (h) => [num(h?.level), num(h?.mlvl), num(h?.xp), num(h?.mxp), num(h?.stats?.kills)];
+// > 0: a is further on than b; 0: neither
+export function further(a, b) {
+  const p = progress(a), q = progress(b);
+  for (let i = 0; i < p.length; i++) if (p[i] !== q[i]) return p[i] - q[i];
+  return 0;
+}
 
-// the module's record, made whole: { who, base: { id: { rev, sum, del } }, tomb: { id: at }, last }
+// the module's record, made whole: { who, base: { id: { rev, sum, work, del } }, tomb: { id: at }, away: { who: { tomb,
+// at } }, last }. tomb is the account who's (the deletions made here while it was this browser's account, and those it
+// told); away holds other accounts' tombstones, kept for them (a browser two accounts share)
 export function cleanMeta(m) {
-  m = m && typeof m === 'object' ? m : {};
-  const base = m.base && typeof m.base === 'object' ? m.base : {}, tomb = m.tomb && typeof m.tomb === 'object' ? m.tomb : {};
-  return { who: typeof m.who === 'string' ? m.who : null, base, tomb, last: num(m.last) };
+  m = obj(m);
+  const away = {};
+  for (const [w, a] of Object.entries(obj(m.away))) if (a && typeof a === 'object') away[w] = { tomb: { ...obj(a.tomb) }, at: num(a.at) };
+  return { who: typeof m.who === 'string' ? m.who : null, base: obj(m.base), tomb: obj(m.tomb), away, last: num(m.last) };
+}
+// the record as another account finds it: no base (what this browser agreed with the other account is nothing to this
+// one), and that account's own tombstones (none for one new here), the other's put aside for it. Deletions made before
+// this browser had any account are its own, and go to the first it syncs with
+export function forAccount(meta, who, at = Date.now()) {
+  meta = cleanMeta(meta);
+  if (meta.who === who) return meta;
+  const away = { ...meta.away };
+  if (meta.who != null && Object.keys(meta.tomb).length) away[meta.who] = { tomb: meta.tomb, at };
+  const mine = away[who]?.tomb || {};
+  delete away[who];
+  const tomb = meta.who == null ? { ...mine, ...meta.tomb } : { ...mine };
+  const keep = Object.entries(away).sort((a, b) => b[1].at - a[1].at).slice(0, MAX_AWAY);
+  return { ...meta, who, base: {}, tomb, away: Object.fromEntries(keep) };
 }
 
 // One sync, all heroes. Resolves a report { ok, pushed, pulled, removed, dropped, kept, errors: [{ id, code }], replaced:
-// [ids a cloud copy replaced locally (a backup kept)] }; a call the backend failed ends it (ok false, code) with
-// nothing changed locally that its answers had not already settled.
+// [ids a cloud copy replaced locally (a backup kept)], behind: [ids kept as they are only because this page plays them,
+// a copy further on in the cloud] }; a call the backend failed ends it (ok false, code) with nothing changed locally
+// that its answers had not already settled. o.readOnly: a view that may not write (no put, no remove; copies only taken)
 export async function syncAll(backend, store, o = {}) {
-  const now = o.now || Date.now;
-  const R = { ok: false, pushed: [], pulled: [], removed: [], dropped: [], kept: [], errors: [], replaced: [] };
-  let meta = cleanMeta(store.meta());
-  // (another account's base is no base here: a code taken on this device, a session of another user)
-  if (meta.who !== backend.who) meta = { ...meta, who: backend.who, base: {} };
+  const now = o.now || Date.now, ro = !!o.readOnly;
+  const R = { ok: false, pushed: [], pulled: [], removed: [], dropped: [], kept: [], errors: [], replaced: [], behind: [] };
+  // (another account: a code taken on this device, a session of another user)
+  let meta = forAccount(store.meta(), backend.who, now());
   const save = () => store.setMeta(meta);
   let cloud;
   try { cloud = await backend.list(); } catch (e) { R.code = e?.code || 'unavailable'; return R; }
@@ -60,33 +99,44 @@ export async function syncAll(backend, store, o = {}) {
   for (const h of store.heroes()) if (h && HERO_ID.test(h.id)) L.set(h.id, h);
   const ids = new Set([...L.keys(), ...C.keys(), ...Object.keys(meta.tomb)]);
   const fail = (id, e) => { R.errors.push({ id, code: e?.code || 'unavailable' }); };
-  const agree = (id, rec, sum) => { meta.base[id] = rec.del ? { rev: rec.rev, del: true } : { rev: rec.rev, sum }; };
+  const agree = (id, rec, h) => { meta.base[id] = rec.del ? { rev: rec.rev, del: true } : { rev: rec.rev, sum: heroSum(h), work: workSum(h) }; };
   let live = [...C.values()].filter((c) => !c.del).length;
 
   const push = async (id, h, c) => {
+    if (ro) return;
     const data = JSON.stringify(h), sum = heroSum(h);
     if (data.length > MAX_HERO) { fail(id, { code: 'too_big' }); return; }
     if (!c || c.del) { if (live >= MAX_HEROES) { fail(id, { code: 'too_many' }); return; } }
     try {
       const r = await backend.put(id, { data, sum, played: num(h.played) }, c ? c.rev : null);
       if (!c || c.del) live++;
-      meta.base[id] = { rev: r.rev, sum }; R.pushed.push(id);
+      meta.base[id] = { rev: r.rev, sum, work: workSum(h) }; R.pushed.push(id);
     } catch (e) { fail(id, e); }
   };
-  // a cloud copy taken: only once its record is here, never over the hero this page plays (it is taken after it is put
-  // down: the next sync), what it replaces kept first
-  const pull = async (id, l, why) => {
-    if (store.current() === id) { R.kept.push(id); return; }
+  // the cloud's whole record: { rec, h } (the hero parsed), or null (the failure reported)
+  const fetch = async (id) => {
     let c;
-    try { c = await backend.get(id); } catch (e) { fail(id, e); return; }
-    if (!c || c.del || typeof c.data !== 'string') { fail(id, { code: 'gone' }); return; }
+    try { c = await backend.get(id); } catch (e) { fail(id, e); return null; }
+    if (!c || c.del || typeof c.data !== 'string') { fail(id, { code: 'gone' }); return null; }
     let h;
     try { h = JSON.parse(c.data); } catch (e) { h = null; }
-    if (!h || typeof h !== 'object' || h.id !== id) { fail(id, { code: 'bad_data' }); return; }
-    if (store.current() === id) { R.kept.push(id); return; }
+    if (!h || typeof h !== 'object' || Array.isArray(h) || h.id !== id) { fail(id, { code: 'bad_data' }); return null; }
+    return { rec: c, h };
+  };
+  // a cloud copy taken: only once its record is here, never over the hero this page plays (it is taken after it is put
+  // down: the next sync; the page is told, behind), never one this page cannot keep as it is (check), what it replaces
+  // kept first
+  const pull = async (id, l, why, got = null) => {
+    const held = () => { R.kept.push(id); if (l) R.behind.push(id); };
+    if (store.current() === id) { held(); return; }
+    got ||= await fetch(id);
+    if (!got) return;
+    const bad = store.check?.(got.h);
+    if (bad) { fail(id, { code: bad }); return; }
+    if (store.current() === id) { held(); return; }
     if (l) store.backup(l, why);
-    if (store.put(h) === false) { R.kept.push(id); return; }
-    agree(id, c, heroSum(h)); R.pulled.push(id);
+    if (store.put(got.h) === false) { R.kept.push(id); return; }
+    agree(id, got.rec, got.h); R.pulled.push(id);
     if (l) R.replaced.push(id);
   };
 
@@ -100,7 +150,7 @@ export async function syncAll(backend, store, o = {}) {
       else {
         if (l && store.current() !== id) { store.backup(l, 'deleted'); store.drop(id); }
         if (c && !c.del) {
-          try { const r = await backend.remove(id, t, c.rev); meta.base[id] = { rev: r.rev, del: true }; R.removed.push(id); live--; } catch (e) { fail(id, e); }
+          if (!ro) try { const r = await backend.remove(id, t, c.rev); meta.base[id] = { rev: r.rev, del: true }; R.removed.push(id); live--; } catch (e) { fail(id, e); }
         } else if (c) agree(id, c);
         else meta.base[id] = { rev: null, del: true };
         continue;
@@ -120,16 +170,22 @@ export async function syncAll(backend, store, o = {}) {
     if (l && !c) { await push(id, l, null); continue; }
     if (c && !l) { await pull(id, null, 'cloud'); continue; }
     if (!l || !c) continue;
-    if (sumL === c.sum) { agree(id, c, sumL); continue; }
-    const cloudSame = b && !b.del && b.rev === c.rev, localSame = b && !b.del && b.sum === sumL;
+    if (sumL === c.sum) { agree(id, c, l); continue; }
+    const known = b && !b.del, cloudSame = known && b.rev === c.rev, localSame = known && b.sum === sumL;
+    // (a copy here that only sat open since the cloud last agreed with it, its clock running and nothing done: the
+    // same, whatever its autosaves did to `played`)
+    const localIdle = known && typeof b.work === 'string' && b.work === workSum(l);
     if (cloudSame) { await push(id, l, c); continue; }
-    if (localSame) { await pull(id, l, 'cloud'); continue; }
-    // changed on both sides, or never agreed on: the later played wins; the other copy is kept as a backup
-    if (num(c.played) > num(l.played)) await pull(id, l, 'conflict');
-    else {
-      try { const g = await backend.get(id); const h = g && typeof g.data === 'string' ? JSON.parse(g.data) : null; if (h && typeof h === 'object') store.backup(h, 'conflict'); } catch (e) { fail(id, e); continue; }
-      await push(id, l, c);
-    }
+    if (localSame || localIdle) { await pull(id, l, 'cloud'); continue; }
+    // changed on both sides, or never agreed on: the copy further on wins, then the later played (then the larger sum,
+    // so that two devices choose alike); the other copy is kept as a backup. (A cloud copy that, like an open page's,
+    // only moved its clock since the base is no change there: this one goes up over it)
+    const got = await fetch(id);
+    if (!got) continue;
+    if (known && typeof b.work === 'string' && b.work === workSum(got.h)) { await push(id, l, got.rec); continue; }
+    const d = further(got.h, l) || num(got.h.played) - num(l.played) || (heroSum(got.h) > sumL ? 1 : -1);
+    if (d > 0) await pull(id, l, 'conflict', got);
+    else if (!ro) { store.backup(got.h, 'conflict'); await push(id, l, got.rec); }
   }
   // (tombstones kept: the newest MAX_TOMBS, so a device that has not synced for long cannot bring many back)
   const ts = Object.entries(meta.tomb).sort((a, b) => b[1] - a[1]);
@@ -154,7 +210,7 @@ export async function pushOne(backend, store, id) {
   if (data.length > MAX_HERO) return false;
   const r = await backend.put(id, { data, sum, played: num(h.played) }, b.rev);
   const m2 = cleanMeta(store.meta());
-  m2.base[id] = { rev: r.rev, sum };
+  m2.base[id] = { rev: r.rev, sum, work: workSum(h) };
   store.setMeta(m2);
   return true;
 }

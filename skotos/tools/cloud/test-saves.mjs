@@ -4,7 +4,8 @@
 // own rows only, rev and 'conflict', the caps (size, heroes, rate, the project's bytes and players), codes (made,
 // claimed, normalized, renewed, tries limited), tombstones. Then src/net/cloudsb.js over a fake supabase-js client whose
 // RPCs run here as the signed-in user, with game/cloudsync.js: two devices joined by a code, a session lost and found
-// again by its kept code. PGlite: npm i --no-save @electric-sql/pglite@0.5.8 (or PGLITE=<its dist/index.js>).
+// again by its kept code, and a claim of that code whose answer is lost (the code kept, never another's put over it).
+// PGlite: npm i --no-save @electric-sql/pglite@0.5.8 (or PGLITE=<its dist/index.js>).
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { randomUUID } from 'node:crypto';
@@ -178,7 +179,9 @@ await T('claims', async () => {
 
 // ---------- the backend and the sync over a fake supabase-js client whose RPCs run here ----------
 function memStorage() { const m = new Map(); return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k), m }; }
-const net = { offline: false, signIns: 0 };
+// (blockClaim: the next save_claim calls never reach the server; dropClaim: they run there, their answers lost)
+const net = { offline: false, signIns: 0, blockClaim: 0, dropClaim: 0 };
+const lost = { data: null, error: { message: 'TypeError: Failed to fetch' } };
 function fakeCreateClient(url, key, opts) {
   const sk = opts.auth.storageKey, st = opts.auth.storage;
   const read = () => { try { return JSON.parse(st.getItem(sk) || 'null'); } catch (e) { return null; } };
@@ -192,7 +195,9 @@ function fakeCreateClient(url, key, opts) {
         const p = (async () => {
           if (net.offline) return { data: null, error: { message: 'TypeError: Failed to fetch' } };
           if (s !== 'skotos' || !/^save_[a-z_]+$/.test(fn)) return { data: null, error: { message: 'not found' } };
+          if (fn === 'save_claim' && net.blockClaim > 0) { net.blockClaim--; return lost; }
           const r = await call(read()?.user?.id, fn, args);
+          if (fn === 'save_claim' && net.dropClaim > 0) { net.dropClaim--; return lost; }
           return r && r.err ? { data: null, error: { message: r.err } } : { data: r, error: null };
         })();
         p.abortSignal = () => p;
@@ -251,6 +256,48 @@ await T('backend: two devices joined by a code', async () => {
   ok(CODE_RE.test(nc) && a.B.code() === nc, 'a new code kept and shown');
 });
 function showish(c) { return c.toLowerCase().match(/.{1,4}/g).join(' - '); }
+
+await T('backend: a claim of the kept code that gets no answer', async () => {
+  await admin('update skotos.save_players set tokens = 20');
+  const sP = memStorage();
+  const p = await supabaseBackend(cfg, { storage: sP });
+  const P = p.player, codeP = p.code();
+  const uidOf = () => JSON.parse(sP.getItem('skotos-save-auth')).user.id;
+  const tied = async () => (await admin('select player from skotos.save_users where uid = $1', [uidOf()]))[0]?.player;
+  const players = async () => (await admin('select count(*)::int as n from skotos.save_players'))[0].n;
+  // the session lost, the code kept; the first start's claim never reaches the server
+  sP.removeItem('skotos-save-auth');
+  net.blockClaim = 1;
+  let e1 = null; try { await supabaseBackend(cfg, { storage: sP }); } catch (x) { e1 = x.code; }
+  ok(e1 === 'offline' && normCode(sP.getItem('skotos.cloud.code')) === codeP, 'first start: refused offline, the code kept', e1);
+  // the retry (the session stored now): save_hello makes a new player, the claim goes through but its answer is lost
+  const n0 = await players();
+  net.dropClaim = 1;
+  let b = null, e2 = null; try { b = await supabaseBackend(cfg, { storage: sP }); } catch (x) { e2 = x.code; }
+  ok(b && b.player === P && b.who === 'sb:' + P, 'the retry finds the user tied to the code\'s player', { e2, who: b?.who, P });
+  ok(normCode(sP.getItem('skotos.cloud.code')) === codeP && b?.code() === codeP, 'the code kept and shown is still that player\'s', sP.getItem('skotos.cloud.code'));
+  ok(await tied() === P && await players() === n0, 'the server: the user on P, the empty player made for it gone');
+  const c = await supabaseBackend(cfg, { storage: memStorage(), claim: codeP });
+  ok(c.who === 'sb:' + P, 'the code shown works');
+  // again, the retry's claim never reaching the server either: refused, nothing changed; the next start settles it
+  sP.removeItem('skotos-save-auth');
+  net.blockClaim = 2;
+  let e3 = null, e4 = null;
+  try { await supabaseBackend(cfg, { storage: sP }); } catch (x) { e3 = x.code; }
+  try { await supabaseBackend(cfg, { storage: sP }); } catch (x) { e4 = x.code; }
+  ok(e3 === 'offline' && e4 === 'offline' && normCode(sP.getItem('skotos.cloud.code')) === codeP, 'two starts refused offline, the code kept (no split onto the new player)', { e3, e4 });
+  const d = await supabaseBackend(cfg, { storage: sP });
+  ok(d.who === 'sb:' + P && d.code() === codeP && await tied() === P, 'the next start claims it: the code\'s player', d.who);
+  ok(!sP.getItem('skotos.cloud.claim'), 'settled: nothing left marked');
+  // a kept code the server no longer knows (a new one made elsewhere): the new player's own code, one that works
+  await admin('update skotos.save_players set tokens = 20');
+  const nc = await c.newCode();
+  sP.removeItem('skotos-save-auth');
+  const e = await supabaseBackend(cfg, { storage: sP });
+  ok(e.who !== 'sb:' + P && CODE_RE.test(e.code()) && e.code() !== codeP && e.code() !== nc, 'a dead kept code: a player of its own, its own code kept', { who: e.who, code: e.code() });
+  const f = await supabaseBackend(cfg, { storage: memStorage(), claim: e.code() });
+  ok(f.who === e.who, 'and that code works');
+});
 
 console.log(`test-saves: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

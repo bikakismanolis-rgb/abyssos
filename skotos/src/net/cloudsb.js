@@ -8,8 +8,11 @@
 // of Crockford's base 32, shown as XXXX-XXXX-XXXX-XXXX); the server keeps only its SHA-256, so the code is shown when it
 // is made and kept on this device (localStorage) to be shown again. Another device types it ("restore from a code") and
 // from then on plays the same heroes. A device whose session is gone (its site data cleared but the code written down,
-// or the anonymous user cleared from the project) signs in anew and takes its code again by itself.
-const AUTH_KEY = 'skotos-save-auth', CODE_KEY = 'skotos.cloud.code', CALL_MS = 10000;
+// or the anonymous user cleared from the project) signs in anew and takes its code again by itself. The code kept here
+// is only ever replaced by one the server answered for: a claim of it that ends without a clear answer (offline, its
+// answer lost, the tries spent) leaves it as it is, marked (PENDING_KEY), and the backend is not made (start() tries
+// again later) until a claim is answered, or save_hello shows the user tied to another player than the one it had.
+const AUTH_KEY = 'skotos-save-auth', CODE_KEY = 'skotos.cloud.code', PENDING_KEY = 'skotos.cloud.claim', CALL_MS = 10000;
 const coded = (c) => { const e = new Error(c); e.code = c; return e; };
 const local = () => { try { return typeof localStorage !== 'undefined' ? localStorage : null; } catch (e) { return null; } };
 // a code as typed: letters upper case, Crockford's look-alikes read as the digits they stand for, separators dropped
@@ -45,24 +48,48 @@ export async function supabaseBackend(cfg, o = {}) {
   }
   if (!user?.id) throw coded('no_sign_in');
   const getCode = () => { try { const c = normCode(store?.getItem(CODE_KEY)); return CODE_RE.test(c) ? c : null; } catch (e) { return null; } };
-  const setCode = (c) => { try { store?.setItem(CODE_KEY, c); } catch (e) { /* shown now only */ } };
+  const pending = () => { try { return store?.getItem(PENDING_KEY) || null; } catch (e) { return null; } };
+  const setPending = (c) => { try { if (c) store?.setItem(PENDING_KEY, c); else store?.removeItem?.(PENDING_KEY); } catch (e) { /* the next start claims again only on a new player */ } };
+  const setCode = (c) => { try { store?.setItem(CODE_KEY, c); } catch (e) { /* shown now only */ } setPending(null); };
   const B = { kind: 'supabase', who: null, player: null };
   const take = (r) => { if (!r || typeof r.player !== 'string') throw coded('unavailable'); B.player = r.player; B.who = 'sb:' + r.player; if (typeof r.code === 'string') setCode(normCode(r.code)); return r; };
   // (a new session with a code kept here: the code's player again, not a new one)
   const kept = getCode();
-  let hello = null;
+  let hello = null, dead = false;
+  // the kept code claimed: its player (the code kept as it is), or null when the server says the code is no more
+  // (bad_code: the player save_hello gives, with its own code, stands). Any other end leaves it unsettled: the code kept,
+  // marked, and the start given up (thrown), unless save_hello now finds the user tied to another player than h's, the
+  // claim having gone through with its answer lost
+  const claimKept = async (h) => {
+    let r;
+    try { r = await rpc('save_claim', { code: kept }); } catch (e) {
+      if (e.code === 'bad_code') { dead = true; setPending(null); return null; }
+      setPending(kept);
+      if (h?.player) { let h2 = null; try { h2 = await rpc('save_hello'); } catch (x) { h2 = null; } if (typeof h2?.player === 'string' && h2.player !== h.player) { setPending(null); return take({ player: h2.player }); } }
+      throw e;
+    }
+    const out = take({ player: r?.player });
+    setPending(null);
+    return out;
+  };
   // (a device with nothing yet that takes another's code: that player at once, none made for it)
   if (o.claim != null) {
     const want = normCode(o.claim);
     if (!CODE_RE.test(want)) throw coded('bad_code');
     hello = take(await rpc('save_claim', { code: want })); setCode(want);
   }
-  if (!hello && fresh && kept) { try { hello = take(await rpc('save_claim', { code: kept })); } catch (e) { if (e.code === 'offline') throw e; hello = null; } }
+  if (!hello && fresh && kept) hello = await claimKept(null);
   if (!hello) {
-    // (a user the server tied to no player, with a code kept here: that code's player, the one just made let go by it)
+    // (a user the server tied to no player, with a code kept here (or one whose claim of it never got its answer): that
+    // code's player, the one just made let go by it)
     const h = await rpc('save_hello');
-    if (h?.new && kept) { try { hello = take(await rpc('save_claim', { code: kept })); } catch (e) { hello = null; } }
-    if (!hello) hello = take(h);
+    if (kept && !dead && (h?.new || pending() === kept)) hello = await claimKept(h);
+    if (!hello) {
+      hello = take(h);
+      // (the kept code is no more, and this player's own code was never kept here: a new one for it, so that the code
+      // shown is one that works)
+      if (dead && typeof h?.code !== 'string') { try { const r = await rpc('save_new_code'); if (typeof r?.code === 'string') setCode(normCode(r.code)); } catch (e) { /* the old code shown until a new one is made */ } }
+    }
   }
   Object.assign(B, {
     list: () => rpc('save_list').then((x) => (Array.isArray(x) ? x : [])),
@@ -71,7 +98,7 @@ export async function supabaseBackend(cfg, o = {}) {
     remove: (id, at, rev) => rpc('save_delete', { hero_id: id, at: Math.round(at || 0), base_rev: rev ?? null }),
     code: getCode,
     // another device's code: this browser's saves are that player's from now on (game/cloud.js syncs both ways after)
-    async claim(c) { const n = normCode(c); if (!CODE_RE.test(n)) throw coded('bad_code'); take(await rpc('save_claim', { code: n })); setCode(n); return B.who; },
+    async claim(c) { const n = normCode(c); if (!CODE_RE.test(n)) throw coded('bad_code'); take({ player: (await rpc('save_claim', { code: n }))?.player }); setCode(n); return B.who; },
     // a new code for this player; the old one no longer works (one written where others may have seen it)
     async newCode() { const r = await rpc('save_new_code'); if (typeof r?.code !== 'string') throw coded('unavailable'); setCode(normCode(r.code)); return getCode(); }
   });

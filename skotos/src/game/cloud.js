@@ -6,9 +6,12 @@
 // goes up at most every PUSH s while it is played, and on leaving a zone at most every NUDGE s; other devices' changes
 // are heard every POLL s, when the page comes back to view after a while, and from Settings (Sync now). As the page is
 // hidden or closed, the hero it plays goes up on its own if it changed (best effort). One page of the browser syncs at
-// a time (a Web Lock); a page that finds another syncing leaves it to that one.
+// a time (a Web Lock); a page that finds another syncing leaves it to that one. A view that may not write (a write
+// refused read_only) stops writing for the rest of the visit: no sync on its changes, only copies taken (pull only) as
+// it comes back to view, every POLL s and from Settings. A sync that finds the hero this page plays further on in the
+// cloud says so ('cloudBehind': ui/cloudui.js tells the player, back to the title to take it up).
 import { G } from './state.js';
-import { storedHeroes, playingId, putStored, dropStored, cloudMeta, setCloudMeta, backupHero, saveHooks, writeSave } from './save.js';
+import { storedHeroes, playingId, putStored, dropStored, cloudMeta, setCloudMeta, backupHero, heroFits, saveHooks, writeSave } from './save.js';
 import { syncAll, pushOne, dirty } from './cloudsync.js';
 import { artifactBackend } from '../net/cloudart.js';
 import { supabaseBackend } from '../net/cloudsb.js';
@@ -20,8 +23,9 @@ const PUSH = 120, NUDGE = 20, POLL = 600, AWAY = 60;
 // state: 'off' (no cloud in this build), 'starting', 'on', 'unavailable' (this view cannot: signed out, view-only, an
 // older viewer, the project down), 'error' (the last sync failed: why in err; nothing local changed)
 export const CLOUD = { kind: null, state: 'off', why: null, last: 0, err: null, busy: false, notes: [], code: null };
-const store = { heroes: storedHeroes, current: playingId, put: putStored, drop: dropStored, meta: cloudMeta, setMeta: setCloudMeta, backup: backupHero };
-let B = null, running = null, lastTry = 0, hiddenAt = 0, SB = SUPABASE;
+const store = { heroes: storedHeroes, current: playingId, put: putStored, drop: dropStored, meta: cloudMeta, setMeta: setCloudMeta, backup: backupHero, check: heroFits };
+// RO: this view may not write (read_only seen)
+let B = null, running = null, lastTry = 0, hiddenAt = 0, SB = SUPABASE, RO = false;
 const now = () => Date.now();
 const tell = () => emit('cloud', CLOUD);
 
@@ -61,15 +65,18 @@ export function syncNow(why = 'manual') {
   if (running) return running;
   lastTry = now(); CLOUD.busy = true; tell();
   const run = async () => {
-    const r = await syncAll(B, store);
+    const r = await syncAll(B, store, { readOnly: RO });
     CLOUD.busy = false;
-    if (r.ok) { CLOUD.last = now(); CLOUD.err = r.errors.length ? r.errors[0].code : null; CLOUD.state = 'on'; }
+    if (r.ok) { CLOUD.last = now(); CLOUD.err = r.errors.length ? r.errors[0].code : null; if (!RO) CLOUD.state = 'on'; }
     else { CLOUD.err = r.code; if (r.code === 'revoked') CLOUD.state = 'unavailable'; }
-    if (r.code === 'read_only' || r.errors.some((e) => e.code === 'read_only')) { CLOUD.state = 'unavailable'; CLOUD.why = 'read_only'; }
+    if (r.code === 'read_only' || r.errors.some((e) => e.code === 'read_only')) RO = true;
+    if (RO) { CLOUD.state = 'unavailable'; CLOUD.why = 'read_only'; if (r.ok && r.errors.every((e) => e.code === 'read_only')) CLOUD.err = null; }
     for (const id of r.replaced) CLOUD.notes.push({ id, at: now() });
     if (r.pulled.length || r.dropped.length) emit('cloudHeroes', r);
     if (r.replaced.length) emit('toast', t('cloud.replaced'), 'quest');
     tell();
+    const id = playingId();
+    if (id && r.behind?.includes(id)) emit('cloudBehind', id);
     return r;
   };
   const locks = typeof navigator !== 'undefined' && navigator.locks;
@@ -87,22 +94,26 @@ function written() {
     else if (CLOUD.kind === 'supabase' && CLOUD.state === 'unavailable' && due(300)) { lastTry = now(); start(() => supabaseBackend(SB)); }
     return;
   }
+  // (a view that may not write: only other devices' copies, now and then)
+  if (RO) { if (due(POLL)) syncNow('poll'); return; }
   if (CLOUD.state !== 'on') return;
   if ((due(PUSH) && dirty(store, B.who)) || due(POLL)) syncNow('auto');
 }
-on('travel', () => { if (B && due(NUDGE) && dirty(store, B.who)) setTimeout(() => syncNow('zone'), 1500); });
+// (only a cloud that takes writes: not a view-only one, nor one whose access went)
+const writable = () => !!B && !RO && CLOUD.state === 'on';
+on('travel', () => { if (writable() && due(NUDGE) && dirty(store, B.who)) setTimeout(() => syncNow('zone'), 1500); });
 // a hero deleted, a backup taken back: told at once
-function changed() { if (B) setTimeout(() => syncNow('change'), 200); else syncNow('first'); }
+function changed() { if (B) { if (writable()) setTimeout(() => syncNow('change'), 200); } else syncNow('first'); }
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { hiddenAt = now(); flush(); } else if (B && now() - hiddenAt > AWAY * 1000) syncNow('back');
+    if (document.hidden) { hiddenAt = now(); flush(); } else if (B && (writable() || RO) && now() - hiddenAt > AWAY * 1000) syncNow('back');
   });
   window.addEventListener('pagehide', flush);
 }
 // the hero this page plays, up as the page goes (no list first; refused if the cloud changed meanwhile)
 // (its record written first: this listener may run before the game's own save on hiding)
 function flush() {
-  const id = playingId(); if (!B || !id) return;
+  const id = playingId(); if (!writable() || !id) return;
   writeSave();
   if (!running) pushOne(B, store, id).then((ok) => { if (ok) { CLOUD.last = now(); tell(); } }, () => {});
 }

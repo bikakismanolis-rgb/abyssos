@@ -1121,7 +1121,7 @@ const S = {
     const base = A5.base, r = {};
     const ready = async (q = 'q=0&sim=2&norender') => { await pg.goto(base + '?' + q); await pg.waitForFunction(() => window.__ready && window.__G?.save, null, { timeout: 240000 }); };
     const cloudOn = () => pg.waitForFunction(async () => { const C = (await import('/src/game/cloud.js')).CLOUD; return C.state === 'on' && C.last > 0 && !C.busy; }, null, { timeout: 60000 });
-    const sync = () => pg.evaluate(async () => { const r = await (await import('/src/game/cloud.js')).syncNow('test'); return r && { ok: r.ok, pushed: r.pushed, pulled: r.pulled, removed: r.removed, dropped: r.dropped, kept: r.kept, errors: r.errors }; });
+    const sync = () => pg.evaluate(async () => { const r = await (await import('/src/game/cloud.js')).syncNow('test'); return r && { ok: r.ok, pushed: r.pushed, pulled: r.pulled, removed: r.removed, dropped: r.dropped, kept: r.kept, errors: r.errors, behind: r.behind }; });
     const docs = () => pg.evaluate(() => JSON.parse(localStorage.getItem('__fakecloud') || '{}'));
     const stored = () => pg.evaluate(() => JSON.parse(localStorage.getItem('skotos.save.v1') || 'null'));
     // two heroes as an older version left them (a field this version never heard of, Act V's fields absent)
@@ -1162,6 +1162,12 @@ const S = {
     await pg.evaluate(() => { const d = JSON.parse(localStorage.getItem('__fakecloud')), x = d['data/users/u-test/h-hA'], h = JSON.parse(x.data); h.gold = 1; h.played = Date.now() + 60000; x.data = JSON.stringify(h); x.played = h.played; x.sum = 'other2'; x.rev++; localStorage.setItem('__fakecloud', JSON.stringify(d)); });
     r.whilePlayed = await sync();
     r.heroKept = await pg.evaluate(() => ({ gold: window.__G.hero.gold, stored: JSON.parse(localStorage.getItem('skotos.save.v1')).heroes.find((h) => h.id === 'hA').gold }));
+    // (and the player is told: a word with the way back to the title, once)
+    r.newerPanel = await pg.evaluate(() => ({ panel: window.__G.panel, quit: !!document.querySelector('#panel [data-a="quit"]'), stay: !!document.querySelector('#panel .pn-b [data-a="close"]') }));
+    await shot();
+    await pg.evaluate(() => window.__D.closePanel());
+    r.newerOnce = await sync();
+    r.newerOnce = { kept: r.newerOnce?.kept, panel: await pg.evaluate(() => window.__G.panel) };
     // a co-op guest's G.hero is a view over its own record: that record's id is the one being played
     r.guest = await pg.evaluate(async () => { const SV = await import('/src/game/save.js'), G = window.__G, real = G.hero; G.hero = Object.create(real); G.hero.__real = real; G.hero.id = 'hostsView'; const id = SV.playingId(); G.hero = real; return id; });
     // hB deleted here: its cloud copy becomes a tombstone, and a sync does not bring it back
@@ -1178,6 +1184,16 @@ const S = {
     await shot();
     await pg.click('[data-a="clsync"]'); await pg.waitForTimeout(800);
     r.syncMsg = await pg.evaluate(() => document.getElementById('cl-msg')?.textContent || null);
+    // a backup taken back: two taps on hB's (named by hero and time); a backup added between the taps does not change which
+    const bsel = await pg.evaluate(() => [...document.querySelectorAll('#panel [data-a^="clrestore:hB:"]')].map((b) => b.dataset.a)[0] || null);
+    if (bsel) await pg.click(`[data-a="${bsel}"]`);
+    await pg.evaluate(async () => { const SV = await import('/src/game/save.js'); SV.backupHero(Object.assign(JSON.parse(JSON.stringify(window.__G.hero)), { id: 'hZ', gold: 3 }), 'cloud'); (await import('/src/ui/bus.js')).emit('cloud', {}); });
+    await pg.waitForTimeout(300);
+    r.restoreRows = await pg.evaluate(() => document.querySelectorAll('#panel .cl-bk').length);
+    if (bsel) await pg.click(`[data-a="${bsel}"]`);
+    await pg.waitForTimeout(500);
+    r.restore = await pg.evaluate(() => ({ sel: !!document.querySelector('[data-a^="clrestore:hB:"]'), msg: document.getElementById('cl-msg')?.textContent || null, stored: JSON.parse(localStorage.getItem('skotos.save.v1')).heroes.map((h) => h.id) }));
+    r.restore.bsel = bsel;
     await pg.evaluate(() => window.__D.closePanel());
     // a signed-out view: no cloud, the game as before, the settings say so
     await pg.evaluate(() => localStorage.setItem('__fakecloud_mode', 'out'));
@@ -1198,6 +1214,8 @@ const S = {
       newer: r.newer?.pulled?.includes('hA') && r.newerLocal.gold === 999 && r.newerLocal.mem === 999 && r.newerLocal.backups.some((b) => b[0] === 'hA' && b[1] === 100),
       play: r.playGold === 999 && r.pushPlay?.pushed?.includes('hA') && r.pushedGold === 4321,
       whilePlayed: r.whilePlayed?.kept?.includes('hA') && r.heroKept.gold === 5555 && r.heroKept.stored === 5555,
+      newerTold: r.whilePlayed?.behind?.includes('hA') && r.newerPanel.panel === 'cloudNewer' && r.newerPanel.quit && r.newerPanel.stay && r.newerOnce.kept?.includes('hA') && !r.newerOnce.panel,
+      restore: !!r.restore.bsel && r.restore.stored.includes('hB') && !!r.restore.msg && r.restoreRows >= 3,
       guest: r.guest === 'hA',
       tomb: r.tomb.del === true && r.tomb.data === null && !r.afterDel.includes('hB'),
       settings: !!r.row && r.panel.backups >= 1 && r.panel.sync && !r.panel.code && !!r.syncMsg,
