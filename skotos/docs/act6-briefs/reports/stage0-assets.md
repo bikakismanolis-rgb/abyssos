@@ -14,7 +14,7 @@ No game code was touched.
 | **the Ketos** (and the Ketling at ×0.6): "Pistosaur Animated" by RickStikkelorum (ricksticky) | 773667575a264c7baa4ec404115a044b | CC-BY 4.0, downloadable | **pass** | not taken (Spinnee's Pliosaur; then icemaw.glb ×3.4 with the code lure) |
 | **the Falselight**: "Scorpion" by anthonyvanoo | 4c0fd62d33ab4d2592ee0a1d985a480d | CC-BY 4.0, downloadable | **pass, no doubt found** | not taken (the .hapto Pseudoscorpion; then spider.glb ×0.8 with the code lure) |
 
-**For G0:** the provenance part of the gate passes for both, so neither no-download body is needed for provenance reasons. The look gates are still to run. The design's "(to verify)" marks on these two uids (Assets tables, Asset audit, the two ASSET blocks) can become "verified 27 Oct, `asset-gates.json`". That edit is the lead's to make; this stage did not edit the design.
+**For G0:** the provenance part of the gate passes for both, so neither no-download body is needed for provenance reasons. The look gates ran later the same day (The look gates, below). The design's "(to verify)" marks on these two uids (Assets tables, Asset audit, the two ASSET blocks) can become "verified 27 Oct, `asset-gates.json`". That edit is the lead's to make; this stage did not edit the design.
 
 **Credits for CREDITS.txt:**
 - "Pistosaur Animated" by RickStikkelorum (ricksticky), https://sketchfab.com/3d-models/pistosaur-animated-773667575a264c7baa4ec404115a044b, CC-BY 4.0.
@@ -113,6 +113,23 @@ No game code was touched.
 - **Strip** the 52 helpers (reassign pincerIK_R_077's vertices to the pincer) and the dead scale keys (0.999-1.001).
 - **The phone budget of 1.74 MB (512 d, 256 n)** means dropping the flat metallicRoughness map (set roughness 0.42, metal 0) and the emissive map. Its warm yellow sting tip would read as *true* light; the code lure's cold glow replaces it.
 - **Look-gate note:** the legs are long and thin. At ×1.6, pitch 0.95 and quality 0 on a phone they may read as hairlines. Check the pale bone-grey regrade in the viewer before the build is final.
+
+## The look gates (27 October)
+
+Run in the viewers at gameplay pitch (the game camera, the hero's warm lamp at the feet, the viewer's grass) on SwiftShader, quality 2. viewer.js's people view now takes one value per figure, as creatureview.js does: `&tints=<hex>:<amt>`, `&rims=<hex>:<amt>`, `&scales=<s>`, `-` to skip. The shots are in `g0/` beside this report.
+
+| gate | what was seen | outcome |
+|---|---|---|
+| **the First beside Selna** (`?viewer&only=p:selna,p:selna&tints=-,9ab8d0:2.1`, `g0/first-close.jpg`) | The grade drains her into a pale, cold blue-grey and she reads as a colder woman than Selna. The silhouette is the same body, and the two hair buns read at gameplay pitch. | **Passes with its code parts, not on the grade alone.** The icicle crown sits over the buns, the stoop and the brand change the stance. The two never share a zone, so the risk is a player's memory, not one frame. Stage A re-shoots it with the crown on; if the buns still show, the fallback `first6` stands. |
+| **the Faded beside the Sunken** (`g0/faded-close.jpg`: villager0 at `1a1c24:2.2` rim `8a9ab8:0.3`; the Sunken at its shipped `8c9e99:1.6`) | The Faded are dry, dim and brown-grey. The Sunken are pale green-grey with white hands and a hunch. They do not read as one kind. | **Passes** (the veil is code, stage A). |
+| **Keyx** (`g0/keyx-strengths.jpg`: villager1 at 0.55, 0.8, 1.1) | At the design's 1.1 he goes as dark as the Faded. A tint above 1 is fully mixed in, so it darkens his face and hands with his clothes. At 0.55-0.8 he keeps a face and pale hands. | **Passes at tintAmt 0.6** (`g0/faded-keyx06-leif085-sailor14.jpg`, the middle figure): a man with a face among the Faded. The design's "half strength (1.1)" is read as tintAmt 0.6. |
+| **Leif** (villager2 at 1.32 and 0.85) | `g0/villagers-plain.jpg`: people.glb's villager2 is a woman (the red bodice), so she cannot be "the woodcutter's son". | **Body changed:** villager0 ×0.92 with the brown hood and the axe (the Sailor is villager0 too, but they never share a scene). Below: tintAmt 0.85 until his fire is lit (dimmed, still alive), then 0. |
+| **the Sailor** | "The Faded's tint at 0.9" read as 2.2 × 0.9 = 1.98 is one of the Faded. | **tintAmt 1.4**, no veil (bottom-left figure in the same shot): grey but not yet gone. |
+| **the Lampbearer** | The Sunken's body as shot above; its oil lamp is code (stage B). | **Body passes**; the lamp is judged with its light in stage B's `darktele` shot. |
+| **the Shade's forms** (`g0/shade-heroes.jpg`: warden, ranger, mage at `0c0a14:2.0` rim `8a9ab8:0.5`; `g0/shade-creatures.jpg`: barrowLord, spider, troll in creatureview, same grade) | Class and silhouette read: shield and sword, crossbow, staff, hood. Under the viewer's lamp the bodies read as dark grey leather, not black. **The held weapons keep their full colour** (an orange blade, a blue shield, a red staff), because the person patch does not reach them. | **Fallback chosen: the plain near-black tint plus a weapon regrade.** Combat's Shade code darkens every held mesh (`a.hold` parts) to the same near-black, rim kept for the silhouette. The skin patch is optional on top. Re-shot under the Hearth's light in stage C (`shade`). |
+| **the Icemaw at ×3.4** (`g0/icemaw34.jpg`, creatureview `only=icemaw&ref&scales=-,3.4`) | Beside the 1.8 m reference it reads as a leviathan, longer than the frame. Its pale whale-grey hide is the open sea's and looks lit from above, which is wrong for the bottom. | **Size passes as the Ketos's fallback;** it needs a dark regrade to belong below (the lure's cold glow is its only light). The tint is picked with the lure in stage B; the fallback only matters if `ketos.glb` fails to load. |
+
+**For G0:** every look gate has passed or has its fallback chosen. The binding numbers (Keyx 0.6, Leif villager0 ×0.92 at 0.85, the Sailor 1.4, the Shade's weapon regrade) are written into the contract's Stage 0 outcome. Not run here: perf5's Field on the gate machine (perf5's Field runs of 26 October stand as the perf6 baseline until stage A's engine lane re-measures it).
 
 ## Limits of this check
 
