@@ -82,9 +82,72 @@ if (name === 'room' || name === 'access') {
     window.claude = Object.freeze({ use: async (n) => (n === 'room' ? make('') : n === 'user' ? user : null) });
   });
 }
-const NETQ = name === 'room' || name === 'access' ? '' : 'net=local&';
+// NET=supa: every page's co-op is SupabaseTransport, stamped, against the fake project of tools/net/fakesupa.mjs in this
+// process (its rules as the migration's: the RPCs, private channels, the server's stamp, the sender's own echo; the
+// project's events counted, each sent and each delivered), the page's supabase-js client a stand-in that reaches it
+// through a binding (?net=supabase and window.__skotosSupa: transport.js pickTransport). Each call answers after
+// SUPA_LAG ms (default 110) and up to SUPA_JIT more (60): about the live project's 140-160 ms from here. ECON=0: the
+// channels as they were before the economy (no bundles, no outboxes, the room's rates)
+let SUPA = null;
+if (process.env.NET === 'supa' && name !== 'room' && name !== 'access') {
+  const { fakeSupabase } = await import('./net/fakesupa.mjs');
+  SUPA = { bus: {}, clients: new Map() };
+  const lag = { lagMin: +(process.env.SUPA_LAG ?? 110), lag: +(process.env.SUPA_JIT ?? 60) };
+  const send = (page, fn, arg) => page.evaluate(fn, arg).catch(() => {});
+  await ctx.exposeBinding('__supa', async ({ page }, op, a) => {
+    let st = SUPA.clients.get(page);
+    if (!st) { st = { c: fakeSupabase(SUPA.bus, lag), ch: new Map() }; SUPA.clients.set(page, st); }
+    const c = st.c;
+    if (op === 'getSession') return c.auth.getSession();
+    if (op === 'signIn') return c.auth.signInAnonymously(a);
+    if (op === 'rpc') return await c.schema(a[0]).rpc(a[1], a[2]);
+    if (op === 'chan') {
+      const [id, nm, opts] = a, sc = c.channel(nm, opts);
+      sc.on('broadcast', { event: '*' }, (m) => send(page, ([id, m]) => window.__supaIn?.(id, 'b', m), [id, JSON.parse(JSON.stringify(m))]));
+      sc.on('presence', { event: 'sync' }, () => send(page, ([id, x]) => window.__supaIn?.(id, 'sync', x), [id, sc.presenceState()]));
+      st.ch.set(id, sc); return 1;
+    }
+    const sc = st.ch.get(a[0]); if (!sc) return 'error';
+    if (op === 'sub') { sc.subscribe((v) => send(page, ([id, v]) => window.__supaIn?.(id, 'st', v), [a[0], v])); return 1; }
+    if (op === 'send') return sc.send(a[1]);
+    if (op === 'track') return sc.track(a[1]);
+    if (op === 'unsub') { st.ch.delete(a[0]); return sc.unsubscribe(); }
+    return 'error';
+  });
+  await ctx.addInitScript((econ) => {
+    const chans = {}; let n = 0;
+    window.__supaIn = (id, kind, x) => {
+      const c = chans[id]; if (!c) return;
+      if (kind === 'b') { for (const [ev, f] of c.L.b) if (ev === '*' || ev === x.event) f(x); }
+      else if (kind === 'sync') { c.state = x; for (const f of c.L.p) f(); }
+      else if (kind === 'st') c.cb?.(x);
+    };
+    const call = (op, a) => window.__supa(op, a);
+    const client = () => ({
+      auth: { getSession: () => call('getSession'), signInAnonymously: (o) => call('signIn', o) },
+      realtime: { setAuth: async () => {} },
+      schema: (sch) => ({ rpc: (fn, args) => { const b = { abortSignal() { return b; }, then: (f, r) => call('rpc', [sch, fn, args]).then(f, r) }; return b; } }),
+      channel(name, opts) {
+        const id = ++n, c = (chans[id] = { L: { b: [], p: [] }, state: {}, cb: null });
+        call('chan', [id, name, opts]);
+        const ch = {
+          on(t, flt, f) { if (t === 'broadcast') c.L.b.push([flt.event, f]); if (t === 'presence') c.L.p.push(f); return ch; },
+          subscribe(cb) { c.cb = cb; call('sub', [id]); return ch; },
+          send: (m) => call('send', [id, m]), track: (p) => call('track', [id, p]),
+          presenceState: () => c.state, unsubscribe: () => { delete chans[id]; return call('unsub', [id]); }
+        };
+        return ch;
+      },
+      removeChannel: (ch) => ch.unsubscribe()
+    });
+    window.__skotosSupa = { url: 'https://fake.supabase.co', anonKey: 'k', stamped: true, createClient: client, economy: econ ? undefined : false };
+  }, process.env.ECON !== '0');
+}
+const NETQ = name === 'room' || name === 'access' ? '' : SUPA ? 'net=supabase&' : 'net=local&';
 async function open(peer, q) {
   const pg = await ctx.newPage();
+  // (THROTTLE=<n>: the page's CPU n times slower, as a busy phone, or four pages on a few cores)
+  if (+process.env.THROTTLE > 1) { const c = await ctx.newCDPSession(pg); await c.send('Emulation.setCPUThrottlingRate', { rate: +process.env.THROTTLE }); }
   pg.on('pageerror', (e) => console.log('[' + peer + '] pageerror', e.message.slice(0, 300)));
   pg.on('console', (m) => { if (m.type() === 'error') console.log('[' + peer + '] console', m.text().slice(0, 300)); });
   await pg.goto(BASE + '?' + NETQ + 'peer=' + peer + '&slot=' + peer + '&q=0&' + (q.includes('render') ? '' : 'norender&') + q);
@@ -127,7 +190,65 @@ const hostPos = (h) => ev(h, () => ({ x: window.__G.player.x, z: window.__G.play
 const stats = (pg) => ev(pg, () => { const S = window.__NET.S, r = S.ch?.meter.rate(); return { r, peak: S.ch?.meter.peak, tx: S.ch?.meter.tx, snaps: S.stats.snaps, snapBytes: S.stats.snapBytes, rejected: S.stats.rejected, hits: S.stats.hits, why: S.stats.why }; });
 async function shot(pg, file) { await pg.evaluate(() => { window.__shoot = true; }); await sleep(400); await pg.screenshot({ path: out + '/' + file }); await pg.evaluate(() => { window.__shoot = false; }); }
 
+// (NET=supa: the fake project's counts, and their rates between two of them)
+const supaCount = () => SUPA && { t: Date.now(), ev: SUPA.bus.log?.events || 0, calls: SUPA.bus.srv?.log.calls || 0, del: SUPA.bus.srv?.log.delivered || 0, sends: SUPA.bus.srv?.log.fn.send || 0, msgs: SUPA.bus.srv?.ids || 0 };
+const supaRate = (a, b) => { const s = (b.t - a.t) / 1000; return { evs: (b.ev - a.ev) / s, calls: (b.sends - a.sends) / s, del: (b.del - a.del) / s, msgs: (b.msgs - a.msgs) / s }; };
+
 const SC = {
+  // how the others look: one hero walks a circle (5 m, 5 m/s), another page watches it every 16 ms. late: how far behind
+  // the walker it is shown (its angle on the circle against the walker's own, both by Date.now()), mean and p95; cv: the
+  // spread of its steps frame to frame over their mean (0 when even); held: the share of frames it did not move. Three
+  // views: the host seen by a guest, a guest by the host, a guest by another guest (the host passes it on where the
+  // channel bundles: NET=supa)
+  async feel() {
+    const { host, guests } = await party('town', 2, { lvl: 14, glvl: 13 });
+    const all = [host, ...guests];
+    for (const pg of all) await ev(pg, () => { window.__immortal = true; });
+    const R = 5, V = 5;
+    // an open circle near the host
+    const c = await ev(host, ([R]) => {
+      const G = window.__G, m = G.zone.map, p = G.player;
+      for (let k = 0; k < 400; k++) {
+        const a = k * 2.4, d = Math.sqrt(k) * 1.5, cx = p.x + Math.cos(a) * d, cz = p.z + Math.sin(a) * d;
+        let open = true;
+        for (let i = 0; i < 32 && open; i++) { const x = cx + Math.cos(i / 32 * 6.2832) * R, z = cz + Math.sin(i / 32 * 6.2832) * R, f = m.nearestFloor(x, z); if (!f || Math.hypot(f.x - x, f.z - z) > 0.05) open = false; }
+        if (open) return { x: cx, z: cz };
+      }
+      return null;
+    }, [R]);
+    ok(!!c, 'an open circle to walk', c);
+    const rows = [];
+    const view = async (walker, watcher, what) => {
+      for (const pg of all) await place(pg, c.x + 7 * (pg === walker ? 0 : 1), c.z + (pg === watcher ? 1 : -1) * 2 * (pg === walker ? 0 : 1));
+      const peer = await ev(walker, () => window.__NET.S.ch.me);
+      const T0 = Date.now() + 300;
+      await ev(walker, ([c, R, V, T0]) => { const G = window.__G, w = V / R; clearInterval(window.__walk); window.__walk = setInterval(() => { const a = Math.max(0, Date.now() - T0) / 1000 * w; G.player.x = c.x + Math.cos(a) * R; G.player.z = c.z + Math.sin(a) * R; G.player.rot = -a; }, 8); }, [c, R, V, T0]);
+      await sleep(3000);
+      await ev(watcher, ([peer]) => { window.__look = []; clearInterval(window.__looker); window.__looker = setInterval(() => { const a = window.__NET.S.peers.get(peer)?.actor; if (a) window.__look.push([Date.now(), a.x, a.z]); }, 16); }, [peer]);
+      await sleep(12000);
+      const r = await ev(watcher, ([c, R, V, T0]) => {
+        clearInterval(window.__looker); const L = window.__look, w = V / R, late = [], st = [];
+        for (let i = 0; i < L.length; i++) {
+          const [t, x, z] = L[i], want = (t - T0) / 1000 * w; let th = Math.atan2(z - c.z, x - c.x);
+          let d = want - th; d -= Math.round(d / 6.2832) * 6.2832; late.push(d / w * 1000);
+          if (i) { const dt = (t - L[i - 1][0]) / 1000; if (dt > 0) st.push(Math.hypot(x - L[i - 1][1], z - L[i - 1][2]) / (V * dt)); }
+        }
+        const mean = (a) => a.reduce((s, v) => s + v, 0) / Math.max(1, a.length), sd = (a) => { const m = mean(a); return Math.sqrt(mean(a.map((v) => (v - m) ** 2))); };
+        const ls = late.slice().sort((a, b) => a - b);
+        return { n: L.length, late: Math.round(mean(late)), p95: Math.round(ls[Math.floor(ls.length * 0.95)] || 0), cv: +(sd(st) / Math.max(1e-6, mean(st))).toFixed(2), held: +(st.filter((v) => v < 0.2).length / Math.max(1, st.length)).toFixed(2) };
+      }, [c, R, V, T0]);
+      await ev(walker, () => clearInterval(window.__walk));
+      rows.push({ what, ...r });
+      console.log('     ' + what + ': ' + r.late + ' ms behind (p95 ' + r.p95 + '), steps cv ' + r.cv + ', held ' + Math.round(r.held * 100) + '% of ' + r.n + ' frames');
+      return r;
+    };
+    await view(host, guests[0], 'the host seen by a guest');
+    await view(guests[0], host, 'a guest seen by the host');
+    await view(guests[0], guests[1], 'a guest seen by another guest');
+    for (const r of rows) ok(r.n > 300 && r.late > 0 && r.late < 1500, r.what + ': followed', r);
+    fs.writeFileSync(out + '/feel.json', JSON.stringify({ net: process.env.NET || 'local', econ: process.env.ECON !== '0', lag: SUPA ? [+(process.env.SUPA_LAG ?? 110), +(process.env.SUPA_JIT ?? 60)] : null, rows }, null, 1));
+  },
+
   // two heroes in the Old Forest: the guest sees the host and the host's monsters; the host sees the guest
   async join() {
     const { host, guests: [g] } = await party('forest', 1);
@@ -984,21 +1105,34 @@ const SC = {
     await sleep(2500);
     const cnt = await ev(host, (id) => window.__G.actors.filter((a) => a.packId === id).length, pk.id);
     ok(cnt >= Math.round(pk.n * 1.75 * 0.85) - 1, 'the pack came bigger for four', { listed: pk.n, spawned: cnt });
-    // fight for a while: everyone's blows, every page's sends counted
-    const t0 = Date.now();
+    // fight for a while: everyone's blows, every page's sends counted (and, NET=supa, the project's events)
+    const t0 = Date.now(), e0 = supaCount();
     while (Date.now() - t0 < 15000) {
       for (const g of guests) await ev(g, async () => { const C = await import('/src/game/combat.js'), G = window.__G; G.player.hp = G.player.hpMax; for (const a of window.__NET.S.pup.values()) if (!a.dead && a.team === 'foe' && Math.hypot(a.x - G.player.x, a.z - G.player.z) < 14) { C.damage(G.player, a, G.stats.wmax * G.stats.dmgMult * 0.4, { crit: false }); break; } });
       await sleep(400);
     }
-    const all = [];
+    const e1 = supaCount(), all = [];
+    if (e0) { const r = supaRate(e0, e1); console.log('     the project: ' + r.msgs.toFixed(1) + ' messages a second in ' + r.calls.toFixed(1) + ' calls, ' + Math.round(r.del) + ' deliveries: ' + Math.round(r.evs) + ' events a second'); if (process.env.ECON !== '0') ok(r.evs < 85, 'a party of four in a fight: under 85 Realtime events a second', Math.round(r.evs)); }
     for (const [i, pg] of [host, ...guests].entries()) { const st = await stats(pg); all.push(st); console.log('     ' + (i ? 'guest ' + i : 'host   ') + ' sends/s ' + st.r.msgsOut.toFixed(1) + ' (peak ' + st.peak.toFixed(1) + '), bytes/s out ' + Math.round(st.r.bytesOut) + ', in ' + Math.round(st.r.bytesIn) + ', drops ' + st.tx.drops + ', too big ' + st.tx.big); }
     ok(all.every((s) => s.peak <= 20), 'every page under 20 sends a second (the room allows ~40)', all.map((s) => +s.peak.toFixed(1)));
     ok(all.every((s) => s.tx.big === 0), 'no message or presence ever over 4 KiB');
     ok(all[0].snaps > 0 && all[0].snapBytes / all[0].snaps < 3900, 'the host\'s snapshots average ' + Math.round(all[0].snapBytes / all[0].snaps) + ' bytes');
     const gk = []; for (const g of guests) gk.push(await ev(g, () => window.__G.hero.stats.kills));
     console.log('     guests\' kills', gk.join(' '));
+    // (NET=supa, the economy: every guest on its outbox; what the host passed on of theirs, as the game rebuilds it
+    // (coop.js relayOf: no blows, acks or finds), within each guest's share of the host's bytes)
+    if (SUPA && process.env.ECON !== '0') {
+      const rs = await ev(host, () => ({ ...window.__NET.S.ch.relayStats }));
+      const boxes = []; for (const g of guests) boxes.push(await ev(g, () => !!window.__NET.S.ch._boxLive?.()));
+      const others = await ev(guests[0], () => [...window.__NET.S.peers.values()].filter((P) => P.role === 'guest').map((P) => ({ moving: !!P.state, keys: Object.keys(P.pres).sort().join() })));
+      console.log('     the host passed on ' + rs.n + ' of its guests\' entries (' + rs.bytes + ' bytes, ' + Math.round(rs.bytes / 15) + ' a second), let go ' + rs.cut);
+      ok(boxes.every(Boolean), 'every guest says it by its outbox', boxes);
+      ok(others.length === 2 && others.every((p) => p.moving && !/\b(ev|ak|nd|mf|gf|dm|cd)\b/.test(p.keys)), 'a guest has the other two guests\' heroes, passed on by the host as the game rebuilds them (no blows, acks, finds)', others);
+      ok(rs.n > 0 && rs.cut <= Math.max(3, rs.n * 0.1), 'a fight\'s presence and fx passed on within the guests\' share (at most a tenth let go)', rs);
+    }
     // the guests' mixed classes in the HUD
     ok(await ev(guests[0], () => window.__NET.party().length) === 3, 'a guest\'s party list holds the other three');
+    for (const [i, pg] of [host, ...guests].entries()) console.log('     page ' + i + ': role ' + (await ev(pg, () => window.__NET.S.role)) + ', n ' + (await ev(pg, () => window.__NET.NET.n)));
   },
 
   // the lobby and the HUD on a phone (844 x 390, touch), drawn

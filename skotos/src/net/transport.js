@@ -15,6 +15,13 @@
 //                               too_big, no_game, ...) or the page's own (big, offline, budget, timeout, busy)
 //   ch.host                     (a game's channel, on a transport whose server keeps the games: Supabase, stamped) the
 //                               peer the server says hosts it; undefined elsewhere, where the game finds its host itself
+//   ch.econ                     (a game's channel that bundles what a page says: Supabase, stamped) the rates the game
+//                               holds itself to there, { snap, pres } a second; undefined elsewhere (the game's own)
+//   ch.ready(), ch.room()       (econ) whether what is given now would go at once, and the bytes a message given now
+//                               still has room for beside what waits. Set by the game, on the host: ch.relayTo(peer),
+//                               whether that peer is one whose outbox it hears and passes on (its party; unset: any);
+//                               ch.relayData(event, data, peer), what of a guest's presence or fx it passes on (rebuilt;
+//                               null: nothing), or else ch.relayOmit, the presence fields it does not pass on
 // A transport: { kind, lobby: Channel | null, join(name, { host }) -> Promise<Channel> } (host: this page hosts the
 // game; only a transport whose server keeps the games reads it). Three of them:
 // - RoomTransport (claude.ai artifact `room`): the lobby is the room itself, a game is room.join(name). The room's own
@@ -22,7 +29,8 @@
 //   is held here below it: BUDGET sends a second, the coalesced presence counted in.
 // - LocalTransport (BroadcastChannel): pages of one browser, for the tests; drops and lag on demand (o.drop, o.lag).
 // - SupabaseTransport (Supabase Realtime broadcast and presence, supabase-js v2): for the app and the public web build,
-//   the sender of each message written by the server (stamped: private channels, sends by RPC; docs/coop/supabase.md).
+//   the sender of each message written by the server (stamped: private channels, sends by RPC; docs/coop/supabase.md),
+//   a game's channel held to an economy (bundles, guests' outboxes the host passes on: ECON below, docs/coop/diet.md).
 // Nothing a peer sends is trusted (coop.js validates); a transport only moves JSON and counts it.
 
 export const MAX_MSG = 4096, MAX_PRES = 4096, BUDGET = 32, BURST = 64, PRES_HZ = 10;
@@ -69,6 +77,8 @@ export function makeChannel(name, wire, o = {}) {
   const meter = makeMeter(), bucket = o.bucket || makeBucket(o.rate, o.burst), H = {}, PH = [], CH = [], EH = [];
   let mine = {}, mineB = 2, dirty = false, presT = 0, list = [], conn = false, left = false, queue = [], retry = 0;
   const gap = 1000 / (o.presHz || PRES_HZ);
+  // (a wire that bundles counts what it sends itself, message by message: wire.meters)
+  const out = (b) => { if (!wire.meters) meter.out(b); };
   const ch = {
     name, kind: wire.kind, meter, get me() { return wire.me; },
     emit(topic, data, eo = {}) {
@@ -77,7 +87,7 @@ export function makeChannel(name, wire, o = {}) {
       if (b > MAX_MSG) { meter.tx.big++; meter.drop('big'); return Promise.resolve(false); }
       if (!conn) { meter.drop('offline'); return Promise.resolve(false); }
       if (!bucket.take()) { if (eo.must && queue.length < 32) { queue.push([topic, data, b]); return Promise.resolve(true); } meter.drop('budget'); return Promise.resolve(false); }
-      meter.out(b);
+      out(b);
       return Promise.resolve(wire.send(topic, data)).then(() => true, (e) => { meter.drop(e); ch._err(e, 'send'); return false; });
     },
     on(topic, fn) { (H[topic] ||= []).push(fn); return () => { const l = H[topic]; const i = l ? l.indexOf(fn) : -1; if (i >= 0) l.splice(i, 1); }; },
@@ -89,7 +99,7 @@ export function makeChannel(name, wire, o = {}) {
       mine = next; mineB = b; dirty = true; ch.pump();
       return Promise.resolve(true);
     },
-    presenceDue: () => !left && conn && now() - presT >= gap,
+    presenceDue: () => !left && conn && now() - presT >= gap && wire.ready?.() !== false,
     mine: () => mine,
     peers: () => list,
     onPeers(fn) { PH.push(fn); return () => { const i = PH.indexOf(fn); if (i >= 0) PH.splice(i, 1); }; },
@@ -101,16 +111,17 @@ export function makeChannel(name, wire, o = {}) {
     // rate or the budget holds back is tried again on a timer, so a channel nobody pumps, the lobby, still sends its last)
     pump() {
       if (left || !conn) return;
-      while (queue.length && bucket.level >= 1) { const [t, d, b] = queue.shift(); bucket.take(); meter.out(b); Promise.resolve(wire.send(t, d)).catch((e) => { meter.drop(e); ch._err(e, 'send'); }); }
+      while (queue.length && bucket.level >= 1) { const [t, d, b] = queue.shift(); bucket.take(); out(b); Promise.resolve(wire.send(t, d)).catch((e) => { meter.drop(e); ch._err(e, 'send'); }); }
       const t = now(), wait = gap - (t - presT);
       // (a presence the wire would not send (wire.idle: Supabase's, the same as the one it said a moment ago) takes no
       // token and is not counted: the meter is what went out)
       if (dirty && wait <= 0 && wire.idle?.(mine)) { dirty = false; presT = t; }
       else if (dirty && wait <= 0 && bucket.take()) {
-        dirty = false; presT = t; meter.out(mineB);
+        dirty = false; presT = t; out(mineB);
         Promise.resolve(wire.sendPresence(mine)).catch((e) => { meter.drop(e); dirty = true; ch._err(e, 'send'); });
       }
       if ((dirty || queue.length) && !retry) retry = setTimeout(() => { retry = 0; ch.pump(); }, Math.max(1, dirty && wait > 0 ? wait : 1000 / (o.rate || BUDGET)));
+      wire.tick?.();
     },
     _hear(msg) { if (left) return; meter.heard(msg.topic + ' ' + msg.peer, msg.data); const l = H[msg.topic]; if (l) for (const fn of l.slice()) { try { fn(msg); } catch (e) { console.error(e); } } },
     _peers(next, change) {
@@ -280,9 +291,51 @@ export function LocalTransport(o = {}) {
 // clients' own word: they only say who came and who left, sooner than silence would; a peer is listed only once the
 // server has named it in a '_p'.
 const RENEW = 30 * 60 * 1000, CALL_MAX = 16, WAIT_MAX = 64, CALL_MS = 5000;
+// Economy (a stamped game's channel; docs/coop/diet.md). Realtime counts a message from the database once sent and once
+// for every member of its channel, the sender too: on a game of four each message costs 5 events, and the free plan
+// allows 100 a second for the whole project (a party of four at the room's rates, ~52 messages a second: ~280). So:
+// - What a page says goes together, as one message 'b' ([[event, data], ...], a presence in the place of one still
+//   waiting), when its carrier is given (the host's snapshot 's' or end 'c', a guest's presence) and no call is on its
+//   way, the rest at most HOLD ms after it was given (HOLD_C while carriers flow, so it rides with the next). The game
+//   holds itself to ECON's rates (ch.econ) and builds its next only when it would go at once (ch.ready, presenceDue).
+// - A guest says it into its outbox, a topic that only its host hears (2 events, not 5): '<room>.<its id>' (boxOf), a games
+//   row the guest holds as a host holds its game's (skotos.host_game: no page can fill a topic nobody holds), joined
+//   by the host alone, with no presence. The host takes there only what the server stamped with that id, and passes the
+//   guest's presence (less what only the host reads: ch.relayOmit) and fx on to the others in its own message, as
+//   [event, data, guest]. A page believes such an entry only from its game's host (ch.host), and only a presence or fx:
+//   the host is believed on everything already, and nothing is taken from it as another's but what that one would say.
+// - A guest says ['_o', 1] in the game's channel while its outbox is not heard; the host says ['_o', [the guests whose
+//   outbox it hears]] when that changes and every 3 s, and a guest uses its outbox only while its host lists it (its
+//   last list at most OUT_FRESH old); else it says everything in the game's channel, bundled, as it did before.
+// - What the host passes on goes in its own calls, on its own buckets and day (skotos.send counts the bytes of the
+//   caller), so it passes on only what it would take itself: the outboxes of its party alone (ch.relayTo: an outbox is
+//   opened only for such a peer, and let go when the peer is no longer one), what the game rebuilds of each entry
+//   (ch.relayData), and each guest at most RELAY_RATE bytes a second (RELAY_BURST at once), all of them at most
+//   RELAY_ALL (RELAY_ALL_BURST), the rest let go before it waits; and none for a moment after a call of its own was
+//   refused for its rate. So a guest, or a page that is none, cannot spend the host's budget past a guest's share.
+// - A guest's outbox lost (its first host_game not answered or refused, its row gone: a send refused no_game, a
+//   renewal not 'ok') is made again, 2 s later, then 4, 8 ... a minute; the host lets go an outbox whose channel the
+//   server shut (CLOSED: realtime-js does not join it again) or that has not come in for long, and opens it anew when
+//   the guest asks again.
+// - A page of the wire before the economy (it sends a plain '_p' on the game's channel and never a bundle, and cannot
+//   read one) cannot play with one of this wire; coop.js's VER says so, and the host says its presence plainly too
+//   while such a page is in its channel, so that page reads the host's version and is told, not left waiting.
+// (a guest's outbox: the room and the first 24 hex digits of its user id, 96 bits, so that a room of up to 23
+// characters has one within the 48 a room may have)
+const boxOf = (room, uid) => room + '.' + String(uid).replace(/-/g, '').slice(0, 24);
+const ECON = Object.freeze({ snap: 7, pres: 5 }), HOLD = 200, HOLD_C = 400, OUTBOXES = 6, OUT_FRESH = 8000, BUNDLE_MAX = 80;
+const RELAY_RATE = 3072, RELAY_BURST = 6144, RELAY_ALL = 9216, RELAY_ALL_BURST = 16384, RELAY_HUSH = 2000, BOX_RETRY = 2000, BOX_STALE = 10000;
+// (a bucket of bytes: take(n, keep) takes n, leaving at least keep, or nothing; give(n) gives back what was taken for
+// what never went)
+const byteBucket = (rate, burst) => {
+  let tok = burst, t0 = Date.now();
+  const fill = () => { const t = Date.now(); tok = Math.min(burst, tok + (t - t0) / 1000 * rate); t0 = t; };
+  return { take(n, keep = 0) { fill(); if (tok - n < keep) return false; tok -= n; return true; }, give(n) { fill(); tok = Math.min(burst, tok + n); } };
+};
 const coded = (code) => Object.assign(new Error(code), { code });
 const BAD = Symbol('not json');
 const unjson = (s) => { if (typeof s !== 'string') return BAD; try { return JSON.parse(s); } catch (e) { return BAD; } };
+const utf8 = (s) => (enc ? enc.encode(s).length : s.length);
 export function SupabaseTransport(client, o = {}) {
   if (!client?.channel) return null;
   const stamped = o.stamped === true;
@@ -291,9 +344,9 @@ export function SupabaseTransport(client, o = {}) {
   const bucket = makeBucket(o.rate, o.burst);
   const rpc = stamped ? rpcOf(client, o.callMs) : null, post = stamped ? poster(rpc) : null;
   const open = (name, lobby) => {
-    const topic = 'skotos:' + name;
+    const topic = 'skotos:' + name, econ = stamped && !lobby && o.economy !== false;
     const sc = client.channel(topic, { config: Object.assign({ broadcast: { self: false, ack: false }, presence: { key: me } }, stamped ? { private: true } : {}) });
-    const beat = lobby ? 10000 : 1500, gone = lobby ? Math.max(o.gone || 12000, 3 * beat) : o.gone || 12000;
+    const beat = lobby ? 10000 : econ ? 3000 : 1500, gone = lobby ? Math.max(o.gone || 12000, 3 * beat) : o.gone || 12000;
     let hb = 0;
     // (stamped: a game's send refused for its game or for the project's day ends the game for the page)
     const said = (pr) => (lobby ? pr : pr.catch((e) => { if (e?.code === 'no_game' || e?.code === 'quota') ch._err(e.code, 'room'); throw e; }));
@@ -301,8 +354,8 @@ export function SupabaseTransport(client, o = {}) {
     const rawOf = (p) => { if (wire.memo?.[0] !== p) wire.memo = [p, JSON.stringify(p)]; return wire.memo[1]; };
     const idle = (raw) => raw === wire.raw && (raw === '{}' || (!wire.again && Date.now() - wire.sentT < beat - 300));
     const wire = {
-      kind: 'supabase', me, sentT: 0, raw: '{}', again: false, soon: 0, memo: null,
-      send: (t, data) => (stamped ? said(post(topic, t, data)) : sc.send({ type: 'broadcast', event: t, payload: { f: me, d: data } })),
+      kind: 'supabase', me, sentT: 0, raw: '{}', again: false, soon: 0, memo: null, meters: econ,
+      send: (t, data) => (econ ? E.put(t, data) : stamped ? said(post(topic, t, data)) : sc.send({ type: 'broadcast', event: t, payload: { f: me, d: data } })),
       idle: (p) => idle(rawOf(p)),
       sendPresence: (p) => {
         const raw = rawOf(p), t = Date.now();
@@ -310,13 +363,15 @@ export function SupabaseTransport(client, o = {}) {
         wire.raw = raw; wire.sentT = t; wire.again = false;
         if (!stamped) return sc.send({ type: 'broadcast', event: '_p', payload: { f: me, p } });
         // (one the server refused (its rate) was not said: said again on the next beat's look, not a whole beat on)
-        return said(post(topic, '_p', p)).catch((e) => { if (wire.raw === raw) { wire.raw = null; wire.sentT = 0; } throw e; });
+        return (econ ? E.put('_p', p) : said(post(topic, '_p', p))).catch((e) => { if (wire.raw === raw) { wire.raw = null; wire.sentT = 0; } throw e; });
       },
-      leave: () => { clearInterval(hb); clearTimeout(wire.soon); return client.removeChannel ? client.removeChannel(sc) : sc.unsubscribe(); }
+      ready: econ ? () => post.idle() : undefined,
+      tick: econ ? () => E.go() : undefined,
+      leave: () => { clearInterval(hb); clearTimeout(wire.soon); if (E) E.end(); return client.removeChannel ? client.removeChannel(sc) : sc.unsubscribe(); }
     };
     // (our presence said again: on its beat, and for someone new, once for all who came in the same moment)
     const again = () => { wire.again = true; ch.presence({}); };
-    const ch = makeChannel(name, wire, Object.assign({ bucket }, o));
+    const ch = makeChannel(name, wire, Object.assign({ bucket }, o, econ ? { presHz: ECON.pres } : {}));
     // each peer's last presence ({ p, raw, t }), the views handed out (the same object while its presence is the same)
     const last = new Map(), memo = new Map();
     let members = new Set(), self = null;
@@ -329,7 +384,7 @@ export function SupabaseTransport(client, o = {}) {
         if (k === me) continue;
         const L = last.get(k);
         if (L ? t - L.t > gone : stamped) continue;
-        const c = memo.get(k), v = c && c.src === L ? c.v : { peer: k, by: stamped ? k : null, isMe: false, presence: L?.p || {}, updatedAt: L?.t || t };
+        const c = memo.get(k), v = c && c.src === L ? c.v : { peer: k, by: stamped ? k : null, isMe: false, presence: L?.p || {}, updatedAt: L?.t || t, ago: L?.ago || 0 };
         memo.set(k, { src: L, v }); next.push(v);
       }
       for (const k of memo.keys()) if (!now0.has(k)) memo.delete(k);
@@ -337,6 +392,36 @@ export function SupabaseTransport(client, o = {}) {
       if (!self || self.presence !== ch.mine()) self = { peer: me, by: stamped ? me : null, isMe: true, presence: ch.mine(), updatedAt: t };
       next.unshift(self);
       ch._peers(next);
+    };
+    // what a peer said: its presence (raw: its JSON text, to tell a presence said again from a new one), or a topic's
+    const hearP = (k, p, raw, ago) => {
+      if (!p || typeof p !== 'object' || Array.isArray(p)) return;
+      const L = last.get(k);
+      // (said again, the same: heard, counted, nothing new to tell the game)
+      if (L && L.raw === raw) { L.t = Date.now(); ch.meter.in(raw.length); return; }
+      // (any member's is kept; of senders not yet members, as many as there are members and 64 more)
+      if (!L && !members.has(k) && last.size > members.size + 64) return;
+      last.set(k, { p, raw, t: Date.now(), ago: ago || 0 }); sync();
+    };
+    const hear1 = (t, d, k, raw, ago) => {
+      if (t === '_p') { hearP(k, d, raw ?? JSON.stringify(d), ago); return; }
+      if (t === '_o') { if (E) E.heardO(k, d); return; }
+      if (!TOPIC.test(t)) return;
+      ch._hear({ topic: t, data: d, peer: k, by: stamped ? k : null });
+    };
+    // (a bundle from k; box: it came by k's outbox, to this page, its host. An entry naming another sender is taken only
+    // from the game's host, and only a presence or fx, and never one that names the host itself or this page)
+    const unbundle = (arr, k, box) => {
+      if (!Array.isArray(arr) || arr.length > BUNDLE_MAX) return;
+      for (const e of arr) {
+        if (!Array.isArray(e) || typeof e[0] !== 'string' || e[0] === 'b') continue;
+        if (e.length > 2) {
+          const f = e[2];
+          if (box || k !== ch.host || typeof f !== 'string' || !f || f === k || f === me || (e[0] !== '_p' && e[0] !== 'f')) continue;
+          // (and how long the host held it before it went: the game dates the sample back by as much)
+          hear1(e[0], e[1], f, undefined, typeof e[3] === 'number' && e[3] > 0 ? Math.min(e[3], 500) : 0);
+        } else { hear1(e[0], e[1], k); if (box) E.relay(e[0], e[1], k); }
+      }
     };
     // (supabase-js wants its listeners before subscribe(): one catch-all '*' listener hears every topic)
     sc.on('broadcast', { event: '*' }, (m) => {
@@ -347,27 +432,165 @@ export function SupabaseTransport(client, o = {}) {
       // (stamped, what the page said comes as its own JSON text)
       const d = stamped ? unjson(pl.d) : t === '_p' ? pl.p : pl.d;
       if (d === BAD) return;
-      if (t === '_p') {
-        const p = d;
-        if (!p || typeof p !== 'object' || Array.isArray(p)) return;
-        const raw = stamped ? pl.d : JSON.stringify(p), L = last.get(k);
-        // (said again, the same: heard, counted, nothing new to tell the game)
-        if (L && L.raw === raw) { L.t = Date.now(); ch.meter.in(raw.length); return; }
-        // (any member's is kept; of senders not yet members, as many as there are members and 64 more)
-        if (!L && !members.has(k) && last.size > members.size + 64) return;
-        last.set(k, { p, raw, t: Date.now() }); sync();
-        return;
-      }
-      if (!TOPIC.test(t)) return;
-      ch._hear({ topic: t, data: d, peer: k, by: stamped ? k : null });
+      if (t === 'b' && econ) { E.wireOf(k, true); unbundle(d, k, false); return; }
+      if (t === '_o') return;
+      if (t === '_p' && econ) E.wireOf(k, false);
+      hear1(t, d, k, stamped ? pl.d : undefined);
     });
     sc.on('presence', { event: 'sync' }, sync);
     sc.subscribe((status) => {
       if (status === 'SUBSCRIBED') { Promise.resolve(sc.track({ k: me })).catch(() => {}); wire.again = true; ch._conn(true); sync(); }
       else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') ch._conn(false);
     });
+    // what waits to go (econ), the outbox (a guest's) and the outboxes heard (the host's)
+    const E = econ ? {
+      q: [], want: false, mt: false, timer: 0, carT: 0, out: null, outT: 0, ob: new Map(), oKey: '', oT: 0, last: null,
+      // (the host: each guest's bytes passed on and all of theirs (rb, rAll), none passed on until hush; what it passed
+      // on and let go (rs); the peers heard bundling (nb) and those heard saying a plain presence and never a bundle
+      // (old: the wire before the economy), with when)
+      rb: new Map(), rAll: byteBucket(o.relayAll || RELAY_ALL, o.relayAllBurst || RELAY_ALL_BURST), hush: 0, rs: { n: 0, bytes: 0, cut: 0 }, nb: new Set(), old: new Map(),
+      carrier: (ev) => (ch.host === me ? ev === 's' || ev === 'c' : ev === '_p'),
+      // (an entry: [event, data] or, passed on, [event, data, from]; a presence or the outboxes' list takes the place of
+      // the one still waiting. s: its JSON text, when the caller has it already)
+      put(ev, d, from, s0) {
+        return new Promise((ok, no) => {
+          const s = s0 || JSON.stringify(from === undefined ? [ev, d ?? null] : [ev, d ?? null, from]);
+          const e = { ev, d, from, s, b: utf8(s) + (from === undefined ? 0 : 4), ok, no, key: ev === '_p' || ev === '_o' ? ev + ' ' + (from || '') : null, at: Date.now() };
+          const i = e.key ? E.q.findIndex((x) => x.key === e.key) : -1;
+          // (a guest's presence passed on in the place of one still waiting: what that one took is given back)
+          if (i >= 0) { const x = E.q[i]; if (x.from !== undefined) E.give(x); x.ok('ok'); E.q[i] = e; } else E.q.push(e);
+          E.last = e;
+          // (what is passed on is look and presence: the oldest fx let go past eight of them waiting)
+          if (from !== undefined && ev === 'f') { const fx = E.q.filter((x) => x.from !== undefined && x.ev === 'f'); if (fx.length > 8) { const x = fx[0]; E.q.splice(E.q.indexOf(x), 1); E.give(x); x.ok('ok'); } }
+          if (from === undefined && E.carrier(ev)) { E.want = true; E.carT = Date.now(); if (!E.mt) { E.mt = true; Promise.resolve().then(() => { E.mt = false; E.go(); }); } }
+          else if (!E.timer) E.timer = setTimeout(() => { E.timer = 0; E.want = true; E.go(); }, Date.now() - E.carT < 1000 ? HOLD_C : HOLD);
+        });
+      },
+      // (and only while the host is there: a guest whose host has left says it in the game's channel, refused no_game)
+      live: () => !!E.out && Date.now() - E.outT < OUT_FRESH && members.has(ch.host),
+      // (a page of the wire before the economy in the channel: one heard saying a plain presence, never a bundle)
+      olds() { const t = Date.now(); for (const [k, at] of E.old) if (members.has(k) && t - at < gone) return true; return false; },
+      wireOf(k, bundles) {
+        if (bundles) { if (!E.nb.has(k)) { if (E.nb.size >= 64) E.nb.clear(); E.nb.add(k); } E.old.delete(k); return; }
+        if (E.nb.has(k)) return;
+        const fresh = !E.old.has(k);
+        if (fresh && E.old.size >= 16) E.old.clear();
+        E.old.set(k, Date.now());
+        // (the host says its presence at once for one new: the old page reads its version there)
+        if (fresh && ch.host === me && wire.raw !== '{}' && !wire.soon) wire.soon = setTimeout(() => { wire.soon = 0; again(); }, 50);
+      },
+      // (what waits goes, as few messages as hold it: when a carrier wants it or its time came, and no call is on its
+      // way, or at once (force: the page leaving))
+      go(force) {
+        if (!E.q.length || (!force && (!E.want || !post.idle()))) return;
+        E.want = false; clearTimeout(E.timer); E.timer = 0;
+        const box = E.live(), to = box ? E.out : topic;
+        if (E.out && !box && !E.q.some((x) => x.ev === '_o')) { const s = '["_o",1]'; E.q.push({ ev: '_o', d: 1, s, b: s.length, ok() {}, no() {} }); }
+        const q = E.q.splice(0), msgs = [], t = Date.now();
+        // (a presence passed on says how long it waited here, at most 999 ms)
+        for (const e of q) if (e.from !== undefined && e.ev === '_p') { e.s = e.s.slice(0, -1) + ',' + Math.min(999, t - e.at) + ']'; e.b = utf8(e.s); }
+        let cur = [], cb = 2;
+        for (const e of q) {
+          // (one that cannot go in a bundle goes as its own message, as before; one passed on is let go)
+          if (e.b > MAX_MSG - 2) { if (e.from === undefined) msgs.push([e]); else e.ok('ok'); continue; }
+          if (cur.length && cb + 1 + e.b > MAX_MSG) { msgs.push(cur); cur = []; cb = 2; }
+          cb += e.b + (cur.length ? 1 : 0); cur.push(e);
+        }
+        if (cur.length) msgs.push(cur);
+        // (the host's own presence, plainly too, while a page of the wire before the economy is in the channel)
+        if (ch.host === me && E.olds()) for (const e of q) if (e.from === undefined && e.ev === '_p' && e.b <= MAX_MSG - 2) msgs.push([Object.assign({}, e, { plain: true, ok() {}, no() {} })]);
+        for (const m of msgs) {
+          const one = m.length === 1 && (m[0].plain || m[0].b > MAX_MSG - 2), text = one ? null : '[' + m.map((e) => e.s).join(',') + ']';
+          ch.meter.out(one ? bytesOf(m[0].d) : utf8(text));
+          (one ? post(to, m[0].ev, m[0].d) : post.text(to, 'b', text)).then((r) => { for (const e of m) e.ok(r); }, (err) => {
+            const code = err?.code;
+            // (the outbox's row gone: the game's channel from now on, and the row made again; a game's send refused for
+            // its game or the day: the game ends for the page. Refused for its rate: nothing passed on for a moment, the
+            // host's own first)
+            if (box && code === 'no_game') { if (E.out === to) { E.out = null; ch._boxLost?.(); } } else if (code === 'no_game' || code === 'quota') ch._err(code, 'room');
+            if (code === 'rate_limited' && ch.host === me) E.hush = Date.now() + RELAY_HUSH;
+            for (const e of m) e.no(err);
+          });
+        }
+      },
+      room: () => { let b = MAX_MSG - 24; for (const e of E.q) if (e.b <= 1500) b -= e.b + 1; return b; },
+      // (may the host hear k's outbox and pass on what it says: one of its party, as the game says)
+      takes: (k) => (typeof ch.relayTo === 'function' ? !!ch.relayTo(k) : true),
+      give(x) { if (x.rb) { E.rb.get(x.from)?.give(x.rb); E.rAll.give(x.rb); x.rb = 0; } },
+      // (the host: a guest's presence and fx, heard by its outbox, passed on to the others, if there are others; only
+      // a guest it takes, only what the game rebuilds of it, within that guest's bytes and all of theirs)
+      relay(ev, d, k) {
+        if (ev !== '_p' && ev !== 'f') return;
+        if (!E.takes(k)) return;
+        let other = false; for (const x of members) if (x !== me && x !== k) { other = true; break; }
+        if (!other) return;
+        if (typeof ch.relayData === 'function') { try { d = ch.relayData(ev, d, k); } catch (e) { d = null; } if (d == null) return; }
+        else if (ev === '_p' && ch.relayOmit && d && typeof d === 'object') { d = Object.assign({}, d); for (const x of ch.relayOmit) delete d[x]; }
+        const s = JSON.stringify([ev, d ?? null, k]), n = utf8(s) + 8;
+        let B = E.rb.get(k);
+        if (!B) { if (E.rb.size >= OUTBOXES * 2) for (const x of E.rb.keys()) if (!E.ob.has(x)) E.rb.delete(x); E.rb.set(k, (B = byteBucket(o.relayRate || RELAY_RATE, o.relayBurst || RELAY_BURST))); }
+        // (fx take only what leaves room for the presences, which show where the hero is)
+        const fx = ev === 'f';
+        if (Date.now() < E.hush || n > MAX_MSG - 2 || !B.take(n, fx ? 1024 : 0)) { E.rs.cut++; return; }
+        if (!E.rAll.take(n, fx ? 2048 : 0)) { B.give(n); E.rs.cut++; return; }
+        E.last = null;
+        const p = E.put(ev, d, k, s), e = E.last;
+        if (e && E.q.includes(e)) { e.rb = n; E.rs.n++; E.rs.bytes += n; } else { B.give(n); E.rAll.give(n); }
+        p.catch(() => {});
+      },
+      heardO(k, d) {
+        if (ch.host === me) { if (d === 1) E.openBox(k); return; }
+        if (k === ch.host && Array.isArray(d)) E.outT = d.includes(me) ? Date.now() : 0;
+      },
+      // (the host hears a guest's outbox: joined, no presence; only what the server stamped with that guest's id. One
+      // already open is kept while it is heard or still coming in; one the server shut, or not in for long, is let go
+      // and opened anew)
+      openBox(k) {
+        if (!E.takes(k) || !ROOM.test(boxOf(name, k))) return;
+        const t = Date.now(), old = E.ob.get(k);
+        if (old) {
+          if (old.ok || t - old.at < (old.st === 'CLOSED' || old.st === 'CHANNEL_ERROR' ? 1000 : BOX_STALE)) return;
+          E.ob.delete(k); try { client.removeChannel ? client.removeChannel(old.oc) : old.oc.unsubscribe(); } catch (e) { /* gone */ }
+        }
+        if (E.ob.size >= OUTBOXES) return;
+        const oc = client.channel('skotos:' + boxOf(name, k), { config: { private: true, broadcast: { self: false, ack: false } } }), rec = { oc, ok: false, t, at: t, st: null };
+        E.ob.set(k, rec);
+        oc.on('broadcast', { event: '*' }, (m) => {
+          if (E.ob.get(k) !== rec) return;
+          const pl = m.payload || {}; if (pl._by !== k) return;
+          const d = unjson(pl.d); if (d === BAD) return;
+          rec.t = Date.now();
+          if (m.event === 'b') unbundle(d, k, true); else if (m.event !== '_o') { hear1(m.event, d, k, pl.d); E.relay(m.event, d, k); }
+        });
+        oc.subscribe((st) => { if (E.ob.get(k) !== rec) return; rec.st = st; const v = st === 'SUBSCRIBED'; if (v !== rec.ok) { rec.ok = v; E.sayO(); } });
+      },
+      closeBox(k) { const rec = E.ob.get(k); if (!rec) return; E.ob.delete(k); E.rb.delete(k); try { client.removeChannel ? client.removeChannel(rec.oc) : rec.oc.unsubscribe(); } catch (e) { /* gone */ } E.sayO(); },
+      sayO(force) {
+        const l = [...E.ob].filter(([, r]) => r.ok).map(([k]) => k), key = l.join();
+        if (!force && key === E.oKey) return;
+        E.oKey = key; E.oT = Date.now(); E.put('_o', l).catch(() => {});
+      },
+      // (each beat: a host lets go the outboxes of those gone and of those it no longer takes, and says again which it
+      // hears)
+      beat() {
+        if (ch.host !== me) return;
+        const t = Date.now();
+        for (const [k, r] of E.ob) if ((!members.has(k) && t - r.t > gone) || !E.takes(k)) E.closeBox(k);
+        if (E.ob.size && t - E.oT > 3000) E.sayO(true);
+      },
+      end() { clearTimeout(E.timer); E.timer = 0; post.idlers.delete(E.go); for (const k of [...E.ob.keys()]) { const r = E.ob.get(k); E.ob.delete(k); try { client.removeChannel ? client.removeChannel(r.oc) : r.oc.unsubscribe(); } catch (e) { /* gone */ } } for (const e of E.q.splice(0)) e.ok('ok'); }
+    } : null;
+    if (E) {
+      E.go = E.go.bind(E); post.idlers.add(E.go);
+      // (_box: the guest's outbox, made (its topic) or lost (null); the same one again changes nothing. relayStats: what
+      // the host passed on of its guests' and what it let go)
+      ch.econ = ECON; ch.ready = () => post.idle(); ch.room = E.room; ch.relayStats = E.rs;
+      ch._box = (b) => { const to = b ? 'skotos:' + b : null; if (to === E.out) return; E.out = to; E.outT = 0; };
+      ch._flush = () => E.go(true);
+      ch._boxLive = () => E.live();
+    }
     // (the presence said again when nothing new went for its beat; the silent let go)
-    hb = setInterval(() => { if (!ch.connected()) return; if (wire.raw !== '{}' && Date.now() - wire.sentT > beat - 300) again(); sync(); }, lobby ? 2500 : 1500);
+    hb = setInterval(() => { if (!ch.connected()) return; if (wire.raw !== '{}' && Date.now() - wire.sentT > beat - 300) again(); sync(); E?.beat(); }, lobby ? 2500 : 1500);
     return ch;
   };
   const T = { kind: 'supabase', me, stamped, lobby: open(o.lobby || 'lobby', true), rooms: new Map() };
@@ -386,13 +609,20 @@ export function SupabaseTransport(client, o = {}) {
       : rpc('game_host', { room: name }).then((h) => { if (typeof h !== 'string' || !h) throw coded('no_game'); if (h === me) throw coded('same_user'); return h; });
     const p = who.then((host) => {
       const ch = open(name); ch.host = host;
-      // (the row of a game this page hosts is renewed while the game is open, and let go when it leaves. A renewal answered
-      // with anything but 'ok' is the row lost (run out and another's): the game is told, as a room that ended. One that
-      // got no answer is tried again in a minute. The last renewal sent is kept: renewing, settled once it has its answer)
-      let renew = 0, renewing = null, done = false;
-      const every = o.renew || RENEW;
-      const keep = (ms) => { renew = setTimeout(() => { renewing = rpc('host_game', { room: name }).then((r) => { if (done) return; if (r === 'ok') keep(every); else ch._err(typeof r === 'string' && r ? r : 'upstream_error', 'room'); }, () => { if (!done) keep(Math.min(every, 60000)); }); }, ms); };
+      // (the row of a game this page hosts is renewed while the game is open, and let go when it leaves; a guest's
+      // outbox the same (econ). A renewal answered with anything but 'ok' is the row lost (run out and another's): the
+      // game is told, as a room that ended. One that got no answer is tried again in a minute. A guest's outbox not
+      // made (its first host_game unanswered or refused) or lost (a renewal not 'ok', a send to it refused no_game; the
+      // game's channel meanwhile) is made again, BOX_RETRY later, twice as long each time after, a minute at most. The
+      // last call for the row is kept: renewing, settled once it has its answer)
+      let renew = 0, renewing = null, done = false, tries = 0;
+      const every = o.renew || RENEW, box = !hosting && ch.econ && ROOM.test(boxOf(name, me)) ? boxOf(name, me) : null, row = hosting ? name : box;
+      const later = () => Math.min(60000, (o.boxRetry || BOX_RETRY) * 2 ** Math.min(5, tries++));
+      const keep = (ms) => { clearTimeout(renew); renew = setTimeout(() => { renewing = rpc('host_game', { room: row }).then((r) => { if (done) return; if (r === 'ok') { if (box) ch._box(box); keep(every); } else lost(r); }, () => { if (!done) keep(Math.min(every, 60000)); }); }, ms); };
+      const make = (ms) => { clearTimeout(renew); renew = setTimeout(() => { renewing = rpc('host_game', { room: box }).then((r) => { if (done) return; if (r === 'ok') { tries = 0; ch._box(box); keep(every); } else make(later()); }, () => { if (!done) make(later()); }); }, ms); };
+      const lost = (r) => { if (hosting) ch._err(typeof r === 'string' && r ? r : 'upstream_error', 'room'); else { ch._box(null); make(later()); } };
       if (hosting) keep(every);
+      else if (box) { make(0); ch._boxLost = () => { if (!done) make(later()); }; }
       const l0 = ch.leave;
       // (the game's row ends once what this page said before has had its answer: its last messages, the end of the game
       // its guests are told among them, go while the row is there. And once a renewal on its way has had its answer: one
@@ -400,7 +630,8 @@ export function SupabaseTransport(client, o = {}) {
       ch.leave = () => {
         if (!done) {
           done = true; T.rooms.delete(name); clearTimeout(renew);
-          if (hosting) Promise.all([post.settled(), renewing]).then(() => rpc('end_game', { room: name })).catch(() => {});
+          ch._flush?.();
+          if (row) Promise.all([post.settled(), renewing]).then(() => rpc('end_game', { room: row })).catch(() => {});
         }
         return l0();
       };
@@ -440,13 +671,19 @@ function poster(rpc) {
       busy = false; done = last;
       for (let i = waits.length - 1; i >= 0; i--) if (waits[i].at <= done) waits.splice(i, 1)[0].r();
       flush();
+      if (!busy) for (const f of [...post.idlers]) { try { f(); } catch (e) { console.error(e); } }
     });
   };
-  const post = (topic, event, data) => new Promise((ok, no) => {
+  const text = (topic, event, s) => new Promise((ok, no) => {
     if (q.length >= WAIT_MAX) { no(coded('busy')); return; }
-    q.push({ m: [topic, event, JSON.stringify(data ?? null)], ok, no, seq: ++seq }); flush();
+    q.push({ m: [topic, event, s], ok, no, seq: ++seq }); flush();
   });
+  const post = (topic, event, data) => text(topic, event, JSON.stringify(data ?? null));
+  post.text = text;
   post.settled = () => new Promise((r) => { if (done >= seq) r(); else waits.push({ at: seq, r }); });
+  // (no call on its way and nothing waiting for one; idlers: told each time a call's answer leaves it so)
+  post.idle = () => !busy && !q.length;
+  post.idlers = new Set();
   return post;
 }
 
@@ -463,13 +700,16 @@ export async function pickTransport(q, cfg = {}) {
   if (want !== 'supabase' && typeof window !== 'undefined' && window.claude?.use) {
     try { const room = await window.claude.use('room'); if (room) return RoomTransport(room); } catch (e) { /* no room here */ }
   }
+  // (the tests' stand-in for a project, tools/coop.mjs NET=supa: ?net=supabase and a config the page was given by its
+  // own test, window.__skotosSupa, its client reaching a fake project in the test's process)
+  if (want === 'supabase' && typeof window !== 'undefined' && window.__skotosSupa) cfg = window.__skotosSupa;
   if (cfg.url && cfg.anonKey && cfg.stamped === true) {
     try {
       const make = cfg.createClient || (typeof window !== 'undefined' && window.supabase?.createClient);
       if (make) {
         const opts = clientOpts(); await unclone(opts.auth.storage);
         const client = await make(cfg.url, cfg.anonKey, opts), me = await signIn(client);
-        if (me) { claim(me); return SupabaseTransport(client, { stamped: true, me }); }
+        if (me) { claim(me); return SupabaseTransport(client, { stamped: true, me, economy: cfg.economy }); }
       }
     } catch (e) { /* not this build, or no sign-in: single-player */ }
   }
