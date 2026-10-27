@@ -104,7 +104,7 @@ kill by PIDs from `ps`.
 
 ## Open items
 
-- **Cloud saves (27 October):** the Supabase saves migration and the merge to `main` wait on the owner (above). The last check of the lead's own fixes: see the 27 October section's last report, `docs/cloudsave/README.md`.
+- **Cloud saves (27 October):** the Supabase saves migration and the merge to `main` wait on the owner (above). Six review passes in all; the last one (on 2f9e89b, two lenses, two skeptics each) confirmed nothing. A known trade-off it raised and judged by the rules: a device whose base the 128-sum chain no longer reaches and whose copy is further on than the cloud's pushes it, even over a restore of an older copy made on another device (the restored copy is kept there as `restored`, the cloud's as `conflict` on the deciding device; the player restores again). That is the price of never losing the further copy of a fork lost long ago.
 
 - perf5 at the coast (above). Two review findings judged not worth their code: the delayed blows of the base skills
   (only the later skills are guarded), and two pages playing the same hero (the last write wins).
