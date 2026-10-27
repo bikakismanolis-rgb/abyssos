@@ -27,7 +27,8 @@
 //   is held here below it: BUDGET sends a second, the coalesced presence counted in.
 // - LocalTransport (BroadcastChannel): pages of one browser, for the tests; drops and lag on demand (o.drop, o.lag).
 // - SupabaseTransport (Supabase Realtime broadcast and presence, supabase-js v2): for the app and the public web build,
-//   the sender of each message written by the server (stamped: private channels, sends by RPC; docs/coop/supabase.md).
+//   the sender of each message written by the server (stamped: private channels, sends by RPC; docs/coop/supabase.md),
+//   a game's channel held to an economy (bundles, guests' outboxes the host passes on: ECON below, docs/coop/diet.md).
 // Nothing a peer sends is trusted (coop.js validates); a transport only moves JSON and counts it.
 
 export const MAX_MSG = 4096, MAX_PRES = 4096, BUDGET = 32, BURST = 64, PRES_HZ = 10;
