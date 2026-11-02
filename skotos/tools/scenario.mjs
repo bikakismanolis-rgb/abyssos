@@ -2924,10 +2924,10 @@ const S = {
   // and their textures are freed on the GPU (Brokka's and Elati's people stay until the sea is lit, for the cameo), the
   // zones that drew them are dropped; each older zone loads them again (a pack's layers into the same texture objects);
   // every texture drawn is alive (no white or untextured model, no GL error) and no person comes back as a stand-in.
-  // Tamarisk's frost loads in the wood after the act. Then three cold starts (coast, farlight, drained) measure each act's
-  // own phone texture: G1's bar for a cold start into Act VI is 100 MB. (MB: the GPU bytes of every texture the registries
-  // hold, each uploaded, read through a WebGL hook; quality 1 halves the large maps as a phone does; renderer.info's count
-  // beside it.) COLD=0 skips the cold starts
+  // Tamarisk's frost loads in the wood after the act. Then four cold starts (coast, farlight, drained, bottom) measure each
+  // act's own phone texture: G1's bar for a cold start into Act VI (either of its zones) is 100 MB. (MB: the GPU bytes of
+  // every texture the registries hold, each uploaded, read through a WebGL hook; quality 1 halves the large maps as a phone
+  // does; renderer.info's count beside it.) COLD=0 skips the cold starts, TOUR=0 the tour (the cold starts alone)
   unload6: { q: 'auto=ashfield&q=1&lvl=24&cloud=off&' + A5.url('coastSeen'), init: () => {
     if (window.__texMem) return;
     const P = WebGL2RenderingContext.prototype, GLc = WebGL2RenderingContext, map = new Map(), st = new WeakMap();
@@ -3005,6 +3005,7 @@ const S = {
     await ev(() => { window.__immortal = true; });
     const out = {};
     try {
+    if (process.env.TOUR !== '0') {
     // ---- the Field of Ash, Act IV: what it holds ----
     await settle('ashfield');
     const s0 = await ST(), m0 = await ev(MEM), a0 = await ev(AUDIT);
@@ -3065,8 +3066,9 @@ const S = {
     const a8 = await ev(AUDIT), same = await ev(() => window.__G.zone.__u6 === true);
     beat('Whitecliff as it was (the same zone) and drawn whole', same && whole(a8), a8);
     await shot();
+    }
     // ---- cold starts: each act's own phone texture ----
-    const COLD = { coast: 'auto=coast&lvl=28&' + A5.url('coastSeen'), farlight: 'auto=farlight&lvl=31&' + A5.url('farSeen'), drained: 'auto=drained&lvl=34&' + A5.url('toldChild') + ',act5,tam6,call6,coal6' };
+    const COLD = { coast: 'auto=coast&lvl=28&' + A5.url('coastSeen'), farlight: 'auto=farlight&lvl=31&' + A5.url('farSeen'), drained: 'auto=drained&lvl=34&' + A5.url('toldChild') + ',act5,tam6,call6,coal6', bottom: 'auto=bottom&lvl=37&' + A5.url('toldChild') + ',act5,tam6,call6,coal6,ketosWake,ketosDown' };
     if (process.env.COLD !== '0') {
       out.cold = {};
       for (const z of Object.keys(COLD)) {
@@ -3083,10 +3085,270 @@ const S = {
           out.cold[z].audit = await p.evaluate(AUDIT);
         } finally { await ctx.close(); }
       }
-      beat('a cold start into Act VI: its own phone texture within 100 MB', out.cold.drained.own <= 100 && whole(out.cold.drained.audit), out.cold.drained);
+      for (const z of ['drained', 'bottom']) beat('a cold start into Act VI (' + z + '): its own phone texture within 100 MB', out.cold[z].own <= 100 && whole(out.cold[z].audit), out.cold[z]);
     }
     return { pass: beats.every((b) => b.ok), failed: beats.filter((b) => !b.ok).map((b) => b.b), mem: out, beats };
     } catch (e) { return { pass: false, step, error: e.message, beats }; }
+  } },
+  // perf6, Act VI's perf gate (docs/act6-contract.md, Stages and gates G1, G2; act6-design.md, The look: "The perf gate,
+  // perf6"): frame time at quality 1 under phone emulation, perf5's way to the letter (915 x 412 at a pixel ratio of 1.5, a
+  // coarse pointer, MSAA, adaptive resolution pinned at 1.0 and the scale it would have picked beside it; each visit's
+  // frame the best of K drawn-and-waited frames plus the game's own logic over a few real frames; the verdict the median
+  // over CYCLES of each spot's ratio to the Field of Ash drawn in the same cycle), at the design's five spots, each within
+  // the Field's x 1.00. Quality 0 is measured as a floor (each spot no slower than at quality 1, + 5%). The spots, on fixed
+  // seeds, each the worst place of its part for the gameplay camera's view (its ground footprint, cast from the screen,
+  // scored over every dry cell of the part):
+  //   hollows   the Black Hollows at full black water (0.9 m), 25 actors: the most water on screen in x 54-104, z 40-104
+  //   mere      the Black Mere in the Ketos's phase 1 (its level forced to 1.6), the Ketos risen in it, four Ketlings, the
+  //             three wreck lanterns lit and the lure (a false pool and its one pooled light): the most water from its shore
+  //   wood      the Drowned Wood at full black water, 20 actors: the most trees and water on screen in its window
+  //   village   the Forgotten Village's square: the most houses on screen, the Faded at their chores (13), Keyx with his
+  //             lantern and the black lamp in his hand
+  //   hearth    the First's Hearth in the Shade's form 2: its body, three webs, two Hands at the black pools, the four
+  //             stones lit and the seven named lamps: the most of them on screen
+  // The Field is perf5's own visit (seed 5, its camp, no packs: its frame is perf5's Field, the calibration), and in the
+  // same visit the Field again with each spot's crowd standing round her as it stands at the spot (the same bodies at the
+  // same offsets, on the Field's floor): a person-bodied actor costs SwiftShader about 37 ms a frame (its skinning; a Hull-
+  // louse 4-8, an Icemaw 10-16), so 25 of them weigh as much as the Field's whole world, and a spot is held against the
+  // Field with the same crowd ('vsField', the gate). Beside it: each spot's world alone (its crowd hidden) against the
+  // bare Field ('world', draw only; the design's estimate of 0.85-0.95 was of these terms), and the spot against the bare
+  // Field ('vsBare', the crowd counted on one side only).
+  // Stage A's stand-ins (combat's packs, the Ketos, the Faded and the Shade come at stage B and C; G2 runs this again with
+  // the real ones): the Sunken for the Black Crews, the Faded and Keyx (his body people.glb's villager1), the Hull-lice, the
+  // Icemaw for the pool hunters, the Ketos (x 3.4) and the Ketlings (x 0.96), the spider for the Falselights (x 1.28), the
+  // Weaver for the Shade's form 2, the Skotos's Hand for the Hands; Act V's creature files loaded, which act6's group lists
+  // (louse, icemaw, tentacle, skotos); the pools systems adds at stage B for what is lit at each spot (true light: a
+  // trembling lamp pool with its light; the named lamps and Keyx's lantern without one; the skylights; the false pools of
+  // the lure posts, the Falselights' lures and the black lamps, no light). The silt pack is not built yet: its layers'
+  // chains stand in (rime). The black water stands at its level through the water's uniforms (its clock is systems').
+  // Env: QS ('1,0'), CYCLES (5), K (3), SEEDS ('5,3,3': Field, drained, bottom), ONLY (spots, comma-separated), CREW=0 (the
+  // world alone: no actors, no spot pools), SPLIT=1 (each spot's draw again with one part hidden at a time: actors, water,
+  // ground, props, decals and fx, and the pool's lights off), NOUNLOAD=1 (the Field kept between cycles: &nounload)
+  perf6: { q: 'world=town&q=0&noenv', run: async (pg, shot) => {
+    const browser = pg.context().browser(), base = process.env.BASE || 'http://localhost:5199/';
+    await pg.goto('about:blank');
+    const QS = (process.env.QS || '1,0').split(','), CYC = +(process.env.CYCLES || 5), K = +(process.env.K || 3), out = {};
+    const seeds = (process.env.SEEDS || '5,3,3').split(',').map(Number), ALL = ['hollows', 'mere', 'wood', 'village', 'hearth'];
+    const spots = process.env.ONLY ? ALL.filter((s) => process.env.ONLY.split(',').includes(s)) : ALL, zones = ['ashfield', ...spots];
+    const med = (a) => a.slice().sort((x, y) => x - y)[a.length >> 1];
+    for (const Q of QS) {
+      const ctx = await browser.newContext({ viewport: { width: 915, height: 412 }, deviceScaleFactor: 1.5, isMobile: true, hasTouch: true });
+      const p = await ctx.newPage();
+      p.on('pageerror', (e) => logs.push('pageerror(perf6 q' + Q + '): ' + e.message));
+      p.on('console', (m) => { if (m.type() === 'error') logs.push('perf6 q' + Q + ': ' + m.text()); });
+      // (each frame of the game's loop timed, less the part of it spent in renderer.render: the game's logic; perf5's)
+      await p.addInitScript(() => {
+        const raf = window.requestAnimationFrame.bind(window);
+        window.__cb = []; window.__rn = 0;
+        window.requestAnimationFrame = (f) => raf((t) => { const t0 = performance.now(), r0 = window.__rn; f(t); if (window.__rn !== r0) window.__cb.push(performance.now() - t0 - (window.__rn - r0)); if (window.__cb.length > 60) window.__cb.shift(); });
+      });
+      await p.goto(base + '?auto=ashfield&q=' + Q + '&lvl=30&seed=' + seeds[0] + '&cloud=off' + (process.env.NOUNLOAD === '1' ? '&nounload' : ''));
+      try { await p.waitForFunction(() => window.__G?.player && window.__G.zone && window.__G.mode === 'play', null, { timeout: 400000 }); } catch (e) { out['q' + Q] = 'no zone'; await ctx.close(); continue; }
+      await p.evaluate(async (seeds) => {
+        window.__immortal = true;
+        const h = window.__G.hero, R = window.__R;
+        h.seeds = Object.assign(h.seeds || {}, { ['drained@' + h.diff]: seeds[1], ['bottom@' + h.diff]: seeds[2] });
+        // (the creatures act6's group lists that ship today: Act V's files)
+        await (await import('/src/gfx/creatures.js')).loadCreatures('act5');
+        const r0 = R.renderer.render.bind(R.renderer);
+        R.renderer.render = (s, c) => { const t0 = performance.now(); r0(s, c); window.__rn += performance.now() - t0; };
+      }, seeds);
+      const visit = (spot, crowds) => p.evaluate(async ({ spot, K, crew, split, crowds }) => {
+        const G = window.__G, R = window.__R, D = window.__D, fx = await import('/src/gfx/fx.js'), gfx = await import('/src/gfx/gfx.js');
+        const W = await import('/src/game/world.js'), Lt = await import('/src/game/light.js'), Pj = await import('/src/game/projectiles.js'), { SEA } = await import('/src/world/sea.js');
+        const zone = spot === 'ashfield' ? 'ashfield' : spot === 'hollows' || spot === 'mere' ? 'drained' : 'bottom';
+        if (G.zone.id !== zone) { await W.zoneReady(zone); D.enterZone(zone); }
+        const z = G.zone, L = z.L, S = L.spots, A = z.lvl.act6, w = L.w;
+        // (no pack of the zone's own wakes; every foe standing goes; no boss)
+        for (const pk of z.packs) pk.spawned = true;
+        for (const a of G.actors.slice()) if (a.team === 'foe') { a.remove?.(); G.actors.splice(G.actors.indexOf(a), 1); }
+        z.bossSpawned = true;
+        // the black water at its spot's level: the pockets at the clock's top, the Mere forced (drained, phase 1)
+        const lv = spot === 'ashfield' ? null : 0.9, bay = zone === 'drained' ? 1.6 : 0;
+        // the gameplay camera's ground footprint: the screen cast onto the floor, as offsets from the hero (NX x NY points)
+        const NX = 48, NY = 22, cam = R.camera, V3 = cam.position.constructor, foot = [];
+        gfx.updateCamera(0, w / 2, L.h / 2, true); cam.updateMatrixWorld(); cam.updateProjectionMatrix();
+        for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
+          const v = new V3(((i + 0.5) / NX) * 2 - 1, ((j + 0.5) / NY) * 2 - 1, 0.5).unproject(cam).sub(cam.position);
+          if (v.y >= -1e-4) continue;
+          const t = -cam.position.y / v.y; foot.push([cam.position.x + v.x * t - w / 2, cam.position.z + v.z * t - L.h / 2]);
+        }
+        const bb = foot.reduce((b, [dx, dz]) => [Math.min(b[0], dx), Math.max(b[1], dx), Math.min(b[2], dz), Math.max(b[3], dz)], [1e9, -1e9, 1e9, -1e9]);
+        const cell = (x, zz) => { const cx = Math.floor(x), cz = Math.floor(zz); return cx < 0 || cz < 0 || cx >= w || cz >= L.h ? -1 : cz * w + cx; };
+        const wetAt = (i) => i >= 0 && !!L.pocket?.[i] && L.bed[i] < (L.pocket[i] === 2 ? bay : lv) - 0.02;
+        const wetIn = (x, zz) => { let n = 0; for (const [dx, dz] of foot) if (wetAt(cell(x + dx, zz + dz))) n++; return n / foot.length; };
+        const inView = (x, zz, q, m = 1) => q.x >= x + bb[0] * m && q.x <= x + bb[1] * m && q.z >= zz + bb[2] * m && q.z <= zz + bb[3] * m;
+        const dry = (i) => L.cells[i] && !L.pocket?.[i] && z.map.walkable(i % w + 0.5, Math.floor(i / w) + 0.5);
+        // the spot: the best dry cell of its part by its score (the Field: perf5's)
+        const best = (ok, score) => { let b = null; for (let i = 0; i < L.cells.length; i++) { if (!dry(i)) continue; const x = i % w + 0.5, zz = Math.floor(i / w) + 0.5; if (!ok(x, zz)) continue; const s = score(x, zz); if (!b || s > b.s) b = { x, z: zz, s }; } return b; };
+        const hyp = (a, b) => Math.hypot(a.x - b.x, a.z - b.z), TREE = new Set(['pine', 'oak', 'dead']);
+        let v = null;
+        if (spot === 'ashfield') v = { x: S.camp.x, z: S.camp.z - 8 };
+        else if (spot === 'hollows') v = best((x, zz) => x >= 54 && x <= 104 && zz >= 40 && zz <= 104, wetIn);
+        else if (spot === 'mere') v = best((x, zz) => { const d = Math.hypot(x - S.mere.x, zz - S.mere.z); return d > S.mere.r + 0.5 && d < S.heap.r - 3; }, wetIn);
+        else if (spot === 'wood') {
+          const st = L.stamps.find((s) => s.kind === 'forest'), trees = L.props.filter((q) => TREE.has(q.t));
+          v = best((x, zz) => x >= st.x0 && x < st.x0 + st.w && zz >= st.z0 && zz < st.z0 + st.h, (x, zz) => wetIn(x, zz) * 4 + trees.filter((q) => inView(x, zz, q, 0.8)).length / 40);
+        } else if (spot === 'village') v = best((x, zz) => hyp({ x, z: zz }, S.keyx.well) < 12, (x, zz) => S.houses.filter((q) => inView(x, zz, q, 0.8)).length + 0.05 * (S.chores || []).filter((q) => inView(x, zz, q, 0.8)).length);
+        else if (spot === 'hearth') { const H = S.hearth; v = best((x, zz) => hyp({ x, z: zz }, H) < H.r - 1, (x, zz) => [...H.stones, ...H.niches, ...H.pools, H.fire].filter((q) => inView(x, zz, q, 0.8)).length - hyp({ x, z: zz }, H) * 0.01); }
+        const f = z.map.nearestFloor(v.x, v.z);
+        G.player.x = f.x; G.player.z = f.z;
+        gfx.updateCamera(0, G.player.x, G.player.z, true);
+        // ---- the timing (perf5's): a few real frames for the logic, then the loop held, the particles run 12 s ahead, the
+        // water at its level, every stand-in standing where it is (a lurker gone under or a louse in its shell come up), and
+        // K frames drawn and waited for ----
+        R.prScale = 1; R.renderer.setPixelRatio(R.basePR); R.renderer.setSize(R.w, R.h, false); R.lastResize = 1e15;
+        const gl = R.renderer.getContext(), px = new Uint8Array(4);
+        const draw = () => { R.lost = false; R.skyHook?.(); R.renderer.render(R.scene, R.camera); R.lost = true; gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); };
+        const time = () => { draw(); const t = []; for (let i = 0; i < K; i++) { const t0 = performance.now(); draw(); t.push(performance.now() - t0); } return +Math.min(...t).toFixed(1); };
+        const spawn = (list) => list.map((c) => { const q = z.map.nearestFloor(c.x, c.z, 3), a = D.spawnMonster(c.kind, q.x, q.z, { dormant: false, ...c.o }); G.actors.push(a); return a; });
+        const drop = (list) => { for (const a of list) { if (!a.removed) a.remove?.(); const i = G.actors.indexOf(a); if (i >= 0) G.actors.splice(i, 1); } };
+        const run = async (actors) => {
+          window.__cb.length = 0;
+          for (let i = 0; i < 6; i++) await new Promise((ok) => requestAnimationFrame(() => { gfx.updateCamera(0, G.player.x, G.player.z, true); ok(); }));
+          const lg = window.__cb.slice(2).sort((a, b) => a - b), logic = lg[lg.length >> 1] ?? 0;
+          const mode0 = G.mode; G.mode = 'hold'; R.lost = true;
+          for (let i = 0; i < 120; i++) fx.updateFX(0.1, G.player.x, G.player.z);
+          gfx.updateCamera(0, G.player.x, G.player.z, true); gfx.frame(0.016);
+          if (lv != null) { SEA.uLevel.value = lv; SEA.uWetLevel.value = lv; SEA.uBayLevel.value = bay; }
+          for (const a of actors) if (!a.removed && !a.dead && a.avatar) { a.under = false; a.hidden = false; a.y = 0; a.avatar.group.visible = true; a.avatar.group.position.y = 0; }
+          const d = time(), info = R.renderer.info.render;
+          return { logic: +logic.toFixed(1), draw: d, calls: info.calls, tris: info.triangles, done: () => { R.lost = false; G.mode = mode0; } };
+        };
+        // ---- the Field: perf5's visit, then with each spot's crowd round her ----
+        if (spot === 'ashfield') {
+          const m = await run([]); m.done();
+          const res = { ms: +(m.draw + m.logic).toFixed(1), draw: m.draw, logic: m.logic, calls: m.calls, tris: m.tris, wet: 0, actors: 0, pools: 0, lights: R.pool.filter((l) => l.intensity > 0).length, at: [+f.x.toFixed(1), +f.z.toFixed(1)], pr: R.renderer.getPixelRatio(), crowd: {} };
+          for (const [k, list] of crowds) {
+            const as = spawn(list.map((c) => ({ ...c, x: f.x + c.dx, z: f.z + c.dz }))), c = await run(as); c.done();
+            res.crowd[k] = { ms: +(c.draw + c.logic).toFixed(1), draw: c.draw, logic: c.logic, calls: c.calls, actors: as.filter((a) => !a.removed && a.avatar?.group.visible).length };
+            drop(as);
+          }
+          return res;
+        }
+        // ---- a spot: what is lit there (pools), its crowd in view ----
+        const P6 = { actors: [], pools: [], lights: [], lit: [], areas: [] };
+        const pool = (q, r, o) => { const p0 = Lt.addLightPool(q.x, q.z, r, Infinity, 'perf6', o); P6.pools.push(p0); return p0; };
+        const lit = (m) => { if (m?.userData.setLit) { m.userData.setLit(true); P6.lit.push(m); } };
+        // (a true lamp: a trembling pool with its light; o: the pool's options over it)
+        const lamp = (q, r, o = {}) => pool(q, r, { lamp: true, ...o });
+        // (the places a body stands: cells on screen 2.5-11 m from her, a cell apart, in a fixed scatter)
+        const places = [];
+        if (crew) {
+          const h = (i) => { let x = Math.imul(i ^ 0x9e3779b9, 0x85ebca6b); x ^= x >>> 13; x = Math.imul(x, 0xc2b2ae35); return (x ^ (x >>> 16)) >>> 0; };
+          const cand = [];
+          for (const [dx, dz] of foot) { const x = Math.floor(f.x + dx * 0.8) + 0.5, zz = Math.floor(f.z + dz * 0.8) + 0.5, d = Math.hypot(x - f.x, zz - f.z), i = cell(x, zz); if (i < 0 || d < 2.5 || d > 11 || !z.map.walkable(x, zz)) continue; cand.push({ x, z: zz, i, k: h(i) }); }
+          cand.sort((a, b) => a.k - b.k);
+          for (const c of cand) if (!places.some((q) => hyp(q, c) < 1.2)) places.push(c);
+        }
+        const list = [];
+        let pi = 0;
+        const put = (kind, n, o = {}) => { for (let k = 0; k < n && pi < places.length; k++) { const q = places[pi++]; list.push({ kind, x: q.x, z: q.z, o }); } };
+        if (crew && zone === 'drained') {
+          for (const s of S.sky || []) pool(s, s.r, { sky: true, light: false });
+          for (const l of S.lures || []) pool(l.bait || l, 2.5, { fake: true, light: false });
+        }
+        if (crew && zone === 'bottom') {
+          for (const l of S.lamps || []) pool(l, 4, { fake: true, light: false, core: 'dark' });
+          for (const l of S.lures || []) pool(l.bait || l, 2.5, { fake: true, light: false });
+        }
+        if (crew && spot === 'hollows') {
+          const h2 = A.hearths.slice().sort((a, b) => hyp(a, f) - hyp(b, f))[0]; if (h2) { lit(h2.mesh); lamp(h2, 6); }
+          put('sunken', 10); put('harpooner', 5); put('hullLouse', 6); put('icemaw', 4);
+        }
+        if (crew && spot === 'mere') {
+          for (const l of A.wrecks) { lit(l.mesh); lamp(l, 4); }
+          const lu = S.mere.lure; pool(lu, 2.5, { fake: true, light: false }); P6.lights.push(gfx.addLight({ x: lu.x, y: 1.6, z: lu.z, color: 0xd8e0ff, intensity: 14, range: 8, flicker: 0 }));
+          // the Ketos risen in the Mere, between its lure and her
+          list.push({ kind: 'icemaw', x: S.mere.x + (f.x - S.mere.x) * 0.35, z: S.mere.z + (f.z - S.mere.z) * 0.35, o: { scale: 3.4 } });
+          put('icemaw', 4, { scale: 0.96 });
+        }
+        if (crew && spot === 'wood') { put('sunken', 12); put('spider', 5, { scale: 1.28 }); put('icemaw', 3); }
+        if (crew && spot === 'village') {
+          list.push({ kind: 'sunken', x: S.keyx.x, z: S.keyx.z, o: { model: 'villager1' } });
+          pool(S.keyx, 1.5, { tremble: true, light: false });
+          for (const c of (S.chores || []).filter((q) => inView(f.x, f.z, q))) if (list.length < 14) list.push({ kind: 'sunken', x: c.x, z: c.z, o: {} });
+          put('sunken', 14 - list.length);
+        }
+        if (crew && spot === 'hearth') {
+          const H = S.hearth;
+          for (const s of A.stones) { lit(s.mesh); lamp(s, 4); }
+          for (const n of A.niches) { lit(n.mesh); lamp(n, 3, { light: false }); }
+          list.push({ kind: 'weaver', x: H.x, z: H.z - 4.5, o: {} });
+          for (const hp of H.pools.slice(0, 2)) list.push({ kind: 'skotosHand', x: hp.x, z: hp.z, o: {} });
+          for (let k = 0; k < 3; k++) P6.areas.push(Pj.area('web', H.x + (k - 1) * 4, H.z - 1 + (k % 2) * 2.5, 2, 1e4, { team: 'foe' }));
+        }
+        P6.actors = spawn(list);
+        const m = await run(P6.actors);
+        const onPool = R.pool.filter((l) => l.intensity > 0).length;
+        // the world alone: the crowd hidden (its draw only)
+        const shown = P6.actors.filter((a) => !a.removed && a.avatar?.group.visible), hideCrowd = (on) => { for (const a of shown) { a.avatar.group.visible = !on; if (a.mesh) a.mesh.visible = !on; } };
+        hideCrowd(true); const bare = time(); hideCrowd(false);
+        // SPLIT: where the frame goes, each part hidden in turn (its draw less the whole's); the lights' share with the pool's
+        // intensities at 0 (the loop is compiled for the pool's length either way)
+        let parts = null;
+        if (split) {
+          parts = {};
+          const lvl = z.lvl.group, kids = lvl.children, av = new Set(G.actors.map((a) => a.avatar?.group).filter(Boolean));
+          const gr = [z.lvl.ground].flat().filter(Boolean), sea = [z.lvl.sea].filter(Boolean);
+          const sets = {
+            actors: R.scene.children.filter((o) => av.has(o)),
+            water: sea,
+            ground: gr,
+            props: kids.filter((o) => !gr.includes(o) && !sea.includes(o)),
+            fxDecals: R.scene.children.filter((o) => o !== lvl && !av.has(o) && !o.isLight && !o.isCamera)
+          };
+          const whole = time();
+          for (const [k, l] of Object.entries(sets)) { const vis = l.map((o) => o.visible); l.forEach((o) => { o.visible = false; }); parts[k] = { n: l.length, saves: +(whole - time()).toFixed(1) }; l.forEach((o, i) => { o.visible = vis[i]; }); }
+          const I0 = R.pool.map((l) => l.intensity); R.pool.forEach((l) => { l.intensity = 0; }); parts.poolLights = { on: onPool, saves: +(whole - time()).toFixed(1) }; R.pool.forEach((l, i) => { l.intensity = I0[i]; });
+          parts.whole = whole;
+        }
+        const wet = +wetIn(G.player.x, G.player.z).toFixed(3);
+        m.done();
+        window.__p6 = P6;
+        return { ms: +(m.draw + m.logic).toFixed(1), draw: m.draw, logic: m.logic, bare, calls: m.calls, tris: m.tris, wet, actors: shown.length, pools: P6.pools.length, lights: onPool, at: [+f.x.toFixed(1), +f.z.toFixed(1)], pr: R.renderer.getPixelRatio(), parts,
+          crowd: list.map((c) => ({ kind: c.kind, dx: +(c.x - f.x).toFixed(2), dz: +(c.z - f.z).toFixed(2), o: c.o })) };
+      }, { spot, K, crew: process.env.CREW !== '0', split: process.env.SPLIT === '1', crowds });
+      // (the spot let go after its visit: its actors, pools, lights, lit props and webs)
+      const undress = () => p.evaluate(async () => {
+        const G = window.__G, P6 = window.__p6, gfx = await import('/src/gfx/gfx.js'), Lt = await import('/src/game/light.js'); if (!P6) return;
+        for (const a of P6.actors) { if (!a.removed) a.remove?.(); const i = G.actors.indexOf(a); if (i >= 0) G.actors.splice(i, 1); }
+        for (const q of P6.pools) Lt.removeLightPool(q);
+        for (const s of P6.lights) gfx.removeLight(s);
+        for (const m of P6.lit) m.userData.setLit(false);
+        for (const a of P6.areas) { const i = G.areas.indexOf(a); if (i >= 0) { a.dispose?.(); G.areas.splice(i, 1); } }
+        window.__p6 = null;
+      });
+      // (each spot's crowd as its first visit stood it, for the Field's like-for-like frames)
+      const S = {}, crowds = {};
+      for (let c = -1; c < CYC; c++) for (const z of zones) {
+        const m = await visit(z, z === 'ashfield' ? Object.entries(crowds).filter(([, l]) => l.length) : []);
+        if (c < 0) { if (m.crowd && z !== 'ashfield') crowds[z] = m.crowd; await p.waitForTimeout(300); await p.screenshot({ path: shot.dir + '/perf6-' + z + '-q' + Q + '.png', timeout: 240000 }).catch((e) => logs.push('perf6 shot ' + z + ': ' + e.message.split('\n')[0])); }
+        await undress();
+        if (c < 0) continue;
+        (S[z] ||= []).push(m);
+        console.log('perf6 q' + Q + ' cycle ' + c + ' ' + z + ' ' + JSON.stringify(z === 'ashfield' ? m : { ...m, crowd: m.crowd.length }));
+      }
+      for (const z of zones) {
+        const ms = med(S[z].map((m) => m.ms)), last = S[z][S[z].length - 1];
+        out[z + '@q' + Q] = { ms, draw: med(S[z].map((m) => m.draw)), logic: med(S[z].map((m) => m.logic)), calls: last.calls, tris: last.tris, wet: last.wet, actors: last.actors, pools: last.pools, lights: last.lights, at: last.at, pr: last.pr, wouldScale: ms > 21 ? 'down (to 0.55 at worst)' : ms < 14.5 ? 'up' : 'hold' };
+      }
+      for (const z of spots) {
+        const o = out[z + '@q' + Q], F = S.ashfield;
+        o.bare = med(S[z].map((m) => m.bare));
+        if (F[0].crowd[z]) { o.field = med(F.map((m) => m.crowd[z].ms)); o.ratios = S[z].map((m, i) => +(m.ms / F[i].crowd[z].ms).toFixed(3)); }
+        else { o.field = med(F.map((m) => m.ms)); o.ratios = S[z].map((m, i) => +(m.ms / F[i].ms).toFixed(3)); }
+        o.vsField = med(o.ratios);
+        o.world = med(S[z].map((m, i) => +(m.bare / F[i].draw).toFixed(3)));
+        o.vsBare = med(S[z].map((m, i) => +(m.ms / F[i].ms).toFixed(3)));
+        o.pass = o.vsField <= 1.0 && o.world <= 1.0;
+      }
+      await ctx.close();
+    }
+    // (the floor: at quality 0 each spot draws no slower than at quality 1)
+    for (const z of zones) if (out[z + '@q0']?.ms && out[z + '@q1']?.ms) out[z + '@q0'].floor = out[z + '@q0'].ms <= out[z + '@q1'].ms * 1.05;
+    out.pass = spots.every((z) => out[z + '@q1']?.pass) && zones.every((z) => out[z + '@q0']?.floor !== false);
+    return out;
   } },
   // Act VI: look
   // the look lane's stage A (docs/act6-contract.md, Visuals): on quality 0 and 1, the bench (src/debug/look6.js: a test
