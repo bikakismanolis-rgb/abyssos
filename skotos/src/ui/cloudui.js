@@ -121,7 +121,7 @@ function pickFile() {
   inp.onchange = () => {
     const f = inp.files?.[0];
     if (!f) return;
-    if (f.size > 8e6) { say(t('cloud.importBad')); return; }
+    if (f.size > 5e6) { say(t('cloud.importBad')); return; }
     f.text().then(takeIn, () => say(t('cloud.importBad')));
   };
   inp.click();

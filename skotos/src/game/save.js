@@ -2,7 +2,7 @@
 import { G } from './state.js';
 import { cleanItem, MAX_ILVL } from './items.js';
 import { BOON, MAX_LEVEL, INV_SIZE, STASH_SIZE, xpToNext, CLASSES, DIFFS, BASES, LEGENDARIES } from './data.js';
-import { further, HERO_ID } from './cloudsync.js';
+import { further, HERO_ID, MAX_HERO } from './cloudsync.js';
 
 // (?slot=name: a save of its own, for tests that run several heroes in one browser: tools/coop.mjs)
 const SLOT = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('slot') : null;
@@ -119,7 +119,7 @@ export function heroRepairable(h) {
   if (!h) return false;
   let d = null;
   try { const text = RAW.get(h); d = text !== undefined ? JSON.parse(text) : readDisk()?.heroes.find((x) => x && typeof x === 'object' && x.id === h.id) || null; } catch (e) { d = null; }
-  return !!d && typeof d === 'object' && Object.prototype.hasOwnProperty.call(CLASSES, d.cls);
+  return !!d && typeof d === 'object' && Object.prototype.hasOwnProperty.call(CLASSES, d.cls) && heroFits(d) !== 'bad_data';
 }
 // a hero taken up from the title as it is stored now (another page of this browser may have played it since this page
 // read the save): the stored record, made whole, in the list in its place; the hero itself when it is not stored; null
@@ -187,6 +187,8 @@ export function repairHero(h) {
   h.xp = fin(h.xp) && h.xp > 0 ? Math.min(h.xp, xpToNext(h.level) - 1) : 0;
   h.gold = fin(h.gold) && h.gold > 0 ? Math.floor(h.gold) : 0;
   h.points = fin(h.points) && h.points > 0 ? Math.round(h.points) : 0;
+  if (h.mlvl !== undefined) h.mlvl = fin(h.mlvl) && h.mlvl > 0 ? Math.floor(h.mlvl) : 0;
+  if (h.mxp !== undefined) h.mxp = fin(h.mxp) && h.mxp > 0 ? h.mxp : 0;
   if (!Array.isArray(h.boons)) h.boons = [];
   h.boons = h.boons.slice(0, 5).map((id) => (typeof id === 'string' && Object.prototype.hasOwnProperty.call(BOON, id) ? id : null));
   const st = h.stats && typeof h.stats === 'object' ? h.stats : (h.stats = {});
@@ -204,9 +206,14 @@ export const playingId = () => (G.hero?.__real || G.hero)?.id ?? null;
 // the game wrote (a class, difficulty, item base, legendary or blessing this version does not know, a level or item level
 // past its caps), which repairHero would strip, and which a sync would then carry stripped to every device
 export function heroFits(h) {
-  if (!h || typeof h !== 'object' || Array.isArray(h) || typeof h.id !== 'string') return 'bad_data';
+  if (!h || typeof h !== 'object' || Array.isArray(h) || typeof h.id !== 'string' || h.id in Object.prototype) return 'bad_data';
+  // (a record no version of the game writes: a number that is none, or markup in any of its strings, which the screens
+  // would draw; the game itself only ever stores ids there)
+  for (const k of ['level', 'xp', 'gold', 'points', 'mlvl', 'mxp']) if (h[k] !== undefined && !(typeof h[k] === 'number' && isFinite(h[k]))) return 'bad_data';
+  if (unsafeText(h)) return 'bad_data';
   const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
-  if (!own(CLASSES, h.cls) || !DIFFS[h.diff]) return 'newer';
+  if (!own(CLASSES, h.cls) || !(Number.isInteger(h.diff) && h.diff >= 0)) return 'newer';
+  if (!DIFFS[h.diff]) return 'newer';
   if (typeof h.level === 'number' && h.level > MAX_LEVEL) return 'newer';
   if (Array.isArray(h.boons) && h.boons.some((id, i) => id != null && (i >= 5 || (typeof id === 'string' && !own(BOON, id))))) return 'newer';
   const items = [...(Array.isArray(h.inv) ? h.inv : []), ...(Array.isArray(h.stash) ? h.stash : []), ...Object.values(h.equip && typeof h.equip === 'object' ? h.equip : {})];
@@ -215,6 +222,15 @@ export function heroFits(h) {
     if (!own(BASES, it.base) || (it.leg != null && !LEGENDARIES.some((l) => l.id === it.leg)) || (typeof it.ilvl === 'number' && it.ilvl > MAX_ILVL)) return 'newer';
   }
   return null;
+}
+// (any string or key of a record, however deep, holding a character of markup; or nesting past what a hero has)
+const UNSAFE = /[<>"'`&\\]/;
+function unsafeText(o, depth = 0) {
+  if (depth > 12) return true;
+  if (typeof o === 'string') return UNSAFE.test(o);
+  if (!o || typeof o !== 'object') return false;
+  for (const k of Object.keys(o)) if (UNSAFE.test(k) || unsafeText(o[k], depth + 1)) return true;
+  return false;
 }
 // a hero from the cloud put in the stored list in its place (or first), and in this page's list made whole; never the
 // hero this page plays (false), nor one this version cannot keep as it is (heroFits: false)
@@ -252,7 +268,7 @@ export function setCloudMeta(m) { try { localStorage.setItem(CLOUD_KEY, JSON.str
 // a routine place, and goes only for room, told. Storage too full for them drops routine ones first. Whatever goes for
 // room is told (backupsGone: the panel says so)
 export const BAK_MAX = 6, BAK_KEEP = 12;
-const KEEP_WHY = new Set(['conflict', 'deleted', 'restored', 'repaired', 'imported']);
+const KEEP_WHY = new Set(['conflict', 'deleted', 'restored', 'repaired']);
 export function backups() { try { const b = JSON.parse(localStorage.getItem(BAK_KEY) || '[]'); return Array.isArray(b) ? b.filter((x) => x && x.hero && typeof x.hero === 'object') : []; } catch (e) { return []; } }
 // the backups no longer kept, newest first (at most 8): { at (when dropped), why, id, cls, level, diff }
 export function backupsGone() { try { const b = JSON.parse(localStorage.getItem(BAK_GONE_KEY) || '[]'); return Array.isArray(b) ? b.filter((x) => x && typeof x === 'object') : []; } catch (e) { return []; } }
@@ -295,7 +311,8 @@ export function backupHero(h, why) {
       if (!list.length) break;
       let i = -1;
       for (let j = list.length - 1; j >= 0; j--) if (!KEEP_WHY.has(list[j].why)) { i = j; break; }
-      if (i < 0) i = list.length - 1;
+      // (none routine left: the copy just added goes before any older one kept for a conflict or a deletion)
+      if (i < 0) i = list[0]?.at === at ? 0 : list.length - 1;
       t.told.push(list[i]); list = list.filter((_, j) => j !== i);
     }
   }
@@ -323,7 +340,7 @@ export function restoreBackup(id, at) {
 
 // ---------- heroes moved by hand between the game's versions (the claude.ai artifact and the web build keep their saves
 // apart: neither can reach the other's cloud). Settings › Cloud save › Move heroes, ui/cloudui.js ----------
-export const MOVE_KIND = 'skotos-heroes';
+export const MOVE_KIND = 'skotos-heroes', MOVE_MAX = 48;
 // every stored hero, as stored, in a file of its own (the hero being played written first); null with none
 export function exportHeroes() {
   writeSave();
@@ -339,11 +356,11 @@ export function importHeroes(text) {
   let d = null;
   try { d = JSON.parse(text); } catch (e) { d = null; }
   const list = Array.isArray(d) ? d : d && typeof d === 'object' && Array.isArray(d.heroes) && (d.k === MOVE_KIND || d.k === undefined) ? d.heroes : null;
-  if (!list || !list.length) return { ok: false, code: 'bad_file' };
+  if (!list || !list.length || list.length > MOVE_MAX) return { ok: false, code: 'bad_file' };
   const R = { ok: true, added: 0, updated: 0, same: 0, kept: 0, refused: 0 };
   const fin = (v) => (typeof v === 'number' && isFinite(v) ? v : 0);
   for (const rec of list) {
-    if (!rec || typeof rec !== 'object' || Array.isArray(rec) || typeof rec.id !== 'string' || !HERO_ID.test(rec.id) || heroFits(rec)) { R.refused++; continue; }
+    if (!rec || typeof rec !== 'object' || Array.isArray(rec) || typeof rec.id !== 'string' || !HERO_ID.test(rec.id) || heroFits(rec) || JSON.stringify(rec).length > MAX_HERO) { R.refused++; continue; }
     const cur = storedHeroes().find((h) => h.id === rec.id);
     if (cur && JSON.stringify(cur) === JSON.stringify(rec)) { R.same++; continue; }
     if (rec.id === playingId() || (cur && further(cur, rec) >= 0)) { backupHero(rec, 'imported'); R.kept++; continue; }
