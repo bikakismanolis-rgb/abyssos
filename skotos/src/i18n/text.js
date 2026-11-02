@@ -1111,5 +1111,7 @@ export const TEXT = {
   'd.ropeShut': ['Χωρίς φωτιά δεν κατεβαίνει κανείς εκεί κάτω.', 'No one goes down there without fire.'],
   'd.wellShut': ['Το Πηγάδι είναι κάτω από το μαύρο νερό, κι εκεί μέσα κάτι ζει.', 'The Well is under the black water, and something lives in it.'],
   'd.gateDark': ['Το δαχτυλίδι είναι σκοτεινό.', 'The ring is dark.'],
-  'q.legBack': ['Βρέθηκε ξανά: {0}.', 'Found again: {0}.']
+  'q.legBack': ['Βρέθηκε ξανά: {0}.', 'Found again: {0}.'],
+  // Act VI: look (the 'reduce flicker' setting: true light's tremble cut to a steady glow; the story lane owns it from D)
+  'set.flicker': ['Λιγότερο τρεμόπαιγμα', 'Reduce flicker']
 };
