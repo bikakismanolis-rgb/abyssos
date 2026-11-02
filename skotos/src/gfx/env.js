@@ -38,13 +38,16 @@ async function bytes(url) {
 }
 // Decoded straight from bytes (no image URL is ever loaded). Rows stay in file order (flipY off): row 0 is v = 0.
 // (Half size on low and medium quality and on phones, and the decoded copy let go once uploaded: gltf.js.)
-async function texture(url, srgb, quality) {
+// (into: a layer's texture kept from a pack let go, decoded into again: the materials made from it hold that object. Its
+// GPU copy goes first, so the new image gets storage of its own size)
+async function texture(url, srgb, quality, into) {
   const blob = new Blob([await bytes(url)], { type: 'image/webp' });
   let img;
   try { img = await shrink(await createImageBitmap(blob)); } catch (e) {
     img = await new Promise((ok, fail) => { const im = new Image(); im.onload = () => ok(im); im.onerror = fail; im.src = URL.createObjectURL(blob); });
   }
-  const t = new THREE.Texture(img);
+  const t = into || new THREE.Texture(img);
+  if (into) { t.dispose(); t.image = img; }
   t.flipY = false;
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
@@ -133,12 +136,18 @@ function packLayers(name) {
 export function loadPack(name) {
   if (packs[name]) return packs[name];
   const q = ENV.quality;
+  gen[name] = (gen[name] || 0) + 1;
   packs[name] = (async () => {
     const glbKey = '../assets/' + name + '.glb';
     const tex = Object.entries(packLayers(name)).map(async ([id, u]) => {
+      // (a layer of a pack let go comes back as the same objects: build.js's materials made from it hold them, MAT)
+      const old = KEPT[name]?.[id];
       const [ud, un] = await Promise.all([u.d(), q >= 1 && u.n ? u.n() : null]);
-      const [td, tn] = await Promise.all([texture(ud, true, q), un ? texture(un, false, q) : null]);
-      putLayer(name, id, { d: td, n: tn });
+      const [td, tn] = await Promise.all([texture(ud, true, q, old?.d), un ? texture(un, false, q, old?.n || undefined) : null]);
+      const L = old || { d: td, n: tn };
+      L.n = tn;
+      if (old) delete KEPT[name][id];
+      putLayer(name, id, L);
     });
     const glb = PACK_GLB[glbKey] ? PACK_GLB[glbKey]().then(bytes).then((b) => gltfLoader().parseAsync(b, '')).then((g) => readProps(g, q, name)) : null;
     await Promise.all([...tex, glb]);
@@ -148,6 +157,59 @@ export function loadPack(name) {
 }
 export const packReady = (name) => !!ENV.packs[name];
 
+// ---------- letting a pack go (game/unload.js: Acts II-IV's, on entering an Act V or VI zone) ----------
+// Its names leave the registry at once, so nothing built from then on takes them (a bare name goes back to the next
+// loaded pack in PACK_ORDER that has it, as if this one had never come); the function returned frees what it held on the
+// GPU, to be called once nothing on screen draws it any more (unload.js calls it after the next zone is entered). The
+// layers' textures stay as objects with nothing in them (build.js's materials hold them, MAT): freed, they are given a
+// one-pixel image so a material still holding one draws a flat tone and never an upload of a released image, and a later
+// loadPack decodes the pack's images into them again. Its props' geometry, materials and maps are let go for good (a
+// later load makes new ones). free(live): live, the textures something still draws (Whitecliff's lantern on Isarn's staff
+// is the cinder pack's when it was planted with the pack loaded): those keep their GPU copies, and the rest goes. Null
+// when there is nothing to let go: never loaded, or still loading.
+const KEPT = {}, gen = {};
+const FLAT = { srgb: null, n: null };
+const flat = (n) => (FLAT[n ? 'n' : 'srgb'] ||= new ImageData(new Uint8ClampedArray(n ? [128, 128, 255, 255] : [118, 116, 112, 255]), 1, 1));
+const SLOTS = ['map', 'normalMap', 'aoMap', 'emissiveMap', 'roughnessMap', 'metalnessMap', 'alphaMap', 'bumpMap', 'lightMap', 'specularMap'];
+export function matTextures(m, out = new Set()) { for (const s of SLOTS) if (m?.[s]?.isTexture) out.add(m[s]); return out; }
+function reclaim(kind, id, extra) {
+  // (the earliest loaded pack that has this name takes the bare name back)
+  let best = null;
+  for (const k in ENV[kind]) { const i = k.indexOf('/'); if (i > 0 && k.slice(i + 1) === id && (best == null || rank(k.slice(0, i)) < rank(best))) best = k.slice(0, i); }
+  if (best == null) return;
+  owners[kind][id] = best;
+  ENV[kind][id] = ENV[kind][best + '/' + id];
+  for (const x of extra || []) if (ENV[x][best + '/' + id] !== undefined) ENV[x][id] = ENV[x][best + '/' + id];
+}
+export function unloadPack(name) {
+  if (!ENV.packs[name] || name === 'env') return null;
+  const pre = name + '/', layers = [], parts = [], tex = new Set(), geo = new Set();
+  for (const k in ENV.layers) if (k.startsWith(pre)) { const L = ENV.layers[k]; layers.push([k.slice(pre.length), L]); if (L.d) tex.add(L.d); if (L.n) tex.add(L.n); }
+  for (const k in ENV.props) if (k.startsWith(pre)) for (const p of ENV.props[k]) { parts.push(p); geo.add(p.geo); if (p.mat !== GLOW) matTextures(p.mat, tex); }
+  const g = gen[name];
+  for (const [id, L] of layers) {
+    delete ENV.layers[pre + id];
+    if (owners.layers[id] === name) { delete owners.layers[id]; delete ENV.layers[id]; reclaim('layers', id); }
+    (KEPT[name] ||= {})[id] = L;
+  }
+  for (const k of Object.keys(ENV.props)) if (k.startsWith(pre)) {
+    const id = k.slice(pre.length);
+    for (const x of ['props', 'pivots', 'sizes', 'extras']) delete ENV[x][k];
+    if (owners.props[id] === name) { delete owners.props[id]; for (const x of ['props', 'pivots', 'sizes', 'extras']) delete ENV[x][id]; reclaim('props', id, ['pivots', 'sizes', 'extras']); }
+  }
+  delete ENV.packs[name]; delete packs[name];
+  const mats = new Set(parts.map((p) => p.mat).filter((m) => m !== GLOW));
+  for (const [src, m] of LAMB) if (mats.has(m)) { LAMB.delete(src); mats.add(src); }
+  return {
+    tex, geo,
+    free(live = new Set()) {
+      // (a pack loaded again since keeps its layers: the same objects carry its new images)
+      if (gen[name] === g) for (const [, L] of layers) for (const t of [L.d, L.n]) if (t && !live.has(t)) { t.dispose(); t.image = flat(t === L.n); t.needsUpdate = true; }
+      for (const p of parts) p.geo.dispose();
+      for (const m of mats) { for (const t of matTextures(m)) if (!live.has(t)) t.dispose(); m.dispose(); }
+    }
+  };
+}
 let loading = null;
 export function loadEnv(quality = 1) {
   if (loading) return loading;
