@@ -295,8 +295,26 @@ void main(){
   }
   gl_FragColor = vec4(uColor, a * uA);
 }`;
+// Act VI: the colour 'dark' (the dark's drinking: a Lampbearer's line, a Black Flare, a Light-web). An additive black draws
+// nothing and a merely dark shape is lost on the dark silt, so it darkens the ground under it by its own alpha (normal
+// blending) and adds a bright violet rim over that, pulsing at 2 Hz (under three flashes a second), its fill darker as it
+// fills. One pass: premultiplied (ONE, ONE_MINUS_SRC_ALPHA). The colour is a value, so the co-op mirror carries it as is
+const TELE_DARK_FS = `
+varying vec2 vUv; uniform float uP; uniform vec3 uColor; uniform float uShape; uniform float uArc; uniform float uA; uniform float uT;
+void main(){
+  vec2 p = vUv * 2.0 - 1.0; float edge = 0.0, fill = 0.0, front = 0.0;
+  if (uShape < 0.5) { float d = length(p); if (d > 1.0) discard; edge = smoothstep(0.84, 0.97, d); fill = step(d, uP); front = smoothstep(uP - 0.06, uP, d) * fill; }
+  else if (uShape < 1.5) { float d = length(p); if (d > 1.0) discard; float ang = abs(atan(p.x, p.y)); if (ang > uArc) discard;
+    edge = max(smoothstep(0.84, 0.97, d), smoothstep(uArc - 0.1, uArc, ang)); fill = step(d, uP); front = smoothstep(uP - 0.06, uP, d) * fill; }
+  else { float y = vUv.y, ex = abs(p.x); edge = smoothstep(0.72, 0.95, ex); fill = step(y, uP); front = smoothstep(uP - 0.04, uP, y) * fill; }
+  float pulse = 0.7 + 0.3 * sin(uT * 12.566);
+  float dark = (0.42 + 0.3 * fill) * (1.0 - edge * 0.6);
+  gl_FragColor = vec4((uColor * (edge * 1.2 * pulse + front * 0.6 + fill * 0.05) + vec3(0.02, 0.008, 0.045) * dark) * uA, dark * uA);
+}`;
+const DARK_T = { value: 0 };
 const teleGeo = new THREE.PlaneGeometry(2, 2); teleGeo.rotateX(-Math.PI / 2);
 function teleMat(color, shape, arc = 0.5) {
+  if (color === 'dark') return new THREE.ShaderMaterial({ uniforms: { uP: { value: 0 }, uColor: { value: new THREE.Color(0x8a70ff) }, uShape: { value: shape }, uArc: { value: arc }, uA: { value: 1 }, uT: DARK_T }, vertexShader: TELE_VS, fragmentShader: TELE_DARK_FS, transparent: true, depthWrite: false, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor });
   return new THREE.ShaderMaterial({ uniforms: { uP: { value: 0 }, uColor: { value: new THREE.Color(color) }, uShape: { value: shape }, uArc: { value: arc }, uA: { value: 1 } }, vertexShader: TELE_VS, fragmentShader: TELE_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
 }
 // circle at x,z radius r, fills over dur seconds
@@ -414,6 +432,9 @@ function emit(e, dt, cx, cz) {
     // Act III: mist lying in the Glade of Stones, motes round the seed-lanterns and Tears, the mere's slow glow, weeping trees
     case 'lowmist': while (e.acc > 0.3) { e.acc -= 0.3; P({ add: false, x: e.x + rr(-4, 4) * s, y: rr(0.7, 1.3), z: e.z + rr(-4, 4) * s, vx: rr(-0.15, 0.15), vy: 0.02, vz: rr(-0.15, 0.15), life: rr(5, 8), size: 2.2, size1: 3.4, color: 0xd8ccb0, alpha: 0.12, alpha1: 0, drag: 0.1 }); } break;
     case 'motes': {
+      // (Act VI, e.dark: the forgotten, black motes rising slowly off the floor toward the vault, normal-blended; half as
+      // many on quality 0)
+      if (e.dark) { const iv = FX.q < 1 ? 0.7 : 0.35; while (e.acc > iv) { e.acc -= iv; P({ add: false, x: e.x + rr(-1.2, 1.2) * s, y: e.y + rr(0, 0.6), z: e.z + rr(-1.2, 1.2) * s, vx: rr(-0.05, 0.05), vy: rr(0.1, 0.25), vz: rr(-0.05, 0.05), life: rr(5, 9), size: rr(0.05, 0.1), size1: 0.04, color: 0x050508, alpha: 0.8, alpha1: 0 }); } break; }
       const r = e.autumn ? 1 - FX.autumn : 1; if (r <= 0) break;
       while (e.acc > 0.35 / r) { e.acc -= 0.35 / r; P({ x: e.x + rr(-0.6, 0.6) * s, y: e.y + rr(-0.5, 0.5), z: e.z + rr(-0.6, 0.6) * s, vx: rr(-0.1, 0.1), vy: rr(0.02, 0.15), vz: rr(-0.1, 0.1), life: rr(2, 4), size: 0.07, size1: 0.03, color: e.color || 0xe0f080, color1: e.color1 || 0x80a020, alpha: 0.9, alpha1: 0 }); }
       break;
@@ -430,6 +451,19 @@ function emit(e, dt, cx, cz) {
     case 'drip': {
       if (FX.autumn >= 1) break;
       if (e.acc > (e.next ||= rr(2.5, 6))) { e.acc = 0; e.next = rr(2.5, 6); const x = e.x + rr(-1.2, 1.2), z = e.z + rr(-1.2, 1.2), y = e.y || 3.5; P({ x, y, z, vy: -0.5, life: Math.sqrt((2 * y) / 9.8), size: 0.09, size1: 0.07, color: 0xffc050, color1: 0xff9a20, alpha: 0.95, alpha1: 0.9, grav: 9.8 }); }
+      break;
+    }
+    // Act VI: the vault's drips, white, falling the whole way from it (e.y, 7 m) round the spot every 1.5-4 s (half as
+    // often on quality 0)
+    case 'drips': {
+      if (e.acc > (e.next ||= rr(1.5, 4) * (FX.q < 1 ? 2 : 1))) { e.acc = 0; e.next = rr(1.5, 4) * (FX.q < 1 ? 2 : 1); const x = e.x + rr(-1.5, 1.5) * s, z = e.z + rr(-1.5, 1.5) * s, y = e.y || 7; P({ add: false, x, y, z, vy: -0.5, life: Math.sqrt((2 * y) / 9.8), size: 0.08, size1: 0.07, color: 0xe8f2f8, alpha: 0.9, alpha1: 0.8, grav: 9.8 }); }
+      break;
+    }
+    // Act VI: ember motes off the Gate ring once it wakes warm, rising slowly from all round its stone (e.r its radius,
+    // e.rot the way it faces; half as many on quality 0)
+    case 'emberMotes': {
+      const iv = FX.q < 1 ? 0.16 : 0.08, r = e.r || 2.6, c = Math.cos(e.rot || 0), sn = Math.sin(e.rot || 0);
+      while (e.acc > iv) { e.acc -= iv; const a = rr(0, TAU), u = Math.sin(a) * r; P({ x: e.x + u * c, y: e.y + Math.cos(a) * r, z: e.z - u * sn, vx: rr(-0.1, 0.1), vy: rr(0.25, 0.6), vz: rr(-0.1, 0.1), life: rr(1.6, 3), size: rr(0.05, 0.09), size1: 0.02, color: 0xffc070, color1: 0xff5a20, alpha: 0.9, alpha1: 0, drag: 0.4 }); }
       break;
     }
     // Act IV: an ember sink on the Field: a few embers, a thread of ash-smoke
@@ -478,9 +512,12 @@ function emit(e, dt, cx, cz) {
 function ambient(dt, cx, cz) {
   const k = FX.ambient; if (!k) return;
   FX.ambAcc = (FX.ambAcc || 0) + dt;
-  const rate = k === 'forest' ? 0.06 : k === 'town' ? 0.05 : k === 'snow' ? 0.012 : k === 'halls' ? 0.07 : k === 'weep' ? 0.07 : k === 'weepAutumn' ? 0.045 : k === 'heart' || k === 'heartAutumn' ? 0.08
+  let rate = k === 'forest' ? 0.06 : k === 'town' ? 0.05 : k === 'snow' ? 0.012 : k === 'halls' ? 0.07 : k === 'weep' ? 0.07 : k === 'weepAutumn' ? 0.045 : k === 'heart' || k === 'heartAutumn' ? 0.08
     : k === 'ashfall' ? 0.022 : k === 'ashfieldStars' ? 0.16 : k === 'ashfieldDawn' ? 0.07 : k === 'forge' ? 0.045 : k === 'forgeCold' ? 0.08
-      : k === 'coast' ? 0.028 : k === 'coastFrozen' ? 0.03 : k === 'farlight' ? 0.034 : k === 'blizzard' ? 0.0045 : 0.09;
+      : k === 'coast' ? 0.028 : k === 'coastFrozen' ? 0.03 : k === 'farlight' ? 0.034 : k === 'blizzard' ? 0.0045
+        : k === 'drained' ? 0.045 : k === 'bottom' ? 0.055 : k === 'thaw' ? 0.05 : 0.09;
+  // (Act VI's: half as many on quality 0)
+  if (FX.q < 1 && AMB6.has(k)) rate *= 2;
   while (FX.ambAcc > rate) {
     FX.ambAcc -= rate;
     const x = cx + rr(-16, 16), z = cz + rr(-14, 12);
@@ -563,6 +600,27 @@ function ambient(dt, cx, cz) {
       if (q < 0.72) P({ add: false, x: x + 12, y: rr(0.3, 7), z: z + rr(-2, 2), vx: rr(-11, -7), vy: rr(-1.4, -0.4), vz: rr(-0.8, 0.8), life: rr(1.6, 2.6), size: rr(0.06, 0.13), size1: 0.07, color: 0xf2f6fc, alpha: 0.9, alpha1: 0.3 });
       else if (q < 0.94) P({ add: false, x: x + 10, y: rr(0.1, 1.2), z: z + rr(-2, 2), vx: rr(-8, -5), vy: rr(-0.05, 0.15), vz: rr(-0.6, 0.6), life: rr(1.5, 2.5), size: rr(1.4, 2.2), size1: rr(3.5, 5), color: 0xdfe8f2, alpha: 0.16, alpha1: 0 });
       else P({ add: false, x, y: rr(1, 3), z, vx: rr(-3, -1.5), vy: 0, vz: 0, life: rr(2, 3.5), size: 5, size1: 8, color: 0xc8d2de, alpha: 0.07, alpha1: 0 });
+    } else if (k === 'drained') {
+      // the Drained Sea: silt hanging and settling, pale and warm where her light reaches it, a grey dust out of it; now and
+      // then a drop off the vault, falling the whole way; a cold haze lying on the floor
+      const q = Math.random();
+      if (q < 0.5) P({ x: cx + rr(-5, 5), y: rr(0.3, 3.2), z: cz + rr(-4.5, 4.5), vx: rr(-0.06, 0.06), vy: rr(-0.09, -0.02), vz: rr(-0.06, 0.06), life: rr(4, 7), size: rr(0.035, 0.065), size1: 0.03, color: 0xe8dcc0, color1: 0x8a7a62, alpha: 0.5, alpha1: 0 });
+      else if (q < 0.78) P({ add: false, x, y: rr(0.3, 4), z, vx: rr(-0.05, 0.05), vy: rr(-0.08, -0.02), vz: rr(-0.05, 0.05), life: rr(5, 8), size: rr(0.04, 0.07), size1: 0.05, color: 0x4a5258, alpha: 0.55, alpha1: 0 });
+      else if (q < 0.86) { const y = rr(6, 9); P({ add: false, x, y, z, vy: -0.6, life: Math.sqrt((2 * y) / 9.8), size: 0.07, size1: 0.06, color: 0xd8e6ee, alpha: 0.85, alpha1: 0.7, grav: 9.8 }); }
+      else P({ add: false, x, y: rr(0.15, 0.6), z, vx: rr(-0.08, 0.08), vy: 0, vz: rr(-0.08, 0.08), life: rr(6, 9), size: 2.6, size1: 4.2, color: 0x16222a, alpha: 0.12, alpha1: 0 });
+    } else if (k === 'bottom') {
+      // the Bottom of the Gates: black motes rising slowly off the floor toward the vault (the forgotten), a few pale ones
+      // where her light catches them, the dark lying low
+      const q = Math.random();
+      if (q < 0.62) P({ add: false, x, y: rr(0.05, 1.2), z, vx: rr(-0.04, 0.04), vy: rr(0.08, 0.22), vz: rr(-0.04, 0.04), life: rr(6, 10), size: rr(0.05, 0.1), size1: 0.04, color: 0x050508, alpha: 0.75, alpha1: 0 });
+      else if (q < 0.8) P({ x: cx + rr(-5, 5), y: rr(0.2, 2.5), z: cz + rr(-4.5, 4.5), vx: rr(-0.03, 0.03), vy: rr(0.04, 0.12), vz: rr(-0.03, 0.03), life: rr(4, 7), size: rr(0.03, 0.05), size1: 0.02, color: 0xb8b4c8, color1: 0x4a4860, alpha: 0.4, alpha1: 0 });
+      else P({ add: false, x, y: rr(0.1, 0.5), z, vx: rr(-0.05, 0.05), vy: 0.01, vz: rr(-0.05, 0.05), life: rr(6, 9), size: 2.8, size1: 4.4, color: 0x050608, alpha: 0.16, alpha1: 0 });
+    } else if (k === 'thaw') {
+      // her fire burns: warm motes rising slow and gold, the vault dripping as it thaws, the haze gone warm
+      const q = Math.random();
+      if (q < 0.6) P({ x, y: rr(0.2, 3.5), z, vx: rr(-0.05, 0.05), vy: rr(0.03, 0.12), vz: rr(-0.05, 0.05), life: rr(4, 7), size: rr(0.04, 0.08), size1: 0.03, color: 0xffd8a0, color1: 0xc07040, alpha: 0.8, alpha1: 0 });
+      else if (q < 0.8) { const y = rr(6, 9); P({ add: false, x, y, z, vy: -0.6, life: Math.sqrt((2 * y) / 9.8), size: 0.07, size1: 0.06, color: 0xf0e0c8, alpha: 0.85, alpha1: 0.7, grav: 9.8 }); }
+      else P({ add: false, x, y: rr(0.4, 1.3), z, vx: rr(0.05, 0.15), vy: 0, vz: rr(-0.05, 0.05), life: rr(6, 9), size: 2.4, size1: 3.6, color: 0x3a2a1c, alpha: 0.08, alpha1: 0 });
     } else if (k === 'gate') {
       P({ x, y: rr(0.2, 3), z, vx: rr(-0.2, 0.2), vy: rr(0.2, 0.6), vz: rr(-0.2, 0.2), life: rr(2, 4), size: 0.1, size1: 0.02, color: 0xc080ff, color1: 0x4010a0, alpha: 0.9, alpha1: 0 });
     }
@@ -573,7 +631,8 @@ export function updateFX(dt, cx, cz) {
   FX.time += dt;
   for (const e of FX.emitters) emit(e, dt, cx, cz);
   ambient(dt, cx, cz);
-  if (AMB5.has(FX.ambient)) walk5(dt, cx, cz); else FX.walk = null;
+  if (AMB5.has(FX.ambient) || AMB6.has(FX.ambient)) walk5(dt, cx, cz, AMB5.has(FX.ambient)); else FX.walk = null;
+  DARK_T.value = FX.time;
   if (PRINTS.mesh) tickPrints(dt);
   FX.add.update(dt); FX.alpha.update(dt); FX.leaf.update(dt);
   for (let i = FX.rings.length - 1; i >= 0; i--) {
@@ -610,6 +669,8 @@ export function clearFX() {
 
 // ---------- Act V: water, ice, breath, footprints ----------
 const AMB5 = new Set(['coast', 'coastFrozen', 'farlight', 'blizzard']);
+// Act VI's: her breath in the cold under the ice, but no footprints of hers (Act V's 48 are the Faded's tell down there)
+const AMB6 = new Set(['drained', 'bottom', 'thaw']);
 // a splash where something goes into the water (s its size): spray thrown up, a foam burst, a ring on the surface
 export function splash(...a) { return mir('splash', splash0, a); }
 function splash0(x, z, s = 1) {
@@ -633,8 +694,8 @@ export function breath(x, y, z, k = 0, dx = 0, dz = 1) {
   for (let i = 0; i < 2 + Math.round(k * 3); i++) P({ add: false, x: x + dx * 0.1, y: y + rr(-0.04, 0.04), z: z + dz * 0.1, vx: dx * rr(0.3, 0.6) + rr(-0.1, 0.1), vy: rr(0.08, 0.25), vz: dz * rr(0.3, 0.6) + rr(-0.1, 0.1), life: rr(1.1, 1.8), size: rr(0.1, 0.16), size1: rr(0.55, 0.8) * (1 + k * 0.4), color: 0xeef2f6, alpha: 0.22 + k * 0.12, alpha1: 0, drag: 0.9 });
 }
 // in an Act V zone, round the hero (the camera's target): a breath every 2.5 s (FX.chill 0-1, cold.js, quickens it and
-// thickens it), and her footprints in the snow every 0.7 m (not at quality 0)
-function walk5(dt, cx, cz) {
+// thickens it), and her footprints in the snow every 0.7 m (not at quality 0; prints false: none, Act VI)
+function walk5(dt, cx, cz, prints = true) {
   const w = FX.walk ||= { x: cx, z: cz, d: 0, side: 1, dx: 0, dz: 1, bt: 1 };
   const mx = cx - w.x, mz = cz - w.z, m = Math.hypot(mx, mz);
   w.x = cx; w.z = cz;
@@ -642,7 +703,7 @@ function walk5(dt, cx, cz) {
   if (m > 0.001) { w.dx = mx / m; w.dz = mz / m; }
   const chill = clamp(FX.chill || 0, 0, 1);
   if ((w.bt -= dt) <= 0) { w.bt = lerp(2.5, 1.4, chill) * rr(0.9, 1.1); breath(cx + w.dx * 0.22, 1.6, cz + w.dz * 0.22, chill, w.dx, w.dz); }
-  if (FX.q < 1 || !FX.L5) return;
+  if (!prints || FX.q < 1 || !FX.L5) return;
   w.d += m;
   if (w.d < 0.7) return;
   w.d = 0; w.side = -w.side;
@@ -697,6 +758,41 @@ function tickPrints(dt) {
   PRINTS.fade.needsUpdate = true;
 }
 function clearPrints() { if (PRINTS.mesh) { PRINTS.mesh.count = 0; PRINTS.n = 0; PRINTS.t.fill(0); } }
+
+// ---------- Act VI: the First's marks, seen only in the hero's light ----------
+// FIRE_U: the hero's ring for the shaders (uFireR its drawn radius, uFireP where she stands), written each frame by light.js
+// tickLight (which exports it: this file cannot import that one)
+export const FIRE_U = { uFireR: { value: 0 }, uFireP: { value: new THREE.Vector2() } };
+// a brand-scorched, melted-smooth patch on the seabed rock: a char black at the heart, a glassy sheen where the stone ran,
+// a few ember-brown flecks at its edge, longer than it is wide (the way the brand was dragged)
+let markTex = null;
+function markTexture() {
+  if (markTex) return markTex;
+  const c = document.createElement('canvas'); c.width = 64; c.height = 96; const g = c.getContext('2d');
+  const rnd = (() => { let a = 41; return () => { a = (a * 16807) % 2147483647; return a / 2147483647; }; })();
+  g.translate(32, 48);
+  const blot = (x, y, rx, ry, col) => { const gr = g.createRadialGradient(x, y, 1, x, y, Math.max(rx, ry)); gr.addColorStop(0, col); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, TAU); g.fill(); };
+  for (let i = 0; i < 7; i++) blot((rnd() - 0.5) * 14, (rnd() - 0.5) * 50, 10 + rnd() * 9, 13 + rnd() * 12, 'rgba(14,10,8,0.85)');
+  blot(0, 0, 9, 26, 'rgba(10,8,7,0.95)');
+  for (let i = 0; i < 4; i++) blot((rnd() - 0.5) * 6, (rnd() - 0.5) * 30, 3 + rnd() * 3, 6 + rnd() * 6, 'rgba(120,128,136,0.55)');
+  for (let i = 0; i < 9; i++) { const a = rnd() * TAU, d = 0.75 + rnd() * 0.25; blot(Math.cos(a) * 14 * d, Math.sin(a) * 34 * d, 1.5 + rnd() * 2, 1.5 + rnd() * 2, 'rgba(120,52,20,0.7)'); }
+  return (markTex = new THREE.CanvasTexture(c));
+}
+// list: [{ x, z, rot }] (gen6 L.spots.trail); yAt(x, z): the ground under one. One instanced draw on every quality, each
+// mark's alpha x a smoothstep on its distance to the hero against her ring (1 inside 0.7 of it, 0 at its edge)
+export function marksMesh(list, yAt = () => 0) {
+  if (!list?.length) return null;
+  const geo = new THREE.PlaneGeometry(0.8, 1.2); geo.rotateX(-Math.PI / 2);
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uTex: { value: markTexture() }, uFireR: FIRE_U.uFireR, uFireP: FIRE_U.uFireP }, transparent: true, depthWrite: false,
+    vertexShader: 'varying vec2 vUv; varying vec2 vW; void main(){ vUv = uv; vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.0); vW = w.xz; gl_Position = projectionMatrix * viewMatrix * w; }',
+    fragmentShader: 'uniform sampler2D uTex; uniform float uFireR; uniform vec2 uFireP; varying vec2 vUv; varying vec2 vW; void main(){ float k = 1.0 - smoothstep(uFireR * 0.7, uFireR, distance(vW, uFireP)); vec4 t = texture2D(uTex, vUv); float a = t.a * k; if (a < 0.01) discard; gl_FragColor = vec4(t.rgb, a * 0.9); }'
+  });
+  const m = new THREE.InstancedMesh(geo, mat, list.length), M = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), up = new THREE.Vector3(0, 1, 0);
+  list.forEach((p, i) => { const k = 0.85 + ((i * 0.618) % 1) * 0.4; m.setMatrixAt(i, M.compose(v.set(p.x, yAt(p.x, p.z) + 0.028, p.z), q.setFromAxisAngle(up, p.rot || 0), one.set(k, 1, k))); });
+  m.instanceMatrix.needsUpdate = true; m.frustumCulled = false; m.renderOrder = 2; m.name = 'marks6';
+  return m;
+}
 
 // ---------- Act V: the frost at the screen's edges (hud.js lays it over the screen under a CSS mask that follows Cold) ----------
 // frostImage(): a data URL (the CSP allows data: images) of frost feathers growing in from the edges, clear in the middle;
