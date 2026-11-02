@@ -298,7 +298,11 @@ void main(){
 // Act VI: the colour 'dark' (the dark's drinking: a Lampbearer's line, a Black Flare, a Light-web). An additive black draws
 // nothing and a merely dark shape is lost on the dark silt, so it darkens the ground under it by its own alpha (normal
 // blending) and adds a bright violet rim over that, pulsing at 2 Hz (under three flashes a second), its fill darker as it
-// fills. One pass: premultiplied (ONE, ONE_MINUS_SRC_ALPHA). The colour is a value, so the co-op mirror carries it as is
+// fills. One pass: premultiplied (ONE, ONE_MINUS_SRC_ALPHA). The three calls below turn the string into TELE_DARK before
+// the co-op mirror hears them, a 24-bit colour no additive tell can show (a black but for one step of blue), so the
+// mirror's colour slot (coop.js fxArgs 'C': a number as it is, anything else white) carries it to every page unchanged
+export const TELE_DARK = 0x000001;
+const darkC = (a, i) => { if (a[i] === 'dark') a[i] = TELE_DARK; return a; };
 const TELE_DARK_FS = `
 varying vec2 vUv; uniform float uP; uniform vec3 uColor; uniform float uShape; uniform float uArc; uniform float uA; uniform float uT;
 void main(){
@@ -314,21 +318,21 @@ void main(){
 const DARK_T = { value: 0 };
 const teleGeo = new THREE.PlaneGeometry(2, 2); teleGeo.rotateX(-Math.PI / 2);
 function teleMat(color, shape, arc = 0.5) {
-  if (color === 'dark') return new THREE.ShaderMaterial({ uniforms: { uP: { value: 0 }, uColor: { value: new THREE.Color(0x8a70ff) }, uShape: { value: shape }, uArc: { value: arc }, uA: { value: 1 }, uT: DARK_T }, vertexShader: TELE_VS, fragmentShader: TELE_DARK_FS, transparent: true, depthWrite: false, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor });
+  if (color === TELE_DARK) return new THREE.ShaderMaterial({ uniforms: { uP: { value: 0 }, uColor: { value: new THREE.Color(0x8a70ff) }, uShape: { value: shape }, uArc: { value: arc }, uA: { value: 1 }, uT: DARK_T }, vertexShader: TELE_VS, fragmentShader: TELE_DARK_FS, transparent: true, depthWrite: false, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor });
   return new THREE.ShaderMaterial({ uniforms: { uP: { value: 0 }, uColor: { value: new THREE.Color(color) }, uShape: { value: shape }, uArc: { value: arc }, uA: { value: 1 } }, vertexShader: TELE_VS, fragmentShader: TELE_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
 }
 // circle at x,z radius r, fills over dur seconds
-export function teleCircle(...a) { return mir('teleCircle', teleCircle0, a); }
+export function teleCircle(...a) { return mir('teleCircle', teleCircle0, darkC(a, 4)); }
 function teleCircle0(x, z, r, dur, color = 0xff3020) {
   const m = new THREE.Mesh(teleGeo, teleMat(color, 0)); m.position.set(x, 0.06, z); m.scale.set(r, 1, r);
   return addTele(m, dur);
 }
-export function teleCone(...a) { return mir('teleCone', teleCone0, a); }
+export function teleCone(...a) { return mir('teleCone', teleCone0, darkC(a, 6)); }
 function teleCone0(x, z, rot, range, arc, dur, color = 0xff3020) {
   const m = new THREE.Mesh(teleGeo, teleMat(color, 1, arc)); m.position.set(x, 0.06, z); m.scale.set(range, 1, range); m.rotation.y = rot + Math.PI;
   return addTele(m, dur);
 }
-export function teleLine(...a) { return mir('teleLine', teleLine0, a); }
+export function teleLine(...a) { return mir('teleLine', teleLine0, darkC(a, 6)); }
 function teleLine0(x, z, rot, len, width, dur, color = 0xff3020) {
   const g = new THREE.PlaneGeometry(2, 2); g.rotateX(-Math.PI / 2); g.translate(0, 0, -1);
   const m = new THREE.Mesh(g, teleMat(color, 2)); m.position.set(x, 0.06, z); m.scale.set(width / 2, 1, len / 2); m.rotation.y = rot + Math.PI;
