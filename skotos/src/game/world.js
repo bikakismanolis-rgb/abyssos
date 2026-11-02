@@ -409,7 +409,8 @@ function spawnPack(z, p, D) {
   let n = Math.round(p.n * (0.85 + D.elite * 0.15) * COOP.pack[ci]);
   let elite = p.elite;
   if (!elite && Math.random() < 0.06 * D.elite * COOP.elite[ci]) elite = 'champion';
-  const weights = PACKS[tag] || PACKS.goblins;
+  // (an Act VI pack whose tag combat's PACKS does not hold yet: the Sunken stand in, never Act I's goblins)
+  const weights = PACKS[tag] || (ZONES[z.id]?.act === 6 ? PACKS.sunkenCrew : PACKS.goblins);
   const pick = () => rand.weighted(weights);
   // Act III packs are built round a lead creature (the den's bear, the grove's Rootwarden, the Mourners): it comes first
   const lead = PACK_LEAD[tag];
@@ -1548,16 +1549,31 @@ on('cairn', (it, z) => {
 // people and scenes story's). The farlight zone's own Act VI dressing is act6Presence's, from act5Presence
 export const drainedMode = () => (G.hero.flags.ketosDown ? 'dry' : 'mere');
 export const bottomMode = () => (G.hero.flags.herFire ? 'lit' : 'dark');
-// before the build: what the story has done to the layout (the Heap's gaps and the Stair's walls are gen6's, laid on it
-// here from the flags as they come)
-function act6Layout() {}
+// before the build: what the story has done to the layout (gen6's own: the Stair's shadow-walls, shut in the 'dark'
+// reading, open here for each lamp put out; the Heap's east and west gaps, plugged while the Ketos is awake). The zone is
+// cached, so every entry lays them again on its map (openings6)
+function act6Layout(id, L) {
+  const F = G.hero.flags, set = (cells, v) => { for (const [x, z] of cells) L.cells[z * L.w + x] = v; };
+  if (id === 'bottom') for (const wl of L.walls || []) if (F['blackLamp' + wl.k]) set(wl.cells, 1);
+  if (id === 'drained' && F.ketosWake && !F.ketosDown) for (const g of L.gaps || []) set(g.cells, 0);
+}
+// on every entry, quietly: the walls of the lamps put out opened, the Heap's gaps shut or opened (only where they differ;
+// the shadow-walls' thinning and the plugs' dust are the story's and the fight's, as they happen)
+function openings6(z) {
+  const F = G.hero.flags, L = z.L, m = z.map; let n = 0;
+  if (z.id === 'bottom') for (const wl of L.walls || []) if (F['blackLamp' + wl.k]) n += m.open(wl.cells);
+  if (z.id === 'drained') { const shut = !!F.ketosWake && !F.ketosDown; for (const g of L.gaps || []) n += shut ? m.close(g.cells, false) : m.open(g.cells); }
+  if (n) emit('mapChanged');
+  return n;
+}
 function act6Zone(z) {
   const L = z.L, S = L.spots;
   // (the zone flags Acts V and VI share: act5Zone's)
   z.cold = true; z.water = true;
   z.act6 = { hearths: [], lost: [], lures: [], wrecks: [], bells: [], lamps: [], walls: [], stones: [], niches: [], ring: null, ember: null, mere: null, shade: null, figs: {} };
-  // the place voices (story.js 'voice'): the Well under the black water, heard at the Mere's north edge before it drains
-  z.voices = [];
+  // the place voices (story.js 'voice'): the Skotos's, one in each place (gen6), and the Well under the black water, heard
+  // at the Mere's north edge before it drains
+  z.voices = (S.voices || []).map((v) => ({ ...v }));
   if (z.id === 'drained' && L.mode === 'mere' && S.mere) z.voices.push({ x: S.mere.x, z: S.mere.z - S.mere.r - 1.5, r: 4, key: 'd.wellShut' });
 }
 // the place to wake in an Act VI zone, kept in the save as Act V's is (flags.cp6[zone]): the camp (the Rope; the Well's
@@ -1585,6 +1601,7 @@ function act6Enter(z) {
   const F = G.hero.flags, lit = z.id === 'bottom' && !!F.herFire;
   setAtmosphere(ATMOS[lit ? 'bottomLit' : z.id] || ATMOS[z.id] || ATMOS.crypt);
   setAmbient(lit ? 'thaw' : z.id);
+  openings6(z);
   if (F.cp6?.[z.id]) checkpoint6(z, F.cp6[z.id]);
   act6Presence(z);
 }

@@ -801,13 +801,13 @@ export function rimWhole(L, r) {
   for (const [x, z] of circleCells(L, r.x, r.z, r.r1)) { const d = Math.hypot(x + 0.5 - r.x, z + 0.5 - r.z); if (d >= r.r0 && d < r.r1 && !firm(L, x + 0.5, z + 0.5)) return false; }
   return true;
 }
-function flood(L, mask, s, seen) {
+export function flood(L, mask, s, seen) {
   const { w, h } = L, q = [s]; seen[s] = 1;
   for (let hd = 0; hd < q.length; hd++) { const i = q[hd], x = i % w, z = (i - x) / w; for (const [dx, dz] of N4) { const X = x + dx, Z = z + dz, n = Z * w + X; if (X >= 0 && Z >= 0 && X < w && Z < h && mask[n] && !seen[n]) { seen[n] = 1; q.push(n); } } }
   return q;
 }
 // 4-neighbour steps from the cells src(i) through the cells via(i), capped
-function bfs(L, src, via, cap) {
+export function bfs(L, src, via, cap) {
   const { w, h } = L, N = w * h, d = new Uint8Array(N).fill(255), q = [];
   for (let i = 0; i < N; i++) if (src(i)) { d[i] = 0; q.push(i); }
   for (let hd = 0; hd < q.length; hd++) {
@@ -818,7 +818,7 @@ function bfs(L, src, via, cap) {
   return d;
 }
 // the cells of a turned rectangle (half sizes hw across, hd along, as blockR lays it)
-function rectCells(L, cx, cz, hw, hd, r) {
+export function rectCells(L, cx, cz, hw, hd, r) {
   const c = Math.cos(r), s = Math.sin(r), R = Math.hypot(hw, hd), out = [];
   for (let z = Math.floor(cz - R); z <= Math.floor(cz + R); z++) for (let x = Math.floor(cx - R); x <= Math.floor(cx + R); x++) {
     const dx = x + 0.5 - cx, dz = z + 0.5 - cz, u = dx * c - dz * s, v = dx * s + dz * c;
@@ -826,9 +826,9 @@ function rectCells(L, cx, cz, hw, hd, r) {
   }
   return out;
 }
-const segDist = (x, z, s) => { const dx = s.x1 - s.x0, dz = s.z1 - s.z0, l2 = dx * dx + dz * dz || 1, t = clamp(((x - s.x0) * dx + (z - s.z0) * dz) / l2, 0, 1); return Math.hypot(s.x0 + dx * t - x, s.z0 + dz * t - z); };
+export const segDist = (x, z, s) => { const dx = s.x1 - s.x0, dz = s.z1 - s.z0, l2 = dx * dx + dz * dz || 1, t = clamp(((x - s.x0) * dx + (z - s.z0) * dz) / l2, 0, 1); return Math.hypot(s.x0 + dx * t - x, s.z0 + dz * t - z); };
 // the nearest free dry cell to (x, z) within r (its centre), or null
-function landNear(L, K, blk, res, x, z, r = 3) {
+export function landNear(L, K, blk, res, x, z, r = 3) {
   let best = null, bd = 1e9;
   for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
     const cx = Math.floor(x) + dx, cz = Math.floor(z) + dz;
@@ -839,7 +839,7 @@ function landNear(L, K, blk, res, x, z, r = 3) {
   return best;
 }
 // the nearest open floor cell (after the footprints) to (x, z) within r
-function nearFloor(L, x, z, r) {
+export function nearFloor(L, x, z, r) {
   let best = null, bd = 1e9;
   for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
     const cx = Math.floor(x) + dx, cz = Math.floor(z) + dz;
@@ -860,7 +860,7 @@ function flatSpot(L, rng, R0, want, list, gap) {
   return null;
 }
 // a layout's drawing kit: classes painted in discs and strokes, footprints, the cells kept clear of dressing
-function makeDraw(L, K, blk, res, rng) {
+export function makeDraw(L, K, blk, res, rng) {
   const { w } = L;
   const disc = (cx, cz, r, k, keep) => { for (const [x, z] of circleCells(L, cx, cz, r)) { const i = z * w + x; if (!keep || !keep(K[i])) K[i] = k; } };
   const seg = (x0, z0, x1, z1, r, k, keep) => { const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, z1 - z0) * 2)); for (let j = 0; j <= n; j++) disc(x0 + ((x1 - x0) * j) / n, z0 + ((z1 - z0) * j) / n, r, k, keep); };
