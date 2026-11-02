@@ -10,6 +10,7 @@ Repo `/home/user/abyssos/skotos`. The repository root (Abyssos, everything outsi
 - The container restarts every few hours: keep progress notes in `docs/act6-briefs/reports/<lane>-progress.md` and write your stage report to `docs/act6-briefs/reports/<stage>-<lane>.md`.
 - A message from the owner about something else is not addressed to you: do your task.
 - Match the surrounding code (density, naming, comment style). No model names in code, comments or commits. Do not reformat files you do not own.
+- **Build before every commit** (`npx vite build --logLevel error`), not only at the end of a stage: every commit must start the game for Acts I-V (stage A's review found one that did not, 5574492: Stage A review below).
 
 ## The owner's decisions (27 October 2026)
 
@@ -733,3 +734,10 @@ A review of this contract against the code at 12e94d6 (and the cloud line at 35a
 - **Co-op:** `cells6` (tide.js only) sends the slush as its calls and a key without the time left; the Budget names the diet's bars (events a second, `ch.room()`, `relayStats.cut`, the day caps) and is measured on `NET=supa ... four` with Novas in the drip soak; no `brazier6` interact; `leifLit` and the Flare's `o.l[3]` added; the Rope camp's vendors open for a guest; `presenceAgain` cited for `onWorld`.
 - **Hooks named** that lanes need in others' files: story's `coast6`, `weep6` (world.js) and `act6Npc` with its NPC rows (actors.js); combat's `spawnBoss` wake rows and the `nearestInteract` priority (world.js); progression's `lampBonus` and `LIGHT.base` factor (light.js) and `ringPct: 0` (stats.js); look's 'reduce flicker' (`G.settings.flicker`, state.js and panels.js); `SAVE_FMT` in data.js; a `// Act VI: <lane>` block for every lane's scenarios. FAR_BEACONS 7-12 are world's; `perf6` is engine's; the actors.js stand-in rows are combat's.
 - **Smaller:** `SHADE_FORM` (not `SHADE`, taken at ai.js:1467); the Ketling's own CAST key `ketling` so its stand-in scale matches; `L.spots.casks` in bottom; the `L.ice?.` guard at gen5.js:787 and :856 too; `L.vault` as patch ids with `L.spots.vaults`; a frame-order list (Who ticks what each frame); the champion line world.js:401; G0's report `reports/stage0-assets.md`.
+
+## Stage A review (2 November)
+
+A review of stage A (6965a99..320dc92, every commit extracted and built) found three things; each is fixed or written into its section above:
+- **A commit that does not build: 5574492** (look, "true and false light"). Its light.js re-exports `FIRE_U` from fx.js (`export { FIRE_U } from '../gfx/fx.js'`, light.js:29), which fx.js only exports from the next commit, 0709cae; `npx vite build` fails (`"FIRE_U" is not exported by "src/gfx/fx.js"`) and in the browser the import is a module link error, so the game does not start at that commit, Acts I-V included. Every other commit of the range builds and passes `test-sync`; HEAD is not affected and the pushed history is not rewritten. **A bisect over stage A skips it** (`git bisect skip 5574492`). The working rules now ask for a build before every commit.
+- **The 'dark' telegraph on a guest's page** (Visuals, fx.js): the string did not cross the mirror, a guest drew a white additive tell; fixed with `TELE_DARK`, asserted by `coop.mjs darkmirror`.
+- **A damaged cloud copy in a conflict** (Saves): the conflict branch's guard stopped on any copy `heroFits` refuses, `bad_data` too, so a copy further on could no longer mend a damaged cloud record; it now stops only on `newer`, as Saves says (`test-sync` "a damaged cloud copy in a conflict").
