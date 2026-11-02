@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { clamp, damp, noise2 } from '../core/util.js';
 import { lang } from '../i18n/i18n.js';
+import { G } from '../game/state.js';
 
 export const R = {
   renderer: null, scene: null, camera: null,
@@ -11,7 +12,7 @@ export const R = {
   lost: false, reload: false, // the GL context was lost: nothing is drawn any more, the page reloads (onContextLost)
   basePR: 1, prScale: 1,
   w: 1, h: 1,
-  hemi: null, moon: null, heroLight: null, hemiBase: new THREE.Color(), drift: 0,
+  hemi: null, moon: null, heroLight: null, hemiBase: new THREE.Color(), drift: 0, driftCol: new THREE.Color(0x6af0b0), driftCol2: null,
   pool: [], sources: new Set(),
   cam: { x: 0, z: 0, tx: 0, tz: 0, zoom: 1, zoomT: 1, trauma: 0, shakeT: 0, lookY: 0.9, pitch: 0.95, dist: 15, kick: { x: 0, z: 0 } },
   time: 0,
@@ -136,16 +137,20 @@ export function setAtmosphere(a) {
   R.heroLight.userData.base = a.heroI ?? 30;
   R.heroLight.distance = a.heroRange ?? 15;
   R.cam.zoomT = a.zoom ?? 1;
-  // Act V: the aurora's brightness and darkness (sea.js reads them), and the hemisphere light's slow green drift
+  // Act V: the aurora's brightness and darkness (sea.js reads them), and the hemisphere light's slow green drift (Act VI:
+  // a.driftCol the colour it wanders toward, the aurora's green through the ice, or the thaw's warmth; a.driftCol2 a
+  // second one the first itself wanders toward, as the Drained Sea's green goes white and back)
   R.drift = a.drift || 0; R.hemiBase.set(a.sky);
+  R.driftCol.set(a.driftCol ?? AUR_GREEN_HEX); R.driftCol2 = a.driftCol2 != null ? (R.driftCol2 || new THREE.Color()).set(a.driftCol2) : null;
   R.atmosHook?.(a);
 }
 // (the drift: the hemisphere colour wanders between its own and the aurora's green, over about a minute and a half)
-const AUR_GREEN = new THREE.Color(0x6af0b0);
+const AUR_GREEN_HEX = 0x6af0b0, _dc = new THREE.Color();
 function driftHemi() {
   if (!R.drift) return;
   const k = R.drift * (0.5 + 0.5 * Math.sin(R.time * 0.07)) * (0.6 + 0.4 * Math.sin(R.time * 0.23 + 1.3));
-  R.hemi.color.copy(R.hemiBase).lerp(AUR_GREEN, k * 0.6);
+  const to = R.driftCol2 ? _dc.copy(R.driftCol).lerp(R.driftCol2, 0.5 + 0.5 * Math.sin(R.time * 0.041 + 2.1)) : R.driftCol;
+  R.hemi.color.copy(R.hemiBase).lerp(to, k * 0.6);
 }
 
 // ---------- dynamic light sources ----------
@@ -190,6 +195,8 @@ function updateLights(dt) {
     let k = 1;
     if (s.flicker === 'beat') k = beatK;
     else if (s.flicker === 'seed') k = (1 - LIGHTS.autumn) * (1 + 0.16 * (noise2(R.time * 1.3 + s.phase, s.phase) - 0.5));
+    // (Act VI's true light: the tremble, +-10% from band-limited noise; none with 'reduce flicker')
+    else if (s.flicker === 'tremble') { const n = trembleStep(s.trem ||= trembler(Math.floor(s.phase * 1e4)), dt); k = G.settings.flicker ? 1 : 1 + 0.1 * n; }
     else if (s.flicker) k = 1 + s.flicker * (noise2(R.time * 9 + s.phase, s.phase) - 0.5) * 2;
     if (s.fade) k *= s.life > 0 ? Math.min(1, s.life / s.fade) : 1;
     if (s.gain) k *= s.gain.k; // a shared dimmer (an Amber Tear once its memory is spent)
@@ -198,6 +205,38 @@ function updateLights(dt) {
     l.intensity = s.intensity * k;
     l.distance = s.range;
   }
+}
+
+// ---------- true light's tremble (Act VI: docs/act6-contract.md, Light) ----------
+// Band-limited noise: white noise stepped at 60 Hz through a 4th-order Butterworth high-pass at 3 Hz and a 4th-order
+// low-pass at 7 Hz (two biquads each), so about 80% of its power lies in 3-7 Hz and it has no beat (noise, never summed
+// sines), one seed per light. trembler(seed) -> T; trembleStep(T, dt) -> n in [-1, 1] (its RMS about 0.38, clipped under 1%
+// of the time), the same for the same seed and time at any frame rate (fixed steps, the last two joined linearly).
+// light.js trembles its pools with it (their drawn radius and intensity), updateLights a source of flicker 'tremble'
+const TR_FS = 60, TR_K = 1.8;
+const biquad = (lp, f, q) => {
+  const w = (2 * Math.PI * f) / TR_FS, c = Math.cos(w), al = Math.sin(w) / (2 * q), a0 = 1 + al, b = lp ? (1 - c) / 2 : (1 + c) / 2;
+  return [b / a0, (lp ? 2 * b : -2 * b) / a0, b / a0, (-2 * c) / a0, (1 - al) / a0];
+};
+const TR_SECS = [biquad(false, 3, 0.5412), biquad(false, 3, 1.3066), biquad(true, 7, 0.5412), biquad(true, 7, 1.3066)];
+function trStep(T) {
+  // (the seed's own white noise: mulberry32)
+  let a = (T.s = (T.s + 0x6d2b79f5) | 0), t = Math.imul(a ^ (a >>> 15), 1 | a);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  let x = (((t ^ (t >>> 14)) >>> 0) / 4294967296) * 2 - 1;
+  for (let k = 0; k < 4; k++) { const q = TR_SECS[k], z = T.z, j = k * 2, y = q[0] * x + z[j]; z[j] = q[1] * x - q[3] * y + z[j + 1]; z[j + 1] = q[2] * x - q[4] * y; x = y; }
+  T.y0 = T.y1; T.y1 = clamp(x * TR_K, -1, 1);
+}
+export function trembler(seed = 1) {
+  const T = { s: seed | 0 || 1, z: new Float64Array(8), y0: 0, y1: 0, acc: 0 };
+  // (a second and a half of it run off, so it starts in its stride, not from rest)
+  for (let i = 0; i < 90; i++) trStep(T);
+  return T;
+}
+export function trembleStep(T, dt) {
+  T.acc = Math.min(T.acc + dt * TR_FS, 8);
+  while (T.acc >= 1) { T.acc -= 1; trStep(T); }
+  return T.y0 + (T.y1 - T.y0) * T.acc;
 }
 
 // ---------- camera ----------

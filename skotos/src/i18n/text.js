@@ -1120,5 +1120,7 @@ export const TEXT = {
   'd.skotos6.w4.r': ['...κι εσύ, παιδί του δάσους... ξέρεις πώς είναι να σε στέλνουν μακριά για να κρυφτείς...', '...and you, child of the wood... you know what it is to be sent away to hide...'],
   'd.skotos6.w5': ['...εδώ κάτω τα κρατάω όλα... κανείς δεν τα ζητάει...', '...down here i keep everything... no one asks for it back...'],
   'd.skotos6.w6': ['...ένας βασιλιάς, ένας ιστός, ένα χωριό... τα ξέχασαν... εγώ όχι πια...', '...a king, a web, a village... they forgot them... not i, not any more...'],
-  'd.skotos6.w7': ['...ποιος σου έμαθε να κουβαλάς φωτιά;... κάποια σου το έμαθε... κάποια πολύ παλιά...', '...who taught you to carry fire?... someone taught you... someone very old...']
+  'd.skotos6.w7': ['...ποιος σου έμαθε να κουβαλάς φωτιά;... κάποια σου το έμαθε... κάποια πολύ παλιά...', '...who taught you to carry fire?... someone taught you... someone very old...'],
+  // Act VI: look (the 'reduce flicker' setting: true light's tremble cut to a steady glow; the story lane owns it from D)
+  'set.flicker': ['Λιγότερο τρεμόπαιγμα', 'Reduce flicker']
 };

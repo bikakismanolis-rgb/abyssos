@@ -24,6 +24,9 @@ const V4 = () => new THREE.Vector4(0, 0, 0, 0);
 // uBayLevel: Skerry Bay's own level (tide.js: 0 under the clock, which never reaches it; the Walking Tower's while it
 // owns the water); the water over the bay (aBay) stands at it instead of uLevel.
 // SEA.sky (a plain boolean): the aurora dome may show in the cines (act5Enter, townFires after seaLit).
+// Act VI (docs/act6-contract.md, Visuals): SEA_BLACK, the black water of the pockets and the Mere (no aurora in it, no
+// light paths, no moon glint, the swell all but still; its 0.45 m step and its pale edge kept, gameplay), and its slush
+// crust (tSlush); ICE_VAULT, the vault overhead seen from below in the cines only (vaultMesh).
 export const SEA = {
   uTime: { value: 0 },
   uLevel: { value: 0 }, uWetLevel: { value: 0 }, uBayLevel: { value: 0 },
@@ -35,6 +38,9 @@ export const SEA = {
   uBeam: { value: [V4(), V4()] },
   uFreeze: { value: [V4(), V4(), V4()] }, uFreezeAll: { value: 0 }, uFrzT: { value: 0 }, uFrzOn: { value: 0 }, uGlowOn: { value: 0 },
   uWake: { value: V4() },
+  // Act VI: the black water's slush (tSlush: the drawn layout's R8 w x h, any byte not 0 a slush cell, tide.js writes it:
+  // L.tSlush, slushSet) and the vault's thin places the cines see (uSkyV: x, z, r of up to 8 skylights, vaultMesh)
+  tSlush: { value: null }, uSkyV: { value: Array.from({ length: 8 }, () => new THREE.Vector3(0, 0, 0)) },
   sky: false
 };
 // the per-frame light the sea's own shading reads (the water is unlit: it mirrors and glows; set before each render)
@@ -202,23 +208,24 @@ vec3 freezeIf(vec2 p, float lead, float shore) { return uFrzOn > 0.5 ? freezeAt(
 const SEA_MATS = new Map();
 // (tBed's grid: this many texels to a cell, buildSea)
 const BS = 4;
+// o.black (Act VI): the black water, SEA_BLACK
 function seaMat(o = {}) {
-  const hi = R.quality >= 1, key = (o.low ? 'l' : 't') + (o.far ? 'f' : '') + (hi ? 'h' : '') + (R.quality >= 2 ? '2' : '');
+  const hi = R.quality >= 1, key = (o.low ? 'l' : 't') + (o.far ? 'f' : '') + (o.black ? 'b' : '') + (hi ? 'h' : '') + (R.quality >= 2 ? '2' : '');
   if (SEA_MATS.has(key)) return SEA_MATS.get(key);
   noiseTex();
   // (the Farthest Light's leads have no tide and are never see-through: opaque, drawn first with the ice, so the sea bed
   // under them is turned away by the depth test instead of shaded)
   const m = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: !o.low, depthWrite: !!o.low });
-  const u = Object.assign(SEA_U({ uLevel: SEA.uLevel, uBayLevel: SEA.uBayLevel, uFreeze: SEA.uFreeze, uFreezeAll: SEA.uFreezeAll, uFrzT: SEA.uFrzT, uFrzOn: SEA.uFrzOn, uWake: SEA.uWake, uLights: SEA.uLights, tBed: SEA.tBed, uBedS: SEA.uBedS }), LIT);
+  const u = Object.assign(SEA_U({ uLevel: SEA.uLevel, uBayLevel: SEA.uBayLevel, uFreeze: SEA.uFreeze, uFreezeAll: SEA.uFreezeAll, uFrzT: SEA.uFrzT, uFrzOn: SEA.uFrzOn, uWake: SEA.uWake, uLights: SEA.uLights, tBed: SEA.tBed, uBedS: SEA.uBedS, tSlush: SEA.tSlush }), LIT);
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
-    sh.defines = Object.assign(sh.defines || {}, hi ? { SEA_HI: '' } : {}, R.quality >= 2 ? { SEA_Q2: '' } : {}, o.low ? { SEA_LOW: '' } : {}, o.far ? { SEA_FAR: '' } : {});
+    sh.defines = Object.assign(sh.defines || {}, hi ? { SEA_HI: '' } : {}, R.quality >= 2 ? { SEA_Q2: '' } : {}, o.low ? { SEA_LOW: '' } : {}, o.far ? { SEA_FAR: '' } : {}, o.black ? { SEA_BLACK: '' } : {});
     sh.vertexShader = sh.vertexShader.replace('#include <common>', `#include <common>
 attribute float aBed; attribute float aHold; attribute float aLead; attribute float aShore; attribute float aFrz; attribute float aBay; attribute float aLand; attribute float aGd; attribute float aDrop; attribute vec2 aG; attribute float aBedS;
 uniform float uLevel; uniform float uBayLevel; uniform float uFrzT;
 varying vec3 vWP; varying float vDep; varying float vLead; varying float vShore; varying float vSw; varying float vHold; varying float vFrz; varying float vLand; varying float vCr; varying float vGd; varying float vDrop; varying vec2 vG; varying float vBay;
 ${COMMON}
-#if defined(SEA_HI) && !defined(SEA_FAR)
+#if defined(SEA_HI) && !defined(SEA_FAR) && !defined(SEA_BLACK)
 varying vec3 vAur; varying float vAurK;
 #endif
 ${SWELL}
@@ -239,6 +246,10 @@ ${FREEZE}`)
   // the Freeze holds the swell where it stopped: the crests it caught stay as ice
   float st = mix(uTime, uFrzT, step(0.001, uFreezeAll));
   float sw = swell(wp0.xz, st);
+#ifdef SEA_BLACK
+  // (the black water lies under the ice, out of the wind: a slow heave, no more)
+  sw *= 0.3;
+#endif
 #ifdef SEA_LOW
   float y = -0.08 + sw * 0.025;
 #else
@@ -279,7 +290,7 @@ ${FREEZE}`)
   y = mix(y, ${(ICE_Y - 0.005).toFixed(3)}, frz.y);
   transformed.y = y;
   vWP = vec3(wp0.x, y, wp0.z); vDep = dep; vLead = aLead; vShore = aShore; vSw = sw; vHold = aHold; vFrz = aFrz; vLand = aLand; vGd = aGd; vDrop = aDrop; vG = aG; vBay = aBay;
-#if defined(SEA_HI) && !defined(SEA_FAR)
+#if defined(SEA_HI) && !defined(SEA_FAR) && !defined(SEA_BLACK)
   // the aurora in the water, worked out at the vertices (a metre apart: its folds and rays are metres wide); the ripple
   // breaks it into streaks in the fragment. Under the black aurora: its dark curtains (vAurK), blotting the sky's sheen
   vAur = vec3(0.0); vAurK = 0.0;
@@ -301,10 +312,10 @@ ${FREEZE}`)
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
 ${COMMON}
 uniform float uFrzT; uniform vec4 uWake; uniform vec4 uLights[2];
-uniform sampler2D tBed; uniform vec2 uBedS; uniform float uLevel; uniform float uBayLevel;
+uniform sampler2D tBed; uniform vec2 uBedS; uniform float uLevel; uniform float uBayLevel; uniform sampler2D tSlush;
 uniform float uAmbK; uniform vec3 uSkyC; uniform vec3 uMoonD; uniform vec3 uMoonC; uniform vec3 uHeroP; uniform vec3 uHeroC; uniform float uHeroR;
 varying vec3 vWP; varying float vDep; varying float vLead; varying float vShore; varying float vSw; varying float vHold; varying float vFrz; varying float vLand; varying float vCr; varying float vGd; varying float vDrop; varying vec2 vG; varying float vBay;
-#if defined(SEA_HI) && !defined(SEA_FAR)
+#if defined(SEA_HI) && !defined(SEA_FAR) && !defined(SEA_BLACK)
 varying vec3 vAur; varying float vAurK;
 #endif
 ${FREEZE}
@@ -361,6 +372,9 @@ float sq256(float x) { x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; r
   // would scatter it into noise)
   // (and the swell's own slope in both, so open water heaves as a sheet: thin ice beside it lies still)
   vec2 swg = (cos(P.x * 0.21 + P.y * 0.13 + t * 1.1) * vec2(0.21, 0.13) + cos(-P.x * 0.09 + P.y * 0.27 + t * 0.83) * vec2(-0.09, 0.27)) * 0.5 * 0.18 * 2.5 * deep;
+#ifdef SEA_BLACK
+  swg *= 0.3;
+#endif
   vec3 N = normalize(vec3(g.x * mix(0.12, 0.3, deep) - swg.x, 1.0, g.y * mix(0.12, 0.3, deep) - swg.y));
   vec3 Nc = normalize(vec3((n1.r - 0.5) * 0.08 - swg.x, 1.0, (n1.g - 0.5) * 0.08 - swg.y));
   float NdV = clamp(dot(Nc, V), 0.0, 1.0), F = 0.02 + 0.98 * sq4(1.0 - NdV) * (1.0 - NdV);
@@ -372,6 +386,10 @@ float sq256(float x) { x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; r
 #ifdef SEA_LOW
   dcol = vec3(0.005, 0.014, 0.024);
 #endif
+#ifdef SEA_BLACK
+  // (black water: a cold ink where she can wade, near black where it closes; violet only in what it gives back)
+  shal = vec3(0.017, 0.018, 0.026); dcol = vec3(0.0035, 0.004, 0.0085);
+#endif
   float amb = 0.45 + 0.55 * uAmbK;
   // (the sky the glints catch: never less than a cold glow, so the water moves even under a dark sky)
   vec3 skyG = max(uSkyC, vec3(0.012, 0.02, 0.03));
@@ -379,7 +397,10 @@ float sq256(float x) { x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; r
   // the sky in it: a dull sheen even looking down (a night sea is a mirror), brighter at a grazing look; under the black
   // aurora its dark curtains blot the sheen out in moving bands
   float sheen = (0.16 + 0.6 * F) * mix(0.4, 1.0, deep);
-#if defined(SEA_HI) && !defined(SEA_FAR)
+#ifdef SEA_BLACK
+  sheen *= 0.45;
+#endif
+#if defined(SEA_HI) && !defined(SEA_FAR) && !defined(SEA_BLACK)
   sheen *= 1.0 - 0.85 * vAurK;
   col += vec3(0.05, 0.02, 0.09) * vAurK * smoothstep(0.2, 0.5, vAurK) * (1.0 - smoothstep(0.5, 0.9, vAurK)) * 0.25 * deep;
 #endif
@@ -404,6 +425,7 @@ float sq256(float x) { x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; r
 #endif
   // the long swell: its crests catch the sky; small ripples glint (the water reads by its motion)
   col += skyG * smoothstep(-0.2, 1.0, vSw) * 0.3 * deep;
+#ifndef SEA_BLACK
   // (the glints gathered in patches a few metres across, where the ripple's broad read is high: strewn evenly they lay
   // over the water as confetti)
   // (white and the moon's colour, not the sky's cyan, soft, and gathered toward the moon's path: cyan and hard-edged they lay
@@ -415,6 +437,7 @@ float sq256(float x) { x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; r
   }
   // the moon's glint, broken by the ripple, and its broad path
   col += uMoonC * (sq256(max(dot(Rf, uMoonD), 0.0)) * 0.37 + sq16(max(dot(Rc, uMoonD), 0.0)) * 0.032) * deep;
+#endif
   // the hero's lantern: it lights the shallows and glints on the water
   // (worked out only within its reach: none of it shows past uHeroR)
   vec3 hd = uHeroP - vWP; float hl = length(hd);
@@ -422,9 +445,14 @@ float sq256(float x) { x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; r
     hd /= max(hl, 0.001);
     float ha = sq2(1.0 - sq4(hl / uHeroR)) / max(pow(hl, 1.4), 0.5);
     // (her lantern's glint off the ripple narrow and few: wide, it laid a field of flecks round her feet)
+#ifdef SEA_BLACK
+    // (the black water takes her light as ink does: a glint and a faint sheen, the floor under it barely lit)
+    col += uHeroC * ha * (0.0016 * (1.0 - deep) * max(hd.y, 0.0) + 0.0007 * deep + sq256(max(dot(Rf, hd), 0.0)) * 0.014);
+#else
     col += uHeroC * ha * (0.008 * (1.0 - deep) * max(hd.y, 0.0) + 0.0025 * deep + sq256(max(dot(Rf, hd), 0.0)) * 0.011);
+#endif
   }
-#ifdef SEA_HI
+#if defined(SEA_HI) && !defined(SEA_BLACK)
   // the aurora in the water: the reflected ray meets a sheet of sky 70 m up (not under the black aurora, where it would
   // be all but black: it comes back with the returning front)
 #ifdef SEA_FAR
@@ -462,7 +490,26 @@ float sq256(float x) { x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; r
   }
 #endif
   float plateK = 0.0;
-#ifndef SEA_LOW
+#ifdef SEA_BLACK
+  // slush (tide.js: a cell held at wading whatever the level, tSlush): a crust of grey brash over the black water, its
+  // plates jostling a little, black water in the cracks between; read across the cells' edges, so it lies in soft patches
+  // (a byte of 1 or of 255 alike: the cell's read scaled up and held to 1)
+  {
+    float slK = clamp(texture2D(tSlush, P / uMap).r * 255.0, 0.0, 1.0);
+    if (slK > 0.01) {
+      // (a grey mush lying on the water in soft drifts, cracked finely between small floes: plates of one size with dark
+      // gaps between them read as a paved floor laid on the water)
+      vec2 sv = vorT(P * 4.2 + (n1.ba - 0.5) * 0.9 + vec2(sin(t * 0.5 + P.y * 0.4), cos(t * 0.43 + P.x * 0.4)) * 0.03 + 1.7);
+      // (its edge ragged floe by floe: the slow reads alone left it ruled along the cells' edges)
+      float cover = smoothstep(0.4, 0.7, slK + (n1.a - 0.5) * 0.5 + (sv.y - 0.5) * 0.7);
+      float mush = smoothstep(0.25, 0.75, n1.g * 0.55 + n2.r * 0.45);
+      plateK = cover * (0.7 + 0.3 * smoothstep(0.0, 0.05, sv.x));
+      vec3 pc = vec3(0.06, 0.063, 0.07) * (0.7 + 0.45 * mush + 0.15 * sv.y) * amb + skyG * (0.04 + 0.04 * mush);
+      col = mix(col, pc, plateK * 0.88);
+    }
+  }
+#endif
+#if !defined(SEA_LOW) && !defined(SEA_BLACK)
   // shore ice: brash plates crowding the water's edge wherever it meets the land, at any tide (their outer edge ragged,
   // plate by plate, so a shore that runs straight along the cells reads as a frayed band of floating ice, not a rule);
   // the distance to the waterline taken from the depth's slope, near it
@@ -491,7 +538,8 @@ float sq256(float x) { x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; r
   // (and a few sparkles on the shallows, here and gone)
   // (each a round point of two or three pixels at a hashed spot in its cell: the cell's own square, 14 cm, read as pale
   // squares strewn over the flats)
-  // (none on closed water)
+  // (none on closed water, nor on the black water)
+#ifndef SEA_BLACK
   if (deep < 0.999) {
     vec2 sc = P * 7.0, ci = floor(sc);
     float tt = floor(t * 2.0 + n1.g * 3.0);
@@ -500,7 +548,8 @@ float sq256(float x) { x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; r
       col += vec3(0.75, 0.82, 0.9) * dot(skyG, vec3(0.33)) * 9.0 * (1.0 - smoothstep(px * 0.6, px * 1.6, d)) * (1.0 - deep) * smoothstep(0.02, 0.1, dw);
     }
   }
-#ifndef SEA_LOW
+#endif
+#if !defined(SEA_LOW) && !defined(SEA_BLACK)
   // and wherever it meets a steep shore at any depth (a rock, an islet, the bay's rim, the cliff's foot): a broken line of
   // foam riding the swell (vLand: the share of land at the corners, 0.5 along the shore's edge)
   // (a thin lacy line hugging the edge, its froth a fine web, riding the swell: a band of noise blotches a cell wide read as
@@ -523,6 +572,10 @@ float sq256(float x) { x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; r
     foam = max(foam, max(max(kel, trail * 0.85), bow * 0.8) * uWake.w * smoothstep(0.3, 0.6, n1.a + n1.r * 0.4));
   }
 #endif
+#ifdef SEA_BLACK
+  // (its lapping a grey scum, thin)
+  foam *= 0.45;
+#endif
   col = mix(col, vec3(0.5, 0.56, 0.58) * uAmbK + uSkyC * 0.3, clamp(foam, 0.0, 1.0) * 0.8);
   // the faint pale line along the edge of closed water (on the flats: where the bed drops away steeply, off a jetty or a
   // rock, the shore itself shows where the water closes, and a line there would only trace the cells' steps)
@@ -531,8 +584,14 @@ float sq256(float x) { x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; r
   // (and not where the step lies at the shore itself, the high flats against the low: there the shore shows it, and the
   // line along it read as a dashed map border; in long lengths, not dashes)
   float edge = (1.0 - smoothstep(fw * 0.5, fw * 1.6, abs(depD + sn * 0.4 - 0.4))) * (0.75 + 0.25 * sin(t * 1.7 + P.x * 0.7 + P.y * 0.5)) * (1.0 - smoothstep(0.35, 0.8, slope)) * smoothstep(0.35, 0.6, n1.g + (n1.r - 0.5) * 0.4);
+#ifdef SEA_BLACK
+  // (the black water's closed edge a pale cold violet-grey: where she cannot wade must read at a glance)
+  col = mix(col, vec3(0.24, 0.25, 0.32) * (0.55 + 0.45 * uAmbK), edge * 0.38);
+  float a = mix(mix(0.7, 0.9, smoothstep(0.0, 0.42, dw)), 0.97, deep);
+#else
   col = mix(col, vec3(0.5, 0.62, 0.68) * uAmbK, edge * 0.45);
   float a = mix(mix(0.32, 0.62, smoothstep(0.0, 0.42, dw)), 0.95, deep);
+#endif
   // (where the bed drops away steeply, off a rock, an islet or the bay's rim, the water is closed right up to the shore:
   // no see-through strip over the drop's dark face to trace the cells' steps; and wherever the ground under it lies a
   // fifth of a metre down or more)
@@ -547,7 +606,7 @@ float sq256(float x) { x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; r
   a = max(a, edge * 0.5) * smoothstep(0.0, 0.06, dw) * film;
   // (the foam and the plates too only where there is water: on a flat at the level they ringed the dry sand)
   a = max(a, max(foam * 0.7, plateK * 0.95) * film);
-#ifndef SEA_FAR
+#if !defined(SEA_FAR) && !defined(SEA_BLACK)
   // frozen: white rime in a frost-crystal pattern; the front glitters as it races out
   vec3 frz = freezeIf(P, vLead, vShore);
   frz.y = max(frz.y, vFrz);
@@ -612,14 +671,16 @@ export function iceFlatBed(L, vx, vz) {
   return ni && nf ? s / nf : null;
 }
 // Skerry Bay's share of each corner's cells (0-1, (w+1)(h+1); null off the coast): the water and the ground over the bay
-// read uBayLevel instead of uLevel (cached on L)
+// read uBayLevel instead of uLevel (cached on L). Act VI: the Drained Sea's Mere (its cells L.pocket 2) the same, so it
+// stands at its own level while the pockets breathe with the clock (tide.js); the Bottom has none (null)
 export function bayCorners(L) {
-  if (L.type !== 'coast' || !L.boss) return null;
+  const mere = L.type === 'drained' && !!L.pocket;
+  if (!mere && (L.type !== 'coast' || !L.boss)) return null;
   if (L.bay5) return L.bay5;
-  const { w, h } = L, W = w + 1, out = new Float32Array(W * (h + 1));
+  const { w, h } = L, W = w + 1, out = new Float32Array(W * (h + 1)), inB = mere ? (x, z) => L.pocket[z * w + x] === 2 : (x, z) => inBay(L, x, z);
   for (let vz = 0; vz <= h; vz++) for (let vx = 0; vx <= w; vx++) {
     let n = 0;
-    for (const [dx, dz] of CORNER) { const x = vx + dx, z = vz + dz; if (x >= 0 && z >= 0 && x < w && z < h && inBay(L, x, z)) n++; }
+    for (const [dx, dz] of CORNER) { const x = vx + dx, z = vz + dz; if (x >= 0 && z >= 0 && x < w && z < h && inB(x, z)) n++; }
     out[vz * W + vx] = n / 4;
   }
   return (L.bay5 = out);
@@ -748,7 +809,10 @@ export function buildSea(L, group, quality = R.quality) {
     const i = q[hd], cx = i % w, cz = (i - cx) / w;
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = cx + dx, nz = cz + dz, n = nz * w + nx; if (nx >= 0 && nz >= 0 && nx < w && nz < h && D[n] > D[i] + 1) { D[n] = D[i] + 1; q.push(n); } }
   }
-  const mat = seaMat({ low }), J = shoreJit(L), BY = bayCorners(L), FB = FRZ_BAND(L), edgeI = (i) => !!FB && i < 2 * w && !!L.low[i] && i % w >= FB[0] && i % w < FB[1];
+  // (Act VI: the pockets' and the Mere's black water, and its slush, L.tSlush: gen6's layouts carry L.pocket and no ice)
+  const black = !!L.pocket && !L.ice;
+  if (black && !L.tSlush) { const t = new THREE.DataTexture(new Uint8Array(N), w, h, THREE.RedFormat); t.magFilter = t.minFilter = THREE.LinearFilter; t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; t.generateMipmaps = false; t.needsUpdate = true; L.tSlush = t; }
+  const mat = seaMat({ low, black }), J = shoreJit(L), BY = bayCorners(L), FB = FRZ_BAND(L), edgeI = (i) => !!FB && i < 2 * w && !!L.low[i] && i % w >= FB[0] && i % w < FB[1];
   // (the water's bed at a corner of level land: a hand over its wettest cell's, not the land's own averaged in. With the
   // land's (BED_DRY) in the mean the surface sank under the ground most of a cell out from the shore, so the water's edge
   // ran along the next row of corners, the cells' line a metre off the land, a pale strip of nothing between)
@@ -806,9 +870,9 @@ export function buildSea(L, group, quality = R.quality) {
   const out = new THREE.Group(); out.name = 'sea';
   // (the open water's cells, for the Freeze's spray: sprayTick)
   const open = [];
-  if (!low) for (let i = 0; i < N; i += 3) if (wet(i) && !iceLike(i) && !L.ice[i] && L.bed[i] < 0.2) open.push(i % w + 0.5, Math.floor(i / w) + 0.5);
+  if (!low) for (let i = 0; i < N; i += 3) if (wet(i) && !iceLike(i) && !L.ice?.[i] && L.bed[i] < 0.2) open.push(i % w + 0.5, Math.floor(i / w) + 0.5);
   L.open5 = Float32Array.from(open);
-  const hook = () => { SEA.uMap.value.set(w, h); SEA.seaL = L; if (L.bedTex5) { SEA.tBed.value = L.bedTex5; SEA.uBedS.value.set(w * BS + 1, h * BS + 1); } };
+  const hook = () => { SEA.uMap.value.set(w, h); SEA.seaL = L; if (L.bedTex5) { SEA.tBed.value = L.bedTex5; SEA.uBedS.value.set(w * BS + 1, h * BS + 1); } if (L.tSlush) SEA.tSlush.value = L.tSlush; };
   for (let cz0 = 0; cz0 < h; cz0 += CH) for (let cx0 = 0; cx0 < w; cx0 += CH) {
     const vid = new Map(), pos = [], bed = [], hold = [], ld = [], sh = [], fr = [], by = [], lnd = [], gd = [], dp = [], gg = [], bs = [], idx = [];
     const vert = (vx, vz) => {
@@ -967,8 +1031,9 @@ function frameHook() { if (R.time !== hookT) { hookT = R.time; lightTick(); } }
 // the crack stage per cell from tCrack (1 a hairline, 2 a web, 3 crazed white, 4 broken: discarded, the water shows,
 // 5 slush). o.far: the far pack ice (no cracks); o.window: an ice window's clear pane (ICE_WINDOW); o.floe: a floe shard
 const ICE_MATS = new Map();
+// o.vault (Act VI): the vault overhead seen from below, ICE_VAULT (vaultMesh)
 export function iceMat(o = {}) {
-  const hi = R.quality >= 1, key = (o.far ? 'f' + (o.far === 'dark' ? 'd' : '') : '') + (o.window ? 'w' : '') + (o.floe ? 'o' : '') + (hi ? 'h' : '') + (R.quality >= 2 ? '2' : '');
+  const hi = R.quality >= 1, key = (o.far ? 'f' + (o.far === 'dark' ? 'd' : '') : '') + (o.window ? 'w' : '') + (o.floe ? 'o' : '') + (o.vault ? 'v' : '') + (hi ? 'h' : '') + (R.quality >= 2 ? '2' : '');
   if (ICE_MATS.has(key)) return ICE_MATS.get(key);
   noiseTex(); crackTex();
   const lay = ENV.layers['rime/ice'] || null;
@@ -978,14 +1043,14 @@ export function iceMat(o = {}) {
   const m = R.quality >= 2 && o.window ? new THREE.MeshPhongMaterial({ color: 0xffffff, specular: new THREE.Color(o.window ? 0x343c46 : 0x2a3440), shininess: o.window ? 300 : 420 })
     : new THREE.MeshLambertMaterial({ color: 0xffffff });
   if (o.window) { m.transparent = true; m.depthWrite = false; }
-  const u = SEA_U({ tCrack: SEA.tCrack, uShade: SEA.uShade, uGlow: SEA.uGlow, uGlowOn: SEA.uGlowOn, uLights: SEA.uLights, uFreezeAll: SEA.uFreezeAll, tIceL: { value: lay?.d || null }, uSkyC: LIT.uSkyC, uHeroP: LIT.uHeroP, uHeroC: LIT.uHeroC, uHeroR: LIT.uHeroR, uMoonD: LIT.uMoonD, uMoonC: LIT.uMoonC });
+  const u = SEA_U({ tCrack: SEA.tCrack, uShade: SEA.uShade, uGlow: SEA.uGlow, uGlowOn: SEA.uGlowOn, uLights: SEA.uLights, uFreezeAll: SEA.uFreezeAll, tIceL: { value: lay?.d || null }, uSkyC: LIT.uSkyC, uHeroP: LIT.uHeroP, uHeroC: LIT.uHeroC, uHeroR: LIT.uHeroR, uMoonD: LIT.uMoonD, uMoonC: LIT.uMoonC, uSkyV: SEA.uSkyV });
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
-    sh.defines = Object.assign(sh.defines || {}, hi ? { ICE_HI: '' } : {}, hi && !o.window ? { ICE_GLINT: '' } : {}, hi && R.quality < 2 ? { ICE_Q1: '' } : {}, o.far ? { ICE_FAR: '' } : {}, o.far === 'dark' ? { ICE_FARD: '' } : {}, o.window ? { ICE_WINDOW: '' } : {}, o.floe ? { ICE_FLOE: '' } : {}, lay ? { ICE_LAY: '' } : {});
+    sh.defines = Object.assign(sh.defines || {}, hi ? { ICE_HI: '' } : {}, hi && !o.window && !o.vault ? { ICE_GLINT: '' } : {}, hi && R.quality < 2 ? { ICE_Q1: '' } : {}, o.far ? { ICE_FAR: '' } : {}, o.far === 'dark' ? { ICE_FARD: '' } : {}, o.window ? { ICE_WINDOW: '' } : {}, o.floe ? { ICE_FLOE: '' } : {}, o.vault ? { ICE_VAULT: '' } : {}, lay ? { ICE_LAY: '' } : {});
     sh.vertexShader = sh.vertexShader.replace('#include <common>', `#include <common>
 attribute vec2 aC; attribute vec2 aE; attribute float aB;
 varying vec3 vIP; varying vec2 vIC; varying vec2 vIE; varying float vIB;
-#if defined(ICE_HI) && !defined(ICE_FAR)
+#if defined(ICE_HI) && !defined(ICE_FAR) && !defined(ICE_VAULT)
 ${COMMON}
 varying vec3 vIAur;
 #endif
@@ -997,7 +1062,7 @@ varying float vIAurK;`)
   ipp = instanceMatrix * ipp;
 #endif
   vIP = (modelMatrix * ipp).xyz; vIC = aC;
-#if defined(ICE_HI) && !defined(ICE_FAR)
+#if defined(ICE_HI) && !defined(ICE_FAR) && !defined(ICE_VAULT)
   // the aurora mirrored in the ice, at the vertices (as the water's); under the black aurora its dark curtains
   vIAur = vec3(0.0); vIAurK = 0.0;
   {
@@ -1013,9 +1078,9 @@ varying float vIAurK;`)
 #endif`);
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
 ${COMMON}
-uniform sampler2D tCrack; uniform vec4 uShade[4]; uniform vec4 uGlow[8]; uniform float uGlowOn; uniform vec4 uLights[2]; uniform sampler2D tIceL; uniform vec3 uSkyC; uniform vec3 uHeroP; uniform vec3 uHeroC; uniform float uHeroR; uniform vec3 uMoonD; uniform vec3 uMoonC;
+uniform sampler2D tCrack; uniform vec4 uShade[4]; uniform vec4 uGlow[8]; uniform float uGlowOn; uniform vec4 uLights[2]; uniform sampler2D tIceL; uniform vec3 uSkyC; uniform vec3 uHeroP; uniform vec3 uHeroC; uniform float uHeroR; uniform vec3 uMoonD; uniform vec3 uMoonC; uniform vec3 uSkyV[8];
 varying vec3 vIP; varying vec2 vIC; varying vec2 vIE; varying float vIB;
-#if defined(ICE_HI) && !defined(ICE_FAR)
+#if defined(ICE_HI) && !defined(ICE_FAR) && !defined(ICE_VAULT)
 varying vec3 vIAur;
 #endif
 varying float vIAurK;
@@ -1024,6 +1089,26 @@ uniform float uFreezeAll;
 float vEdge(vec2 p) { return vorT(p).x; }
 vec3 iceEm = vec3(0.0);`)
       .replace('#include <map_fragment>', `
+#ifdef ICE_VAULT
+  // Act VI: the vault overhead, seen from below in the cines (the play camera never looks up at it): the sea ice's
+  // underside, a dark green-black, paler in slow patches where it is thinner, its old pressure ridges darker; where it is
+  // thinnest (the skylights, uSkyV) the green-white of the sky coming through it; on quality 1 and up the aurora along
+  // the view ray, as the ice's own takes it. Quality 0: the flat dark ice and the skylights' glow alone
+  vec2 P = vIP.xz; float t = uTime, frost = 0.0, thin = 0.0;
+  vec3 col = vec3(0.012, 0.03, 0.034);
+  for (int i = 0; i < 8; i++) { vec3 sk = uSkyV[i]; if (sk.z <= 0.0) continue; thin = max(thin, 1.0 - smoothstep(0.55, 1.4, length(P - sk.xy) / sk.z)); }
+#ifdef ICE_HI
+  vec4 nV = texture2D(tNoise, P * 0.012 + 0.41), nF = texture2D(tNoise, P * 0.07 + 0.17);
+  col = mix(col, vec3(0.03, 0.075, 0.08), smoothstep(0.35, 0.8, nV.r * 0.7 + nF.g * 0.3));
+  col *= 1.0 - 0.45 * (1.0 - smoothstep(0.0, 0.05, vorT(P * 0.09 + nV.gb * 0.3).x));
+  thin = max(thin, smoothstep(0.7, 0.95, nV.b * 0.7 + nF.a * 0.3) * 0.22);
+  vec3 Vd = normalize(vIP - cameraPosition);
+  vec2 sp = P + Vd.xz * ((70.0 - vIP.y) / max(Vd.y, 0.08));
+  if (uAur > 0.02) iceEm += aurora(sp, 0.9, 8.0) * (0.25 + 0.75 * thin) * 0.8;
+#endif
+  iceEm += vec3(0.35, 0.62, 0.52) * thin * thin * 0.55 + vec3(0.01, 0.035, 0.03) * thin;
+  diffuseColor.rgb = col;
+#else
   vec2 P = vIP.xz; float t = uTime, st = 0.0;
 #if !defined(ICE_FAR) && !defined(ICE_WINDOW) && !defined(ICE_FLOE)
   vec2 cc = vIC.x >= 0.0 ? vIC : floor(P) + 0.5;
@@ -1260,12 +1345,30 @@ vec3 iceEm = vec3(0.0);`)
   diffuseColor.rgb = col;
 #ifdef ICE_WINDOW
   diffuseColor.a = mix(0.72 + 0.2 * pow(1.0 - clamp(dot(V, vec3(0.0, 1.0, 0.0)), 0.0, 1.0), 2.0) + 0.2 * smoothstep(0.5, 0.8, wr), 1.0, rim);
+#endif
 #endif`)
       .replace('#include <specularmap_fragment>', '#include <specularmap_fragment>\n  specularStrength *= 1.0 - frost * 0.85;')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += iceEm;');
   };
   m.customProgramCacheKey = () => 'ice|' + key + (lay ? '|l' : '') + '|' + m.type;
   ICE_MATS.set(key, m);
+  return m;
+}
+// Act VI: a cell of the black water set to slush or back (tide.js keeps its own list; this is the texture the water reads)
+export function slushSet(L, i, on) { const t = L?.tSlush; if (!t) return; t.image.data[i] = on ? 255 : 0; t.needsUpdate = true; }
+// Act VI: the vault over a layout, for the cines only: one quad over the map and a margin (120 x 180 m over the Drained
+// Sea, the Bottom's longer) at y 14, facing down, in the ice's program as ICE_VAULT; its skylights (L.spots.sky) the thin
+// places. Shown only while the camera looks low enough to see it (pitch 0.4 or under): the play camera never does
+export function vaultMesh(L) {
+  const W = Math.max(120, L.w + 8), H = Math.max(180, L.h + 4), geo = new THREE.PlaneGeometry(W, H, 1, 1);
+  geo.rotateX(Math.PI / 2);
+  const n = geo.attributes.position.count;
+  geo.setAttribute('aC', new THREE.BufferAttribute(new Float32Array(n * 2).fill(-1), 2)); geo.setAttribute('aE', new THREE.BufferAttribute(new Float32Array(n * 2), 2)); geo.setAttribute('aB', new THREE.BufferAttribute(new Float32Array(n), 1));
+  const m = new THREE.Mesh(geo, iceMat({ vault: true }));
+  m.position.set(L.w / 2, 14, L.h / 2); m.castShadow = m.receiveShadow = false; m.renderOrder = -2; m.name = 'vault'; m.visible = false;
+  const sky = (L.spots?.sky || []).slice(0, 8);
+  m.onBeforeRender = () => { for (let i = 0; i < 8; i++) { const s = sky[i]; SEA.uSkyV.value[i].set(s ? s.x : 0, s ? s.z : 0, s ? s.r || 4 : 0); } };
+  TICKS.add({ obj: m, tick() { m.visible = R.cam.pitch <= 0.4; } });
   return m;
 }
 // The ice of a level: the thin-ice cells as an opaque mesh at ICE_Y (chunked), a short skirt where it meets open water (its

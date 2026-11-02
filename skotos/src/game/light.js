@@ -10,7 +10,7 @@
 // turns it on anywhere, for tests: true or 'ember' for Act IV's rules, 'sea' for Act V's).
 import * as THREE from 'three';
 import { G } from './state.js';
-import { R, addLight, removeLight } from '../gfx/gfx.js';
+import { R, addLight, removeLight, trembler, trembleStep } from '../gfx/gfx.js';
 import * as FXM from '../gfx/fx.js';
 import * as B from '../world/build.js';
 import { SEA, beamMesh } from '../world/sea.js';
@@ -24,6 +24,9 @@ import { emit } from '../ui/bus.js';
 import { clamp, damp, rand, angleDiff } from '../core/util.js';
 
 export const LIGHT = { force: false, base: 6, swell: 9, swellT: 8 };
+// the hero's ring for the shaders that show what only her light shows (Act VI: the First's marks, fx.js marksMesh): its
+// drawn radius and where she stands, written each frame by tickLight (the object lives in fx.js, which cannot import this)
+export { FIRE_U } from '../gfx/fx.js';
 const S = { zone: null, pools: [], beams: [], over: null, owner: null, dark: null, swellT: 0, halfT: 0, sipT: 0, streamT: 0, ring: null, ringR: 6, cradle: null, cradleAv: null, flame: null, range0: 15, litT: 0, ice: 0 };
 const V = new THREE.Vector3();
 // in a boss's darkness her own fire (a Mage's Meteor) lights only as it bursts, and the fires the variants leave behind
@@ -47,7 +50,7 @@ const ember = () => lightKind() === 'ember';
 export function lightAt(x, z, o = {}) {
   if (!lightOn()) return true;
   const pad = o.pad || 0;
-  for (const p of S.pools) if (p.r > 0 && !p.beam && (p.x - x) ** 2 + (p.z - z) ** 2 < (p.r + pad) ** 2) return true;
+  for (const p of S.pools) if (p.r > 0 && !p.beam && !p.fake && (p.x - x) ** 2 + (p.z - z) ** 2 < (p.r + pad) ** 2) return true;
   if (S.beams.length && inBeam(x, z)) return true;
   // Karthax has drunk every fire: only the pools are left (Isarn's lantern, the ghosts)
   if (S.dark) return false;
@@ -76,7 +79,7 @@ export function fireAt(x, z, pad = 0, warm = false) {
 // Breathing-hole's rim lamp (the seals could not work)
 export function lampLightAt(x, z) {
   for (const it of G.zone?.interact || []) if (it.lit && it.lightR && it.kind !== 'holeLamp' && (it.x - x) ** 2 + (it.z - z) ** 2 < it.lightR * it.lightR) return it;
-  for (const p of S.pools) if (p.lamp && p.r > 0 && (p.x - x) ** 2 + (p.z - z) ** 2 < p.r * p.r) return p;
+  for (const p of S.pools) if (p.lamp && !p.fake && p.r > 0 && (p.x - x) ** 2 + (p.z - z) ** 2 < p.r * p.r) return p;
   return null;
 }
 // a warm pool (cold.js: -12/s): lamp light, a lit hole lamp, the camp's brazier on the ice
@@ -134,17 +137,31 @@ export function relightNear(x, z, r) {
 // lampLightAt), color, intensity }. The pool is a plain object: move it (x, z) or resize it (r) freely; shrink(p, r, t) for
 // a while. (On the snow of the sea zones a pool is a soft warm glow with no rim, and its light a third as strong: the ember
 // zones' pool burns white snow into a bright disc and drowns the fire that throws it)
+// Act VI's light (docs/act6-contract.md, Light): o.tremble (by default a lamp pool's in an 'under' zone): true light, its
+// drawn radius +-8% and its intensity (the decal's and its light's) +-10% from band-limited noise (gfx.js trembler, its own
+// seed: o.seed), +-3% and steady with 'reduce flicker' (G.settings.flicker); what it lights for the rules (p.r) never
+// trembles. o.fake: false light, dead still, a hard rim, and lightAt, lampLightAt and warmAt pass it by. o.light === false:
+// the decal without a light of its own (a false pool, a skylight, a niche). o.core: 'dark' (a fake pool's): a dark core
+// over the ground under its rim (the black lamps, 0x8a70ff). o.sky: a skylight's (p.sky for the Carried Fire's fills; its
+// look green-white and soft). All of them draw the act's own disc (discMesh's o)
 export function addLightPool(x, z, r, dur = Infinity, tag = null, o = {}) {
-  const snow = lightKind() === 'sea';
-  const p = { x, z, r, r0: r, t: 0, dur, tag, owner: o.owner || null, shrinkT: 0, color: o.color ?? 0xffc070, lamp: !!o.lamp, a0: snow ? 0.13 : 0.3 };
+  const snow = lightKind() === 'sea', fake = !!o.fake, trem = !fake && (o.tremble ?? (!!o.lamp && lightKind() === 'under'));
+  const p = { x, z, r, r0: r, t: 0, dur, tag, owner: o.owner || null, shrinkT: 0, color: o.color ?? (o.core === 'dark' ? 0x8a70ff : fake ? 0xd8e0ff : o.sky ? 0xa8e8cc : 0xffc070), lamp: !!o.lamp, a0: snow ? 0.13 : 0.3, k: 1, ki: 1, sc: 1 };
+  if (fake) p.fake = true;
+  if (o.sky) p.sky = true;
+  if (trem) { p.seed = o.seed ?? Math.floor(Math.random() * 2147483647); p.trem = trembler(p.seed); p.sc = TREM_MAX; }
   if (o.fx !== false) {
     const I = o.intensity ?? 12 + r * 2;
-    p.light = addLight({ x, y: 1.8, z, color: p.color, intensity: snow ? I * 0.36 : I, range: r * 2, flicker: o.flicker ?? 0.12 });
-    if (o.decal !== false) { p.mesh = discMesh(snow ? warmer(p.color) : p.color, p.a0, snow ? 0 : 0.6); p.mesh.position.set(x, 0, z); p.mesh.scale.setScalar(r); B.drape(p.mesh, G.zone?.L); R.scene.add(p.mesh); }
+    // (a trembling pool's light follows its tremble, not the pool's own flicker; a false one's never flickers)
+    if (o.light !== false) { p.light = addLight({ x, y: 1.8, z, color: p.color, intensity: snow ? I * 0.36 : I, range: r * 2, flicker: o.flicker ?? (trem || fake ? 0 : 0.12) }); p.I0 = p.light.intensity; }
+    if (o.decal !== false) { p.mesh = discMesh(snow ? warmer(p.color) : p.color, p.a0, snow ? 0 : 0.6, trem || fake || o.core || o.sky ? { hard: fake, core: o.core === 'dark' } : null); p.mesh.position.set(x, 0, z); p.mesh.scale.setScalar(r * p.sc); B.drape(p.mesh, G.zone?.L); R.scene.add(p.mesh); }
   }
   S.pools.push(p);
   return p;
 }
+// (a trembling pool's disc is drawn this much bigger than its radius, and cut to its trembling radius in the shader, so it
+// is laid on the ground once)
+const TREM_MAX = 1.09;
 // a pool's colour on snow: deeper and warmer, so the white under it reads as firelit, not bleached
 const _w = new THREE.Color();
 const warmer = (c) => _w.set(c).multiply(_w.clone().setRGB(1, 0.78, 0.55)).getHex();
@@ -259,9 +276,23 @@ const DISC_FS = `varying vec2 vUv; uniform vec3 uColor; uniform float uA; unifor
 void main(){ float d = length(vUv * 2.0 - 1.0); if (d > 1.0) discard;
   float a = (1.0 - smoothstep(0.55, 1.0, d)) * 0.45 + uRim * smoothstep(0.86, 0.97, d) * (1.0 - smoothstep(0.97, 1.0, d)) * 2.2;
   gl_FragColor = vec4(uColor * a * uA, 1.0); }`;
+// Act VI's disc (o: { hard, core }): true light's (hard 0) a soft warm fall from the middle with a broad faint edge; false
+// light's (hard 1) flat to its edge and cut there by one narrowed smoothstep, a thin bright rim; core: the dark's core, a
+// black-violet drawn over the ground by its own alpha (normal blending) with the rim added over it. One pass: the blend is
+// premultiplied (ONE, ONE_MINUS_SRC_ALPHA), so with no core it adds as the shipped disc does. uK: the radius it is cut to
+// (the tremble), as the mesh's size over it
+const DISC6_FS = `varying vec2 vUv; uniform vec3 uColor; uniform float uA; uniform float uK; uniform float uHard; uniform float uCoreA;
+void main(){ float d = length(vUv * 2.0 - 1.0) * uK; if (d > 1.0) discard;
+  float body = mix((1.0 - smoothstep(0.3, 1.0, d)) * 0.5, (1.0 - smoothstep(0.93, 0.995, d)) * 0.22, uHard);
+  float rim = mix(smoothstep(0.55, 0.9, d) * (1.0 - smoothstep(0.9, 1.0, d)) * 0.3, smoothstep(0.91, 0.965, d) * (1.0 - smoothstep(0.975, 0.995, d)) * 2.4, uHard);
+  float c = uCoreA * (1.0 - smoothstep(0.78, 0.95, d));
+  gl_FragColor = vec4(uColor * (body * (1.0 - c) + rim) * uA + vec3(0.04, 0.024, 0.07) * c, c); }`;
 // (each its own geometry: on the Act IV slopes it is laid over the ground where it lies, build.js drape)
-function discMesh(color, a, rim = 0.6) {
-  const m = new THREE.Mesh(B.drapable(new THREE.PlaneGeometry(2, 2, 16, 16).rotateX(-Math.PI / 2), 0.07), new THREE.ShaderMaterial({ uniforms: { uColor: { value: new THREE.Color(color) }, uA: { value: a }, uRim: { value: rim } }, vertexShader: DISC_VS, fragmentShader: DISC_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+function discMesh(color, a, rim = 0.6, o = null) {
+  const geo = B.drapable(new THREE.PlaneGeometry(2, 2, 16, 16).rotateX(-Math.PI / 2), 0.07);
+  const m = o ? new THREE.Mesh(geo, new THREE.ShaderMaterial({ uniforms: { uColor: { value: new THREE.Color(color) }, uA: { value: a }, uK: { value: 1 }, uHard: { value: o.hard ? 1 : 0 }, uCoreA: { value: o.core ? 0.82 : 0 } }, vertexShader: DISC_VS, fragmentShader: DISC6_FS, transparent: true, depthWrite: false, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor }))
+    : new THREE.Mesh(geo, new THREE.ShaderMaterial({ uniforms: { uColor: { value: new THREE.Color(color) }, uA: { value: a }, uRim: { value: rim } }, vertexShader: DISC_VS, fragmentShader: DISC_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  if (o?.core) m.userData.coreA = 0.82;
   m.renderOrder = 2; m.frustumCulled = false;
   return m;
 }
@@ -355,11 +386,17 @@ export function tickLight(dt) {
     if (p.t > p.dur || (p.owner && (p.owner.dead || p.owner.removed))) { dropPool(i); continue; }
     if (p.shrinkT > 0 && (p.shrinkT -= dt) <= 0) p.r = p.r0;
     const fade = Math.min(1, (p.dur - p.t) / 1.5);
-    if (p.light) { p.light.x = p.x; p.light.z = p.z; if (!p.beam) p.light.range = p.r * 2; }
+    // (true light's tremble: its drawn radius and its intensity, never p.r; with 'reduce flicker' +-3% and steady)
+    if (p.trem) { const n = trembleStep(p.trem, dt), calm = !!G.settings.flicker; p.k = 1 + n * (calm ? 0.03 : 0.08); p.ki = calm ? 1 : 1 + n * 0.1; }
+    if (p.light) { p.light.x = p.x; p.light.z = p.z; if (!p.beam) p.light.range = p.r * 2 * p.k; if (p.trem) p.light.intensity = p.I0 * p.ki; }
     if (p.mesh) {
-      const m = p.mesh, r = Math.max(0.01, p.r);
-      if (m.position.x !== p.x || m.position.z !== p.z || m.scale.x !== r) { m.position.set(p.x, 0, p.z); m.scale.setScalar(r); B.drape(m, z?.L); }
-      m.material.uniforms.uA.value = p.a0 * fade * (1 + Math.sin(p.t * 3 + p.x) * 0.08);
+      const m = p.mesh, r = Math.max(0.01, p.r), u = m.material.uniforms;
+      if (m.position.x !== p.x || m.position.z !== p.z || m.scale.x !== r * p.sc) { m.position.set(p.x, 0, p.z); m.scale.setScalar(r * p.sc); B.drape(m, z?.L); }
+      // (false light is dead still: no pulse; a trembling pool trembles; the rest breathe as they always have)
+      if (p.fake) u.uA.value = p.a0 * fade;
+      else if (p.trem) { u.uA.value = p.a0 * fade * p.ki; u.uK.value = p.sc / p.k; }
+      else u.uA.value = p.a0 * fade * (1 + Math.sin(p.t * 3 + p.x) * 0.08);
+      if (u.uCoreA) u.uCoreA.value = (m.userData.coreA || 0) * fade;
     }
   }
   if (S.beams.length) tickBeams(dt); else SEA.uBeam.value[0].w = 0;
@@ -372,6 +409,7 @@ export function tickLight(dt) {
   // the ring: eases to its radius, follows the hero, gone in the dark
   const r = heroLightR(), ring = heroRing();
   S.ringR = damp(S.ringR, r, 5, dt);
+  FXM.FIRE_U.uFireR.value = pl.dead ? 0 : S.ringR; FXM.FIRE_U.uFireP.value.set(pl.x, pl.z);
   if (!ring.parent) R.scene.add(ring);
   ring.visible = S.ringR > 0.15 && !pl.dead;
   ring.position.set(pl.x, 0, pl.z); ring.scale.set(Math.max(0.01, S.ringR), 1, Math.max(0.01, S.ringR));

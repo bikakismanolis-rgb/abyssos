@@ -15,6 +15,7 @@ import { ENV } from '../gfx/env.js';
 import { BED_DRY } from './genlib.js';
 import { SEA, SEA_U, SEA_LIT, SEA_GLSL, buildSea, buildIce, seaBeyond, noiseTex, shoreJit, bayCorners, iceFlatBed } from './sea.js';
 import { act5Level, instDef5 } from './build5.js';
+import { act6Level, instDef6, drownDef, drownMat } from './build6.js';
 
 // uWind: amplitude of all tree and grass sway (Act III's Still Wood sets 0 until the First Autumn). uEdge (z0, z1): south of
 // z1 the wind blows whatever uWind says, fading out by z0 (the Edge of Tears); (0, 0) is off. uAutumn: see setAutumn().
@@ -446,48 +447,10 @@ class Instancer {
   build(quality) {
     const M = mats(), out = {};
     for (const type in this.sets) {
-      let def;
-      if (type.startsWith('tree:')) {
-        const [name, variant] = type.slice(5).split('@'), parts = ENV.props[name];
-        if (!parts) { console.warn('missing tree', type); continue; }
-        def = { parts: parts.map((p) => ({ geo: p.geo, material: treeMat(p.mat, variant) })), shadow: quality >= 2 };
-      } else if (type.startsWith('stone:') || type.startsWith('bark:') || type.startsWith('roots:')) {
-        // Act III: scans given the game's own surface (moss stone, bark, root wall), projected in world space
-        const k = type.slice(0, type.indexOf(':')), name = type.slice(k.length + 1), parts = ENV.props[name];
-        if (!parts) { console.warn('missing prop', name); continue; }
-        const mat = (k === 'stone' ? M.mossW : k === 'bark' ? M.barkW : M.rootW) || M.rockW || M.lam;
-        def = { parts: parts.map((p) => ({ geo: p.geo, material: mat })), shadow: true };
-      } else if (type.startsWith('seed:')) {
-        // the Evergreen's seed-lanterns: the lantern scan with a green-gold glow that goes out with the First Autumn
-        const parts = ENV.props[type.slice(5)];
-        if (!parts) continue;
-        def = { parts: parts.map((p) => ({ geo: p.geo, material: p.mat.transparent ? seedGlow() : p.mat, glow: p.mat.transparent })), shadow: false };
-      } else if (type.startsWith('rock:') || type.startsWith('rockb:')) {
-        const name = type.slice(type.indexOf(':') + 1), parts = ENV.props[name];
-        if (!parts) { console.warn('missing rock', name); continue; }
-        def = { parts: parts.map((p) => ({ geo: p.geo, material: (type.startsWith('rock:') ? M.cliffW : M.rockW) || M.lam })), shadow: true };
-      } else if (type.startsWith('kit:')) {
-        const [kit, m] = type.slice(4).split('#')[0].split('~')[0].split('/');
-        const g = KIT[kit]?.[m];
-        if (!g) { console.warn('missing kit model', kit, m); continue; }
-        def = { parts: [{ geo: g, material: kitMaterial(M, kit, m, type) }], shadow: !type.includes('#floor') };
-      } else if (type.startsWith('cin:')) {
-        // Act IV (the cinder pack): 'cin:<name>@<look>'; geometry-only scans take the game's ash rock or iron
-        const [name, v] = type.slice(4).split('@'), parts = ENV.props['cinder/' + name] || ENV.props[name];
-        if (!parts) { console.warn('missing cinder prop', name); continue; }
-        def = { parts: parts.map((p) => ({ geo: p.geo, material: cinMat(p.mat, v), glow: p.mat.transparent || /glow/i.test(p.mat.name) })), shadow: !/^(lantern|cagedLight)$/.test(name) };
-      } else if (/^(icy|cliff5|rime|c5):/.test(type)) {
-        // Act V (build5.js): scans and code models in the shared ice or sea-cliff material, the rime pack's own, code dressing
-        def = instDef5(type, M, quality);
-        if (!def) continue;
-      } else if (type.startsWith('env:')) {
-        const name = type.slice(4), parts = ENV.props[name];
-        if (!parts) { console.warn('missing env prop', name); continue; }
-        def = { parts: parts.map((p) => ({ geo: p.geo, material: p.mat, glow: p.mat.transparent })), shadow: ENV_SHADOW[name] ?? true };
-      } else {
-        def = CAT[type]();
-        def = { parts: [{ geo: def.geo || bake(def.parts, def.uv), material: def.material || M[def.mat] || M.lam }], shadow: def.shadow };
-      }
+      // (Act VI, build6.js: 'drowned:<type>' any type below in the drowned grade, the stamped crypt's and wood's; 'c6:<name>'
+      // its own code models)
+      const def = type.startsWith('drowned:') ? drownDef(instDef(type.slice(8), M, quality)) : type.startsWith('c6:') ? instDef6(type, M, quality) : instDef(type, M, quality);
+      if (!def) continue;
       const list = this.sets[type];
       const chunks = new Map();
       for (const it of list) { const k = Math.floor(it[0] / CHUNK) + ',' + Math.floor(it[2] / CHUNK); if (!chunks.has(k)) chunks.set(k, []); chunks.get(k).push(it); }
@@ -512,6 +475,51 @@ class Instancer {
     }
     return out;
   }
+}
+// an instanced type's parts: { parts: [{ geo, material, glow }], shadow } (null: none to draw)
+function instDef(type, M, quality) {
+  let def;
+  if (type.startsWith('tree:')) {
+    const [name, variant] = type.slice(5).split('@'), parts = ENV.props[name];
+    if (!parts) { console.warn('missing tree', type); return null; }
+    def = { parts: parts.map((p) => ({ geo: p.geo, material: treeMat(p.mat, variant) })), shadow: quality >= 2 };
+  } else if (type.startsWith('stone:') || type.startsWith('bark:') || type.startsWith('roots:')) {
+    // Act III: scans given the game's own surface (moss stone, bark, root wall), projected in world space
+    const k = type.slice(0, type.indexOf(':')), name = type.slice(k.length + 1), parts = ENV.props[name];
+    if (!parts) { console.warn('missing prop', name); return null; }
+    const mat = (k === 'stone' ? M.mossW : k === 'bark' ? M.barkW : M.rootW) || M.rockW || M.lam;
+    def = { parts: parts.map((p) => ({ geo: p.geo, material: mat })), shadow: true };
+  } else if (type.startsWith('seed:')) {
+    // the Evergreen's seed-lanterns: the lantern scan with a green-gold glow that goes out with the First Autumn
+    const parts = ENV.props[type.slice(5)];
+    if (!parts) return null;
+    def = { parts: parts.map((p) => ({ geo: p.geo, material: p.mat.transparent ? seedGlow() : p.mat, glow: p.mat.transparent })), shadow: false };
+  } else if (type.startsWith('rock:') || type.startsWith('rockb:')) {
+    const name = type.slice(type.indexOf(':') + 1), parts = ENV.props[name];
+    if (!parts) { console.warn('missing rock', name); return null; }
+    def = { parts: parts.map((p) => ({ geo: p.geo, material: (type.startsWith('rock:') ? M.cliffW : M.rockW) || M.lam })), shadow: true };
+  } else if (type.startsWith('kit:')) {
+    const [kit, m] = type.slice(4).split('#')[0].split('~')[0].split('/');
+    const g = KIT[kit]?.[m];
+    if (!g) { console.warn('missing kit model', kit, m); return null; }
+    def = { parts: [{ geo: g, material: kitMaterial(M, kit, m, type) }], shadow: !type.includes('#floor') };
+  } else if (type.startsWith('cin:')) {
+    // Act IV (the cinder pack): 'cin:<name>@<look>'; geometry-only scans take the game's ash rock or iron
+    const [name, v] = type.slice(4).split('@'), parts = ENV.props['cinder/' + name] || ENV.props[name];
+    if (!parts) { console.warn('missing cinder prop', name); return null; }
+    def = { parts: parts.map((p) => ({ geo: p.geo, material: cinMat(p.mat, v), glow: p.mat.transparent || /glow/i.test(p.mat.name) })), shadow: !/^(lantern|cagedLight)$/.test(name) };
+  } else if (/^(icy|cliff5|rime|c5):/.test(type)) {
+    // Act V (build5.js): scans and code models in the shared ice or sea-cliff material, the rime pack's own, code dressing
+    def = instDef5(type, M, quality);
+  } else if (type.startsWith('env:')) {
+    const name = type.slice(4), parts = ENV.props[name];
+    if (!parts) { console.warn('missing env prop', name); return null; }
+    def = { parts: parts.map((p) => ({ geo: p.geo, material: p.mat, glow: p.mat.transparent })), shadow: ENV_SHADOW[name] ?? true };
+  } else {
+    def = CAT[type]();
+    def = { parts: [{ geo: def.geo || bake(def.parts, def.uv), material: def.material || M[def.mat] || M.lam }], shadow: def.shadow };
+  }
+  return def;
 }
 // KayKit dungeon walls and posts take the photoreal stone; everything else keeps the kit's own look
 const STONE_KIT = new Set(['wall', 'wall_arched', 'wall_cracked', 'wall_pillar', 'wall_shelves', 'wall_broken', 'wall_corner', 'wall_endcap', 'stairs', 'stairs_wide']);
@@ -552,7 +560,8 @@ class Batch {
     for (const [, b] of this.buckets) {
       const geo = mergeGeometries(b.geos, false);
       geo.computeBoundingSphere();
-      const mesh = new THREE.Mesh(geo, M[b.mat] || M.lam);
+      // (Act VI: 'drowned:<material>' that material in the drowned grade, build6.js)
+      const mesh = new THREE.Mesh(geo, b.mat.startsWith('drowned:') ? drownMat(M[b.mat.slice(8)] || M.lam) : M[b.mat] || M.lam);
       mesh.castShadow = quality >= 1 && b.mat !== 'glow';
       mesh.receiveShadow = true;
       this.group.add(mesh);
@@ -1132,6 +1141,21 @@ function ground5(type) {
     hueB: type === 'farlight' ? (B !== 'rime/ice' ? [0.62, 0.82, 1.08] : null) : B === 'rime/shore' ? null : B === 'gravel' ? [0.86, 0.9, 0.96] : [0.62, 0.66, 0.74],
     fake: !snowy, glint: true, wet: type === 'coast', aur: true, edge: type === 'farlight', act5: true };
 }
+// Act VI: the silt pack's layers (docs/act6-contract.md, Visuals), each a chain down to a layer that is always there: the
+// seabed's silt (A, and the road in its second reading, P), the shore's stone in its outcrops and ridges (B), the ice of
+// the vault's sides on the steep faces (W). Until the silt pack exists its silt is the rime shore's sand darkened toward
+// the grey-green of a drained sea floor (hueA), and its road the same read lighter and greyer (hueP). The X6 set: G_WET
+// on (the black water's wet rims, gameplay), G_AUR, G_GLINT, G_WIN and G_EDGE off (no aurora, no snow, no windows, no
+// open sea); the Bottom the same set, darker and bluer
+function ground6(type) {
+  const A = lay4('silt/silt', 'rime/shore', 'mud', 'flags'), own = A === 'silt/silt', bot = type === 'bottom';
+  const B = lay4('rime/shore', 'mud', 'flags'), W = lay4('silt/iceWall', 'rime/ice', 'wall');
+  // (the rime ice standing in for the vault's sides read, bright, as lit water from the play camera: darkened and greyed
+  // to old ice in shadow, hueW)
+  return { A, B, P: A, W: W || undefined, s: [3.6, 5.2, 2.4], r: [0.92, 0.85, 0.9], ns: 1.3, tint: bot ? 0x8e96a0 : 0x949c98, dual: [1, 1], ws: W === 'silt/iceWall' ? 4.4 : 9.0, sat: own ? 0.8 : 0.42,
+    hueA: own ? null : bot ? [0.5, 0.55, 0.62] : [0.55, 0.62, 0.6], hueP: own ? [1.12, 1.12, 1.1] : bot ? [0.66, 0.7, 0.76] : [0.7, 0.76, 0.74], hueB: bot ? [0.7, 0.74, 0.82] : [0.78, 0.82, 0.82],
+    hueW: W === 'silt/iceWall' ? [0.8, 0.86, 0.9] : W === 'rime/ice' ? [0.3, 0.36, 0.4] : [0.5, 0.54, 0.6], wet: true, act6: true };
+}
 // the ground's beds at its corners (the wet sand, and the bed the deep water hides): the corner's cells' mean, as the
 // water's (cornerBeds), but thick ice, a window or the jetty count as dry land (the layout gives them the open sea's bed
 // for the water's colour under them); where thin ice meets tidal flats the flats' own, as the water takes it (sea.js
@@ -1159,7 +1183,7 @@ function wetBeds(L) {
     const ib = iceFlatBed(L, vx, vz);
     if (ib != null) { out[vz * W + vx] = ib; continue; }
     let s = 0, n = 0;
-    for (const [dx, dz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) { const x = vx + dx, z = vz + dz, i = z * w + x; if (x < 0 || z < 0 || x >= w || z >= h || L.thick[i] || L.window[i] || L.deck[i] || L.ice[i] || !(L.bed[i] < BED_DRY)) continue; s += L.bed[i]; n++; }
+    for (const [dx, dz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) { const x = vx + dx, z = vz + dz, i = z * w + x; if (x < 0 || z < 0 || x >= w || z >= h || L.thick[i] || L.window[i] || L.deck[i] || L.ice?.[i] || !(L.bed[i] < BED_DRY)) continue; s += L.bed[i]; n++; }
     out[vz * W + vx] = n ? s / n : BED_DRY;
   }
   // (and carried up the land three corners, a little higher each: a jump to 9 m a corner away put the wet sand's edge
@@ -1185,7 +1209,9 @@ function buildGround(L, group) {
   const D = L.dist, crypt = L.type === 'crypt', halls = L.type === 'halls', pass = L.type === 'pass';
   const heart = L.type === 'heart', act3 = heart || L.type === 'weep', LG = L.spots?.lanternglade;
   const act4 = !!L.hgt, forge = L.type === 'forge'; // Act IV: the layout carries its own heights (gen4.js terrain)
-  const act5 = ACT5.has(L.type), vbed = act5 && L.bed ? groundBeds(L) : null, vbay = act5 ? bayCorners(L) : null, far = L.type === 'farlight', jit = act5 ? shoreJit(L) : null;
+  // (Act VI's layouts carry Act V's beds, its pockets and its Mere standing at their levels as the coast's tide and bay do:
+  // the wet rims, the bed under the water and the Mere's own level read the same fields, act56)
+  const act5 = ACT5.has(L.type), act6 = ACT6.has(L.type), act56 = act5 || act6, vbed = act56 && L.bed ? groundBeds(L) : null, vbay = act56 ? bayCorners(L) : null, far = L.type === 'farlight', jit = act5 ? shoreJit(L) : null;
   const vwet = vbed ? wetBeds(L) : null;
   const sapW = act3 ? new Float32Array(n) : null, watW = far ? new Float32Array(n) : null;
   // (the Farthest Light: a lead sealed before this build, thick ice over the sea's bed, which the frozen water covers)
@@ -1193,7 +1219,7 @@ function buildGround(L, group) {
   const cellAt = (x, z) => (x < 0 || z < 0 || x >= w || z >= h ? -1 : z * w + x);
   // (Act V: each cell's distance in cells from rock or a footprint, for the snow's shadow at their feet)
   let dW = null;
-  if (act5) {
+  if (act56) {
     dW = new Uint8Array(w * h).fill(9); const q = [];
     for (let c = 0; c < w * h; c++) if (!cells[c] && !L.low[c] && !L.sea?.[c]) { dW[c] = 0; q.push(c); }
     for (let hd = 0; hd < q.length; hd++) { const c = q[hd], x = c % w, z = (c - x) / w; if (dW[c] >= 4) continue; for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nc = cellAt(x + dx, z + dz); if (nc >= 0 && dW[nc] > dW[c] + 1) { dW[nc] = dW[c] + 1; q.push(nc); } } }
@@ -1206,9 +1232,9 @@ function buildGround(L, group) {
   // triangle teeth round Skerry Bay)
   // (a footprint standing on the flats, a hull or a boulder, keeps the shore under it: its corners keep the flats' beds,
   // gen5 vbed. Drawn as land, each hull stood on a staircase of snow)
-  const tidal5 = act5 && L.bed ? (c) => (L.bed[c] < BED_DRY && !L.thick[c] && !L.ice[c] && !L.window[c] && !L.deck[c]) || (L.vbed && !cells[c] && !L.low[c] && [0, 1, w + 1, w + 2].every((d) => L.vbed[c + Math.floor(c / w) + d] < BED_DRY - 1 && Math.abs(L.hgt[c + Math.floor(c / w) + d]) < 0.3)) : () => false;
+  const tidal5 = act56 && L.bed ? (c) => (L.bed[c] < BED_DRY && !L.thick[c] && !L.ice?.[c] && !L.window[c] && !L.deck[c]) || (L.vbed && !cells[c] && !L.low[c] && [0, 1, w + 1, w + 2].every((d) => L.vbed[c + Math.floor(c / w) + d] < BED_DRY - 1 && Math.abs(L.hgt[c + Math.floor(c / w) + d]) < 0.3)) : () => false;
   let tB = null;
-  if (act5 && L.bed && !far) {
+  if (act56 && L.bed && !far) {
     const tm = new Uint8Array(w * h); for (let c = 0; c < w * h; c++) tm[c] = tidal5(c) ? 1 : 0;
     tB = new Float32Array((w + 1) * (h + 1));
     // (weighed from where the corner is drawn, shoreJit's nudge included: from the grid's point, a corner nudged across the
@@ -1282,6 +1308,25 @@ function buildGround(L, group) {
       for (const c of L.spots?.caves || []) { const d = Math.hypot(vx - c.x, vz - c.z - 0.8); if (d < 3.6) k *= 0.42 + 0.58 * smooth(clamp((d - 1.4) / 2.2, 0, 1)); }
       // (the snow pools a cold blue shadow within a metre or two of every cliff's foot, hut, hull and boulder)
       if (fl > 0 && y > -0.3) { let dm = 9; for (const [dx, dz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) { const c = cellAt(vx + dx, vz + dz); if (c >= 0) dm = Math.min(dm, dW[c]); } ao = 0.62 + 0.38 * smooth(clamp(dm / 2.6, 0, 1)); }
+    } else if (act6) {
+      // Act VI: the drained sea's floor (and the Bottom's), level wherever it is walked; the vault's walls rising off it and
+      // the pools sunk under their black water (gen6's heights). Silt on the floor; the shore's stone in broad patches, at
+      // the walls' feet and round the pools' rims (the black water's bed is stone and silt, tB as the coast's shore); the
+      // road in the silt's second reading, not down into the water; the walls' steep faces take the vault's ice (G_WALL)
+      const y = L.hgt[vz * (w + 1) + vx];
+      pos.setY(i, y);
+      let walls = 0, tide = 0;
+      for (let dz = -2; dz <= 1; dz++) for (let dx = -2; dx <= 1; dx++) { const c = cellAt(vx + dx, vz + dz); if (c < 0 || (!cells[c] && !L.low[c])) walls++; }
+      for (const [dx, dz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) { const c = cellAt(vx + dx, vz + dz); if (c >= 0 && tidal5(c)) tide++; }
+      const tv = tB ? tB[vz * (w + 1) + vx] : tide / 4;
+      wp = clamp(pv * 1.25, 0, 1) * (1 - tv * 0.7);
+      // (a little either side of 0..1, as the coast's: the shader's threshold then meets a field that runs on through the edge)
+      wb = clamp((fl > 0 ? -0.32 + walls * 0.035 : 0.35 + dd * 0.08) + (nz - 0.5) * 1.5 + (big - 0.5) * 1.3 + tv * 0.6, -0.4, 1.4);
+      k = fl > 0 || tide ? 0.9 + nz * 0.16 : Math.max(0.42, 0.9 - Math.min(Math.max(y, 0), 12) * 0.035) + (nz - 0.5) * 0.12;
+      if (y < -0.3) k *= 0.5;
+      if (hole) k *= 0.45;
+      // (dark at the feet of the walls, the keels and the hulls: the floor reads as lying under them)
+      if (fl > 0 && y > -0.3) { let dm = 9; for (const [dx, dz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) { const c = cellAt(vx + dx, vz + dz); if (c >= 0) dm = Math.min(dm, dW[c]); } ao = 0.6 + 0.4 * smooth(clamp(dm / 2.6, 0, 1)); }
     } else if (act4) {
       // the Field: ash on the floor, black scree up the slopes, the rock face where they steepen; the Forge: volcanic tiles,
       // iron plate in the galleries and bellows chambers, Karthax's herringbone on the Anvil, walls of black rock
@@ -1356,7 +1401,7 @@ function buildGround(L, group) {
   geo.computeVertexNormals();
   // Act V: the floor is level wherever it is walked (the pits of the sea bed and of the ground under the thin ice beside it
   // would tilt its corners' normals, and the ice road would take the cliff layer)
-  if (act5) { const nr = geo.attributes.normal; for (let i = 0; i < n; i++) if (Math.abs(pos.getY(i)) < 0.01) nr.setXYZ(i, 0, 1, 0); }
+  if (act56) { const nr = geo.attributes.normal; for (let i = 0; i < n; i++) if (Math.abs(pos.getY(i)) < 0.01) nr.setXYZ(i, 0, 1, 0); }
   // (the Farthest Light: the bed under the thin ice and the leads is never seen, the opaque ice and the opaque black water
   // lie over every such cell: its quads are left out, which spares the phone their vertices and the depth test their pixels.
   // Both zones: an ice window's cells, whose pit is the iceWindow prop's, walls and floor, seen through the pane)
@@ -1367,7 +1412,7 @@ function buildGround(L, group) {
     for (let c = 0; c < w * h; c++) if (!(far && (L.ice[c] || L.sea?.[c] || pit(c) || sealedF(c)))) for (let k = 0; k < 6; k++) keep.push(ix[c * 6 + k]);
     geo.setIndex(keep);
   }
-  const cfg = GROUND[L.type] || (act5 ? ground5(L.type) : act4 ? ground4(L.type) : GROUND.forest);
+  const cfg = GROUND[L.type] || (act5 ? ground5(L.type) : act6 ? ground6(L.type) : act4 ? ground4(L.type) : GROUND.forest);
   if (act5) cfg.frozen = L.mode === 'frozen';
   // (Act V: the ice windows' centres, the corner each 2 x 2 window's cells share: the ground cuts the round hole, G_WIN)
   if (act5 && L.window) { const wins = []; for (let z = 0; z < h - 1; z++) for (let x = 0; x < w - 1; x++) if (L.window[z * w + x] && L.window[z * w + x + 1] && L.window[(z + 1) * w + x] && L.window[(z + 1) * w + x + 1] && !(x > 0 && L.window[z * w + x - 1]) && !(z > 0 && L.window[(z - 1) * w + x])) wins.push(x + 1, z + 1); cfg.wins = wins.slice(0, 16); }
@@ -1428,13 +1473,19 @@ function groundMat(cfg, type) {
   if (X.dry) { const Dr = ENV.layers.dryleaf; Object.assign(uni, { tD: { value: (Dr || A).d }, uDryTint: { value: new THREE.Color(Dr ? 0xffffff : 0xc89a70).multiplyScalar(cfg.dryK ?? 1) }, uAut: WIND.uAutumn }); }
   if (X.wall) { const W = lay(cfg.W); Object.assign(uni, { tW: { value: W.d }, tWn: { value: W.n }, uWS: { value: 1 / (cfg.ws || 2.4) } }); }
   // Act V (sea.js): the snow's glints (not on low quality), the wet sand behind the ebb, the aurora's light on the ground
-  const X5 = { glint: !!cfg.glint && R.quality >= 1, wet: !!cfg.wet, aur: !!cfg.aur, fake: !!cfg.fake, hueB: !!cfg.hueB, edge: !!cfg.edge, v5: !!cfg.act5, win: !!cfg.wins?.length };
+  // Act VI (the X6 set, ground6): the coast's ground with only its wet rims (on quality 1 and up; quality 0 draws the dry
+  // seabed alone) and its cheaper reads (V56: the path read where a path lies, the wobbling edges, the walls' strata)
+  const X6 = !!cfg.act6;
+  const X5 = { glint: !!cfg.glint && R.quality >= 1, wet: !!cfg.wet && (!X6 || R.quality >= 1), aur: !!cfg.aur, fake: !!cfg.fake, hueB: !!cfg.hueB, edge: !!cfg.edge, v5: !!cfg.act5, win: !!cfg.wins?.length };
+  const V56 = X5.v5 || X6;
   if (X5.win) uni.uWin = { value: Array.from({ length: 8 }, (_, i) => new THREE.Vector2(cfg.wins[i * 2] ?? -99, cfg.wins[i * 2 + 1] ?? -99)) };
   X5.any = X5.glint || X5.wet || X5.aur || X5.edge || X5.win;
   if (X5.any) { noiseTex(); Object.assign(uni, SEA_U({ uWetLevel: SEA.uWetLevel, uLevel: SEA.uLevel, uBayLevel: SEA.uBayLevel }), SEA_LIT); }
   // (the flats frozen: 1 on the coast after the Freeze, the Freeze's own progress on the tide's)
   if (X5.wet) uni.uFzG = cfg.frozen ? { value: 1 } : SEA.uFreezeAll;
   if (X5.hueB) uni.uHueB = { value: new THREE.Vector3(...cfg.hueB) };
+  if (cfg.hueP) uni.uHueP = { value: new THREE.Vector3(...cfg.hueP) };
+  if (cfg.hueW) uni.uHueW = { value: new THREE.Vector3(...cfg.hueW) };
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, uni);
     // the anti-repeat second reading is a desktop luxury (quality 2); phones get one reading per layer
@@ -1456,7 +1507,7 @@ uniform sampler2D tA; uniform sampler2D tB; uniform sampler2D tP; uniform sample
 uniform vec3 uS; uniform vec3 uR; uniform float uNS;
 varying vec4 vLay; varying vec2 vGP; varying vec3 vGN;
 float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\nvarying float vSap;' : '') + (X.sat ? '\nuniform float uSat;' : '') + (cfg.hueA ? '\nuniform vec3 uHueA;' : '') + (X.dry ? '\nuniform sampler2D tD; uniform vec3 uDryTint; uniform float uAut;' : '') + (X.wall ? '\nuniform sampler2D tW; uniform sampler2D tWn; uniform float uWS; varying float vGY;' : '')
-      + (X5.hueB ? '\nuniform vec3 uHueB;' : '') + (X5.win ? '\nuniform vec2 uWin[8];' : '') + (X5.wet ? '\nvarying float vBed; varying float vBay; varying float vBedW; uniform float uWetLevel; uniform float uLevel; uniform float uBayLevel; uniform float uFzG;' : '') + (X5.edge ? '\nvarying float vWat;' : '')
+      + (X5.hueB ? '\nuniform vec3 uHueB;' : '') + (cfg.hueP ? '\nuniform vec3 uHueP;' : '') + (cfg.hueW ? '\nuniform vec3 uHueW;' : '') + (X5.win ? '\nuniform vec2 uWin[8];' : '') + (X5.wet ? '\nvarying float vBed; varying float vBay; varying float vBedW; uniform float uWetLevel; uniform float uLevel; uniform float uBayLevel; uniform float uFzG;' : '') + (X5.edge ? '\nvarying float vWat;' : '')
       + (X5.any ? SEA_GLSL() + '\nvarying vec3 vGW; uniform vec3 uMoonD; uniform vec3 uMoonC; uniform vec3 uHeroP; uniform vec3 uHeroC;\nvec3 gEm = vec3(0.0);' : '') + (X5.aur ? '\nvarying vec3 vGAur; varying float vGAurK;' : ''))
       .replace('#include <map_fragment>', (X5.win ? `
   // the ice windows: the ground runs over their cells and leaves a round hole of clear ice (the pane, sea.js, the same
@@ -1484,12 +1535,12 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
 #else
   vec3 cA = texture2D(tA, uA).rgb;
 #endif
-  vec3 cB = texture2D(tB, uB).rgb;` + (cfg.hueA ? '\n  cA *= uHueA;' : '') + (X5.hueB ? '\n  cB *= uHueB;' : '') + (X5.v5 ? `
+  vec3 cB = texture2D(tB, uB).rgb;` + (cfg.hueA ? '\n  cA *= uHueA;' : '') + (X5.hueB ? '\n  cB *= uHueB;' : '') + (V56 ? `
   // (the path's layer read only where a path lies near: off it its weight is 0 whatever it reads, and on the Shallows'
   // flats those reads cost a phone its frame, perf5's coastLow)
   vec3 cP = vec3(0.0); float gmP = 0.0;
   if (vLay.y > 0.01) {` : '') + `
-` + (X5.v5 ? `
+` + (V56 ? `
   // (two reads at two scales and angles on every quality, swapped every few metres: one read laid the same boot prints in
   // rows down the path, a stamp repeating every 2.6 m)
     gmP = smoothstep(0.3, 0.7, vLay.w + sin(vGP.x * 0.71 + sin(vGP.y * 0.53) * 1.3) * 0.22 + sin(vGP.y * 0.43 - vGP.x * 0.21) * 0.14);
@@ -1499,17 +1550,19 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
 #else
   vec3 cP = texture2D(tP, uP).rgb;
 #endif`) + `
- ` + (X5.v5 ? `}` : '') + (X5.v5 ? `
+ ` + (V56 ? `}` : '') + (X5.v5 ? `
   // (the trodden snow: a little greyer than the snow round it, its boot prints and scuffs kept, so a path reads as walked)
-  cP = mix(cP, cA * vec3(0.84, 0.87, 0.92), 0.25);` : '') + `
-  float hA = gH(cA), hB = gH(cB), hP = gH(cP);` + (X5.v5 ? `
+  cP = mix(cP, cA * vec3(0.84, 0.87, 0.92), 0.25);` : '') + (cfg.hueP ? `
+  // (Act VI: the road, the silt's second reading, trodden paler)
+  cP *= uHueP;` : '') + `
+  float hA = gH(cA), hB = gH(cB), hP = gH(cP);` + (V56 ? `
   // (a slow wobble, metres across, worked out here, no read: the shore's edge and the path's wander through the triangles
   // on it instead of following the field the vertices carry)
   float gWob = sin(vGP.x * 0.83 + sin(vGP.y * 0.61) * 1.7) * sin(vGP.y * 0.97 + sin(vGP.x * 0.53) * 1.5);
   float wB = smoothstep(-0.15, 0.15, vLay.x * 2.0 - 1.1 + (hB - hA) * 1.3 + gWob * 0.32);` : `
   float wB = smoothstep(-0.15, 0.15, vLay.x * 2.0 - 1.1 + (hB - hA) * 1.3);`) + `
   vec3 gc = mix(cA, cB, wB); float gh = mix(hA, hB, wB);
-  float wP = smoothstep(-0.15, 0.15, vLay.y * 2.0 - 1.3 + (hP - gh) * 1.2` + (X5.v5 ? ' + gWob * 0.22' : '') + `);
+  float wP = smoothstep(-0.15, 0.15, vLay.y * 2.0 - 1.3 + (hP - gh) * 1.2` + (V56 ? ' + gWob * 0.22' : '') + `);
   gc = mix(gc, cP, wP); gh = mix(gh, hP, wP);` + (X.sat ? `
   gc = mix(vec3(dot(gc, vec3(0.3, 0.59, 0.11))), gc, uSat);` : '') + (X.dry ? `
   // the First Autumn: dry leaves drift over everything but the trodden paths (none before it: a uniform branch)
@@ -1525,7 +1578,7 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
   totalEmissiveRadiance += vec3(1.0, 0.45, 0.06) * 0.08 * wS;` : '') + (X.wall ? `
   // root walls: the steep faces take the bark, projected sideways
   vec3 gNw = normalize(vGN);
-  float steep = 1.0 - smoothstep(0.45, 0.82, gNw.y);` + (X5.v5 ? `
+  float steep = 1.0 - smoothstep(0.45, 0.82, gNw.y);` + (V56 ? `
   // (high on a cliff a gentler facet is still the cliff, dusted below: taking the floor's snow whole, a long thin facet
   // ran down a face as a pale hard-edged blade. Only a true top or ledge keeps the sheet)
   // (and a low rock rib's faces are its stone: half the floor's snow on them read as one pale slab along the Landing)
@@ -1537,16 +1590,24 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
   vec2 uWx = vec2(vGP.y, -vGY) * uWS, uWz = vec2(vGP.x, -vGY) * uWS;
   // (the flat floor skips the bark: steep changes smoothly, so where the branch splits a pixel quad its weight is ~0)
   if (steep > 0.001) {
-    vec3 cW = texture2D(tW, uWx).rgb * wbw.x + texture2D(tW, uWz).rgb * wbw.y;` + (X5.v5 ? `
+    vec3 cW = texture2D(tW, uWx).rgb * wbw.x + texture2D(tW, uWz).rgb * wbw.y;` + (V56 ? `
     // (the sea-cliffs: read from above too where the face leans back, so a slope never smears; laid in strata)
-    cW = mix(cW, texture2D(tW, vGP * uWS * 0.9 + 0.37).rgb, smoothstep(0.25, 0.6, gNw.y));
+    cW = mix(cW, texture2D(tW, vGP * uWS * 0.9 + 0.37).rgb, smoothstep(0.25, 0.6, gNw.y));` : '') + (cfg.hueW ? `
+    // (Act VI: the vault's ice greyed and darkened, hueW)
+    cW = mix(vec3(dot(cW, vec3(0.3, 0.59, 0.11))), cW, 0.5) * uHueW;` : '') + (V56 ? `
     cW *= 0.8 + 0.2 * sin(vGY * 2.1 + (vLay.z - 0.5) * 7.0 + (vLay.w - 0.5) * 3.0) + 0.08 * sin(vGY * 6.3 + vLay.w * 9.0);
     // (snow settling on what leans back, in drifts the snow's own relief breaks up, the stone showing between)
     cW = mix(cW, cA * vec3(0.9, 0.93, 0.98), smoothstep(0.62, 0.95, gNw.y + (hA - 0.5) * 0.35) * 0.6);` : '') + `
     gc = mix(gc, cW, steep); gh = mix(gh, gH(cW), steep);
   }` : '') + (X5.fake ? `
   // (no snow layer loaded: whiten whatever stands in for it, keeping its relief)
-  gc = mix(gc, vec3(0.7, 0.74, 0.8) * (0.8 + 0.34 * gh), 0.8 * (1.0 - wB) * (1.0 - wP * 0.4));` : '') + (X5.wet ? `
+  gc = mix(gc, vec3(0.7, 0.74, 0.8) * (0.8 + 0.34 * gh), 0.8 * (1.0 - wB) * (1.0 - wP * 0.4));` : '') + (X5.wet && X6 ? `
+  // Act VI: the black water's rims, on the silt and the stone alike: dark and glossy where the water has stood within the
+  // last 20 s (and under it now), its edge wandering inside the cells with the water's own (sea.js shoreN); the Mere at its
+  // own level (vBay). No ripples, no pools, no frost: the black water leaves the floor as it found it
+  float gPool = 0.0;
+  float gWet = vBedW < 2.0 ? smoothstep(-0.03, 0.06, mix(uWetLevel, uBayLevel, vBay) - vBedW + shoreN(vGW.xz)) * (1.0 - wP * 0.5) : 0.0;
+  gc *= mix(vec3(1.0), vec3(0.4, 0.43, 0.46), gWet);` : X5.wet ? `
   // the flats' own marks: ripple bands along the bed's contours, darker wet patches, rock pools where the bed dips; the
   // shore's stone greyed (its weed read as a lawn from afar)
   // (Skerry Bay's sand greyer and lighter still: its weed read as moss, the arena a target of camouflage bands)
@@ -1624,7 +1685,7 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>' + (X5.any ? '\n  totalEmissiveRadiance += gEm;' : ''))
       .replace('#include <dithering_fragment>', '#include <dithering_fragment>' + (X5.wet ? '\n  }' : ''))
       .replace('#include <normal_fragment_maps>', `#ifdef G_NRM
-  // the second readings are rotated: turn their tangent-space xy back into the first frame` + (X5.v5 ? `
+  // the second readings are rotated: turn their tangent-space xy back into the first frame` + (V56 ? `
   // (each layer's normal read only where its weight is not 0: mix() then takes the other's exactly)
   vec3 nA = vec3(0.0, 0.0, 1.0), nP = vec3(0.0, 0.0, 1.0), nB = vec3(0.0, 0.0, 1.0);
   if (wB < 0.999 && wP < 0.999) {
@@ -1666,7 +1727,7 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
     diffuseColor.rgb *= clamp(1.0 + (dot(nR, Lr) - dot(gN, Lr)) * rk, 0.72, 1.28); }` : '') + `
 #endif`);
   };
-  m.customProgramCacheKey = () => 'groundPBR|' + type + (nrm ? '|n' : '') + '|q' + R.quality + (cfg.fake ? '|f' : '') + (cfg.hueB ? '|b' : '') + (cfg.edge ? '|e' : '') + (X5.win ? '|w' : '');
+  m.customProgramCacheKey = () => 'groundPBR|' + type + (nrm ? '|n' : '') + '|q' + R.quality + (cfg.fake ? '|f' : '') + (cfg.hueB ? '|b' : '') + (cfg.edge ? '|e' : '') + (X5.win ? '|w' : '') + (cfg.hueA ? '|a' : '') + (cfg.hueP ? '|p' : '') + (cfg.hueW ? '|hw' : '');
   return m;
 }
 
@@ -2312,6 +2373,8 @@ export const HEAT = { k: 0, uLava: { value: 0.8 }, uGrate: { value: 0.2 }, gain:
 const NIGHT = { mode: 'ash', gain: { k: 1 }, stars: null, glow: null };
 const ACT4 = new Set(['ashfield', 'forge']);
 const ACT5 = new Set(['coast', 'farlight']);
+// Act VI's layouts (gen6.js): the Drained Sea and the Bottom of the Gates (ground6, act6Level, the black water)
+export const ACT6 = new Set(['drained', 'bottom']);
 const cinder = (name) => ENV.props['cinder/' + name] || null;
 const DEAD = new THREE.Color(0x15130f), LIT = new THREE.Color(0xffc070);
 // the extent of a scanned prop (its parts' bounding boxes): { x, y, z, y0 }
@@ -3116,18 +3179,21 @@ export function buildLevel(L, quality) {
   // Act V (sea.js): the water over the tidal flats, the leads and the open sea; the thin ice, its windows and floes
   if (L.bed || L.sea) out.sea = buildSea(L, group, quality);
   if (L.ice) out.ice = buildIce(L, group, quality);
-  // (Act V's props are the rime pack's, placed by act5Level)
-  if (!ACT5.has(L.type)) for (const p of L.props) addProp(B, I, p, L, rng, out);
+  // (Act V's props are the rime pack's, placed by act5Level; Act VI's are build6.js's, act6Level, the boot sets' among them)
+  if (!ACT5.has(L.type) && !ACT6.has(L.type)) for (const p of L.props) addProp(B, I, p, L, rng, out);
   if (L.type === 'weep' || L.type === 'heart') act3Level(L, I, B, out);
   if (ACT4.has(L.type)) act4Level(L, I, B, out);
   // the sea past the north and east edges, out into the fog: pack ice after the Freeze, and round the Farthest Light
   if (ACT5.has(L.type)) { out.beyond = seaBeyond(L, group, { ice: L.type === 'farlight' ? 'pack' : L.mode === 'frozen' }); act5Level(L, I, B, out); }
+  // Act VI: its props, the static dressing its spots name, the vault over it for the cines
+  if (ACT6.has(L.type)) act6Level(L, I, B, out);
   if (L.type === 'town') townBeyond(L, I, group);
   // per-level shader globals, set whenever this level's ground is drawn (only the zone the hero is in): the Edge of Tears,
   // where the last of the wind still reaches the Weeping Woods, and the Heartwood's heart that the lights beat with
   const edge = L.type === 'weep' ? [L.h - 40, L.h - 26] : [0, 0], heartAt = L.type === 'heart' ? L.spots.heart : null;
-  // (FX.L5: an Act V layout for fx.js's footprints, which lie only on its snow)
-  const l5 = ACT5.has(L.type) ? L : null;
+  // (FX.L5: an Act V or Act VI layout for fx.js's footprints, which lie only on its snow or its dry silt, and its stains'
+  // beds under the water; the occluder's Act V form, a hole round her, for the keels and hulls too)
+  const l5 = ACT5.has(L.type) || ACT6.has(L.type) ? L : null;
   if (out.ground) out.ground.onBeforeRender = () => { WIND.uEdge.value.set(edge[0], edge[1]); LIGHTS.heart = heartAt; FX.L5 = l5; WIND.uOcc5.value = l5 ? 1 : 0; };
   const inst = I.build(quality);
   B.build(quality);
@@ -3234,4 +3300,4 @@ export function runeDisc(r = 1.2, color = 0x5aa8ff) {
   return m;
 }
 // (for build5.js: Act V's props share the materials, the geometry helpers and the Act IV fire looks)
-export { MAT, mats, worldMat, bake, jitter, prism, solid, size4, own, glowMat, flameMesh, lanternMesh, lay4, hash2, act4Mats, Std };
+export { MAT, mats, worldMat, bake, jitter, prism, solid, size4, own, glowMat, flameMesh, lanternMesh, lay4, hash2, act4Mats, Std, addProp };
