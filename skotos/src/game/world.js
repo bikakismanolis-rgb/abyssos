@@ -36,6 +36,7 @@ import { emit, on } from '../ui/bus.js';
 import Audio from '../audio/audio.js';
 import { RNG, rand, angleTo, clamp, angleDiff } from '../core/util.js';
 import { t } from '../i18n/i18n.js';
+import { unloadOld } from './unload.js';
 
 export const ZONES = {
   town: { level: 1, music: 'town', ambient: 'town', atmos: 'town' },
@@ -106,6 +107,8 @@ function zoneFolk(id) {
 const crew = (set) => { try { return set ? creatureCount(set) : 0; } catch (e) { return 0; } };
 export function zoneReady(id, onPart) {
   const R0 = READY[ZONES[id]?.pack], folk = zoneFolk(id);
+  // (engine: Acts II-IV let go on the way into an Act V or VI zone, all but what this one loads: unload.js)
+  unloadOld(id, { packs: zonePacks(id), folk, group: R0?.creatures });
   if (!R0 && !folk.length) return Promise.resolve();
   const part = (pr) => pr.then((v) => { onPart?.(); return v; });
   return Promise.all([...zonePacks(id).map((k) => part(loadPack(k))), ...folk.map((f) => part(loadFolk(f))), R0 && crew(R0.creatures) ? loadCreatures(R0.creatures, onPart) : null]);
