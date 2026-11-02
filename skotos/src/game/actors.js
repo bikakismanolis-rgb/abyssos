@@ -8,7 +8,7 @@ import { Avatar } from '../gfx/anim.js';
 import { hasPerson, personModel } from '../gfx/people.js';
 import { hasCreature, creatureModel } from '../gfx/creatures.js';
 import { tex } from '../gfx/textures.js';
-import { MONSTERS, DIFFS, HAZ5, monsterHP, monsterDmg, AFFIXES, CLASSES, SKILLS, PACK_DORMANT, PACK_LINE, COOP } from './data.js';
+import { MONSTERS, DIFFS, HAZ5, HAZ6, monsterHP, monsterDmg, AFFIXES, CLASSES, SKILLS, PACK_DORMANT, PACK_LINE, COOP } from './data.js';
 import { NET } from '../net/state.js';
 import * as B from '../world/build.js';
 import { G, uid } from './state.js';
@@ -156,8 +156,10 @@ export function spawnMonster(id, x, z, o = {}) {
   const D = DIFFS[G.hero.diff];
   const lvl = o.level ?? monsterLevel(G.zone?.level ?? 1);
   let hp = monsterHP(lvl) * def.hp * D.hp, dmg = monsterDmg(lvl) * def.dmg * D.dmg;
-  // (Act V's zones: their creatures' blows by difficulty too, HAZ5.dmg, so the act steps up from the one before on each)
-  if (G.zone?.act5) dmg *= HAZ5[G.hero.diff]?.dmg ?? 1;
+  // (Act V's and Act VI's zones: their creatures' blows by difficulty too, the act's row's dmg, so the act steps up from the
+  // one before on each)
+  const HZ = G.zone?.act6 ? HAZ6 : G.zone?.act5 ? HAZ5 : null;
+  if (HZ) dmg *= HZ[G.hero.diff]?.dmg ?? 1;
   // co-op: the host's monsters stand up to the party (data.js COOP; net/coop.js rescales them as players come and go)
   const ck = NET.mode === 'host' && NET.n > 1 ? (def.boss ? COOP.boss : COOP.hp)[Math.min(4, NET.n) - 1] : 1, cd = ck !== 1 ? COOP.dmg[Math.min(4, NET.n) - 1] : 1;
   if (ck !== 1) { hp *= ck; dmg *= cd; }
@@ -209,10 +211,10 @@ function actSpawn(id, def, a, av, o) {
     a.mesh = M.moundMesh(); a.mesh.position.set(a.x, 0, a.z); a.mesh.rotation.y = Math.random() * 6.28; R.scene.add(a.mesh);
   }
   // the dead that wait: the Hollowed pass for dead wood (a dark tint), the Ash-Fallen lie under the ash (a pose and a mound).
-  // (An Act V pack says for itself whether it lies in wait, gen5's p.dormant: the Sunken on the coast's dry road stand; a
-  // frozen crew waits as ice instead, act5Spawn)
+  // (An Act V or VI pack (a zone with water) says for itself whether it lies in wait, gen5's p.dormant: the Sunken on the
+  // coast's dry road stand; a frozen crew waits as ice instead, act5Spawn)
   const pk = o.packId != null ? G.zone?.packs?.find((p) => p.id === o.packId) || null : null, tag = pk?.tag;
-  const dorm = o.dormant ?? (G.zone?.act5 && pk && 'dormant' in pk ? !!pk.dormant : tag && PACK_DORMANT[tag]);
+  const dorm = o.dormant ?? (G.zone?.water && pk && 'dormant' in pk ? !!pk.dormant : tag && PACK_DORMANT[tag]);
   if (def.wake && dorm && tag !== 'frozenCrew') {
     a.dormant = true; a.disguised = true;
     if (def.wake.pose) { a.pose = def.wake.pose; av.play(a.pose, 1); heapOver(a); }

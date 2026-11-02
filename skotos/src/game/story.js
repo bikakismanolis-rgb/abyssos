@@ -29,7 +29,7 @@ const STORY_TEARS = ['planting', 'sorrow', 'breaking'];
 const tearsSeen = () => STORY_TEARS.filter((id) => G.hero.flags['tear_' + id]).length;
 const wallsDown = () => [0, 1, 2].filter((i) => G.hero.flags['thorn' + i]).length;
 export function questText() {
-  const q = Math.min(G.hero.quest, 31), F = G.hero.flags;
+  const q = Math.min(G.hero.quest, 39), F = G.hero.flags;
   if (q === 12) return t('q.12', tearsSeen());
   if (q === 14) { const n = wallsDown(); return n >= 3 ? t('q.14b') : t('q.14', n); }
   if (q === 18) return t('q.18', lampsLit());
@@ -527,7 +527,9 @@ function actComplete(act) {
   else if (act === 2) { h.act2 = Math.max(h.act2 ?? -1, h.diff); h.quest = 10; h.flags.act2 = true; }
   else if (act === 3) { h.act3 = Math.max(h.act3 ?? -1, h.diff); h.quest = 16; h.flags.act3 = true; }
   else if (act === 4) { h.act4 = Math.max(h.act4 ?? -1, h.diff); h.quest = 23; h.flags.act4 = true; }
-  else { h.act5 = Math.max(h.act5 ?? -1, h.diff); h.quest = 31; h.flags.act5 = true; }
+  else if (act === 5) { h.act5 = Math.max(h.act5 ?? -1, h.diff); h.quest = 31; h.flags.act5 = true; }
+  // (Act VI: its end state; the act's music, panel and blessing are the story's, docs/act6-contract.md, Story)
+  else if (act === 6) { h.act6 = Math.max(h.act6 ?? -1, h.diff); h.quest = 39; h.flags.act6 = true; }
   G.flags.actDone = act;
   emit('quest');
   writeSave();

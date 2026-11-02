@@ -36,7 +36,7 @@ const fail = (r) => { REJECT[r] = (REJECT[r] || 0) + 1; return null; };
 
 // ---------- the walk grid at a tide level (what tide.js keeps, and what the checks walk) ----------
 // a tidal cell: a bed below BED_DRY, and no ice, thick ice, window or deck over it
-export const tidal = (L, i) => !!L.bed && L.bed[i] < BED_DRY && !L.ice[i] && !L.thick[i] && !L.window[i] && !L.deck[i];
+export const tidal = (L, i) => !!L.bed && L.bed[i] < BED_DRY && !L.ice?.[i] && !L.thick[i] && !L.window[i] && !L.deck[i];
 // Skerry Bay's own water (L.boss + 4): behind its bar the zone's clock never reaches it; the Walking Tower drives it
 export const inBay = (L, x, z) => L.type === 'coast' && Math.hypot(x + 0.5 - L.boss.x, z + 0.5 - L.boss.z) < L.boss.r + 4;
 // cells walkable at water level h (m): the build's grid with every tidal cell deep at h closed (the bay keeps low water)
@@ -771,7 +771,7 @@ export function coastFaults(L, R0, R1) {
 }
 // a cell to stand on whatever the tide: dry land, thick ice, a window, a deck
 // (a spot's own footprint, the hearth's stones or a Name-stone, is firm too: footprints are dry land or thick ice)
-export const firm = (L, x, z) => { const i = Math.floor(z) * L.w + Math.floor(x); return !L.ice[i] && !L.low[i] && (!!L.thick[i] || !!L.window[i] || !!L.deck?.[i] || !L.bed || L.bed[i] >= BED_DRY); };
+export const firm = (L, x, z) => { const i = Math.floor(z) * L.w + Math.floor(x); return !L.ice?.[i] && !L.low[i] && (!!L.thick[i] || !!L.window[i] || !!L.deck?.[i] || !L.bed || L.bed[i] >= BED_DRY); };
 export function refugeNear(L, x, z, r) {
   const { w } = L, okC = (cx, cz) => { const i = cz * w + cx; return L.cells[i] && L.bed[i] >= BED_DRY; };
   for (let cz = Math.floor(z - r); cz <= z + r; cz++) for (let cx = Math.floor(x - r); cx <= x + r; cx++) {
@@ -784,7 +784,7 @@ export function refugeNear(L, x, z, r) {
 }
 // a spine: from its start to its end on thick ice or dry ground only (the farlight's leads sealed: thick)
 export function spineWhole(L, s, extra) {
-  const { w, h } = L, okC = (i) => L.cells[i] && !L.ice[i] && (L.thick[i] || L.window[i] || !L.bed || L.bed[i] >= BED_DRY) || extra?.[i];
+  const { w, h } = L, okC = (i) => L.cells[i] && !L.ice?.[i] && (L.thick[i] || L.window[i] || !L.bed || L.bed[i] >= BED_DRY) || extra?.[i];
   const near = (p) => { for (let r = 0; r <= 2; r++) for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) { const x = Math.floor(p.x) + dx, z = Math.floor(p.z) + dz; if (x >= 0 && z >= 0 && x < w && z < h && okC(z * w + x)) return z * w + x; } return -1; };
   const a = near(s.from), b = near(s.to);
   if (a < 0 || b < 0) return false;
@@ -853,7 +853,7 @@ function flatSpot(L, rng, R0, want, list, gap) {
   const { w, h } = L;
   for (let t = 0; t < 300; t++) {
     const x = rng.int(4, w - 5), z = rng.int(4, h - 5), i = z * w + x;
-    if (!L.cells[i] || !R0[i] || !L.bed || !(L.bed[i] < BED_DRY) || L.ice[i] || L.thick[i] || L.deck[i] || !want(i)) continue;
+    if (!L.cells[i] || !R0[i] || !L.bed || !(L.bed[i] < BED_DRY) || L.ice?.[i] || L.thick[i] || L.deck[i] || !want(i)) continue;
     if (list.some((p) => Math.hypot(p.x - x - 0.5, p.z - z - 0.5) < gap)) continue;
     return { x: x + 0.5, z: z + 0.5 };
   }

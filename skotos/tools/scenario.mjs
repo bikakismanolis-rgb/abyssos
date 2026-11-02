@@ -2493,6 +2493,156 @@ const S = {
     const end = await ev(() => { const G = window.__G, h = G.hero; return { quest: h.quest, act5: h.act5, boons: h.boons.slice(), flags: ['seaLit', 'carved', 'toldChild', 'act5'].filter((f) => h.flags[f]), deaths: h.stats.deaths, lvl: h.level, minutes: Math.round(h.stats.time / 60) }; });
     await beat('the end: q31', end.quest === 31 && end.act5 >= 0, end);
     return { pass: beats.every((b) => b.ok) && end.quest === 31, failed: beats.filter((b) => !b.ok).map((b) => b.beat), end, tower, skotos, beats };
+  } },
+  // Act VI: world
+  // the save format and Act VI's fields (docs/act6-contract.md, Saves): an Act V-end hero of the shipped format (no act6,
+  // no fmt, five blessings) migrates with fmt === SAVE_FMT, act6 -1, gateFound 0, quest 31 and the sea still lit; an Act
+  // VI-end hero keeps its act6, quest 39, Lamplight rank and every blessing this build has (all six once BOONS[6] is in;
+  // until then a sixth this build does not know is refused 'newer', never cut); a boss legendary a pre-Act VI page cut
+  // comes back once, and not again (LEG_FROM.ketos, or Act V's Einar's Lantern stood in for it until combat's row is in);
+  // a stored record made newer between the title and the tap is refused by startHero and not written; and with the real
+  // save store over the fake artifact db, a cloud copy of a higher format is refused 'newer' and kept byte for byte while
+  // this page's copy is further on and later played (no push, no pull)
+  save15: { q: 'q=0&sim=2&norender&cloud=off', run: async (pg) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    const ev = (f, a) => pg.evaluate(f, a);
+    const D = await ev(async () => { const M = await import('/src/game/data.js'); return { fmt: M.SAVE_FMT, nb: Object.keys(M.BOONS).length, b6: M.BOONS[6]?.[0]?.id || null, ketos: M.LEG_FROM.ketos || null }; });
+    const now = Date.now(), flags5 = Object.fromEntries([...A5.ACT4, ...A5.flagsTo('toldChild'), 'act5'].map((k) => [k, true]));
+    const base = (o) => Object.assign({ xp: 0, gold: 900, inv: new Array(32).fill(null), equip: {}, stash: new Array(48).fill(null), skills: { whirl: 5, leap: 5, cry: 5, quake: 5 }, points: 0, wps: ['town', 'forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'forge', 'coast', 'farlight'], act1: 1, act2: 1, act3: 1, act4: 1, act5: 1, gateBest: 4, stats: { kills: 4000, deaths: 3, time: 80000, legs: 3, elites: 90 }, created: now, played: now, seeds: {} }, o);
+    const v5 = base({ id: 'hV5', name: 'V5', cls: 'warden', level: 36, diff: 1, quest: 31, flags: { ...flags5 }, boons: ['ember', 'forge', 'amber', 'lantern', 'name'] });
+    const v6 = base({ id: 'hV6', name: 'V6', cls: 'mage', level: 40, diff: 1, quest: 39, act6: 1, gateFound: 2, fmt: D.fmt, flags: { ...flags5, act6: true, ketosDown: true, keyxLamp: true, herFire: true, nameBack: true, homeGate: true }, boons: ['ember', 'forge', 'amber', 'lantern', 'name', ...(D.b6 ? [D.b6] : [])], mast: { lamp: 12, might: 3 }, mlvl: 20, skills: { fireball: 5, nova: 5 } });
+    const legK = base({ id: 'hLeg', name: 'Leg', cls: 'ranger', level: 38, diff: 1, quest: 39, act6: 1, fmt: D.fmt, flags: { ...flags5, act6: true, legFrom_ketos: true }, boons: ['ember', 'forge', 'amber', 'lantern', 'name'], skills: { multi: 5 } });
+    const six = base({ id: 'hSix', name: 'Six', cls: 'warden', level: 40, diff: 1, quest: 39, act6: 1, fmt: D.fmt, flags: { ...flags5, act6: true }, boons: ['ember', 'forge', 'amber', 'lantern', 'name', 'bearer6x'] });
+    const put = (heroes, last) => ev(([heroes, last]) => { const s = { heroes, settings: { helpSeen: true }, last }; localStorage.clear(); localStorage.setItem('skotos.save.v1', JSON.stringify(s)); window.__G.save = JSON.parse(JSON.stringify(s)); }, [heroes, last]);
+    const load = async (id, stand) => {
+      await pg.goto(A5.base + '?q=0&sim=2&norender&cloud=off');
+      await pg.waitForFunction(() => window.__ready && window.__G?.save, null, { timeout: 240000 });
+      if (stand) await ev(async (s) => { (await import('/src/game/data.js')).LEG_FROM.ketos = s; }, stand);
+      await ev((id) => window.__D.emit('startHero', window.__G.save.heroes.find((x) => x.id === id), false), id);
+      await pg.waitForFunction(() => window.__G?.zone && window.__G.mode === 'play', null, { timeout: 240000 });
+      await A5.tick(pg); await pg.waitForTimeout(2600);
+      return ev(async (id) => {
+        const G = window.__G, h = G.hero, st = JSON.parse(localStorage.getItem('skotos.save.v1')).heroes.find((x) => x.id === id), S = await import('/src/game/story.js');
+        const legs = [...h.inv, ...h.stash, ...Object.values(h.equip)].filter((it) => it?.leg).map((it) => it.leg);
+        return { fmt: h.fmt, act6: h.act6, act5: h.act5, gateFound: h.gateFound, quest: h.quest, q: S.questText(), seaLit: !!h.flags.seaLit, f6: !!h.flags.act6, boons: h.boons.slice(), lamp: h.mast?.lamp, legs, legBack: Object.keys(h.flags).filter((k) => k.startsWith('legBack_')), stored: st && { fmt: st.fmt, act6: st.act6, boons: st.boons, lamp: st.mast?.lamp } };
+      }, id);
+    };
+    // ---- an Act V-end hero of the shipped format ----
+    await put([v5], 'hV5');
+    const a = await load('hV5');
+    beat('Act V end: migrated, stamped', a.fmt === D.fmt && a.act6 === -1 && a.gateFound === 0 && a.quest === 31 && a.seaLit && !a.f6 && a.boons.join() === 'ember,forge,amber,lantern,name' && a.stored?.fmt === D.fmt && a.stored.act6 === -1 && a.q !== 'q.31', a);
+    // ---- an Act VI-end hero ----
+    await put([v6, six], 'hV6');
+    const b = await load('hV6');
+    beat('Act VI end: act6, quest 39, the Lamplight rank and every blessing this build has', b.fmt === D.fmt && b.act6 === 1 && b.f6 && b.quest === 39 && b.lamp === 12 && b.stored?.lamp === 12 && b.boons.length === 5 + (D.b6 ? 1 : 0) && b.stored.boons.length === b.boons.length, b);
+    const sx = await ev(async () => { const SV = await import('/src/game/save.js'), d = JSON.parse(localStorage.getItem('skotos.save.v1')).heroes.find((x) => x.id === 'hSix'); return { fits: SV.heroFits(d), blocked: SV.heroBlocked(window.__G.save.heroes.find((x) => x.id === 'hSix')), boons: d.boons.length }; });
+    beat('a sixth blessing this build does not know: refused newer, kept whole', sx.fits === 'newer' && sx.blocked === 'newer' && sx.boons === 6, sx);
+    // ---- a boss legendary cut by an older page comes back once ----
+    await put([legK], 'hLeg');
+    const stand = D.ketos ? null : 'einarLantern', leg = D.ketos || stand;
+    const c1 = await load('hLeg', stand), c2 = await load('hLeg', stand);
+    beat('the Ketos\'s legendary back once, not again', c1.legs.filter((l) => l === leg).length === 1 && c1.legBack.includes('legBack_ketos') && c2.legs.filter((l) => l === leg).length === 1, { stand, c1: { legs: c1.legs, back: c1.legBack }, c2: c2.legs });
+    // ---- a record made newer between the title and the tap ----
+    await put([v5], 'hV5');
+    await pg.goto(A5.base + '?q=0&sim=2&norender&cloud=off');
+    await pg.waitForFunction(() => window.__ready && window.__G?.save && window.__G.mode === 'title', null, { timeout: 240000 });
+    const nw = await ev(async (fmt) => {
+      // (as a newer tab writes it: found by its id, the page before this one may have put its own hero back on leaving)
+      const disk = JSON.parse(localStorage.getItem('skotos.save.v1')), rec = disk.heroes.find((x) => x.id === 'hV5'); rec.fmt = fmt + 1; rec.gold = 4242;
+      const text = JSON.stringify(rec); localStorage.setItem('skotos.save.v1', JSON.stringify(disk));
+      const toasts = []; (await import('/src/ui/bus.js')).on('toast', (t) => toasts.push(t));
+      window.__D.emit('startHero', window.__G.save.heroes.find((x) => x.id === 'hV5'), false);
+      await new Promise((r) => setTimeout(r, 2500));
+      const after = JSON.stringify(JSON.parse(localStorage.getItem('skotos.save.v1')).heroes.find((x) => x.id === 'hV5'));
+      return { mode: window.__G.mode, hero: !!window.__G.hero, same: after === text, toast: toasts.includes(window.__D.t('menu.newer')) };
+    }, D.fmt);
+    beat('made newer meanwhile: not taken up, not written', nw.mode === 'title' && !nw.hero && nw.same && nw.toast, nw);
+    // ---- the cloud: a copy of a higher format is never written over ----
+    await put([base({ id: 'hC', name: 'C', cls: 'warden', level: 30, diff: 1, quest: 31, flags: { ...flags5 }, fmt: D.fmt, boons: ['ember'] })], null);
+    await pg.goto(A5.base + '?q=0&sim=2&norender&cloud=off');
+    await pg.waitForFunction(() => window.__ready && window.__G?.save && window.__G.mode === 'title', null, { timeout: 240000 });
+    const cl = await ev(async (fmt) => {
+      const { syncAll } = await import('/src/game/cloudsync.js'), { artifactBackend } = await import('/src/net/cloudart.js'), F = await import('/tools/cloud/fakes.mjs'), SV = await import('/src/game/save.js');
+      const store = { heroes: SV.storedHeroes, current: SV.playingId, put: SV.putStored, drop: SV.dropStored, meta: SV.cloudMeta, setMeta: SV.setCloudMeta, backup: SV.backupHero, check: SV.heroFits };
+      const A = F.artifactDb(), B = await artifactBackend(A.claude('u1')), other = F.device(); other.B = await artifactBackend(A.claude('u1'));
+      const r0 = await syncAll(B, store); await syncAll(other.B, other.store);
+      other.play('hC', (h) => { h.fmt = fmt + 1; h.act6 = -1; h.gold = 7; }, Date.now() - 60000); await syncAll(other.B, other.store);
+      const text = A.docs.get('data/users/u1/h-hC').data;
+      const disk = JSON.parse(localStorage.getItem('skotos.save.v1')), h = disk.heroes.find((x) => x.id === 'hC'); h.level = 36; h.xp = 50; h.stats.kills += 900; h.played = Date.now();
+      localStorage.setItem('skotos.save.v1', JSON.stringify(disk));
+      const r = await syncAll(B, store);
+      return { r0: r0.pushed, pushed: r.pushed, pulled: r.pulled, errors: r.errors, same: A.docs.get('data/users/u1/h-hC').data === text, local: SV.storedHeroes().find((x) => x.id === 'hC')?.level };
+    }, D.fmt);
+    beat('a cloud copy of a higher format: refused newer, kept byte for byte, this further copy kept here', cl.r0.includes('hC') && !cl.pushed.length && !cl.pulled.length && cl.errors.some((e) => e.id === 'hC' && e.code === 'newer') && cl.same && cl.local === 36, cl);
+    return { pass: beats.every((x) => x.ok), D, failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
+  } },
+  // the way down and home (docs/act6-contract.md, Exits and Waypoints): ?auto=drained and ?auto=bottom load (light 'under',
+  // z.cold and z.water, no ice); the rope hole on the Light's Skerry once Tamarisk has told of it (tam6), pushed once, on a
+  // walkable cell clear of the door-stone and Selna's pad, shut until the coal (coal6: d.ropeShut); down to the rope's foot
+  // and back up to the hole; the Well only in the drained reading (ketosDown: the zone built again), down to the Well's
+  // Foot; the Gate ring shut until her fire (d.gateDark), then home within 3 m of Isarn's staff; both waypoints found and
+  // listed with their places' names; the seeds one per difficulty
+  way6: { q: 'auto=town&q=0&sim=2&norender&lvl=36&cloud=off', run: async (pg) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    const ev = (f, a) => pg.evaluate(f, a);
+    const zoneOf = () => ev(async () => { const z = window.__G.zone, Lt = await import('/src/game/light.js'); return { id: z.id, mode: z.mode, cold: !!z.cold, water: !!z.water, act6: !!z.act6, ice: !!z.L.ice || !!z.lvl.ice, light: Lt.lightKind(), exits: z.L.exits.map((e) => e.to + (e.locked ? ':' + e.locked : '')) }; });
+    for (const id of ['drained', 'bottom']) {
+      await pg.goto(A5.base + '?auto=' + id + '&q=0&sim=2&norender&cloud=off');
+      await pg.waitForFunction(() => window.__ready && window.__G?.player && window.__G.mode === 'play', null, { timeout: 240000 });
+      await A5.tick(pg); await pg.waitForTimeout(800);
+      const s = await zoneOf();
+      beat('?auto=' + id + ' loads', s.id === id && s.cold && s.water && s.act6 && !s.ice && s.light === 'under', s);
+    }
+    await pg.goto(A5.base + '?' + 'auto=town&q=0&sim=2&norender&lvl=36&cloud=off');
+    await pg.waitForFunction(() => window.__ready && window.__G?.player && window.__G.mode === 'play', null, { timeout: 240000 });
+    await A5.tick(pg); await A4.listen(pg);
+    await ev(() => { window.__immortal = true; const h = window.__G.hero, F = h.flags; for (const k of ['act1', 'act2', 'act3', 'act4', 'act5', 'fireTaken', 'crownUnmade', 'newFire', 'hearth', 'frozen', 'farSeen', 'hole0', 'hole1', 'hole2', 'skotosWake', 'skotosDown', 'selnaBack', 'seaLit', 'mem_i4', 'carved']) F[k] = true; h.act5 = h.diff; h.quest = 31; });
+    const flag = (k) => ev((k) => { window.__G.hero.flags[k] = true; }, k);
+    const exitIt = (to) => `z.interact.find((i) => i.kind === 'exit' && i.to === '${to}')`;
+    const useExit = async (to, arrive) => {
+      await ev((to) => { const G = window.__G, z = G.zone, it = z.interact.find((i) => i.kind === 'exit' && i.to === to); const f = z.map.nearestFloor(it.x, it.z + 1.2, 3); G.player.x = f.x; G.player.z = f.z; window.__says.length = 0; it.use(); }, to);
+      if (arrive) await pg.waitForFunction((id) => window.__G.zone?.id === id && !document.getElementById('fade').classList.contains('on'), arrive, { timeout: 240000 });
+      await pg.waitForTimeout(500);
+    };
+    const near = (to, r) => ev(([to, r]) => { const G = window.__G, z = G.zone, e = z.L.exits.find((x) => x.to === to); return !!e && Math.hypot(G.player.x - e.x, G.player.z - e.z) <= r; }, [to, r]);
+    // ---- the Light's Skerry ----
+    await A5.travel(pg, 'farlight', 'waypoint');
+    beat('no rope hole before tam6', await ev((q) => { const z = window.__G.zone; return !z.L.exits.some((e) => e.to === 'drained') && !new Function('z', 'return ' + q)(z); }, exitIt('drained')));
+    await flag('tam6');
+    await A5.travel(pg, 'farlight', 'waypoint'); await A5.travel(pg, 'farlight', 'waypoint');
+    const hole = await ev(() => { const z = window.__G.zone, S = z.L.spots, e = z.L.exits.find((x) => x.to === 'drained'), d = S.farLight.door; return e && { n: z.L.exits.filter((x) => x.to === 'drained').length, it: z.interact.filter((i) => i.kind === 'exit' && i.to === 'drained').length, locked: e.locked, door: +Math.hypot(e.x - d.x - 1.2, e.z - d.z + 0.6).toFixed(2), pad: +Math.hypot(e.x - S.selnaPad.x, e.z - S.selnaPad.z).toFixed(2), core: +Math.hypot(e.x - S.core.x, e.z - S.core.z).toFixed(2), walk: z.map.walkable(e.x, e.z) }; });
+    beat('the rope hole: once, on the core, clear of the door-stone and the pad', hole && hole.n === 1 && hole.it === 1 && hole.locked === 'coal6' && hole.door >= 2.5 && hole.pad >= 3 && hole.core <= 6.5 && hole.walk, hole);
+    await useExit('drained');
+    beat('shut until the coal: d.ropeShut', await ev(() => window.__G.zone.id === 'farlight' && window.__says.includes('d.ropeShut')));
+    await flag('coal6');
+    await useExit('drained', 'drained');
+    const d1 = await zoneOf();
+    beat('down the rope: the rope\'s foot, the Mere unbroken (no Well)', d1.mode === 'mere' && !d1.exits.some((e) => e.startsWith('bottom')) && await near('farlight', 4) && await ev(() => (window.__G.zone.voices || []).some((v) => v.key === 'd.wellShut')), d1);
+    await useExit('farlight', 'farlight');
+    beat('up the rope: at the hole', await near('drained', 4));
+    // ---- the Drained Sea once the Ketos is down: the Well ----
+    await flag('ketosDown');
+    await A5.travel(pg, 'drained', 'waypoint');
+    const d2 = await zoneOf();
+    beat('the Ketos down: built again dry, the Well open', d2.mode === 'dry' && d2.exits.includes('bottom:ketosDown'), d2);
+    await useExit('bottom', 'bottom');
+    beat('down the Well: the Well\'s Foot', await near('drained', 4));
+    await useExit('town');
+    beat('the Gate ring shut until her fire: d.gateDark', await ev(() => window.__G.zone.id === 'bottom' && window.__says.includes('d.gateDark')));
+    await flag('herFire');
+    await A5.travel(pg, 'bottom', 'waypoint');
+    beat('her fire: the Bottom built again lit', (await zoneOf()).mode === 'lit');
+    await useExit('town', 'town');
+    const home = await ev(() => { const G = window.__G, s = G.zone.L.spots.npcs.wayfarer; return +Math.hypot(G.player.x - s.x, G.player.z - s.z).toFixed(2); });
+    beat('home beside Isarn\'s staff (within 3 m)', home <= 3, home);
+    // ---- waypoints and seeds ----
+    const wp = await ev(async () => { const G = window.__G, h = G.hero; window.__D.openPanel('waypoints'); await new Promise((r) => setTimeout(r, 400)); const html = document.getElementById('panel').innerHTML; window.__D.closePanel(); return { wps: h.wps.slice(), rope: html.includes(window.__D.t('wp.drained')), foot: html.includes(window.__D.t('wp.bottom')), seeds: Object.keys(h.seeds || {}), diff: h.diff }; });
+    beat('both waypoints found and listed by their places', wp.wps.includes('drained') && wp.wps.includes('bottom') && wp.rope && wp.foot, wp);
+    beat('the seeds one per difficulty', wp.seeds.includes('drained@' + wp.diff) && wp.seeds.includes('bottom@' + wp.diff) && !wp.seeds.includes('drained') && !wp.seeds.includes('bottom'), wp.seeds);
+    await pg.evaluate(() => window.__D.emit('travel', 'bottom', { at: 'waypoint' }));
+    await pg.waitForFunction(() => window.__G.zone?.id === 'bottom' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 240000 });
+    beat('by the waypoint to the Well\'s Foot', true);
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
   } }
 };
 const sc = S[name];

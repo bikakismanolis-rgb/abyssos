@@ -188,6 +188,12 @@ export async function syncAll(backend, store, o = {}) {
     if (l) R.replaced.push(id);
   };
 
+  // (a cloud copy this page cannot keep as it is (check: a newer version's, a higher save format) is weighed against
+  // nothing: neither taken nor written over, however much further on or later played this copy is; the base stays as it
+  // was, so a lower format never replaces a higher one. Unless the player took the hero up repaired on this page (its
+  // base marked lost and forced, save.js): that copy was theirs to choose, its record kept here as a backup first)
+  const newer = (id, got, b) => { if (b?.forced) return false; const bad = store.check?.(got.h); if (bad) fail(id, { code: bad }); return !!bad; };
+
   for (const id of ids) {
     if (stop) break;
     const l = L.get(id), c = C.get(id), b = meta.base[id], t = meta.tomb[id];
@@ -237,7 +243,7 @@ export async function syncAll(backend, store, o = {}) {
     if (localSame || localIdle) {
       // (a base the chain no longer reaches: the cloud's copy taken as routine only if it is not behind this one)
       const got = await fetch(id);
-      if (!got) continue;
+      if (!got || newer(id, got, b)) continue;
       if (further(got.h, l) >= 0) await pull(id, l, 'cloud', got);
       else if (!ro) { store.backup(got.h, 'conflict'); await push(id, l, got.rec); }
       continue;
@@ -246,7 +252,7 @@ export async function syncAll(backend, store, o = {}) {
     // so that two devices choose alike); the other copy is kept as a backup. (A cloud copy that, like an open page's,
     // only moved its clock since the base is no change there: this one goes up over it)
     const got = await fetch(id);
-    if (!got) continue;
+    if (!got || newer(id, got, b)) continue;
     if (known && typeof b.work === 'string' && b.work === workSum(got.h)) { await push(id, l, got.rec); continue; }
     const d = further(got.h, l) || num(got.h.played) - num(l.played) || (heroSum(got.h) > sumL ? 1 : -1);
     if (d > 0) await pull(id, l, 'conflict', got);

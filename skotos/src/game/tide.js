@@ -91,7 +91,7 @@ export function tickTide(dt) {
 }
 function tick(dt) {
   const z = G.zone;
-  if (z?.act5) tickWash(z, dt);
+  if (z?.water) tickWash(z, dt);
   TIDE = z?.L?.bed && z.tide ? z.tide : null;
   const T = TIDE; if (!T) return;
   const H = haz(), pl = G.player;

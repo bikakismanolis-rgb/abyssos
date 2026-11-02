@@ -112,7 +112,7 @@ export function updateActors(dt) {
     // Act V: wading (tide.js; moveMul slows all but swimmers); never the floaters, fliers or the hidden
     a.inWater = a.def.float || a.def.ai === 'bat' || a.under || a.airborne ? null : wadeAt(a.x, a.z);
     // ... swimmers in the deep, the Sunken stronger in the shallows (waterTick)
-    if (G.zone.act5) waterTick(a, dt);
+    if (G.zone.water) waterTick(a, dt);
     // a sea-light's beam: the unlit dazzled and revealed, the light-shy scattered
     if (a.def.unlit || a.def.lightShy) beamTick(a);
     // floundering in a broken hole: no actions until it hauls out (ice.js)
@@ -160,7 +160,7 @@ export function updateActors(dt) {
       if (a.def.frostRoar && Math.random() < dt * 0.7) breath(a.x + Math.sin(a.rot) * 1.25 * (a.scale || 1), 1.15 * (a.scale || 1), a.z + Math.cos(a.rot) * 1.25 * (a.scale || 1), 0.6, Math.sin(a.rot), Math.cos(a.rot));
     }
   }
-  if (G.zone.act5) shadeTick(dt);
+  if (G.zone.water) shadeTick(dt);
 }
 function targetOf(a) {
   // held by a Challenge or an Iron Bulwark (skillsx.js; a guest's, net/coop.js): that hero, while it stands
