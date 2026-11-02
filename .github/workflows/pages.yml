@@ -47,8 +47,8 @@ jobs:
         continue-on-error: true
         working-directory: skotos
         env:
-          VITE_SUPABASE_URL: https://twabjiurbqhqmxzcokqj.supabase.co
-          VITE_SUPABASE_ANON_KEY: sb_publishable_A4_6wAoE8hvOBtIWBVp2Tw_vrry83yH
+          VITE_SUPABASE_URL: https://jxjrggyjdqgbodvlqdte.supabase.co
+          VITE_SUPABASE_ANON_KEY: sb_publishable__6PL3oO2A53qVhU0w6wAEw_pXlHMYk4
         run: |
           npm ci --no-audit --no-fund
           npm run build:web
