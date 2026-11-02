@@ -2746,6 +2746,171 @@ const S = {
     }
     return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
   } },
+  // the six peaks (docs/act6-contract.md, FAR_BEACONS): FAR_BEACONS 7-12 on the northern skyline, seed and orange, dark
+  // in Whitecliff until Act VI is done (h.act6 >= 0), then lit on that entry and every one after (a Continue too), each a
+  // sprite and its flames with no light of its own (no L.lights entry, no live source); put out and lit again without
+  // touching the town's other lights; the hilltop far fires unchanged; the Saltborn's three lights hold their flash from
+  // the call below the ice until her fire burns, and flash again after; from the home cine's camera over the beacon hill
+  // no peak's core overlaps another far fire's (a shot for the eye)
+  peaks6: { q: 'auto=town&q=0&sim=2&norender&lvl=36&cloud=off', run: async (pg, shot) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    const ev = (f, a) => pg.evaluate(f, a);
+    await A5.tick(pg);
+    const PEAKS = [7, 8, 9, 10, 11, 12];
+    const fires = () => ev(async () => {
+      const G = window.__G, z = G.zone, W = await import('/src/game/world.js'), { R } = await import('/src/gfx/gfx.js'), T = z.town || { far: [] };
+      const far = W.FAR_BEACONS.map((F0, i) => { const f = T.far[i]; return f ? { i, light: !!f.light, inL: !!f.light && z.L.lights.includes(f.light), shown: f.spr.parent === R.scene, extra: z.extra.includes(f.spr), em: z.emit4.includes(f.em), flash: f.spr.userData.flash, col: f.spr.material.color.getHex() } : null; });
+      const rows = W.FAR_BEACONS.map((F0) => ({ peak: !!F0.peak, seed: !!F0.seed, col: F0.color ?? null }));
+      return { far, rows, keys: z.L.lights.filter((l) => /^far\d+$/.test(l.key || '')).map((l) => l.key).sort(), live: [...R.sources].filter((s) => /^far\d+$/.test(s.key || '')).map((s) => s.key).sort(), nL: z.L.lights.length, nX: z.extra.length, nE: z.emit4.length, hills: z.L.farFires.length };
+    });
+    const fireTown = (o) => ev(async (o) => { const G = window.__G, h = G.hero, W = await import('/src/game/world.js'); Object.assign(h.flags, o.flags || {}); if (o.act6 != null) h.act6 = o.act6; W.townFires(G.zone); }, o);
+    // ---- Act V's end: the sea lit, the peaks dark ----
+    const flags5 = Object.fromEntries([...A5.ACT4, ...A5.flagsTo('toldChild'), 'act5'].map((k) => [k, true]));
+    await ev((f) => { window.__immortal = true; const h = window.__G.hero; Object.assign(h.flags, f); h.act1 = h.act2 = h.act3 = h.act4 = h.act5 = h.diff; h.act6 = -1; h.quest = 31; }, flags5);
+    await fireTown({});
+    let s = await fires();
+    const row = s.rows;
+    beat('FAR_BEACONS 7-12: thirteen rows, the six peaks seed and orange', s.rows.length === 13 && PEAKS.every((i) => row[i].peak && row[i].seed && row[i].col === null) && row.slice(0, 7).every((r) => !r.peak) && s.hills === 3, row.slice(7));
+    beat('Act V\'s end: the seven fires lit, each with its light; the peaks dark', [0, 1, 2, 3, 4, 5, 6].every((i) => s.far[i]?.inL && s.far[i].shown) && PEAKS.every((i) => !s.far[i]) && s.keys.length === 7 && s.live.length === 7, { keys: s.keys, live: s.live });
+    // ---- the call below the ice: the sea-lights hold their flash; her fire: they flash again ----
+    await fireTown({ flags: { call6: true } });
+    s = await fires();
+    beat('the call: the Saltborn\'s lights held (flash 0), the fourth fire as it was', [4, 5, 6].every((i) => s.far[i]?.flash === 0) && s.far[3]?.flash === 0 && PEAKS.every((i) => !s.far[i]), [3, 4, 5, 6].map((i) => s.far[i]?.flash));
+    await fireTown({ flags: { coal6: true, ketosDown: true, herFire: true, nameBack: true } });
+    s = await fires();
+    beat('her fire: they flash again in their 12 s beat', [4, 5, 6].every((i) => s.far[i]?.flash === 12), [4, 5, 6].map((i) => s.far[i]?.flash));
+    const base = s;
+    // ---- the act done: the six peaks catch ----
+    await fireTown({ flags: { homeGate: true, act6: true }, act6: 1 });
+    s = await fires();
+    const pk = PEAKS.map((i) => s.far[i]);
+    beat('Act VI done: the six peaks lit, sprite and flames, orange, no light of their own', pk.every((f) => f && !f.light && !f.inL && f.shown && f.extra && f.em && f.flash === 0 && f.col === 0xffa040) && s.keys.join() === base.keys.join() && s.live.join() === base.live.join() && s.nL === base.nL && s.nX === base.nX + 6 && s.nE === base.nE + 6, { pk, keys: s.keys, nL: [base.nL, s.nL], nX: [base.nX, s.nX], nE: [base.nE, s.nE] });
+    // ---- one put out and lit again: the town's other lights untouched ----
+    const cyc = await ev(async () => {
+      const G = window.__G, z = G.zone, W = await import('/src/game/world.js'), { R } = await import('/src/gfx/gfx.js');
+      const snap = () => ({ L: z.L.lights.slice(), n: R.sources.size, x: z.extra.length, e: z.emit4.length });
+      const a = snap(); W.setFar(z, 9, false); const b = snap(); W.setFar(z, 9, true); const c = snap();
+      const same = (u, v) => u.length === v.length && u.every((l, i) => l === v[i]);
+      return { offL: same(a.L, b.L), onL: same(a.L, c.L), src: [a.n, b.n, c.n], x: [a.x, b.x, c.x], e: [a.e, b.e, c.e] };
+    });
+    beat('a peak put out and lit again: L.lights and the live sources untouched', cyc.offL && cyc.onL && cyc.src[0] === cyc.src[1] && cyc.src[1] === cyc.src[2] && cyc.x[1] === cyc.x[0] - 1 && cyc.x[2] === cyc.x[0] && cyc.e[1] === cyc.e[0] - 1 && cyc.e[2] === cyc.e[0], cyc);
+    // ---- from the home cine's camera over the beacon hill: no peak's core on another far fire's ----
+    const view = await ev(async () => {
+      const G = window.__G, z = G.zone, b = z.L.beacon, W = await import('/src/game/world.js'), { R } = await import('/src/gfx/gfx.js');
+      window.__D.emit('cine', { x: b.x, z: b.z - 16, dur: 60, zoom: 1.5, pitch: 0.28, steps: [] });
+      await new Promise((r) => setTimeout(r, 4000));
+      const c = R.camera; c.updateMatrixWorld(); const p = c.position, V = p.constructor;
+      // (a far fire's core: where its glow is over half its brightness, 0.4 of the sprite's half-size, at the breath's top)
+      const list = W.FAR_BEACONS.map((F0, i) => { if (!z.town.far[i]) return null; const q = new V(b.x + F0.dx, F0.y, b.z + F0.dz), d = q.clone().sub(p), dist = d.length(), sc = q.clone().project(c); return { i, peak: !!F0.peak, u: d.normalize(), dist: +dist.toFixed(1), ang: Math.atan((0.4 * 3.5 * 1.13) / dist), on: Math.abs(sc.x) <= 1 && Math.abs(sc.y) <= 1 && sc.z < 1, s: [+sc.x.toFixed(2), +sc.y.toFixed(2)] }; }).filter(Boolean);
+      const pairs = [];
+      for (let a = 0; a < list.length; a++) for (let k = a + 1; k < list.length; k++) { const A = list[a], B = list[k], sep = Math.acos(Math.min(1, A.u.dot(B.u))); pairs.push({ a: A.i, b: B.i, peak: A.peak || B.peak, r: +(sep / (A.ang + B.ang)).toFixed(2), deg: +(sep * 57.3).toFixed(1) }); }
+      pairs.sort((u, v) => u.r - v.r);
+      return { cam: { x: +p.x.toFixed(1), y: +p.y.toFixed(1), z: +p.z.toFixed(1) }, inView: list.filter((l) => l.on).map((l) => l.i), dist: list.map((l) => [l.i, l.dist]), screen: list.map((l) => [l.i, ...l.s]), closestPeak: pairs.filter((q) => q.peak).slice(0, 4), closestOld: pairs.filter((q) => !q.peak).slice(0, 2) };
+    });
+    await shot();
+    await ev(() => { const c = window.__G.cine; if (c) c.t = c.dur; });
+    beat('from the beacon hill: no peak\'s core overlaps another far fire\'s', view.closestPeak.length && view.closestPeak[0].r >= 1, view);
+    // ---- a Continue: lit again on the first entry ----
+    await A5.reload(pg, { q: 'q=0&sim=2&norender&cloud=off' });
+    s = await fires();
+    beat('a Continue: the six peaks lit on entry, still no light of their own', s.rows.length === 13 && PEAKS.every((i) => s.far[i] && !s.far[i].light && s.far[i].shown) && s.keys.length === 7 && s.live.length === 7 && [4, 5, 6].every((i) => s.far[i]?.flash === 12), { keys: s.keys, live: s.live, peaks: PEAKS.map((i) => !!s.far[i]) });
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
+  } },
+  // the places to wake and the way home (docs/act6-contract.md, Checkpoints, Waypoints, Exits): each zone's waypoint found
+  // on the first arrival (the Rope down the rope, the Well's Foot down the Well) and kept in the save; the camp the place
+  // to wake from that arrival (flags.cp6[zone], saved); every key of checkpoint6 refused until what it names holds, then
+  // waking beside its spot on a walkable cell and kept in flags.cp6; a Continue builds the zone again and wakes there, and
+  // so does a death; a key that no longer holds (the Heap's gap once the Ketos is down, the Stair's foot once the Shade is)
+  // gives way to the camp on the next entry; the Gate ring one way: home by Isarn's staff, no way down from Whitecliff, an
+  // arrival from the town (or the Bottom's waypoint) never at the ring
+  wake6: { q: 'auto=town&q=0&sim=2&norender&lvl=36&cloud=off', run: async (pg) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    const ev = (f, a) => pg.evaluate(f, a);
+    const Q = 'q=0&sim=2&norender&cloud=off';
+    await A5.tick(pg);
+    const listen = () => ev(async () => { window.__toasts = []; (await import('/src/ui/bus.js')).on('toast', (t) => window.__toasts.push(t)); });
+    await listen();
+    const flags5 = Object.fromEntries([...A5.ACT4, ...A5.flagsTo('toldChild'), 'act5', 'call6', 'tam6', 'coal6'].map((k) => [k, true]));
+    await ev((f) => { window.__immortal = true; const h = window.__G.hero; Object.assign(h.flags, f); h.act1 = h.act2 = h.act3 = h.act4 = h.act5 = h.diff; h.act6 = -1; h.quest = 31; h.wps = h.wps.filter((w) => w !== 'drained' && w !== 'bottom'); }, flags5);
+    // (where each key wakes her, against its spot: the camp's centre +2 m, a hearth's, a lantern's or a lost light's +2 m,
+    // the Heap's gap and the Stair's foot as they are)
+    const here = () => ev(() => { const G = window.__G, z = G.zone, h = G.hero, st = JSON.parse(localStorage.getItem('skotos.save.v1')).heroes.find((x) => x.id === h.id), c = z.checkpoint, S = z.L.spots; return { id: z.id, mode: z.mode, wps: h.wps.slice(), sWps: st?.wps || [], cp6: { ...(h.flags.cp6 || {}) }, sCp6: { ...(st?.flags?.cp6 || {}) }, found: window.__toasts.filter((t) => t === window.__D.t('hud.discovered')).length, cpCamp: c ? +Math.hypot(c.x - S.camp.x, c.z - S.camp.z - 2).toFixed(2) : null }; });
+    const keys = (list) => ev(async (list) => {
+      const G = window.__G, z = G.zone, F = G.hero.flags, S = z.L.spots, W = await import('/src/game/world.js'), out = [];
+      const LOST = ['galini', 'twins', 'kranea', 'psamathe'];
+      const spot = (key) => { const k = /^(hearth|wreck|lost)(\d)$/.exec(key); if (key === 'camp' || key === 'well') return { x: S.camp.x, z: S.camp.z + 2 }; if (key === 'heap') return S.heap?.gap; if (key === 'stair') return S.stair?.foot; const p = k[1] === 'hearth' ? S.hearths?.find((h) => h.k === +k[2]) : k[1] === 'wreck' ? S.wreckLamps?.find((l) => l.i === +k[2]) : S.lost?.find((l) => l.id === LOST[+k[2]])?.lamp; return p && { x: p.x, z: p.z + 2 }; };
+      for (const [key, on, off] of list) {
+        for (const f of Object.keys(on)) delete F[f];
+        Object.assign(F, off || {});
+        const before = F.cp6?.[z.id], no = W.checkpoint6(z, key);
+        const refused = !no && F.cp6?.[z.id] === before;
+        Object.assign(F, on);
+        const ok = W.checkpoint6(z, key), c = z.checkpoint, p = spot(key);
+        out.push({ key, refused, ok, saved: F.cp6?.[z.id] === key, d: c && p ? +Math.hypot(c.x - p.x, c.z - p.z).toFixed(2) : null, walk: !!c && z.map.walkable(c.x, c.z) });
+      }
+      return out;
+    }, list);
+    const good = (r, always) => r.ok && r.saved && r.walk && r.d != null && r.d <= 4 && (always || r.refused);
+    // ---- the Drained Sea, first arrival down the rope ----
+    await A5.travel(pg, 'drained', 'farlight');
+    let h = await here();
+    beat('drained: the Rope found on the first arrival, saved', h.id === 'drained' && h.wps.includes('drained') && h.sWps.includes('drained') && h.found === 1, h);
+    beat('drained: the camp the place to wake from the first arrival, saved', h.cp6.drained === 'camp' && h.sCp6.drained === 'camp' && h.cpCamp <= 4, h);
+    const kd = await keys([['camp', {}], ['hearth1', { hearth6_1: true }], ['hearth2', { hearth6_2: true }], ['hearth3', { hearth6_3: true }], ['wreck0', { wreck6: [0] }], ['wreck1', { wreck6: [0, 1] }], ['wreck2', { wreck6: [0, 1, 2] }],
+      ['lost0', { lost0: true }], ['lost1', { lost1: true }], ['lost2', { lost2: true }], ['lost3', { lost3: true }], ['heap', { ketosWake: true }, { ketosDown: false }]]);
+    beat('drained: every key refused until it holds, then beside its spot, kept in flags.cp6', kd.every((r) => good(r, r.key === 'camp')), kd);
+    const nd = await keys([['well', {}], ['stair', { blackLamp0: true, blackLamp1: true, blackLamp2: true }]]);
+    beat('drained: the Bottom\'s keys never wake her here', nd.every((r) => !r.ok), nd);
+    await ev(() => { const F = window.__G.hero.flags; for (const k of ['blackLamp0', 'blackLamp1', 'blackLamp2']) delete F[k]; });
+    // ---- a Continue, then a death: she wakes at the second hearth ----
+    await ev(async () => { const G = window.__G, F = G.hero.flags, W = await import('/src/game/world.js'); delete F.ketosWake; F.hearth6_2 = true; W.checkpoint6(G.zone, 'hearth2'); (await import('/src/game/save.js')).writeSave(); });
+    await A5.reload(pg, { q: Q }); await listen();
+    h = await here();
+    beat('a Continue: in Whitecliff, cp6 kept', h.id === 'town' && h.cp6.drained === 'hearth2', h.cp6);
+    await A5.travel(pg, 'drained', 'waypoint');
+    const cont = await ev(() => { const G = window.__G, z = G.zone, S = z.L.spots, c = z.checkpoint, hh = S.hearths.find((q) => q.k === 2); return { cp: G.hero.flags.cp6.drained, d: c ? +Math.hypot(c.x - hh.x, c.z - hh.z - 2).toFixed(2) : null, c }; });
+    beat('the zone built again: the place to wake at the second hearth', cont.cp === 'hearth2' && cont.d != null && cont.d <= 4, cont);
+    await ev(() => window.__D.emit('respawn', false));
+    await pg.waitForFunction(() => window.__G.zone?.id === 'drained' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 240000 });
+    await pg.waitForTimeout(500);
+    const woke = await ev((c) => { const p = window.__G.player; return +Math.hypot(p.x - c.x, p.z - c.z).toFixed(2); }, cont.c);
+    beat('a death: she wakes at the second hearth', woke <= 1.5, woke);
+    // ---- a key that no longer holds: the Heap's gap once the Ketos is down ----
+    await ev(async () => { const G = window.__G, F = G.hero.flags, W = await import('/src/game/world.js'); F.ketosWake = true; W.checkpoint6(G.zone, 'heap'); });
+    await ev(() => { const F = window.__G.hero.flags; F.ketosDown = true; F.keyxLamp = true; });
+    await A5.travel(pg, 'drained', 'waypoint');
+    h = await here();
+    beat('the Ketos down: the Heap\'s gap gives way to the camp', h.mode === 'dry' && h.cp6.drained === 'camp' && h.cpCamp <= 4, h);
+    // ---- the Bottom, first arrival down the Well ----
+    await A5.travel(pg, 'bottom', 'drained');
+    h = await here();
+    beat('bottom: the Well\'s Foot found on the first arrival, saved', h.id === 'bottom' && h.wps.includes('bottom') && h.sWps.includes('bottom') && h.found === 1, h);
+    beat('bottom: the camp the place to wake, saved', h.cp6.bottom === 'camp' && h.sCp6.bottom === 'camp' && h.cp6.drained === 'camp' && h.cpCamp <= 4, h);
+    const kb = await keys([['camp', {}], ['well', {}], ['stair', { blackLamp0: true, blackLamp1: true, blackLamp2: true }, { shadeDown: false }]]);
+    beat('bottom: the Well\'s Foot always, the Stair\'s foot once the three lamps are out', kb.every((r) => good(r, r.key !== 'stair')), kb);
+    const nb = await keys([['hearth1', { hearth6_1: true }], ['heap', { ketosWake: true }, { ketosDown: false }]]);
+    beat('bottom: the Drained Sea\'s keys never wake her here', nb.every((r) => !r.ok), nb);
+    await ev(async () => { const G = window.__G, F = G.hero.flags, W = await import('/src/game/world.js'); delete F.ketosWake; F.ketosDown = true; W.checkpoint6(G.zone, 'stair'); F.shadeWake = true; F.shadeDown = true; });
+    await A5.travel(pg, 'bottom', 'waypoint');
+    h = await here();
+    beat('the Shade down: the Stair\'s foot gives way to the camp', h.mode === 'dark' && h.cp6.bottom === 'camp' && h.cpCamp <= 4, h);
+    // ---- the Gate ring: one way ----
+    await ev(() => { const F = window.__G.hero.flags; F.herFire = true; F.nameBack = true; });
+    await A5.travel(pg, 'bottom', 'waypoint');
+    const ring = await ev(() => { const z = window.__G.zone, e = z.L.exits.find((x) => x.to === 'town'); return { mode: z.mode, e: e && { x: e.x, z: e.z, at: e.at, locked: e.locked }, wp: z.L.spots.waypoint }; });
+    await ev(() => { const G = window.__G, z = G.zone, it = z.interact.find((i) => i.kind === 'exit' && i.to === 'town'), f = z.map.nearestFloor(it.x, it.z + 1.2, 3); G.player.x = f.x; G.player.z = f.z; it.use(); });
+    await pg.waitForFunction(() => window.__G.zone?.id === 'town' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 240000 });
+    await pg.waitForTimeout(500);
+    const town = await ev(() => { const G = window.__G, z = G.zone, s = z.L.spots.npcs.wayfarer; return { staff: +Math.hypot(G.player.x - s.x, G.player.z - s.z).toFixed(2), exits: z.L.exits.filter((e) => e.to === 'bottom').length, inter: z.interact.filter((i) => i.to === 'bottom').length }; });
+    beat('through the ring: home by Isarn\'s staff, no way down from Whitecliff', ring.mode === 'lit' && ring.e?.at === 'staff' && town.staff <= 3 && !town.exits && !town.inter, { ring, town });
+    const from = async (at) => {
+      await A5.travel(pg, 'bottom', at);
+      return ev(([e, w]) => { const p = window.__G.player; return { ring: +Math.hypot(p.x - e.x, p.z - e.z).toFixed(1), wp: +Math.hypot(p.x - w.x, p.z - w.z - 2).toFixed(1) }; }, [ring.e, ring.wp]);
+    };
+    const fromTown = await from('town'), fromWp = await from('waypoint');
+    beat('an arrival from Whitecliff, or by the waypoint, never at the ring', fromTown.ring > 8 && fromWp.ring > 8 && fromWp.wp <= 1.5, { fromTown, fromWp });
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
+  } },
   // Act VI: engine
   // unload6: the unload of Acts II-IV (game/unload.js; docs/act6-contract.md, File ownership: engine; act6-design.md,
   // Engine work 5 and 20). A hero walks from the Field of Ash (Act IV, the coal in hand) down to the coast and back up,
