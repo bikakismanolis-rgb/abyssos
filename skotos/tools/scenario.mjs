@@ -3631,7 +3631,8 @@ const S = {
   // (drained mere and dry, bottom dark and lit): every story prop stands at its gen6 spot and is handed to the zone in
   // z.lvl.act6 (hearths, lost lights with their fire at the lantern end's interact, lure posts, wreck lanterns, bells,
   // Asger's brazier; the black lamps, the shadow-walls over the shut bands, the ember's pane, Leif's dead fire, the Hearth's
-  // fire, stones, niches and Gate ring; the neck only once the Mere is dry), each in its first state for the reading; the
+  // fire, stones, niches and Gate ring; the neck only once the Mere is dry), each in its first state for the reading, and
+  // the zone holding those same objects in z.act6 (world.js act6Zone builds none of its own: no kind twice at a spot); the
   // atmosphere and ambient of the reading; the shore off the grid (sea.js shoreJit on gen6's layouts); no ring or pool
   // drawn up the vault's walls (build.js drape); a frame drawn at a spot of each (shots)
   place6: { q: 'auto=drained&q=1&lvl=36&cloud=off&seed=4242', run: async (pg) => {
@@ -3662,6 +3663,12 @@ const S = {
         const dry = L.mode === 'dry', lit = L.mode === 'lit';
         if (!!A.neck !== (z.id === 'drained' && dry)) bad.push('neck ' + !!A.neck);
         if (dry !== !!A.well) bad.push('well mouth');
+        // (the zone holds the build's own props, never a second set: z.act6's lists and singles are z.lvl.act6's; no kind
+        // stands twice within 0.6 m in the level)
+        const held = ['hearths', 'lost', 'lures', 'wrecks', 'bells', 'lamps', 'walls', 'stones', 'niches', 'asgerBrazier', 'neck', 'ember', 'leif', 'centre', 'ring', 'rope'].filter((k) => z.act6?.[k] !== (A[k] ?? null));
+        const kinds = [], P0 = W.clone(), P1 = W.clone(), twice = [];
+        z.lvl.group.traverse((o) => { if (o !== z.lvl.group && o.userData?.kind) kinds.push(o); });
+        for (let i = 0; i < kinds.length; i++) for (let j = i + 1; j < kinds.length; j++) if (kinds[i].userData.kind === kinds[j].userData.kind && kinds[i].getWorldPosition(P0).distanceTo(kinds[j].getWorldPosition(P1)) < 0.6) twice.push(kinds[i].userData.kind);
         // (each in its first state for the reading)
         const st = {
           hearths: A.hearths.map((h) => !!h.mesh.userData.lit), lost: A.lost.map((h) => !!h.mesh.userData.lit), wrecks: A.wrecks.map((h) => !!h.mesh.userData.lit),
@@ -3685,9 +3692,10 @@ const S = {
           let top = -9; ring.updateWorldMatrix(true, true); ring.traverse((o) => { const P = o.geometry?.attributes.position; if (!P || !o.geometry.userData.drape) return; for (let k = 0; k < P.count; k++) top = Math.max(top, W.fromBufferAttribute(P, k).applyMatrix4(o.matrixWorld).y); });
           drape = { x, z: zz, top: +top.toFixed(2) };
         }
-        return { mode: L.mode, bad, st, okState, atm, moved, drape, kids: z.lvl.group.children.length };
+        return { mode: L.mode, bad, held, twice, st, okState, atm, moved, drape, kids: z.lvl.group.children.length };
       });
       beat(`${tag}: every story prop at its gen6 spot, handed over in z.lvl.act6`, !r.bad.length, { bad: r.bad, mode: r.mode });
+      beat(`${tag}: the zone holds the build's own props (z.act6 is z.lvl.act6's), none built twice`, !r.held.length && !r.twice.length, { held: r.held, twice: r.twice });
       beat(`${tag}: each in its first state for the reading`, r.okState, r.st);
       beat(`${tag}: the reading's atmosphere and ambient`, r.atm.fog === r.atm.want && r.atm.amb === r.atm.wantAmb, r.atm);
       beat(`${tag}: the shore off the grid (shoreJit on gen6's layout)`, r.moved > 100, { moved: r.moved });

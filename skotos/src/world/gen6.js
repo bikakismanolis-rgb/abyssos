@@ -19,13 +19,18 @@
 // idle), L.tideCfg (the black water's clock), L.refuges, L.road; drained L.gaps (the Heap's east and west plugs); bottom
 // L.stamps (the windows laid) and L.walls (the Stair's shadow-walls: { k, cells }, closed at build in the 'dark' reading).
 // Every walkable cell stands at y = 0; the pockets and the Mere are the only cells with a bed below BED_DRY, and a blocked
-// footprint is always BED_DRY (so the tide never opens it). L.props, placed by build (build6.js act6Level once it is in;
-// until then build.js's shipped kinds draw and the rime ones wait): the rime pack's wreck, keelboat, rowboat, brokenBoat
-// (tilt), shack (side: lying on its side), kelp, driftwood, barnacleRock, anchor, sunkenAnchor, whale; the shipped stone,
-// rock, crate, brazier (Tamarisk's braziers and Glaukos's fire-pots, pot: true), firepit, cart, stake, well, bld (the
-// village's houses, tilt and sink); code kinds stiltFrame and keel (s its radius, hgt); the stamped crypt's and wood's own
-// props, their lights left out (LIT_PROPS). The story's and the fights' things (hearths, lost lights, lanterns, bells,
-// lures, black lamps, stones, niches, the ring, the ember, the neck) are placed from L.spots by the zone (world.js).
+// footprint is always BED_DRY (so the tide never opens it; one standing in the water keeps the water round and under it:
+// sea.js buildSea reads the corners' beds, taken before the footprints). Who builds what: build6.js act6Level draws L.props,
+// the rime pack's wreck, keelboat, rowboat, brokenBoat (tilt), shack (side: lying on its side), kelp, driftwood,
+// barnacleRock, anchor, sunkenAnchor, whale; the shipped stone, rock, crate, brazier (Tamarisk's braziers and Glaukos's
+// fire-pots, pot: true), firepit, cart, stake, well, bld (the village's houses, tilt and sink); code kinds stiltFrame and
+// keel (s its radius, hgt); the stamped crypt's and wood's own props, their lights left out (LIT_PROPS). The story's and
+// the fights' things are no props here, only L.spots: act6Level builds each of them once (build6.js story6: the hearths,
+// lost lights, wreck lanterns, bells, lure posts, Asger's brazier, the neck, the black lamps, shadow-walls, the ember's
+// pane, Leif's fire, her fire, the hearthstones, niches and Gate ring, the rope's foot; and the Mere's lure-rock) and
+// hands them to the zone in z.lvl.act6, where world.js act6Zone takes them and lays only their interacts and their flags'
+// states. L.lights is the light of every fire that burns from the build, added to the pooled lights on entry: Tamarisk's
+// braziers, the camp's fire-pit, her fire at the Hearth's centre, Glaukos's fire-pots.
 import { RNG, clamp, fbm } from '../core/util.js';
 import { base, distField, genCrypt, genForest } from './gen.js';
 import { reach, nearReach, circleCells, snap, terrain, BED_DRY, wetAt } from './genlib.js';

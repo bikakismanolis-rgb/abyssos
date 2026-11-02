@@ -1,12 +1,15 @@
 // Act VI's props (docs/act6-contract.md, Visuals; act6-design.md, The look). act6Level dresses a layout of gen6.js from
 // L.props (the rime pack's scans where it has one, 'rime/<name>'; the boot sets' props of the stamped crypt and wood, and
 // the village's houses, in the drowned grade; code for the rest) and the spots no one else places (skylights, the glade's
-// garlands, the Well's mouth once the Mere is dry, the rope's foot, the vault for the cines). What gen6 leaves to the zone
-// (world.js act6Zone, from L.spots: hearths, lost lights, lanterns, bells, lures, black lamps, stones, niches, the ring,
-// the ember, the neck) comes from act6Prop, which builds the props the story owns, each a THREE.Object3D with userData.kind and its
-// switches, and a code fallback for every part. No light of their own: the pools that light them are light.js's (true
-// light, `it.lit && it.lightR`) and the layout's (L.lights: the braziers, the fire-pots, the camp fires). Every image has
-// its quality-0 path first (no sparks, no motes, no shafts, half the dark's particles); quality 1 adds them.
+// garlands, the Well's mouth once the Mere is dry, the rope's foot, the Mere's lure-rock, the vault for the cines). The
+// story's and the fights' props gen6 leaves at L.spots (hearths, lost lights, lanterns, bells, lures, Asger's brazier, the
+// neck, black lamps, shadow-walls, the ember, Leif's fire, her fire, stones, niches, the ring) are built here too, once
+// each (story6), and handed to the zone in out.act6 (z.lvl.act6): world.js act6Zone takes them for z.act6 and lays only
+// their interacts and their flags' states, never a second one. Each is an act6Prop, a THREE.Object3D with userData.kind
+// and its switches, and a code fallback for every part. No light of their own: the pools that light them are light.js's
+// (true light, `it.lit && it.lightR`) and the layout's (L.lights: the braziers, the fire-pots, the camp fires, her fire at
+// the Hearth's centre). Every image has its quality-0 path first (no sparks, no motes, no shafts, half the dark's
+// particles); quality 1 adds them.
 // Instancer types (build.js): 'drowned:<type>' any type in the drowned grade; 'c6:<name>' a code model of this file,
 // 'c6:stone/<scan>' an env scan in the vault's stone (stone6), unlit by snow.
 import * as THREE from 'three';
