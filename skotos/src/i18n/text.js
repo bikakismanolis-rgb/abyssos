@@ -1111,5 +1111,14 @@ export const TEXT = {
   'd.ropeShut': ['Χωρίς φωτιά δεν κατεβαίνει κανείς εκεί κάτω.', 'No one goes down there without fire.'],
   'd.wellShut': ['Το Πηγάδι είναι κάτω από το μαύρο νερό, κι εκεί μέσα κάτι ζει.', 'The Well is under the black water, and something lives in it.'],
   'd.gateDark': ['Το δαχτυλίδι είναι σκοτεινό.', 'The ring is dark.'],
-  'q.legBack': ['Βρέθηκε ξανά: {0}.', 'Found again: {0}.']
+  'q.legBack': ['Βρέθηκε ξανά: {0}.', 'Found again: {0}.'],
+  // (the Skotos's place voices below the ice, one in each place gen6 lays them: the design's lines)
+  'd.skotos6.w1': ['...εγώ ήμουν η θάλασσα εδώ... την ήπια... τώρα έχω πού να σταθώ...', '...i was the sea here... i drank it... now i have somewhere to stand...'],
+  'd.skotos6.w2': ['...μου έδωσαν όνομα... κι από τότε θυμάμαι... πονάει να θυμάσαι... πώς το αντέχετε;...', '...they gave me a name... and since then i remember... it hurts to remember... how do you bear it?...'],
+  'd.skotos6.w3': ['...όποιος έχει όνομα ψάχνει τα άλλα... τα μαζεύω... ένα μου λείπει... το πρώτο...', '...whoever has a name looks for the others... i gather them... i am missing one... the first...'],
+  'd.skotos6.w4': ['...εκείνη κρύβεται... ακούω τη φωτιά της... δεν ακούω τ\' όνομά της...', '...she is hiding... i hear her fire... i do not hear her name...'],
+  'd.skotos6.w4.r': ['...κι εσύ, παιδί του δάσους... ξέρεις πώς είναι να σε στέλνουν μακριά για να κρυφτείς...', '...and you, child of the wood... you know what it is to be sent away to hide...'],
+  'd.skotos6.w5': ['...εδώ κάτω τα κρατάω όλα... κανείς δεν τα ζητάει...', '...down here i keep everything... no one asks for it back...'],
+  'd.skotos6.w6': ['...ένας βασιλιάς, ένας ιστός, ένα χωριό... τα ξέχασαν... εγώ όχι πια...', '...a king, a web, a village... they forgot them... not i, not any more...'],
+  'd.skotos6.w7': ['...ποιος σου έμαθε να κουβαλάς φωτιά;... κάποια σου το έμαθε... κάποια πολύ παλιά...', '...who taught you to carry fire?... someone taught you... someone very old...']
 };
