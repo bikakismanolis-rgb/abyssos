@@ -11,12 +11,13 @@
 // 'c6:stone/<scan>' an env scan in the vault's stone (stone6), unlit by snow.
 import * as THREE from 'three';
 import { R } from '../gfx/gfx.js';
-import { emitAt } from '../gfx/fx.js';
+import { emitAt, marksMesh } from '../gfx/fx.js';
 import { ENV, packProp } from '../gfx/env.js';
 import { tex, runeLines } from '../gfx/textures.js';
 import { G } from '../gfx/rig.js';
 import { KIT, KIT_SCALE } from '../gfx/kits.js';
 import { RNG, clamp, lerp, noise2 } from '../core/util.js';
+import { groundY } from './genlib.js';
 import { TICKS, vaultMesh } from './sea.js';
 import { instDef5, act5Prop } from './build5.js';
 import { MAT, mats, worldMat, bake, jitter, size4, own, lanternMesh, lay4, hash2, occlude, addProp, WIND } from './build.js';
@@ -398,7 +399,7 @@ const PROP6 = {
   },
   // the Gate ring on the Hearth's south rim: a black stone ring of r 2.6 standing on its base, runes cut round its faces and a
   // rune disc turning in it (the Shadow Gate exit's), dark until her fire; setWarm(k) 0..1: the runes and the disc warm,
-  // ember motes rising (quality 1 and up)
+  // ember motes rising off its stone (fx 'emberMotes', half as many on quality 0)
   gateRing() {
     const g = new THREE.Group(), R0 = 2.6, cy = R0 + 0.42;
     g.add(solid6([{ geo: jitter(G.torus(R0, 0.42, 8, 36), 0.04, 1021), color: BLACKST, o: { y: cy } }, { geo: jitter(G.box(1.6, 0.55, 1.2), 0.05, 1022), color: DARKST, o: { y: 0.25 } }, { geo: jitter(G.box(0.7, 0.5, 0.9), 0.05, 1023), color: BLACKST, o: { x: -1.2, y: 0.22 } }, { geo: jitter(G.box(0.7, 0.45, 0.9), 0.05, 1024), color: BLACKST, o: { x: 1.2, y: 0.2 } }], MAT.stone6));
@@ -410,8 +411,8 @@ const PROP6 = {
     const glow = sprite6(0xff9a40, R0 * 3.2, { opacity: 0 }); glow.position.y = cy; g.add(glow);
     disc.onBeforeRender = () => { disc.rotation.z = R.time * 0.25; };
     let k = 0;
-    const COLD = new THREE.Color(0x3a3050), WARM = new THREE.Color(0xffa050), e = { type: 'embers', s: 1 }, p = new THREE.Vector3();
-    TICKS.add({ obj: g, tick(dt) { if (k <= 0.05 || R.quality < 1) return; g.updateWorldMatrix(true, false); p.set(Math.sin(R.time) * 1.5, cy - 1.2, 0).applyMatrix4(g.matrixWorld); e.x = p.x; e.y = p.y; e.z = p.z; emitAt(e, dt * k); } });
+    const COLD = new THREE.Color(0x3a3050), WARM = new THREE.Color(0xffa050), e = { type: 'emberMotes', s: 1, r: R0 }, p = new THREE.Vector3();
+    TICKS.add({ obj: g, tick(dt) { if (k <= 0.05) return; g.updateWorldMatrix(true, false); const m = g.matrixWorld.elements; p.set(0, cy, 0).applyMatrix4(g.matrixWorld); e.x = p.x; e.y = p.y; e.z = p.z; e.rot = Math.atan2(-m[2], m[0]); emitAt(e, dt * Math.min(1, k)); } });
     g.userData.setWarm = (v = 1) => { k = clamp(v, 0, 1.5); rm.color.copy(COLD).lerp(WARM, Math.min(1, k)); disc.material.opacity = 0.6 * Math.min(1, k); disc.visible = k > 0.01; glow.material.opacity = 0.35 * Math.min(1, k); glow.visible = k > 0.01; g.userData.warm = k; };
     g.userData.setWarm(0);
     g.userData.cy = cy;
@@ -724,8 +725,9 @@ function wellMouth(out, w) {
   return g;
 }
 
-// Dresses an Act VI layout (buildLevel): its props, the spots no one else places, the vault for the cines. Writes
-// out.act6 = { braziers, fires, sky, keels (a count), rope, well, asger (the sleeper's pane), vault } for world.js
+// Dresses an Act VI layout (buildLevel): its props, the spots no one else places, the First's marks, the vault for the
+// cines, the drips and the forgotten's motes (out.emitters). Writes
+// out.act6 = { braziers, fires, sky, keels (a count), rope, well, asger (the sleeper's pane), marks, vault } for world.js
 // (act6Zone) to find them
 export function act6Level(L, I, B, out) {
   mats(); mats6();
@@ -757,6 +759,12 @@ export function act6Level(L, I, B, out) {
   if (L.type === 'drained' && S.rope) { const m = act6Prop('ropeWinch', { foot: true }); m.position.set(S.rope.x, 0, S.rope.z); out.group.add(m); out.act6.rope = m; }
   // the Mere's lure-rock (drained), in the water at its north side
   if (S.mere?.lure) { const n = rockAt(S.mere.lure.x, S.mere.lure.z), f = n && fit6(ENV.props[n], 1.8, 'w'); if (f) I.add('drowned:env:' + n, S.mere.lure.x, S.mere.lure.z, 0.6, f.k, -0.35 - f.y0, f.k * 0.8, f.k); }
+  // the First's marks along her trail, seen only in the hero's light (fx.js marksMesh: one draw)
+  const mk = marksMesh(S.trail, (x, z) => groundY(L, x, z)); if (mk) { out.group.add(mk); out.act6.marks = mk; }
+  // the vault's drips over each of its low patches (white, falling from it), and the forgotten's black motes rising round
+  // the dark's lamps and the drowned village (the Bottom)
+  for (const v of S.vaults || []) out.emitters.push({ type: 'drips', x: v.x, y: 6.5, z: v.z, s: clamp((v.r || 2) / 2, 0.6, 2.5) });
+  for (const p of [...(S.lamps || []), ...(S.houses || [])]) out.emitters.push({ type: 'motes', dark: true, x: p.x, y: 0.1, z: p.z, s: 1.6 });
   // the vault over all of it, for the cines (sea.js: shown only while the camera looks low)
   out.act6.vault = vaultMesh(L); out.group.add(out.act6.vault);
 }

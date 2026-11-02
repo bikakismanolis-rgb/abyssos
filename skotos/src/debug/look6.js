@@ -13,14 +13,9 @@ import { BED_DRY, terrain } from '../world/genlib.js';
 import { buildLevel, WIND } from '../world/build.js';
 import { act6Prop } from '../world/build6.js';
 import { SEA, slushSet } from '../world/sea.js';
-import { FX, updateFX, setEmitters } from '../gfx/fx.js';
+import { FX, FIRE_U, updateFX, setEmitters } from '../gfx/fx.js';
 import { RNG } from '../core/util.js';
-
-// the design's numbers for the two atmospheres (atmos.js takes them in the look lane's other half): stand-ins here
-export const ATM6 = {
-  drained: { fog: 0x060a10, density: 0.03, sky: 0x203040, ground: 0x0c1014, hemi: 0.55, moon: 0x7aa8a0, moonI: 0.45, exposure: 1.25, heroI: 24, heroRange: 9, heroColor: 0xffe0b0, zoom: 1, drift: 0.6 },
-  bottom: { fog: 0x040508, density: 0.036, sky: 0x141822, ground: 0x0a0b0e, hemi: 0.4, moon: 0x6a8090, moonI: 0.25, exposure: 1.3, heroI: 24, heroRange: 9, heroColor: 0xffe0b0, zoom: 1 }
-};
+import { ATMOS } from '../world/atmos.js';
 const Q = (v) => Math.round(v / 0.15) * 0.15;
 // a test layout: the fields of the contract's L, a floor of a few rooms joined by a dry road, the black water's basins
 export function testLayout(type = 'drained', mode = type === 'drained' ? 'mere' : 'dark', seed = 3) {
@@ -75,7 +70,9 @@ export function testLayout(type = 'drained', mode = type === 'drained' ? 'mere' 
     camp, rope: { x: camp.x, z: camp.z - 4 }, waypoint: { x: camp.x - 3, z: camp.z + 2 }, braziers: br,
     sky: [{ x: camp.x, z: camp.z, r: 6 }, { x: 62, z: 56, r: 4 }, { x: 30, z: 104, r: 3.5 }],
     keels: [{ x: 28, z: 92, r: 2.0 }, { x: 46, z: 96, r: 1.4 }, { x: 34, z: 110, r: 2.4 }, { x: 74, z: 58, r: 1.6 }],
-    lures: [{ x: 73, z: 42, bait: { x: 70, z: 45 } }, { x: 39, z: 44, bait: { x: 42, z: 47 } }], vaults: [], casks: []
+    lures: [{ x: 73, z: 42, bait: { x: 70, z: 45 } }, { x: 39, z: 44, bait: { x: 42, z: 47 } }], vaults: [{ id: 1, x: 30, z: 104, r: 4, n: 50 }], casks: [],
+    // (the First's trail: a mark every 1.6 m down the road from the camp, turned along it)
+    trail: Array.from({ length: 44 }, (_, k) => { const z = camp.z + 6 + k * 1.6, x = 56 + Math.sin(z * 0.08) * 6 + Math.sin(k * 2.3) * 0.5; return { x, z, rot: Math.atan2(Math.cos(z * 0.08) * 0.48, 1) + Math.sin(k * 1.7) * 0.3 }; })
   });
   if (bot) Object.assign(S, { glade: { x: 38, z: 100, r: 5 }, houses: [{ x: 70, z: 60, rot: 0.3, tilt: 0.12, sink: 0.5 }, { x: 72, z: 72, rot: -0.5, tilt: -0.18, sink: 0.7 }, { x: 44, z: 72, rot: 1.2, tilt: 0.08, sink: 0.4 }] });
   // (the Bottom: a stamped wood's and crypt's boot props round the glade and the village, placed by the shipped addProp in
@@ -100,7 +97,7 @@ export async function show(o = {}) {
   if (cur) { R.scene.remove(cur.group); }
   // (the viewer's own level and props out of the way)
   for (const c of [...R.scene.children]) if (c.isGroup && c !== R.scene && !c.userData.keep6 && c.name !== 'auroraSky') { if (c.children.some((k) => k.isMesh || k.isGroup || k.isInstancedMesh)) R.scene.remove(c); }
-  setAtmosphere(ATM6[L.type]);
+  setAtmosphere(ATMOS[L.type]);
   const lvl = buildLevel(L, R.quality);
   R.scene.add(lvl.group);
   for (const l of L.lights) addLight(l);
@@ -123,7 +120,8 @@ export async function show(o = {}) {
   }
   cur = { L, lvl, group: lvl.group, props };
   window.__look6 = cur;
-  return { w: L.w, h: L.h, sea: !!lvl.sea, seaQuads: lvl.sea?.children.length || 0, vault: !!lvl.act6?.vault, keels: lvl.act6?.keels, sky: lvl.act6?.sky.length, braziers: lvl.act6?.braziers.length, rope: !!lvl.act6?.rope, well: !!lvl.act6?.well, arch: !!lvl.act6?.arch, props: props.map((p) => p.k), ground: !!lvl.ground, groundKey: lvl.ground?.material.customProgramCacheKey?.() };
+  return { w: L.w, h: L.h, sea: !!lvl.sea, seaQuads: lvl.sea?.children.length || 0, vault: !!lvl.act6?.vault, keels: lvl.act6?.keels, sky: lvl.act6?.sky.length, braziers: lvl.act6?.braziers.length, rope: !!lvl.act6?.rope, well: !!lvl.act6?.well, arch: !!lvl.act6?.arch, props: props.map((p) => p.k), ground: !!lvl.ground, groundKey: lvl.ground?.material.customProgramCacheKey?.(),
+    marks: lvl.act6?.marks?.count || 0, drips: lvl.emitters.filter((e) => e.type === 'drips').length, darkMotes: lvl.emitters.filter((e) => e.type === 'motes' && e.dark).length };
 }
 // where each bench prop stands, on the bench's own floor (the Bottom's six metres further west); BENCH_VIEW how far the
 // camera stands back from it (the big ones further)
@@ -135,8 +133,10 @@ const BENCH = {
 export const BENCH_VIEW = { shadowWall: 13, neckArch: 13, keel: 12, gateRing: 10, skylight: 11, stiltFrame: 9, toppledLight: 14 };
 export const PROP_AT = (k, type = 'drained') => { const b = BENCH[k] || [72, 90]; return { x: b[0] - (type === 'bottom' ? 6 : 0), z: b[1] }; };
 // one frame drawn with the camera on (x, z): o.level, o.wet (the clock's water), o.mere (the Mere's own), o.slush
-// ([[ix, iz]...] cells set to slush), o.dist, o.pitch, o.density, o.lookY
+// ([[ix, iz]...] cells set to slush), o.dist, o.pitch, o.density, o.lookY, o.fireR (the hero's ring the First's marks show
+// in, 4.5 m; light.js writes it in the game)
 export function view(x, z, o = {}) {
+  FIRE_U.uFireR.value = o.fireR ?? 4.5; FIRE_U.uFireP.value.set(x, z);
   if (o.level != null) { SEA.uLevel.value = o.level; SEA.uWetLevel.value = Math.max(o.level, o.wet ?? o.level); }
   if (o.mere != null) SEA.uBayLevel.value = o.mere;
   if (o.slush && cur) for (const [ix, iz] of o.slush) slushSet(cur.L, iz * cur.L.w + ix, true);

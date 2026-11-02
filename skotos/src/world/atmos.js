@@ -1,6 +1,8 @@
 // Per-zone lighting and fog. Act V keys (missing keys read 0): aur, aurDark (the aurora's brightness, and how black it has
 // gone: gfx.js hands them to sea.js), drift (0-1: the hemisphere light wanders toward the aurora's green), aurCol (the
-// aurora's colour, [r, g, b] linear: the coast's green when missing; the true aurora greener and whiter).
+// aurora's colour, [r, g, b] linear: the coast's green when missing; the true aurora greener and whiter). Act VI's:
+// driftCol (what the hemisphere wanders toward instead of the aurora's green), driftCol2 (a second colour driftCol itself
+// wanders toward: the Drained Sea's green going white and back).
 import * as THREE from 'three';
 export const ATMOS = {
   town: { fog: 0x0e1424, density: 0.018, sky: 0x7a8cbe, ground: 0x2e2418, hemi: 1.15, moon: 0xb8c8ff, moonI: 1.5, exposure: 1.15, heroI: 18, heroRange: 13, zoom: 1.05 },
@@ -43,6 +45,17 @@ ATMOS.coastAurora = { ...ATMOS.coast, sky: 0x5a9682, ground: 0x142420, fog: 0x0c
 ATMOS.farlightFight = { ...ATMOS.farlight, zoom: 1.25 };
 // Whitecliff once the sea is lit: the true aurora over the beacon hill (G_AUR at half), the hemisphere drifting green
 ATMOS.townAurora = { ...ATMOS.town, aur: 0.5, drift: 0.45, aurCol: [0.32, 1.0, 0.62] };
+// Act VI (docs/act6-design.md, Zones): the Drained Sea under the vault, the aurora's green coming down through the ice
+// onto the hemisphere and nothing reflecting it (aur 0); the coal's warm white for the hero (the Carried Fire). Its cines
+// with the fog thinned so the vault reads; inside the Wreck Heap, closer and darker, the lure the brightest thing there.
+// The Bottom of the Gates darker still; the Hearth in the Shade's last form near black (eased in over 2 s with mixAtmos:
+// the Hearth's fire, the stones and the named lamps the light); once her fire burns, the Bottom warm
+ATMOS.drained = { fog: 0x060a10, density: 0.03, sky: 0x203040, ground: 0x0c1014, hemi: 0.55, moon: 0x7aa8a0, moonI: 0.45, exposure: 1.25, heroI: 24, heroRange: 9, heroColor: 0xffe0b0, zoom: 1, aur: 0, aurDark: 0, drift: 0.55, driftCol: 0x7ad0a8, driftCol2: 0xe8f0ec };
+ATMOS.drainedCine = { ...ATMOS.drained, density: 0.012 };
+ATMOS.mere = { ...ATMOS.drained, density: 0.034, hemi: 0.45 };
+ATMOS.bottom = { fog: 0x040508, density: 0.036, sky: 0x141822, ground: 0x0a0b0e, hemi: 0.4, moon: 0x6a8090, moonI: 0.25, exposure: 1.3, heroI: 24, heroRange: 9, heroColor: 0xffe0b0, zoom: 1, aur: 0, aurDark: 0, drift: 0 };
+ATMOS.hearthDark = { ...ATMOS.bottom, hemi: 0.25, moonI: 0.1 };
+ATMOS.bottomLit = { ...ATMOS.bottom, fog: 0x0e0a08, density: 0.028, hemi: 0.6, exposure: 1.2, drift: 0.5, driftCol: 0xffc890 };
 // an atmosphere between a and b (k 0-1): colours in linear light, numbers straight (world.js eases with it)
 const _ca = new THREE.Color(), _cb = new THREE.Color();
 export function mixAtmos(a, b, k) {
@@ -50,7 +63,7 @@ export function mixAtmos(a, b, k) {
   for (const key in b) {
     const x = a[key] ?? b[key], y = b[key];
     if (typeof y !== 'number') o[key] = y;
-    else if (key === 'fog' || key === 'sky' || key === 'ground' || key === 'moon' || key === 'heroColor') o[key] = _ca.set(x).lerp(_cb.set(y), k).getHex();
+    else if (key === 'fog' || key === 'sky' || key === 'ground' || key === 'moon' || key === 'heroColor' || key === 'driftCol' || key === 'driftCol2') o[key] = _ca.set(x).lerp(_cb.set(y), k).getHex();
     else o[key] = x + (y - x) * k;
   }
   return o;
