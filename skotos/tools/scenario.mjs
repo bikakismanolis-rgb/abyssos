@@ -2643,6 +2643,164 @@ const S = {
     await pg.waitForFunction(() => window.__G.zone?.id === 'bottom' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 240000 });
     beat('by the waypoint to the Well\'s Foot', true);
     return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
+  } },
+  // Act VI: engine
+  // unload6: the unload of Acts II-IV (game/unload.js; docs/act6-contract.md, File ownership: engine; act6-design.md,
+  // Engine work 5 and 20). A hero walks from the Field of Ash (Act IV, the coal in hand) down to the coast and back up,
+  // then goes below the ice once the sea is lit, revisits the Halls, the Lanternglade (the wood, after the act) and the
+  // Forge, and comes back to the coast. On each way into an Act V or VI zone Acts II-IV's packs, people and creatures leave
+  // and their textures are freed on the GPU (Brokka's and Elati's people stay until the sea is lit, for the cameo), the
+  // zones that drew them are dropped; each older zone loads them again (a pack's layers into the same texture objects);
+  // every texture drawn is alive (no white or untextured model, no GL error) and no person comes back as a stand-in.
+  // Tamarisk's frost loads in the wood after the act. Then three cold starts (coast, farlight, drained) measure each act's
+  // own phone texture: G1's bar for a cold start into Act VI is 100 MB. (MB: the GPU bytes of every texture the registries
+  // hold, each uploaded, read through a WebGL hook; quality 1 halves the large maps as a phone does; renderer.info's count
+  // beside it.) COLD=0 skips the cold starts
+  unload6: { q: 'auto=ashfield&q=1&lvl=24&cloud=off&' + A5.url('coal'), init: () => {
+    if (window.__texMem) return;
+    const P = WebGL2RenderingContext.prototype, GLc = WebGL2RenderingContext, map = new Map(), st = new WeakMap();
+    const S = (gl) => { let s = st.get(gl); if (!s) st.set(gl, (s = { unit: 0, b: {} })); return s; };
+    const BPP = { [GLc.R8]: 1, [GLc.RG8]: 2, [GLc.RGBA16F]: 8, [GLc.RGBA32F]: 16, [GLc.R16F]: 2, [GLc.R32F]: 4, [GLc.RG16F]: 4, [GLc.RGB16F]: 8, [GLc.RGB32F]: 16, [GLc.DEPTH_COMPONENT16]: 2, [GLc.LUMINANCE]: 1, [GLc.ALPHA]: 1, [GLc.RED]: 1 };
+    const bpp = (f) => BPP[f] ?? 4, tgt = (t) => (t >= GLc.TEXTURE_CUBE_MAP_POSITIVE_X && t <= GLc.TEXTURE_CUBE_MAP_NEGATIVE_Z ? GLc.TEXTURE_CUBE_MAP : t);
+    const cur = (gl, t) => { const s = S(gl); return s.b[s.unit + ':' + tgt(t)]; };
+    const ent = (tex) => { let e = map.get(tex); if (!e) map.set(tex, (e = { lv: {}, stor: 0, mip: false })); return e; };
+    const wrap = (name, f) => { const o = P[name]; P[name] = function (...a) { try { f.call(this, a); } catch (e) { /* never in the game's way */ } return o.apply(this, a); }; };
+    wrap('activeTexture', function ([u]) { S(this).unit = u; });
+    wrap('bindTexture', function ([t, tex]) { S(this).b[S(this).unit + ':' + t] = tex; if (tex) ent(tex); });
+    wrap('deleteTexture', function ([tex]) { map.delete(tex); });
+    wrap('texStorage2D', function ([t, levels, f, w, h]) { const tex = cur(this, t); if (!tex) return; let b = 0; for (let l = 0; l < levels; l++) b += Math.max(1, w >> l) * Math.max(1, h >> l) * bpp(f); ent(tex).stor = b * (t === GLc.TEXTURE_CUBE_MAP ? 6 : 1); });
+    wrap('texStorage3D', function ([t, levels, f, w, h, d]) { const tex = cur(this, t); if (!tex) return; let b = 0; for (let l = 0; l < levels; l++) b += Math.max(1, w >> l) * Math.max(1, h >> l) * d * bpp(f); ent(tex).stor = b; });
+    wrap('texImage2D', function (a) { const tex = cur(this, a[0]); if (!tex) return; const src = a.length >= 9 ? null : a[5], w = a.length >= 9 ? a[3] : src?.width ?? src?.videoWidth ?? 0, h = a.length >= 9 ? a[4] : src?.height ?? src?.videoHeight ?? 0; ent(tex).lv[a[0] + ':' + a[1]] = w * h * bpp(a[2]); });
+    wrap('generateMipmap', function ([t]) { const tex = cur(this, t); if (tex) ent(tex).mip = true; });
+    const bytes = (e) => e.stor || Object.values(e.lv).reduce((s, v) => s + v, 0) * (e.mip ? 4 / 3 : 1);
+    window.__texMem = { map, bytes, of: (tex) => { const e = tex && map.get(tex); return e ? bytes(e) : 0; }, total: () => { let s = 0; for (const e of map.values()) s += bytes(e); return s; } };
+  }, run: async (pg, shot) => {
+    const ev = (f, a) => pg.evaluate(f, a), beats = [], beat = (b, ok, v) => { beats.push({ b, ok: !!ok, v }); };
+    // every texture the registries hold, uploaded if it is not yet, its GPU bytes by owner (each GL texture once); the
+    // GL textures kept by owner for gone() (MB)
+    const MEM = async () => {
+      const [{ ENV }, { PEOPLE }, { CREATURES }, { R }] = await Promise.all(['/src/gfx/env.js', '/src/gfx/people.js', '/src/gfx/creatures.js', '/src/gfx/gfx.js'].map((u) => import(u)));
+      const SETS = { people: ['warden', 'ranger', 'mage', 'wayfarer', 'smith', 'healer', 'villager0', 'villager1', 'villager2'], folk: ['stoneborn', 'stonebornArb', 'runepriest', 'brokka', 'moltenKing'], grove: ['elati', 'linden', 'rootsworn', 'rootswornArcher', 'hollowed', 'mourner', 'amaranthe'], ash: ['lampless', 'ashSpear', 'ashDwarf', 'ashBow', 'ashsmith', 'ivar', 'arna', 'arnaOld', 'isarnBoy', 'hammerhorn', 'karthax'], frost: ['sunken', 'icesinger', 'alkyone', 'selna', 'tern', 'tamarisk', 'glaukos'] };
+      const ACT = { act1: ['goblin', 'skeleton', 'wolf', 'spider', 'ashspawn', 'troll', 'wight', 'barrowlord'], act2: ['magmahound', 'bat', 'worm', 'golem'], act3: ['elk', 'bear', 'moth', 'mandrake', 'treeman'], act4: ['ashwing', 'smokeeater', 'embertick'], act5: ['crab', 'skotos', 'tentacle', 'icemaw', 'louse', 'skua', 'bear'] };
+      const SL = ['map', 'normalMap', 'aoMap', 'emissiveMap', 'roughnessMap', 'metalnessMap', 'alphaMap'], owner = new Map();
+      const put = (t, who) => { if (t?.isTexture && !owner.has(t)) owner.set(t, who); };
+      const mats = (m, who) => { for (const mm of [].concat(m || [])) for (const s of SL) put(mm[s], who); };
+      for (const k in ENV.layers) { const i = k.indexOf('/'); if (i > 0) { put(ENV.layers[k].d, 'pack:' + k.slice(0, i)); put(ENV.layers[k].n, 'pack:' + k.slice(0, i)); } }
+      for (const k in ENV.props) { const i = k.indexOf('/'); if (i > 0) for (const p of ENV.props[k]) mats(p.mat, 'pack:' + k.slice(0, i)); }
+      for (const [set, names] of Object.entries(SETS)) for (const n of names) PEOPLE.scenes[n]?.traverse((o) => { if (o.isMesh) mats(o.material, 'set:' + set); });
+      for (const f in CREATURES.tpl) { const g = 'cr:' + Object.keys(ACT).filter((a) => ACT[a].includes(f)).join('+'); CREATURES.tpl[f].scene.traverse((o) => { if (o.isMesh) mats(o.material, g); }); }
+      const gl = R.renderer, P = gl.properties, H = window.__texMem;
+      for (const t of owner.keys()) if (!P.get(t).__webglTexture && (t.image?.width || 0) > 1) { try { gl.initTexture(t); } catch (e) { /* a released image */ } }
+      const by = {}, seen = new Set(), cap = {};
+      for (const [t, who] of owner) { const w = P.get(t).__webglTexture; if (!w || seen.has(w)) continue; seen.add(w); const b = H.of(w); by[who] = (by[who] || 0) + b; (cap[who] ||= []).push([w, b]); }
+      window.__u6 = Object.assign(window.__u6 || {}, { cap });
+      const MB = (b) => +(b / 1048576).toFixed(2), BOOT = ['pack:env', 'pack:village', 'pack:trees', 'set:people', 'cr:act1'];
+      const total = Object.values(by).reduce((s, v) => s + v, 0), boot = BOOT.reduce((s, k) => s + (by[k] || 0), 0);
+      return { total: MB(total), own: MB(total - boot), gl: MB(H.total()), info: gl.info.memory.textures, by: Object.fromEntries(Object.entries(by).sort().map(([k, v]) => [k, MB(v)])) };
+    };
+    // of the GL textures MEM last saw for these owners: how many MB they were, how many are still allocated
+    const gone = (owners) => ev((owners) => { const H = window.__texMem, cap = window.__u6?.cap || {}; let was = 0, held = 0, n = 0; for (const o of owners) for (const [w, b] of cap[o] || []) { was += b; if (H.map.has(w)) { held += H.bytes(H.map.get(w)); n++; } } return { was: +(was / 1048576).toFixed(2), held: +(held / 1048576).toFixed(2), n }; }, owners);
+    // a few frames drawn, then every texture the scene draws: alive (on the GPU, or an image still there to upload), never a
+    // pack's freed layer (its one-pixel stand-in); the GL error flag; the people and whether each is a stand-in (*)
+    const AUDIT = async () => {
+      for (let i = 0; i < 4; i++) await new Promise((r) => requestAnimationFrame(() => r()));
+      await new Promise((r) => setTimeout(r, 500));
+      const [{ R }, U] = await Promise.all([import('/src/gfx/gfx.js'), import('/src/game/unload.js')]);
+      const gl = R.renderer, P = gl.properties, tex = U.drawn([R.scene]), bad = [];
+      let dead = 0, flat = 0;
+      for (const t of tex) {
+        const img = t.image, w = img?.width ?? img?.videoWidth ?? 0, on = !!P.get(t).__webglTexture;
+        if (typeof ImageData !== 'undefined' && img instanceof ImageData && w === 1) { flat++; bad.push('flat ' + (t.name || t.uuid.slice(0, 8))); }
+        else if (!on && !w && !t.isRenderTargetTexture && !t.isDepthTexture) { dead++; bad.push('dead ' + (t.name || t.uuid.slice(0, 8))); }
+      }
+      const G = window.__G, npcs = G.zone.actors.filter((a) => a.npc && a.avatar && !a.removed).map((a) => a.npc + ':' + a.avatar.modelName + (a.avatar.standIn ? '*' : '')).sort();
+      return { n: tex.size, dead, flat, bad: bad.slice(0, 8), err: gl.getContext().getError(), npcs };
+    };
+    const ST = () => ev(async () => {
+      const [E, P, C, U] = await Promise.all(['/src/gfx/env.js', '/src/gfx/people.js', '/src/gfx/creatures.js', '/src/game/unload.js'].map((u) => import(u)));
+      const G = window.__G;
+      return { zone: G.zone.id, packs: ['deep', 'wood', 'cinder', 'rime'].filter(E.packReady), folk: ['folk', 'grove', 'ash', 'frost'].filter(P.folkReady), groups: ['act2', 'act3', 'act4', 'act5'].filter(C.groupReady), zones: Object.keys(G.zones).sort(), log: U.UNLOAD.log.slice(-1)[0] || null, nlog: U.UNLOAD.log.length };
+    });
+    const whole = (a) => a.dead === 0 && a.flat === 0 && a.err === 0 && !a.npcs.some((x) => x.endsWith('*'));
+    const settle = async (id) => { await pg.waitForFunction((id) => window.__G?.zone?.id === id && window.__G.mode === 'play' && !document.getElementById('fade').classList.contains('on'), id, { timeout: 300000 }); await pg.waitForTimeout(1200); };
+    const travel = async (to) => { await ev((to) => window.__D.emit('travel', to, { at: 'waypoint' }), to); await settle(to); };
+    // (on foot: through the zone's exit)
+    const walk = async (to) => { await ev((to) => { const G = window.__G, z = G.zone, it = z.interact.find((i) => i.kind === 'exit' && i.to === to); const f = z.map.nearestFloor(it.x, it.z + 1.2, 3); G.player.x = f.x; G.player.z = f.z; it.use(); }, to); await settle(to); };
+    const has = (l, xs) => xs.every((x) => l.includes(x)), none = (l, xs) => !xs.some((x) => l.includes(x));
+    await ev(() => { window.__immortal = true; });
+    const out = {};
+    // ---- the Field of Ash, Act IV: what it holds ----
+    await settle('ashfield');
+    const s0 = await ST(), m0 = await ev(MEM), a0 = await ev(AUDIT);
+    const lay = await ev(async () => { const { ENV } = await import('/src/gfx/env.js'); const k = Object.keys(ENV.layers).find((x) => x.startsWith('cinder/')); window.__u6.lay = { k, L: ENV.layers[k] }; return k; });
+    beat('the Field holds Act IV and the people it brings', has(s0.packs, ['cinder']) && has(s0.folk, ['ash', 'folk', 'grove']) && has(s0.groups, ['act4']) && whole(a0), { s0, a0 });
+    out.field = m0;
+    // ---- on foot to the coast (Act V, the sea not lit) ----
+    await walk('coast');
+    const s1 = await ST(), g1 = await gone(['pack:cinder', 'set:ash', 'cr:act4']), a1 = await ev(AUDIT), m1 = await ev(MEM);
+    const L1 = await ev(async () => { const { R } = await import('/src/gfx/gfx.js'), { L } = window.__u6.lay; return { gpu: !!R.renderer.properties.get(L.d).__webglTexture, w: L.d.image?.width }; });
+    beat('the coast: Act IV let go, its zone dropped, freed at once', s1.log?.to === 'coast' && has(s1.log.packs, ['cinder']) && has(s1.log.folk, ['ash']) && has(s1.log.groups, ['act4']) && s1.log.freed && !s1.log.late.length && s1.log.zones.includes('ashfield') && !s1.zones.includes('ashfield') && none(s1.packs, ['cinder']), s1);
+    beat('Brokka\'s and Elati\'s people kept for the cameo (the sea not lit)', has(s1.folk, ['folk', 'grove']) && none(s1.log?.folk || [], ['folk', 'grove']), s1.folk);
+    beat('the textures disposed: none of Act IV\'s left on the GPU, the cinder layer holds its one-pixel stand-in', g1.n === 0 && g1.was >= 100 && !L1.gpu && L1.w === 1, { g1, L1 });
+    beat('the coast drawn whole: every texture alive, no GL error, no stand-in', whole(a1), a1);
+    out.coast = m1; out.saved1 = g1.was;
+    await shot();
+    // ---- on foot back up to the Field ----
+    await walk('ashfield');
+    const s2 = await ST(), a2 = await ev(AUDIT), m2 = await ev(MEM);
+    const L2 = await ev(async () => { const { R } = await import('/src/gfx/gfx.js'), { ENV } = await import('/src/gfx/env.js'), { k, L } = window.__u6.lay; return { same: ENV.layers[k] === L, gpu: !!R.renderer.properties.get(L.d).__webglTexture, w: L.d.image?.width || 0 }; });
+    beat('the Field again: Act IV loaded again (the layer into the same objects)', has(s2.packs, ['cinder']) && has(s2.folk, ['ash']) && has(s2.groups, ['act4']) && L2.same && L2.gpu && L2.w !== 1, { s2, L2 });
+    const back = ['pack:cinder', 'set:ash', 'cr:act4'].map((k) => [k, m0.by[k], m2.by[k]]);
+    beat('the Field drawn whole: alive, no stand-in, the same people as before, Act IV\'s textures as large as they were', whole(a2) && a2.npcs.join() === a0.npcs.join() && back.every(([, a, b]) => a > 0 && Math.abs(a - b) < 0.5), { a2, back });
+    await shot();
+    // ---- the sea lit, the act over: below the ice ----
+    await ev(() => { const G = window.__G, h = G.hero, F = h.flags; for (const k of ['hearth', 'frozen', 'farSeen', 'skotosDown', 'seaLit', 'carved', 'act5']) F[k] = true; h.act5 = 1; h.quest = 31; });
+    await travel('drained');
+    const s3 = await ST(), g3 = await gone(['pack:cinder', 'set:ash', 'set:folk', 'set:grove', 'cr:act4']), a3 = await ev(AUDIT);
+    beat('below the ice (Act VI): Brokka\'s and Elati\'s people go too once the sea is lit', s3.log?.to === 'drained' && has(s3.log.folk, ['ash', 'folk', 'grove']) && has(s3.log.packs, ['cinder']) && s3.log.freed && !s3.log.late.length && none(s3.folk, ['ash', 'folk', 'grove']) && has(s3.folk, ['frost']) && has(s3.packs, ['rime']), s3);
+    beat('freed on the GPU, the drained sea drawn whole', g3.n === 0 && whole(a3), { g3, a3 });
+    // ---- the older zones again: the Halls, the Lanternglade (after the act: Tamarisk's frost), the Forge ----
+    await travel('halls');
+    const s4 = await ST(), a4 = await ev(AUDIT);
+    beat('the Halls: the deep and the dwarves load, Brokka herself', has(s4.packs, ['deep']) && has(s4.folk, ['folk']) && has(s4.groups, ['act2']) && a4.npcs.includes('brokka:brokka') && whole(a4), { s4, a4 });
+    await ev(() => { window.__G.hero.act6 = 1; window.__G.hero.flags.act6 = true; });
+    await travel('weep');
+    const s5 = await ST(), a5 = await ev(AUDIT), m5 = await ev(MEM);
+    beat('the Lanternglade: the wood and the Evergreen load, Elati herself, and the frost set for Tamarisk after the act', has(s5.packs, ['wood']) && has(s5.folk, ['grove', 'frost']) && has(s5.groups, ['act3']) && a5.npcs.includes('elati:elati') && whole(a5), { s5, a5 });
+    out.weep = m5;
+    await shot();
+    await travel('forge');
+    const s6 = await ST(), a6 = await ev(AUDIT), m6 = await ev(MEM);
+    beat('the Forge: cinder and deep, the ash people', has(s6.packs, ['cinder', 'deep']) && has(s6.folk, ['ash']) && has(s6.groups, ['act4']) && whole(a6), { s6, a6 });
+    out.forge = m6;
+    await shot();
+    // ---- and the coast once more: everything of Acts II-IV goes ----
+    await travel('coast');
+    const OLD = ['pack:deep', 'pack:wood', 'pack:cinder', 'set:folk', 'set:grove', 'set:ash', 'cr:act2', 'cr:act3', 'cr:act4'];
+    const s7 = await ST(), g7 = await gone(OLD), a7 = await ev(AUDIT), m7 = await ev(MEM);
+    beat('the coast after the whole tour: every pack, set and group of Acts II-IV let go and freed', none(s7.packs, ['deep', 'wood', 'cinder']) && none(s7.folk, ['folk', 'grove', 'ash']) && none(s7.groups, ['act2', 'act3', 'act4']) && s7.log?.freed && !s7.log.late.length && g7.n === 0 && whole(a7), { s7, g7, a7 });
+    out.coast2 = m7; out.saved2 = g7.was;
+    // ---- cold starts: each act's own phone texture ----
+    const COLD = { coast: 'auto=coast&lvl=28&' + A5.url('coastSeen'), farlight: 'auto=farlight&lvl=31&' + A5.url('farSeen'), drained: 'auto=drained&lvl=34&' + A5.url('toldChild') + ',act5,tam6,call6,coal6' };
+    if (process.env.COLD !== '0') {
+      out.cold = {};
+      for (const z of Object.keys(COLD)) {
+        const ctx = await pg.context().browser().newContext({ viewport: { width: 1280, height: 720 } });
+        try {
+          const p = await ctx.newPage();
+          p.on('pageerror', (e) => logs.push('pageerror(cold ' + z + '): ' + e.message));
+          await p.addInitScript(S.unload6.init);
+          await p.addInitScript(() => { setInterval(() => { const G = window.__G; if (G?.player) { G.player.hp = G.player.hpMax; G.player.dead = false; } }, 50); });
+          await p.goto(A5.base + '?' + COLD[z] + '&q=1&cloud=off');
+          await p.waitForFunction((z) => window.__G?.zone?.id === z && window.__G.mode === 'play', z, { timeout: 300000 });
+          await p.waitForTimeout(2500);
+          out.cold[z] = await p.evaluate(MEM);
+          out.cold[z].audit = await p.evaluate(AUDIT);
+        } finally { await ctx.close(); }
+      }
+      beat('a cold start into Act VI: its own phone texture within 100 MB', out.cold.drained.own <= 100 && whole(out.cold.drained.audit), out.cold.drained);
+    }
+    return { pass: beats.every((b) => b.ok), failed: beats.filter((b) => !b.ok).map((b) => b.b), mem: out, beats };
   } }
 };
 const sc = S[name];

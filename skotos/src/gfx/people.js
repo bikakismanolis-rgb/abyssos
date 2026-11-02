@@ -49,23 +49,59 @@ export function loadPeople() {
   return loading;
 }
 // crowd: a zone set's people (the extra sets: mostly the dead and the warriors who come in packs)
+// (the scenes' names, for the set that brought them)
 async function addScenes(glb, crowd = false) {
   const gltf = await gltfLoader().parseAsync(glb, '');
+  const names = [];
   for (const s of gltf.scenes) {
     // GLTFLoader makes node names unique across the file (pelvis, pelvis_1, ...): restore the originals
     s.traverse((o) => { if (o.userData?.name) o.name = o.userData.name; });
     prepareTemplate(s, crowd);
     PEOPLE.scenes[s.name] = s;
+    names.push(s.name);
   }
+  return names;
 }
-const sets = {};
+const sets = {}, OWN = {};
 export function loadFolk(set = 'folk') {
   const load = SET_URLS[set];
   if (!load) return Promise.resolve();
-  sets[set] ||= loadPeople().then(async () => addScenes(await bytes(await load()), true)).catch((e) => { console.warn(set + ' failed to load', e); delete sets[set]; });
+  sets[set] ||= loadPeople().then(async () => { OWN[set] = await addScenes(await bytes(await load()), true); }).catch((e) => { console.warn(set + ' failed to load', e); delete sets[set]; });
   return sets[set];
 }
 export const hasPerson = (name) => !!PEOPLE.scenes[name];
+export const folkReady = (set) => !!OWN[set];
+
+// ---------- letting a set go (game/unload.js: Acts II-IV's people, on entering an Act V or VI zone) ----------
+// Its people leave the templates at once (an NPC or a monster made from then on takes its stand-in, actors.js STAND_IN,
+// until the set is loaded again: loadFolk fetches it anew); the function returned frees their geometry, materials and
+// maps on the GPU, once nothing on screen draws them (every avatar made from them shares them). keep(tex): a texture-set
+// test (true: something still draws the set, leave it). Null when there is nothing to let go (never loaded, still loading,
+// or kept). Never the boot set (people.glb: the heroes and Whitecliff).
+const SLOTS = ['map', 'normalMap', 'aoMap', 'emissiveMap', 'roughnessMap', 'metalnessMap', 'alphaMap', 'bumpMap', 'lightMap', 'specularMap'];
+// every map, geometry and material under a template (or any object)
+export function partsOf(root, out = { tex: new Set(), geo: new Set(), mats: new Set() }) {
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    out.geo.add(o.geometry);
+    for (const m of [].concat(o.material || [])) { out.mats.add(m); for (const k of SLOTS) if (m[k]?.isTexture) out.tex.add(m[k]); }
+  });
+  return out;
+}
+export function freeParts(P) {
+  for (const g of P.geo) g.dispose();
+  for (const t of P.tex) t.dispose();
+  for (const m of P.mats) m.dispose();
+}
+export function unloadFolk(set, keep) {
+  const names = OWN[set]; if (!names || !sets[set]) return null;
+  const P = { tex: new Set(), geo: new Set(), mats: new Set() };
+  for (const n of names) if (PEOPLE.scenes[n]) partsOf(PEOPLE.scenes[n], P);
+  if (keep?.(P.tex)) return null;
+  for (const n of names) delete PEOPLE.scenes[n];
+  delete sets[set]; delete OWN[set];
+  return { tex: P.tex, geo: P.geo, free: () => freeParts(P) };
+}
 
 // ---------- materials: hit flash, tint, rim light and the burning dissolve, shared per character ----------
 const NOISE = `
