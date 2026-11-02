@@ -113,7 +113,9 @@ export function cleanItem(it, o = {}) {
   const ilvl = fin(it.ilvl) ? clamp(Math.round(it.ilvl), 1, o.maxIlvl || MAX_ILVL) : 1;
   const leg = rar === 3 && LEGENDARIES.find((l) => l.id === it.leg && l.base === it.base);
   if (rar === 3 && !leg) rar = 2;
-  const out = { id: (typeof it.id === 'string' || fin(it.id)) && String(it.id) ? String(it.id).slice(0, 40) : iid++ + '_' + Date.now().toString(36), base: it.base, rar, ilvl, stats: {} };
+  // (an id the game could have made, else a new one: one sent by a co-op host or a file is any text)
+  const sid = (typeof it.id === 'string' || fin(it.id)) ? String(it.id) : '';
+  const out = { id: /^[A-Za-z0-9_.-]{1,40}$/.test(sid) ? sid : iid++ + '_' + Date.now().toString(36), base: it.base, rar, ilvl, stats: {} };
   const q = [1, 1.08, 1.16, 1.26][rar], num = (v, hi, d) => (fin(v) ? clamp(Math.round(v), 0, hi) : d);
   if (B.slot === 'weapon') {
     const top = (3.2 + ilvl * 2.35) * q * 1.08, mid = (3.2 + ilvl * 2.35) * q;

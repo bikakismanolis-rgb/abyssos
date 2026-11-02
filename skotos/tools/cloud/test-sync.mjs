@@ -762,6 +762,33 @@ await T('a crafted heroes file: markup, numbers that are none, odd ids, oversize
   ok(hx.mlvl === 0 && hx.mxp === 0, 'mastery numbers made whole', { mlvl: hx.mlvl, mxp: hx.mxp });
 });
 
+await T('a damaged hero is repaired, never locked out: an item id a co-op host sent, text for gold, markup in a flag', async () => {
+  const { cleanItem } = await import('../../src/game/items.js');
+  const it = cleanItem({ id: "a'b<x>", base: 'ring', rar: 0, ilvl: 5, stats: {} }, { rolled: true });
+  ok(it && /^[A-Za-z0-9_.-]+$/.test(it.id), 'a host\'s item id that is any text is made anew', it?.id);
+  ok(cleanItem({ id: 'n_kq3', base: 'ring', rar: 0, ilvl: 5, stats: {} }, { keep: true }).id === 'n_kq3', 'the game\'s own ids are kept');
+  for (const [name, o] of [['text for gold', { gold: 'lots' }], ['markup in a flag', { flags: { q: '<b>x</b>', ok: true } }], ['a quote in an item id', { inv: [{ id: "it'1", base: 'ring', rar: 0, ilvl: 5, stats: {} }] }]]) {
+    fresh([hero('hD', { level: 9, ...o })], 'hD');
+    const h = G.save.heroes.find((x) => x.id === 'hD');
+    ok(SV.heroBlocked(h) === 'bad_data' && SV.heroRepairable(h) === true, name + ': blocked as it is, repairable', { b: SV.heroBlocked(h), r: SV.heroRepairable(h) });
+    const t = SV.freshHero(h, true);
+    ok(t && SV.heroFits(JSON.parse(JSON.stringify(t))) === null && t.level === 9, name + ': taken up repaired, whole', { gold: t?.gold, flags: t?.flags, inv0: t?.inv?.[0]?.id });
+    G.hero = t; SV.writeSave(); G.hero = null;
+    SV.loadSave();
+    ok(!SV.heroBlocked(G.save.heroes.find((x) => x.id === 'hD')), name + ': its record whole once written');
+  }
+});
+
+await T('a file listing a hero twice: the second refused; the played hero\'s further copy kept protected', async () => {
+  fresh([hero('hA', { level: 12 }), hero('hB', { cls: 'mage', level: 20 })], 'hA');
+  const r = SV.importHeroes(JSON.stringify([hero('hA', { level: 13 }), hero('hA', { level: 14 }), hero('hA', { level: 15 })]));
+  ok(r.updated === 1 && r.refused === 2 && storedLvl('hA') === 13 && SV.backups().filter((b) => b.hero.id === 'hA').length === 1, 'one hero once a file', { r, bk: bk() });
+  G.hero = G.save.heroes.find((x) => x.id === 'hB'); SV.writeSave();
+  SV.importHeroes(JSON.stringify([hero('hB', { cls: 'mage', level: 25 })]));
+  ok(storedLvl('hB') === 20 && SV.backups().some((b) => b.why === 'conflict' && b.hero.id === 'hB' && b.hero.level === 25), 'the played hero stays; the file\'s further copy kept as a conflict', bk());
+  G.hero = null;
+});
+
 await T('storage full: a new backup goes before older ones kept for a conflict or a deletion', async () => {
   fresh([hero('hA', { level: 12 })], 'hA');
   SV.backupHero(hero('hB', { level: 9 }), 'deleted');
@@ -789,7 +816,7 @@ await T('a hero moved in that was deleted here comes back and stays; the hero be
   G.hero = G.save.heroes.find((h) => h.id === 'hB'); SV.writeSave();
   const further = JSON.parse(text); further.heroes.find((h) => h.id === 'hB').level = 30;
   const p = SV.importHeroes(JSON.stringify(further));
-  ok(p.kept >= 1 && storedLvl('hB') === 20 && SV.backups().some((b) => b.why === 'imported' && b.hero.id === 'hB' && b.hero.level === 30), 'the hero being played stays; the file\'s copy kept', { p, bk: bk() });
+  ok(p.kept >= 1 && storedLvl('hB') === 20 && SV.backups().some((b) => b.why === 'conflict' && b.hero.id === 'hB' && b.hero.level === 30), 'the hero being played stays; the file\'s further copy kept as a conflict', { p, bk: bk() });
   G.hero = null;
 });
 
