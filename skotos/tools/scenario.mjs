@@ -2655,12 +2655,17 @@ const S = {
     const ev = (f, a) => pg.evaluate(f, a);
     const ready = (id) => pg.waitForFunction((id) => window.__ready && window.__G?.player && window.__G.mode === 'play' && window.__G.zone?.id === id && !document.getElementById('fade').classList.contains('on'), id, { timeout: 240000 });
     await ready('drained'); await A5.tick(pg);
+    // (SEED6B=<n>: the Bottom built from that seed, to run a failure again)
+    if (process.env.SEED6B) await ev((s) => { const h = window.__G.hero; (h.seeds ||= {})['bottom@' + (h.diff || 0)] = s; }, +process.env.SEED6B);
     await ev(() => {
       window.__immortal = true;
       // (the walk: a 4-neighbour way over the zone's own map, steered with the movement keys toward a point a few cells on)
       window.__walk6 = async (tx, tz, maxT = 120) => {
         const G = window.__G, z = G.zone, m = z.map, { IN } = await import('/src/core/input.js'), w = m.w;
         for (const p of z.packs) p.spawned = true;
+        // (and the foes already standing: an Act V or VI pack that lies in wait is made with the zone, and one woken on
+        // the way would hold her in its arms, which is no fault of the ground)
+        for (const a of z.actors) if (a.team === 'foe' && !a.prop && !a.dead) { a.hp = 0; a.dead = true; a.remove?.(); }
         const t0 = m.nearestFloor(tx, tz, 3), goal = Math.floor(t0.z) * w + Math.floor(t0.x), pl0 = G.player;
         const from = Math.floor(pl0.z) * w + Math.floor(pl0.x), par = new Int32Array(w * m.h).fill(-1), q = [from]; par[from] = from;
         for (let hd = 0; hd < q.length && par[goal] < 0; hd++) { const i = q[hd], x = i % w, zz = (i - x) / w; for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const X = x + dx, Z = zz + dz, n = Z * w + X; if (X >= 0 && Z >= 0 && X < w && Z < m.h && m.cells[n] && par[n] < 0) { par[n] = i; q.push(n); } } }
@@ -2686,7 +2691,7 @@ const S = {
         });
       };
     });
-    const faults = () => ev(async () => { const z = window.__G.zone, g = await import('/src/world/gen6.js'); return { mode: z.mode, f: (z.id === 'drained' ? g.drainedFaults : g.bottomFaults)(z.L), ice: !!z.lvl.ice || !!z.L.ice, kids: z.lvl.group.children.length, props: z.L.props.length, packs: z.L.packs.length }; });
+    const faults = () => ev(async () => { const z = window.__G.zone, g = await import('/src/world/gen6.js'); return { mode: z.mode, seed: z.seed, f: (z.id === 'drained' ? g.drainedFaults : g.bottomFaults)(z.L), ice: !!z.lvl.ice || !!z.L.ice, kids: z.lvl.group.children.length, props: z.L.props.length, packs: z.L.packs.length }; });
     const walk = (p, t) => ev(([p, t]) => window.__walk6(p.x, p.z, t), [p, t]);
     const spots = () => ev(() => { const S = window.__G.zone.L.spots; return JSON.parse(JSON.stringify({ hearths: S.hearths, gap: S.heap?.gap, lamps5: S.wreckLamps, well: S.well, mere: S.npcs?.mere, door: window.__G.zone.L.stamps?.[0]?.door, ember: S.ember, lamps: S.lamps, leif: S.leif?.fire, glade: S.glade, keyx: S.keyx, foot: S.stair?.foot, stones: S.hearth?.stones, ring: S.hearth?.ring })); });
     const go = async (name, p, t = 120) => { const r = await walk(p, t); beat('walk: ' + name, r.ok, r); return r.ok; };
