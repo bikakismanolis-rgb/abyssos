@@ -152,6 +152,7 @@ export async function startViewer(q) {
 // &open=1 the gate open and the plug melted, &state=taken|refused for the altars, &white=0..1 the Forge Mouth's whitening
 // (with &heat=cold: after the Unmaking); the chests stand where the story puts them; &at=chest&n=.. looks at one;
 // &live keeps rendering (otherwise it stops once FX have warmed up, which keeps software-rendered screenshots quick)
+// Act VI: ?world=drained|bottom&mode=mere|dry (dark|lit)&at=<a spot of gen6's L.spots>&n=.. (the boss: the arena)
 export async function startWorld(q) {
   const { genForest, genCrypt, genTown } = await import('../world/gen.js');
   const { genPass, genHalls } = await import('../world/gen2.js');
@@ -164,7 +165,7 @@ export async function startWorld(q) {
   const { ATMOS } = await import('../world/atmos.js');
   initGfx(+(q.get('q') || 2));
   await Promise.all([loadKits(['dungeon', 'grave', 'town']), q.has('noenv') ? null : loadEnv(R.quality)]);
-  const type = q.get('world'), seed = +(q.get('seed') || 3), act3 = type === 'weep' || type === 'heart', act4 = type === 'ashfield' || type === 'forge', act5 = type === 'coast' || type === 'farlight';
+  const type = q.get('world'), seed = +(q.get('seed') || 3), act3 = type === 'weep' || type === 'heart', act4 = type === 'ashfield' || type === 'forge', act5 = type === 'coast' || type === 'farlight', act6 = type === 'drained' || type === 'bottom';
   if (type === 'pass' || type === 'halls' || type === 'forge') await loadPack('deep');
   if (act3) await Promise.all([loadPack('wood'), loadCreatures(), loadFolk('grove')]);
   // Act IV: the cinder pack (whatever of it exists), its people and those of Acts II-III who come north, every creature
@@ -173,13 +174,15 @@ export async function startWorld(q) {
   if (q.has('fakecinder')) { await loadPack('deep'); fakeCinder(); }
   // Act V: the rime pack (whatever of it exists); &deep=1 also the deep's snow and stone (as after a trip through Act II)
   if (act5) await Promise.all([loadPack('rime'), q.has('deep') ? loadPack('deep') : null]);
+  if (act6) await Promise.all([loadPack('rime'), loadPack('silt')]);
   if (R.quality >= 1) await loadPack('trees');
   if (!q.has('nohouses')) await loadPack('village');
   if (type === 'pass') WIND.uSnow.value = 1;
-  const L = act5 ? await layout5(q, type, seed) : type === 'crypt' ? genCrypt(seed) : type === 'town' ? genTown() : type === 'pass' ? genPass(seed) : type === 'halls' ? genHalls(seed)
+  const g6 = act6 ? await import('../world/gen6.js') : null;
+  const L = act6 ? (type === 'drained' ? g6.genDrained(seed, { mode: q.get('mode') || 'mere' }) : g6.genBottom(seed, { mode: q.get('mode') || 'dark' })) : act5 ? await layout5(q, type, seed) : type === 'crypt' ? genCrypt(seed) : type === 'town' ? genTown() : type === 'pass' ? genPass(seed) : type === 'halls' ? genHalls(seed)
     : type === 'weep' ? genWeep(seed) : type === 'heart' ? genHeart(seed) : type === 'ashfield' ? genAshfield(seed) : type === 'forge' ? genForge(seed) : genForest(seed);
   const autumn = q.get('autumn') === '1', night = q.get('night') || 'ash', heat = q.get('heat') === 'cold' ? -1 : +(q.get('heat') || 0);
-  setAtmosphere(ATMOS[q.get('atmos') || (act3 && autumn ? type + 'Autumn' : type === 'ashfield' && night !== 'ash' ? 'ashfield' + night[0].toUpperCase() + night.slice(1) : act5 && q.has('frozen') && type === 'coast' ? 'coastFrozen' : type)]);
+  setAtmosphere(act6 && !ATMOS[q.get('atmos') || type] ? ATMOS.crypt : ATMOS[q.get('atmos') || (act3 && autumn ? type + 'Autumn' : type === 'ashfield' && night !== 'ash' ? 'ashfield' + night[0].toUpperCase() + night.slice(1) : act5 && q.has('frozen') && type === 'coast' ? 'coastFrozen' : type)]);
   if (act5 || q.get('atmos')?.endsWith('Aurora')) WIND.uSnow.value = act5 ? 1 : 0;
   if (act3) { WIND.uWind.value = autumn || q.has('wind') ? 1 : 0; setAutumn(autumn ? 1 : 0); }
   if (q.has('nofog')) { R.scene.fog.density = 0; R.camera.far = 600; R.camera.updateProjectionMatrix(); R.hemi.intensity *= 1.6; }
@@ -206,8 +209,8 @@ export async function startWorld(q) {
   }
   const at0 = q.get('at'), n0 = +(q.get('n') || 0);
   const sp = L.spots, off = (p, dz = 0, dx = 0) => p && { x: p.x + dx, z: p.z + dz };
-  const s5 = act5 && (Array.isArray(L.spots[at0]) ? L.spots[at0][n0] : L.spots[at0] || (at0 === 'boss' ? L.boss : null));
-  const at = act5 ? (s5 && { x: s5.x, z: s5.z + 2 }) || L.start : act4 ? act4At(L, at0, n0) : at0 === 'boss' ? L.boss : at0 === 'gate' ? (L.gate || off(sp.rootGate, 4)) : at0 === 'bridge' ? L.bridge
+  const s5 = (act5 || act6) && (Array.isArray(L.spots[at0]) ? L.spots[at0][n0] : L.spots[at0] || (at0 === 'boss' ? L.boss : null));
+  const at = act5 || act6 ? (s5 && { x: s5.x, z: s5.z + 2 }) || L.start : act4 ? act4At(L, at0, n0) : at0 === 'boss' ? L.boss : at0 === 'gate' ? (L.gate || off(sp.rootGate, 4)) : at0 === 'bridge' ? L.bridge
     : at0 === 'glade' ? off(sp.glade, 6) : at0 === 'mere' ? off(sp.mere, 2) : at0 === 'lantern' ? off(sp.lanternglade, 3) : at0 === 'deer' ? off(sp.deer, 4)
       : at0 === 'island' ? off(sp.island, 1) : at0 === 'heart' ? off(sp.heart, 9) : at0 === 'thorns' ? off(L.thorns?.[n0], 0) : at0 === 'chamber' ? L.chambers?.[n0]
         : at0 === 'tear' ? off(sp.tears?.[n0], 2.5) : at0 === 'waypoint' ? off(sp.waypoint, 2) : L.start;

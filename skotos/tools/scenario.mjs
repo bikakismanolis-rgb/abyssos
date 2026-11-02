@@ -2643,6 +2643,108 @@ const S = {
     await pg.waitForFunction(() => window.__G.zone?.id === 'bottom' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 240000 });
     beat('by the waypoint to the Well\'s Foot', true);
     return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
+  } },
+  // gen6's ground in the game (docs/act6-contract.md, The level object L): each zone in each reading built from its real
+  // layout with no ice mesh, gen6's own faults empty on the zone's L, the hero walking (keys, collision and all) the
+  // critical path from the camp: the Drained Sea's three hearths, the Heap's north gap and its three wreck lanterns, and in
+  // the dry reading down the Well; the Bottom's barrow door, the ember's pane, the three black lamps, Leif's fire and the
+  // glade, the Stair's head (its foot out of reach behind the walls), and once her fire burns the Stair's foot, the Hearth's
+  // stones and the Gate ring home; a pack of a tag combat's PACKS does not hold yet spawning the Sunken, never goblins
+  ground6: { q: 'auto=drained&q=0&sim=2&norender&lvl=36&cloud=off', run: async (pg) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    const ev = (f, a) => pg.evaluate(f, a);
+    const ready = (id) => pg.waitForFunction((id) => window.__ready && window.__G?.player && window.__G.mode === 'play' && window.__G.zone?.id === id && !document.getElementById('fade').classList.contains('on'), id, { timeout: 240000 });
+    await ready('drained'); await A5.tick(pg);
+    await ev(() => {
+      window.__immortal = true;
+      // (the walk: a 4-neighbour way over the zone's own map, steered with the movement keys toward a point a few cells on)
+      window.__walk6 = async (tx, tz, maxT = 120) => {
+        const G = window.__G, z = G.zone, m = z.map, { IN } = await import('/src/core/input.js'), w = m.w;
+        for (const p of z.packs) p.spawned = true;
+        const t0 = m.nearestFloor(tx, tz, 3), goal = Math.floor(t0.z) * w + Math.floor(t0.x), pl0 = G.player;
+        const from = Math.floor(pl0.z) * w + Math.floor(pl0.x), par = new Int32Array(w * m.h).fill(-1), q = [from]; par[from] = from;
+        for (let hd = 0; hd < q.length && par[goal] < 0; hd++) { const i = q[hd], x = i % w, zz = (i - x) / w; for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const X = x + dx, Z = zz + dz, n = Z * w + X; if (X >= 0 && Z >= 0 && X < w && Z < m.h && m.cells[n] && par[n] < 0) { par[n] = i; q.push(n); } } }
+        if (par[goal] < 0) return { ok: false, why: 'noWay' };
+        const path = []; for (let i = goal; i !== from; i = par[i]) path.push({ x: i % w + 0.5, z: Math.floor(i / w) + 0.5 }); path.reverse();
+        const dist = path.length;
+        return await new Promise((res) => {
+          let k = 0, gt = 0, best = -1, still = 0, last = performance.now();
+          const keys = (x, zz) => { for (const c of ['w', 'a', 's', 'd']) IN.keys.delete(c); if (zz < -0.3) IN.keys.add('w'); if (zz > 0.3) IN.keys.add('s'); if (x < -0.3) IN.keys.add('a'); if (x > 0.3) IN.keys.add('d'); };
+          const step = () => {
+            // (the player as it is now: the zone's arrival may make her again)
+            const pl = window.__G.player, now = performance.now(); gt += (now - last) / 1000 * 2; last = now;
+            // (cell by cell, the nearest of the next few once she is within 0.45 m of it: round corners, never into them)
+            let j = k; for (let q = k; q < Math.min(path.length, k + 8); q++) if (Math.hypot(path[q].x - pl.x, path[q].z - pl.z) < Math.hypot(path[j].x - pl.x, path[j].z - pl.z)) j = q;
+            k = Math.hypot(path[j].x - pl.x, path[j].z - pl.z) < 0.45 ? Math.min(path.length - 1, j + 1) : j;
+            const tgt = path[k], dx = tgt.x - pl.x, dz = tgt.z - pl.z, l = Math.hypot(dx, dz) || 1;
+            const left = Math.hypot(t0.x - pl.x, t0.z - pl.z);
+            if (k > best) { best = k; still = 0; } else still += 1;
+            if (left < 1.2 || still > 300 || gt > maxT) { keys(0, 0); res({ ok: left < 1.2, left: +left.toFixed(2), cells: dist, k, stuck: still > 300, at: { x: +pl.x.toFixed(1), z: +pl.z.toFixed(1) } }); return; }
+            keys(dx / l, dz / l); requestAnimationFrame(step);
+          };
+          requestAnimationFrame(step);
+        });
+      };
+    });
+    const faults = () => ev(async () => { const z = window.__G.zone, g = await import('/src/world/gen6.js'); return { mode: z.mode, f: (z.id === 'drained' ? g.drainedFaults : g.bottomFaults)(z.L), ice: !!z.lvl.ice || !!z.L.ice, kids: z.lvl.group.children.length, props: z.L.props.length, packs: z.L.packs.length }; });
+    const walk = (p, t) => ev(([p, t]) => window.__walk6(p.x, p.z, t), [p, t]);
+    const spots = () => ev(() => { const S = window.__G.zone.L.spots; return JSON.parse(JSON.stringify({ hearths: S.hearths, gap: S.heap?.gap, lamps5: S.wreckLamps, well: S.well, mere: S.npcs?.mere, door: window.__G.zone.L.stamps?.[0]?.door, ember: S.ember, lamps: S.lamps, leif: S.leif?.fire, glade: S.glade, keyx: S.keyx, foot: S.stair?.foot, stones: S.hearth?.stones, ring: S.hearth?.ring })); });
+    const go = async (name, p, t = 120) => { const r = await walk(p, t); beat('walk: ' + name, r.ok, r); return r.ok; };
+    // ---- the Drained Sea, before the Ketos ----
+    let f = await faults();
+    beat('drained (mere): built, no ice mesh, gen6 holds on the zone\'s own L', f.mode === 'mere' && !f.ice && !f.f.length && f.kids > 3 && f.packs >= 10, f);
+    let S = await spots();
+    for (const hh of S.hearths) await go('hearth ' + hh.k, { x: hh.x, z: hh.z + 1.5 });
+    await go('the Heap\'s north gap', S.gap);
+    for (const l of S.lamps5) await go('wreck lantern ' + l.i, l);
+    await go('Glaukos\'s place by the Mere', S.mere);
+    // ---- the stand-in packs: an Act VI tag combat has not written yet spawns the Sunken ----
+    const pk = await ev(async () => {
+      const G = window.__G, z = G.zone, p = z.packs.find((q) => q.tag === 'heapLice' || q.tag === 'shoreFaded'); if (!p) return null;
+      p.spawned = false; const n0 = z.actors.length; G.player.x = p.x; G.player.z = p.z + 1;
+      await new Promise((r) => setTimeout(r, 1200));
+      const got = z.actors.slice(n0).filter((a) => a.team === 'foe' && !a.prop).map((a) => a.kind);
+      for (const a of z.actors.slice(n0)) if (!a.prop) { a.hp = 0; a.dead = true; a.remove?.(); }
+      return { tag: p.tag, got };
+    });
+    beat('an unwritten Act VI pack spawns the Sunken, not goblins', pk && pk.got.length > 0 && pk.got.every((k) => k === 'sunken' || k === 'harpooner'), pk);
+    // ---- the Drained Sea dry: down the Well ----
+    await ev(() => { window.__G.hero.flags.ketosDown = true; window.__D.emit('travel', 'drained', { at: 'waypoint' }); });
+    await pg.waitForTimeout(600); await ready('drained');
+    f = await faults();
+    beat('drained (dry): built again, the Well open, gen6 holds', f.mode === 'dry' && !f.f.length && !f.ice, f);
+    S = await spots();
+    if (await go('the Well\'s mouth', { x: S.well.x, z: S.well.z - 2.6 }, 160)) {
+      await ev(() => { const z = window.__G.zone, it = z.interact.find((i) => i.kind === 'exit' && i.to === 'bottom'); it.use(); });
+      await ready('bottom');
+      beat('down the Well to the Bottom', true);
+    } else await ev(() => window.__D.emit('travel', 'bottom', { at: 'start' }));
+    await ready('bottom');
+    // ---- the Bottom, dark ----
+    f = await faults();
+    beat('bottom (dark): built, no ice mesh, gen6 holds', f.mode === 'dark' && !f.ice && !f.f.length && f.kids > 3, f);
+    S = await spots();
+    await go('the barrow\'s door', S.door);
+    await go('the ember\'s pane', S.ember.pane);
+    for (const l of S.lamps) await go('black lamp ' + l.k + ' (' + l.place + ')', l, 160);
+    await go('Leif\'s fire', S.leif);
+    await go('the glade', S.glade);
+    const shut = await walk(S.foot, 30);
+    beat('the Stair\'s foot out of reach behind its walls', !shut.ok && shut.why === 'noWay', shut);
+    // ---- the Bottom once her fire burns: the Stair, the Hearth, the ring home ----
+    await ev(() => { const F = window.__G.hero.flags; F.blackLamp0 = F.blackLamp1 = F.blackLamp2 = true; F.herFire = true; window.__D.emit('travel', 'bottom', { at: 'waypoint' }); });
+    await pg.waitForTimeout(600); await ready('bottom');
+    f = await faults();
+    beat('bottom (lit): built again, gen6 holds', f.mode === 'lit' && !f.f.length, f);
+    S = await spots();
+    await go('the Stair\'s foot', S.foot, 200);
+    for (const st of S.stones) await go('hearthstone ' + st.i, st);
+    if (await go('the Gate ring', { x: S.ring.x, z: S.ring.z - 1.5 })) {
+      await ev(() => { const z = window.__G.zone, it = z.interact.find((i) => i.kind === 'exit' && i.to === 'town'); it.use(); });
+      await ready('town');
+      beat('through the ring home', true);
+    }
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
   } }
 };
 const sc = S[name];
