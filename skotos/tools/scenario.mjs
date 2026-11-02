@@ -1301,6 +1301,88 @@ const S = {
     };
     return { pass: Object.values(checks).every(Boolean), checks, r };
   } },
+  // heroes moved by hand between the claude.ai version and the web one (Settings › Cloud save › Move heroes): in
+  // claude.ai (a stand-in kept in localStorage '__xfer' = 'art': its db, user and downloads) every hero out through the
+  // downloads capability; on the web (no claude.ai) a plain download, then the claude.ai file in through the file picker:
+  // the heroes added and on the title, the same file again changes nothing, the further copy kept on each hero, pasted
+  // text taken as a file is, a file that is none refused; back in claude.ai the web's file in, and up to its cloud
+  transfer: { q: 'q=0&sim=2&norender', init: () => {
+    if (localStorage.getItem('__xfer') !== 'art') return;
+    const K = '__fakecloud', load = () => JSON.parse(localStorage.getItem(K) || '{}'), save = (d) => localStorage.setItem(K, JSON.stringify(d));
+    const cp = (v) => JSON.parse(JSON.stringify(v));
+    const snap = (id, v) => ({ id, exists: !!v, data: () => (v ? cp(v) : undefined), metadata: { fromCache: false, hasPendingWrites: false } });
+    const doc = (path) => ({ id: path.split('/').pop(), path, async get() { return snap(path.split('/').pop(), load()[path]); }, async set(v) { const d = load(); d[path] = cp(v); save(d); }, async delete() { const d = load(); delete d[path]; save(d); } });
+    const db = { doc, collection: (path) => ({ path, doc: (id) => doc(path + '/' + id), async get() { const d = load(), n = path.split('/').length + 1; const docs = Object.keys(d).filter((p) => p.startsWith(path + '/') && p.split('/').length === n).sort().map((p) => snap(p.split('/').pop(), d[p])); return { docs, size: docs.length, empty: !docs.length }; } }) };
+    const user = { id: async () => 'u-test', canEdit: async () => true, can: async () => true };
+    const downloads = { async save(o) { window.__dl = { filename: o.filename, data: typeof o.data === 'string' ? o.data : null }; return { status: 'saved' }; } };
+    window.claude = { use: async (n) => (n === 'db' ? db : n === 'user' ? user : n === 'downloads' ? downloads : null) };
+  }, run: async (pg) => {
+    const base = A5.base, r = {};
+    const h = (id, cls, lvl, o) => Object.assign({ id, cls, level: lvl, xp: lvl * 100, gold: 100, diff: 0, skills: {}, points: lvl - 1, inv: new Array(32).fill(null), equip: {}, stash: new Array(48).fill(null), quest: 2, flags: {}, wps: ['town'], act1: -1, act2: -1, act3: -1, act4: -1, gateBest: 0, boons: [], stats: { kills: 3, deaths: 0, time: 60, legs: 0, elites: 0 }, created: 1, played: 1000 }, o);
+    const as = async (mode, heroes) => {
+      await pg.evaluate(([mode, heroes]) => {
+        for (const k of Object.keys(localStorage)) if (k.startsWith('skotos.') || k.startsWith('__fakecloud')) localStorage.removeItem(k);
+        localStorage.setItem('__xfer', mode);
+        localStorage.setItem('skotos.save.v1', JSON.stringify({ heroes, settings: {}, last: heroes[0].id }));
+      }, [mode, heroes]);
+      await pg.goto(base + '?q=0&sim=2&norender');
+      await pg.waitForFunction(() => window.__ready && window.__G?.save && window.__G.mode === 'title', null, { timeout: 240000 });
+      await pg.evaluate(() => window.__D.openPanel('cloud')); await pg.waitForTimeout(300);
+    };
+    const msg = () => pg.evaluate(() => document.getElementById('cl-msg')?.textContent || '');
+    const stored = () => pg.evaluate(() => JSON.parse(localStorage.getItem('skotos.save.v1')).heroes.map((x) => x.id + ':' + x.level).sort());
+    // claude.ai: every hero out through the downloads capability
+    await as('art', [h('hA', 'warden', 12), h('hB', 'mage', 20)]);
+    await pg.waitForFunction(async () => (await import('/src/game/cloud.js')).CLOUD.state === 'on', null, { timeout: 60000 }).catch(() => {});
+    await pg.click('[data-a="clexport"]');
+    await pg.waitForFunction(() => window.__dl, null, { timeout: 20000 }).catch(() => {});
+    const art = await pg.evaluate(() => window.__dl);
+    const artFile = art?.data ? JSON.parse(art.data) : null;
+    r.artOut = { name: art?.filename, n: artFile?.heroes?.length, k: artFile?.k, msg: await msg() };
+    // the web: its own hero; out as a plain download
+    await as('web', [h('hW', 'ranger', 7)]);
+    const [dlw] = await Promise.all([pg.waitForEvent('download', { timeout: 20000 }).catch(() => null), pg.click('[data-a="clexport"]')]);
+    let webText = null;
+    if (dlw) { const fs = await import('node:fs'); webText = fs.readFileSync(await dlw.path(), 'utf8'); }
+    r.webOut = { name: dlw?.suggestedFilename(), n: webText ? JSON.parse(webText).heroes.length : 0, msg: await msg() };
+    // the claude.ai file in through the picker
+    const [fc] = await Promise.all([pg.waitForEvent('filechooser', { timeout: 20000 }), pg.click('[data-a="climport"]')]);
+    await fc.setFiles({ name: art?.filename || 'heroes.json', mimeType: 'application/json', buffer: Buffer.from(art?.data || '') });
+    await pg.waitForFunction(() => /\d/.test(document.getElementById('cl-msg')?.textContent || ''), null, { timeout: 20000 }).catch(() => {});
+    r.in1 = { msg: await msg(), stored: await stored(), title: await pg.evaluate(() => window.__G.save.heroes.length), same: await pg.evaluate((t) => { const f = JSON.parse(t), d = JSON.parse(localStorage.getItem('skotos.save.v1')); return f.heroes.every((x) => JSON.stringify(d.heroes.find((y) => y.id === x.id)) === JSON.stringify(x)); }, art?.data || '{"heroes":[]}') };
+    // the same file again, as pasted text: nothing to do
+    await pg.click('[data-a="clpaste"]'); await pg.waitForTimeout(200);
+    await pg.fill('#cl-paste', art?.data || ''); await pg.click('[data-a="clpastego"]'); await pg.waitForTimeout(300);
+    r.in2 = { msg: await msg(), stored: await stored() };
+    // played further here on hA, further in the file on hB
+    await pg.evaluate(() => { const d = JSON.parse(localStorage.getItem('skotos.save.v1')); d.heroes.find((x) => x.id === 'hA').level = 15; d.heroes.find((x) => x.id === 'hB').xp = 5; localStorage.setItem('skotos.save.v1', JSON.stringify(d)); });
+    await pg.click('[data-a="clpaste"]'); await pg.waitForTimeout(200);
+    await pg.fill('#cl-paste', art?.data || ''); await pg.click('[data-a="clpastego"]'); await pg.waitForTimeout(300);
+    r.in3 = { msg: await msg(), stored: await stored(), bak: await pg.evaluate(() => JSON.parse(localStorage.getItem('skotos.cloud.bak.v1') || '[]').map((b) => b.why + ':' + b.hero.id)) };
+    // not a heroes file
+    await pg.click('[data-a="clpaste"]'); await pg.waitForTimeout(200);
+    await pg.fill('#cl-paste', 'hello'); await pg.click('[data-a="clpastego"]'); await pg.waitForTimeout(300);
+    r.bad = await msg();
+    // back in claude.ai: the web's file in, then up to its cloud
+    await as('art', [h('hA', 'warden', 12), h('hB', 'mage', 20)]);
+    await pg.waitForFunction(async () => { const C = (await import('/src/game/cloud.js')).CLOUD; return C.state === 'on' && !C.busy; }, null, { timeout: 60000 }).catch(() => {});
+    const [fc2] = await Promise.all([pg.waitForEvent('filechooser', { timeout: 20000 }), pg.click('[data-a="climport"]')]);
+    await fc2.setFiles({ name: 'web.json', mimeType: 'application/json', buffer: Buffer.from(webText || '') });
+    await pg.waitForFunction(() => /\d/.test(document.getElementById('cl-msg')?.textContent || ''), null, { timeout: 20000 }).catch(() => {});
+    await pg.evaluate(async () => (await import('/src/game/cloud.js')).syncNow('test'));
+    r.back = { stored: await stored(), cloud: await pg.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('__fakecloud') || '{}')).map((k) => k.split('/').pop()).sort()) };
+    await pg.evaluate(() => localStorage.removeItem('__xfer'));
+    const checks = {
+      artOut: /^skotos-heroes-\d{4}-\d\d-\d\d\.json$/.test(r.artOut.name || '') && r.artOut.n === 2 && r.artOut.k === 'skotos-heroes' && /2/.test(r.artOut.msg),
+      webOut: /\.json$/.test(r.webOut.name || '') && r.webOut.n === 1,
+      in1: r.in1.stored.join() === 'hA:12,hB:20,hW:7' && r.in1.title === 3 && r.in1.same && /2/.test(r.in1.msg),
+      in2: r.in2.stored.join() === 'hA:12,hB:20,hW:7' && /0[^0-9]+2/.test(r.in2.msg),
+      in3: r.in3.stored.join() === 'hA:15,hB:20,hW:7' && r.in3.bak.includes('imported:hA') && r.in3.bak.includes('conflict:hB'),
+      bad: /Σκότους|Skotos/.test(r.bad),
+      back: r.back.stored.join() === 'hA:12,hB:20,hW:7' && ['h-hA', 'h-hB', 'h-hW'].every((k) => r.back.cloud.includes(k))
+    };
+    return { pass: Object.values(checks).every(Boolean), checks, r };
+  } },
   // levels past the old skill cap, Mastery past 50, and a save from before the progression taken up from the title
   progress: { q: 'auto=town&sim=2&q=1&lvl=1&cls=' + (process.env.CLS || 'ranger'), run: async (pg, shot) => {
     const r = {};

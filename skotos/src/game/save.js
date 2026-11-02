@@ -2,6 +2,7 @@
 import { G } from './state.js';
 import { cleanItem, MAX_ILVL } from './items.js';
 import { BOON, MAX_LEVEL, INV_SIZE, STASH_SIZE, xpToNext, CLASSES, DIFFS, BASES, LEGENDARIES } from './data.js';
+import { further, HERO_ID } from './cloudsync.js';
 
 // (?slot=name: a save of its own, for tests that run several heroes in one browser: tools/coop.mjs)
 const SLOT = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('slot') : null;
@@ -251,7 +252,7 @@ export function setCloudMeta(m) { try { localStorage.setItem(CLOUD_KEY, JSON.str
 // a routine place, and goes only for room, told. Storage too full for them drops routine ones first. Whatever goes for
 // room is told (backupsGone: the panel says so)
 export const BAK_MAX = 6, BAK_KEEP = 12;
-const KEEP_WHY = new Set(['conflict', 'deleted', 'restored', 'repaired']);
+const KEEP_WHY = new Set(['conflict', 'deleted', 'restored', 'repaired', 'imported']);
 export function backups() { try { const b = JSON.parse(localStorage.getItem(BAK_KEY) || '[]'); return Array.isArray(b) ? b.filter((x) => x && x.hero && typeof x.hero === 'object') : []; } catch (e) { return []; } }
 // the backups no longer kept, newest first (at most 8): { at (when dropped), why, id, cls, level, diff }
 export function backupsGone() { try { const b = JSON.parse(localStorage.getItem(BAK_GONE_KEY) || '[]'); return Array.isArray(b) ? b.filter((x) => x && typeof x === 'object') : []; } catch (e) { return []; } }
@@ -319,3 +320,44 @@ export function restoreBackup(id, at) {
   if (ok) saveHooks.changed?.();
   return ok;
 }
+
+// ---------- heroes moved by hand between the game's versions (the claude.ai artifact and the web build keep their saves
+// apart: neither can reach the other's cloud). Settings › Cloud save › Move heroes, ui/cloudui.js ----------
+export const MOVE_KIND = 'skotos-heroes';
+// every stored hero, as stored, in a file of its own (the hero being played written first); null with none
+export function exportHeroes() {
+  writeSave();
+  const heroes = storedHeroes().filter((h) => typeof h.id === 'string' && HERO_ID.test(h.id) && !isGone(h));
+  return heroes.length ? JSON.stringify({ k: MOVE_KIND, v: 1, at: Date.now(), heroes }) : null;
+}
+// such a file (or a list of heroes, or a save as stored) taken in: a hero new here is added; one this browser has too is
+// replaced only by a copy further on (its own then kept as a 'conflict' backup), else the file's copy is kept as an
+// 'imported' backup, as it is when it is the hero this page plays; one this version cannot read as it is (heroFits) is
+// left out. A hero deleted here comes back, dated after its tombstone as a restore is. { ok, added, updated, same, kept,
+// refused } or { ok: false, code: 'bad_file' }
+export function importHeroes(text) {
+  let d = null;
+  try { d = JSON.parse(text); } catch (e) { d = null; }
+  const list = Array.isArray(d) ? d : d && typeof d === 'object' && Array.isArray(d.heroes) && (d.k === MOVE_KIND || d.k === undefined) ? d.heroes : null;
+  if (!list || !list.length) return { ok: false, code: 'bad_file' };
+  const R = { ok: true, added: 0, updated: 0, same: 0, kept: 0, refused: 0 };
+  const fin = (v) => (typeof v === 'number' && isFinite(v) ? v : 0);
+  for (const rec of list) {
+    if (!rec || typeof rec !== 'object' || Array.isArray(rec) || typeof rec.id !== 'string' || !HERO_ID.test(rec.id) || heroFits(rec)) { R.refused++; continue; }
+    const cur = storedHeroes().find((h) => h.id === rec.id);
+    if (cur && JSON.stringify(cur) === JSON.stringify(rec)) { R.same++; continue; }
+    if (rec.id === playingId() || (cur && further(cur, rec) >= 0)) { backupHero(rec, 'imported'); R.kept++; continue; }
+    if (cur) backupHero(cur, 'conflict');
+    const m = cloudMeta();
+    let t = fin(m.tomb?.[rec.id]);
+    for (const a of Object.values(m.away && typeof m.away === 'object' ? m.away : {})) t = Math.max(t, fin(a?.tomb?.[rec.id]));
+    if (m.base?.[rec.id]?.del) t = Math.max(t, fin(m.base[rec.id].at));
+    if (gone.has(rec.id)) t = Math.max(t, fin(gone.get(rec.id)));
+    const h = JSON.parse(JSON.stringify(rec));
+    if (t) { h.played = Math.max(fin(h.played), Date.now(), t + 1); if (m.tomb) { delete m.tomb[h.id]; setCloudMeta(m); } }
+    if (putStored(h)) { if (cur) R.updated++; else R.added++; } else R.refused++;
+  }
+  if (R.added || R.updated) saveHooks.changed?.();
+  return R;
+}
+

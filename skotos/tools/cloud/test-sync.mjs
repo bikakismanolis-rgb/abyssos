@@ -710,6 +710,51 @@ await T('taking up repaired with storage full: the mark is still made by the fir
   G.hero = null;
 });
 
+// ---------- heroes moved by hand between the game's versions (Settings › Cloud save › Move heroes) ----------
+await T('heroes moved by hand: out to a file, in on the other side, the further copy kept, nothing lost', async () => {
+  fresh([hero('hA', { level: 12, xp: 500 }), hero('hB', { cls: 'mage', level: 20, xp: 900 })], 'hA');
+  const text = SV.exportHeroes(), file = JSON.parse(text);
+  ok(file.k === SV.MOVE_KIND && file.heroes.length === 2 && JSON.stringify(file.heroes) === JSON.stringify(SV.storedHeroes()), 'every stored hero out, as stored', file.heroes.map((h) => h.id));
+  // the other version: a hero of its own
+  fresh([hero('hW', { cls: 'ranger', level: 7 })], 'hW');
+  let r = SV.importHeroes(text);
+  ok(r.ok && r.added === 2 && SV.storedHeroes().length === 3 && G.save.heroes.length === 3, 'two added beside its own', r);
+  ok(JSON.stringify(SV.storedHeroes().find((h) => h.id === 'hA')) === JSON.stringify(file.heroes[0]), 'stored as they came');
+  r = SV.importHeroes(text);
+  ok(r.ok && r.same === 2 && !r.added && !r.updated, 'the same file again: nothing to do', r);
+  // played further here: the file's copy goes to the backups; further in the file: it replaces this one, kept as conflict
+  const disk = JSON.parse(localStorage.getItem('skotos.save.v1'));
+  disk.heroes.find((h) => h.id === 'hA').level = 15; disk.heroes.find((h) => h.id === 'hB').xp = 100;
+  localStorage.setItem('skotos.save.v1', JSON.stringify(disk)); SV.loadSave();
+  r = SV.importHeroes(text);
+  ok(r.kept === 1 && r.updated === 1 && storedLvl('hA') === 15 && SV.storedHeroes().find((h) => h.id === 'hB').xp === 900, 'the further copy stays on each hero', r);
+  ok(SV.backups().some((b) => b.why === 'imported' && b.hero.id === 'hA' && b.hero.level === 12) && SV.backups().some((b) => b.why === 'conflict' && b.hero.id === 'hB' && b.hero.xp === 100), 'and the other copy of each is in the backups', bk());
+  // what is not a heroes file, or a hero this version cannot read
+  ok(SV.importHeroes('hello').ok === false && SV.importHeroes('{"heroes":[]}').ok === false && SV.importHeroes('{"k":"other","heroes":[{"id":"x"}]}').ok === false, 'not a heroes file: refused');
+  r = SV.importHeroes(JSON.stringify({ k: SV.MOVE_KIND, v: 1, heroes: [hero('hZ', { cls: 'bard' }), { id: '../x' }, 5] }));
+  ok(r.ok && r.refused === 3 && !SV.storedHeroes().some((h) => h.id === 'hZ'), 'heroes this version cannot read are left out', r);
+});
+
+await T('a hero moved in that was deleted here comes back and stays; the hero being played is never replaced', async () => {
+  fresh([hero('hA', { level: 12, played: 1000 }), hero('hB', { cls: 'mage', level: 20 })], 'hA');
+  const text = SV.exportHeroes();
+  const A = artifactDb(); const LB = await artifactBackend(A.claude('u1'));
+  await syncAll(LB, real(SV));
+  SV.deleteHero('hA');
+  await syncAll(LB, real(SV));
+  ok(!SV.storedHeroes().some((h) => h.id === 'hA') && (await LB.get('hA')).del, 'deleted here and in the cloud');
+  const r = SV.importHeroes(text);
+  ok(r.added === 1 && SV.storedHeroes().find((h) => h.id === 'hA').played > SV.cloudMeta().base.hA.at, 'moved in again, dated after its tombstone', r);
+  const s = await syncAll(LB, real(SV));
+  ok(s.pushed.includes('hA') && !s.dropped.includes('hA') && !(await LB.get('hA')).del && SV.storedHeroes().some((h) => h.id === 'hA'), 'the next sync puts it up, not drops it', s);
+  // the hero this page plays: the file's copy only to the backups, even when further on
+  G.hero = G.save.heroes.find((h) => h.id === 'hB'); SV.writeSave();
+  const further = JSON.parse(text); further.heroes.find((h) => h.id === 'hB').level = 30;
+  const p = SV.importHeroes(JSON.stringify(further));
+  ok(p.kept >= 1 && storedLvl('hB') === 20 && SV.backups().some((b) => b.why === 'imported' && b.hero.id === 'hB' && b.hero.level === 30), 'the hero being played stays; the file\'s copy kept', { p, bk: bk() });
+  G.hero = null;
+});
+
 await T('a lost mark made again during a sync whose base began lost stands (the stale copy never goes up as a change)', async () => {
   const A = artifactDb();
   const P = device(); P.B = await artifactBackend(A.claude('u1'));

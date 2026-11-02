@@ -53,6 +53,14 @@ Each hero is compared three ways:
 - **Account switch:** a base belongs to one account (`art:<uid>`, `sb:<player>`). A different account (a code taken, a different claude.ai user) starts with no base, so both sides merge and nothing is lost. Tombstones belong to an account too. The other account's are kept aside for it (`away`, up to 4 accounts) and apply again only when it is back, so a deletion made under one account never deletes a hero from another account's cloud or devices. Deletions made before the browser had any account go to the first one it syncs with.
 - **Limits, client side:** 96 KiB per hero (a real one is about 20 KB) and 12 heroes in the cloud. Past those, the extra heroes stay local only and Settings says why.
 
+## Moving heroes between the two versions
+
+The claude.ai artifact and the web build keep separate clouds and cannot reach each other's: an artifact page reaches only claude.ai's own services (its `db`, `room`), and a web page cannot read a claude.ai account. So heroes move between them by hand, in Settings › Cloud save › **Move heroes** (`save.js` `exportHeroes`, `importHeroes`; `ui/cloudui.js`):
+
+- **Export to a file:** every stored hero, as stored, in `skotos-heroes-<date>.json` (`{ k: 'skotos-heroes', v: 1, at, heroes }`; the hero being played is written first). In claude.ai it goes through the `downloads` capability (the viewer confirms the save); on the web, a plain download. Where neither works, the file's text is shown to be copied.
+- **Import from a file**, or **Paste text**: a hero new here is added; a hero this browser has too is replaced only by a copy further on (by level, mastery, XP, kills), and the copy it replaces is kept as a `conflict` backup; otherwise the file's copy is kept as an `imported` backup (protected like a lost conflict's), as it is for the hero being played. A hero this version cannot read (`heroFits`) is left out. A hero deleted here comes back, dated after its tombstone as a restore is. The next sync puts what came in up to this version's cloud.
+- Scenario `transfer`; `test-sync` "heroes moved by hand".
+
 ## claude.ai (the artifact)
 
 There's one document per hero: `data/users/<uid>/h-<hero id>`, with body `{ k: 'hero', id, rev, played, sum, del, at, data, chain }`, where `data` is the hero's JSON text and `chain` the sums of its last 128 revs (`{ rev: sum }`). A write takes a short lease of the document (`acquire`, a holder of the page's own, 10 s), reads it, checks that `rev` is the one expected, writes `rev + 1`, then shortens the lease to the least there is (1 s; the db has no release). A page that finds the lease held is refused `conflict`, and the next sync tries again. Leases only bind callers that use them and a lease can lapse under a slow call; a runtime without `acquire` writes without one. Then two devices can still both write the same `rev + 1`, and the later write stands. The device whose write did not stand finds the cloud's chain naming another hero at the rev it agreed on, and weighs the hero as changed on both sides (the copy further on wins, the other is kept as a `conflict` backup). It does not take its own rev for an unchanged cloud. Every write also names the sum it agreed on at the rev it expects, and is refused `conflict` when the document holds another hero at that rev, so not even the page-hide push (`pushOne`) of the device whose write did not stand goes over the one that stood. A base rev ahead of the document's is weighed the same way. A base rev the chain no longer reaches (a device away for more than 128 writes, an evening or more of play; 16 while a page of version 16 or earlier still writes) proves neither: a copy unchanged since takes the cloud's as a routine one only when the cloud's is not behind it; otherwise the two are weighed as a conflict (the further one wins, the other kept as `conflict`). So no further copy is replaced as a mere change, and backups kept for real conflicts are not pushed out by ones that were none.
@@ -75,9 +83,12 @@ A non-empty object replaces the full set, so it has to restate room and user:
 capabilities: {
   room: { topics: { s: 'interact', w: 'interact', i: 'interact', f: 'interact', c: 'interact' } },
   user: { scopes: ['profile'] },
-  db: {}
+  db: {},
+  downloads: true
 }
 ```
+
+(`downloads` for Move heroes' export.)
 
 `db: {}` keeps the defaults: shared documents read at `view` and written at `interact`, and each viewer's `data/users/<id>/` subtree private, readable by its own viewer at `view` (so a view-level player's pull-only sync still finds their saves) and written at `interact`. Do not lock the root (`{ path: '', write: 'owner' }`): `can('data.write')` then answers false for every Contributor, and co-op's send advice (`net/coop.js`) hides the co-op button for exactly the friends the owner invites. Nor would it protect the db's caps: every Contributor can still create documents under their own subtree, and those count toward the same 25,000 documents and size. The game itself bounds what it writes (one document a hero, at most 12 live heroes and 32 tombstones a viewer).
 
