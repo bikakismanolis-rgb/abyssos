@@ -3104,8 +3104,8 @@ const S = {
   //   wood      the Drowned Wood at full black water, 20 actors: the most trees and water on screen in its window
   //   village   the Forgotten Village's square: the most houses on screen, the Faded at their chores (13), Keyx with his
   //             lantern and the black lamp in his hand
-  //   hearth    the First's Hearth in the Shade's form 2: its body, three webs, two Hands at the black pools, the four
-  //             stones lit and the seven named lamps: the most of them on screen
+  //   hearth    the First's Hearth in the Shade's form 2: its body 4.5 m off, three webs, two Hands at the black pools, the
+  //             four stones lit and the seven named lamps: the most of them on screen from inside the stones' ring (r 8.5)
   // The Field is perf5's own visit (seed 5, its camp, no packs: its frame is perf5's Field, the calibration), and in the
   // same visit the Field again with each spot's crowd standing round her as it stands at the spot (the same bodies at the
   // same offsets, on the Field's floor): a person-bodied actor costs SwiftShader about 37 ms a frame (its skinning; a Hull-
@@ -3190,7 +3190,7 @@ const S = {
           const st = L.stamps.find((s) => s.kind === 'forest'), trees = L.props.filter((q) => TREE.has(q.t));
           v = best((x, zz) => x >= st.x0 && x < st.x0 + st.w && zz >= st.z0 && zz < st.z0 + st.h, (x, zz) => wetIn(x, zz) * 4 + trees.filter((q) => inView(x, zz, q, 0.8)).length / 40);
         } else if (spot === 'village') v = best((x, zz) => hyp({ x, z: zz }, S.keyx.well) < 12, (x, zz) => S.houses.filter((q) => inView(x, zz, q, 0.8)).length + 0.05 * (S.chores || []).filter((q) => inView(x, zz, q, 0.8)).length);
-        else if (spot === 'hearth') { const H = S.hearth; v = best((x, zz) => hyp({ x, z: zz }, H) < H.r - 1, (x, zz) => [...H.stones, ...H.niches, ...H.pools, H.fire].filter((q) => inView(x, zz, q, 0.8)).length - hyp({ x, z: zz }, H) * 0.01); }
+        else if (spot === 'hearth') { const H = S.hearth; v = best((x, zz) => hyp({ x, z: zz }, H) < 8.5, (x, zz) => [...H.stones, ...H.niches, ...H.pools, H.fire].filter((q) => inView(x, zz, q, 0.8)).length - hyp({ x, z: zz }, H) * 0.01); }
         const f = z.map.nearestFloor(v.x, v.z);
         G.player.x = f.x; G.player.z = f.z;
         gfx.updateCamera(0, G.player.x, G.player.z, true);
@@ -3274,9 +3274,11 @@ const S = {
           const H = S.hearth;
           for (const s of A.stones) { lit(s.mesh); lamp(s, 4); }
           for (const n of A.niches) { lit(n.mesh); lamp(n, 3, { light: false }); }
-          list.push({ kind: 'weaver', x: H.x, z: H.z - 4.5, o: {} });
+          // (the Shade 4.5 m from her toward her fire, or north of her; its webs between them; the Hands at the black pools)
+          const d = hyp(f, H), sx = d > 2 ? f.x + (H.x - f.x) / d * 4.5 : f.x, sz = d > 2 ? f.z + (H.z - f.z) / d * 4.5 : f.z - 4.5;
+          list.push({ kind: 'weaver', x: sx, z: sz, o: {} });
           for (const hp of H.pools.slice(0, 2)) list.push({ kind: 'skotosHand', x: hp.x, z: hp.z, o: {} });
-          for (let k = 0; k < 3; k++) P6.areas.push(Pj.area('web', H.x + (k - 1) * 4, H.z - 1 + (k % 2) * 2.5, 2, 1e4, { team: 'foe' }));
+          for (let k = 0; k < 3; k++) P6.areas.push(Pj.area('web', (f.x + sx) / 2 + (k - 1) * 3.5, (f.z + sz) / 2 + (k % 2) * 2 - 1, 2, 1e4, { team: 'foe' }));
         }
         P6.actors = spawn(list);
         const m = await run(P6.actors);
