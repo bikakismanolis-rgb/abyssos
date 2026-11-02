@@ -1,11 +1,13 @@
 // Cloud saves in Settings: a row with the state, and a panel of its own (the state, the last sync, Sync now; on the web
 // build the save code, shown, copied, a new one, and another device's code taken; the backups of what a sync or a
 // deletion replaced, each taken back with a tap, and those no longer kept). And a word when another device played the
-// hero this page plays further on (back to the title to take that copy up). game/cloud.js, docs/cloudsave/README.md.
+// hero this page plays further on (back to the title to take that copy up). And heroes moved by hand between the game's
+// versions, a file out and a file (or its text) in (save.js exportHeroes, importHeroes). game/cloud.js,
+// docs/cloudsave/README.md.
 import { G } from '../game/state.js';
 import { CLASSES, DIFFS } from '../game/data.js';
 import { CLOUD, syncNow, claimCode, newCode } from '../game/cloud.js';
-import { backups, backupsGone, restoreBackup } from '../game/save.js';
+import { backups, backupsGone, restoreBackup, exportHeroes, importHeroes } from '../game/save.js';
 import { EXTRA, open as openPanel, renderPanel } from './panels.js';
 import { ICON } from './icons.js';
 import { on, emit } from './bus.js';
@@ -14,7 +16,7 @@ import { t, lang } from '../i18n/i18n.js';
 const esc = (x) => String(x ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 const when = (ms) => { if (!ms) return t('cloud.never'); const s = Math.max(0, Math.round((Date.now() - ms) / 1000)); if (s < 60) return t('cloud.justNow'); if (s < 3600) return t('cloud.minAgo', Math.round(s / 60)); return new Date(ms).toLocaleString(lang() === 'en' ? 'en-GB' : 'el-GR', { dateStyle: 'short', timeStyle: 'short' }); };
 const errText = (c) => t('cloud.e.' + c) !== 'cloud.e.' + c ? t('cloud.e.' + c) : t('cloud.e.unavailable') + ' (' + esc(c) + ')';
-const UI = { msg: null, shown: false, sure: null, bk: '' };
+const UI = { msg: null, shown: false, sure: null, bk: '', text: null, paste: false };
 // (a backup is named by its hero and time, not its place in the list: a sync between two taps may add one before it)
 const bkKey = (b) => b.hero.id + ':' + b.at;
 const bkSig = () => backups().map(bkKey).join() + '|' + backupsGone().map((g) => g.id + ':' + g.at).join();
@@ -48,6 +50,10 @@ function render() {
     ${sb && (on || CLOUD.state === 'idle') ? `<h4>${t('cloud.claim')}</h4><p class="muted">${t('cloud.claim.d')}</p>
       <div class="cl-code"><input id="cl-in" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="24" placeholder="XXXX-XXXX-XXXX-XXXX"><button class="btn sm" data-a="clclaim">${t('cloud.claimGo')}</button></div>` : ''}
     ${UI.msg ? `<p class="cl-msg" id="cl-msg">${esc(UI.msg)}</p>` : ''}
+    <h4>${t('cloud.move')}</h4><p class="muted">${t('cloud.move.d')}</p>
+    <div class="cl-code"><button class="btn ghost sm" data-a="clexport">${t('cloud.export')}</button><button class="btn ghost sm" data-a="climport">${t('cloud.import')}</button><button class="btn ghost sm" data-a="clpaste">${t('cloud.paste')}</button></div>
+    ${UI.text != null ? `<textarea id="cl-text" readonly style="width:100%;height:7em;font-size:11px">${esc(UI.text)}</textarea>` : ''}
+    ${UI.paste ? `<textarea id="cl-paste" style="width:100%;height:7em;font-size:11px" placeholder="${esc(t('cloud.paste.d'))}"></textarea><button class="btn sm" data-a="clpastego" style="width:100%">${t('cloud.importGo')}</button>` : ''}
     <h4>${t('cloud.backups')}</h4><p class="muted">${t('cloud.backups.d')}</p>${bk || `<p class="muted">${t('cloud.noBackups')}</p>`}${gone}
     <button class="btn ghost" data-a="settings" style="width:100%">${t('pick.back')}</button></div></div>`;
 }
@@ -69,6 +75,10 @@ function click(a, x, y) {
     claimCode(v).then((r) => say(r.ok ? t('cloud.claimed') : errText(r.code)));
     return true;
   }
+  if (a === 'clexport') { exportFile(); return true; }
+  if (a === 'climport') { pickFile(); return true; }
+  if (a === 'clpaste') { UI.paste = !UI.paste; UI.text = null; renderPanel(); return true; }
+  if (a === 'clpastego') { takeIn(document.getElementById('cl-paste')?.value || ''); return true; }
   if (a === 'clrestore') {
     const key = x + ':' + y;
     if (UI.sure !== key) { UI.sure = key; say(t('cloud.restoreSure')); return true; }
@@ -80,6 +90,49 @@ function click(a, x, y) {
   }
   return false;
 }
+// every hero out to a file: in claude.ai through the downloads capability (the viewer confirms), elsewhere a plain
+// download; where neither can, the file's text, shown to be copied and pasted in the other version
+async function exportFile() {
+  const text = exportHeroes();
+  if (!text) { say(t('cloud.noHeroes')); return; }
+  const n = JSON.parse(text).heroes.length, name = 'skotos-heroes-' + new Date().toISOString().slice(0, 10) + '.json';
+  UI.text = null; UI.paste = false;
+  if (window.claude?.use) {
+    let dl = null;
+    try { dl = await window.claude.use('downloads'); } catch (e) { dl = null; }
+    if (dl) {
+      try { await dl.save({ filename: name, data: text }); say(t('cloud.exported', n)); return; } catch (e) {
+        if (e?.code === 'declined') { say(t('cloud.exportNo')); return; }
+      }
+    }
+  } else {
+    try {
+      const a = document.createElement('a'), url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+      a.href = url; a.download = name; document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 2000);
+      say(t('cloud.exported', n)); return;
+    } catch (e) { /* the text, below */ }
+  }
+  UI.text = text; say(t('cloud.exportText'));
+}
+function pickFile() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.json,application/json,text/plain';
+  inp.onchange = () => {
+    const f = inp.files?.[0];
+    if (!f) return;
+    if (f.size > 8e6) { say(t('cloud.importBad')); return; }
+    f.text().then(takeIn, () => say(t('cloud.importBad')));
+  };
+  inp.click();
+}
+function takeIn(text) {
+  const r = importHeroes(String(text || '').trim());
+  if (!r.ok) { say(t('cloud.importBad')); return; }
+  UI.paste = false;
+  say(t('cloud.imported', r.added + r.updated, r.same, r.kept, r.refused));
+  if (r.added || r.updated) emit('cloudHeroes', {});
+}
 // the hero this page plays is further on in the cloud (another device played it since): back to the title takes that
 // copy up (this one goes to the backups); playing on keeps both (the next sync keeps the further one, the other backed up)
 function renderNewer() {
@@ -89,7 +142,7 @@ function renderNewer() {
     <button class="btn ghost" data-a="close" style="width:100%;margin-top:8px">${t('cloud.newer.stay')}</button></div></div>`;
 }
 export function initCloudUi() {
-  EXTRA.cloud = { render, click, reset() { UI.msg = null; UI.shown = false; UI.sure = null; UI.sureNew = false; } };
+  EXTRA.cloud = { render, click, reset() { UI.msg = null; UI.shown = false; UI.sure = null; UI.sureNew = false; UI.text = null; UI.paste = false; } };
   EXTRA.cloudNewer = { render: renderNewer, click: () => false };
   // (the settings row: the state, a tap opens the panel)
   EXTRA.cloudRow = () => (CLOUD.state === 'off' ? '' : `<div class="set-row"><span>${t('cloud.title')}</span><button class="btn ghost sm cl-row" data-a="cloud">${esc(cloudLine())}</button></div>`);
