@@ -3631,7 +3631,8 @@ const S = {
   // (drained mere and dry, bottom dark and lit): every story prop stands at its gen6 spot and is handed to the zone in
   // z.lvl.act6 (hearths, lost lights with their fire at the lantern end's interact, lure posts, wreck lanterns, bells,
   // Asger's brazier; the black lamps, the shadow-walls over the shut bands, the ember's pane, Leif's dead fire, the Hearth's
-  // fire, stones, niches and Gate ring; the neck only once the Mere is dry), each in its first state for the reading, and
+  // fire (burning, with its light among the layout's), stones, niches and Gate ring; the neck only once the Mere is dry),
+  // each in its first state for the reading, and
   // the zone holding those same objects in z.act6 (world.js act6Zone builds none of its own: no kind twice at a spot); the
   // atmosphere and ambient of the reading; the shore off the grid (sea.js shoreJit on gen6's layouts); no ring or pool
   // drawn up the vault's walls (build.js drape); a frame drawn at a spot of each (shots)
@@ -3669,6 +3670,9 @@ const S = {
         const kinds = [], P0 = W.clone(), P1 = W.clone(), twice = [];
         z.lvl.group.traverse((o) => { if (o !== z.lvl.group && o.userData?.kind) kinds.push(o); });
         for (let i = 0; i < kinds.length; i++) for (let j = i + 1; j < kinds.length; j++) if (kinds[i].userData.kind === kinds[j].userData.kind && kinds[i].getWorldPosition(P0).distanceTo(kinds[j].getWorldPosition(P1)) < 0.6) twice.push(kinds[i].userData.kind);
+        // (her fire's light: one of the layout's lights at the Hearth's centre, live among the pooled lights' sources)
+        const near = (l) => !!S.hearth && Math.hypot(l.x - S.hearth.fire.x, l.z - S.hearth.fire.z) < 0.5;
+        const fire = { n: L.lights.filter(near).length, live: [...window.__R.sources].filter(near).map((s) => s.range) };
         // (each in its first state for the reading)
         const st = {
           hearths: A.hearths.map((h) => !!h.mesh.userData.lit), lost: A.lost.map((h) => !!h.mesh.userData.lit), wrecks: A.wrecks.map((h) => !!h.mesh.userData.lit),
@@ -3692,10 +3696,11 @@ const S = {
           let top = -9; ring.updateWorldMatrix(true, true); ring.traverse((o) => { const P = o.geometry?.attributes.position; if (!P || !o.geometry.userData.drape) return; for (let k = 0; k < P.count; k++) top = Math.max(top, W.fromBufferAttribute(P, k).applyMatrix4(o.matrixWorld).y); });
           drape = { x, z: zz, top: +top.toFixed(2) };
         }
-        return { mode: L.mode, bad, held, twice, st, okState, atm, moved, drape, kids: z.lvl.group.children.length };
+        return { mode: L.mode, bad, held, twice, fire, st, okState, atm, moved, drape, kids: z.lvl.group.children.length };
       });
       beat(`${tag}: every story prop at its gen6 spot, handed over in z.lvl.act6`, !r.bad.length, { bad: r.bad, mode: r.mode });
       beat(`${tag}: the zone holds the build's own props (z.act6 is z.lvl.act6's), none built twice`, !r.held.length && !r.twice.length, { held: r.held, twice: r.twice });
+      if (zone === 'bottom') beat(`${tag}: her fire burning with its light (one of L.lights at the Hearth's centre, r 5, live in the pooled lights)`, r.st.centre && r.fire.n === 1 && r.fire.live.length === 1 && r.fire.live[0] >= 10, r.fire);
       beat(`${tag}: each in its first state for the reading`, r.okState, r.st);
       beat(`${tag}: the reading's atmosphere and ambient`, r.atm.fog === r.atm.want && r.atm.amb === r.atm.wantAmb, r.atm);
       beat(`${tag}: the shore off the grid (shoreJit on gen6's layout)`, r.moved > 100, { moved: r.moved });
