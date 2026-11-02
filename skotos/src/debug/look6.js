@@ -77,7 +77,13 @@ export function testLayout(type = 'drained', mode = type === 'drained' ? 'mere' 
     keels: [{ x: 28, z: 92, r: 2.0 }, { x: 46, z: 96, r: 1.4 }, { x: 34, z: 110, r: 2.4 }, { x: 74, z: 58, r: 1.6 }],
     lures: [{ x: 73, z: 42, bait: { x: 70, z: 45 } }, { x: 39, z: 44, bait: { x: 42, z: 47 } }], vaults: [], casks: []
   });
-  if (bot) Object.assign(S, { glade: { x: 38, z: 100, r: 5 }, houses: [{ x: 70, z: 60, rot: 0.3, tilt: 7, sink: 0.5 }, { x: 72, z: 72, rot: -0.5, tilt: 10, sink: 0.7 }, { x: 44, z: 72, rot: 1.2, tilt: 5, sink: 0.4 }] });
+  if (bot) Object.assign(S, { glade: { x: 38, z: 100, r: 5 }, houses: [{ x: 70, z: 60, rot: 0.3, tilt: 0.12, sink: 0.5 }, { x: 72, z: 72, rot: -0.5, tilt: -0.18, sink: 0.7 }, { x: 44, z: 72, rot: 1.2, tilt: 0.08, sink: 0.4 }] });
+  // (the Bottom: a stamped wood's and crypt's boot props round the glade and the village, placed by the shipped addProp in
+  // the drowned grade: dead trees and pines, stumps, logs, rocks, a broken pillar and a statue)
+  if (bot) L.props.push({ t: 'well', x: 58, z: 66, r: 0.4, sunk: true }, { t: 'cart', x: 54, z: 74, r: 1.1 }, { t: 'stake', x: 62, z: 70, r: 0.2 });
+  // (the Drained Sea: a keel as gen6 lays it, s its radius, hgt how far up, Asger's with its clear face; a shack on its side)
+  if (!bot) L.props.push({ t: 'keel', x: 22, z: 104, r: 0.6, s: 2.2, hgt: 9, asger: true }, { t: 'shack', x: 66, z: 26, r: 0.5, s: 1, side: true });
+  if (bot) for (const [t, x, z, r] of [['dead', 31, 95, 0.3], ['dead', 44, 94, 1.9], ['pine', 33, 107, 0.8], ['pine', 45, 106, 2.5], ['dead', 38, 92, 4.1], ['stump', 35, 101, 0], ['log', 42, 101, 0.7], ['rock', 40, 108, 1.1], ['bush', 32, 100, 0], ['pillar', 60, 76, 0], ['pillarBroken', 64, 78, 0.4], ['statue', 50, 66, 2.8]]) L.props.push({ t, x, z, r, s: 1, d: 1 });
   for (const [t, x, z, r, s] of [['wreck', 68, 136, 0.9], ['keelboat', 46, 136, -0.6], ['rowboat', 70, 156, 2.2], ['brokenBoat', 47, 156, 1.0], ['kelp', 50, 40, 0.3], ['kelp', 64, 38, 1.8], ['stiltFrame', 40, 30, 0.4],
     ['towerB', 30, 70, 1.2], ['anchor', 62, 30, 0.7], ['cask', 52, 22, 0], ['crate', 59, 23, 0.4], ['driftwood', 60, 70, 0.9], ['barnacleRock', 72, 52, 0], ['whale', 40, 82, 0.4, 0.8]]) L.props.push({ t, x, z, r, s: s || 1 });
   L.start = { x: camp.x, z: camp.z };
@@ -110,7 +116,9 @@ export async function show(o = {}) {
       R.scene.add(m); props.push({ k, x: at.x, z: at.z, m });
       const u = m.userData;
       u.setLit?.(true); u.setWarm?.(1); u.setGlow?.(1); u.setFire?.(true);
-      if (u.setLit || u.setFire || u.setWarm || u.setGlow) if (k !== 'blackLamp') addLight({ x: at.x, y: (u.fireY ?? 1.2) + 1.6, z: at.z, color: k === 'emberPane' ? 0xff6a30 : 0xffb060, intensity: 12, range: 7, flicker: 0.12 });
+      // (the toppled light's at its lantern end, out along its length: at its base it stood inside the stone)
+      if (k === 'toppledLight') { const a = m.rotation.y, la = u.lampAt; addLight({ x: at.x + Math.sin(a) * la.z + Math.cos(a) * la.x, y: 2.4, z: at.z + Math.cos(a) * la.z - Math.sin(a) * la.x, color: 0xffb060, intensity: 12, range: 7, flicker: 0.12 }); }
+      else if (u.setLit || u.setFire || u.setWarm || u.setGlow) if (k !== 'blackLamp') addLight({ x: at.x, y: (u.fireY ?? 1.2) + 1.6, z: at.z, color: k === 'emberPane' ? 0xff6a30 : 0xffb060, intensity: 12, range: 7, flicker: 0.12 });
     });
   }
   cur = { L, lvl, group: lvl.group, props };
@@ -122,7 +130,7 @@ export async function show(o = {}) {
 const BENCH = {
   hearth6: [72, 90], brazier6: [77, 90], blackLamp: [82, 90], hearthStone: [87, 90], nameLamp: [92, 90], wreckLantern: [97, 90], shipBell: [102, 90],
   lurePost: [72, 97], garland: [77, 97], emberPane: [82, 97], keyxLantern: [87, 97], bird: [92, 97], ropeWinch: [97, 97],
-  shadowWall: [79, 105], neckArch: [94, 106], keel: [74, 114], gateRing: [83, 114], skylight: [92, 113], stiltFrame: [100, 114], toppledLight: [80, 121]
+  shadowWall: [79, 105], neckArch: [94, 106], keel: [74, 114], gateRing: [83, 114], skylight: [92, 113], stiltFrame: [100, 114], toppledLight: [84, 127]
 };
 export const BENCH_VIEW = { shadowWall: 13, neckArch: 13, keel: 12, gateRing: 10, skylight: 11, stiltFrame: 9, toppledLight: 14 };
 export const PROP_AT = (k, type = 'drained') => { const b = BENCH[k] || [72, 90]; return { x: b[0] - (type === 'bottom' ? 6 : 0), z: b[1] }; };

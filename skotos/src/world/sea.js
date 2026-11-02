@@ -500,10 +500,11 @@ float sq256(float x) { x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; r
       // (a grey mush lying on the water in soft drifts, cracked finely between small floes: plates of one size with dark
       // gaps between them read as a paved floor laid on the water)
       vec2 sv = vorT(P * 4.2 + (n1.ba - 0.5) * 0.9 + vec2(sin(t * 0.5 + P.y * 0.4), cos(t * 0.43 + P.x * 0.4)) * 0.03 + 1.7);
-      float cover = smoothstep(0.35, 0.8, slK + (n1.a - 0.5) * 0.6 + (n2.b - 0.5) * 0.35 + (sv.y - 0.5) * 0.2);
+      // (its edge ragged floe by floe: the slow reads alone left it ruled along the cells' edges)
+      float cover = smoothstep(0.4, 0.7, slK + (n1.a - 0.5) * 0.5 + (sv.y - 0.5) * 0.7);
       float mush = smoothstep(0.25, 0.75, n1.g * 0.55 + n2.r * 0.45);
       plateK = cover * (0.7 + 0.3 * smoothstep(0.0, 0.05, sv.x));
-      vec3 pc = vec3(0.07, 0.074, 0.082) * (0.7 + 0.45 * mush + 0.15 * sv.y) * amb + skyG * (0.05 + 0.05 * mush);
+      vec3 pc = vec3(0.06, 0.063, 0.07) * (0.7 + 0.45 * mush + 0.15 * sv.y) * amb + skyG * (0.04 + 0.04 * mush);
       col = mix(col, pc, plateK * 0.88);
     }
   }
