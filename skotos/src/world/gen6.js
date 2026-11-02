@@ -11,6 +11,7 @@
 //   stamp(L, sub, x0, z0, o)                      a sub-layout's cells, paint, walls and props laid into a window of L
 //   drainedFaults(L), bottomFaults(L)            what check-act6 and the try loops hold a layout to (empty: it holds)
 //   walk6(L, h, mh)                               the walk grid at black water h (the Mere at mh)
+//   wideDry(L, a, b), roomDoors(L, r)             a way 3 cells wide on dry ground from a to b; a room's ways in
 //   ropeSpot(L)                                   where the rope hole stands on a farlight layout's Light's Skerry
 // Besides gen5's cells/paint/low/hgt/dist/bed/vbed they carry L.pocket (1 a breathing pocket, 2 the Mere), L.vault (the
 // vault patch over a cell: its id, L.spots.vaults its rows), L.keel (the ice keels' footprints), Act V's thick, window,
@@ -212,6 +213,34 @@ function nearFrame(L) {
   const { w, h } = L;
   for (let z = 0; z < h; z++) for (let x = 0; x < w; x++) if ((x < MARGIN || z < MARGIN || x >= w - MARGIN || z >= h - MARGIN) && L.cells[z * w + x]) return true;
   return false;
+}
+// a way three cells wide or more on ground the black water never takes, from a to within r of b: over cells whose four
+// neighbours are dry floor too (8-connected: a diagonal step between two such cells keeps the width)
+export function wideDry(L, a, b, r = 3) {
+  const { w, h } = L, N = w * h, ok = (i) => L.cells[i] && !L.pocket[i], D = new Uint8Array(N);
+  for (let z = 1; z < h - 1; z++) for (let x = 1; x < w - 1; x++) { const i = z * w + x; if (ok(i) && ok(i - 1) && ok(i + 1) && ok(i - w) && ok(i + w)) D[i] = 1; }
+  let s = -1, bd = 1e9;
+  for (const [cx, cz] of circleCells(L, a.x, a.z, 3)) { const i = cz * w + cx, d = Math.hypot(cx + 0.5 - a.x, cz + 0.5 - a.z); if (D[i] && d < bd) { bd = d; s = i; } }
+  if (s < 0) return false;
+  const seen = new Uint8Array(N), q = [s]; seen[s] = 1;
+  for (let hd = 0; hd < q.length; hd++) {
+    const i = q[hd], x = i % w, z = (i - x) / w;
+    if (Math.hypot(x + 0.5 - b.x, z + 0.5 - b.z) < r) return true;
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) { const n = i + dz * w + dx; if ((dx || dz) && D[n] && !seen[n]) { seen[n] = 1; q.push(n); } }
+  }
+  return false;
+}
+// the ways into a room (a stamped crypt's rect, in cells): the runs of open cells on the ring just outside it
+export function roomDoors(L, r) {
+  const { w } = L, ring = [];
+  for (let x = r.x; x < r.x + r.w; x++) ring.push([x, r.z - 1]);
+  for (let z = r.z; z < r.z + r.h; z++) ring.push([r.x + r.w, z]);
+  for (let x = r.x + r.w - 1; x >= r.x; x--) ring.push([x, r.z + r.h]);
+  for (let z = r.z + r.h - 1; z >= r.z; z--) ring.push([r.x - 1, z]);
+  const open = ring.map(([x, z]) => x >= 0 && z >= 0 && x < L.w && z < L.h && !!L.cells[z * w + x]);
+  if (open.every(Boolean)) return 1;
+  let n = 0; for (let k = 0; k < open.length; k++) if (open[k] && !open[(k + open.length - 1) % open.length]) n++;
+  return n;
 }
 // the dry pockets at high water: every piece of dry floor the black water cuts off from the start is a refuge's (holds a
 // 3 x 3 of dry ground) or lies within 12 m of one. Returns the faults; with add, each such refuge joins L.refuges
@@ -472,7 +501,7 @@ function tryDrained(seed, last) {
     if (!S.asger && !last) return fail('asger');
     const want = rng.int(14, 22);
     for (let t = 0; t < 600 && S.keels.length < want; t++) {
-      const r = 1 + 1.5 * rng.next() ** 1.6, x = rng.range(9, 52), z = rng.range(98, 123);
+      const r = 1 + 1.5 * rng.next() ** 1.6, x = rng.range(9, 52), z = rng.range(98, 122);
       if (!keelOk(x, z, r) || S.keels.some((q) => hyp(q, { x, z }) < q.r + r + 1.3)) continue;
       blockC(x, z, r); S.keels.push({ x, z, r });
     }
@@ -587,7 +616,9 @@ function tryDrained(seed, last) {
     }
   }
   // ---- Tamarisk's braziers along the way, so that every pack lies within 15 m of a light that burns from the build ----
-  lightUp(L, L.packs, R1, roadAt, (x, z) => free(x, z, 0.9) && hyp(HP, { x, z }) > HP.r + 1 && !S.hearths.some((q) => hyp(q, { x, z }) < 3) && !L.packs.some((q) => hyp(q, { x, z }) < 2.5), (x, z) => { S.braziers.push({ x, z }); fire(x, z); });
+  // (never on the spine, the side paths or a hearth's disc: a brazier's footprint would narrow them)
+  const offKeep = (x, z) => !circleCells(L, x, z, 1.6).some(([cx, cz]) => keep[cz * w + cx]);
+  lightUp(L, L.packs, R1, roadAt, (x, z) => free(x, z, 0.9) && offKeep(x, z) && hyp(HP, { x, z }) > HP.r + 1 && !S.hearths.some((q) => hyp(q, { x, z }) < 3) && !L.packs.some((q) => hyp(q, { x, z }) < 2.5), (x, z) => { S.braziers.push({ x, z }); fire(x, z); });
   // ---- the First's trail on the road and the side paths to her three hearths; skylights; the vault's patches ----
   {
     const toGap = road.filter((p) => p.z <= HP.z - HP.r + 1);
@@ -687,6 +718,9 @@ export function drainedFaults(L) {
   if (S.trail.length < 60 || S.trail.length > 120) out.push('trail.count');
   for (const m of S.trail) if (!dryAt(L, m.x, m.z)) { out.push('trail.wet'); break; }
   for (const p of [...S.hearths, ...S.wreckLamps, ...S.bells, ...S.braziers, S.camp, ...L.exits.filter((e) => e.to !== 'bottom')]) if (p && (!firm(L, p.x, p.z) || L.pocket[Math.floor(p.z) * L.w + Math.floor(p.x)])) { out.push('onWet'); break; }
+  // the second hearth's spine: three cells wide or more, dry at full flood, from the road to her island
+  const H2 = S.hearths.find((q) => q.k === 2);
+  if (!S.spine || !H2 || !wideDry(L, S.spine.to, H2)) out.push('spine');
   // the main road whole at high water, never closed by a keel
   for (const p of L.road) { const i = Math.floor(p.z) * L.w + Math.floor(p.x); if (!R1[i] || !dryAt(L, p.x, p.z) || L.keel[i]) { out.push('road'); break; } }
   // the shore ring six cells wide at least, all the way round (the Mere at its fight level)
@@ -735,7 +769,8 @@ function readBottom(L, mode) {
 // a sub-layout's cells, paint and props laid into the window [x0, x0 + sub.w) x [z0, z0 + sub.h) of L (its own size: a
 // window is never sized the other way round), o.flipZ mirroring it north-south. Its exits, packs, boss, waypoint, shrines,
 // chests and lights are dropped, and every prop that draws a light of its own (LIT_PROPS); its rooms, trail, walls and
-// clearings are kept, remapped, in the record it returns (pushed to L.stamps). null: the window does not fit
+// clearings are kept, remapped, in the record it returns (pushed to L.stamps; o.seed, the seed it was drawn from, so
+// check-act6 can draw it again). null: the window does not fit
 export function stamp(L, sub, x0, z0, o = {}) {
   if (x0 < 0 || z0 < 0 || x0 + sub.w > L.w || z0 + sub.h > L.h) return null;
   const { w } = L, flip = !!o.flipZ;
@@ -749,7 +784,7 @@ export function stamp(L, sub, x0, z0, o = {}) {
     L.props.push(q);
   }
   const rec = {
-    kind: o.kind, x0, z0, w: sub.w, h: sub.h, flipZ: flip,
+    kind: o.kind, seed: o.seed, x0, z0, w: sub.w, h: sub.h, flipZ: flip,
     rooms: (sub.rooms || []).map((r) => ({ ...r, x: x0 + r.x, z: flip ? z0 + sub.h - (r.z + r.h) : z0 + r.z })),
     trail: (sub.trail || []).map(P), clearings: (sub.clearings || []).map(P),
     walls: (sub.walls || []).map((wl) => ({ x: x0 + wl.x, z: Z(wl.z), r: RT(wl.r), m: wl.m })),
@@ -762,12 +797,12 @@ export function stamp(L, sub, x0, z0, o = {}) {
 // redrawn with seed + 1
 function barrowSub(seed, n = 10) {
   for (let k = 0; k < n; k++) {
-    const sub = genCrypt(((seed ^ 0xB0770) >>> 0) + k, { mw: 14, mh: 26, rooms: 6 });
+    const sd = ((seed ^ 0xB0770) >>> 0) + k, sub = genCrypt(sd, { mw: 14, mh: 26, rooms: 6 });
     if (sub.w !== 42 || sub.h !== 78) continue;
     const R = reach(sub, sub.start.x, sub.start.z);
     if (!sub.rooms.every((r) => nearReach(sub, R, r.x + r.w / 2, r.z + r.h / 2, 5) < 4)) continue;
     const leaf = leafRoom(sub);
-    if (leaf) return { sub, leaf, k };
+    if (leaf) return { sub, leaf, k, sd };
   }
   return null;
 }
@@ -796,7 +831,7 @@ function woodSub(seed, n = 10) {
     const R = reach(sub, sub.start.x, sub.start.z);
     if (nearReach(sub, R, sub.boss.x, sub.boss.z, 4) >= 3) continue;
     const rng = RNG((sd ^ 0x1eaf) >>> 0), leif = offTrail(sub, 1 / 3, 4, rng, []), glade = leif && offTrail(sub, 2 / 3, 5, rng, [leif]);
-    if (glade) return { sub, k, leif, glade };
+    if (glade) return { sub, k, sd, leif, glade };
   }
   return null;
 }
@@ -827,7 +862,7 @@ function tryBottom(seed, last) {
   // ---- the windows first (their cells straight into L.cells; the parent's own carving is drawn over them in K) ----
   const B0 = barrowSub(seed, last ? 80 : 10), W0 = woodSub(seed, last ? 80 : 10);
   if (!B0 || !W0) return fail(B0 ? 'wood' : 'crypt');
-  const CR = stamp(L, B0.sub, 6, 28, { flipZ: true, kind: 'crypt' }), WD = stamp(L, W0.sub, 56, 28, { flipZ: true, kind: 'forest' });
+  const CR = stamp(L, B0.sub, 6, 28, { flipZ: true, kind: 'crypt', seed: B0.sd }), WD = stamp(L, W0.sub, 56, 28, { flipZ: true, kind: 'forest', seed: W0.sd });
   const subCells = L.cells.slice();
   const K = new Uint8Array(N), bed = new Float32Array(N).fill(BED_DRY), blk = new Uint8Array(N), res = new Uint8Array(N), keep = new Uint8Array(N), win = new Uint8Array(N), wayM = new Uint8Array(N);
   for (let i = 0; i < N; i++) K[i] = L.cells[i] ? LAND : ROCK;
@@ -1044,7 +1079,7 @@ function tryBottom(seed, last) {
   // ---- Glaukos's fire-pots: every pack and black lamp within 15 m of a light that burns from the build ----
   {
     const wayAt = (x, z) => { let b = 1e9; for (const p of ways) b = Math.min(b, Math.abs(p.x - x) + Math.abs(p.z - z)); for (const p of tr) b = Math.min(b, Math.abs(p.x - x) + Math.abs(p.z - z)); return b; };
-    const okPot = (x, z) => free(x, z, 0.8) && hyp(HC, { x, z }) > HC.r + 1 && !S.lamps.some((q) => hyp(q, { x, z }) < 2.5) && !L.packs.some((q) => hyp(q, { x, z }) < 2.5) && hyp(S.ember, { x, z }) > 2 && !wayM[Math.floor(z) * w + Math.floor(x)];
+    const okPot = (x, z) => free(x, z, 0.8) && hyp(HC, { x, z }) > HC.r + 1 && !S.lamps.some((q) => hyp(q, { x, z }) < 2.5) && !L.packs.some((q) => hyp(q, { x, z }) < 2.5) && hyp(S.ember, { x, z }) > 2 && !wayM[Math.floor(z) * w + Math.floor(x)] && !tr.some((t) => hyp(t, { x, z }) < 1.5);
     lightUp(L, [...S.lamps, ...L.packs], RO, wayAt, okPot, (x, z) => { S.pots.push({ x, z }); fire(x, z, { pot: true }); });
   }
   // ---- the vault over the village square and the Hearth's east and west thirds; the place voices ----
@@ -1120,7 +1155,10 @@ export function bottomFaults(L) {
   for (const r of L.stamps) { if (r.w !== 42 || r.h !== 78) out.push('window.size'); if (far(R1, r.door, 2) || far(R1, r.south, 2.5)) out.push('window.door'); }
   const clear = [S.leif, S.glade].filter((g) => g && circleCells(L, g.x, g.z, g.r - 0.6).every(([x, z]) => L.cells[z * w + x] && !L.pocket[z * w + x] || !L.cells[z * w + x] && L.bed[z * w + x] >= BED_DRY));
   if (clear.length < 2) out.push('clearings');
-  if (!S.ember) out.push('noLeaf');
+  const er = S.ember && L.stamps[0]?.rooms.find((r) => S.ember.x >= r.x && S.ember.x < r.x + r.w && S.ember.z >= r.z && S.ember.z < r.z + r.h);
+  if (!er || er.kind !== 'room' || roomDoors(L, er) !== 1 || !dryAt(L, S.ember.x, S.ember.z)) out.push('noLeaf');
+  // the wood's trail stays dry (its own props stand on it as they do in the Gates)
+  for (const t of L.stamps[1]?.trail || []) { const i = Math.floor(t.z) * w + Math.floor(t.x); if (L.pocket[i]) { out.push('woodTrail'); break; } }
   // the 15 m rule (the Hearth counts its own centre fire), the arena's spacing, the refuges, the dry pockets
   const lights = buildLights(L);
   for (const p of [...L.packs, ...S.lamps]) if (!lights.some((l) => hyp(l, p) <= LIGHT_R)) { out.push('light'); break; }

@@ -8,11 +8,24 @@
 // what the story stands on dry; the shore ring 6 m wide; the 15 m rule; the arenas' interacts 3 m apart; a dry refuge
 // within 12 m of every pocket; no carved feature within 3 cells of the solid frame; the stamped windows the size of their
 // sub-layouts with their doors on the road, two dry clearings in the wood, a leaf room for the ember); both generators
-// deterministic. Soft: a mean above 3 tries per seed, a seed above 12, and oddities.
+// deterministic. Besides gen6's own lists, the check holds each layout itself to: no pocket, vault or keel cell in the
+// margin and the arenas' discs inside it; every basin's refuge in L.refuges within 12 m; the 15 m rule and the arenas'
+// 3 m spacing; on the Drained Sea the Old Shore's huts, shacks and boats, the keels in the Keels' rows and clear of the
+// Heap's ring, the three lanterns 120 degrees apart, the lure-rock at r 6 in the Mere's north water, the fourth lost
+// light on the Heap's outer slope, the brazier on its north rim, the camp dry, the First's trail at every hearth, the
+// second hearth's spine three cells wide and dry at full flood, the beds in their ranges (the basins 0.15-0.9, the
+// Mere's core 0-0.15 and ring 0.45-0.6), L.lights Tamarisk's braziers only; on the Bottom the ember in a stamped leaf
+// room (one way in, dry), the wood's trail dry, two lure posts on its bends, the black lamps in the barrow, the wood
+// and Keyx's hand, his pool, the village and the Stair's pools in their places, the stones on the diagonals, the black
+// pools on the north rims, the vault over the square and the Hearth's east and west thirds, the beds 0.3-0.75 (the
+// barrow's 0.3-0.6), each window the size of its sub-layout drawn again from its seed, its door on its north edge.
+// Soft: a mean above 3 tries per seed, a seed above 12, and oddities (fewer than three pockets in the Hollows, no
+// causeway, a clearing far off the wood's trail, a fire-pot on it, a window keeping under 80% of its sub-layout's cells).
 // GEN6=<path> checks another copy of gen6.js.
 import { pathToFileURL } from 'node:url';
 const GEN6 = process.env.GEN6 ? pathToFileURL(process.env.GEN6).href : '../src/world/gen6.js';
 const { genDrained, genBottom, drainedFaults, bottomFaults, ropeSpot, walk6, REJECT6, MARGIN, LIGHT_R } = await import(GEN6);
+const { genCrypt, genForest } = await import('../src/world/gen.js');
 const { BED_DRY } = await import('../src/world/genlib.js');
 const { firm } = await import('../src/world/gen5.js');
 const { genFarlight } = await import('../src/world/gen5.js');
@@ -25,6 +38,47 @@ const cellOf = (L, x, z) => Math.floor(z) * L.w + Math.floor(x);
 const inR = (v, c, r) => Math.abs(v - c) <= r + 1e-9;
 const hyp = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const J = (o) => JSON.stringify(o, (k, v) => (ArrayBuffer.isView(v) ? Array.from(v) : v));
+const inFrame = (L, p, r = 0) => p.x - r >= MARGIN && p.z - r >= MARGIN && p.x + r <= L.w - MARGIN && p.z + r <= L.h - MARGIN;
+const dryC = (L, i) => !!L.cells[i] && !L.pocket[i];
+const wet = (L, p) => { const i = cellOf(L, p.x, p.z); return !!L.pocket[i] || L.bed[i] < BED_DRY; };
+const angle = (p, c) => Math.atan2(p.x - c.x, p.z - c.z);
+const turn = (a, b) => Math.abs(Math.atan2(Math.sin(b - a), Math.cos(b - a)));
+// the 4-connected regions of cells with m[i] === v
+function regions(L, m, v) {
+  const { w, h } = L, seen = new Uint8Array(m.length), out = [];
+  for (let s = 0; s < m.length; s++) if (m[s] === v && !seen[s]) {
+    const q = [s]; seen[s] = 1;
+    for (let hd = 0; hd < q.length; hd++) { const i = q[hd], x = i % w, z = (i - x) / w; for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const X = x + dx, Z = z + dz, n = Z * w + X; if (X >= 0 && Z >= 0 && X < w && Z < h && m[n] === v && !seen[n]) { seen[n] = 1; q.push(n); } } }
+    out.push(q);
+  }
+  return out;
+}
+// from a to within 3 m of b over cells whose four neighbours are dry floor too, 8-connected (a way three cells wide)
+function wide3(L, a, b) {
+  const { w, h } = L, D = new Uint8Array(w * h);
+  for (let z = 1; z < h - 1; z++) for (let x = 1; x < w - 1; x++) { const i = z * w + x; if (dryC(L, i) && dryC(L, i - 1) && dryC(L, i + 1) && dryC(L, i - w) && dryC(L, i + w)) D[i] = 1; }
+  let s = -1, bd = 1e9;
+  for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) { const x = Math.floor(a.x) + dx, z = Math.floor(a.z) + dz, d = Math.hypot(x + 0.5 - a.x, z + 0.5 - a.z); if (x > 0 && z > 0 && x < w && z < h && D[z * w + x] && d < bd) { bd = d; s = z * w + x; } }
+  if (s < 0) return false;
+  const seen = new Uint8Array(w * h), q = [s]; seen[s] = 1;
+  for (let hd = 0; hd < q.length; hd++) {
+    const i = q[hd], x = i % w, z = (i - x) / w;
+    if (Math.hypot(x + 0.5 - b.x, z + 0.5 - b.z) < 3) return true;
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) { const n = i + dz * w + dx; if ((dx || dz) && D[n] && !seen[n]) { seen[n] = 1; q.push(n); } }
+  }
+  return false;
+}
+// the runs of open cells on the ring just outside a room (its ways in)
+function doors(L, r) {
+  const ring = [];
+  for (let x = r.x; x < r.x + r.w; x++) ring.push([x, r.z - 1]);
+  for (let z = r.z; z < r.z + r.h; z++) ring.push([r.x + r.w, z]);
+  for (let x = r.x + r.w - 1; x >= r.x; x--) ring.push([x, r.z + r.h]);
+  for (let z = r.z + r.h - 1; z >= r.z; z--) ring.push([r.x - 1, z]);
+  const open = ring.map(([x, z]) => !!L.cells[z * L.w + x]);
+  if (open.every(Boolean)) return 1;
+  return open.filter((o, k) => o && !open[(k + open.length - 1) % open.length]).length;
+}
 const st = { drained: { tries: 0, ms: 0, props: 0, packs: 0, pockets: 0, high: 0, n: 0 }, bottom: { tries: 0, ms: 0, props: 0, packs: 0, pockets: 0, n: 0 }, rope: 0 };
 
 // the fields every Act VI layout carries
@@ -58,8 +112,14 @@ function fields(L, tag, seed, w, h) {
   // the build's lights on dry cells; refuges 3 x 3 of dry ground
   for (const l of L.lights) if (!firm(L, l.x, l.z) || L.pocket[cellOf(L, l.x, l.z)]) { bad(tag + '.lightOnWet', seed); break; }
   for (const r of L.refuges) for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) { const i = cellOf(L, r.x + dx, r.z + dz); if (!L.cells[i] || L.pocket[i]) { bad(tag + '.refugeNotDry', seed); dz = dx = 9; } }
-  // nothing walkable in the frame and its margin
-  for (let i = 0; i < N2; i++) { const x = i % w, z = (i - x) / w; if ((x < MARGIN || z < MARGIN || x >= w - MARGIN || z >= h - MARGIN) && L.cells[i]) { bad(tag + '.frame', seed); break; } }
+  // nothing walkable, wet, vaulted or keeled in the frame and its margin; the arena's disc inside it
+  for (let i = 0; i < N2; i++) { const x = i % w, z = (i - x) / w; if ((x < MARGIN || z < MARGIN || x >= w - MARGIN || z >= h - MARGIN) && (L.cells[i] || L.pocket[i] || L.vault[i] || L.keel[i])) { bad(tag + '.frame', seed); break; } }
+  if (!inFrame(L, L.boss, L.boss.r)) bad(tag + '.frame.arena', seed);
+  // every basin (a region of breathing pocket) has its refuge in L.refuges within 12 m of its water
+  for (const q of regions(L, L.pocket, 1)) if (!q.some((i) => L.refuges.some((r) => Math.hypot(i % w + 0.5 - r.x, Math.floor(i / w) + 0.5 - r.z) <= 12))) { bad(tag + '.basinNoRefuge', seed); break; }
+  // the 15 m rule on its own: every pack (and the Bottom's black lamps) within 15 m of a light that burns from the build, on dry ground
+  const lit = L.lights.filter((l) => firm(L, l.x, l.z) && !L.pocket[cellOf(L, l.x, l.z)]);
+  for (const p of [...L.packs, ...(S.lamps || [])]) if (!lit.some((l) => hyp(l, p) <= LIGHT_R)) { bad(tag + '.light15', seed); break; }
   // every walkable cell's corners at y 0
   const W = w + 1;
   for (let i = 0; i < N2; i++) if (L.cells[i]) { const x = i % w, z = (i - x) / w; if ([0, 1, W, W + 1].some((d) => L.hgt[z * W + x + d] !== 0)) { bad(tag + '.floorNotLevel', seed); break; } }
@@ -106,6 +166,42 @@ function drained(seed) {
   const ex = L.exits;
   if (ex.length !== 1 || ex[0].to !== 'farlight' || ex[0].label !== 'exit.ropeUp' || hyp(ex[0], S.rope) > 0.01) bad('drained.exits', seed);
   for (const f of drainedFaults(L)) bad('drained.' + f.replace(/@.*/, ''), seed);
+  // the Old Shore: 4-6 stilt frames, 2 shacks, 3 boats (the Sailor on the first), all on it
+  const stilts = S.huts.filter((q) => q.kind === 'stilt').length, shacks = S.huts.filter((q) => q.kind === 'shack').length;
+  if (stilts < 4 || stilts > 6 || shacks !== 2 || S.boats.length !== 3 || hyp(S.sailor, S.boats[0]) > 0.01) bad('drained.oldShore', seed);
+  if ([...S.huts, ...S.boats].some((q) => q.x < 6 || q.x > 46 || q.z < 30 || q.z > 84)) bad('drained.oldShore.range', seed);
+  // the Keels in their rows, clear of the Heap's ring; Asger's among them
+  if (S.keels.some((q) => q.x < 8 || q.x > 52 || q.z < 98 || q.z > 122 || hyp(q, S.heap) < S.heap.r + q.r)) bad('drained.keels.range', seed);
+  if (S.keels.filter((q) => q.asger).length !== 1 || hyp(S.keels.find((q) => q.asger) || S.asger, S.asger.keel) > 0.01) bad('drained.keels.asger', seed);
+  // the Heap: the lanterns 120 degrees apart, the lure-rock at r 6 in the Mere's north water, the fourth lost light on its
+  // outer slope, Tamarisk's brazier on its north rim
+  const la = S.wreckLamps.map((l) => angle(l, S.heap));
+  if (la.some((a, k) => Math.abs(turn(a, la[(k + 1) % 3]) - 2 * Math.PI / 3) > 0.01)) bad('drained.wreckLamps.angle', seed);
+  const lu = S.mere.lure;
+  if (!inR(hyp(lu, S.mere), 6, 0.01) || lu.z >= S.mere.z || L.pocket[cellOf(L, lu.x, lu.z)] !== 2) bad('drained.lureRock', seed);
+  const ps = S.lost.find((l) => l.id === 'psamathe');
+  if (!ps || hyp(ps, S.heap) < S.heap.r || hyp(ps, S.heap) > S.heap.r + 6) bad('drained.lost.psamathe', seed);
+  if (!S.braziers.some((b) => Math.hypot(b.x - S.heap.x, b.z - (S.heap.z - S.heap.r - 1)) < 4.5)) bad('drained.rimBrazier', seed);
+  if (L.lights.length !== S.braziers.length) bad('drained.lightsNotOwn', seed);
+  // the camp dry all over; the skylight of r 6 over the rope; the First's trail at every hearth
+  for (let z = Math.floor(S.camp.z - S.camp.r); z <= S.camp.z + S.camp.r; z++) for (let x = Math.floor(S.camp.x - S.camp.r); x <= S.camp.x + S.camp.r; x++) if (Math.hypot(x + 0.5 - S.camp.x, z + 0.5 - S.camp.z) <= S.camp.r && L.pocket[z * w + x]) { bad('drained.campWet', seed); z = x = 1e9; }
+  if (hyp(S.sky[0], S.rope) > 3) bad('drained.sky.camp', seed);
+  for (const hh of S.hearths) if (!S.trail.some((m) => hyp(m, hh) < 4)) bad('drained.trail.hearth' + hh.k, seed);
+  // the second hearth's spine: three cells wide, dry at full flood, from the road to her island
+  if (!wide3(L, S.spine.to, S.hearths.find((q) => q.k === 2))) bad('drained.spine', seed);
+  // the beds: the basins 0.15-0.9, the Mere's core 0-0.15, its ring 0.45-0.6
+  for (let i = 0; i < w * h; i++) {
+    const p = L.pocket[i], b = L.bed[i], d = Math.hypot(i % w + 0.5 - S.mere.x, Math.floor(i / w) + 0.5 - S.mere.z);
+    if (p === 1 && (b < 0.15 - 1e-4 || b > 0.9 + 1e-4)) { bad('drained.bed.basin', seed); break; }
+    if (p === 2 && (d > S.mere.r || (d < S.mere.core ? b > 0.15 + 1e-4 : b < 0.45 - 1e-4 || b > 0.6 + 1e-4))) { bad('drained.bed.mere', seed); break; }
+  }
+  // the arena's interacts 3 m apart (the lanterns, the bells, the casks)
+  if ([...S.wreckLamps, ...S.bells, ...S.casks].some((a, i, l) => l.some((b, j) => j > i && hyp(a, b) < 3))) bad('drained.arenaCrowded', seed);
+  // (soft) three pockets or more in the Hollows; the causeway wading at high water
+  const hol = regions(L, L.pocket, 1).filter((q) => q.some((i) => i % w >= 54 && Math.floor(i / w) >= 40 && Math.floor(i / w) <= 104));
+  if (hol.length < 3) odd('drained.hollows<3', seed);
+  const cw = S.causeway;
+  if (cw) { let n = 0; for (let t = 0; t <= 20; t++) { const i = cellOf(L, cw.x0 + (cw.x1 - cw.x0) * t / 20, cw.z0 + (cw.z1 - cw.z0) * t / 20); if (L.pocket[i] && L.bed[i] >= 0.45 - 1e-4 && L.bed[i] <= 0.6 + 1e-4) n++; } if (n < 3) odd('drained.noCauseway', seed); } else odd('drained.noCauseway', seed);
   // the dry reading: the same layout, the Well's mouth and the neck blocked, the exit down
   t0 = Date.now();
   const D = genDrained(seed, { mode: 'dry' });
@@ -158,6 +254,46 @@ function bottom(seed) {
   const ex = Object.fromEntries(L.exits.map((e) => [e.to, e]));
   if (L.exits.length !== 2 || ex.drained?.label !== 'exit.well' || ex.town?.label !== 'exit.gateUp' || ex.town.at !== 'staff' || ex.town.locked !== 'herFire' || hyp(ex.town, H.ring) > 0.01) bad('bottom.exits', seed);
   for (const fl of bottomFaults(L)) bad('bottom.' + fl.replace(/@.*/, ''), seed);
+  // each window drawn again from its seed: the size of its sub-layout, its door on its north edge (the side facing the Well)
+  for (const [r, gen] of [[c, (sd) => genCrypt(sd, { mw: 14, mh: 26, rooms: 6 })], [f, (sd) => genForest(sd, { w: 42, h: 78 })]]) {
+    if (r.seed == null) { bad('bottom.window.seed', seed); continue; }
+    const sub = gen(r.seed);
+    if (sub.w !== r.w || sub.h !== r.h) bad('bottom.window.sub', seed);
+    if (r.door.z < r.z0 || r.door.z > r.z0 + 8) bad('bottom.window.doorEdge', seed);
+    let same = 0;
+    for (let z = 0; z < sub.h; z++) for (let x = 0; x < sub.w; x++) if (!!sub.cells[z * sub.w + x] === !!L.cells[(r.z0 + sub.h - 1 - z) * w + r.x0 + x]) same++;
+    if (same < 0.8 * sub.w * sub.h) odd('bottom.window.kept<80%', seed);
+  }
+  // the ember in a stamped leaf room: a free room with one way in, dry
+  const er = c.rooms.find((r) => S.ember.x >= r.x && S.ember.x < r.x + r.w && S.ember.z >= r.z && S.ember.z < r.z + r.h);
+  if (!er || er.kind !== 'room' || doors(L, er) !== 1) bad('bottom.emberNotLeaf', seed);
+  if (wet(L, S.ember) || !L.cells[cellOf(L, S.ember.x, S.ember.z)]) bad('bottom.emberWet', seed);
+  // the wood's trail dry (its own props stand on it, as in the Gates); two lure posts on its bends; no fire-pot on it
+  if (f.trail.some((t) => L.pocket[cellOf(L, t.x, t.z)])) bad('bottom.woodTrailWet', seed);
+  if (S.lures.length !== 2 || S.lures.some((l) => hyp(l, l.bait) > 4 || !(l.x >= f.x0 && l.x < f.x0 + f.w && l.z >= f.z0 && l.z < f.z0 + f.h))) bad('bottom.lures', seed);
+  if (S.pots.some((p) => f.trail.some((t) => hyp(t, p) < 1))) odd('bottom.potOnTrail', seed);
+  for (const g of [S.leif, S.glade]) { const d = Math.min(...f.trail.map((t) => hyp(t, g))); if (d < g.r + 1 || d > 16) odd('bottom.clearingOffTrail', seed); }
+  // the black lamps: the barrow's in its window by the throne hall, the wood's in its hollow, the third in Keyx's hand
+  const inW = (p, r) => p.x >= r.x0 && p.x < r.x0 + r.w && p.z >= r.z0 && p.z < r.z0 + r.h;
+  const throne = c.rooms.find((r) => r.kind === 'boss');
+  if (!inW(S.lamps[0], c) || !throne || Math.abs(S.lamps[0].z - (throne.z + throne.h)) > 6 || !inW(S.lamps[1], f) || hyp(S.lamps[1], f.end) > 6 || hyp(S.lamps[2], S.keyx) > 0.01) bad('bottom.lampPlaces', seed);
+  // Keyx's pool (bed 0.3, r 4) beside the square's well; the village in its place; the Stair's two pools (bed 0.6)
+  { let n = 0; for (let z = Math.floor(S.keyx.pool.z - 4); z <= S.keyx.pool.z + 4; z++) for (let x = Math.floor(S.keyx.pool.x - 4); x <= S.keyx.pool.x + 4; x++) { const i = z * w + x; if (L.pocket[i] && inR(L.bed[i], 0.3, 1e-4)) n++; } if (n < 12 || hyp(S.keyx.pool, S.keyx.well) > 7) bad('bottom.keyxPool', seed); }
+  if (S.houses.some((q) => q.x < 28 || q.x > 76 || q.z < 110 || q.z > 142) || !inR(S.keyx.well.x, 52, 6) || S.keyx.well.z < 110 || S.keyx.well.z > 142) bad('bottom.village', seed);
+  for (const p of S.stair.pools) { let n = 0; for (let z = Math.floor(p.z - p.r); z <= p.z + p.r; z++) for (let x = Math.floor(p.x - p.r); x <= p.x + p.r; x++) { const i = z * w + x; if (L.pocket[i] && inR(L.bed[i], 0.6, 1e-4)) n++; } if (n < 8 || p.z < S.stair.z0 || p.z > S.stair.z1) bad('bottom.stairPools', seed); }
+  // the Hearth: the stones on the diagonals, the black pools on its north rims, the vault over its east and west thirds
+  // (and over the village square), its interacts 3 m apart (the stones, the casks, the Gate ring)
+  if (H.stones.some((q) => Math.abs(((angle(q, H) % (Math.PI / 2)) + Math.PI / 2) % (Math.PI / 2) - Math.PI / 4) > 0.01)) bad('bottom.hearth.stones', seed);
+  if (H.pools.some((p) => p.z >= H.z || !inR(hyp(p, H), 12.5, 1)) || !H.pools.some((p) => p.x < H.x) || !H.pools.some((p) => p.x > H.x)) bad('bottom.hearth.pools', seed);
+  if (!S.vaults.some((v) => v.x > H.x + 4 && hyp(v, H) < H.r) || !S.vaults.some((v) => v.x < H.x - 4 && hyp(v, H) < H.r) || !S.vaults.some((v) => hyp(v, S.keyx.well) < 3)) bad('bottom.vaults', seed);
+  if ([...H.stones, ...H.casks, H.ring].some((a, i, l) => l.some((b, j) => j > i && hyp(a, b) < 3))) bad('bottom.arenaCrowded', seed);
+  // the beds: 0.3-0.75 everywhere, the barrow's 0.3-0.6
+  for (let i = 0; i < w * h; i++) {
+    if (!L.pocket[i]) continue;
+    const b = L.bed[i], x = i % w, z = (i - x) / w;
+    if (b < 0.3 - 1e-4 || b > 0.75 + 1e-4) { bad('bottom.bed', seed); break; }
+    if (x >= c.x0 && x < c.x0 + c.w && z >= c.z0 && z < c.z0 + c.h && b > 0.6 + 1e-4) { bad('bottom.bed.barrow', seed); break; }
+  }
   // the lit reading: the walls open, nothing else changed
   t0 = Date.now();
   const Lt = genBottom(seed, { mode: 'lit' });
