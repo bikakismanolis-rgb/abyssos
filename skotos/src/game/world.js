@@ -65,9 +65,13 @@ export const ZONES = {
 // Evergreen's old beacon-tree far in the west, green-gold, that no hand lit (offsets from our beacon). After the Unmaking
 // they are dark until the new fire, and then a fourth burns far to the north, on the Farthest Light, out on the sea ice
 // beyond the Black Anvil (seed: no hilltop of ours). Once the sea is lit, the Saltborn's lights answer low on the north
-// horizon (sea: they flash once a sweep)
+// horizon (sea: they flash once a sweep). After Act VI the six peaks on the northern skyline, dark since the night the
+// fires went out, burn every night either side of Arna's hill (peak: a sprite and its flames, no light of its own: the
+// town's pooled lights stay for what is near)
 export const FAR_BEACONS = [{ dx: -40, dz: -60, y: 14 }, { dx: 46, dz: -58, y: 17 }, { dx: -44, dz: -32, y: 8, color: 0xb8e060 }, { dx: 0, dz: -72, y: 12, color: 0xfff0c0, seed: true },
-  { dx: -18, dz: -78, y: 8, color: 0xf0f4ff, sea: true, seed: true }, { dx: 20, dz: -80, y: 7, sea: true, seed: true }, { dx: 34, dz: -76, y: 6, sea: true, seed: true }];
+  { dx: -18, dz: -78, y: 8, color: 0xf0f4ff, sea: true, seed: true }, { dx: 20, dz: -80, y: 7, sea: true, seed: true }, { dx: 34, dz: -76, y: 6, sea: true, seed: true },
+  { dx: -70, dz: -30, y: 10, peak: true, seed: true }, { dx: -22, dz: -62, y: 16, peak: true, seed: true }, { dx: -6, dz: -50, y: 13, peak: true, seed: true },
+  { dx: 8, dz: -58, y: 15, peak: true, seed: true }, { dx: 26, dz: -50, y: 14, peak: true, seed: true }, { dx: 66, dz: -38, y: 11, peak: true, seed: true }];
 // a far-off beacon: a glow seen through the fog (sprites ignore it), breathing like a fire (userData.k: a scene may shrink
 // it); o.flash: a sea-light's period (s), a brighter pulse once a turn as its beam comes round, kept as userData.flash and
 // read each frame (0 holds the pulse: a live sprite can be held and released)
@@ -290,7 +294,9 @@ export function enterZone(id, o = {}) {
   // (Act VI's way home: the Gate ring brings her out beside Isarn's staff, planted where he stood by the beacon)
   else if (at === 'staff') { const s = z.L.spots.npcs?.wayfarer; at = s ? { x: s.x, z: s.z + 2 } : z.L.start; }
   else if (typeof at === 'string') {
-    const e = z.L.exits.find((x) => x.to === at), L = z.L;
+    // (an exit that names its own arrival, e.at, goes one way: never the way in from where it leads, as the Gate ring,
+    // which comes out by Isarn's staff and has no way back down from Whitecliff)
+    const e = z.L.exits.find((x) => x.to === at && !x.at), L = z.L;
     // step in from the exit, north or south of it (the town's west road to the woods: east of it)
     const side = e && id === 'town' && e.to === 'weep';
     at = !e ? L.start : side ? { x: e.x + (e.x > L.w / 2 ? -2.5 : 2.5), z: e.z } : { x: e.x, z: e.z + (e.z > L.h / 2 ? -2.5 : 2.5) };
@@ -1605,7 +1611,9 @@ function act6Enter(z) {
   setAtmosphere(ATMOS[lit ? 'bottomLit' : z.id] || ATMOS[z.id] || ATMOS.crypt);
   setAmbient(lit ? 'thaw' : z.id);
   openings6(z);
-  if (F.cp6?.[z.id]) checkpoint6(z, F.cp6[z.id]);
+  // the place to wake, as the save keeps it (a Continue builds the zone again); the camp from the first arrival, and again
+  // once the one kept no longer holds (the Heap's gap after the Ketos, the Stair's foot after the Shade)
+  if (!checkpoint6(z, F.cp6?.[z.id])) checkpoint6(z, 'camp');
   act6Presence(z);
 }
 // what the story has lit or moved, on every entry and as it moves (story's people6 joins it): in the act's zones; on the
@@ -1743,8 +1751,10 @@ export function townFires(z) {
   const h = G.hero, F = h.flags;
   z.town ||= { far: [] };
   setBeacon(z, !F.fireTaken || !!F.newFire);
-  // (the fourth fire goes out when the coast calls, and is lit again with the sea; the Saltborn's lights answer then)
-  const sea = !!F.seaLit, night = F.crownUnmade && !F.newFire, lit = [h.act1 >= 0 || h.quest >= 5, (h.act2 ?? -1) >= 0 || h.quest >= 10, (h.act3 ?? -1) >= 0 || h.quest >= 16, !!F.newFire && !(F.coastCall && !sea), sea, sea, sea];
+  // (the fourth fire goes out when the coast calls, and is lit again with the sea; the Saltborn's lights answer then; the
+  // six peaks once Act VI is done, lit one by one in its home cine and every night after)
+  const sea = !!F.seaLit, night = F.crownUnmade && !F.newFire, peaks = (h.act6 ?? -1) >= 0;
+  const lit = [h.act1 >= 0 || h.quest >= 5, (h.act2 ?? -1) >= 0 || h.quest >= 10, (h.act3 ?? -1) >= 0 || h.quest >= 16, !!F.newFire && !(F.coastCall && !sea), sea, sea, sea, peaks, peaks, peaks, peaks, peaks, peaks];
   FAR_BEACONS.forEach((_, i) => setFar(z, i, lit[i] && !night));
   // (Act VI: the Saltborn's lights hold their flash from the call below the ice until her fire burns)
   const hold = !!F.call6 && !F.herFire;
@@ -1753,20 +1763,24 @@ export function townFires(z) {
   townPresence(z);
 }
 const liveLights = (key) => [...R.sources].filter((s) => s.key === key);
-// one far fire: its light, its glow over the treeline and its flames (kept with the zone and shown on every entry)
+// one far fire: its light (none on a peak), its glow over the treeline and its flames (kept with the zone and shown on
+// every entry)
 export function setFar(z, i, on) {
   const T = z.town ||= { far: [] }, L = z.L, b = L.beacon, F0 = FAR_BEACONS[i], cur = T.far[i], here = G.zone === z;
   if (!!cur === !!on || !F0) return cur;
+  const drop = (list, x) => { const k = list.indexOf(x); if (k >= 0) list.splice(k, 1); };
   if (on) {
     const far = { x: b.x + F0.dx, y: F0.y, z: b.z + F0.dz }, key = 'far' + i;
-    const light = { x: far.x, y: far.y, z: far.z, color: F0.color ?? 0xff8a30, intensity: 200, range: 60, flicker: 0.3, key };
+    const light = F0.peak ? null : { x: far.x, y: far.y, z: far.z, color: F0.color ?? 0xff8a30, intensity: 200, range: 60, flicker: 0.3, key };
     const em = { x: far.x, y: far.y - 2, z: far.z, type: 'beacon', s: F0.sea ? 0.7 : 1.2, key }, spr = farFire(far, F0.color, { flash: F0.sea ? 12 : 0 });
-    L.lights.push(light); z.extra.push(spr); z.emit4.push(em);
-    if (here) { addLight(light); R.scene.add(spr); }
+    if (light) L.lights.push(light);
+    z.extra.push(spr); z.emit4.push(em);
+    if (here) { if (light) addLight(light); R.scene.add(spr); }
     T.far[i] = { light, spr, em, far };
   } else {
-    L.lights.splice(L.lights.indexOf(cur.light), 1); z.extra.splice(z.extra.indexOf(cur.spr), 1); z.emit4.splice(z.emit4.indexOf(cur.em), 1);
-    if (here) { for (const s of liveLights(cur.light.key)) removeLight(s); R.scene.remove(cur.spr); }
+    if (cur.light) drop(L.lights, cur.light);
+    drop(z.extra, cur.spr); drop(z.emit4, cur.em);
+    if (here) { if (cur.light) for (const s of liveLights(cur.light.key)) removeLight(s); R.scene.remove(cur.spr); }
     T.far[i] = null;
   }
   refreshEmit(z);
