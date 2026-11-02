@@ -222,7 +222,7 @@ void main() {
     // (each mote a soft puff, black-violet at its heart and greying toward the dark's violet as it thins out: black alone on
     // the black floor never read as a wall, and a violet rim round each read as a curtain of soap bubbles)
     fragmentShader: `varying float vA;
-void main() { vec2 q = gl_PointCoord - 0.5; float d = dot(q, q) * 4.0, a = (1.0 - d) * (1.0 - d) * vA * 0.85; if (a < 0.01) discard; gl_FragColor = vec4(mix(vec3(0.018, 0.01, 0.028), vec3(0.17, 0.12, 0.34), d), a); }` });
+void main() { vec2 q = gl_PointCoord - 0.5; float d = min(dot(q, q) * 4.0, 1.0), a = (1.0 - d) * (1.0 - d) * vA * 0.85; if (a < 0.01) discard; gl_FragColor = vec4(mix(vec3(0.018, 0.01, 0.028), vec3(0.17, 0.12, 0.34), d), a); }` });
   const pts = new THREE.Points(geo, mat); pts.renderOrder = 2.4;
   pts.onBeforeRender = (r) => { u.uVH.value = r.getDrawingBufferSize(_v2).y; };
   return { pts, u };

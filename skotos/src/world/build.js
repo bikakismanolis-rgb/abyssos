@@ -1317,7 +1317,7 @@ function buildGround(L, group) {
       // road in the silt's second reading, not down into the water; the walls' steep faces take the vault's ice (G_WALL)
       const y = L.hgt[vz * (w + 1) + vx];
       pos.setY(i, y);
-      // (its pools' and walls' edges off the grid as the coast's shore: sea.js shoreJit, the water takes the same nudge)
+      // (the walls' foot off the grid as the coast's shore: sea.js shoreJit, the water takes the same nudge)
       if (jit) { const j = (vz * (w + 1) + vx) * 2; pos.setX(i, vx + jit[j]); pos.setZ(i, vz + jit[j + 1]); }
       let walls = 0, tide = 0;
       for (let dz = -2; dz <= 1; dz++) for (let dx = -2; dx <= 1; dx++) { const c = cellAt(vx + dx, vz + dz); if (c < 0 || (!cells[c] && !L.low[c])) walls++; }
