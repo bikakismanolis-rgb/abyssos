@@ -692,8 +692,11 @@ export function bayCorners(L) {
 // strip, the Fall's path, can take). The ground, the water and the ice take the same offset and stay matched. Not a corner
 // of an ice window or the jetty (their props keep the grid), nor the map's rim. Offsets (x, z) per corner, (w+1)(h+1)
 const CC = [[-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]];
+// (Act VI too, gen6's layouts (L.pocket and no L.ice), for the vault's walls' foot alone, which ran ruled along the cells:
+// its pools' edges are the waterline's own, drawn from the smooth bed over a ring of the floor round them (buildSea), since
+// their closed step lies close inside the rim, and a jittered corner beside it bent its pale line into a sawtooth)
 export function shoreJit(L) {
-  if (!L.hgt || !L.ice) return null;
+  if (!L.hgt || !(L.ice || L.pocket)) return null;
   if (L.jit5) return L.jit5;
   const { w, h } = L, W = w + 1, out = new Float32Array(W * (h + 1) * 2), H = L.hgt, seed = L.seed || 1;
   // a cell's class: 0 floor (dry land, thick ice, a footprint), 1 a high tidal flat, 5 a low one, 2 the pit (open water,
@@ -703,7 +706,7 @@ export function shoreJit(L) {
   for (let i = 0; i < w * h; i++) {
     const x = i % w, z = (i - x) / w, k = z * W + x;
     const lo = Math.min(H[k], H[k + 1], H[k + W], H[k + W + 1]), hi = Math.max(H[k], H[k + 1], H[k + W], H[k + W + 1]);
-    cls[i] = L.window[i] || L.deck?.[i] ? 4 : L.ice[i] ? 6 : L.low[i] || L.sea?.[i] || (!L.cells[i] && lo < -0.5) ? 2 : !L.cells[i] && hi > 0.25 ? 3
+    cls[i] = L.window[i] || L.deck?.[i] ? 4 : L.ice?.[i] ? 6 : L.low[i] || L.sea?.[i] || (!L.cells[i] && lo < -0.5) ? 2 : !L.cells[i] && hi > 0.25 ? 3
       : L.bed && L.bed[i] < BED_DRY && L.cells[i] && !L.thick[i] ? (L.bed[i] < 0.42 ? 5 : 1) : 0;
   }
   const C = (x, z) => cls[clamp(z, 0, h - 1) * w + clamp(x, 0, w - 1)];
@@ -715,7 +718,7 @@ export function shoreJit(L) {
     const k0 = vz * W + vx;
     if (c.some((q) => q !== c[0])) edgeC[k0] = 1;
     if (c.includes(4)) continue;
-    const f = preds.find((g) => { const n = c.filter(g).length; return n && n < 4; });
+    const f = (L.ice ? preds : preds.slice(1, 2)).find((g) => { const n = c.filter(g).length; return n && n < 4; });
     if (!f) continue;
     // (a slow noise and a quicker one: the slow alone leaves a long run ruled straight, only tilted)
     const t = c.map(f), n = t.filter(Boolean).length;
@@ -730,7 +733,7 @@ export function shoreJit(L) {
     // wander further, below)
     // (and thin ice against a tidal flat, both walkable: the bay's ice ran ruled across the Walking Tower's arena)
     // (and thin ice against any ground she can stand on, thick ice or dry land: the Ice Road's edge ran ruled down the road)
-    const thinRun = f === preds[0] && CORNER.every(([dx, dz], j) => { const i = clamp(vz + dz, 0, h - 1) * w + clamp(vx + dx, 0, w - 1); return t[j] ? !!L.ice[i] : flatCell(L, i) || (!!L.cells[i] && cls[i] === 0); });
+    const thinRun = f === preds[0] && CORNER.every(([dx, dz], j) => { const i = clamp(vz + dz, 0, h - 1) * w + clamp(vx + dx, 0, w - 1); return t[j] ? !!L.ice?.[i] : flatCell(L, i) || (!!L.cells[i] && cls[i] === 0); });
     // (a pit's own straight edge, an islet's or a shelf's over the water, and the rock's foot wander too, but no further
     // than a lone corner may: there the cells' line is where she can stand. Each corner on its own, such a run stayed
     // ruled, only roughened: a rock rib's snowed face ran across the Landing as one straight slab)
@@ -813,6 +816,10 @@ export function buildSea(L, group, quality = R.quality) {
   const black = !!L.pocket && !L.ice;
   if (black && !L.tSlush) { const t = new THREE.DataTexture(new Uint8Array(N), w, h, THREE.RedFormat); t.magFilter = t.minFilter = THREE.LinearFilter; t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; t.generateMipmaps = false; t.needsUpdate = true; L.tSlush = t; }
   const mat = seaMat({ low, black }), J = shoreJit(L), BY = bayCorners(L), FB = FRZ_BAND(L), edgeI = (i) => !!FB && i < 2 * w && !!L.low[i] && i % w >= FB[0] && i % w < FB[1];
+  // (Act VI: the level floor round a pocket or the Mere, a cell deep, drawn too: the black water's edge is then where its
+  // smooth bed says (the discard below) and where its surface dips under the floor, a curve across the cells, not the wet
+  // cells' own staircase standing a hand over the floor)
+  const rim6 = (x, z) => { for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) { const nx = x + dx, nz = z + dz; if ((dx || dz) && nx >= 0 && nz >= 0 && nx < w && nz < h && L.pocket[nz * w + nx]) return true; } return false; };
   // (the water's bed at a corner of level land: a hand over its wettest cell's, not the land's own averaged in. With the
   // land's (BED_DRY) in the mean the surface sank under the ground most of a cell out from the shore, so the water's edge
   // ran along the next row of corners, the cells' line a metre off the land, a pale strip of nothing between)
@@ -909,7 +916,7 @@ export function buildSea(L, group, quality = R.quality) {
     const quads = [];
     for (let z = cz0; z < Math.min(h, cz0 + CH); z++) for (let x = cx0; x < Math.min(w, cx0 + CH); x++) {
       const rs = !wet(z * w + x) && rockSea(z * w + x);
-      if (!wet(z * w + x) && !band(z * w + x) && !rs) continue;
+      if (!wet(z * w + x) && !band(z * w + x) && !rs && !(black && rim6(x, z))) continue;
       // (split as the ground's grid is: (x, z + 1) to (x + 1, z))
       const a = vert(x, z), b = vert(x + 1, z), c = vert(x, z + 1), d = vert(x + 1, z + 1);
       // (each quad keyed by the lowest bed among its corners, the level that first wets it; held, frozen or the bay's

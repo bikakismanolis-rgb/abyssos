@@ -51,9 +51,13 @@ ATMOS.townAurora = { ...ATMOS.town, aur: 0.5, drift: 0.45, aurCol: [0.32, 1.0, 0
 // The Bottom of the Gates darker still; the Hearth in the Shade's last form near black (eased in over 2 s with mixAtmos:
 // the Hearth's fire, the stones and the named lamps the light); once her fire burns, the Bottom warm
 ATMOS.drained = { fog: 0x060a10, density: 0.03, sky: 0x203040, ground: 0x0c1014, hemi: 0.55, moon: 0x7aa8a0, moonI: 0.45, exposure: 1.25, heroI: 24, heroRange: 9, heroColor: 0xffe0b0, zoom: 1, aur: 0, aurDark: 0, drift: 0.55, driftCol: 0x7ad0a8, driftCol2: 0xe8f0ec };
-ATMOS.drainedCine = { ...ATMOS.drained, density: 0.012 };
+// (the cines: the fog thinned and the aurora lit, which only the vault overhead takes (sea.js ICE_VAULT, on quality 1 and
+// up), the keels' ice a little: at aur 0 the arrival's 'green vault' was a flat dark lid)
+ATMOS.drainedCine = { ...ATMOS.drained, density: 0.012, aur: 0.6 };
 ATMOS.mere = { ...ATMOS.drained, density: 0.034, hemi: 0.45 };
-ATMOS.bottom = { fog: 0x040508, density: 0.036, sky: 0x141822, ground: 0x0a0b0e, hemi: 0.4, moon: 0x6a8090, moonI: 0.25, exposure: 1.3, heroI: 24, heroRange: 9, heroColor: 0xffe0b0, zoom: 1, aur: 0, aurDark: 0, drift: 0 };
+// (aurCol below: no aurora reaches the Bottom, and the Skotos's skin (sea.js skotosSkin) lights its fresnel with it: the
+// Hands on the Stair and the Shade's forms rimmed in the dark's own violet, not the coast's green)
+ATMOS.bottom = { fog: 0x040508, density: 0.036, sky: 0x141822, ground: 0x0a0b0e, hemi: 0.4, moon: 0x6a8090, moonI: 0.25, exposure: 1.3, heroI: 24, heroRange: 9, heroColor: 0xffe0b0, zoom: 1, aur: 0, aurDark: 0, drift: 0, aurCol: [0.34, 0.27, 0.62] };
 ATMOS.hearthDark = { ...ATMOS.bottom, hemi: 0.25, moonI: 0.1 };
 ATMOS.bottomLit = { ...ATMOS.bottom, fog: 0x0e0a08, density: 0.028, hemi: 0.6, exposure: 1.2, drift: 0.5, driftCol: 0xffc890 };
 // an atmosphere between a and b (k 0-1): colours in linear light, numbers straight (world.js eases with it)
