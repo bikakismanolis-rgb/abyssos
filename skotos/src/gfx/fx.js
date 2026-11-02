@@ -774,7 +774,8 @@ function markTexture() {
   const blot = (x, y, rx, ry, col) => { const gr = g.createRadialGradient(x, y, 1, x, y, Math.max(rx, ry)); gr.addColorStop(0, col); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, TAU); g.fill(); };
   for (let i = 0; i < 7; i++) blot((rnd() - 0.5) * 14, (rnd() - 0.5) * 50, 10 + rnd() * 9, 13 + rnd() * 12, 'rgba(14,10,8,0.85)');
   blot(0, 0, 9, 26, 'rgba(10,8,7,0.95)');
-  for (let i = 0; i < 4; i++) blot((rnd() - 0.5) * 6, (rnd() - 0.5) * 30, 3 + rnd() * 3, 6 + rnd() * 6, 'rgba(120,128,136,0.55)');
+  // (the sheen: one long smear down its middle where the stone ran smooth, faint)
+  blot(rnd() - 0.5, -6, 2.6, 16, 'rgba(110,118,128,0.32)'); blot(rnd() - 0.5, 12, 2, 9, 'rgba(110,118,128,0.22)');
   for (let i = 0; i < 9; i++) { const a = rnd() * TAU, d = 0.75 + rnd() * 0.25; blot(Math.cos(a) * 14 * d, Math.sin(a) * 34 * d, 1.5 + rnd() * 2, 1.5 + rnd() * 2, 'rgba(120,52,20,0.7)'); }
   return (markTex = new THREE.CanvasTexture(c));
 }
