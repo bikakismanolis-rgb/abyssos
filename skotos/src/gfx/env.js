@@ -164,8 +164,9 @@ export const packReady = (name) => !!ENV.packs[name];
 // layers' textures stay as objects with nothing in them (build.js's materials hold them, MAT): freed, they are given a
 // one-pixel image so a material still holding one draws a flat tone and never an upload of a released image, and a later
 // loadPack decodes the pack's images into them again. Its props' geometry, materials and maps are let go for good (a
-// later load makes new ones). keep(tex): a texture-set test (true: something still draws the pack, leave it loaded).
-// Null when there is nothing to let go: never loaded, still loading, or kept.
+// later load makes new ones). free(live): live, the textures something still draws (Whitecliff's lantern on Isarn's staff
+// is the cinder pack's when it was planted with the pack loaded): those keep their GPU copies, and the rest goes. Null
+// when there is nothing to let go: never loaded, or still loading.
 const KEPT = {}, gen = {};
 const FLAT = { srgb: null, n: null };
 const flat = (n) => (FLAT[n ? 'n' : 'srgb'] ||= new ImageData(new Uint8ClampedArray(n ? [128, 128, 255, 255] : [118, 116, 112, 255]), 1, 1));
@@ -180,12 +181,11 @@ function reclaim(kind, id, extra) {
   ENV[kind][id] = ENV[kind][best + '/' + id];
   for (const x of extra || []) if (ENV[x][best + '/' + id] !== undefined) ENV[x][id] = ENV[x][best + '/' + id];
 }
-export function unloadPack(name, keep) {
+export function unloadPack(name) {
   if (!ENV.packs[name] || name === 'env') return null;
   const pre = name + '/', layers = [], parts = [], tex = new Set(), geo = new Set();
   for (const k in ENV.layers) if (k.startsWith(pre)) { const L = ENV.layers[k]; layers.push([k.slice(pre.length), L]); if (L.d) tex.add(L.d); if (L.n) tex.add(L.n); }
   for (const k in ENV.props) if (k.startsWith(pre)) for (const p of ENV.props[k]) { parts.push(p); geo.add(p.geo); if (p.mat !== GLOW) matTextures(p.mat, tex); }
-  if (keep?.(tex)) return null;
   const g = gen[name];
   for (const [id, L] of layers) {
     delete ENV.layers[pre + id];
@@ -202,11 +202,11 @@ export function unloadPack(name, keep) {
   for (const [src, m] of LAMB) if (mats.has(m)) { LAMB.delete(src); mats.add(src); }
   return {
     tex, geo,
-    free() {
+    free(live = new Set()) {
       // (a pack loaded again since keeps its layers: the same objects carry its new images)
-      if (gen[name] === g) for (const [, L] of layers) for (const t of [L.d, L.n]) if (t) { t.dispose(); t.image = flat(t === L.n); t.needsUpdate = true; }
+      if (gen[name] === g) for (const [, L] of layers) for (const t of [L.d, L.n]) if (t && !live.has(t)) { t.dispose(); t.image = flat(t === L.n); t.needsUpdate = true; }
       for (const p of parts) p.geo.dispose();
-      for (const m of mats) { for (const t of matTextures(m)) t.dispose(); m.dispose(); }
+      for (const m of mats) { for (const t of matTextures(m)) if (!live.has(t)) t.dispose(); m.dispose(); }
     }
   };
 }

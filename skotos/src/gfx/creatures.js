@@ -64,8 +64,8 @@ export const groupReady = (set) => GROUPS.has(set) && !!ACT_FILES[set]?.some((n)
 // ---------- letting a group go (game/unload.js: Acts II-IV's creatures, on entering an Act V or VI zone) ----------
 // Its files leave the templates at once (a monster made from then on takes its stand-in, actors.js STAND_IN, until the
 // group is loaded again), but a file another group still asked for or keep names (Act V's bear is Act III's) and Act I's;
-// the function returned frees their GPU copies once nothing on screen draws them. inUse(tex): a texture-set test per file
-// (true: something still draws it, leave it). Null when nothing is let go
+// the function returned frees their GPU copies once nothing on screen draws them (free(live) keeps those of live).
+// inUse(tex): a texture-set test per file (true: something still draws it, leave it). Null when nothing is let go
 export function unloadCreatures(set, keep = [], inUse) {
   if (!ACT_FILES[set] || set === 'act1' || !GROUPS.has(set)) return null;
   const hold = new Set([...GROUPS, ...keep, 'act1'].filter((g) => g !== set).flatMap((g) => ACT_FILES[g] || []));
@@ -85,7 +85,7 @@ export function unloadCreatures(set, keep = [], inUse) {
   }
   if (!left) GROUPS.delete(set);
   if (!files.length) return null;
-  return { files, tex, geo, free: () => { for (const P of parts) freeParts(P); } };
+  return { files, tex, geo, free: (live) => { for (const P of parts) freeParts(P, live); } };
 }
 
 function prepare(gltf) {
