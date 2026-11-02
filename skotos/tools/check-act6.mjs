@@ -11,7 +11,8 @@
 // deterministic. Besides gen6's own lists, the check holds each layout itself to: no pocket, vault or keel cell in the
 // margin and the arenas' discs inside it; every basin's refuge in L.refuges within 12 m; the 15 m rule and the arenas'
 // 3 m spacing; on the Drained Sea the Old Shore's huts, shacks and boats, the keels in the Keels' rows and clear of the
-// Heap's ring, the three lanterns 120 degrees apart, the lure-rock at r 6 in the Mere's north water, the fourth lost
+// Heap's ring, the three lanterns 120 degrees apart, the lure-rock at r 6 in the Mere's north water (a footprint in
+// both readings, the water round it), the fourth lost
 // light on the Heap's outer slope, the brazier on its north rim, the camp dry, the First's trail at every hearth, the
 // second hearth's spine three cells wide and dry at full flood, the beds in their ranges (the basins 0.15-0.9, the
 // Mere's core 0-0.15 and ring 0.45-0.6), L.lights Tamarisk's braziers only; on the Bottom the ember in a stamped leaf
@@ -174,12 +175,12 @@ function drained(seed) {
   // the Keels in their rows, clear of the Heap's ring; Asger's among them
   if (S.keels.some((q) => q.x < 8 || q.x > 52 || q.z < 98 || q.z > 122 || hyp(q, S.heap) < S.heap.r + q.r)) bad('drained.keels.range', seed);
   if (S.keels.filter((q) => q.asger).length !== 1 || hyp(S.keels.find((q) => q.asger) || S.asger, S.asger.keel) > 0.01) bad('drained.keels.asger', seed);
-  // the Heap: the lanterns 120 degrees apart, the lure-rock at r 6 in the Mere's north water, the fourth lost light on its
-  // outer slope, Tamarisk's brazier on its north rim
+  // the Heap: the lanterns 120 degrees apart, the lure-rock at r 6 in the Mere's north water (its cell a footprint, the
+  // Mere on its four sides), the fourth lost light on its outer slope, Tamarisk's brazier on its north rim
   const la = S.wreckLamps.map((l) => angle(l, S.heap));
   if (la.some((a, k) => Math.abs(turn(a, la[(k + 1) % 3]) - 2 * Math.PI / 3) > 0.01)) bad('drained.wreckLamps.angle', seed);
-  const lu = S.mere.lure;
-  if (!inR(hyp(lu, S.mere), 6, 0.01) || lu.z >= S.mere.z || L.pocket[cellOf(L, lu.x, lu.z)] !== 2) bad('drained.lureRock', seed);
+  const lu = S.mere.lure, li = cellOf(L, lu.x, lu.z);
+  if (!inR(hyp(lu, S.mere), 6, 0.01) || lu.z >= S.mere.z || L.cells[li] || L.pocket[li] || L.bed[li] !== BED_DRY || [1, -1, w, -w].some((d) => L.pocket[li + d] !== 2)) bad('drained.lureRock', seed);
   const ps = S.lost.find((l) => l.id === 'psamathe');
   if (!ps || hyp(ps, S.heap) < S.heap.r || hyp(ps, S.heap) > S.heap.r + 6) bad('drained.lost.psamathe', seed);
   if (!S.braziers.some((b) => Math.hypot(b.x - S.heap.x, b.z - (S.heap.z - S.heap.r - 1)) < 4.5)) bad('drained.rimBrazier', seed);
