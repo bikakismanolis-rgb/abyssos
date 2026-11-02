@@ -211,6 +211,7 @@ const R = {
       <div class="set-row"><span>${t('set.lang')}</span><div class="chips" style="justify-content:flex-start">${chip('lang:el', lang() === 'el', 'Ελληνικά')}${chip('lang:en', lang() === 'en', 'English')}</div></div>
       <div class="set-row"><span>${t('set.vibrate')}</span><div class="chips" style="justify-content:flex-start">${chip('vib:1', s.vibrate, t('set.on'))}${chip('vib:0', !s.vibrate, t('set.off'))}</div></div>
       <div class="set-row"><span>${t('set.numbers')}</span><div class="chips" style="justify-content:flex-start">${chip('num:1', s.numbers, t('set.on'))}${chip('num:0', !s.numbers, t('set.off'))}</div></div>
+      <div class="set-row"><span>${t('set.flicker')}</span><div class="chips" style="justify-content:flex-start">${chip('flk:1', !!s.flicker, t('set.on'))}${chip('flk:0', !s.flicker, t('set.off'))}</div></div>
       ${EXTRA.cloudRow?.() || ''}
       <p class="muted">${t('set.qnote')}</p><p class="muted">${t('menu.credits')}</p>
       <button class="btn ghost" data-a="credits" style="width:100%">${t('cr.title')}</button></div></div>`;
@@ -320,6 +321,7 @@ function onClick(e) {
     case 'lang': setLang(x); G.settings.lang = x; emit('settings'); break;
     case 'vib': G.settings.vibrate = x === '1'; break;
     case 'num': G.settings.numbers = x === '1'; break;
+    case 'flk': G.settings.flicker = x === '1'; break;
     case 'boon': { const act = P.ctx?.act || 1; h.boons ||= []; h.boons[act - 1] = x; refreshStats(); writeSave(); close(); emit('boonTaken', x); return; }
     case 'gift': { const id = P.ctx?.id; close(); if (id) emit('altarChoice', id, x); return; }
     case 'respawn': close(); emit('respawn', false); return;
