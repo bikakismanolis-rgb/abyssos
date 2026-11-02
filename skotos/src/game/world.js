@@ -1553,9 +1553,13 @@ on('cairn', (it, z) => {
 // ---------- Act VI: the Drained Sea and the Bottom of the Gates (docs/act6-contract.md) ----------
 // What the world is: drainedMode() ('mere' until the Ketos is down, then 'dry': the Mere drained, the Well open) and
 // bottomMode() ('dark' until her fire burns, then 'lit'), each built again from its seed when it changes (enterZone).
-// z.act6 keeps what the story lights and moves: { hearths, lost, lures, wrecks, bells, lamps, walls, stones, niches, ring,
-// ember, mere, shade, figs } (filled by the lanes as they land: the props are look's act6Prop, the fights combat's, the
-// people and scenes story's). The farlight zone's own Act VI dressing is act6Presence's, from act5Presence
+// z.act6 keeps what the story lights and moves. Its props are the build's: build6.js act6Level (story6) builds each once
+// at gen6's spots, in its first state for the reading, and hands them over in z.lvl.act6; act6Zone takes them as they are
+// (PROPS6: hearths, lost, lures, wrecks, bells, lamps, walls, stones, niches, [{ k | i | id, x, z, mesh }]; ONE6:
+// asgerBrazier, neck, ember, leif, centre (her fire), ring, rope, a mesh each), so the zone never builds a second one and
+// lays only their interacts and their flags' states (the lanes', as they land); their light is the build's (L.lights) or
+// light.js's pools. mere, shade and figs are the fights' (combat's) and the people's (story's). The farlight zone's own
+// Act VI dressing is act6Presence's, from act5Presence
 export const drainedMode = () => (G.hero.flags.ketosDown ? 'dry' : 'mere');
 export const bottomMode = () => (G.hero.flags.herFire ? 'lit' : 'dark');
 // before the build: what the story has done to the layout (gen6's own: the Stair's shadow-walls, shut in the 'dark'
@@ -1575,11 +1579,15 @@ function openings6(z) {
   if (n) emit('mapChanged');
   return n;
 }
+const PROPS6 = ['hearths', 'lost', 'lures', 'wrecks', 'bells', 'lamps', 'walls', 'stones', 'niches'], ONE6 = ['asgerBrazier', 'neck', 'ember', 'leif', 'centre', 'ring', 'rope'];
 function act6Zone(z) {
-  const L = z.L, S = L.spots;
+  const L = z.L, S = L.spots, A = z.lvl.act6 || {};
   // (the zone flags Acts V and VI share: act5Zone's)
   z.cold = true; z.water = true;
-  z.act6 = { hearths: [], lost: [], lures: [], wrecks: [], bells: [], lamps: [], walls: [], stones: [], niches: [], ring: null, ember: null, mere: null, shade: null, figs: {} };
+  // (the build's own objects, not copies: what lights one through z.act6 lights the one standing in the scene)
+  z.act6 = { mere: null, shade: null, figs: {} };
+  for (const k of PROPS6) z.act6[k] = A[k] || [];
+  for (const k of ONE6) z.act6[k] = A[k] || null;
   // the place voices (story.js 'voice'): the Skotos's, one in each place (gen6), and the Well under the black water, heard
   // at the Mere's north edge before it drains
   z.voices = (S.voices || []).map((v) => ({ ...v }));
