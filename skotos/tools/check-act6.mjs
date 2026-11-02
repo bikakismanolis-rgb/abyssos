@@ -18,7 +18,8 @@
 // room (one way in, dry), the wood's trail dry, two lure posts on its bends, the black lamps in the barrow, the wood
 // and Keyx's hand, his pool, the village and the Stair's pools in their places, the stones on the diagonals, the black
 // pools on the north rims, the vault over the square and the Hearth's east and west thirds, the beds 0.3-0.75 (the
-// barrow's 0.3-0.6), each window the size of its sub-layout drawn again from its seed, its door on its north edge.
+// barrow's 0.3-0.6), each window the size of its sub-layout drawn again from its seed, its door on its north edge,
+// L.lights the camp's fire-pit, her fire at the Hearth's centre and Glaukos's fire-pots only.
 // Soft: a mean above 3 tries per seed, a seed above 12, and oddities (fewer than three pockets in the Hollows, no
 // causeway, a clearing far off the wood's trail, a fire-pot on it, a window keeping under 80% of its sub-layout's cells).
 // GEN6=<path> checks another copy of gen6.js.
@@ -238,7 +239,8 @@ function bottom(seed) {
   if (!c.rooms?.some((r) => r.kind === 'boss') || !f.trail?.length || !c.door || !f.door || !c.end || !f.end) bad('bottom.stampRecords', seed);
   if (c.door.z > c.end.z || f.door.z > f.end.z) bad('bottom.notFlipped', seed);
   if (L.props.some((p) => p.stamp && (p.t === 'kit' ? ['torch_mounted', 'skull_candle'].includes(p.m) : ['torch', 'brazier', 'candlestick', 'campfire', 'shroom', 'fx', 'barrowDoor'].includes(p.t)))) bad('bottom.litPropStamped', seed);
-  if (L.lights.length !== 1 + S.pots.length) bad('bottom.lightsNotOwn', seed);
+  // (the build's lights: the camp's fire-pit, her fire at the Hearth's centre (its own, r 5), Glaukos's pots)
+  if (L.lights.length !== 2 + S.pots.length || L.lights.filter((l) => l.centre && hyp(l, H.fire) < 0.01 && l.range >= 10).length !== 1) bad('bottom.lightsNotOwn', seed);
   // the Stair's walls: three bands of 3 x 14, shut in this reading
   if (L.walls.length !== 3 || L.walls.some((wl, k) => wl.k !== k || wl.cells.length !== 42 || wl.cells.some(([x, z]) => L.cells[z * w + x] || L.pocket[z * w + x]))) bad('bottom.walls', seed);
   if (S.lamps.map((l) => l.k + l.place).join(',') !== '0barrow,1wood,2village' || S.lamps.some((l) => l.wall !== l.k)) bad('bottom.lamps', seed);

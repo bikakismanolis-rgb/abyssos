@@ -1015,13 +1015,18 @@ function tryBottom(seed, last) {
   });
   // the stamped props on a way or clearing the parent cut (a wall across the barrow's doors, a tree on a new path) are gone
   L.props = L.props.filter((p) => { if (!p.stamp) return true; const i = Math.floor(p.z) * w + Math.floor(p.x); return !(wayM[i] || (K[i] !== ROCK && !subCells[i])); });
-  // ---- the build's lights: the fire-pit at the camp, then Glaukos's fire-pots for the 15 m rule ----
+  // ---- the build's lights: the fire-pit at the camp, her fire at the Hearth's centre, then Glaukos's fire-pots for the
+  // 15 m rule ----
   const fire = (x, z, o = {}) => {
     plug(L, x, z, o.pot ? 0.4 : 0.9); reserve(x, z, 1.6);
     L.props.push({ t: o.pot ? 'brazier' : 'firepit', x, z, ...o });
     L.lights.push({ x, y: o.pot ? 1.1 : 1.2, z, color: 0xff9a50, intensity: o.pot ? 12 : 22, range: o.pot ? 7 : 12, flicker: 0.35 });
   };
   fire(S.pit.x, S.pit.z, { camp: true });
+  // (her fire on the blocked 2 x 2 at the centre burns from the build: build6.js story6 draws it, so no prop here, only its
+  // light, the design's true light of r 5 in the pooled lights with the camp's and the pots', its tremble the true light's
+  // (gfx.js, steady with 'reduce flicker'). The 15 m rule counts it, as an arena counts its own lights)
+  L.lights.push({ x: H.fire.x, y: 1.4, z: H.fire.z, color: 0xff9a50, intensity: 22, range: 10, flicker: 'tremble', centre: true });
   // ---- the packs ----
   const wallsOpen = L.cells.slice();
   for (const wl of L.walls) for (const [x, z] of wl.cells) L.cells[z * w + x] = 0;

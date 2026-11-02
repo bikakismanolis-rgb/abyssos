@@ -798,7 +798,8 @@ function story6(L, out) {
   if (L.type === 'bottom' && S.well) A.rope = put('ropeWinch', { foot: true }, S.well.x, S.well.z);
   const H = S.hearth;
   if (H) {
-    // her stone and fire on the 2 x 2 at the centre, burning from the build (the shipped brazier fire, half again)
+    // her stone and fire on the 2 x 2 at the centre, burning from the build (the shipped brazier fire, half again; its light
+    // is the layout's, gen6's L.lights)
     A.centre = put('hearth6', {}, H.fire.x, H.fire.z, 0.4); A.centre.scale.setScalar(1.5); A.centre.userData.setLit(true); A.centre.userData.flash?.(lit ? 0.8 : 0);
     for (const st of H.stones || []) { const m = put('hearthStone', {}, st.x, st.z, face(st, H)); m.userData.setLit(lit); A.stones.push({ i: st.i, x: st.x, z: st.z, mesh: m }); }
     for (const n of H.niches || []) A.niches.push({ id: n.id, x: n.x, z: n.z, mesh: put('nameLamp', { id: n.id }, n.x, n.z, face(n, H)) });
