@@ -3630,10 +3630,10 @@ const S = {
   // place6: the looks in the real zones (build6.js act6Level on gen6's layouts), on quality 0 and 1, in all four readings
   // (drained mere and dry, bottom dark and lit): every story prop stands at its gen6 spot and is handed to the zone in
   // z.lvl.act6 (hearths, lost lights with their fire at the lantern end's interact, lure posts, wreck lanterns, bells,
-  // Asger's brazier; the black lamps, the shadow-walls over the shut bands, the ember's pane, Leif's dead fire, the Hearth's
-  // fire (burning, with its light among the layout's), stones, niches and Gate ring; the neck only once the Mere is dry),
-  // each in its first state for the reading, and
-  // the zone holding those same objects in z.act6 (world.js act6Zone builds none of its own: no kind twice at a spot); the
+  // Asger's brazier; the black lamps, the shadow-walls over the shut bands, the ember's pane, Leif's dead fire, the
+  // Hearth's fire (burning, with its light among the layout's), stones, niches and Gate ring; the neck only once the Mere
+  // is dry), each in its first state for the reading, and the zone holding those same objects in z.act6 (world.js
+  // act6Zone builds none of its own: no kind twice at a spot); the Mere's lure-rock blocked in both readings; the
   // atmosphere and ambient of the reading; the shore off the grid (sea.js shoreJit on gen6's layouts); no ring or pool
   // drawn up the vault's walls (build.js drape); a frame drawn at a spot of each (shots)
   place6: { q: 'auto=drained&q=1&lvl=36&cloud=off&seed=4242', run: async (pg) => {
@@ -3673,6 +3673,8 @@ const S = {
         // (her fire's light: one of the layout's lights at the Hearth's centre, live among the pooled lights' sources)
         const near = (l) => !!S.hearth && Math.hypot(l.x - S.hearth.fire.x, l.z - S.hearth.fire.z) < 0.5;
         const fire = { n: L.lights.filter(near).length, live: [...window.__R.sources].filter(near).map((s) => s.range) };
+        // (the Mere's lure-rock a footprint in either reading: she walks round it, never through it)
+        const lu = S.mere?.lure, rock = lu ? { cell: L.cells[Math.floor(lu.z) * L.w + Math.floor(lu.x)], walk: z.map.walkable(lu.x, lu.z) } : null;
         // (each in its first state for the reading)
         const st = {
           hearths: A.hearths.map((h) => !!h.mesh.userData.lit), lost: A.lost.map((h) => !!h.mesh.userData.lit), wrecks: A.wrecks.map((h) => !!h.mesh.userData.lit),
@@ -3696,11 +3698,12 @@ const S = {
           let top = -9; ring.updateWorldMatrix(true, true); ring.traverse((o) => { const P = o.geometry?.attributes.position; if (!P || !o.geometry.userData.drape) return; for (let k = 0; k < P.count; k++) top = Math.max(top, W.fromBufferAttribute(P, k).applyMatrix4(o.matrixWorld).y); });
           drape = { x, z: zz, top: +top.toFixed(2) };
         }
-        return { mode: L.mode, bad, held, twice, fire, st, okState, atm, moved, drape, kids: z.lvl.group.children.length };
+        return { mode: L.mode, bad, held, twice, fire, rock, st, okState, atm, moved, drape, kids: z.lvl.group.children.length };
       });
       beat(`${tag}: every story prop at its gen6 spot, handed over in z.lvl.act6`, !r.bad.length, { bad: r.bad, mode: r.mode });
       beat(`${tag}: the zone holds the build's own props (z.act6 is z.lvl.act6's), none built twice`, !r.held.length && !r.twice.length, { held: r.held, twice: r.twice });
       if (zone === 'bottom') beat(`${tag}: her fire burning with its light (one of L.lights at the Hearth's centre, r 5, live in the pooled lights)`, r.st.centre && r.fire.n === 1 && r.fire.live.length === 1 && r.fire.live[0] >= 10, r.fire);
+      if (zone === 'drained') beat(`${tag}: the Mere's lure-rock a footprint (she walks round it)`, r.rock && !r.rock.cell && !r.rock.walk, r.rock);
       beat(`${tag}: each in its first state for the reading`, r.okState, r.st);
       beat(`${tag}: the reading's atmosphere and ambient`, r.atm.fog === r.atm.want && r.atm.amb === r.atm.wantAmb, r.atm);
       beat(`${tag}: the shore off the grid (shoreJit on gen6's layout)`, r.moved > 100, { moved: r.moved });

@@ -533,6 +533,10 @@ function tryDrained(seed, last) {
       bed[i] = d < 5 ? (n > 0.55 ? 0.15 : 0) : Q(0.45 + (n > 0.5 ? 0.15 : 0));
     }
     S.mere = { x: HP.x, z: HP.z, r: 10, core: 5, lure: { x: HP.x, z: HP.z - 6 } };
+    // (the lure-rock, a stone 1.8 m across on its one cell (build6.js), blocked as the lure posts are: a footprint in both
+    // readings, so she goes round it once the Mere falls to wading in its phase 2 and once it is dry; the water stands
+    // round and under it all the same)
+    blockC(S.mere.lure.x, S.mere.lure.z, 0.9);
     S.well = { x: HP.x, z: HP.z, r: 2, cells: circleCells(L, HP.x, HP.z, 2) };
     const arch = [];
     for (let z = hz + 3; z < hz + 17; z++) for (const x of [hx - 1, hx]) arch.push([x, z]);
