@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { gltfLoader } from './gltf.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { clamp, damp, smooth } from '../core/util.js';
-import { bytes, patchPerson, personUniforms, cullSphere } from './people.js';
+import { bytes, patchPerson, personUniforms, cullSphere, partsOf, freeParts } from './people.js';
 import { R } from './gfx.js';
 
 // every creature GLB present at build time; missing ones fall back to the code-built models.
@@ -50,12 +50,43 @@ function loadFile(n) {
     } catch (e) { console.warn('creature ' + n + ' failed to load', e); delete loads[n]; } // the next zone tries again
   })());
 }
+// (the groups asked for: a file stays while any of them lists it, unloadCreatures)
+const GROUPS = new Set();
 export function loadCreatures(set, onFile) {
+  if (set) GROUPS.add(set);
   const names = (set ? ACT_FILES[set] : [...new Set(Object.values(CAST).map((c) => c[0]))]).filter((n) => URLS[n]);
   return Promise.all(names.map((n) => loadFile(n).then(() => onFile?.()))).then(() => { CREATURES.ready = true; });
 }
 export const creatureCount = (set) => ACT_FILES[set].filter((n) => URLS[n]).length;
 export const hasCreature = (model) => !!(CAST[model] && CREATURES.tpl[CAST[model][0]]);
+export const groupReady = (set) => GROUPS.has(set) && !!ACT_FILES[set]?.some((n) => CREATURES.tpl[n]);
+
+// ---------- letting a group go (game/unload.js: Acts II-IV's creatures, on entering an Act V or VI zone) ----------
+// Its files leave the templates at once (a monster made from then on takes its stand-in, actors.js STAND_IN, until the
+// group is loaded again), but a file another group still asked for or keep names (Act V's bear is Act III's) and Act I's;
+// the function returned frees their GPU copies once nothing on screen draws them. inUse(tex): a texture-set test per file
+// (true: something still draws it, leave it). Null when nothing is let go
+export function unloadCreatures(set, keep = [], inUse) {
+  if (!ACT_FILES[set] || set === 'act1' || !GROUPS.has(set)) return null;
+  const hold = new Set([...GROUPS, ...keep, 'act1'].filter((g) => g !== set).flatMap((g) => ACT_FILES[g] || []));
+  const tex = new Set(), geo = new Set(), parts = [], files = [];
+  let left = false;
+  for (const n of ACT_FILES[set]) {
+    const T = CREATURES.tpl[n];
+    // (still loading: its promise lands it later, and the next unload takes it; one still drawn stays, and so does the group)
+    if (hold.has(n) || (!T && !loads[n])) continue;
+    if (!T) { left = true; continue; }
+    const P = partsOf(T.scene);
+    if (inUse?.(P.tex)) { left = true; continue; }
+    delete CREATURES.tpl[n]; delete loads[n];
+    files.push(n); parts.push(P);
+    for (const t of P.tex) tex.add(t);
+    for (const g of P.geo) geo.add(g);
+  }
+  if (!left) GROUPS.delete(set);
+  if (!files.length) return null;
+  return { files, tex, geo, free: () => { for (const P of parts) freeParts(P); } };
+}
 
 function prepare(gltf) {
   const scene = gltf.scene;
