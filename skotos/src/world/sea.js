@@ -692,8 +692,9 @@ export function bayCorners(L) {
 // strip, the Fall's path, can take). The ground, the water and the ice take the same offset and stay matched. Not a corner
 // of an ice window or the jetty (their props keep the grid), nor the map's rim. Offsets (x, z) per corner, (w+1)(h+1)
 const CC = [[-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]];
-// (Act VI too, gen6's layouts: L.pocket and no L.ice. Its black water stands over a level floor, so without it every pool's
-// and the Mere's edge, and the vault's walls' foot, ran in the cells' staircase: an island read as a cross of squares)
+// (Act VI too, gen6's layouts (L.pocket and no L.ice), for the vault's walls' foot alone, which ran ruled along the cells:
+// its pools' edges are the waterline's own, drawn from the smooth bed over a ring of the floor round them (buildSea), since
+// their closed step lies close inside the rim, and a jittered corner beside it bent its pale line into a sawtooth)
 export function shoreJit(L) {
   if (!L.hgt || !(L.ice || L.pocket)) return null;
   if (L.jit5) return L.jit5;
@@ -717,7 +718,7 @@ export function shoreJit(L) {
     const k0 = vz * W + vx;
     if (c.some((q) => q !== c[0])) edgeC[k0] = 1;
     if (c.includes(4)) continue;
-    const f = preds.find((g) => { const n = c.filter(g).length; return n && n < 4; });
+    const f = (L.ice ? preds : preds.slice(1, 2)).find((g) => { const n = c.filter(g).length; return n && n < 4; });
     if (!f) continue;
     // (a slow noise and a quicker one: the slow alone leaves a long run ruled straight, only tilted)
     const t = c.map(f), n = t.filter(Boolean).length;
@@ -739,9 +740,7 @@ export function shoreJit(L) {
     if (n === 2 && (t[0] === t[1] || t[0] === t[2])) {
       const ax = t[0] === t[1] ? 1 : 0, sl = fbm(vx * 0.09 + 3, vz * 0.09 - 5, seed + 79, 2) - 0.5, qk = ax ? nz : nx;
       // (those held to 0.4 m wander on the quicker read: the slow one, held, only shifted a short islet's edge, still ruled)
-      // (Act VI's pools all held: their closed step's pale line is read off the grid's own beds (vG), and a corner wandering
-      // 1.25 m beside one held still drew it in the triangles' sawtooth across the Hollows)
-      const held = (f === preds[0] && !thinRun) || f === preds[1] || !L.ice;
+      const held = (f === preds[0] && !thinRun) || f === preds[1];
       // (the coast's land against the open sea, the Strand's, an islet's, the whale's shore: it leans out over the water by
       // 0.1-0.85 m and never back from it, so the run curves while she still stops on the land's own side of its edge;
       // held to 0.4 m either way, a twenty-metre shore still read ruled. Not across a strait of under three cells)
@@ -817,6 +816,10 @@ export function buildSea(L, group, quality = R.quality) {
   const black = !!L.pocket && !L.ice;
   if (black && !L.tSlush) { const t = new THREE.DataTexture(new Uint8Array(N), w, h, THREE.RedFormat); t.magFilter = t.minFilter = THREE.LinearFilter; t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; t.generateMipmaps = false; t.needsUpdate = true; L.tSlush = t; }
   const mat = seaMat({ low, black }), J = shoreJit(L), BY = bayCorners(L), FB = FRZ_BAND(L), edgeI = (i) => !!FB && i < 2 * w && !!L.low[i] && i % w >= FB[0] && i % w < FB[1];
+  // (Act VI: the level floor round a pocket or the Mere, a cell deep, drawn too: the black water's edge is then where its
+  // smooth bed says (the discard below) and where its surface dips under the floor, a curve across the cells, not the wet
+  // cells' own staircase standing a hand over the floor)
+  const rim6 = (x, z) => { for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) { const nx = x + dx, nz = z + dz; if ((dx || dz) && nx >= 0 && nz >= 0 && nx < w && nz < h && L.pocket[nz * w + nx]) return true; } return false; };
   // (the water's bed at a corner of level land: a hand over its wettest cell's, not the land's own averaged in. With the
   // land's (BED_DRY) in the mean the surface sank under the ground most of a cell out from the shore, so the water's edge
   // ran along the next row of corners, the cells' line a metre off the land, a pale strip of nothing between)
@@ -913,7 +916,7 @@ export function buildSea(L, group, quality = R.quality) {
     const quads = [];
     for (let z = cz0; z < Math.min(h, cz0 + CH); z++) for (let x = cx0; x < Math.min(w, cx0 + CH); x++) {
       const rs = !wet(z * w + x) && rockSea(z * w + x);
-      if (!wet(z * w + x) && !band(z * w + x) && !rs) continue;
+      if (!wet(z * w + x) && !band(z * w + x) && !rs && !(black && rim6(x, z))) continue;
       // (split as the ground's grid is: (x, z + 1) to (x + 1, z))
       const a = vert(x, z), b = vert(x + 1, z), c = vert(x, z + 1), d = vert(x + 1, z + 1);
       // (each quad keyed by the lowest bed among its corners, the level that first wets it; held, frozen or the bay's
