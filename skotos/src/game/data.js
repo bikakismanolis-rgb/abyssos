@@ -39,6 +39,25 @@ export const HAZ5 = [
   H5({ wash: 10, plunge: 10, load: 1.0, cold: 1.3, frost: 7, ring: 10, breath: 5, bossCd: 0.85, adds: 1 }),
   H5({ wash: 12, plunge: 12, load: 0.9, cold: 1.45, frost: 8, ring: 10, breath: 5, bossCd: 0.8, adds: 2 })
 ];
+// Act VI's hazards by difficulty (indexed like DIFFS; docs/act6-contract.md, Combat): the black water's cycle (s), the ice's
+// groan before it rises (s), the wash-out (% of max life); the Carried Fire's drains and refill; the Shroud outside light;
+// the icicles' blows; a black lamp's channel (s); a lure's bait time; the Names from Above (s); the Cold and Frostbite as
+// Act V's; Revealed; the bosses' cooldowns and adds; the act's creatures' blows (x DIFFS.dmg). Telegraphs never change.
+// (the table as the contract sets it at stage A, for the rules the act shares with Act V: cold.js, actors.js; tuned in B-C)
+const H6 = (o) => Object.assign({ tide: 120, groan: 6, wash: 6, coal: 1, refill: 1.5, shroud: 0.3, icicle: 0.9, lampT: 2.0, bait: 0.8,
+  namesEvery: 90, namesBase: 5, cold: 1, frost: 5, reveal: 1.25, bossCd: 1, adds: 0, dmg: 1 }, o);
+export const HAZ6 = [
+  H6({ tide: 150, groan: 8, wash: 3, coal: 0.6, refill: 2.0, shroud: 0.45, icicle: 0.6, lampT: 1.6, bait: 1.2, namesEvery: 75, namesBase: 6, cold: 0.8, frost: 2.5, reveal: 1.35, dmg: 1.5 }),
+  H6({}), H6({}),
+  H6({ wash: 8, coal: 1.15, refill: 1.4, icicle: 1.0, namesEvery: 100, cold: 1.15, frost: 6, bossCd: 0.9, adds: 1 }),
+  H6({ tide: 110, wash: 10, coal: 1.3, refill: 1.3, icicle: 1.1, lampT: 2.2, bait: 0.7, namesEvery: 110, namesBase: 4.5, cold: 1.3, frost: 7, bossCd: 0.85, adds: 1 }),
+  H6({ tide: 100, wash: 12, coal: 1.45, refill: 1.2, icicle: 1.2, lampT: 2.4, bait: 0.6, namesEvery: 120, namesBase: 4, cold: 1.45, frost: 8, bossCd: 0.8, adds: 2 })
+];
+// the save format this build reads and writes (save.js heroFits refuses a hero of a higher one as 'newer'; every hero this
+// build makes or takes up is stamped with it, boot.js startHero): 1 for Acts I-V (a hero without `fmt` is 1), 2 once Act
+// VI's fields ship. (No public build may write 2 before a public build refuses it: the bump waits for one that carries
+// this check, docs/act6-contract.md, Saves. Here, not in save.js: data.js imports nothing, so state.js reads it too)
+export const SAVE_FMT = 1;
 
 // ---------- classes ----------
 // resource: fury builds on hit and fades; energy and mana regenerate

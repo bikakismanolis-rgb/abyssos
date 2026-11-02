@@ -108,7 +108,7 @@ export function drawOverlay(dt) {
   const g = OV.g, d = OV.dpr;
   g.setTransform(d, 0, 0, d, 0, 0);
   g.clearRect(0, 0, innerWidth, innerHeight);
-  frostTick(dt, (G.mode === 'play' || G.mode === 'cine') && !!G.zone?.act5);
+  frostTick(dt, (G.mode === 'play' || G.mode === 'cine') && !!G.zone?.cold);
   if (G.mode !== 'play' && G.mode !== 'cine') { OV.nums.length = 0; return; }
   g.textAlign = 'center'; g.textBaseline = 'middle';
   // loot on the ground (not over a cinematic: a boss's drop would label the scene of his death)

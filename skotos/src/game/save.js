@@ -1,13 +1,15 @@
 // Local saves: every hero and the settings, in one localStorage entry.
 import { G } from './state.js';
 import { cleanItem, MAX_ILVL } from './items.js';
-import { BOON, MAX_LEVEL, INV_SIZE, STASH_SIZE, xpToNext, CLASSES, DIFFS, BASES, LEGENDARIES } from './data.js';
+import { BOON, BOONS, MAX_LEVEL, INV_SIZE, STASH_SIZE, xpToNext, CLASSES, DIFFS, BASES, LEGENDARIES, SAVE_FMT } from './data.js';
 import { further, HERO_ID, MAX_HERO } from './cloudsync.js';
 
 // (?slot=name: a save of its own, for tests that run several heroes in one browser: tools/coop.mjs)
 const SLOT = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('slot') : null;
 const SUF = SLOT && /^[a-z0-9]{1,12}$/.test(SLOT) ? '.' + SLOT : '';
 const KEY = 'skotos.save.v1' + SUF;
+// (a blessing for each act that has them: one past them is a newer version's)
+const NBOONS = Object.keys(BOONS).length;
 // (the cloud's own record and the backups of what it replaced: game/cloud.js, docs/cloudsave/README.md)
 // (game/cloud.js: told of every write, and of a change it should sync at once, a deletion or a backup taken back)
 export const saveHooks = { written: null, changed: null };
@@ -31,11 +33,12 @@ function foreign(d) {
   markLost(d.id);
 }
 // (each mark its own: a sync that began with the base already lost and agreed on it meanwhile puts on the record only
-// what it changed, and tells a mark made again since by its being another)
-function markLost(id) {
+// what it changed, and tells a mark made again since by its being another). forced: the hero was taken up repaired here
+// (freshHero force), the player's own choice over a copy this version cannot keep: the sync weighs that copy too (cloudsync)
+function markLost(id, forced = false) {
   const m = cloudMeta();
   m.base = m.base && typeof m.base === 'object' && !Array.isArray(m.base) ? m.base : {};
-  m.base[id] = { lost: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10) }; setCloudMeta(m);
+  m.base[id] = { lost: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10), ...(forced ? { forced: true } : {}) }; setCloudMeta(m);
 }
 const ownCopy = (h, text = JSON.stringify(h)) => { const c = repairHero(JSON.parse(text)); RAW.set(c, text); return c; };
 export function loadSave() {
@@ -96,7 +99,7 @@ export function writeSave() {
   }
   // (the mark kept due until both it and the record are written: storage full now, the next write makes them)
   const forced = !!hero && FORCED.has(hero.id);
-  if (forced) markLost(hero.id);
+  if (forced) markLost(hero.id, true);
   try {
     localStorage.setItem(KEY, JSON.stringify(out ? { ...G.save, heroes: out } : G.save));
     if (forced && cloudMeta().base?.[hero.id]?.lost) FORCED.delete(hero.id);
@@ -196,8 +199,9 @@ export function repairHero(h) {
   h.points = fin(h.points) && h.points > 0 ? Math.round(h.points) : 0;
   if (h.mlvl !== undefined) h.mlvl = fin(h.mlvl) && h.mlvl > 0 ? Math.floor(h.mlvl) : 0;
   if (h.mxp !== undefined) h.mxp = fin(h.mxp) && h.mxp > 0 ? h.mxp : 0;
+  if (h.fmt !== undefined && !fin(h.fmt)) delete h.fmt;
   if (!Array.isArray(h.boons)) h.boons = [];
-  h.boons = h.boons.slice(0, 5).map((id) => (typeof id === 'string' && Object.prototype.hasOwnProperty.call(BOON, id) ? id : null));
+  h.boons = h.boons.slice(0, NBOONS).map((id) => (typeof id === 'string' && Object.prototype.hasOwnProperty.call(BOON, id) ? id : null));
   const st = h.stats && typeof h.stats === 'object' ? h.stats : (h.stats = {});
   for (const k of ['kills', 'deaths', 'time', 'legs', 'elites']) if (!fin(st[k]) || st[k] < 0) st[k] = 0;
   return h;
@@ -210,19 +214,22 @@ export function storedHeroes() { return (readDisk()?.heroes || []).filter((h) =>
 // the hero this page plays (a co-op guest's own record), whose stored record only this page writes
 export const playingId = () => (G.hero?.__real || G.hero)?.id ?? null;
 // can this version keep a hero (a cloud copy, a backup) as it is? null, or why not: 'newer' for one a newer version of
-// the game wrote (a class, difficulty, item base, legendary or blessing this version does not know, a level or item level
-// past its caps), which repairHero would strip, and which a sync would then carry stripped to every device
+// the game wrote (a save format past this build's, SAVE_FMT; a class, difficulty, item base, legendary or blessing this
+// version does not know, a level or item level past its caps), which repairHero would strip, and which a sync would then
+// carry stripped to every device
 export function heroFits(h) {
   if (!h || typeof h !== 'object' || Array.isArray(h) || typeof h.id !== 'string' || h.id in Object.prototype) return 'bad_data';
   // (a record no version of the game writes: a number that is none, or markup in any of its strings, which the screens
   // would draw; the game itself only ever stores ids there)
-  for (const k of ['level', 'xp', 'gold', 'points', 'mlvl', 'mxp']) if (h[k] !== undefined && !(typeof h[k] === 'number' && isFinite(h[k]))) return 'bad_data';
+  for (const k of ['level', 'xp', 'gold', 'points', 'mlvl', 'mxp', 'fmt']) if (h[k] !== undefined && !(typeof h[k] === 'number' && isFinite(h[k]))) return 'bad_data';
   if (unsafeText(h)) return 'bad_data';
   const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+  // (a hero of a save format this build does not read: Act VI's fields, say, on a build of Acts I-V)
+  if (typeof h.fmt === 'number' && h.fmt > SAVE_FMT) return 'newer';
   if (!own(CLASSES, h.cls) || !(Number.isInteger(h.diff) && h.diff >= 0)) return 'newer';
   if (!DIFFS[h.diff]) return 'newer';
   if (typeof h.level === 'number' && h.level > MAX_LEVEL) return 'newer';
-  if (Array.isArray(h.boons) && h.boons.some((id, i) => id != null && (i >= 5 || (typeof id === 'string' && !own(BOON, id))))) return 'newer';
+  if (Array.isArray(h.boons) && h.boons.some((id, i) => id != null && (i >= NBOONS || (typeof id === 'string' && !own(BOON, id))))) return 'newer';
   const items = [...(Array.isArray(h.inv) ? h.inv : []), ...(Array.isArray(h.stash) ? h.stash : []), ...Object.values(h.equip && typeof h.equip === 'object' ? h.equip : {})];
   for (const it of items) {
     if (!it || typeof it !== 'object') continue;

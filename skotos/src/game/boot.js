@@ -25,7 +25,8 @@ import { initPanels, open as openPanel, close as closePanel, panelOpen } from '.
 import { buildTitleScene, removeTitleScene, titleCamera, showTitle, hideScreen } from '../ui/screens.js';
 import { on, emit } from '../ui/bus.js';
 import { setLang, t } from '../i18n/i18n.js';
-import { DIFFS, BOONS } from './data.js';
+import { DIFFS, BOONS, LEG_FROM, SAVE_FMT } from './data.js';
+import { makeItem, itemName } from './items.js';
 import Audio from '../audio/audio.js';
 import { offerBoons } from './story.js';
 import { clamp, rand } from '../core/util.js';
@@ -83,7 +84,7 @@ export async function boot(q) {
     for (const f of (q.get('flags') || '').split(',').filter(Boolean)) h.flags[f] = true;
     // (an act's flag reads as that act finished, on this difficulty, its first blessing taken: an Act V state is not
     // taken for an Act IV left open, nor stopped by the blessings owed)
-    for (let n = 1; n <= 5; n++) if (h.flags['act' + n]) { h['act' + n] = h.diff; h.boons[n - 1] ||= BOONS[n]?.[0]?.id; }
+    for (let n = 1; n <= 6; n++) if (h.flags['act' + n]) { h['act' + n] = h.diff; if (BOONS[n]) h.boons[n - 1] ||= BOONS[n][0].id; }
     if (q.get('auto') === 'farlight') h.flags.frozen = true;
     // &seed=N: the zone's layout seed (Act V's are kept per difficulty)
     if (q.has('seed')) { const z = q.get('auto'); h.seeds = { [z]: +q.get('seed'), [z + '@' + h.diff]: +q.get('seed') }; }
@@ -131,6 +132,13 @@ async function startHero(hero, isNew, zone = 'town', force = false) {
   // and from before Act V: an Act IV hero reads as Act IV's end (quest 23, the new fire burning)
   hero.act5 ??= -1;
   if (hero.act5 >= 0) hero.flags.act5 = true;
+  // and from before Act VI: an Act V hero reads as Act V's end (quest 31, the sea lit if it was), none freed in the Gates;
+  // every hero taken up is stamped with this build's save format (save.js heroFits refuses a newer one)
+  hero.act6 ??= -1;
+  if (hero.act6 >= 0) hero.flags.act6 = true;
+  hero.gateFound ??= 0;
+  hero.fmt = SAVE_FMT;
+  legBack(hero);
   await zoneReady(zone);
   G.mode = 'play';
   showHud(true);
@@ -142,6 +150,23 @@ async function startHero(hero, isNew, zone = 'town', force = false) {
   if (isNew && !G.settings.helpSeen) later(2.4, () => { G.settings.helpSeen = true; writeSave(); if (G.mode === 'play' && !G.panel) openPanel('help'); });
   // a hero taken up again: any blessing still owed
   if (!isNew) later(1.5, offerBoons);
+}
+// Act VI's two bosses' legendaries, once each: a page of a build from before Act VI writes every stored hero back made
+// whole for it, and cleanItem makes a legendary it does not know a rare; the first kill (flags.legFrom_<boss>) never drops
+// it again. One the hero has nowhere (bag, stash, worn) is rolled again into the stash's first free slot (else the bag),
+// at most once (flags.legBack_<boss>: one sold or salvaged comes back no more than that)
+function legBack(hero) {
+  const F = hero.flags, all = [...(hero.inv || []), ...(hero.stash || []), ...Object.values(hero.equip || {})];
+  for (const k of ['ketos', 'shade']) {
+    const leg = LEG_FROM[k];
+    if (!leg || !F['legFrom_' + k] || F['legBack_' + k] || all.some((it) => it?.leg === leg)) continue;
+    const list = hero.stash.includes(null) ? hero.stash : hero.inv, i = list.indexOf(null);
+    if (i < 0) continue;
+    const it = makeItem(Math.max(1, hero.level | 0), { rar: 3, leg, cls: hero.cls });
+    if (it.leg !== leg) continue;
+    list[i] = it; F['legBack_' + k] = true;
+    later(2.2, () => emit('toast', t('q.legBack', itemName(it)), 'quest'));
+  }
 }
 on('startHero', (h, isNew, force) => { startHero(h, isNew, 'town', !!force).catch((e) => fatal(e.stack || e)); });
 let travelling = false;

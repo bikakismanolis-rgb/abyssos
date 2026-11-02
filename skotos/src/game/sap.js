@@ -166,7 +166,7 @@ export function placeCasks(z) {
   }
   return n;
 }
-on('zoneEnter', (id, z) => { if (z?.act5) placeCasks(z); });
+on('zoneEnter', (id, z) => { if (z?.water) placeCasks(z); });
 // a cask broken: a burst of flame and burning oil r 2.5 for 6 s (a fire area that floats); a cask beside it goes up after it
 export function oilBurst(a, r = 2.5, dur = 6) {
   const x = a.x, z = a.z, pl = G.player;

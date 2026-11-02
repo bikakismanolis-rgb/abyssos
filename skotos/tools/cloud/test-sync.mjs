@@ -448,6 +448,35 @@ await T('a newer version\'s hero is never rewritten by this one', async () => {
   ok(SV.storedHeroes().find((h) => h.id === 'hY').gold === 777, 'the hero played is written');
 });
 
+// (docs/act6-contract.md, Saves: a hero carries its save format, fmt; a build refuses one past its SAVE_FMT)
+await T('a copy of a higher save format is never written over by this one, however far on this copy is', async () => {
+  const { SAVE_FMT } = await import('../../src/game/data.js');
+  const A = artifactDb(), doc = () => A.docs.get('data/users/u1/h-hF')?.data;
+  const NEW = device(); NEW.B = await artifactBackend(A.claude('u1'));
+  const OB = await artifactBackend(A.claude('u1'));
+  fresh([hero('hF', { level: 20, xp: 100, fmt: SAVE_FMT, played: 1000 })], null);
+  await syncAll(OB, real(SV)); await sync(NEW);
+  ok(SV.heroFits(hero('hQ', { fmt: SAVE_FMT + 1 })) === 'newer' && SV.heroFits(hero('hQ', { fmt: SAVE_FMT })) === null && SV.heroFits(hero('hQ')) === null, 'heroFits: a higher fmt is newer; this one and none are not');
+  ok(SV.heroFits(hero('hQ', { fmt: 'x' })) === 'bad_data', 'a format that is no number is a damaged record');
+  // a newer build plays it on another device: its format goes up, behind this page's copy
+  NEW.play('hF', (h) => { h.fmt = SAVE_FMT + 1; h.act6 = -1; h.gold = 5; }, 2000); await sync(NEW);
+  const text = doc(), base0 = JSON.stringify(SV.cloudMeta().base.hF);
+  // only the cloud changed: refused, nothing taken
+  const r0 = await syncAll(OB, real(SV));
+  ok(!r0.pulled.length && !r0.pushed.length && r0.errors.some((e) => e.id === 'hF' && e.code === 'newer') && SV.storedHeroes().find((h) => h.id === 'hF').gold === 100, 'one side changed: the newer format is not taken', r0);
+  // this page plays its own copy further on, and later: both sides changed, a conflict this copy would win on any other day
+  G.hero = G.save.heroes.find((h) => h.id === 'hF'); G.hero.level = 30; G.hero.xp = 999; G.hero.stats.kills = 500; SV.writeSave(); G.hero = null;
+  for (let k = 0; k < 2; k++) {
+    const r = await syncAll(OB, real(SV));
+    ok(!r.pushed.length && !r.pulled.length && r.errors.some((e) => e.id === 'hF' && e.code === 'newer'), 'no push, no pull: refused newer (sync ' + (k + 1) + ')', r);
+    ok(doc() === text, 'the cloud\'s copy of the higher format stays byte for byte');
+    ok(SV.storedHeroes().find((h) => h.id === 'hF').level === 30 && !SV.backups().some((b) => b.hero.id === 'hF' && b.why === 'conflict'), 'this copy stays as it is, nothing kept aside');
+    ok(JSON.stringify(SV.cloudMeta().base.hF) === base0, 'the base stays as it was');
+  }
+  const t = await sync(NEW);
+  ok(!t.pulled.length && NEW.hero('hF').fmt === SAVE_FMT + 1 && NEW.hero('hF').gold === 5, 'the newer device keeps its copy', t);
+});
+
 await T('a restore holds against another page\'s deletion', async () => {
   fresh([hero('hX', { level: 44 }), hero('hY', { cls: 'mage' })], 'hX');
   const SA = await import('../../src/game/save.js?tab=A'), SB = await import('../../src/game/save.js?tab=B');

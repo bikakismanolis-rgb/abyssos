@@ -1101,5 +1101,15 @@ export const TEXT = {
   'coop.revive': ['Σηκώνεις: {0}', 'Raising {0}'],
   'coop.reviving': ['Σήκωσες: {0}', 'You raised {0}'],
   'coop.revived': ['Σε σήκωσαν', 'You were raised'],
-  'coop.meter': ['Δίκτυο: {0} μην./δ ({1} KB/δ) έξω, {2} ({3} KB/δ) μέσα', 'Network: {0} msg/s ({1} KB/s) out, {2} ({3} KB/s) in']
+  'coop.meter': ['Δίκτυο: {0} μην./δ ({1} KB/δ) έξω, {2} ({3} KB/δ) μέσα', 'Network: {0} msg/s ({1} KB/s) out, {2} ({3} KB/s) in'],
+  // Act VI: world (the zones, their exits and waypoints, the shut lines; the story lane owns them from stage D)
+  'zone.drained': ['Η Στεγνή Θάλασσα', 'The Drained Sea'], 'zone.drained.s': ['Εκεί που ήπιε τη θάλασσα', 'Where it drank the sea'],
+  'zone.bottom': ['Ο Πάτος των Πυλών', 'The Bottom of the Gates'], 'zone.bottom.s': ['Εκεί που καίει η φωτιά της Πρώτης', 'Where her fire burns'],
+  'exit.rope': ['Το σκοινί κάτω από τον πάγο', 'The rope beneath the ice'], 'exit.ropeUp': ['Ανέβα από το σκοινί', 'Climb the rope'],
+  'exit.well': ['Το Πηγάδι', 'The Well'], 'exit.gateUp': ['Ανέβα από την πύλη', 'Climb the gate'],
+  'wp.drained': ['Το Σκοινί', 'The Rope'], 'wp.bottom': ['Η Ρίζα του Πηγαδιού', 'The Well\'s Foot'],
+  'd.ropeShut': ['Χωρίς φωτιά δεν κατεβαίνει κανείς εκεί κάτω.', 'No one goes down there without fire.'],
+  'd.wellShut': ['Το Πηγάδι είναι κάτω από το μαύρο νερό, κι εκεί μέσα κάτι ζει.', 'The Well is under the black water, and something lives in it.'],
+  'd.gateDark': ['Το δαχτυλίδι είναι σκοτεινό.', 'The ring is dark.'],
+  'q.legBack': ['Βρέθηκε ξανά: {0}.', 'Found again: {0}.']
 };

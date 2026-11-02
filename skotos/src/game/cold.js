@@ -1,5 +1,5 @@
-// The Cold (Act V): a meter on the hero, 0 to 100, on the Frozen Coast and the Farthest Light only. It never builds from
-// simply being outdoors.
+// The Cold (Act V): a meter on the hero, 0 to 100, on the Frozen Coast and the Farthest Light, and below the ice in Act VI
+// (z.cold). It never builds from simply being outdoors.
 // - In: coldAdd(v, o), the one way in, every gain times HAZ5[diff].cold: wading (the tide, brine, slush) +4/s; a blizzard
 //   gust on the Farthest Light out of the lee (of a berg, the ship, a warm pool) +2.5/s; the blows that carry o.cold
 //   (combat.js hurtHero): a wash-out 20, a plunge 35, a Skua's bite 3, a Sunken's blow from the water 4, an Ice Singer's
@@ -12,7 +12,7 @@
 // - For the HUD (story's): COLD { v, state, warmT, k, dir }, bus 'cold' (state) on each change, 'frostbite'; FX.chill for
 //   the breath (fx.js walk5); the frost overlay reads COLD.v (fx.js frostVignette).
 import { G } from './state.js';
-import { HAZ5 } from './data.js';
+import { HAZ5, HAZ6 } from './data.js';
 import { damage, rootHero } from './combat.js';
 import { warmAt, fireAt } from './light.js';
 import { FX, freezeCrystals, glowBurst } from '../gfx/fx.js';
@@ -21,12 +21,14 @@ import Audio from '../audio/audio.js';
 import { clamp } from '../core/util.js';
 
 export const COLD = { v: 0, state: 'none', warmT: 0, k: 0, dir: 0, fbT: 0, held: false };
-const haz = () => HAZ5[G.hero?.diff ?? 1] || HAZ5[1];
-export const coldZone = () => !!G.zone?.act5;
+// (the act's row: Act VI's below the ice, the same cold and frost columns; z.cold: a zone where the Cold runs, set by
+// world.js act5Zone and act6Zone)
+const haz = () => { const H = G.zone?.act6 ? HAZ6 : HAZ5; return H[G.hero?.diff ?? 1] || H[1]; };
+export const coldZone = () => !!G.zone?.cold;
 const stateOf = (v) => (v >= 100 ? 'frostbite' : v >= 75 ? 'freezing' : v >= 50 ? 'chilled' : 'none');
 
-// the one way in: v of Cold, times the difficulty's factor; nothing outside Act V's zones, nothing while she is Warmed
-// (o.pierce: the Deep Cold reaches through the warmth), nothing while she is dead
+// the one way in: v of Cold, times the difficulty's factor; nothing outside the zones where it runs (Acts V and VI), nothing
+// while she is Warmed (o.pierce: the Deep Cold reaches through the warmth), nothing while she is dead
 export function coldAdd(v, o = {}) {
   const pl = G.player;
   if (!v || !pl || pl.dead || !coldZone()) return 0;
@@ -48,13 +50,13 @@ export function warmHero(t = 4) {
   glowBurst(pl.x, 1.2, pl.z, 0xffe0b0, 10, 1.5, 0.25, 0.5);
   settle();
 }
-// on leaving Act V's zones and on a respawn: all warm again
+// on leaving the Cold's zones and on a respawn: all warm again
 export function resetCold() {
   COLD.v = 0; COLD.k = 0; COLD.dir = 0; COLD.fbT = 0; COLD.held = false; COLD.warmT = 0;
   if (COLD.state !== 'none') { COLD.state = 'none'; emit('cold', 'none'); }
   FX.chill = 0;
 }
-on('zoneEnter', (id, z) => { if (!z?.act5) resetCold(); });
+on('zoneEnter', (id, z) => { if (!z?.cold) resetCold(); });
 on('respawn', () => resetCold());
 
 // the lee of the gust: behind a berg (downwind: the blizzard blows west, fx.js) or beside the ship, or in a warm pool

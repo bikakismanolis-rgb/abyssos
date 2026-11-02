@@ -167,7 +167,7 @@ export function updateHud(dt) {
   // amber sap: the build-up toward an amber-lock, then the lock itself (a dodge breaks it)
   const st = pl.status || {}, rooted = st.root > 0, stick = Math.min(1, (st.stick || 0) / 1.5);
   // (in Act V's zones the Cold holds that slot: a Frostbite's freeze shows there, not as amber)
-  const cz = !!G.zone?.act5, am = $('amber'), show = !cz && (rooted || stick > 0.02);
+  const cz = !!G.zone?.cold, am = $('amber'), show = !cz && (rooted || stick > 0.02);
   if (am.hidden === show) am.hidden = !show;
   if (show) {
     am.classList.toggle('rooted', rooted);
@@ -240,7 +240,7 @@ function coldHud(pl, on) {
 // While a boss owns the water (forced) the ring is dark
 const TIDE_PH = ['low', 'flood', 'high', 'ebb'];
 function tideHud() {
-  const el = $('tide'), d = G.zone?.act5 && G.mode === 'play' ? tideDial() : null;
+  const el = $('tide'), d = G.zone?.water && G.mode === 'play' ? tideDial() : null;
   if (el.hidden === !!d) el.hidden = !d;
   if (!d) { S.lane = false; return; }
   const H = HAZ5[G.hero.diff] || HAZ5[1], len = H.phases[TIDE_PH.indexOf(d.phase)] || 40;
@@ -465,7 +465,7 @@ on('gustWarn', () => Audio.sfx('gustRise'));
 on('gust', (g) => { Audio.mood({ gust: g ? 1 : 0 }); if (g) Audio.sfx('blizzard', { vol: 0.9 }); });
 // each turn of a sea-light's beam rings its bell, so the sweep can be heard coming round
 on('beamTurn', (b) => { if (G.zone?.act5 && b) Audio.sfx('beamBell', { x: b.x, z: b.z, vol: 0.7, pitch: b.prop ? 1 : 1.12 }); });
-on('lampSnuffed', (it) => { if (G.zone?.act5 && it) Audio.sfx('lampSnuff', { x: it.x, z: it.z }); });
+on('lampSnuffed', (it) => { if (G.zone?.water && it) Audio.sfx('lampSnuff', { x: it.x, z: it.z }); });
 on('louseCurl', () => hint('louse'));
 // the bosses with a theme of their own (the rest share 'boss')
 const OWN_THEME = new Set(['amaranthe', 'ivar', 'karthax', 'tower', 'skotos']);

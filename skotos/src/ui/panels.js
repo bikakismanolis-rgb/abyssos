@@ -166,10 +166,11 @@ const R = {
   },
   waypoints() {
     const h = G.hero, inTown = G.zone?.id === 'town';
-    // Act IV's Field has a second waypoint, at Elati's camp at the mouth of the Lantern Graves ('ashfield@2'); Act V's are
-    // named for their place (the Landing, the Icebound Ship)
-    const list = ['town', 'forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'ashfield@2', 'forge', 'coast', 'farlight'].filter((z) => h.wps.includes(z)).map((w) => {
-      const z = w.split('@')[0], sub = w.endsWith('@2') ? t('wp.graves') : z === 'coast' || z === 'farlight' ? t('wp.' + z) : t('zone.' + z + '.s');
+    // Act IV's Field has a second waypoint, at Elati's camp at the mouth of the Lantern Graves ('ashfield@2'); Act V's and
+    // Act VI's are named for their place (the Landing, the Icebound Ship; the Rope, the Well's Foot)
+    const named = new Set(['coast', 'farlight', 'drained', 'bottom']);
+    const list = ['town', 'forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'ashfield@2', 'forge', 'coast', 'farlight', 'drained', 'bottom'].filter((z) => h.wps.includes(z)).map((w) => {
+      const z = w.split('@')[0], sub = w.endsWith('@2') ? t('wp.graves') : named.has(z) ? t('wp.' + z) : t('zone.' + z + '.s');
       return `<button class="wp ${G.zone?.id === z ? 'here' : ''}" data-a="wp:${w}">${ICON.portal}<b>${t('zone.' + z)}</b><span class="muted">${sub}</span></button>`;
     }).join('');
     const gates = h.quest >= 5 ? `<button class="wp" data-a="gates">${ICON.gate}<b>${t('gate.title')}</b><span class="muted">${t('gate.best', h.gateBest)}</span></button>` : '';
@@ -260,7 +261,7 @@ const R = {
 export function diffUnlocked(i) {
   const d = DIFFS[i]; if (!d.unlock) return true;
   const [a, id] = d.unlock.split(':'), need = DIFFS.findIndex((x) => x.id === id), h = G.hero;
-  const best = a === 'any' ? Math.max(...[1, 2, 3, 4, 5].map((n) => h?.['act' + n] ?? -1)) : h?.[a] ?? -1;
+  const best = a === 'any' ? Math.max(...[1, 2, 3, 4, 5, 6].map((n) => h?.['act' + n] ?? -1)) : h?.[a] ?? -1;
   return best >= need;
 }
 function render() {
