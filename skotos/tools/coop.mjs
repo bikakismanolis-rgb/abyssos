@@ -1463,6 +1463,44 @@ const SC = {
       await ev(g, () => { for (const p of window.__G.pickups.slice()) if (p.kind === 'item') { /* leave them */ } });
     }
     console.log('     host net', JSON.stringify(await stats(host)));
+  },
+  // Act VI: look
+  // darkmirror: the 'dark' telegraph through the fx mirror (act6-contract.md, Visuals, fx.js). A host's Black Flare (a
+  // 'dark' circle), Drink line (a 'dark' line) and a 'dark' cone, laid round a guest, arrive on the guest's page as the
+  // dark telegraph (premultiplied, the violet rim, its 2 Hz clock), as the host draws them; an ordinary white circle
+  // beside them stays additive and white. (The mirror's colour slot, coop.js fxArgs 'C', keeps a number and makes anything else
+  // white: the string 'dark' would arrive as a plain white tell)
+  async darkmirror() {
+    const { host, guests: [g] } = await party('forest', 1);
+    const hp = await hostPos(host);
+    await place(g, hp.x + 2, hp.z + 1);
+    await until(host, () => { const r = window.__NET.NET.remotes[0], p = window.__G.player; return r && Math.hypot(r.x - p.x, r.z - p.z) < 6; }, null, 15000, 'stand-in by the host');
+    // (each tell known by its time, unique to it: the guest's own monsters' tells have others)
+    const TELLS = { flare: 5.11, drink: 5.22, cone: 5.33, white: 5.44 };
+    const read = async (T) => {
+      const F = await import('/src/gfx/fx.js'), out = {};
+      for (const [k, d] of Object.entries(T)) {
+        const t = F.FX.teles.find((x) => x.alive && Math.abs(x.dur - d) < 0.005); if (!t) continue;
+        const M = t.m.material; out[k] = { dark: !!M.uniforms.uT, blending: M.blending, src: M.blendSrc, dst: M.blendDst, col: M.uniforms.uColor.value.getHex() };
+      }
+      return out;
+    };
+    await ev(host, async (T) => {
+      const F = await import('/src/gfx/fx.js'), r = window.__NET.NET.remotes[0];
+      F.teleCircle(r.x + 1.5, r.z, 2, T.flare, 'dark');
+      F.teleLine(r.x - 1, r.z + 1, 0, 4, 1, T.drink, 'dark');
+      F.teleCone(r.x, r.z - 1.5, Math.PI, 3, 0.5, T.cone, 'dark');
+      F.teleCircle(r.x - 2, r.z - 2, 1.2, T.white, 0xe8f4ff);
+    }, TELLS);
+    const got = await until(g, async (T) => { const F = await import('/src/gfx/fx.js'); return Object.values(T).every((d) => F.FX.teles.some((x) => x.alive && Math.abs(x.dur - d) < 0.005)); }, TELLS, 10000, 'the four tells on the guest');
+    ok(got, 'the host\'s four tells reach the guest');
+    const onHost = await ev(host, read, TELLS), onGuest = await ev(g, read, TELLS);
+    // (three: CustomBlending 5, OneFactor 201, OneMinusSrcAlphaFactor 205; AdditiveBlending 2)
+    const isDark = (v) => v && v.dark && v.blending === 5 && v.src === 201 && v.dst === 205 && v.col === 0x8a70ff;
+    const isWhite = (v) => v && !v.dark && v.blending === 2 && v.col === 0xe8f4ff;
+    ok(['flare', 'drink', 'cone'].every((k) => isDark(onHost[k])) && isWhite(onHost.white), 'on the host: the three dark tells premultiplied with the violet rim, the white one additive', onHost);
+    for (const k of ['flare', 'drink', 'cone']) ok(isDark(onGuest[k]), `on the guest: the ${k} is the dark telegraph (premultiplied, the violet rim, the 2 Hz clock), not a white one`, onGuest[k]);
+    ok(isWhite(onGuest.white), 'on the guest: the white circle stays an ordinary additive tell, its own colour', onGuest.white);
   }
 };
 
