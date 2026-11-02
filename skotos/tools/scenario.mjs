@@ -2663,11 +2663,12 @@ const S = {
       await pg.waitForFunction(() => window.__ready, null, { timeout: 240000 });
       // ---- the Drained Sea's bench: the water, the Mere, the slush, the vault, every prop ----
       const d = await ev(async () => { const m = await import('/src/debug/look6.js'); window.__L6 = m; return m.show({ type: 'drained', props: true }); });
-      beat(`q${q} drained bench built: ground6, the black water, the vault, every prop kind`, d.ground && d.groundKey.startsWith('groundPBR|drained') && d.sea && d.seaQuads > 0 && d.vault && d.keels === 4 && d.sky === 3 && d.braziers === 3 && d.rope && d.props.length === 20, d);
+      beat(`q${q} drained bench built: ground6, the black water, the vault, every prop kind`, d.ground && d.groundKey.startsWith('groundPBR|drained') && d.sea && d.seaQuads > 0 && d.vault && d.keels >= 1 && d.sky === 3 && d.braziers === 3 && d.rope && d.props.length === 20, d);
       const water = [['pockets', 44, 51, { level: 0.6, wet: 0.75, mere: 1.6, dist: 11, pitch: 0.9 }], ['pockets-low', 44, 51, { level: 0.15, wet: 0.6, mere: 1.6, dist: 11, pitch: 0.9 }],
         ['slush', 44, 51, { level: 0.6, mere: 1.6, dist: 11, pitch: 0.9, slush: [[42, 49], [43, 49], [42, 50], [43, 50], [44, 50], [43, 51], [44, 51], [45, 51]] }],
         ['mere16', 58, 141, { level: 0.3, mere: 1.6, dist: 16, pitch: 0.95 }], ['mere085', 58, 141, { level: 0.3, mere: 0.85, dist: 16, pitch: 0.95 }],
-        ['vault', 56, 60, { level: 0.6, mere: 1.6, dist: 18, pitch: 0.12, density: 0.012, lookY: 6 }]];
+        ['vault', 56, 60, { level: 0.6, mere: 1.6, dist: 18, pitch: 0.12, density: 0.012, lookY: 6 }], ['keel-asger', 22, 107, { level: 0.3, dist: 12, pitch: 0.7, density: 0.03, lookY: 0.9 }],
+        ['shack-side', 66, 28, { dist: 10, pitch: 0.85 }]];
       for (const [n, x, z, o] of water) { await ev(([x, z, o]) => window.__L6.view(x, z, o), [x, z, o]); await snap(`q${q}-drained-${n}`); }
       const vs = await ev(() => { const L = window.__look6, v = L.lvl.act6.vault, low = v.visible; window.__L6.view(56, 40, { pitch: 0.95, lookY: 0.9, density: 0.03 }); const t = L.L.tSlush; const by = L.L.bay5; let nb = 0; if (by) for (const k of by) if (k > 0) nb++; return { low, play: v.visible, slush: t ? Array.from(t.image.data).filter((b) => b).length : -1, bay: nb, black: /^sea\|tb/.test(L.lvl.sea.userData.mat.customProgramCacheKey()) }; });
       beat(`q${q} the vault shows only to a low camera; slush cells in its texture; the Mere's corners on its own level; the black water's material`, vs.low && !vs.play && vs.slush === 8 && vs.bay > 200 && vs.black, vs);
@@ -2691,6 +2692,10 @@ const S = {
         return out;
       });
       beat(`q${q} every prop's switches`, Object.values(sw).every(Boolean), sw);
+      // ---- the Drained Sea dry: the Mere drained to its bed, the Well's mouth at its centre ----
+      const dry = await ev(async () => window.__L6.show({ type: 'drained', mode: 'dry' }));
+      beat(`q${q} drained dry: the Well's mouth`, dry.well && dry.ground, dry);
+      await ev(() => window.__L6.view(58, 150, { level: 0.3, mere: 0, dist: 16, pitch: 0.95 })); await snap(`q${q}-drained-dry`);
       // ---- the Bottom's bench: its water, the glade's garlands, the village's sunk houses ----
       const b = await ev(async () => window.__L6.show({ type: 'bottom' }));
       beat(`q${q} bottom bench built: ground6, the black water, no Mere`, b.groundKey.startsWith('groundPBR|bottom') && b.sea && b.seaQuads > 0 && !(await ev(() => window.__look6.L.bay5)), b);

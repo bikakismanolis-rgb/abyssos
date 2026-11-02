@@ -1,8 +1,9 @@
 // Act VI's props (docs/act6-contract.md, Visuals; act6-design.md, The look). act6Level dresses a layout of gen6.js from
-// L.props (the rime pack's scans where it has one, 'rime/<name>'; the boot sets' props of the stamped crypt and wood in the
-// drowned grade; code for the rest) and the spots the story never changes (keels, skylights, the lure posts, the glade's
-// garlands, the village's sunk houses, the Ketos's neck and the Well's mouth once the Mere is dry, the rope's foot, the
-// vault for the cines). act6Prop builds the props the story owns, each a THREE.Object3D with userData.kind and its
+// L.props (the rime pack's scans where it has one, 'rime/<name>'; the boot sets' props of the stamped crypt and wood, and
+// the village's houses, in the drowned grade; code for the rest) and the spots no one else places (skylights, the glade's
+// garlands, the Well's mouth once the Mere is dry, the rope's foot, the vault for the cines). What gen6 leaves to the zone
+// (world.js act6Zone, from L.spots: hearths, lost lights, lanterns, bells, lures, black lamps, stones, niches, the ring,
+// the ember, the neck) comes from act6Prop, which builds the props the story owns, each a THREE.Object3D with userData.kind and its
 // switches, and a code fallback for every part. No light of their own: the pools that light them are light.js's (true
 // light, `it.lit && it.lightR`) and the layout's (L.lights: the braziers, the fire-pots, the camp fires). Every image has
 // its quality-0 path first (no sparks, no motes, no shafts, half the dark's particles); quality 1 adds them.
@@ -88,9 +89,10 @@ export function drownDef(def) {
   const parts = def.parts.filter((p) => !(p.material?.alphaTest > 0 || (p.material?.transparent && !p.glow))).map((p) => ({ ...p, glow: false, material: p.glow ? DEADGLASS : drownMat(p.material) }));
   return parts.length ? { parts, shadow: def.shadow } : null;
 }
-// I and B wrapped so a boot prop placed through build.js addProp comes out drowned
+// I and B wrapped so a boot prop placed through build.js addProp comes out drowned (what it adds to the group itself, a
+// cobweb, stays as it is)
 function drowned(I, B) {
-  return { I: { add: (type, ...a) => I.add('drowned:' + type, ...a) }, B: { add: (mat, ...a) => B.add('drowned:' + mat, ...a), put: (mat, ...a) => B.put('drowned:' + mat, ...a) } };
+  return { I: { add: (type, ...a) => I.add('drowned:' + type, ...a), group: I.group }, B: { add: (mat, ...a) => B.add('drowned:' + mat, ...a), put: (mat, ...a) => B.put('drowned:' + mat, ...a), group: B.group } };
 }
 
 // ---------- 'c6:' instanced code models ----------
@@ -232,7 +234,7 @@ function shaftMesh(r, hgt, color) {
   const u = { uK: { value: 1 }, uC: { value: new THREE.Color(color) }, uH: { value: hgt } };
   const mat = new THREE.ShaderMaterial({ uniforms: u, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     vertexShader: 'varying vec3 vN; varying vec3 vV; varying float vY; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vN = normalize(mat3(modelMatrix) * normal); vV = normalize(cameraPosition - w.xyz); vY = position.y; gl_Position = projectionMatrix * viewMatrix * w; }',
-    fragmentShader: 'uniform vec3 uC; uniform float uK; uniform float uH; varying vec3 vN; varying vec3 vV; varying float vY; void main(){ float f = pow(abs(dot(normalize(vN), normalize(vV))), 2.0); float y = vY / uH; float a = f * smoothstep(0.0, 0.35, y) * (0.35 + 0.65 * y) * 0.16 * uK; gl_FragColor = vec4(uC * a, a); }' });
+    fragmentShader: 'uniform vec3 uC; uniform float uK; uniform float uH; varying vec3 vN; varying vec3 vV; varying float vY; void main(){ float f = pow(abs(dot(normalize(vN), normalize(vV))), 2.0); float y = vY / uH; float a = f * smoothstep(0.0, 0.35, y) * (0.35 + 0.65 * y) * 0.3 * uK; gl_FragColor = vec4(uC * a, a); }' });
   const m = new THREE.Mesh(geo, mat); m.renderOrder = 2.3;
   return { m, u };
 }
@@ -327,10 +329,7 @@ const PROP6 = {
     if (name) for (const m of keelMeshes(name, [{ x: 0, z: 0, rot: 0, r, h: H }])) g.add(m);
     else g.add(solid6([{ geo: jitter(G.cyl(r * 1.1, r * 0.8, H, 9, 4), r * 0.18, 991), color: 0x3a4a54, o: { y: H / 2 - 1 } }], MAT.stone6));
     if (R.quality >= 1) for (const m of icicleMeshes(Array.from({ length: 5 }, (_, k) => { const a = (k / 5) * Math.PI * 2 + 0.4; return { x: Math.sin(a) * r * 0.95, z: Math.cos(a) * r * 0.95, a, y: 6.4 + (k % 2) * 0.6 }; }))) g.add(m);
-    if (o.window) {
-      const pane = new THREE.Mesh(new THREE.PlaneGeometry(r * 1.1, 2.1), own(new THREE.MeshLambertMaterial({ color: 0x9ab8c8, transparent: true, opacity: 0.32, depthWrite: false, emissive: 0x0a1418 })));
-      pane.position.set(0, 1.25, r * 0.9); pane.renderOrder = 1.6; g.add(pane); g.userData.window = { x: 0, y: 1.25, z: r * 0.75 };
-    }
+    if (o.window) { const wd = keelWindow(r); g.add(wd); g.userData.window = wd.userData.window; }
     return g;
   },
   // a skylight: green-white light falling through thin vault, slow motes in its column and a faint shaft (quality 1 and up;
@@ -343,10 +342,10 @@ const PROP6 = {
     g.userData.r = r;
     return g;
   },
-  // a toppled sea-light: a rime tower (o.v 0-2, towerA-C) lying on its side along local +z, its lantern end (its cut top,
+  // a toppled sea-light: a rime tower (o.v 0-2, or o.kind 'towerA'-'towerC' as gen6's L.spots.lost name it) lying on its side along local +z, its lantern end (its cut top,
   // extras.top) at userData.lampAt; setLit(b) the fire relit lying on its side; code tower when the scan is missing
   toppledLight(o) {
-    const g = new THREE.Group(), v = (o.v ?? 0) % 3, nm = ['towerA', 'towerB', 'towerC'][v], parts = rime(nm), H = [8.6, 9.4, 7.8][v];
+    const g = new THREE.Group(), v = (o.v ?? Math.max(0, ['towerA', 'towerB', 'towerC'].indexOf(o.kind))) % 3, nm = ['towerA', 'towerB', 'towerC'][v], parts = rime(nm), H = [8.6, 9.4, 7.8][v];
     let top = H, rad = 1.5;
     if (parts) {
       const f = fit6(parts, H, 'h'), ex = ENV.extras['rime/' + nm]?.top, body = meshOf(parts, f.k, null, true);
@@ -605,7 +604,9 @@ function rime6(I, B, out, name, p) {
     const f = fit6(parts, want * s, by);
     // (laid flat, the kelp: a mat of strands, not a heap)
     if (name === 'kelp') { I.add('rime:kelp', p.x, p.z, p.r || 0, f.k * 1.3, y - f.y0 * 0.28, f.k * 0.28, f.k * 1.3); return; }
-    I.add('rime:' + name, p.x, p.z, p.r || 0, f.k, (p.y ?? y) - f.y0, f.k, f.k, p.tilt || 0);
+    // (a shack lying on its side, gen6's side: turned over onto its long wall)
+    const tilt = p.side ? 1.45 : p.tilt || 0, lift = p.side ? (f.sz.x * f.k) / 2 * 0.85 : 0;
+    I.add('rime:' + name, p.x, p.z, p.r || 0, f.k, (p.y ?? y) - (p.side ? f.y0 * 0 : f.y0) + lift, f.k, f.k, tilt);
     return;
   }
   // (no scan: the hulls the Act V code boat, the rest left out: dressing only)
@@ -619,8 +620,15 @@ const PLACE6 = {
   pot(p, I, B, out) { PLACE6.brazier({ ...p, pot: true }, I, B, out); },
   // a fire-pit (the Saltborn's at the Well's Foot): lit while the layout lights it (a light within a metre or so)
   firepit(p, I, B, out, L) { const m = act6Prop('hearth6'); m.position.set(p.x, 0, p.z); m.userData.setLit(p.lit ?? (L.lights || []).some((l) => Math.hypot(l.x - p.x, l.z - p.z) < 1.5)); out.group.add(m); out.act6.fires.push(m); },
-  // (p.rad its radius, else 1.6 x p.s; p.r its turn, as every prop's)
-  keel(p, I, B, out) { keel6(I, { x: p.x, z: p.z, r: p.rad ?? (p.s || 1) * 1.6, rot: p.r }, out); },
+  // (gen6: p.s its radius, p.hgt how far up it shows, p.asger the sleeper's keel with its clear face; p.r its turn)
+  keel(p, I, B, out) {
+    keel6(I, { x: p.x, z: p.z, r: p.s ?? 1.6, rot: p.r, h: p.hgt != null ? p.hgt + 1 : undefined }, out);
+    if (p.asger) { const m = keelWindow(p.s ?? 2); m.position.set(p.x, 0, p.z); m.rotation.y = p.r || 0; out.group.add(m); out.act6.asger = m; }
+  },
+  // the village's houses (bottom: tilt and sink, in radians and metres), drowned; the stamped windows' 'bld' too
+  bld(p, I) { house6(I, { x: p.x, z: p.z, rot: p.r, tilt: p.tilt ?? 0, sink: p.sink ?? 0, m: p.m, kit: p.kit, s: p.s }); },
+  // the village square's well, sunk and leaning (the base set's, drowned; the code one standing in without it)
+  well(p, I, B, out, L) { if (ENV.props.sWell) I.add('drowned:env:sWell', p.x, p.z, p.r || 0, 1, p.sunk ? -0.45 : 0, 1, 1, p.sunk ? 0.09 : 0); else addProp(drowned(I, B).B, drowned(I, B).I, p, L, RNG(1), out); },
   stiltFrame(p, I, B) { stiltFrameParts(p, B); },
   lurePost(p, I) { I.add('c6:lurePost', p.x, p.z, p.r || 0, 1, 0); },
   garland(p, I, B, out) { const m = act6Prop('garland', { len: p.len, seed: Math.round(p.x * 7) }); m.position.set(p.x, p.y ?? 2, p.z); m.rotation.y = p.r || 0; out.group.add(m); },
@@ -638,7 +646,7 @@ PLACE6.coastCliff = PLACE6.rockFace;
 // the keels of one rock scan as instanced meshes in the 'icy:' material (instDef5's, graded for the dark: keelMat): each
 // stretched tall (o.h, 16 m: from under the floor up past the vault) and hung upside down, as a keel hangs from the ice
 // (what faced the sky faces the floor, so no snow lies on it), its pale faces darkened by an instance colour
-const KEEL_C = new THREE.Color(0.42, 0.47, 0.52);
+const KEEL_C = new THREE.Color(0.32, 0.37, 0.42);
 // (the ice's own material graded for the dark below: its sky rim a third as strong (that sky is the vault's dark), and
 // fading upward into the dark it hangs from, so a keel never ends on a top the play camera sees)
 const KEELM = new Map();
@@ -681,12 +689,18 @@ function keelMeshes(name, list) {
     return im;
   });
 }
+// the clear face of a sleeper's keel (Asger's): a pane of clear ice toward local +z, the figure behind it the story's
+function keelWindow(r) {
+  const g = new THREE.Group(), pane = new THREE.Mesh(new THREE.PlaneGeometry(r * 1.1, 2.1), own(new THREE.MeshLambertMaterial({ color: 0x5a7886, transparent: true, opacity: 0.34, depthWrite: false, emissive: 0x060c10 })));
+  pane.position.set(0, 1.25, r * 0.9); pane.renderOrder = 1.6; g.add(pane); g.userData.window = { x: 0, y: 1.25, z: r * 0.75 };
+  return g;
+}
 // a keel of the layout: its body gathered for keelMeshes (act6Level draws them), icicles round its lip and a fallen slab or
 // two at its foot (quality 1 and up)
 function keel6(I, k, out) {
   const r = k.r ?? 1.6, name = rockAt(k.x, k.z); if (!name) return;
   const rot = k.rot ?? hash2(k.x, k.z) * 6.28;
-  (out.keels6[name] ||= []).push({ x: k.x, z: k.z, rot, r, sx: 0.85 + hash2(k.z, k.x) * 0.3 });
+  (out.keels6[name] ||= []).push({ x: k.x, z: k.z, rot, r, h: k.h, sx: 0.85 + hash2(k.z, k.x) * 0.3 });
   out.act6.keels++;
   if (R.quality < 1) return;
   for (let j = 0; j < 4; j++) { const a = rot + (j / 4) * Math.PI * 2 + 0.3; out.icicles6.push({ x: k.x + Math.sin(a) * r * 0.92, z: k.z + Math.cos(a) * r * 0.92, a, y: 6.4 + (j % 2) * 0.6 }); }
@@ -694,11 +708,12 @@ function keel6(I, k, out) {
 }
 // a village house of the Forgotten Village (bottom: L.spots.houses), tilted and sunk, drowned: the village pack's house, or
 // the KayKit one standing in
+// (h: x, z, rot, tilt (radians, about its own z), sink (metres), m and kit (gen6's; else one by k))
 const HOUSES6 = [['hLong', 'building_home_B_yellow'], ['hTall', 'building_home_A_red'], ['hManor', 'building_home_A_green'], ['hStilt', 'building_home_B_yellow']];
-function house6(I, h, k) {
-  const [m, kit] = HOUSES6[k % HOUSES6.length], tilt = (h.tilt ?? 6) * (Math.PI / 180) * (k % 2 ? 1 : -1), y = -(h.sink ?? 0.5);
-  if (ENV.props[m]) I.add('drowned:env:' + m, h.x, h.z, h.rot ?? h.r ?? 0, 1, y, 1, 1, tilt);
-  else if (KIT.town?.[kit]) I.add('drowned:kit:town/' + kit, h.x, h.z, h.rot ?? h.r ?? 0, KIT_SCALE.town, y, KIT_SCALE.town, KIT_SCALE.town, tilt);
+function house6(I, h, k = 0) {
+  const m = h.m || HOUSES6[k % HOUSES6.length][0], kit = h.kit || HOUSES6[k % HOUSES6.length][1], tilt = h.tilt ?? 0.1, y = -(h.sink ?? 0.5), s = h.s || 1;
+  if (ENV.props[m]) I.add('drowned:env:' + m, h.x, h.z, h.rot ?? h.r ?? 0, s, y, s, s, tilt);
+  else if (KIT.town?.[kit]) I.add('drowned:kit:town/' + kit, h.x, h.z, h.rot ?? h.r ?? 0, KIT_SCALE.town * s, y, KIT_SCALE.town * s, KIT_SCALE.town * s, tilt);
 }
 // the Well's mouth at the drained Mere's centre (mode dry): a low ring of black stones round the dark of the shaft
 function wellMouth(out, w) {
@@ -709,12 +724,13 @@ function wellMouth(out, w) {
   return g;
 }
 
-// Dresses an Act VI layout (buildLevel): its props, the spots the story never changes, the vault for the cines. Writes
-// out.act6 = { braziers, fires, sky, keels (a count), rope, well, arch, vault } for world.js (act6Zone) to find them
+// Dresses an Act VI layout (buildLevel): its props, the spots no one else places, the vault for the cines. Writes
+// out.act6 = { braziers, fires, sky, keels (a count), rope, well, asger (the sleeper's pane), vault } for world.js
+// (act6Zone) to find them
 export function act6Level(L, I, B, out) {
   mats(); mats6();
   const S = L.spots || {}, rng = RNG((L.seed || 1) * 13 + 6), boot = drowned(I, B), props = L.props || [], has = (t) => props.some((p) => p.t === t);
-  out.act6 = { braziers: [], fires: [], sky: [], keels: 0, rope: null, well: null, arch: null, vault: null };
+  out.act6 = { braziers: [], fires: [], sky: [], keels: 0, rope: null, well: null, asger: null, vault: null };
   out.keels6 = {}; out.icicles6 = [];
   for (const p of props) {
     const f = PLACE6[p.t];
@@ -728,17 +744,14 @@ export function act6Level(L, I, B, out) {
   for (const m of icicleMeshes(out.icicles6)) out.group.add(m);
   // the skylights' columns (their pools are light.js's, o.light false; systems dims them at the high water: dim(k))
   for (const s of S.sky || []) { const m = act6Prop('skylight', { r: s.r }); m.position.set(s.x, 0, s.z); out.group.add(m); out.act6.sky.push(m); }
-  // the Falselights' lure posts (their bait and its false light are combat's)
-  if (!has('lurePost')) for (const l of S.lures || []) I.add('c6:lurePost', l.x, l.z, l.r ?? Math.atan2((l.bait?.x ?? l.x) - l.x, (l.bait?.z ?? l.z + 1) - l.z) - Math.PI / 2, 1, 0);
   // the garland glade's garlands, hung round its rim between the trees (bottom)
   if (S.glade && !has('garland')) {
     const n = 8 + Math.floor(hash2(S.glade.x, S.glade.z) * 5);
     for (let k = 0; k < n; k++) { const a = (k / n) * Math.PI * 2 + hash2(k, S.glade.x) * 0.4, d = (S.glade.r ?? 5) - 0.4; PLACE6.garland({ x: S.glade.x + Math.sin(a) * d, z: S.glade.z + Math.cos(a) * d, y: 1.7 + hash2(S.glade.z, k) * 0.8, r: a + Math.PI / 2, len: 1.3 + hash2(k, S.glade.z) * 0.9 }, I, B, out); }
   }
-  // the Forgotten Village's houses, tilted and sunk (bottom)
-  (S.houses || []).forEach((h, k) => house6(I, h, k));
-  // the Drained Sea once the Mere is dry: the Ketos's neck as an arch, the Well's mouth at the centre
-  if (L.mode === 'dry' && S.arch) { const m = act6Prop('neckArch', { len: S.arch.len ?? 14 }); m.position.set(S.arch.x, 0, S.arch.z); m.rotation.y = S.arch.rot || 0; out.group.add(m); out.act6.arch = m; }
+  // the Forgotten Village's houses, tilted and sunk (bottom), when the props do not carry them ('bld')
+  if (!has('bld')) (S.houses || []).forEach((h, k) => house6(I, h, k));
+  // the Drained Sea once the Mere is dry: the Well's mouth at its centre (the Ketos's neck is the zone's, act6Prop)
   if (L.mode === 'dry' && S.well && L.type === 'drained') out.act6.well = wellMouth(out, S.well);
   // the rope's foot at the Rope camp (drained), hanging down out of the vault
   if (L.type === 'drained' && S.rope) { const m = act6Prop('ropeWinch', { foot: true }); m.position.set(S.rope.x, 0, S.rope.z); out.group.add(m); out.act6.rope = m; }
