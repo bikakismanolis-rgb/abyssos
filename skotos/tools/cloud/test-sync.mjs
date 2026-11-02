@@ -735,6 +735,44 @@ await T('heroes moved by hand: out to a file, in on the other side, the further 
   ok(r.ok && r.refused === 3 && !SV.storedHeroes().some((h) => h.id === 'hZ'), 'heroes this version cannot read are left out', r);
 });
 
+await T('a crafted heroes file: markup, numbers that are none, odd ids, oversize, too many: refused; imported backups are routine', async () => {
+  fresh([hero('hA', { level: 12 }), hero('hB', { cls: 'mage', level: 20 })], 'hA');
+  const bad = [
+    hero('hM', { level: 30, mlvl: '<img src=x onerror="localStorage.clear()">' }),
+    hero('hN', { level: 30, mxp: { a: 1 } }),
+    hero('hF', { flags: { q: '<b>x</b>' } }),
+    hero('hK', { flags: { '<i>': true } }),
+    hero('hD', { diff: 'length' }),
+    hero('constructor'), hero('toString'),
+    hero('hS', { flags: { pad: 'y'.repeat(100 * 1024) } })
+  ];
+  const r = SV.importHeroes(JSON.stringify({ k: SV.MOVE_KIND, v: 1, heroes: bad }));
+  ok(r.ok && r.refused === bad.length && SV.storedHeroes().length === 2, 'every crafted record refused', r);
+  ok(SV.heroFits(bad[0]) === 'bad_data' && SV.heroRepairable({ id: 'x' }) === false, 'markup is bad data, never repairable');
+  ok(SV.importHeroes(JSON.stringify(Array.from({ length: 49 }, (_, i) => hero('hq' + i)))).ok === false, 'more heroes than a file holds: refused');
+  // a damaged but honest record (negative gold) is still the game's to repair, not bad data
+  ok(SV.heroFits(hero('hG', { gold: -5 })) === null, 'negative gold: repairable, not refused');
+  // an imported copy kept as a backup is routine: it never pushes out the only copy of a deleted hero
+  SV.deleteHero('hB');
+  for (let i = 0; i < 8; i++) SV.importHeroes(JSON.stringify([hero('hA', { level: 1, xp: i })]));
+  ok(SV.backups().some((b) => b.why === 'deleted' && b.hero.id === 'hB'), 'the deleted hero\'s copy stays', bk());
+  // the mastery numbers of a hero are made whole in the page's copy
+  fresh([hero('hX', { level: 50, mlvl: -3, mxp: -1 })], 'hX');
+  const hx = G.save.heroes.find((h) => h.id === 'hX');
+  ok(hx.mlvl === 0 && hx.mxp === 0, 'mastery numbers made whole', { mlvl: hx.mlvl, mxp: hx.mxp });
+});
+
+await T('storage full: a new backup goes before older ones kept for a conflict or a deletion', async () => {
+  fresh([hero('hA', { level: 12 })], 'hA');
+  SV.backupHero(hero('hB', { level: 9 }), 'deleted');
+  SV.backupHero(hero('hC', { level: 9 }), 'conflict');
+  const set = localStorage.setItem;
+  localStorage.setItem = (k, v) => { if (k.startsWith('skotos.cloud.bak.v1') && v.length > 3 * JSON.stringify(SV.backups()).length / 2 + 100) throw new Error('QuotaExceededError'); return set(k, v); };
+  try { SV.backupHero(hero('hD', { level: 9, flags: { pad: 'z'.repeat(20000) } }), 'conflict'); } finally { localStorage.setItem = set; }
+  const kept = SV.backups().map((b) => b.why + ':' + b.hero.id);
+  ok(kept.includes('deleted:hB') && kept.includes('conflict:hC'), 'the older protected copies stay', kept);
+});
+
 await T('a hero moved in that was deleted here comes back and stays; the hero being played is never replaced', async () => {
   fresh([hero('hA', { level: 12, played: 1000 }), hero('hB', { cls: 'mage', level: 20 })], 'hA');
   const text = SV.exportHeroes();

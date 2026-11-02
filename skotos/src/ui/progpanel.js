@@ -16,7 +16,7 @@ const pips = (r, max = SKILL_MAX_RANK) => `<span class="pp">${Array.from({ lengt
 
 export function renderSkills(P, head) {
   const h = G.hero;
-  const tabs = `<div class="tabs pg-tabs"><button class="tab ${P.tab ? '' : 'on'}" data-a="ptab:0">${ICON.book}${t('prog.tab.skills')}</button><button class="tab ${P.tab ? 'on' : ''}" data-a="ptab:1">${ICON.mastery}${t('prog.tab.mastery')}${h.level >= MAX_LEVEL ? ` <b class="ml">${h.mlvl || 0}</b>` : ''}</button></div>`;
+  const tabs = `<div class="tabs pg-tabs"><button class="tab ${P.tab ? '' : 'on'}" data-a="ptab:0">${ICON.book}${t('prog.tab.skills')}</button><button class="tab ${P.tab ? 'on' : ''}" data-a="ptab:1">${ICON.mastery}${t('prog.tab.mastery')}${h.level >= MAX_LEVEL ? ` <b class="ml">${+h.mlvl || 0}</b>` : ''}</button></div>`;
   const pts = `<div class="pg-pts ${h.points > 0 ? 'has' : ''}">${ICON.star}<b>${t('prog.points', h.points)}</b></div>`;
   const top = `<div class="pn-h pg-h">${tabs}${pts}<button class="x" data-a="close" aria-label="${t('panel.close')}">${ICON.close}</button></div>`;
   void head;
@@ -82,7 +82,7 @@ function mastery(P) {
   // (why it is greyed out, in words: a title is never seen on a phone)
   const why = spent <= 0 ? '' : !inTown() ? t('prog.respecTown') : h.gold < cost ? t('prog.respecGold', fmt(h.gold)) : '';
   const rs = `<div class="pg-rsw"><button class="btn ${P.sure ? 'red' : 'ghost'} sm pg-rs" data-a="respec" ${inTown() && spent > 0 && h.gold >= cost ? '' : 'disabled'} title="${t('prog.respec.d', fmt(cost))}">${ICON.reset}${P.sure ? t('prog.respecSure') : t('prog.respec')} <small>${ICON.coin}${fmtK(cost)}</small></button>${why ? `<span class="why">${why}</span>` : ''}</div>`;
-  const crest = `<div class="pg-crest">${ICON.mastery}<b>${mast ? h.mlvl || 0 : '·'}</b></div>`;
+  const crest = `<div class="pg-crest">${ICON.mastery}<b>${mast ? +h.mlvl || 0 : '·'}</b></div>`;
   const top = `<div class="pg-mt">${crest}<div class="pg-mx"><h3>${mast ? t('mast.rank', h.mlvl || 0) : t('mast.title')}</h3>${bar}</div>${rs}</div><p class="pg-intro">${t('mast.intro')}</p>`;
   const tiles = MASTERY.map((m) => {
     const r = h.mast?.[m.id] || 0, v = masteryValue(m, r, h.level), nx = masteryValue(m, r + 1, h.level) - v;

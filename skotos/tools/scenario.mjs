@@ -1348,7 +1348,7 @@ const S = {
     // the claude.ai file in through the picker
     const [fc] = await Promise.all([pg.waitForEvent('filechooser', { timeout: 20000 }), pg.click('[data-a="climport"]')]);
     await fc.setFiles({ name: art?.filename || 'heroes.json', mimeType: 'application/json', buffer: Buffer.from(art?.data || '') });
-    await pg.waitForFunction(() => /\d/.test(document.getElementById('cl-msg')?.textContent || ''), null, { timeout: 20000 }).catch(() => {});
+    await pg.waitForFunction(() => /Εισαγωγή\.|Import\./.test(document.getElementById('cl-msg')?.textContent || ''), null, { timeout: 20000 }).catch(() => {});
     r.in1 = { msg: await msg(), stored: await stored(), title: await pg.evaluate(() => window.__G.save.heroes.length), same: await pg.evaluate((t) => { const f = JSON.parse(t), d = JSON.parse(localStorage.getItem('skotos.save.v1')); return f.heroes.every((x) => JSON.stringify(d.heroes.find((y) => y.id === x.id)) === JSON.stringify(x)); }, art?.data || '{"heroes":[]}') };
     // the same file again, as pasted text: nothing to do
     await pg.click('[data-a="clpaste"]'); await pg.waitForTimeout(200);
@@ -1368,7 +1368,7 @@ const S = {
     await pg.waitForFunction(async () => { const C = (await import('/src/game/cloud.js')).CLOUD; return C.state === 'on' && !C.busy; }, null, { timeout: 60000 }).catch(() => {});
     const [fc2] = await Promise.all([pg.waitForEvent('filechooser', { timeout: 20000 }), pg.click('[data-a="climport"]')]);
     await fc2.setFiles({ name: 'web.json', mimeType: 'application/json', buffer: Buffer.from(webText || '') });
-    await pg.waitForFunction(() => /\d/.test(document.getElementById('cl-msg')?.textContent || ''), null, { timeout: 20000 }).catch(() => {});
+    await pg.waitForFunction(() => /Εισαγωγή\.|Import\./.test(document.getElementById('cl-msg')?.textContent || ''), null, { timeout: 20000 }).catch(() => {});
     await pg.evaluate(async () => (await import('/src/game/cloud.js')).syncNow('test'));
     r.back = { stored: await stored(), cloud: await pg.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('__fakecloud') || '{}')).map((k) => k.split('/').pop()).sort()) };
     await pg.evaluate(() => localStorage.removeItem('__xfer'));

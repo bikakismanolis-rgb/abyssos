@@ -124,7 +124,7 @@ export function updateHud(dt) {
   $('xpbar').firstChild.style.transform = `scaleX(${mast ? (h.mxp || 0) / mxpToNext(h.mlvl || 0) : h.xp / xpToNext(h.level)})`;
   if (mast !== S.mast) { S.mast = mast; $('xpbar').classList.toggle('mast', mast); }
   $('lvl').textContent = t('hud.level', h.level);
-  const ml = mast ? String(h.mlvl || 0) : '';
+  const ml = mast ? String(+h.mlvl || 0) : '';
   if (ml !== S.ml) { S.ml = ml; const m = $('mlvl'); m.hidden = !mast; m.innerHTML = ICON.mastery + `<b>${ml}</b>`; m.title = t('mast.rank', ml); }
   $('hurt').style.opacity = hpF < 0.3 ? (0.35 + Math.sin(performance.now() / 180) * 0.25) * (1 - hpF / 0.3) + (S.hurt || 0) : (S.hurt || 0);
   S.hurt = Math.max(0, (S.hurt || 0) - dt * 2);
