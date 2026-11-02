@@ -216,12 +216,13 @@ void main() {
   p.y = 0.15 + y * uH; p.x += sin(t * 5.1 + aPh * 11.0) * 0.35; p.z += cos(t * 4.3 + aPh * 5.0) * 0.25;
   vA = sin(y * 3.1416) * (1.0 - uThin);
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
-  gl_PointSize = (0.75 + aPh * 0.6) * (1.0 - uThin * 0.6) * projectionMatrix[1][1] * uVH * 0.5 / max(-mv.z, 0.5);
+  gl_PointSize = (0.95 + aPh * 0.7) * (1.0 - uThin * 0.6) * projectionMatrix[1][1] * uVH * 0.5 / max(-mv.z, 0.5);
   gl_Position = projectionMatrix * mv;
 }`,
-    // (each mote black-violet at its heart, its edge the dark's violet: black alone on the black floor never read as a wall)
+    // (each mote a soft puff, black-violet at its heart and greying toward the dark's violet as it thins out: black alone on
+    // the black floor never read as a wall, and a violet rim round each read as a curtain of soap bubbles)
     fragmentShader: `varying float vA;
-void main() { vec2 q = gl_PointCoord - 0.5; float d = dot(q, q) * 4.0, a = (1.0 - smoothstep(0.45, 1.0, d)) * vA * 0.75; if (a < 0.01) discard; gl_FragColor = vec4(mix(vec3(0.018, 0.01, 0.028), vec3(0.15, 0.11, 0.3), smoothstep(0.3, 0.8, d)), a); }` });
+void main() { vec2 q = gl_PointCoord - 0.5; float d = dot(q, q) * 4.0, a = (1.0 - d) * (1.0 - d) * vA * 0.85; if (a < 0.01) discard; gl_FragColor = vec4(mix(vec3(0.018, 0.01, 0.028), vec3(0.17, 0.12, 0.34), d), a); }` });
   const pts = new THREE.Points(geo, mat); pts.renderOrder = 2.4;
   pts.onBeforeRender = (r) => { u.uVH.value = r.getDrawingBufferSize(_v2).y; };
   return { pts, u };
@@ -321,7 +322,7 @@ const PROP6 = {
     g.userData.setLit = (b) => { lit = !!b; g.userData.lit = lit; look(); };
     g.userData.flare = (k = 1) => { fk = clamp(k, 0, 2); look(); };
     g.userData.flameAt = { x: 0, y, z: 0.42 };
-    look();
+    g.userData.lit = true; look();
     return g;
   },
   // a shadow-wall across the Stair's head: the dark's particles rising over its band and a dark strip on the floor; o.len,
@@ -347,7 +348,7 @@ const PROP6 = {
     const seam = new THREE.Mesh(new THREE.PlaneGeometry(len + 0.6, dep + 1.2).rotateX(-Math.PI / 2), own(new THREE.MeshBasicMaterial({ map: seamTexture(), color: 0x8a70ff, transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false })));
     seam.position.y = 0.045; seam.renderOrder = 2.05; g.add(seam);
     let sk = 1;
-    seam.onBeforeRender = () => { seam.material.opacity = (0.3 + 0.12 * Math.sin(R.time * Math.PI)) * sk; };
+    seam.onBeforeRender = () => { seam.material.opacity = (0.45 + 0.12 * Math.sin(R.time * Math.PI)) * sk; };
     g.userData.thin = (dur = 2, done) => tween(g, dur, (k) => { P.u.uThin.value = k; strip.material.opacity = 0.85 * (1 - k); veil.material.opacity = 0.55 * (1 - k); sk = 1 - k; }, () => { g.visible = false; g.userData.open = true; done?.(); });
     return g;
   },
@@ -813,10 +814,15 @@ export function act6Level(L, I, B, out) {
   const S = L.spots || {}, rng = RNG((L.seed || 1) * 13 + 6), boot = drowned(I, B, L.type === 'drained' ? 'silt' : 'drowned'), props = L.props || [], has = (t) => props.some((p) => p.t === t);
   out.act6 = { braziers: [], fires: [], sky: [], keels: 0, rope: null, well: null, asger: null, vault: null, hearths: [], lost: [], lures: [], wrecks: [], bells: [], lamps: [], walls: [], stones: [], niches: [], asgerBrazier: null, neck: null, ember: null, leif: null, centre: null, ring: null };
   out.keels6 = {};
+  // (the drowned wood's trees stand bare: the scans' leaves are dropped by the grade (drownDef); where the build draws the
+  // code trees instead (quality 0, or no trees pack), their crowns are solid and would stand as grey boulders, so the shipped
+  // dead tree stands in for them, thinned as the scans are)
+  const bare = L.type === 'bottom' && !(R.quality >= 1 && ENV.props.treePine);
   for (const p of props) {
     const f = PLACE6[p.t];
     if (f) f(p, I, B, out, L);
     else if (DROP6.has(p.t)) continue;
+    else if (bare && (p.t === 'oak' || p.t === 'pine')) { if (hash2(p.x * 1.7, p.z * 0.9) < 0.55) addProp(boot.B, boot.I, { ...p, t: 'dead' }, L, rng, out); }
     // (a boot set's prop, the stamped crypt's and wood's: the shipped placement, drowned)
     else addProp(boot.B, boot.I, p, L, rng, out);
   }
@@ -825,10 +831,20 @@ export function act6Level(L, I, B, out) {
   for (const name in out.keels6) for (const m of keelMeshes(name, out.keels6[name])) out.group.add(m);
   // the skylights' columns (their pools are light.js's, o.light false; systems dims them at the high water: dim(k))
   for (const s of S.sky || []) { const m = act6Prop('skylight', { r: s.r }); m.position.set(s.x, 0, s.z); out.group.add(m); out.act6.sky.push(m); }
-  // the garland glade's garlands, hung round its rim between the trees (bottom)
+  // the garland glade's garlands (bottom), hung between its own ring of dead trees just outside the clearing (on the rock
+  // round it, never on the path in): laid round the rim with nothing to hang from, they floated in the air
   if (S.glade && !has('garland')) {
-    const n = 8 + Math.floor(hash2(S.glade.x, S.glade.z) * 5);
-    for (let k = 0; k < n; k++) { const a = (k / n) * Math.PI * 2 + hash2(k, S.glade.x) * 0.4, d = (S.glade.r ?? 5) - 0.4; PLACE6.garland({ x: S.glade.x + Math.sin(a) * d, z: S.glade.z + Math.cos(a) * d, y: 1.7 + hash2(S.glade.z, k) * 0.8, r: a + Math.PI / 2, len: 1.3 + hash2(k, S.glade.z) * 0.9 }, I, B, out); }
+    const g = S.glade, n = 8 + Math.floor(hash2(g.x, g.z) * 5), rr = (g.r ?? 5) + 0.7, posts = [];
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2 + hash2(k, g.x) * 0.3, x = g.x + Math.sin(a) * rr, z = g.z + Math.cos(a) * rr, cx = Math.floor(x), cz = Math.floor(z);
+      posts.push(cx < 0 || cz < 0 || cx >= L.w || cz >= L.h || L.cells[cz * L.w + cx] ? null : { x, z });
+    }
+    for (const p of posts) if (p) I.add('drowned:dead', p.x, p.z, hash2(p.x, p.z) * 6.28, 0.85 + hash2(p.z, p.x) * 0.25, 0);
+    posts.forEach((p, k) => {
+      const q = posts[(k + 1) % n]; if (!p || !q) return;
+      const len = Math.hypot(q.x - p.x, q.z - p.z) * 0.92;
+      PLACE6.garland({ x: (p.x + q.x) / 2, z: (p.z + q.z) / 2, y: 2.0 + hash2(p.z, k) * 0.5, r: Math.atan2(-(q.z - p.z), q.x - p.x), len }, I, B, out);
+    });
   }
   // the Forgotten Village's houses, tilted and sunk (bottom), when the props do not carry them ('bld')
   if (!has('bld')) (S.houses || []).forEach((h, k) => house6(I, h, k));
