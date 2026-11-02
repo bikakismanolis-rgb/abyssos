@@ -188,11 +188,13 @@ export async function syncAll(backend, store, o = {}) {
     if (l) R.replaced.push(id);
   };
 
-  // (a cloud copy this page cannot keep as it is (check: a newer version's, a higher save format) is weighed against
-  // nothing: neither taken nor written over, however much further on or later played this copy is; the base stays as it
-  // was, so a lower format never replaces a higher one. Unless the player took the hero up repaired on this page (its
-  // base marked lost and forced, save.js): that copy was theirs to choose, its record kept here as a backup first)
-  const newer = (id, got, b) => { if (b?.forced) return false; const bad = store.check?.(got.h); if (bad) fail(id, { code: bad }); return !!bad; };
+  // (a cloud copy of a newer version (check 'newer': a class, item or blessing this page does not know, a higher save
+  // format) is weighed against nothing: neither taken nor written over, however much further on or later played this
+  // copy is; the base stays as it was, so a lower format never replaces a higher one. Unless the player took the hero up
+  // repaired on this page (its base marked lost and forced, save.js): that copy was theirs to choose, its record kept
+  // here as a backup first. A damaged one (check 'bad_data') is weighed as any other copy: pull never takes it, and a
+  // copy here further on goes up over it, the damaged record kept here as a conflict backup first)
+  const newer = (id, got, b) => { if (b?.forced || store.check?.(got.h) !== 'newer') return false; fail(id, { code: 'newer' }); return true; };
 
   for (const id of ids) {
     if (stop) break;

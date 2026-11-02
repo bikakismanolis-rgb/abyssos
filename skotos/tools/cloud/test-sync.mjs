@@ -477,6 +477,33 @@ await T('a copy of a higher save format is never written over by this one, howev
   ok(!t.pulled.length && NEW.hero('hF').fmt === SAVE_FMT + 1 && NEW.hero('hF').gold === 5, 'the newer device keeps its copy', t);
 });
 
+// (only a newer version's copy is weighed against nothing (Saves: `store.check(got.h) === 'newer'`): a damaged one,
+// bad_data, is weighed as any other, so a copy here further on mends it, the damaged record kept aside first)
+await T('a damaged cloud copy in a conflict is written over by a copy here further on', async () => {
+  const A = artifactDb(), doc = () => JSON.parse(A.docs.get('data/users/u1/h-hD').data);
+  const BAD = device(); BAD.B = await artifactBackend(A.claude('u1'));
+  const OB = await artifactBackend(A.claude('u1'));
+  fresh([hero('hD', { level: 20, xp: 100, played: 1000 })], null);
+  await syncAll(OB, real(SV)); await sync(BAD);
+  // a damaged record goes up from another device (a number that is none), behind this page's copy
+  BAD.play('hD', (h) => { h.gold = 'lots'; h.level = 21; }, 2000); await sync(BAD);
+  ok(SV.heroFits(doc()) === 'bad_data', 'the cloud\'s copy is damaged (bad_data)');
+  // this page plays its own further on: both sides changed
+  G.hero = G.save.heroes.find((h) => h.id === 'hD'); G.hero.level = 30; G.hero.xp = 999; G.hero.stats.kills = 500; SV.writeSave(); G.hero = null;
+  const r = await syncAll(OB, real(SV));
+  ok(r.pushed.join() === 'hD' && !r.pulled.length && !r.errors.length, 'this copy, further on, goes up over the damaged one', r);
+  ok(doc().gold === 100 && doc().level === 30 && SV.heroFits(doc()) === null, 'the cloud\'s copy is whole again', doc());
+  ok(SV.backups().some((b) => b.hero.id === 'hD' && b.why === 'conflict' && b.hero.gold === 'lots'), 'the damaged record kept as a conflict backup', bk());
+  const s = await syncAll(OB, real(SV)), t = await sync(BAD);
+  ok(!s.pushed.length && !s.pulled.length && !s.errors.length, 'the next sync: nothing more to do', s);
+  ok(t.pulled.join() === 'hD' && BAD.hero('hD').gold === 100 && BAD.hero('hD').level === 30, 'and the other device takes the mended copy', t);
+  // the other way: the damaged copy further on is still never taken (pull refuses it), and this copy stays as it is
+  BAD.play('hD', (h) => { h.gold = 'lots'; h.level = 40; }, 9000); await sync(BAD);
+  G.hero = G.save.heroes.find((h) => h.id === 'hD'); G.hero.gold = 101; SV.writeSave(); G.hero = null;
+  const u = await syncAll(OB, real(SV));
+  ok(!u.pulled.length && !u.pushed.length && u.errors.some((e) => e.id === 'hD' && e.code === 'bad_data') && SV.storedHeroes().find((h) => h.id === 'hD').gold === 101, 'a damaged copy further on is not taken: bad_data, this copy kept', u);
+});
+
 await T('a restore holds against another page\'s deletion', async () => {
   fresh([hero('hX', { level: 44 }), hero('hY', { cls: 'mage' })], 'hX');
   const SA = await import('../../src/game/save.js?tab=A'), SB = await import('../../src/game/save.js?tab=B');
