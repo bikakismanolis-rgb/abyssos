@@ -54,13 +54,26 @@ const sprite6 = (c, s, o = {}) => { const h = new THREE.Sprite(own(new THREE.Spr
 // ---------- the drowned grade (the stamped crypt's and wood's boot props, the village's houses) ----------
 // Black-blue and wet (roughness 0.3 where the material has one), its own colour all but gone, a pale rime on what faces up.
 // The source material's own patches are kept and this one laid after them (cached per material); a basic (unlit) material
-// and a glow part stay as they are
+// and a glow part stay as they are. (The studio environment at its old 0.45 on a wet roughness laid a pale sheen down
+// every drowned trunk and house wall, and a brighter rime drew every wall's, pillar's and stump's top as a white outline
+// under the hemisphere's light: in the Bottom's dark both read as white models)
+// kind 'silt': the Drained Sea's own (its rocks, the rime pack's hulls, shacks and bones, the crates): wet and darkened
+// toward the silt's grey-green, a third of its own colour kept, no rime (nothing up there freezes; the sea only left)
 const DROWN = new Map();
-export function drownMat(src) {
+const GRADE6 = {
+  drowned: `{ float dl = dot(diffuseColor.rgb, vec3(0.3, 0.55, 0.15));
+    diffuseColor.rgb = mix(vec3(dl), diffuseColor.rgb, 0.2) * vec3(0.23, 0.27, 0.35);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.2, 0.22, 0.25) * (0.75 + dl * 0.4), smoothstep(0.72, 0.95, normalize(vDrN).y) * 0.32); }`,
+  silt: `{ float dl = dot(diffuseColor.rgb, vec3(0.3, 0.55, 0.15));
+    diffuseColor.rgb = mix(vec3(dl), diffuseColor.rgb, 0.34) * vec3(0.4, 0.42, 0.4);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.2, 0.21, 0.19) * (0.8 + dl * 0.4), smoothstep(0.75, 0.97, normalize(vDrN).y) * 0.3); }`
+};
+export function drownMat(src, kind = 'drowned') {
   if (!src || src.isMeshBasicMaterial || src.isSpriteMaterial || src.transparent) return src;
-  if (DROWN.has(src)) return DROWN.get(src);
+  const ck = kind === 'drowned' ? src : kind + ':' + src.uuid;
+  if (DROWN.has(ck)) return DROWN.get(ck);
   const m = src.clone(), prev = src.onBeforeCompile, key = src.customProgramCacheKey?.() || src.type;
-  if (m.isMeshStandardMaterial) { m.roughness = 0.3; m.metalness = 0; m.envMapIntensity = 0.45; }
+  if (m.isMeshStandardMaterial) { m.roughness = kind === 'silt' ? 0.45 : 0.3; m.metalness = 0; m.envMapIntensity = 0.12; }
   m.onBeforeCompile = (sh, r) => {
     prev?.call(src, sh, r);
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vDrN;')
@@ -72,28 +85,27 @@ export function drownMat(src) {
     vDrN = normalize(mat3(modelMatrix) * dn); }`);
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vDrN;')
       .replace('#include <alphamap_fragment>', `#include <alphamap_fragment>
-  // (drowned: the colour drained to a cold black-blue, the rime on top faces)
-  { float dl = dot(diffuseColor.rgb, vec3(0.3, 0.55, 0.15));
-    diffuseColor.rgb = mix(vec3(dl), diffuseColor.rgb, 0.2) * vec3(0.23, 0.27, 0.35);
-    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.3, 0.33, 0.37) * (0.7 + dl * 0.6), smoothstep(0.72, 0.95, normalize(vDrN).y) * 0.42); }`);
+  // (${kind}: the colour drained ${kind === 'silt' ? 'and wet, the silt settled on top' : 'to a cold black-blue, the rime on top faces'})
+  ${GRADE6[kind]}`);
   };
-  m.customProgramCacheKey = () => key + '|drowned';
-  DROWN.set(src, m);
+  m.customProgramCacheKey = () => key + '|' + kind;
+  DROWN.set(ck, m);
   return m;
 }
-// an Instancer type's parts in the drowned grade: leaves dropped (the wood stands bare: an alpha-tested or see-through part
-// of a tree scan), glow parts put out (a drowned house's windows are dark)
+// an Instancer type's parts in the drowned grade (or kind's): leaves dropped (the wood stands bare: an alpha-tested or
+// see-through part of a tree scan), glow parts put out (a drowned house's windows are dark)
 let DEADGLASS = null;
-export function drownDef(def) {
+export function drownDef(def, kind = 'drowned') {
   if (!def) return null;
   DEADGLASS ||= new THREE.MeshBasicMaterial({ color: 0x06080c });
-  const parts = def.parts.filter((p) => !(p.material?.alphaTest > 0 || (p.material?.transparent && !p.glow))).map((p) => ({ ...p, glow: false, material: p.glow ? DEADGLASS : drownMat(p.material) }));
+  const parts = def.parts.filter((p) => !(p.material?.alphaTest > 0 || (p.material?.transparent && !p.glow))).map((p) => ({ ...p, glow: false, material: p.glow ? DEADGLASS : drownMat(p.material, kind) }));
   return parts.length ? { parts, shadow: def.shadow } : null;
 }
-// I and B wrapped so a boot prop placed through build.js addProp comes out drowned (what it adds to the group itself, a
-// cobweb, stays as it is)
-function drowned(I, B) {
-  return { I: { add: (type, ...a) => I.add('drowned:' + type, ...a), group: I.group }, B: { add: (mat, ...a) => B.add('drowned:' + mat, ...a), put: (mat, ...a) => B.put('drowned:' + mat, ...a), group: B.group } };
+// I and B wrapped so a boot prop placed through build.js addProp comes out drowned, or in kind's grade (what it adds to the
+// group itself, a cobweb, stays as it is)
+function drowned(I, B, kind = 'drowned') {
+  const pre = kind + ':';
+  return { I: { add: (type, ...a) => I.add(pre + type, ...a), group: I.group }, B: { add: (mat, ...a) => B.add(pre + mat, ...a), put: (mat, ...a) => B.put(pre + mat, ...a), group: B.group } };
 }
 
 // ---------- 'c6:' instanced code models ----------
@@ -181,6 +193,15 @@ function stripTexture() {
   g.putImageData(im, 0, 0);
   return (stripTex = new THREE.CanvasTexture(c));
 }
+// a shadow-wall's seam: bright along both long edges, nothing between them, fading at the band's ends (alpha only)
+let seamTex = null;
+function seamTexture() {
+  if (seamTex) return seamTex;
+  const c = document.createElement('canvas'); c.width = 64; c.height = 32; const g = c.getContext('2d'), im = g.createImageData(64, 32);
+  for (let y = 0; y < 32; y++) for (let x = 0; x < 64; x++) { const u = Math.min(1, Math.min(x, 63 - x) / 8), e = Math.abs(y - 15.5) / 16, a = u * Math.max(0, 1 - Math.abs(e - 0.8) / 0.16) * (0.8 + 0.2 * Math.sin(x * 0.9 + y)); const i = (y * 64 + x) * 4; im.data[i] = im.data[i + 1] = im.data[i + 2] = 255; im.data[i + 3] = Math.round(clamp(a, 0, 1) * 255); }
+  g.putImageData(im, 0, 0);
+  return (seamTex = new THREE.CanvasTexture(c));
+}
 // the dark's particles over a shadow-wall's band (one draw: points that rise and drift, dark, normal-blended)
 function darkPoints(n, len, dep, hgt) {
   const pos = new Float32Array(n * 3), ph = new Float32Array(n), rr = RNG(n * 7 + Math.round(len * 13));
@@ -195,11 +216,12 @@ void main() {
   p.y = 0.15 + y * uH; p.x += sin(t * 5.1 + aPh * 11.0) * 0.35; p.z += cos(t * 4.3 + aPh * 5.0) * 0.25;
   vA = sin(y * 3.1416) * (1.0 - uThin);
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
-  gl_PointSize = (1.1 + aPh * 0.9) * (1.0 - uThin * 0.6) * projectionMatrix[1][1] * uVH * 0.5 / max(-mv.z, 0.5);
+  gl_PointSize = (0.75 + aPh * 0.6) * (1.0 - uThin * 0.6) * projectionMatrix[1][1] * uVH * 0.5 / max(-mv.z, 0.5);
   gl_Position = projectionMatrix * mv;
 }`,
+    // (each mote black-violet at its heart, its edge the dark's violet: black alone on the black floor never read as a wall)
     fragmentShader: `varying float vA;
-void main() { vec2 q = gl_PointCoord - 0.5; float a = (1.0 - dot(q, q) * 4.0) * vA * 0.6; if (a < 0.01) discard; gl_FragColor = vec4(0.018, 0.01, 0.028, a); }` });
+void main() { vec2 q = gl_PointCoord - 0.5; float d = dot(q, q) * 4.0, a = (1.0 - smoothstep(0.45, 1.0, d)) * vA * 0.75; if (a < 0.01) discard; gl_FragColor = vec4(mix(vec3(0.018, 0.01, 0.028), vec3(0.15, 0.11, 0.3), smoothstep(0.3, 0.8, d)), a); }` });
   const pts = new THREE.Points(geo, mat); pts.renderOrder = 2.4;
   pts.onBeforeRender = (r) => { u.uVH.value = r.getDrawingBufferSize(_v2).y; };
   return { pts, u };
@@ -320,16 +342,22 @@ const PROP6 = {
     // (a wall of the dark reads as one at a glance: a low veil standing over the strip, darker toward the floor)
     const veil = new THREE.Mesh(new THREE.PlaneGeometry(len, 2.4), own(new THREE.MeshBasicMaterial({ map: stripTexture(), color: 0x05030a, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide })));
     veil.position.y = 1.0; veil.renderOrder = 2.35; g.add(veil);
-    g.userData.thin = (dur = 2, done) => tween(g, dur, (k) => { P.u.uThin.value = k; strip.material.opacity = 0.85 * (1 - k); veil.material.opacity = 0.55 * (1 - k); }, () => { g.visible = false; g.userData.open = true; done?.(); });
+    // (and a seam of the dark's violet along both long edges of its band, breathing slowly (0.5 Hz, far under the flash
+    // rule's three a second), additive over the strip: on the black floor the wall's own dark showed only where her light fell)
+    const seam = new THREE.Mesh(new THREE.PlaneGeometry(len + 0.6, dep + 1.2).rotateX(-Math.PI / 2), own(new THREE.MeshBasicMaterial({ map: seamTexture(), color: 0x8a70ff, transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false })));
+    seam.position.y = 0.045; seam.renderOrder = 2.05; g.add(seam);
+    let sk = 1;
+    seam.onBeforeRender = () => { seam.material.opacity = (0.3 + 0.12 * Math.sin(R.time * Math.PI)) * sk; };
+    g.userData.thin = (dur = 2, done) => tween(g, dur, (k) => { P.u.uThin.value = k; strip.material.opacity = 0.85 * (1 - k); veil.material.opacity = 0.55 * (1 - k); sk = 1 - k; }, () => { g.visible = false; g.userData.open = true; done?.(); });
     return g;
   },
-  // an ice keel reaching down to the floor: an env rock stretched tall in Act V's ice, icicles round its lip (quality 1
-  // and up), fallen slabs at its foot; o.r (1-2.5), o.h (its height, 16), o.window: a clear face toward local +z (Asger's)
+  // an ice keel reaching down to the floor: an env rock stretched tall in Act V's ice, hung upside down and fading into the
+  // dark above; o.r (1-2.5), o.h (its height, 16), o.window: a clear face toward local +z (Asger's). (Its icicles hang where
+  // it meets the vault, which play never sees: a ring of them at the play camera's height read as a crown floating round it)
   keel(o) {
     const g = new THREE.Group(), r = o.r ?? 1.6, H = o.h ?? 16, name = rockAt(o.seed ?? r * 13, r * 7);
     if (name) for (const m of keelMeshes(name, [{ x: 0, z: 0, rot: 0, r, h: H }])) g.add(m);
     else g.add(solid6([{ geo: jitter(G.cyl(r * 1.1, r * 0.8, H, 9, 4), r * 0.18, 991), color: 0x3a4a54, o: { y: H / 2 - 1 } }], MAT.stone6));
-    if (R.quality >= 1) for (const m of icicleMeshes(Array.from({ length: 5 }, (_, k) => { const a = (k / 5) * Math.PI * 2 + 0.4; return { x: Math.sin(a) * r * 0.95, z: Math.cos(a) * r * 0.95, a, y: 6.4 + (k % 2) * 0.6 }; }))) g.add(m);
     if (o.window) { const wd = keelWindow(r); g.add(wd); g.userData.window = wd.userData.window; }
     return g;
   },
@@ -343,10 +371,12 @@ const PROP6 = {
     g.userData.r = r;
     return g;
   },
-  // a toppled sea-light: a rime tower (o.v 0-2, or o.kind 'towerA'-'towerC' as gen6's L.spots.lost name it) lying on its side along local +z, its lantern end (its cut top,
-  // extras.top) at userData.lampAt; setLit(b) the fire relit lying on its side; code tower when the scan is missing
+  // a toppled sea-light: a rime tower (o.v 0-2, or o.kind 'towerA'-'towerC' as gen6's L.spots.lost name it) lying on its
+  // side along local +z from its base at the origin, its lantern end (its cut top, extras.top) at userData.lampAt; o.len
+  // its length (gen6's footprint), o.lampZ where along it its fire-cage fell (the lantern end's interact); setLit(b) the
+  // fire relit lying on its side; code tower when the scan is missing
   toppledLight(o) {
-    const g = new THREE.Group(), v = (o.v ?? Math.max(0, ['towerA', 'towerB', 'towerC'].indexOf(o.kind))) % 3, nm = ['towerA', 'towerB', 'towerC'][v], parts = rime(nm), H = [8.6, 9.4, 7.8][v];
+    const g = new THREE.Group(), v = (o.v ?? Math.max(0, ['towerA', 'towerB', 'towerC'].indexOf(o.kind))) % 3, nm = ['towerA', 'towerB', 'towerC'][v], parts = rime(nm), H = o.len ?? [8.6, 9.4, 7.8][v];
     let top = H, rad = 1.5;
     if (parts) {
       const f = fit6(parts, H, 'h'), ex = ENV.extras['rime/' + nm]?.top, body = meshOf(parts, f.k, null, true);
@@ -357,6 +387,7 @@ const PROP6 = {
       g.add(solid6([{ geo: jitter(G.cyl(1.3, 1.55, H, 12, 2), 0.06, 1001), color: GREY, o: { y: 1.0, z: H / 2, rx: Math.PI / 2 } }, ...Array.from({ length: 7 }, (_, k) => ({ geo: jitter(G.dodeca(0.4 + (k % 3) * 0.15), 0.1, 1002 + k), color: DARKST, o: { x: Math.sin(k * 2.3) * 2.2, y: 0.2, z: H + 0.6 + Math.cos(k * 1.7) * 1.4 } }))], MAT.stone6));
     }
     // (its fire-cage tipped out of the cut top onto the sand)
+    top = o.lampZ != null ? o.lampZ - 0.5 : top;
     const cage = new THREE.Group(); cage.position.set(0.5, 0.25, top + 0.5); cage.rotation.z = 1.2; g.add(cage);
     const bars = [{ geo: G.torus(0.42, 0.045, 4, 12), color: 0x1c1a1a, o: { rx: Math.PI / 2 } }, { geo: G.torus(0.5, 0.04, 4, 12), color: 0x1c1a1a, o: { y: 0.55, rx: Math.PI / 2 } }];
     for (let k = 0; k < 6; k++) { const a = (k / 6) * Math.PI * 2; bars.push({ geo: G.segTo(Math.sin(a) * 0.08, 0.55, Math.cos(a) * 0.08, 0.035, 0.03, 4), color: 0x201e1c, o: { x: Math.sin(a) * 0.42, z: Math.cos(a) * 0.42 } }); }
@@ -527,10 +558,12 @@ const PROP6 = {
     const pane = new THREE.Mesh(jitter(G.box(1.7, 2.3, 0.22, 2, 2, 1), 0.03, 1121), own(new THREE.MeshLambertMaterial({ color: 0x5a7886, transparent: true, opacity: 0.38, depthWrite: false, emissive: 0x060c10 })));
     pane.position.y = 1.15; pane.renderOrder = 1.7; g.add(pane);
     const frame = solid6([{ geo: jitter(G.box(2.1, 0.3, 0.5), 0.05, 1122), color: DARKST, o: { y: 0.15 } }, { geo: jitter(G.box(2.1, 0.25, 0.5), 0.05, 1123), color: DARKST, o: { y: 2.4 } }], MAT.stone6); g.add(frame);
-    const core = sprite6(0xffd0a0, 0.22, { opacity: 0.95, order: 1.8 }), ember = sprite6(0xff5a2a, 0.75, { opacity: 0.85, order: 1.8 }), haze = sprite6(0xff5a2a, 2.4, { opacity: 0.18, order: 1.8 });
+    // (the ember a coal's size, its haze a hand wider than the pane: smaller, from the play camera it was a pale slab of ice
+    // with nothing in it)
+    const core = sprite6(0xffd0a0, 0.3, { opacity: 0.95, order: 1.8 }), ember = sprite6(0xff5a2a, 1.0, { opacity: 0.9, order: 1.8 }), haze = sprite6(0xff5a2a, 3.0, { opacity: 0.26, order: 1.8 });
     for (const sp of [core, ember, haze]) { sp.position.set(0.1, 1.25, 0.0); g.add(sp); }
     let k = 1;
-    ember.onBeforeRender = () => { const p = 0.82 + 0.18 * Math.sin(R.time * 0.9); ember.scale.setScalar(0.75 * p * Math.max(k, 0.01)); ember.material.opacity = 0.85 * Math.min(1, k); haze.material.opacity = 0.18 * p * Math.min(1, k); core.material.opacity = 0.95 * Math.min(1, k); };
+    ember.onBeforeRender = () => { const p = 0.82 + 0.18 * Math.sin(R.time * 0.9); ember.scale.setScalar(1.0 * p * Math.max(k, 0.01)); ember.material.opacity = 0.9 * Math.min(1, k); haze.material.opacity = 0.26 * p * Math.min(1, k); core.material.opacity = 0.95 * Math.min(1, k); };
     g.userData.setGlow = (v = 1) => { k = Math.max(0, v); core.visible = ember.visible = haze.visible = k > 0.001; g.userData.glow = k; };
     g.userData.emberAt = { x: 0.1, y: 1.25, z: 0 };
     return g;
@@ -599,15 +632,17 @@ export function act6Prop(kind, o = {}) {
 // scans (want: its size, by: which side, y: its base), code where the scan is missing
 const RIME6 = { wreck: [13.5, 'l', -0.25], keelboat: [8.6, 'l', -0.12], rowboat: [4.6, 'l', -0.1], brokenBoat: [7, 'l', -0.12], shack: [4.3, 'l', 0], anchor: [2.2, 'l', -0.3], sunkenAnchor: [2.2, 'l', -0.5],
   whale: [15, 'l', -0.1], kelp: [1.6, 'w', -0.04], barnacleRock: [1.2, 'w', -0.1], driftwood: [2.2, 'l', -0.08], cask: [0.9, 'h', -0.03], crate: [0.75, 'h', -0.03], oilLamp: [0.5, 'h', 0] };
+// (in the Drained Sea's wet grade, 'silt:': as packed, its hulls, shacks, crates and bones stood bone-white and dry on the
+// dark sea floor; the wreck and the rowboat carry Act V's wet wood already)
 function rime6(I, B, out, name, p) {
-  const [want, by, y] = RIME6[name], parts = rime(name), s = p.s || 1;
+  const [want, by, y] = RIME6[name], parts = rime(name), s = p.s || 1, pre = name === 'wreck' || name === 'rowboat' ? 'rime:' : 'silt:rime:';
   if (parts) {
     const f = fit6(parts, want * s, by);
     // (laid flat, the kelp: a mat of strands, not a heap)
-    if (name === 'kelp') { I.add('rime:kelp', p.x, p.z, p.r || 0, f.k * 1.3, y - f.y0 * 0.28, f.k * 0.28, f.k * 1.3); return; }
+    if (name === 'kelp') { I.add(pre + 'kelp', p.x, p.z, p.r || 0, f.k * 1.3, y - f.y0 * 0.28, f.k * 0.28, f.k * 1.3); return; }
     // (a shack lying on its side, gen6's side: turned over onto its long wall)
     const tilt = p.side ? 1.45 : p.tilt || 0, lift = p.side ? (f.sz.x * f.k) / 2 * 0.85 : 0;
-    I.add('rime:' + name, p.x, p.z, p.r || 0, f.k, (p.y ?? y) - (p.side ? f.y0 * 0 : f.y0) + lift, f.k, f.k, tilt);
+    I.add(pre + name, p.x, p.z, p.r || 0, f.k, (p.y ?? y) - (p.side ? f.y0 * 0 : f.y0) + lift, f.k, f.k, tilt);
     return;
   }
   // (no scan: the hulls the Act V code boat, the rest left out: dressing only)
@@ -622,9 +657,10 @@ const PLACE6 = {
   // a fire-pit (the Saltborn's at the Well's Foot): lit while the layout lights it (a light within a metre or so)
   firepit(p, I, B, out, L) { const m = act6Prop('hearth6'); m.position.set(p.x, 0, p.z); m.userData.setLit(p.lit ?? (L.lights || []).some((l) => Math.hypot(l.x - p.x, l.z - p.z) < 1.5)); out.group.add(m); out.act6.fires.push(m); },
   // (gen6: p.s its radius, p.hgt how far up it shows, p.asger the sleeper's keel with its clear face; p.r its turn)
-  keel(p, I, B, out) {
+  // (Asger's clear face toward the road: L.spots.asger.rot)
+  keel(p, I, B, out, L) {
     keel6(I, { x: p.x, z: p.z, r: p.s ?? 1.6, rot: p.r, h: p.hgt != null ? p.hgt + 1 : undefined }, out);
-    if (p.asger) { const m = keelWindow(p.s ?? 2); m.position.set(p.x, 0, p.z); m.rotation.y = p.r || 0; out.group.add(m); out.act6.asger = m; }
+    if (p.asger) { const m = keelWindow(p.s ?? 2); m.position.set(p.x, 0, p.z); m.rotation.y = L?.spots?.asger?.rot ?? p.r ?? 0; out.group.add(m); out.act6.asger = m; }
   },
   // the village's houses (bottom: tilt and sink, in radians and metres), drowned; the stamped windows' 'bld' too
   bld(p, I) { house6(I, { x: p.x, z: p.z, rot: p.r, tilt: p.tilt ?? 0, sink: p.sink ?? 0, m: p.m, kit: p.kit, s: p.s }); },
@@ -649,7 +685,9 @@ PLACE6.coastCliff = PLACE6.rockFace;
 // (what faced the sky faces the floor, so no snow lies on it), its pale faces darkened by an instance colour
 const KEEL_C = new THREE.Color(0.32, 0.37, 0.42);
 // (the ice's own material graded for the dark below: its sky rim a third as strong (that sky is the vault's dark), and
-// fading upward into the dark it hangs from, so a keel never ends on a top the play camera sees)
+// fading upward into the dark it hangs from, so a keel never ends on a top the play camera sees. No snow: hung upside
+// down, its old undersides face up, and the ice's snow on every upward face laid a white crust over each keel that the
+// play camera saw as white models)
 const KEELM = new Map();
 function keelMat(src) {
   if (KEELM.has(src)) return KEELM.get(src);
@@ -657,23 +695,12 @@ function keelMat(src) {
   m.onBeforeCompile = (sh, r) => {
     prev?.call(src, sh, r);
     sh.fragmentShader = sh.fragmentShader.replace('totalEmissiveRadiance += icyEm;', 'totalEmissiveRadiance += icyEm * 0.2 * (1.0 - smoothstep(2.5, 9.0, vYW.y));')
+      .replace('ysn *= smoothstep(0.0, 0.3, vYW.y);', 'ysn = 0.0;')
       .replace('diffuseColor.rgb *= ycol;', 'diffuseColor.rgb *= ycol * mix(1.0, 0.18, smoothstep(2.5, 9.0, vYW.y));');
   };
   m.customProgramCacheKey = () => key + '|keel6';
   KEELM.set(src, m);
   return m;
-}
-// icicles round a keel's lip ({ x, z, a, y } each, y the lip), in the keel's grade: the rime icicle scan, else the code ones
-function icicleMeshes(list) {
-  if (!list.length) return [];
-  const ic = rime('icicle'), def = instDef5('icy:' + (ic ? 'rime/icicle' : '#icicles'), mats(), R.quality); if (!def) return [];
-  const f = ic && fit6(ic, 1.3, 'h');
-  return def.parts.map((p) => {
-    const im = new THREE.InstancedMesh(p.geo, keelMat(p.material), list.length);
-    list.forEach((c, i) => { _e.set(0, c.a || 0, 0, 'YXZ'); _q.setFromEuler(_e); const k = f ? f.k : 0.9; im.setMatrixAt(i, new THREE.Matrix4().compose(_p.set(c.x, f ? c.y - f.y0 - f.sz.y * f.k : c.y, c.z), _q, _s.set(k, k, k))); im.setColorAt(i, KEEL_C); });
-    im.instanceMatrix.needsUpdate = true; im.instanceColor.needsUpdate = true; im.computeBoundingSphere(); im.castShadow = false;
-    return im;
-  });
 }
 function keelMeshes(name, list) {
   const def = instDef5('icy:' + name, mats(), R.quality), sz = size4(ENV.props[name]); if (!def || !sz) return [];
@@ -696,15 +723,14 @@ function keelWindow(r) {
   pane.position.set(0, 1.25, r * 0.9); pane.renderOrder = 1.6; g.add(pane); g.userData.window = { x: 0, y: 1.25, z: r * 0.75 };
   return g;
 }
-// a keel of the layout: its body gathered for keelMeshes (act6Level draws them), icicles round its lip and a fallen slab or
-// two at its foot (quality 1 and up)
+// a keel of the layout: its body gathered for keelMeshes (act6Level draws them), a fallen slab or two at its foot (quality
+// 1 and up)
 function keel6(I, k, out) {
   const r = k.r ?? 1.6, name = rockAt(k.x, k.z); if (!name) return;
   const rot = k.rot ?? hash2(k.x, k.z) * 6.28;
   (out.keels6[name] ||= []).push({ x: k.x, z: k.z, rot, r, h: k.h, sx: 0.85 + hash2(k.z, k.x) * 0.3 });
   out.act6.keels++;
   if (R.quality < 1) return;
-  for (let j = 0; j < 4; j++) { const a = rot + (j / 4) * Math.PI * 2 + 0.3; out.icicles6.push({ x: k.x + Math.sin(a) * r * 0.92, z: k.z + Math.cos(a) * r * 0.92, a, y: 6.4 + (j % 2) * 0.6 }); }
   for (let j = 0; j < 2; j++) { const a = rot + j * 2.6 + 1.1, d = r + 0.6 + hash2(k.x + j, k.z) * 0.8; I.add('c6:slab~ns', k.x + Math.sin(a) * d, k.z + Math.cos(a) * d, a, 0.7 + hash2(j, k.x) * 0.6, 0.02, 0.8, 0.9, 0.25); }
 }
 // a village house of the Forgotten Village (bottom: L.spots.houses), tilted and sunk, drowned: the village pack's house, or
@@ -725,25 +751,78 @@ function wellMouth(out, w) {
   return g;
 }
 
-// Dresses an Act VI layout (buildLevel): its props, the spots no one else places, the First's marks, the vault for the
-// cines, the drips and the forgotten's motes (out.emitters). Writes
-// out.act6 = { braziers, fires, sky, keels (a count), rope, well, asger (the sleeper's pane), marks, vault } for world.js
-// (act6Zone) to find them
+// the stamped wood's undergrowth, left out below: grass, bushes, webs and spiders' eggs do not outlast the sea (drowned, they
+// stood as pale tufts all over the black floor); its trees stand bare, its logs, stumps, branches and bones stay
+const DROP6 = new Set(['grass', 'bush', 'web', 'eggs', 'flowers']);
+// the story's props at gen6's spots (L.spots), each built as it stands at first arrival in the layout's reading (L.mode):
+// the hearths, the lost lights, the wreck lanterns and Asger's brazier cold; the lure posts dead; the black lamps burning;
+// a shadow-wall over each band gen6 left shut (one opened before the build stands hidden); the ember glowing in its pane;
+// Leif's fire dead; the Hearth's fire burning from the build, its stones and niches cold, the Gate ring dark ('lit': her
+// fire flared, the stones lit, the ring warm); the Ketos's neck across the drained Mere ('dry'). Handed to the zone in
+// out.act6 by gen6's keys, so world.js act6Zone fills z.act6 and lays the interacts on these (act6Presence lights them
+// from the flags) and never builds a second one
+function story6(L, out) {
+  const S = L.spots || {}, A = out.act6, lit = L.mode === 'lit';
+  const put = (kind, o, x, z, ry = 0) => { const m = act6Prop(kind, o); m.position.set(x, 0, z); m.rotation.y = ry; out.group.add(m); return m; };
+  // (local +z toward q; local +x toward q)
+  const face = (p, q) => Math.atan2(q.x - p.x, q.z - p.z), arm = (p, q) => Math.atan2(-(q.z - p.z), q.x - p.x);
+  // ---- the Drained Sea ----
+  for (const h of S.hearths || []) A.hearths.push({ k: h.k, x: h.x, z: h.z, mesh: put('hearth6', {}, h.x, h.z, hash2(h.x, h.z) * 6.28) });
+  // (gen6's lost light: its body 7.2 m along rot about (x, z), its lantern end's interact at lamp)
+  for (const l of S.lost || []) {
+    const len = 7.2, bx = l.x - Math.sin(l.rot) * len / 2, bz = l.z - Math.cos(l.rot) * len / 2, lampZ = l.lamp ? Math.hypot(l.lamp.x - bx, l.lamp.z - bz) : len + 1.7;
+    A.lost.push({ id: l.id, x: l.lamp?.x ?? l.x, z: l.lamp?.z ?? l.z, mesh: put('toppledLight', { kind: l.kind, len, lampZ }, bx, bz, l.rot) });
+  }
+  for (const p of S.lures || []) A.lures.push({ x: p.x, z: p.z, mesh: put('lurePost', {}, p.x, p.z, p.bait ? arm(p, p.bait) : 0) });
+  const HP = S.heap || S.mere;
+  for (const l of S.wreckLamps || []) A.wrecks.push({ i: l.i, x: l.x, z: l.z, mesh: put('wreckLantern', { keyx: l.keyx }, l.x, l.z, HP ? arm(l, HP) : 0) });
+  for (const b of S.bells || []) A.bells.push({ i: b.i, x: b.x, z: b.z, mesh: put('shipBell', {}, b.x, b.z, HP ? face(b, HP) : 0) });
+  if (S.asger?.brazier) A.asgerBrazier = put('brazier6', {}, S.asger.brazier.x, S.asger.brazier.z);
+  if (L.type === 'drained' && L.mode === 'dry' && S.arch) A.neck = put('neckArch', { len: 14 }, S.arch.x, S.arch.z, S.arch.rot || 0);
+  // ---- the Bottom ----
+  for (const l of S.lamps || []) A.lamps.push({ k: l.k, x: l.x, z: l.z, mesh: put('blackLamp', {}, l.x, l.z, 0) });
+  for (const wl of L.walls || []) {
+    const m = act6Prop('shadowWall', { cells: wl.cells }), at = m.userData.at;
+    m.position.set(at.x, 0, at.z); m.rotation.y = at.rot; out.group.add(m);
+    // (a band the build left open: its lamp is out, or her fire burns)
+    if (wl.cells.some(([x, z]) => L.cells[z * L.w + x])) { m.visible = false; m.userData.open = true; }
+    A.walls.push({ k: wl.k, mesh: m });
+  }
+  if (S.ember?.pane) A.ember = put('emberPane', {}, S.ember.pane.x, S.ember.pane.z, S.ember.pane.rot || 0);
+  if (S.leif?.fire) { A.leif = put('hearth6', {}, S.leif.fire.x, S.leif.fire.z, 0.7); A.leif.scale.setScalar(0.75); }
+  // (the Well's foot: the rope down the shaft from the Drained Sea)
+  if (L.type === 'bottom' && S.well) A.rope = put('ropeWinch', { foot: true }, S.well.x, S.well.z);
+  const H = S.hearth;
+  if (H) {
+    // her stone and fire on the 2 x 2 at the centre, burning from the build (the shipped brazier fire, half again)
+    A.centre = put('hearth6', {}, H.fire.x, H.fire.z, 0.4); A.centre.scale.setScalar(1.5); A.centre.userData.setLit(true); A.centre.userData.flash?.(lit ? 0.8 : 0);
+    for (const st of H.stones || []) { const m = put('hearthStone', {}, st.x, st.z, face(st, H)); m.userData.setLit(lit); A.stones.push({ i: st.i, x: st.x, z: st.z, mesh: m }); }
+    for (const n of H.niches || []) A.niches.push({ id: n.id, x: n.x, z: n.z, mesh: put('nameLamp', { id: n.id }, n.x, n.z, face(n, H)) });
+    if (H.ring) { A.ring = put('gateRing', {}, H.ring.x, H.ring.z, H.ring.rot || 0); A.ring.userData.setWarm(lit ? 1 : 0); }
+  }
+}
+
+// Dresses an Act VI layout (buildLevel): its props, the spots no one else places, the story's props at gen6's spots
+// (story6), the First's marks, the vault for the cines, the drips and the forgotten's motes (out.emitters). The boot sets'
+// props come out in the zone's grade: the Drained Sea's wet silt, the Bottom's drowned black-blue. Writes out.act6 for
+// world.js (act6Zone) to find them: { braziers, fires, sky, keels (a count), rope, well, asger (the sleeper's pane), marks,
+// vault; hearths, lost, lures, wrecks, bells, lamps, walls, stones, niches ([{ k | i | id, x, z, mesh }], gen6's keys),
+// asgerBrazier, neck, ember, leif, centre (the Hearth's fire), ring }
 export function act6Level(L, I, B, out) {
   mats(); mats6();
-  const S = L.spots || {}, rng = RNG((L.seed || 1) * 13 + 6), boot = drowned(I, B), props = L.props || [], has = (t) => props.some((p) => p.t === t);
-  out.act6 = { braziers: [], fires: [], sky: [], keels: 0, rope: null, well: null, asger: null, vault: null };
-  out.keels6 = {}; out.icicles6 = [];
+  const S = L.spots || {}, rng = RNG((L.seed || 1) * 13 + 6), boot = drowned(I, B, L.type === 'drained' ? 'silt' : 'drowned'), props = L.props || [], has = (t) => props.some((p) => p.t === t);
+  out.act6 = { braziers: [], fires: [], sky: [], keels: 0, rope: null, well: null, asger: null, vault: null, hearths: [], lost: [], lures: [], wrecks: [], bells: [], lamps: [], walls: [], stones: [], niches: [], asgerBrazier: null, neck: null, ember: null, leif: null, centre: null, ring: null };
+  out.keels6 = {};
   for (const p of props) {
     const f = PLACE6[p.t];
     if (f) f(p, I, B, out, L);
+    else if (DROP6.has(p.t)) continue;
     // (a boot set's prop, the stamped crypt's and wood's: the shipped placement, drowned)
     else addProp(boot.B, boot.I, p, L, rng, out);
   }
   // the keels reaching down to the floor (L.keel's footprints, gen6), unless the props carry them
   if (!has('keel')) for (const k of S.keels || []) keel6(I, k, out);
   for (const name in out.keels6) for (const m of keelMeshes(name, out.keels6[name])) out.group.add(m);
-  for (const m of icicleMeshes(out.icicles6)) out.group.add(m);
   // the skylights' columns (their pools are light.js's, o.light false; systems dims them at the high water: dim(k))
   for (const s of S.sky || []) { const m = act6Prop('skylight', { r: s.r }); m.position.set(s.x, 0, s.z); out.group.add(m); out.act6.sky.push(m); }
   // the garland glade's garlands, hung round its rim between the trees (bottom)
@@ -753,12 +832,13 @@ export function act6Level(L, I, B, out) {
   }
   // the Forgotten Village's houses, tilted and sunk (bottom), when the props do not carry them ('bld')
   if (!has('bld')) (S.houses || []).forEach((h, k) => house6(I, h, k));
-  // the Drained Sea once the Mere is dry: the Well's mouth at its centre (the Ketos's neck is the zone's, act6Prop)
+  // the Drained Sea once the Mere is dry: the Well's mouth at its centre
   if (L.mode === 'dry' && S.well && L.type === 'drained') out.act6.well = wellMouth(out, S.well);
   // the rope's foot at the Rope camp (drained), hanging down out of the vault
   if (L.type === 'drained' && S.rope) { const m = act6Prop('ropeWinch', { foot: true }); m.position.set(S.rope.x, 0, S.rope.z); out.group.add(m); out.act6.rope = m; }
   // the Mere's lure-rock (drained), in the water at its north side
   if (S.mere?.lure) { const n = rockAt(S.mere.lure.x, S.mere.lure.z), f = n && fit6(ENV.props[n], 1.8, 'w'); if (f) I.add('drowned:env:' + n, S.mere.lure.x, S.mere.lure.z, 0.6, f.k, -0.35 - f.y0, f.k * 0.8, f.k); }
+  story6(L, out);
   // the First's marks along her trail, seen only in the hero's light (fx.js marksMesh: one draw)
   const mk = marksMesh(S.trail, (x, z) => groundY(L, x, z)); if (mk) { out.group.add(mk); out.act6.marks = mk; }
   // the vault's drips over each of its low patches (white, falling from it), and the forgotten's black motes rising round

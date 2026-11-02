@@ -3192,6 +3192,78 @@ const S = {
       beat(`q${q} false pools have no light of their own and count for nothing (lightAt, lampLightAt, warmAt the same without them)`, st.fake && !st.lureLight && JSON.stringify(st.withLure) === JSON.stringify(st.without), st);
     }
     return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
+  } },
+  // place6: the looks in the real zones (build6.js act6Level on gen6's layouts), on quality 0 and 1, in all four readings
+  // (drained mere and dry, bottom dark and lit): every story prop stands at its gen6 spot and is handed to the zone in
+  // z.lvl.act6 (hearths, lost lights with their fire at the lantern end's interact, lure posts, wreck lanterns, bells,
+  // Asger's brazier; the black lamps, the shadow-walls over the shut bands, the ember's pane, Leif's dead fire, the Hearth's
+  // fire, stones, niches and Gate ring; the neck only once the Mere is dry), each in its first state for the reading; the
+  // atmosphere and ambient of the reading; the shore off the grid (sea.js shoreJit on gen6's layouts); no ring or pool
+  // drawn up the vault's walls (build.js drape); a frame drawn at a spot of each (shots)
+  place6: { q: 'auto=drained&q=1&lvl=36&cloud=off&seed=4242', run: async (pg) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    const ev = (f, a) => pg.evaluate(f, a), dir = process.argv[3] || '/tmp';
+    const base = process.env.BASE || 'http://localhost:5199/';
+    const ready = (id) => pg.waitForFunction((id) => window.__ready && window.__G?.player && window.__G.mode === 'play' && window.__G.zone?.id === id && !document.getElementById('fade').classList.contains('on'), id, { timeout: 240000 });
+    const READ = [['drained', ''], ['drained', 'ketosDown'], ['bottom', ''], ['bottom', 'blackLamp0,blackLamp1,blackLamp2,herFire']];
+    for (const q of [1, 0]) for (const [zone, flags] of READ) {
+      await pg.goto(base + `?auto=${zone}&q=${q}&lvl=36&cloud=off&seed=4242` + (flags ? '&flags=' + flags : ''));
+      await ready(zone);
+      const tag = `q${q} ${zone}${flags ? ' (' + (flags === 'ketosDown' ? 'dry' : 'lit') + ')' : ''}`;
+      const r = await ev(async () => {
+        const G = window.__G, z = G.zone, L = z.L, S = L.spots, A = z.lvl.act6, W = new (await import('three')).Vector3(), B = await import('/src/world/build.js'), { ATMOS } = await import('/src/world/atmos.js'), { FX } = await import('/src/gfx/fx.js');
+        const at = (o, p, d = 0.6) => !!o && !!p && Math.hypot(o.position.x - p.x, o.position.z - p.z) < d && !!o.parent;
+        const n = (l) => (l || []).length, bad = [];
+        const each = (list, spots, key, chk = (e, s) => at(e.mesh, s)) => { if (n(list) !== n(spots)) bad.push(key + ' count ' + n(list) + '/' + n(spots)); for (const s of spots || []) { const e = list.find((q) => (q.k ?? q.i ?? q.id) === (s.k ?? s.i ?? s.id)); if (!e || !chk(e, s)) bad.push(key + ' ' + (s.k ?? s.i ?? s.id)); } };
+        each(A.hearths, S.hearths, 'hearth');
+        each(A.lost, S.lost, 'lost', (e, s) => { const la = e.mesh.userData.lampAt; if (!la) return false; e.mesh.updateWorldMatrix(true, false); const p = e.mesh.localToWorld(W.set(la.x, 0, la.z)); return Math.hypot(p.x - s.lamp.x, p.z - s.lamp.z) < 1.2; });
+        each(A.lures.map((l, i) => ({ ...l, i })), (S.lures || []).map((l, i) => ({ ...l, i })), 'lure');
+        each(A.wrecks, S.wreckLamps, 'wreck'); each(A.bells, S.bells, 'bell');
+        each(A.lamps, S.lamps, 'blackLamp'); each(A.stones, S.hearth?.stones, 'stone'); each(A.niches, S.hearth?.niches, 'niche');
+        if (n(A.walls) !== n(L.walls)) bad.push('walls ' + n(A.walls) + '/' + n(L.walls));
+        if (S.asger && !at(A.asgerBrazier, S.asger.brazier)) bad.push('asgerBrazier');
+        if (S.ember && !at(A.ember, S.ember.pane, 0.1)) bad.push('ember');
+        if (S.leif && !at(A.leif, S.leif.fire, 0.1)) bad.push('leif');
+        if (S.hearth && (!at(A.centre, S.hearth.fire, 0.1) || !at(A.ring, S.hearth.ring, 0.1))) bad.push('hearth centre or ring');
+        const dry = L.mode === 'dry', lit = L.mode === 'lit';
+        if (!!A.neck !== (z.id === 'drained' && dry)) bad.push('neck ' + !!A.neck);
+        if (dry !== !!A.well) bad.push('well mouth');
+        // (each in its first state for the reading)
+        const st = {
+          hearths: A.hearths.map((h) => !!h.mesh.userData.lit), lost: A.lost.map((h) => !!h.mesh.userData.lit), wrecks: A.wrecks.map((h) => !!h.mesh.userData.lit),
+          lamps: A.lamps.map((h) => !!h.mesh.userData.lit), walls: A.walls.map((w) => w.mesh.visible), stones: A.stones.map((h) => !!h.mesh.userData.lit), niches: A.niches.map((h) => !!h.mesh.userData.lit),
+          centre: A.centre ? !!A.centre.userData.lit : null, ring: A.ring ? A.ring.userData.warm : null, ember: A.ember ? A.ember.userData.glow ?? 1 : null
+        };
+        const off = (l) => l.every((v) => !v), on = (l) => l.every(Boolean);
+        const okState = off(st.hearths) && off(st.lost) && off(st.wrecks) && on(st.lamps) && off(st.niches) && (lit ? off(st.walls) && on(st.stones) && st.ring === 1 : z.id !== 'bottom' || (on(st.walls) && off(st.stones) && st.ring === 0)) && (z.id !== 'bottom' || st.centre === true);
+        // the reading's atmosphere and ambient (gfx.js keeps the scene's fog colour)
+        const want = ATMOS[lit ? 'bottomLit' : z.id], fog = window.__R.scene.fog.color.getHex();
+        const atm = { fog: fog.toString(16), want: want.fog.toString(16), amb: FX.ambient, wantAmb: lit ? 'thaw' : z.id };
+        // the shore off the grid: the jitter on gen6's layout, some corners moved
+        const J = L.jit5; let moved = 0; if (J) for (let i = 0; i < J.length; i++) if (J[i]) moved++;
+        // no ring drawn up the vault's walls: a ring of 4.5 m laid at a floor cell whose wall rises 2 m within 4 m
+        let drape = null;
+        for (let i = 0; i < L.cells.length && !drape; i += 7) {
+          if (!L.cells[i] || L.pocket[i]) continue;
+          const x = i % L.w + 0.5, zz = Math.floor(i / L.w) + 0.5, g = (await import('/src/world/genlib.js')).groundY;
+          if (Math.abs(g(L, x, zz)) > 0.05 || !(g(L, x + 3, zz) > 2 || g(L, x - 3, zz) > 2 || g(L, x, zz + 3) > 2 || g(L, x, zz - 3) > 2)) continue;
+          const ring = B.act4Prop('lightRing'); ring.scale.setScalar(4.5); ring.position.set(x, 0, zz); ring.updateWorldMatrix(true, true); B.drape(ring, L);
+          let top = -9; ring.updateWorldMatrix(true, true); ring.traverse((o) => { const P = o.geometry?.attributes.position; if (!P || !o.geometry.userData.drape) return; for (let k = 0; k < P.count; k++) top = Math.max(top, W.fromBufferAttribute(P, k).applyMatrix4(o.matrixWorld).y); });
+          drape = { x, z: zz, top: +top.toFixed(2) };
+        }
+        return { mode: L.mode, bad, st, okState, atm, moved, drape, kids: z.lvl.group.children.length };
+      });
+      beat(`${tag}: every story prop at its gen6 spot, handed over in z.lvl.act6`, !r.bad.length, { bad: r.bad, mode: r.mode });
+      beat(`${tag}: each in its first state for the reading`, r.okState, r.st);
+      beat(`${tag}: the reading's atmosphere and ambient`, r.atm.fog === r.atm.want && r.atm.amb === r.atm.wantAmb, r.atm);
+      beat(`${tag}: the shore off the grid (shoreJit on gen6's layout)`, r.moved > 100, { moved: r.moved });
+      beat(`${tag}: no ring laid up the vault's walls (at most 0.6 m over the floor)`, r.drape && r.drape.top < 0.6, r.drape);
+      // a frame at the reading's place: the camera on its spot, drawn, shot
+      await ev(async () => { const G = window.__G, z = G.zone, S = z.L.spots, p = z.L.mode === 'lit' ? { x: S.hearth.x, z: S.hearth.z - 4 } : z.L.mode === 'dry' ? { x: S.well.x, z: S.well.z - 5 } : z.id === 'bottom' ? S.keyx : S.hearths.find((h) => h.k === 2); const f = z.map.nearestFloor(p.x, p.z, 6); G.player.x = f.x; G.player.z = f.z; for (const a of z.actors) if (a.team === 'foe') { a.hp = 0; a.dead = true; a.remove?.(); } (await import('/src/gfx/gfx.js')).updateCamera(0, f.x, f.z, true); });
+      await ev(() => new Promise((ok) => { let k = 0; const f = () => (++k >= 8 ? ok() : requestAnimationFrame(f)); requestAnimationFrame(f); }));
+      await pg.screenshot({ path: `${dir}/place6-q${q}-${zone}-${r.mode}.png` });
+    }
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
   } }
 };
 const sc = S[name];

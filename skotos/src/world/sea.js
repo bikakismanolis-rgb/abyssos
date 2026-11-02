@@ -692,8 +692,10 @@ export function bayCorners(L) {
 // strip, the Fall's path, can take). The ground, the water and the ice take the same offset and stay matched. Not a corner
 // of an ice window or the jetty (their props keep the grid), nor the map's rim. Offsets (x, z) per corner, (w+1)(h+1)
 const CC = [[-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]];
+// (Act VI too, gen6's layouts: L.pocket and no L.ice. Its black water stands over a level floor, so without it every pool's
+// and the Mere's edge, and the vault's walls' foot, ran in the cells' staircase: an island read as a cross of squares)
 export function shoreJit(L) {
-  if (!L.hgt || !L.ice) return null;
+  if (!L.hgt || !(L.ice || L.pocket)) return null;
   if (L.jit5) return L.jit5;
   const { w, h } = L, W = w + 1, out = new Float32Array(W * (h + 1) * 2), H = L.hgt, seed = L.seed || 1;
   // a cell's class: 0 floor (dry land, thick ice, a footprint), 1 a high tidal flat, 5 a low one, 2 the pit (open water,
@@ -703,7 +705,7 @@ export function shoreJit(L) {
   for (let i = 0; i < w * h; i++) {
     const x = i % w, z = (i - x) / w, k = z * W + x;
     const lo = Math.min(H[k], H[k + 1], H[k + W], H[k + W + 1]), hi = Math.max(H[k], H[k + 1], H[k + W], H[k + W + 1]);
-    cls[i] = L.window[i] || L.deck?.[i] ? 4 : L.ice[i] ? 6 : L.low[i] || L.sea?.[i] || (!L.cells[i] && lo < -0.5) ? 2 : !L.cells[i] && hi > 0.25 ? 3
+    cls[i] = L.window[i] || L.deck?.[i] ? 4 : L.ice?.[i] ? 6 : L.low[i] || L.sea?.[i] || (!L.cells[i] && lo < -0.5) ? 2 : !L.cells[i] && hi > 0.25 ? 3
       : L.bed && L.bed[i] < BED_DRY && L.cells[i] && !L.thick[i] ? (L.bed[i] < 0.42 ? 5 : 1) : 0;
   }
   const C = (x, z) => cls[clamp(z, 0, h - 1) * w + clamp(x, 0, w - 1)];
@@ -730,14 +732,16 @@ export function shoreJit(L) {
     // wander further, below)
     // (and thin ice against a tidal flat, both walkable: the bay's ice ran ruled across the Walking Tower's arena)
     // (and thin ice against any ground she can stand on, thick ice or dry land: the Ice Road's edge ran ruled down the road)
-    const thinRun = f === preds[0] && CORNER.every(([dx, dz], j) => { const i = clamp(vz + dz, 0, h - 1) * w + clamp(vx + dx, 0, w - 1); return t[j] ? !!L.ice[i] : flatCell(L, i) || (!!L.cells[i] && cls[i] === 0); });
+    const thinRun = f === preds[0] && CORNER.every(([dx, dz], j) => { const i = clamp(vz + dz, 0, h - 1) * w + clamp(vx + dx, 0, w - 1); return t[j] ? !!L.ice?.[i] : flatCell(L, i) || (!!L.cells[i] && cls[i] === 0); });
     // (a pit's own straight edge, an islet's or a shelf's over the water, and the rock's foot wander too, but no further
     // than a lone corner may: there the cells' line is where she can stand. Each corner on its own, such a run stayed
     // ruled, only roughened: a rock rib's snowed face ran across the Landing as one straight slab)
     if (n === 2 && (t[0] === t[1] || t[0] === t[2])) {
       const ax = t[0] === t[1] ? 1 : 0, sl = fbm(vx * 0.09 + 3, vz * 0.09 - 5, seed + 79, 2) - 0.5, qk = ax ? nz : nx;
       // (those held to 0.4 m wander on the quicker read: the slow one, held, only shifted a short islet's edge, still ruled)
-      const held = (f === preds[0] && !thinRun) || f === preds[1];
+      // (Act VI's pools all held: their closed step's pale line is read off the grid's own beds (vG), and a corner wandering
+      // 1.25 m beside one held still drew it in the triangles' sawtooth across the Hollows)
+      const held = (f === preds[0] && !thinRun) || f === preds[1] || !L.ice;
       // (the coast's land against the open sea, the Strand's, an islet's, the whale's shore: it leans out over the water by
       // 0.1-0.85 m and never back from it, so the run curves while she still stops on the land's own side of its edge;
       // held to 0.4 m either way, a twenty-metre shore still read ruled. Not across a strait of under three cells)

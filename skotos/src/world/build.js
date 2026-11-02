@@ -447,9 +447,10 @@ class Instancer {
   build(quality) {
     const M = mats(), out = {};
     for (const type in this.sets) {
-      // (Act VI, build6.js: 'drowned:<type>' any type below in the drowned grade, the stamped crypt's and wood's; 'c6:<name>'
-      // its own code models)
-      const def = type.startsWith('drowned:') ? drownDef(instDef(type.slice(8), M, quality)) : type.startsWith('c6:') ? instDef6(type, M, quality) : instDef(type, M, quality);
+      // (Act VI, build6.js: 'drowned:<type>' any type below in the drowned grade, the stamped crypt's and wood's; 'silt:<type>'
+      // in the Drained Sea's wet grade; 'c6:<name>' its own code models)
+      const g6 = /^(drowned|silt):/.exec(type)?.[1];
+      const def = g6 ? drownDef(instDef(type.slice(g6.length + 1), M, quality), g6) : type.startsWith('c6:') ? instDef6(type, M, quality) : instDef(type, M, quality);
       if (!def) continue;
       const list = this.sets[type];
       const chunks = new Map();
@@ -560,8 +561,9 @@ class Batch {
     for (const [, b] of this.buckets) {
       const geo = mergeGeometries(b.geos, false);
       geo.computeBoundingSphere();
-      // (Act VI: 'drowned:<material>' that material in the drowned grade, build6.js)
-      const mesh = new THREE.Mesh(geo, b.mat.startsWith('drowned:') ? drownMat(M[b.mat.slice(8)] || M.lam) : M[b.mat] || M.lam);
+      // (Act VI: 'drowned:<material>' that material in the drowned grade, 'silt:<material>' in the wet one, build6.js)
+      const g6 = /^(drowned|silt):/.exec(b.mat)?.[1];
+      const mesh = new THREE.Mesh(geo, g6 ? drownMat(M[b.mat.slice(g6.length + 1)] || M.lam, g6) : M[b.mat] || M.lam);
       mesh.castShadow = quality >= 1 && b.mat !== 'glow';
       mesh.receiveShadow = true;
       this.group.add(mesh);
@@ -1211,7 +1213,7 @@ function buildGround(L, group) {
   const act4 = !!L.hgt, forge = L.type === 'forge'; // Act IV: the layout carries its own heights (gen4.js terrain)
   // (Act VI's layouts carry Act V's beds, its pockets and its Mere standing at their levels as the coast's tide and bay do:
   // the wet rims, the bed under the water and the Mere's own level read the same fields, act56)
-  const act5 = ACT5.has(L.type), act6 = ACT6.has(L.type), act56 = act5 || act6, vbed = act56 && L.bed ? groundBeds(L) : null, vbay = act56 ? bayCorners(L) : null, far = L.type === 'farlight', jit = act5 ? shoreJit(L) : null;
+  const act5 = ACT5.has(L.type), act6 = ACT6.has(L.type), act56 = act5 || act6, vbed = act56 && L.bed ? groundBeds(L) : null, vbay = act56 ? bayCorners(L) : null, far = L.type === 'farlight', jit = act56 ? shoreJit(L) : null;
   const vwet = vbed ? wetBeds(L) : null;
   const sapW = act3 ? new Float32Array(n) : null, watW = far ? new Float32Array(n) : null;
   // (the Farthest Light: a lead sealed before this build, thick ice over the sea's bed, which the frozen water covers)
@@ -1315,6 +1317,8 @@ function buildGround(L, group) {
       // road in the silt's second reading, not down into the water; the walls' steep faces take the vault's ice (G_WALL)
       const y = L.hgt[vz * (w + 1) + vx];
       pos.setY(i, y);
+      // (its pools' and walls' edges off the grid as the coast's shore: sea.js shoreJit, the water takes the same nudge)
+      if (jit) { const j = (vz * (w + 1) + vx) * 2; pos.setX(i, vx + jit[j]); pos.setZ(i, vz + jit[j + 1]); }
       let walls = 0, tide = 0;
       for (let dz = -2; dz <= 1; dz++) for (let dx = -2; dx <= 1; dx++) { const c = cellAt(vx + dx, vz + dz); if (c < 0 || (!cells[c] && !L.low[c])) walls++; }
       for (const [dx, dz] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) { const c = cellAt(vx + dx, vz + dz); if (c >= 0 && tidal5(c)) tide++; }
@@ -3142,13 +3146,16 @@ export function drape(obj, L) {
   // (Act V: over open water no tide moves, L.sea, at the ice's own height: its surface stands at -0.08, the ice frays
   // into those cells at ICE_Y; laid down into the pit, the hero's ring was cut off by the water along a straight row of
   // its grid, right across a Breathing-hole's lip)
-  const S = L.sea, sw = L.w;
+  const S = L.sea, sw = L.w, a6 = ACT6.has(L.type);
   obj.traverse((o) => {
     const D = o.geometry?.userData.drape; if (!D) return;
     const e = o.matrixWorld.elements, sy = e[5] || 1, P = o.geometry.attributes.position, A = P.array, xz = D.xz;
+    // (Act VI: the vault's walls rise steeply off a level floor, and a ring or a pool laid up them stood on the rock as a lit
+    // trapezoid: held to the floor where it lies, what reaches the wall lies under it, hidden)
+    const cap = a6 ? groundY(L, e[12], e[14]) + 0.45 : Infinity;
     for (let i = 0; i < P.count; i++) {
       const x = xz[i * 2], z = xz[i * 2 + 1], wx = e[0] * x + e[8] * z + e[12], wz = e[2] * x + e[10] * z + e[14];
-      let y = groundY(L, wx, wz);
+      let y = Math.min(groundY(L, wx, wz), cap);
       if (S && S[clamp(Math.floor(wz), 0, L.h - 1) * sw + clamp(Math.floor(wx), 0, sw - 1)]) y = Math.max(y, -0.025);
       A[i * 3 + 1] = (y + D.lift - e[13]) / sy;
     }
