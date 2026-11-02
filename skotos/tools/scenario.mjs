@@ -3211,7 +3211,7 @@ const S = {
       await ready(zone);
       const tag = `q${q} ${zone}${flags ? ' (' + (flags === 'ketosDown' ? 'dry' : 'lit') + ')' : ''}`;
       const r = await ev(async () => {
-        const G = window.__G, z = G.zone, L = z.L, S = L.spots, A = z.lvl.act6, W = new (await import('three')).Vector3(), B = await import('/src/world/build.js'), { ATMOS } = await import('/src/world/atmos.js'), { FX } = await import('/src/gfx/fx.js');
+        const G = window.__G, z = G.zone, L = z.L, S = L.spots, A = z.lvl.act6, W = z.lvl.group.position.clone(), B = await import('/src/world/build.js'), { ATMOS } = await import('/src/world/atmos.js'), { FX } = await import('/src/gfx/fx.js');
         const at = (o, p, d = 0.6) => !!o && !!p && Math.hypot(o.position.x - p.x, o.position.z - p.z) < d && !!o.parent;
         const n = (l) => (l || []).length, bad = [];
         const each = (list, spots, key, chk = (e, s) => at(e.mesh, s)) => { if (n(list) !== n(spots)) bad.push(key + ' count ' + n(list) + '/' + n(spots)); for (const s of spots || []) { const e = list.find((q) => (q.k ?? q.i ?? q.id) === (s.k ?? s.i ?? s.id)); if (!e || !chk(e, s)) bad.push(key + ' ' + (s.k ?? s.i ?? s.id)); } };
