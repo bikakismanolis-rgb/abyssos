@@ -2661,22 +2661,25 @@ const S = {
       window.__walk6 = async (tx, tz, maxT = 120) => {
         const G = window.__G, z = G.zone, m = z.map, { IN } = await import('/src/core/input.js'), w = m.w;
         for (const p of z.packs) p.spawned = true;
-        const t0 = m.nearestFloor(tx, tz, 3), goal = Math.floor(t0.z) * w + Math.floor(t0.x), pl = G.player;
-        const from = Math.floor(pl.z) * w + Math.floor(pl.x), par = new Int32Array(w * m.h).fill(-1), q = [from]; par[from] = from;
+        const t0 = m.nearestFloor(tx, tz, 3), goal = Math.floor(t0.z) * w + Math.floor(t0.x), pl0 = G.player;
+        const from = Math.floor(pl0.z) * w + Math.floor(pl0.x), par = new Int32Array(w * m.h).fill(-1), q = [from]; par[from] = from;
         for (let hd = 0; hd < q.length && par[goal] < 0; hd++) { const i = q[hd], x = i % w, zz = (i - x) / w; for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const X = x + dx, Z = zz + dz, n = Z * w + X; if (X >= 0 && Z >= 0 && X < w && Z < m.h && m.cells[n] && par[n] < 0) { par[n] = i; q.push(n); } } }
         if (par[goal] < 0) return { ok: false, why: 'noWay' };
         const path = []; for (let i = goal; i !== from; i = par[i]) path.push({ x: i % w + 0.5, z: Math.floor(i / w) + 0.5 }); path.reverse();
         const dist = path.length;
         return await new Promise((res) => {
-          let k = 0, gt = 0, best = 1e9, still = 0, last = performance.now();
-          const keys = (x, zz) => { for (const c of ['w', 'a', 's', 'd']) IN.keys.delete(c); if (zz < -0.38) IN.keys.add('w'); if (zz > 0.38) IN.keys.add('s'); if (x < -0.38) IN.keys.add('a'); if (x > 0.38) IN.keys.add('d'); };
+          let k = 0, gt = 0, best = -1, still = 0, last = performance.now();
+          const keys = (x, zz) => { for (const c of ['w', 'a', 's', 'd']) IN.keys.delete(c); if (zz < -0.3) IN.keys.add('w'); if (zz > 0.3) IN.keys.add('s'); if (x < -0.3) IN.keys.add('a'); if (x > 0.3) IN.keys.add('d'); };
           const step = () => {
-            const now = performance.now(); gt += (now - last) / 1000 * 2; last = now;
-            while (k < path.length - 1 && Math.hypot(path[k].x - pl.x, path[k].z - pl.z) < 0.8) k++;
-            const tgt = path[Math.min(path.length - 1, k + 1)], dx = tgt.x - pl.x, dz = tgt.z - pl.z, l = Math.hypot(dx, dz) || 1;
+            // (the player as it is now: the zone's arrival may make her again)
+            const pl = window.__G.player, now = performance.now(); gt += (now - last) / 1000 * 2; last = now;
+            // (cell by cell, the nearest of the next few once she is within 0.45 m of it: round corners, never into them)
+            let j = k; for (let q = k; q < Math.min(path.length, k + 8); q++) if (Math.hypot(path[q].x - pl.x, path[q].z - pl.z) < Math.hypot(path[j].x - pl.x, path[j].z - pl.z)) j = q;
+            k = Math.hypot(path[j].x - pl.x, path[j].z - pl.z) < 0.45 ? Math.min(path.length - 1, j + 1) : j;
+            const tgt = path[k], dx = tgt.x - pl.x, dz = tgt.z - pl.z, l = Math.hypot(dx, dz) || 1;
             const left = Math.hypot(t0.x - pl.x, t0.z - pl.z);
-            if (left < best - 0.05) { best = left; still = 0; } else still += 1;
-            if (left < 1.2 || still > 600 || gt > maxT) { keys(0, 0); res({ ok: left < 1.2, left: +left.toFixed(2), cells: dist, stuck: still > 600, at: { x: +pl.x.toFixed(1), z: +pl.z.toFixed(1) } }); return; }
+            if (k > best) { best = k; still = 0; } else still += 1;
+            if (left < 1.2 || still > 300 || gt > maxT) { keys(0, 0); res({ ok: left < 1.2, left: +left.toFixed(2), cells: dist, k, stuck: still > 300, at: { x: +pl.x.toFixed(1), z: +pl.z.toFixed(1) } }); return; }
             keys(dx / l, dz / l); requestAnimationFrame(step);
           };
           requestAnimationFrame(step);
