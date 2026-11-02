@@ -284,7 +284,7 @@ void main(){ float d = length(vUv * 2.0 - 1.0); if (d > 1.0) discard;
 const DISC6_FS = `varying vec2 vUv; uniform vec3 uColor; uniform float uA; uniform float uK; uniform float uHard; uniform float uCoreA;
 void main(){ float d = length(vUv * 2.0 - 1.0) * uK; if (d > 1.0) discard;
   float body = mix((1.0 - smoothstep(0.3, 1.0, d)) * 0.5, (1.0 - smoothstep(0.93, 0.995, d)) * 0.22, uHard);
-  float rim = mix(smoothstep(0.55, 0.9, d) * (1.0 - smoothstep(0.9, 1.0, d)) * 0.3, smoothstep(0.91, 0.965, d) * (1.0 - smoothstep(0.975, 0.995, d)) * 2.4, uHard);
+  float rim = mix(smoothstep(0.4, 0.76, d) * (1.0 - smoothstep(0.76, 1.0, d)) * 0.3, smoothstep(0.91, 0.965, d) * (1.0 - smoothstep(0.975, 0.995, d)) * 2.4, uHard);
   float c = uCoreA * (1.0 - smoothstep(0.78, 0.95, d));
   gl_FragColor = vec4(uColor * (body * (1.0 - c) + rim) * uA + vec3(0.04, 0.024, 0.07) * c, c); }`;
 // (each its own geometry: on the Act IV slopes it is laid over the ground where it lies, build.js drape)
