@@ -2656,7 +2656,7 @@ const S = {
   // own phone texture: G1's bar for a cold start into Act VI is 100 MB. (MB: the GPU bytes of every texture the registries
   // hold, each uploaded, read through a WebGL hook; quality 1 halves the large maps as a phone does; renderer.info's count
   // beside it.) COLD=0 skips the cold starts
-  unload6: { q: 'auto=ashfield&q=1&lvl=24&cloud=off&' + A5.url('coal'), init: () => {
+  unload6: { q: 'auto=ashfield&q=1&lvl=24&cloud=off&' + A5.url('coastSeen'), init: () => {
     if (window.__texMem) return;
     const P = WebGL2RenderingContext.prototype, GLc = WebGL2RenderingContext, map = new Map(), st = new WeakMap();
     const S = (gl) => { let s = st.get(gl); if (!s) st.set(gl, (s = { unit: 0, b: {} })); return s; };
@@ -2676,6 +2676,7 @@ const S = {
     window.__texMem = { map, bytes, of: (tex) => { const e = tex && map.get(tex); return e ? bytes(e) : 0; }, total: () => { let s = 0; for (const e of map.values()) s += bytes(e); return s; } };
   }, run: async (pg, shot) => {
     const ev = (f, a) => pg.evaluate(f, a), beats = [], beat = (b, ok, v) => { beats.push({ b, ok: !!ok, v }); };
+    let step = 'start';
     // every texture the registries hold, uploaded if it is not yet, its GPU bytes by owner (each GL texture once); the
     // GL textures kept by owner for gone() (MB)
     const MEM = async () => {
@@ -2722,13 +2723,16 @@ const S = {
       return { zone: G.zone.id, packs: ['deep', 'wood', 'cinder', 'rime'].filter(E.packReady), folk: ['folk', 'grove', 'ash', 'frost'].filter(P.folkReady), groups: ['act2', 'act3', 'act4', 'act5'].filter(C.groupReady), zones: Object.keys(G.zones).sort(), log: U.UNLOAD.log.slice(-1)[0] || null, nlog: U.UNLOAD.log.length };
     });
     const whole = (a) => a.dead === 0 && a.flat === 0 && a.err === 0 && !a.npcs.some((x) => x.endsWith('*'));
-    const settle = async (id) => { await pg.waitForFunction((id) => window.__G?.zone?.id === id && window.__G.mode === 'play' && !document.getElementById('fade').classList.contains('on'), id, { timeout: 300000 }); await pg.waitForTimeout(1200); };
-    const travel = async (to) => { await ev((to) => window.__D.emit('travel', to, { at: 'waypoint' }), to); await settle(to); };
+    // (no scene, no line and no fade on: a word said on arrival is let finish before she moves on)
+    const calm = async () => { for (let i = 0; i < 240; i++) { const c = await ev(() => ({ d: !!document.querySelector('#dialog:not([hidden])'), busy: !!window.__G.cine || window.__G.mode !== 'play' || document.getElementById('fade').classList.contains('on') })); if (!c.d && !c.busy) return; if (c.d) await A4.enter(pg); await pg.waitForTimeout(250); } };
+    const settle = async (id) => { await pg.waitForFunction((id) => window.__G?.zone?.id === id && !document.getElementById('fade').classList.contains('on'), id, { timeout: 300000 }); await pg.waitForTimeout(1200); await calm(); };
+    const travel = async (to) => { await calm(); step = 'to ' + to; await ev((to) => window.__D.emit('travel', to, { at: 'waypoint' }), to); await settle(to); };
     // (on foot: through the zone's exit)
-    const walk = async (to) => { await ev((to) => { const G = window.__G, z = G.zone, it = z.interact.find((i) => i.kind === 'exit' && i.to === to); const f = z.map.nearestFloor(it.x, it.z + 1.2, 3); G.player.x = f.x; G.player.z = f.z; it.use(); }, to); await settle(to); };
+    const walk = async (to) => { await calm(); step = 'on foot to ' + to; await ev((to) => { const G = window.__G, z = G.zone, it = z.interact.find((i) => i.kind === 'exit' && i.to === to); const f = z.map.nearestFloor(it.x, it.z + 1.2, 3); G.player.x = f.x; G.player.z = f.z; it.use(); }, to); await settle(to); };
     const has = (l, xs) => xs.every((x) => l.includes(x)), none = (l, xs) => !xs.some((x) => l.includes(x));
     await ev(() => { window.__immortal = true; });
     const out = {};
+    try {
     // ---- the Field of Ash, Act IV: what it holds ----
     await settle('ashfield');
     const s0 = await ST(), m0 = await ev(MEM), a0 = await ev(AUDIT);
@@ -2741,7 +2745,7 @@ const S = {
     const L1 = await ev(async () => { const { R } = await import('/src/gfx/gfx.js'), { L } = window.__u6.lay; return { gpu: !!R.renderer.properties.get(L.d).__webglTexture, w: L.d.image?.width }; });
     beat('the coast: Act IV let go, its zone dropped, freed at once', s1.log?.to === 'coast' && has(s1.log.packs, ['cinder']) && has(s1.log.folk, ['ash']) && has(s1.log.groups, ['act4']) && s1.log.freed && !s1.log.late.length && s1.log.zones.includes('ashfield') && !s1.zones.includes('ashfield') && none(s1.packs, ['cinder']), s1);
     beat('Brokka\'s and Elati\'s people kept for the cameo (the sea not lit)', has(s1.folk, ['folk', 'grove']) && none(s1.log?.folk || [], ['folk', 'grove']), s1.folk);
-    beat('the textures disposed: none of Act IV\'s left on the GPU, the cinder layer holds its one-pixel stand-in', g1.n === 0 && g1.was >= 100 && !L1.gpu && L1.w === 1, { g1, L1 });
+    beat('the textures disposed: none of Act IV\'s left on the GPU, the cinder layer holds its one-pixel stand-in', g1.n === 0 && g1.was >= 100 && !L1.gpu && L1.w === 1 && !s1.log.late.length, { g1, L1 });
     beat('the coast drawn whole: every texture alive, no GL error, no stand-in', whole(a1), a1);
     out.coast = m1; out.saved1 = g1.was;
     await shot();
@@ -2774,12 +2778,21 @@ const S = {
     beat('the Forge: cinder and deep, the ash people', has(s6.packs, ['cinder', 'deep']) && has(s6.folk, ['ash']) && has(s6.groups, ['act4']) && whole(a6), { s6, a6 });
     out.forge = m6;
     await shot();
-    // ---- and the coast once more: everything of Acts II-IV goes ----
+    // ---- the forest and Whitecliff, built while all of it is loaded; then the coast once more: everything of Acts II-IV
+    // goes, the forest is dropped (built again on its next visit), Whitecliff is kept as it stands ----
+    await travel('forest'); await travel('town');
+    await ev(() => { window.__G.zones.town.__u6 = true; });
     await travel('coast');
     const OLD = ['pack:deep', 'pack:wood', 'pack:cinder', 'set:folk', 'set:grove', 'set:ash', 'cr:act2', 'cr:act3', 'cr:act4'];
     const s7 = await ST(), g7 = await gone(OLD), a7 = await ev(AUDIT), m7 = await ev(MEM);
-    beat('the coast after the whole tour: every pack, set and group of Acts II-IV let go and freed', none(s7.packs, ['deep', 'wood', 'cinder']) && none(s7.folk, ['folk', 'grove', 'ash']) && none(s7.groups, ['act2', 'act3', 'act4']) && s7.log?.freed && !s7.log.late.length && g7.n === 0 && whole(a7), { s7, g7, a7 });
+    // (Whitecliff, built here with every pack loaded, keeps what it draws: Isarn's staff carries the cinder pack's lantern)
+    beat('the coast after the whole tour: every pack, set and group of Acts II-IV let go and freed, but the few textures Whitecliff draws', none(s7.packs, ['deep', 'wood', 'cinder']) && none(s7.folk, ['folk', 'grove', 'ash']) && none(s7.groups, ['act2', 'act3', 'act4']) && s7.log?.freed && !s7.log.kept.length && s7.log.late.every((x) => x.startsWith('pack:')) && g7.held <= 2 && g7.was - g7.held >= 300 && whole(a7), { s7, g7, a7 });
+    beat('the forest dropped, Whitecliff kept', has(s7.log?.zones || [], ['halls', 'weep', 'forge', 'forest']) && !s7.log.zones.includes('town') && s7.zones.includes('town') && !s7.zones.includes('forest'), s7.log?.zones);
     out.coast2 = m7; out.saved2 = g7.was;
+    await travel('town');
+    const a8 = await ev(AUDIT), same = await ev(() => window.__G.zone.__u6 === true);
+    beat('Whitecliff as it was (the same zone) and drawn whole', same && whole(a8), a8);
+    await shot();
     // ---- cold starts: each act's own phone texture ----
     const COLD = { coast: 'auto=coast&lvl=28&' + A5.url('coastSeen'), farlight: 'auto=farlight&lvl=31&' + A5.url('farSeen'), drained: 'auto=drained&lvl=34&' + A5.url('toldChild') + ',act5,tam6,call6,coal6' };
     if (process.env.COLD !== '0') {
@@ -2801,6 +2814,7 @@ const S = {
       beat('a cold start into Act VI: its own phone texture within 100 MB', out.cold.drained.own <= 100 && whole(out.cold.drained.audit), out.cold.drained);
     }
     return { pass: beats.every((b) => b.ok), failed: beats.filter((b) => !b.ok).map((b) => b.b), mem: out, beats };
+    } catch (e) { return { pass: false, step, error: e.message, beats }; }
   } }
 };
 const sc = S[name];
