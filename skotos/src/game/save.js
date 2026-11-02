@@ -114,12 +114,16 @@ export function heroBlocked(h) {
   return d ? heroFits(d) : null;
 }
 // can a hero heroBlocked refuses be taken up repaired? Only one of a class this version has (repairHero mends items,
-// level, gold and the like, never a class): a newer version's class is only ever "reload the page"
+// level, gold and the like, never a class): a newer version's class is only ever "reload the page". A damaged record
+// (bad_data: numbers that are none, markup a co-op host or a file put in) only if its repaired copy is whole
 export function heroRepairable(h) {
   if (!h) return false;
   let d = null;
   try { const text = RAW.get(h); d = text !== undefined ? JSON.parse(text) : readDisk()?.heroes.find((x) => x && typeof x === 'object' && x.id === h.id) || null; } catch (e) { d = null; }
-  return !!d && typeof d === 'object' && Object.prototype.hasOwnProperty.call(CLASSES, d.cls) && heroFits(d) !== 'bad_data';
+  if (!d || typeof d !== 'object' || !Object.prototype.hasOwnProperty.call(CLASSES, d.cls)) return false;
+  if (heroFits(d) !== 'bad_data') return true;
+  const c = repairHero(JSON.parse(JSON.stringify(d)));
+  return typeof c.id === 'string' && HERO_ID.test(c.id) && heroFits(c) !== 'bad_data';
 }
 // a hero taken up from the title as it is stored now (another page of this browser may have played it since this page
 // read the save): the stored record, made whole, in the list in its place; the hero itself when it is not stored; null
@@ -176,6 +180,9 @@ export function deleteHero(id) {
 // whole again, its items rebuilt as items are (items.js cleanItem), so Continue, the bag, the shops and the stash work
 export function repairHero(h) {
   const fin = (v) => typeof v === 'number' && isFinite(v);
+  const id = h.id;
+  scrub(h);
+  if (typeof id === 'string' && !UNSAFE.test(id)) h.id = id;
   const items = (a, n) => { const out = Array.isArray(a) ? a.map((it) => (it ? cleanItem(it, { keep: true }) : null)) : []; while (out.length < n) out.push(null); return out; };
   h.inv = items(h.inv, INV_SIZE);
   h.stash = items(h.stash, STASH_SIZE);
@@ -224,13 +231,20 @@ export function heroFits(h) {
   return null;
 }
 // (any string or key of a record, however deep, holding a character of markup; or nesting past what a hero has)
-const UNSAFE = /[<>"'`&\\]/;
+const UNSAFE = /[<>"'`&\\]/, DEEP = 12;
 function unsafeText(o, depth = 0) {
-  if (depth > 12) return true;
   if (typeof o === 'string') return UNSAFE.test(o);
   if (!o || typeof o !== 'object') return false;
+  if (depth >= DEEP) return true;
   for (const k of Object.keys(o)) if (UNSAFE.test(k) || unsafeText(o[k], depth + 1)) return true;
   return false;
+}
+// (and what repair does with it: every such string or key goes, and nesting past what a hero has)
+function scrub(o, depth = 0) {
+  if (!o || typeof o !== 'object') return;
+  const bad = (v) => (typeof v === 'string' ? UNSAFE.test(v) : !!v && typeof v === 'object' && depth + 1 >= DEEP);
+  if (Array.isArray(o)) { for (let i = 0; i < o.length; i++) { if (bad(o[i])) o[i] = null; else scrub(o[i], depth + 1); } return; }
+  for (const k of Object.keys(o)) { if (UNSAFE.test(k) || bad(o[k])) delete o[k]; else scrub(o[k], depth + 1); }
 }
 // a hero from the cloud put in the stored list in its place (or first), and in this page's list made whole; never the
 // hero this page plays (false), nor one this version cannot keep as it is (heroFits: false)
@@ -349,8 +363,8 @@ export function exportHeroes() {
 }
 // such a file (or a list of heroes, or a save as stored) taken in: a hero new here is added; one this browser has too is
 // replaced only by a copy further on (its own then kept as a 'conflict' backup), else the file's copy is kept as an
-// 'imported' backup, as it is when it is the hero this page plays; one this version cannot read as it is (heroFits) is
-// left out. A hero deleted here comes back, dated after its tombstone as a restore is. { ok, added, updated, same, kept,
+// 'imported' backup (routine); the hero this page plays never is (the file's copy kept, protected when further on); one
+// this version cannot read as it is (heroFits), or listed twice, is left out. A hero deleted here comes back, dated after its tombstone as a restore is. { ok, added, updated, same, kept,
 // refused } or { ok: false, code: 'bad_file' }
 export function importHeroes(text) {
   let d = null;
@@ -359,11 +373,16 @@ export function importHeroes(text) {
   if (!list || !list.length || list.length > MOVE_MAX) return { ok: false, code: 'bad_file' };
   const R = { ok: true, added: 0, updated: 0, same: 0, kept: 0, refused: 0 };
   const fin = (v) => (typeof v === 'number' && isFinite(v) ? v : 0);
+  const seen = new Set();
   for (const rec of list) {
-    if (!rec || typeof rec !== 'object' || Array.isArray(rec) || typeof rec.id !== 'string' || !HERO_ID.test(rec.id) || heroFits(rec) || JSON.stringify(rec).length > MAX_HERO) { R.refused++; continue; }
+    // (one hero once a file: a file listing a hero again and again would push this browser's own copy out of the backups)
+    if (!rec || typeof rec !== 'object' || Array.isArray(rec) || typeof rec.id !== 'string' || !HERO_ID.test(rec.id) || seen.has(rec.id) || heroFits(rec) || JSON.stringify(rec).length > MAX_HERO) { R.refused++; continue; }
+    seen.add(rec.id);
     const cur = storedHeroes().find((h) => h.id === rec.id);
     if (cur && JSON.stringify(cur) === JSON.stringify(rec)) { R.same++; continue; }
-    if (rec.id === playingId() || (cur && further(cur, rec) >= 0)) { backupHero(rec, 'imported'); R.kept++; continue; }
+    // (the hero being played is never replaced under it: the file's copy kept, as a conflict's when it is further on)
+    if (rec.id === playingId()) { backupHero(rec, cur && further(rec, cur) > 0 ? 'conflict' : 'imported'); R.kept++; continue; }
+    if (cur && further(cur, rec) >= 0) { backupHero(rec, 'imported'); R.kept++; continue; }
     if (cur) backupHero(cur, 'conflict');
     const m = cloudMeta();
     let t = fin(m.tomb?.[rec.id]);
