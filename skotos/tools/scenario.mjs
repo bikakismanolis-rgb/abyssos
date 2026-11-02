@@ -2643,6 +2643,71 @@ const S = {
     await pg.waitForFunction(() => window.__G.zone?.id === 'bottom' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 240000 });
     beat('by the waypoint to the Well\'s Foot', true);
     return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
+  } },
+  // Act VI: look
+  // the look lane's stage A (docs/act6-contract.md, Visuals): on quality 0 and 1, the bench (src/debug/look6.js: a test
+  // layout of each zone with the black water's pockets and the Mere, built through buildLevel) in the world viewer's page:
+  // the ground is ground6 with the X6 set (G_WET on quality 1 only; no G_AUR, G_GLINT, G_WIN, G_EDGE), the water SEA_BLACK
+  // over the pockets only, the Mere on its own level (bayCorners from L.pocket 2 in drained, none at the Bottom), the slush
+  // crust from its texture, the vault drawn only while the camera looks low, every act6Prop kind built with its switches;
+  // then both zones in the game (?auto=drained, ?auto=bottom) build with ground6 and act6Level, no ice mesh. Pictures of
+  // the water at both levels, the slush, the Mere, the vault and every prop, on both qualities, into the out dir
+  look6: { q: 'world=crypt&q=1&nohouses', run: async (pg) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    const ev = (f, a) => pg.evaluate(f, a), dir = process.argv[3] || '/tmp';
+    const snap = (n) => pg.screenshot({ path: `${dir}/look6-${n}.png` });
+    // (the compiled programs' defines: the ground's and the water's, from the GL's own source)
+    const defs = () => ev(() => { const R = window.__R, gl = R.renderer.getContext(), out = {}; for (const p of R.renderer.info.programs) { const k = p.cacheKey || ''; const tag = k.includes('groundPBR|drained') ? 'groundD' : k.includes('groundPBR|bottom') ? 'groundB' : /sea\|tbh?2?(,|$|\|)/.test(k) ? 'black' : null; if (!tag) continue; const src = gl.getShaderSource(p.fragmentShader) || ''; (out[tag] ||= new Set()); for (const d of ['G_WET', 'G_AUR', 'G_GLINT', 'G_WIN', 'G_EDGE', 'SEA_BLACK', 'SEA_HI']) if (src.includes('#define ' + d)) out[tag].add(d); } for (const k in out) out[k] = [...out[k]]; return out; });
+    for (const q of [0, 1]) {
+      await pg.goto(A5.base + '?world=crypt&q=' + q + '&nohouses');
+      await pg.waitForFunction(() => window.__ready, null, { timeout: 240000 });
+      // ---- the Drained Sea's bench: the water, the Mere, the slush, the vault, every prop ----
+      const d = await ev(async () => { const m = await import('/src/debug/look6.js'); window.__L6 = m; return m.show({ type: 'drained', props: true }); });
+      beat(`q${q} drained bench built: ground6, the black water, the vault, every prop kind`, d.ground && d.groundKey.startsWith('groundPBR|drained') && d.sea && d.seaQuads > 0 && d.vault && d.keels === 4 && d.sky === 3 && d.braziers === 3 && d.rope && d.props.length === 20, d);
+      const water = [['pockets', 44, 51, { level: 0.6, wet: 0.75, mere: 1.6, dist: 11, pitch: 0.9 }], ['pockets-low', 44, 51, { level: 0.15, wet: 0.6, mere: 1.6, dist: 11, pitch: 0.9 }],
+        ['slush', 44, 51, { level: 0.6, mere: 1.6, dist: 11, pitch: 0.9, slush: [[42, 49], [43, 49], [42, 50], [43, 50], [44, 50], [43, 51], [44, 51], [45, 51]] }],
+        ['mere16', 58, 141, { level: 0.3, mere: 1.6, dist: 16, pitch: 0.95 }], ['mere085', 58, 141, { level: 0.3, mere: 0.85, dist: 16, pitch: 0.95 }],
+        ['vault', 56, 60, { level: 0.6, mere: 1.6, dist: 18, pitch: 0.12, density: 0.012, lookY: 6 }]];
+      for (const [n, x, z, o] of water) { await ev(([x, z, o]) => window.__L6.view(x, z, o), [x, z, o]); await snap(`q${q}-drained-${n}`); }
+      const vs = await ev(() => { const L = window.__look6, v = L.lvl.act6.vault, low = v.visible; window.__L6.view(56, 40, { pitch: 0.95, lookY: 0.9, density: 0.03 }); const t = L.L.tSlush; const by = L.L.bay5; let nb = 0; if (by) for (const k of by) if (k > 0) nb++; return { low, play: v.visible, slush: t ? Array.from(t.image.data).filter((b) => b).length : -1, bay: nb, black: /^sea\|tb/.test(L.lvl.sea.userData.mat.customProgramCacheKey()) }; });
+      beat(`q${q} the vault shows only to a low camera; slush cells in its texture; the Mere's corners on its own level; the black water's material`, vs.low && !vs.play && vs.slush === 8 && vs.bay > 200 && vs.black, vs);
+      const df = await defs();
+      beat(`q${q} the X6 set: G_WET ${q ? 'on' : 'off'}, no aurora, glint, windows or edge; the water SEA_BLACK`, (q ? df.groundD?.includes('G_WET') : !df.groundD?.includes('G_WET')) && !['G_AUR', 'G_GLINT', 'G_WIN', 'G_EDGE'].some((k) => df.groundD?.includes(k)) && df.black?.includes('SEA_BLACK'), df);
+      const props = await ev(() => window.__look6.props.map((p) => [p.k, p.x, p.z]));
+      for (const [k, x, z] of props) {
+        const far = { shadowWall: 13, neckArch: 13, keel: 12, gateRing: 10, skylight: 11, stiltFrame: 9, toppledLight: 14 }[k];
+        await ev(([x, z, o]) => window.__L6.view(x, z, o), [x + (k === 'toppledLight' ? 4 : 0), z + (far ? 2 : 1), { dist: far || 6.5, pitch: k === 'keel' || k === 'gateRing' || k === 'skylight' ? 0.55 : 0.78, lookY: k === 'bird' || k === 'garland' ? 1.6 : 0.9, density: 0.03, level: 0.3, mere: 1.6 }]);
+        await snap(`q${q}-prop-${k}`);
+      }
+      // (the switches: lit and out, a flare, the wall thinned away, the bell rung, the ring warm and cold, the pane out)
+      const sw = await ev(async () => {
+        const P = Object.fromEntries(window.__look6.props.map((p) => [p.k, p.m])), u = (k) => P[k].userData, out = {};
+        for (const k of ['hearth6', 'brazier6', 'hearthStone', 'nameLamp', 'wreckLantern', 'toppledLight', 'keyxLantern', 'blackLamp']) { u(k).setLit(false); const a = !!u(k).lit; u(k).setLit(true); out[k] = !a && !!u(k).lit; }
+        u('blackLamp').flare(1); u('blackLamp').flare(0); u('shipBell').ring(1); u('gateRing').setWarm(0); out.ring = u('gateRing').warm === 0; u('gateRing').setWarm(1);
+        u('emberPane').setGlow(0); out.pane = u('emberPane').glow === 0; u('emberPane').setGlow(1); u('ropeWinch').setFire(false); out.winch = u('ropeWinch').fire === false; u('ropeWinch').setFire(true);
+        u('skylight').dim(0.5); out.sky = u('skylight').k === 0.5; u('skylight').dim(1);
+        out.thin = await new Promise((ok) => { u('shadowWall').thin(0.3, () => ok(!P.shadowWall.visible && u('shadowWall').open)); const t0 = performance.now(); const step = () => { window.__L6.view(79, 107, {}); if (performance.now() - t0 < 8000 && P.shadowWall.visible) requestAnimationFrame(step); }; step(); setTimeout(() => ok(false), 9000); });
+        let flew = false; u('bird').fly([{ x: 90, y: 2, z: 97 }, { x: 94, y: 3, z: 94 }, { x: 98, y: 4, z: 92 }], 0.3, () => { flew = true; }); for (let i = 0; i < 40 && !flew; i++) { window.__L6.view(92, 98, {}); await new Promise((r) => setTimeout(r, 30)); } out.bird = flew;
+        return out;
+      });
+      beat(`q${q} every prop's switches`, Object.values(sw).every(Boolean), sw);
+      // ---- the Bottom's bench: its water, the glade's garlands, the village's sunk houses ----
+      const b = await ev(async () => window.__L6.show({ type: 'bottom' }));
+      beat(`q${q} bottom bench built: ground6, the black water, no Mere`, b.groundKey.startsWith('groundPBR|bottom') && b.sea && b.seaQuads > 0 && !(await ev(() => window.__look6.L.bay5)), b);
+      for (const [n, x, z, o] of [['pockets', 44, 51, { level: 0.6, wet: 0.75, mere: 0, dist: 11, pitch: 0.9 }], ['glade', 38, 103, { dist: 12, pitch: 0.85 }], ['village', 66, 70, { dist: 14, pitch: 0.85 }]]) { await ev(([x, z, o]) => window.__L6.view(x, z, o), [x, z, o]); await snap(`q${q}-bottom-${n}`); }
+      const db = await defs();
+      beat(`q${q} the Bottom's ground: the X6 set`, (q ? db.groundB?.includes('G_WET') : !db.groundB?.includes('G_WET')) && !['G_AUR', 'G_GLINT', 'G_WIN', 'G_EDGE'].some((k) => db.groundB?.includes(k)), db);
+      // ---- both zones in the game ----
+      for (const id of ['drained', 'bottom']) {
+        await pg.goto(A5.base + '?auto=' + id + '&q=' + q + '&sim=1&lvl=36&cloud=off');
+        await pg.waitForFunction(() => window.__ready && window.__G?.player && window.__G.mode === 'play', null, { timeout: 240000 });
+        await pg.waitForTimeout(2000);
+        const g = await ev(() => { const z = window.__G.zone, l = z.lvl; return { id: z.id, ground: l.ground?.material.customProgramCacheKey?.().split('|').slice(0, 2).join('|'), ice: !!l.ice, act6: !!l.act6, vault: !!l.act6?.vault, fx5: !!z.L.pocket }; });
+        beat(`q${q} ?auto=${id}: ground6 and act6Level, no ice mesh`, g.id === id && g.ground === 'groundPBR|' + id && !g.ice && g.act6 && g.vault, g);
+        await snap(`q${q}-game-${id}`);
+      }
+    }
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
   } }
 };
 const sc = S[name];
