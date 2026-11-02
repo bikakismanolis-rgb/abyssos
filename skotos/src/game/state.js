@@ -10,7 +10,7 @@ export const G = {
   zone: null, zones: {},
   actors: [], projs: [], areas: [], pickups: [], timers: [],
   combo: { n: 0, t: 0 },
-  settings: { music: 0.55, sfx: 0.8, quality: -1, lang: 'el', vibrate: true, numbers: true },
+  settings: { music: 0.55, sfx: 0.8, quality: -1, lang: 'el', vibrate: true, numbers: true, flicker: false },
   save: null,          // { heroes: [], settings, last }
   nextId: 1,
   flags: {},           // per-session flags (not saved)

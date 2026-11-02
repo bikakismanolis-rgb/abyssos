@@ -2917,6 +2917,281 @@ const S = {
     }
     return { pass: beats.every((b) => b.ok), failed: beats.filter((b) => !b.ok).map((b) => b.b), mem: out, beats };
     } catch (e) { return { pass: false, step, error: e.message, beats }; }
+  } },
+  // Act VI: look
+  // the look lane's stage A (docs/act6-contract.md, Visuals): on quality 0 and 1, the bench (src/debug/look6.js: a test
+  // layout of each zone with the black water's pockets and the Mere, built through buildLevel) in the world viewer's page:
+  // the ground is ground6 with the X6 set (G_WET on quality 1 only; no G_AUR, G_GLINT, G_WIN, G_EDGE), the water SEA_BLACK
+  // over the pockets only, the Mere on its own level (bayCorners from L.pocket 2 in drained, none at the Bottom), the slush
+  // crust from its texture, the vault drawn only while the camera looks low, every act6Prop kind built with its switches;
+  // then both zones in the game (?auto=drained, ?auto=bottom) build with ground6 and act6Level, no ice mesh. Pictures of
+  // the water at both levels, the slush, the Mere, the vault and every prop, on both qualities, into the out dir
+  look6: { q: 'world=crypt&q=1&nohouses', run: async (pg) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    const ev = (f, a) => pg.evaluate(f, a), dir = process.argv[3] || '/tmp';
+    const snap = (n) => pg.screenshot({ path: `${dir}/look6-${n}.png` });
+    // (the compiled programs' defines: the ground's and the water's, from the GL's own source)
+    const defs = () => ev(() => { const R = window.__R, gl = R.renderer.getContext(), out = {}; for (const p of R.renderer.info.programs) { const k = p.cacheKey || ''; const tag = k.includes('groundPBR|drained') ? 'groundD' : k.includes('groundPBR|bottom') ? 'groundB' : /sea\|tbh?2?(,|$|\|)/.test(k) ? 'black' : null; if (!tag) continue; const src = gl.getShaderSource(p.fragmentShader) || ''; (out[tag] ||= new Set()); for (const d of ['G_WET', 'G_AUR', 'G_GLINT', 'G_WIN', 'G_EDGE', 'SEA_BLACK', 'SEA_HI']) if (src.includes('#define ' + d)) out[tag].add(d); } for (const k in out) out[k] = [...out[k]]; return out; });
+    for (const q of [0, 1]) {
+      await pg.goto(A5.base + '?world=crypt&q=' + q + '&nohouses');
+      await pg.waitForFunction(() => window.__ready, null, { timeout: 240000 });
+      // ---- the Drained Sea's bench: the water, the Mere, the slush, the vault, every prop ----
+      const d = await ev(async () => { const m = await import('/src/debug/look6.js'); window.__L6 = m; return m.show({ type: 'drained', props: true }); });
+      beat(`q${q} drained bench built: ground6, the black water, the vault, every prop kind`, d.ground && d.groundKey.startsWith('groundPBR|drained') && d.sea && d.seaQuads > 0 && d.vault && d.keels >= 1 && d.sky === 3 && d.braziers === 3 && d.rope && d.props.length === 20, d);
+      // (the First's marks: one instanced draw along the trail, shown only inside the hero's ring, FIRE_U; the vault's drips)
+      const mk = await ev(() => {
+        const L = window.__look6, m = L.lvl.act6.marks, tr = L.L.spots.trail, R = window.__R, gl = R.renderer.getContext(), pr = R.renderer.getPixelRatio(), px = new Uint8Array(4), V = new R.camera.position.constructor();
+        // (a point off the screen reads nothing: a NaN, which fails the beat)
+        const read = (p) => { V.set(p.x, 0.03, p.z).project(R.camera); const x = Math.round((V.x * 0.5 + 0.5) * R.w * pr), y = Math.round((V.y * 0.5 + 0.5) * R.h * pr); if (x < 0 || y < 0 || x >= R.w * pr || y >= R.h * pr) return [NaN, NaN, NaN]; px.fill(0); gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); return [px[0], px[1], px[2]]; };
+        // (the camera on the twelfth mark: the eleventh 1.6 m behind it, the eighth 6.4 m up the screen, past the ring)
+        const diff = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]), at = tr[12], near = tr[11], far = tr[8], o = { dist: 11, pitch: 0.9, density: 0.03, lookY: 0.9 };
+        window.__L6.view(at.x, at.z, o); const n1 = read(near), f1 = read(far); m.visible = false; window.__L6.view(at.x, at.z, o); const n0 = read(near), f0 = read(far); m.visible = true;
+        window.__L6.view(at.x, at.z, { ...o, fireR: 10 }); const fw = read(far); window.__L6.view(at.x, at.z, o);
+        return { near: +diff(n1, n0).toFixed(1), far: +diff(f1, f0).toFixed(1), farWide: +diff(fw, f0).toFixed(1), dNear: +Math.hypot(near.x - at.x, near.z - at.z).toFixed(1), dFar: +Math.hypot(far.x - at.x, far.z - at.z).toFixed(1) };
+      });
+      beat(`q${q} the First's marks: ${d.marks} in one draw, seen inside the hero's ring and not beyond it, a wider ring showing more; the vault's drips`, d.marks === 44 && d.drips === 1 && mk.near > 12 && mk.far < 2 && mk.farWide > 12, { ...mk, marks: d.marks, drips: d.drips });
+      const tr = await ev(() => window.__look6.L.spots.trail[10]);
+      await ev(([x, z]) => window.__L6.view(x, z, { dist: 11, pitch: 0.9, density: 0.03, lookY: 0.9 }), [tr.x, tr.z]); await snap(`q${q}-drained-marks`);
+      await ev(([x, z]) => window.__L6.view(x, z, { dist: 11, pitch: 0.9, density: 0.03, lookY: 0.9, fireR: 7.5 }), [tr.x, tr.z]); await snap(`q${q}-drained-marks-wide`);
+      const water = [['pockets', 44, 51, { level: 0.6, wet: 0.75, mere: 1.6, dist: 11, pitch: 0.9 }], ['pockets-low', 44, 51, { level: 0.15, wet: 0.6, mere: 1.6, dist: 11, pitch: 0.9 }],
+        ['slush', 44, 51, { level: 0.6, mere: 1.6, dist: 11, pitch: 0.9, slush: [[42, 49], [43, 49], [42, 50], [43, 50], [44, 50], [43, 51], [44, 51], [45, 51]] }],
+        ['mere16', 58, 141, { level: 0.3, mere: 1.6, dist: 16, pitch: 0.95 }], ['mere085', 58, 141, { level: 0.3, mere: 0.85, dist: 16, pitch: 0.95 }],
+        ['vault', 56, 60, { level: 0.6, mere: 1.6, dist: 18, pitch: 0.12, density: 0.012, lookY: 6 }], ['keel-asger', 22, 107, { level: 0.3, dist: 12, pitch: 0.7, density: 0.03, lookY: 0.9 }],
+        ['shack-side', 66, 28, { dist: 10, pitch: 0.85 }]];
+      for (const [n, x, z, o] of water) { await ev(([x, z, o]) => window.__L6.view(x, z, o), [x, z, o]); await snap(`q${q}-drained-${n}`); }
+      const vs = await ev(() => { const L = window.__look6, v = L.lvl.act6.vault; window.__L6.view(56, 60, { pitch: 0.12, lookY: 6, density: 0.012 }); const low = v.visible; window.__L6.view(56, 40, { pitch: 0.95, lookY: 0.9, density: 0.03 }); const t = L.L.tSlush; const by = L.L.bay5; let nb = 0; if (by) for (const k of by) if (k > 0) nb++; return { low, play: v.visible, slush: t ? Array.from(t.image.data).filter((b) => b).length : -1, bay: nb, black: /^sea\|tb/.test(L.lvl.sea.userData.mat.customProgramCacheKey()) }; });
+      beat(`q${q} the vault shows only to a low camera; slush cells in its texture; the Mere's corners on its own level; the black water's material`, vs.low && !vs.play && vs.slush === 8 && vs.bay > 200 && vs.black, vs);
+      const df = await defs();
+      beat(`q${q} the X6 set: G_WET ${q ? 'on' : 'off'}, no aurora, glint, windows or edge; the water SEA_BLACK`, (q ? df.groundD?.includes('G_WET') : !df.groundD?.includes('G_WET')) && !['G_AUR', 'G_GLINT', 'G_WIN', 'G_EDGE'].some((k) => df.groundD?.includes(k)) && df.black?.includes('SEA_BLACK'), df);
+      const props = await ev(() => window.__look6.props.map((p) => [p.k, p.x, p.z]));
+      for (const [k, x, z] of props) {
+        const far = { shadowWall: 13, neckArch: 13, keel: 12, gateRing: 10, skylight: 11, stiltFrame: 9, toppledLight: 14 }[k];
+        await ev(([x, z, o]) => window.__L6.view(x, z, o), [x + (k === 'toppledLight' ? 4 : 0), z + (far ? 2 : 1), { dist: far || 6.5, pitch: k === 'keel' || k === 'gateRing' || k === 'skylight' ? 0.55 : 0.78, lookY: k === 'bird' || k === 'garland' ? 1.6 : 0.9, density: 0.03, level: 0.3, mere: 1.6 }]);
+        await snap(`q${q}-prop-${k}`);
+      }
+      // (the switches: lit and out, a flare, the wall thinned away, the bell rung, the ring warm and cold, the pane out)
+      const sw = await ev(async () => {
+        const P = Object.fromEntries(window.__look6.props.map((p) => [p.k, p.m])), u = (k) => P[k].userData, out = {};
+        for (const k of ['hearth6', 'brazier6', 'hearthStone', 'nameLamp', 'wreckLantern', 'toppledLight', 'keyxLantern', 'blackLamp']) { u(k).setLit(false); const a = !!u(k).lit; u(k).setLit(true); out[k] = !a && !!u(k).lit; }
+        u('blackLamp').flare(1); u('blackLamp').flare(0); u('shipBell').ring(1); u('gateRing').setWarm(0); out.ring = u('gateRing').warm === 0; u('gateRing').setWarm(1);
+        u('emberPane').setGlow(0); out.pane = u('emberPane').glow === 0; u('emberPane').setGlow(1); u('ropeWinch').setFire(false); out.winch = u('ropeWinch').fire === false; u('ropeWinch').setFire(true);
+        u('skylight').dim(0.5); out.sky = u('skylight').k === 0.5; u('skylight').dim(1);
+        out.thin = await new Promise((ok) => { u('shadowWall').thin(0.3, () => ok(!P.shadowWall.visible && u('shadowWall').open)); const t0 = performance.now(); const step = () => { window.__L6.view(79, 107, {}); if (performance.now() - t0 < 8000 && P.shadowWall.visible) requestAnimationFrame(step); }; step(); setTimeout(() => ok(false), 9000); });
+        let flew = false; u('bird').fly([{ x: 90, y: 2, z: 97 }, { x: 94, y: 3, z: 94 }, { x: 98, y: 4, z: 92 }], 0.3, () => { flew = true; }); for (let i = 0; i < 40 && !flew; i++) { window.__L6.view(92, 98, {}); await new Promise((r) => setTimeout(r, 30)); } out.bird = flew;
+        return out;
+      });
+      beat(`q${q} every prop's switches`, Object.values(sw).every(Boolean), sw);
+      // ---- the Drained Sea dry: the Mere drained to its bed, the Well's mouth at its centre ----
+      const dry = await ev(async () => window.__L6.show({ type: 'drained', mode: 'dry' }));
+      beat(`q${q} drained dry: the Well's mouth`, dry.well && dry.ground, dry);
+      await ev(() => window.__L6.view(58, 150, { level: 0.3, mere: 0, dist: 16, pitch: 0.95 })); await snap(`q${q}-drained-dry`);
+      // ---- the Bottom's bench: its water, the glade's garlands, the village's sunk houses ----
+      const b = await ev(async () => window.__L6.show({ type: 'bottom' }));
+      beat(`q${q} bottom bench built: ground6, the black water, no Mere`, b.groundKey.startsWith('groundPBR|bottom') && b.sea && b.seaQuads > 0 && !(await ev(() => window.__look6.L.bay5)), b);
+      for (const [n, x, z, o] of [['pockets', 44, 51, { level: 0.6, wet: 0.75, mere: 0, dist: 11, pitch: 0.9 }], ['glade', 38, 103, { dist: 12, pitch: 0.85 }], ['village', 66, 70, { dist: 14, pitch: 0.85 }]]) { await ev(([x, z, o]) => window.__L6.view(x, z, o), [x, z, o]); await snap(`q${q}-bottom-${n}`); }
+      const db = await defs();
+      beat(`q${q} the Bottom's ground: the X6 set`, (q ? db.groundB?.includes('G_WET') : !db.groundB?.includes('G_WET')) && !['G_AUR', 'G_GLINT', 'G_WIN', 'G_EDGE'].some((k) => db.groundB?.includes(k)), db);
+      // ---- both zones in the game ----
+      for (const id of ['drained', 'bottom']) {
+        await pg.goto(A5.base + '?auto=' + id + '&q=' + q + '&sim=1&lvl=36&cloud=off');
+        await pg.waitForFunction(() => window.__ready && window.__G?.player && window.__G.mode === 'play', null, { timeout: 240000 });
+        await pg.waitForTimeout(2000);
+        const g = await ev(() => { const z = window.__G.zone, l = z.lvl; return { id: z.id, ground: l.ground?.material.customProgramCacheKey?.().split('|').slice(0, 2).join('|'), ice: !!l.ice, act6: !!l.act6, vault: !!l.act6?.vault, fx5: !!z.L.pocket }; });
+        beat(`q${q} ?auto=${id}: ground6 and act6Level, no ice mesh`, g.id === id && g.ground === 'groundPBR|' + id && !g.ice && g.act6 && g.vault, g);
+        await snap(`q${q}-game-${id}`);
+      }
+    }
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
+  } },
+  // the tremble's luminance under WCAG's flash threshold (docs/act6-contract.md, Light: Photosensitivity), at quality 0 and 1:
+  // in the Drained Sea at the gameplay camera (pitch 0.95, its own distance and zoom), a hearth lit 2 m north of the hero
+  // with its r 6 pool (a lamp pool in an 'under' zone: true light, trembling by default), the loop held so nothing else on
+  // the screen moves (no particles, water, flames, the hemisphere's drift, the hero's own light held at its mean). The pool
+  // is ticked at 60 Hz (light.js tickLight) and every frame drawn and read back whole: each pixel's relative luminance
+  // (sRGB to linear, 0.2126 R + 0.7152 G + 0.0722 B; 1 the maximum) over 4 s after 1 s run off, its swing max - min.
+  // Masks, from frames drawn with and without each part: the footprint (every pixel the pool, its disc and its light, adds
+  // 0.004 or more to), the pool on the ground (the disc's own pixels, less the hearth's stones and the hero). WCAG 2.x: a
+  // flash is a pair of opposing changes of 0.1 or more of the maximum relative luminance, the darker under 0.8, and a page
+  // stays under the threshold while its flashing area at once is under 25% of any 10-degree field (WCAG's reference: 341 x
+  // 256 px of a 1024 x 768 screen, so 2.78% of the screen). Passes: no pixel of the pool on the ground swings by 0.1; the
+  // pixels anywhere that do (the light's foot on the hearth's stones, the hero's armour) under 2.78% of the screen; both
+  // with 'reduce flicker' off and on. Reported: the worst pixel, the 99th percentile, the pixels at or over 0.1, the
+  // footprint's mean luminance and its swing, the radius and intensity factors seen. Then the noise itself (2^14 steps of
+  // gfx.js trembleStep, the share of its power in 3-7 Hz: 70% or more), two seeds apart, and the Settings row (set.flicker:
+  // its chips set G.settings.flicker and it is saved). (What else moves while the loop is held is the shipped Cradle's own
+  // halo on the hero's hip, a few pixels, counted in 'anywhere')
+  tremble6: { q: 'world=crypt&q=0&nohouses', run: async (pg) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    const dir = process.argv[3] || '/tmp', out = {};
+    for (const q of [0, 1]) {
+      await pg.goto(A5.base + '?auto=drained&q=' + q + '&sim=1&lvl=36&cloud=off');
+      await pg.waitForFunction(() => window.__ready && window.__G?.player && window.__G.mode === 'play', null, { timeout: 240000 });
+      await pg.waitForTimeout(2500);
+      const m = await pg.evaluate(async () => {
+        const L = await import('/src/game/light.js'), Gf = await import('/src/gfx/gfx.js'), B6 = await import('/src/world/build6.js'), { groundY } = await import('/src/world/genlib.js');
+        const G = window.__G, R = window.__R, pl = G.player, z = G.zone, hx = pl.x, hz = pl.z - 2;
+        const prop = B6.act6Prop('hearth6'); prop.position.set(hx, groundY(z.L, hx, hz), hz); prop.userData.setLit(true); R.scene.add(prop);
+        const pool = L.addLightPool(hx, hz, 6, Infinity, 'tremble6', { lamp: true });
+        const lum = new Float32Array(256); for (let i = 0; i < 256; i++) { const c = i / 255; lum[i] = c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }
+        const gl = R.renderer.getContext(), w = gl.drawingBufferWidth, h = gl.drawingBufferHeight, N = w * h, px = new Uint8Array(N * 4);
+        const read = (y) => { gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px); for (let i = 0, j = 0; i < N; i++, j += 4) y[i] = 0.2126 * lum[px[j]] + 0.7152 * lum[px[j + 1]] + 0.0722 * lum[px[j + 2]]; return y; };
+        const drift = R.drift, hl = (R.heroLight.userData.base ?? 30) * 0.94, calm0 = G.settings.flicker;
+        R.drift = 0;
+        const step = () => { R.heroLight.intensity = hl; L.tickLight(1 / 60); Gf.frame(0); Gf.render(); };
+        const res = { trem: !!pool.trem, light: !!pool.light, w, h }, av = pl.avatar?.group || pl.avatar?.root || null;
+        const shot = () => { Gf.frame(0); Gf.render(); return read(new Float32Array(N)); };
+        for (const calm of [false, true]) {
+          G.settings.flicker = calm;
+          for (let i = 0; i < 60; i++) L.tickLight(1 / 60);
+          step();
+          const all = read(new Float32Array(N)), I0 = pool.light.intensity;
+          prop.visible = false; if (av) av.visible = false; const bare = shot(); prop.visible = true; if (av) av.visible = true;
+          pool.light.intensity = 0; const disc = shot(); pool.mesh.visible = false; const off = shot(); pool.mesh.visible = true; pool.light.intensity = I0;
+          // (three frames drawn and let go after the masks: a flame's sway is set in its onBeforeRender, so the first frame a
+          // prop is drawn again shows it at rest, a jump that is no tremble)
+          for (let i = 0; i < 3; i++) step();
+          const fp = [], gp = new Uint8Array(N);
+          for (let i = 0; i < N; i++) if (all[i] - off[i] >= 0.004) { fp.push(i); if (disc[i] - off[i] >= 0.002 && Math.abs(all[i] - bare[i]) < 0.002) gp[i] = 1; }
+          const mn = new Float32Array(fp.length).fill(9), mx = new Float32Array(fp.length).fill(-9), y = new Float32Array(N), means = [];
+          let k0 = 9, k1 = -9, i0 = 9, i1 = -9;
+          for (let f = 0; f < 240; f++) {
+            step(); read(y);
+            let sum = 0; for (let j = 0; j < fp.length; j++) { const v = y[fp[j]]; sum += v; if (v < mn[j]) mn[j] = v; if (v > mx[j]) mx[j] = v; }
+            means.push(sum / fp.length); k0 = Math.min(k0, pool.k); k1 = Math.max(k1, pool.k); i0 = Math.min(i0, pool.ki); i1 = Math.max(i1, pool.ki);
+          }
+          const swAll = [], swG = []; let flash = 0, bright = 0;
+          for (let j = 0; j < fp.length; j++) { const d = mx[j] - mn[j]; swAll.push(d); if (gp[fp[j]]) swG.push(d); if (d >= 0.1 && mn[j] < 0.8) flash++; bright = Math.max(bright, mx[j]); }
+          swAll.sort((a, b) => a - b); swG.sort((a, b) => a - b);
+          let msw = 0; for (let f = 1; f < means.length; f++) msw = Math.max(msw, Math.abs(means[f] - means[f - 1]));
+          const at = (v, q) => +(v[Math.min(v.length - 1, Math.floor(v.length * q))] || 0).toFixed(4);
+          res[calm ? 'calm' : 'full'] = { footprint: fp.length, footPct: +((fp.length / N) * 100).toFixed(1), worst: at(swAll, 1), p99: at(swAll, 0.99), p50: at(swAll, 0.5), over10: swAll.filter((v) => v >= 0.1).length,
+            flashPx: flash, flashPct: +((flash / N) * 100).toFixed(4), pool: { px: swG.length, worst: at(swG, 1), p99: at(swG, 0.99), p50: at(swG, 0.5) },
+            brightest: +bright.toFixed(3), meanY: +(means.reduce((a, b) => a + b, 0) / means.length).toFixed(4), meanSwing: +(Math.max(...means) - Math.min(...means)).toFixed(4), meanStep: +msw.toFixed(4),
+            radius: [+(k0 - 1).toFixed(4), +(k1 - 1).toFixed(4)], intensity: [+(i0 - 1).toFixed(4), +(i1 - 1).toFixed(4)] };
+        }
+        G.settings.flicker = calm0; R.drift = drift;
+        // (one frame left as the game shows it, for the picture)
+        step();
+        return res;
+      });
+      await pg.screenshot({ path: `${dir}/tremble6-q${q}.png` });
+      out['q' + q] = m;
+      beat(`q${q} the hearth's r 6 pool trembles (a lamp pool below the ice), its light its own`, m.trem && m.light, m);
+      beat(`q${q} the tremble under the flash threshold: no pixel of the pool on the ground swings by 0.1 of the maximum luminance (worst ${m.full?.pool.worst}), the flashing pixels anywhere ${m.full?.flashPct}% of the screen (under 2.78%)`, m.full && m.full.pool.px > 10000 && m.full.pool.worst < 0.1 && m.full.flashPct < 2.78 && m.full.footprint > 1000, m.full);
+      beat(`q${q} the radius trembles within +-8% and the intensity within +-10%, both reached at least half way`, m.full.radius[0] >= -0.0801 && m.full.radius[1] <= 0.0801 && m.full.intensity[0] >= -0.1001 && m.full.intensity[1] <= 0.1001 && m.full.radius[1] - m.full.radius[0] > 0.08 && m.full.intensity[1] - m.full.intensity[0] > 0.1, m.full);
+      beat(`q${q} 'reduce flicker': +-3% radius, no intensity swing, a smaller luminance swing (the pool's worst ${m.calm?.pool.worst}, anywhere ${m.calm?.worst})`, m.calm && m.calm.radius[0] >= -0.0301 && m.calm.radius[1] <= 0.0301 && m.calm.intensity[0] === 0 && m.calm.intensity[1] === 0 && m.calm.pool.worst < m.full.pool.worst && m.calm.pool.worst < 0.1 && m.calm.flashPct < 2.78 && m.calm.meanSwing < m.full.meanSwing, m.calm);
+    }
+    // the noise: its spectrum (a 2^14-point FFT, here in node), two seeds' correlation
+    const ns = await pg.evaluate(async () => { const Gf = await import('/src/gfx/gfx.js'); const a = Gf.trembler(12345), b = Gf.trembler(777), n = 1 << 14, A = [], Bq = []; for (let i = 0; i < n; i++) { A.push(Gf.trembleStep(a, 1 / 60)); Bq.push(Gf.trembleStep(b, 1 / 60)); } return { A, B: Bq }; });
+    const fft = (re, im) => { const n = re.length; for (let i = 1, j = 0; i < n; i++) { let b = n >> 1; for (; j & b; b >>= 1) j ^= b; j ^= b; if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; } } for (let len = 2; len <= n; len <<= 1) { const an = (-2 * Math.PI) / len, wr = Math.cos(an), wi = Math.sin(an); for (let i = 0; i < n; i += len) { let cr = 1, ci = 0; for (let k = 0; k < len / 2; k++) { const ur = re[i + k], ui = im[i + k], j = i + k + len / 2, vr = re[j] * cr - im[j] * ci, vi = re[j] * ci + im[j] * cr; re[i + k] = ur + vr; im[i + k] = ui + vi; re[j] = ur - vr; im[j] = ui - vi; const t = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = t; } } } };
+    const re = Float64Array.from(ns.A), im = new Float64Array(re.length); fft(re, im);
+    let tot = 0, band = 0; for (let k = 1; k < re.length / 2; k++) { const f = (k * 60) / re.length, pw = re[k] ** 2 + im[k] ** 2; tot += pw; if (f >= 3 && f <= 7) band += pw; }
+    const mean = (v) => v.reduce((a, b) => a + b, 0) / v.length, ma = mean(ns.A), mb = mean(ns.B);
+    let sab = 0, saa = 0, sbb = 0; for (let i = 0; i < ns.A.length; i++) { sab += (ns.A[i] - ma) * (ns.B[i] - mb); saa += (ns.A[i] - ma) ** 2; sbb += (ns.B[i] - mb) ** 2; }
+    const rms = Math.sqrt(saa / ns.A.length), corr = sab / Math.sqrt(saa * sbb), clip = ns.A.filter((v) => Math.abs(v) >= 0.999).length / ns.A.length;
+    out.noise = { band: +(band / tot * 100).toFixed(1), rms: +rms.toFixed(3), clipped: +(clip * 100).toFixed(2), corr: +corr.toFixed(3) };
+    beat(`the tremble is band-limited noise: ${out.noise.band}% of its power in 3-7 Hz, two seeds uncorrelated`, out.noise.band >= 70 && Math.abs(out.noise.corr) < 0.1 && out.noise.rms > 0.25, out.noise);
+    // the Settings row: 'Reduce flicker', its chips, saved
+    const st = await pg.evaluate(async () => {
+      const G = window.__G; window.__D.openPanel('settings'); await new Promise((r) => setTimeout(r, 300));
+      const row = [...document.querySelectorAll('.set-row')].find((r) => r.querySelector('[data-a="flk:1"]')), label = row?.querySelector('span')?.textContent;
+      row?.querySelector('[data-a="flk:1"]').click(); await new Promise((r) => setTimeout(r, 100)); const on = G.settings.flicker === true && !!document.querySelector('[data-a="flk:1"].on');
+      window.__D.closePanel(); await new Promise((r) => setTimeout(r, 200));
+      const key = Object.keys(localStorage).find((k) => k.startsWith('skotos.save.v1')), saved = key ? JSON.parse(localStorage.getItem(key)).settings?.flicker : null;
+      window.__D.openPanel('settings'); await new Promise((r) => setTimeout(r, 300)); document.querySelector('[data-a="flk:0"]')?.click(); await new Promise((r) => setTimeout(r, 100)); const off = G.settings.flicker === false; window.__D.closePanel();
+      return { label, on, saved, off };
+    });
+    beat('the Settings row set.flicker: its On chip turns it on, it is saved, Off turns it off', st.label && st.on && st.saved === true && st.off, st);
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), ...out, beats };
+  } },
+  // Act V's shallowtele for this act (act6-design.md, Engine work 20; the contract's G2 list): at quality 0 and 1, on the
+  // Drained Sea's silt in the hero's light and again under ATMOS.hearthDark (the Shade's last form), every tell the act adds
+  // laid round the hero at the gameplay camera: the Black Flare (a 'dark' circle), a Lampbearer's Drink line (a 'dark'
+  // line), the icicles' white circles, the Shade's grey-violet mirror move (an ordinary additive cone, 0x8a7aa8), the black
+  // lamp's false pool (fake, its dark core) and a lure's (fake, cold), with a true pool (trembling) beside them. Each read by
+  // contrast as shallowtele reads (the mean colour at points on it, drawn with it and without it, at six moments of the
+  // dark's 2 Hz pulse): every one over 12 (of 255); the dark's cores darken the lit ground under them; the dark's rim
+  // pulses; the 'dark' telegraph is premultiplied, the others stay additive; the false pools stay dead still and count
+  // for nothing (lightAt, lampLightAt), the true one trembles. Pictures into the out dir
+  darktele: { q: 'world=crypt&q=0&nohouses', run: async (pg) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    const dir = process.argv[3] || '/tmp', out = {};
+    for (const q of [0, 1]) {
+      await pg.goto(A5.base + '?auto=drained&q=' + q + '&sim=1&lvl=36&cloud=off');
+      await pg.waitForFunction(() => window.__ready && window.__G?.player && window.__G.mode === 'play', null, { timeout: 240000 });
+      await pg.waitForTimeout(2500);
+      await pg.evaluate(async () => {
+        const FXm = await import('/src/gfx/fx.js'), L = await import('/src/game/light.js'), G = window.__G, pl = G.player, x = pl.x, z = pl.z;
+        // (the tells round the hero, at fixed offsets, held for the read)
+        const T = window.__dt6 = { x, z, FXm, L, items: {} };
+        T.items.flare = { m: FXm.teleCircle(x + 3.5, z - 3, 2, 99, 'dark').m, kind: 'circle', at: [x + 3.5, z - 3, 2] };
+        T.items.icicle = { m: FXm.teleCircle(x - 3.5, z - 3, 1.2, 99, 0xe8f4ff).m, kind: 'circle', at: [x - 3.5, z - 3, 1.2] };
+        T.items.drink = { m: FXm.teleLine(x - 2, z + 2.5, -Math.PI / 2, 4.5, 1, 99, 'dark').m, kind: 'line', at: [x - 2, z + 2.5, -Math.PI / 2, 4.5, 1] };
+        T.items.mirror = { m: FXm.teleCone(x + 2, z + 2.5, Math.PI / 2, 3.5, 0.45, 99, 0x8a7aa8).m, kind: 'cone', at: [x + 2, z + 2.5, Math.PI / 2, 3.5, 0.45] };
+        const core = L.addLightPool(x + 6.2, z - 0.5, 1.6, Infinity, 'dt6:core', { fake: true, core: 'dark', light: false });
+        const lure = L.addLightPool(x - 6.2, z - 0.5, 2, Infinity, 'dt6:lure', { fake: true, light: false });
+        const tru = L.addLightPool(x, z - 5.2, 1.8, Infinity, 'dt6:true', { lamp: true, light: false });
+        T.items.core = { m: core.mesh, kind: 'pool', at: [x + 6.2, z - 0.5, 1.6], pool: core };
+        T.items.lure = { m: lure.mesh, kind: 'pool', at: [x - 6.2, z - 0.5, 2], pool: lure };
+        T.items.true = { m: tru.mesh, kind: 'pool', at: [x, z - 5.2, 1.8], pool: tru };
+      });
+      for (const atm of ['drained', 'hearthDark']) {
+        const r = await pg.evaluate(async (atm) => {
+          const T = window.__dt6, { L, FXm } = T, Gf = await import('/src/gfx/gfx.js'), { ATMOS } = await import('/src/world/atmos.js'), R = window.__R, G = window.__G;
+          Gf.setAtmosphere(ATMOS[atm]); R.drift = 0;
+          const hl = (R.heroLight.userData.base ?? 30) * 0.94, gl = R.renderer.getContext(), pr = R.renderer.getPixelRatio(), px = new Uint8Array(4), V = new R.camera.position.constructor();
+          const draw = () => { R.heroLight.intensity = hl; L.tickLight(0); R.heroLight.intensity = hl; Gf.frame(0); Gf.render(); };
+          const read = (x, z) => { V.set(x, 0.05, z).project(R.camera); gl.readPixels(Math.round((V.x * 0.5 + 0.5) * R.w * pr), Math.round((V.y * 0.5 + 0.5) * R.h * pr), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); return [px[0], px[1], px[2]]; };
+          const lumOf = (c) => { const f = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
+          const mean = (pts) => { const c = [0, 0, 0]; for (const [x, z] of pts) { const v = read(x, z); for (let i = 0; i < 3; i++) c[i] += v[i] / pts.length; } return c; };
+          const diff = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+          const ring = (cx, cz, r, n = 10) => Array.from({ length: n }, (_, k) => [cx + Math.sin((k * 6.283) / n) * r, cz + Math.cos((k * 6.283) / n) * r]);
+          // (points on its rim and in its core, by its shape: the cone along its arc, the line along its edges and middle)
+          const pts = (it) => { const a = it.at;
+            if (it.kind === 'circle' || it.kind === 'pool') return { rim: ring(a[0], a[1], a[2] * 0.93), core: ring(a[0], a[1], a[2] * 0.4, 6) };
+            if (it.kind === 'cone') { const rim = [], core = []; for (let k = -2; k <= 2; k++) { const an = a[2] + (k / 2) * a[4] * 0.8; rim.push([a[0] + Math.sin(an) * a[3] * 0.94, a[1] + Math.cos(an) * a[3] * 0.94]); core.push([a[0] + Math.sin(an) * a[3] * 0.5, a[1] + Math.cos(an) * a[3] * 0.5]); } return { rim, core }; }
+            const sx = Math.sin(a[2]), cz = Math.cos(a[2]), rim = [], core = []; for (let k = 1; k <= 5; k++) { const d = (k / 6) * a[3]; for (const sd of [-1, 1]) rim.push([a[0] + sx * d + cz * sd * a[4] * 0.43, a[1] + cz * d - sx * sd * a[4] * 0.43]); core.push([a[0] + sx * d, a[1] + cz * d]); } return { rim, core }; };
+          const res = {};
+          for (const k in T.items) {
+            const it = T.items[k], u = it.m.material.uniforms, P = pts(it);
+            if (u.uP) u.uP.value = 0.6;
+            let sum = 0, coreOn = 0, coreOff = 0, rimHi = 0, rimLo = 1e9;
+            for (let j = 0; j < 6; j++) {
+              if (u.uT) u.uT.value = 10 + j * 0.083; draw();
+              const on = mean(P.rim), cOn = mean(P.core);
+              it.m.visible = false; draw(); const off = mean(P.rim), cOff = mean(P.core); it.m.visible = true;
+              const d = diff(on, off) * 0.6 + diff(cOn, cOff) * 0.4; sum += d; coreOn += lumOf(cOn) / 6; coreOff += lumOf(cOff) / 6;
+              const rd = diff(on, off); rimHi = Math.max(rimHi, rd); rimLo = Math.min(rimLo, rd);
+            }
+            res[k] = { read: +(sum / 6).toFixed(1), coreOn: +coreOn.toFixed(4), coreOff: +coreOff.toFixed(4), rim: [+rimLo.toFixed(1), +rimHi.toFixed(1)] };
+          }
+          // (the blends: the dark's premultiplied, the rest additive)
+          res.blend = { flare: T.items.flare.m.material.blendDst, icicle: T.items.icicle.m.material.blending, core: T.items.core.m.material.blendDst };
+          draw();
+          return res;
+        }, atm);
+        await pg.screenshot({ path: `${dir}/darktele-q${q}-${atm}.png` });
+        out[`q${q}-${atm}`] = r;
+        const low = Object.entries(r).filter(([k, v]) => k !== 'blend' && !(v.read > 12)).map(([k]) => k);
+        beat(`q${q} ${atm}: every tell reads over 12 against its ground`, !low.length, { low, r });
+        beat(`q${q} ${atm}: the dark's cores darken the ground under them (the Black Flare, the Drink line, the black lamp's pool)`, ['flare', 'drink', 'core'].every((k) => r[k].coreOn < r[k].coreOff), { flare: r.flare, drink: r.drink, core: r.core });
+        beat(`q${q} ${atm}: the dark's rim pulses (2 Hz), the icicle's does not`, r.flare.rim[1] > r.flare.rim[0] * 1.25 && r.icicle.rim[1] - r.icicle.rim[0] < 2, { flare: r.flare.rim, icicle: r.icicle.rim });
+        beat(`q${q} ${atm}: the 'dark' tell and the dark core premultiplied, the white circle additive`, r.blend.flare === 205 && r.blend.core === 205 && r.blend.icicle === 2, r.blend);
+      }
+      // the false pools stay dead still and count for nothing; the true one trembles
+      const st = await pg.evaluate(async () => {
+        const T = window.__dt6, { L } = T, it = T.items, uA = (k) => it[k].m.material.uniforms.uA.value, uK = (k) => it[k].m.material.uniforms.uK.value, seen = { core: new Set(), lure: new Set(), trueA: new Set(), trueK: new Set() };
+        for (let i = 0; i < 30; i++) { L.tickLight(1 / 60); seen.core.add(uA('core').toFixed(5)); seen.lure.add(uA('lure').toFixed(5)); seen.trueA.add(uA('true').toFixed(5)); seen.trueK.add(uK('true').toFixed(5)); }
+        const [lx, lz] = it.lure.at, [cx, cz] = it.core.at, p = it.lure.pool;
+        const withLure = { at: L.lightAt(lx, lz, { ring: false }), lamp: !!L.lampLightAt(lx, lz), warm: !!L.warmAt(lx, lz), coreAt: L.lightAt(cx, cz, { ring: false }) };
+        L.removeLightPool('dt6:lure'); L.removeLightPool('dt6:core');
+        const without = { at: L.lightAt(lx, lz, { ring: false }), lamp: !!L.lampLightAt(lx, lz), warm: !!L.warmAt(lx, lz), coreAt: L.lightAt(cx, cz, { ring: false }) };
+        return { core: seen.core.size, lure: seen.lure.size, trueA: seen.trueA.size, trueK: seen.trueK.size, withLure, without, lureLight: !!p.light, fake: !!p.fake };
+      });
+      beat(`q${q} false pools dead still (one intensity over 30 frames), the true one trembling`, st.core === 1 && st.lure === 1 && st.trueA > 20 && st.trueK > 20, st);
+      beat(`q${q} false pools have no light of their own and count for nothing (lightAt, lampLightAt, warmAt the same without them)`, st.fake && !st.lureLight && JSON.stringify(st.withLure) === JSON.stringify(st.without), st);
+    }
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
   } }
 };
 const sc = S[name];
