@@ -195,8 +195,9 @@ function updateLights(dt) {
     let k = 1;
     if (s.flicker === 'beat') k = beatK;
     else if (s.flicker === 'seed') k = (1 - LIGHTS.autumn) * (1 + 0.16 * (noise2(R.time * 1.3 + s.phase, s.phase) - 0.5));
-    // (Act VI's true light: the tremble, +-10% from band-limited noise; none with 'reduce flicker')
-    else if (s.flicker === 'tremble') { const n = trembleStep(s.trem ||= trembler(Math.floor(s.phase * 1e4)), dt); k = G.settings.flicker ? 1 : 1 + 0.1 * n; }
+    // (Act VI's true light: the tremble, +-10% from band-limited noise, +-8.5% at quality 0 (trembleAmp); none with
+    // 'reduce flicker')
+    else if (s.flicker === 'tremble') { const n = trembleStep(s.trem ||= trembler(Math.floor(s.phase * 1e4)), dt); k = G.settings.flicker ? 1 : 1 + trembleAmp().i * n; }
     else if (s.flicker) k = 1 + s.flicker * (noise2(R.time * 9 + s.phase, s.phase) - 0.5) * 2;
     if (s.fade) k *= s.life > 0 ? Math.min(1, s.life / s.fade) : 1;
     if (s.gain) k *= s.gain.k; // a shared dimmer (an Amber Tear once its memory is spent)
@@ -238,6 +239,12 @@ export function trembleStep(T, dt) {
   while (T.acc >= 1) { T.acc -= 1; trStep(T); }
   return T.y0 + (T.y1 - T.y0) * T.acc;
 }
+// how far the tremble reaches at full swing (n = +-1): r the drawn radius, i the intensity. +-8% and +-10%; at quality 0
+// +-7% and +-8.5%, where the ground and the stones are drawn brighter: the brightest pixel a hearth's r 6 pool lights (a
+// standing stone's lit face by the Drained Sea's arrival) swung 0.100 of the maximum luminance from n = -1 to +1 at the
+// full reach, on WCAG's flash line; 0.087 at this one, as at quality 1 (tremble6)
+const TREM_A = [{ r: 0.07, i: 0.085 }, { r: 0.08, i: 0.1 }];
+export const trembleAmp = () => TREM_A[R.quality ? 1 : 0];
 
 // ---------- camera ----------
 export function shake(amount) { R.cam.trauma = Math.min(1, R.cam.trauma + amount); }

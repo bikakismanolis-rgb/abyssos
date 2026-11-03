@@ -10,7 +10,7 @@
 // turns it on anywhere, for tests: true or 'ember' for Act IV's rules, 'sea' for Act V's).
 import * as THREE from 'three';
 import { G } from './state.js';
-import { R, addLight, removeLight, trembler, trembleStep } from '../gfx/gfx.js';
+import { R, addLight, removeLight, trembler, trembleStep, trembleAmp } from '../gfx/gfx.js';
 import * as FXM from '../gfx/fx.js';
 import * as B from '../world/build.js';
 import { SEA, beamMesh } from '../world/sea.js';
@@ -138,10 +138,11 @@ export function relightNear(x, z, r) {
 // a while. (On the snow of the sea zones a pool is a soft warm glow with no rim, and its light a third as strong: the ember
 // zones' pool burns white snow into a bright disc and drowns the fire that throws it)
 // Act VI's light (docs/act6-contract.md, Light): o.tremble (by default a lamp pool's in an 'under' zone): true light, its
-// drawn radius +-8% and its intensity (the decal's and its light's) +-10% from band-limited noise (gfx.js trembler, its own
-// seed: o.seed), +-3% and steady with 'reduce flicker' (G.settings.flicker); what it lights for the rules (p.r) never
-// trembles. o.fake: false light, dead still, a hard rim, and lightAt, lampLightAt and warmAt pass it by. o.light === false:
-// the decal without a light of its own (a false pool, a skylight, a niche). o.core: 'dark' (a fake pool's): a dark core
+// drawn radius +-8% and its intensity (the decal's and its light's) +-10% (at quality 0 +-7% and +-8.5%: gfx.js
+// trembleAmp) from band-limited noise (gfx.js trembler, its own seed: o.seed), +-3% and steady with 'reduce flicker'
+// (G.settings.flicker); what it lights for the rules (p.r) never trembles. o.fake: false light, dead still, a hard rim,
+// and lightAt, lampLightAt and warmAt pass it by. o.light === false: the decal without a light of its own (a false pool,
+// a skylight, a niche). o.core: 'dark' (a fake pool's): a dark core
 // over the ground under its rim (the black lamps, 0x8a70ff). o.sky: a skylight's (p.sky for the Carried Fire's fills; its
 // look green-white and soft). All of them draw the act's own disc (discMesh's o)
 export function addLightPool(x, z, r, dur = Infinity, tag = null, o = {}) {
@@ -387,7 +388,7 @@ export function tickLight(dt) {
     if (p.shrinkT > 0 && (p.shrinkT -= dt) <= 0) p.r = p.r0;
     const fade = Math.min(1, (p.dur - p.t) / 1.5);
     // (true light's tremble: its drawn radius and its intensity, never p.r; with 'reduce flicker' +-3% and steady)
-    if (p.trem) { const n = trembleStep(p.trem, dt), calm = !!G.settings.flicker; p.k = 1 + n * (calm ? 0.03 : 0.08); p.ki = calm ? 1 : 1 + n * 0.1; }
+    if (p.trem) { const n = trembleStep(p.trem, dt), calm = !!G.settings.flicker, A = trembleAmp(); p.k = 1 + n * (calm ? 0.03 : A.r); p.ki = calm ? 1 : 1 + n * A.i; }
     if (p.light) { p.light.x = p.x; p.light.z = p.z; if (!p.beam) p.light.range = p.r * 2 * p.k; if (p.trem) p.light.intensity = p.I0 * p.ki; }
     if (p.mesh) {
       const m = p.mesh, r = Math.max(0.01, p.r), u = m.material.uniforms;

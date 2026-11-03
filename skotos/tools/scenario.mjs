@@ -3456,20 +3456,24 @@ const S = {
   // the tremble's luminance under WCAG's flash threshold (docs/act6-contract.md, Light: Photosensitivity), at quality 0 and 1:
   // in the Drained Sea at the gameplay camera (pitch 0.95, its own distance and zoom), a hearth lit 2 m north of the hero
   // with its r 6 pool (a lamp pool in an 'under' zone: true light, trembling by default), the loop held so nothing else on
-  // the screen moves (no particles, water, flames, the hemisphere's drift, the hero's own light held at its mean). The pool
-  // is ticked at 60 Hz (light.js tickLight) and every frame drawn and read back whole: each pixel's relative luminance
-  // (sRGB to linear, 0.2126 R + 0.7152 G + 0.0722 B; 1 the maximum) over 4 s after 1 s run off, its swing max - min.
+  // the screen moves (no particles, water, flames, the hemisphere's drift, the hero's own light held at its mean). Each
+  // frame is drawn and read back whole: each pixel's relative luminance (sRGB to linear, 0.2126 R + 0.7152 G + 0.0722 B; 1
+  // the maximum), its swing max - min. The gate reads the tremble's full reach, the same on every run: the noise held at 21
+  // values from -1 to +1 (light.js tickLight with the pool's trembler held, so its radius, intensity and light are the
+  // game's own at each), every pixel's swing over them (a pixel's luminance rises with the noise, so this is the most any
+  // stretch of it can swing). A 4 s run of the pool's own noise (a fixed seed, ticked at 60 Hz after 1 s run off) is
+  // reported beside it: a random seed's 4 s reached the full reach on some runs and not on others (G1, 2 November).
   // Masks, from frames drawn with and without each part: the footprint (every pixel the pool, its disc and its light, adds
   // 0.004 or more to), the pool on the ground (the disc's own pixels, less the hearth's stones and the hero). WCAG 2.x: a
   // flash is a pair of opposing changes of 0.1 or more of the maximum relative luminance, the darker under 0.8, and a page
   // stays under the threshold while its flashing area at once is under 25% of any 10-degree field (WCAG's reference: 341 x
-  // 256 px of a 1024 x 768 screen, so 2.78% of the screen). Passes: no pixel of the pool on the ground swings by 0.1; the
-  // pixels anywhere that do (the light's foot on the hearth's stones, the hero's armour) under 2.78% of the screen; both
-  // with 'reduce flicker' off and on. Reported: the worst pixel, the 99th percentile, the pixels at or over 0.1, the
-  // footprint's mean luminance and its swing, the radius and intensity factors seen. Then the noise itself (2^14 steps of
-  // gfx.js trembleStep, the share of its power in 3-7 Hz: 70% or more), two seeds apart, and the Settings row (set.flicker:
-  // its chips set G.settings.flicker and it is saved). (What else moves while the loop is held is the shipped Cradle's own
-  // halo on the hero's hip, a few pixels, counted in 'anywhere')
+  // 256 px of a 1024 x 768 screen, so 2.78% of the screen). Passes, at the full reach: no pixel of the pool on the ground
+  // swings by 0.1 (aim: 0.09 or less); the pixels anywhere that do (the light's foot on the hearth's stones, the hero's
+  // armour) under 2.78% of the screen; both with 'reduce flicker' off and on. Reported: the worst pixel and where, the 99th
+  // percentile, the pixels at or over 0.1, the footprint's mean luminance and its swing, the radius and intensity factors
+  // seen. Then the noise itself (2^14 steps of gfx.js trembleStep, the share of its power in 3-7 Hz: 70% or more), two
+  // seeds apart, and the Settings row (set.flicker: its chips set G.settings.flicker and it is saved). (What else moves while
+  // the loop is held is the shipped Cradle's own halo on the hero's hip, a few pixels, counted in 'anywhere')
   tremble6: { q: 'world=crypt&q=0&nohouses', run: async (pg) => {
     const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
     const dir = process.argv[3] || '/tmp', out = {};
@@ -3481,15 +3485,38 @@ const S = {
         const L = await import('/src/game/light.js'), Gf = await import('/src/gfx/gfx.js'), B6 = await import('/src/world/build6.js'), { groundY } = await import('/src/world/genlib.js');
         const G = window.__G, R = window.__R, pl = G.player, z = G.zone, hx = pl.x, hz = pl.z - 2;
         const prop = B6.act6Prop('hearth6'); prop.position.set(hx, groundY(z.L, hx, hz), hz); prop.userData.setLit(true); R.scene.add(prop);
-        const pool = L.addLightPool(hx, hz, 6, Infinity, 'tremble6', { lamp: true });
+        const pool = L.addLightPool(hx, hz, 6, Infinity, 'tremble6', { lamp: true, seed: 12345 });
         const lum = new Float32Array(256); for (let i = 0; i < 256; i++) { const c = i / 255; lum[i] = c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }
         const gl = R.renderer.getContext(), w = gl.drawingBufferWidth, h = gl.drawingBufferHeight, N = w * h, px = new Uint8Array(N * 4);
         const read = (y) => { gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px); for (let i = 0, j = 0; i < N; i++, j += 4) y[i] = 0.2126 * lum[px[j]] + 0.7152 * lum[px[j + 1]] + 0.0722 * lum[px[j + 2]]; return y; };
         const drift = R.drift, hl = (R.heroLight.userData.base ?? 30) * 0.94, calm0 = G.settings.flicker;
         R.drift = 0;
-        const step = () => { R.heroLight.intensity = hl; L.tickLight(1 / 60); Gf.frame(0); Gf.render(); };
-        const res = { trem: !!pool.trem, light: !!pool.light, w, h }, av = pl.avatar?.group || pl.avatar?.root || null;
+        const draw = () => { R.heroLight.intensity = hl; Gf.frame(0); Gf.render(); };
+        const step = () => { L.tickLight(1 / 60); draw(); };
+        // (the noise held at n: the trembler's last two steps set to it and no time to step on, so tickLight reads n itself)
+        const hold = (n) => { const T = pool.trem; T.y0 = T.y1 = n; T.acc = 0; L.tickLight(0); draw(); };
+        const res = { trem: !!pool.trem, light: !!pool.light, w, h, amp: Gf.trembleAmp() }, av = pl.avatar?.group || pl.avatar?.root || null;
         const shot = () => { Gf.frame(0); Gf.render(); return read(new Float32Array(N)); };
+        const at = (v, q) => +(v[Math.min(v.length - 1, Math.floor(v.length * q))] || 0).toFixed(4);
+        // every pixel's swing over n frames, each set by set(f)
+        const measure = (fp, gp, n, set) => {
+          const mn = new Float32Array(fp.length).fill(9), mx = new Float32Array(fp.length).fill(-9), y = new Float32Array(N), means = [];
+          let k0 = 9, k1 = -9, i0 = 9, i1 = -9;
+          for (let f = 0; f < n; f++) {
+            set(f); read(y);
+            let sum = 0; for (let j = 0; j < fp.length; j++) { const v = y[fp[j]]; sum += v; if (v < mn[j]) mn[j] = v; if (v > mx[j]) mx[j] = v; }
+            means.push(sum / fp.length); k0 = Math.min(k0, pool.k); k1 = Math.max(k1, pool.k); i0 = Math.min(i0, pool.ki); i1 = Math.max(i1, pool.ki);
+          }
+          const swAll = [], swG = []; let flash = 0, bright = 0, wj = -1;
+          for (let j = 0; j < fp.length; j++) { const d = mx[j] - mn[j]; swAll.push(d); if (gp[fp[j]]) { swG.push(d); if (wj < 0 || d > mx[wj] - mn[wj]) wj = j; } if (d >= 0.1 && mn[j] < 0.8) flash++; bright = Math.max(bright, mx[j]); }
+          swAll.sort((a, b) => a - b); swG.sort((a, b) => a - b);
+          let msw = 0; for (let f = 1; f < means.length; f++) msw = Math.max(msw, Math.abs(means[f] - means[f - 1]));
+          const wp = wj < 0 ? null : { x: fp[wj] % w, y: h - 1 - Math.floor(fp[wj] / w), lo: +mn[wj].toFixed(4), hi: +mx[wj].toFixed(4) };
+          return { footprint: fp.length, footPct: +((fp.length / N) * 100).toFixed(1), worst: at(swAll, 1), p99: at(swAll, 0.99), p50: at(swAll, 0.5), over10: swAll.filter((v) => v >= 0.1).length,
+            flashPx: flash, flashPct: +((flash / N) * 100).toFixed(4), pool: { px: swG.length, worst: at(swG, 1), p99: at(swG, 0.99), p50: at(swG, 0.5), over9: swG.filter((v) => v >= 0.09).length, at: wp },
+            brightest: +bright.toFixed(3), meanY: +(means.reduce((a, b) => a + b, 0) / means.length).toFixed(4), meanSwing: +(Math.max(...means) - Math.min(...means)).toFixed(4), meanStep: +msw.toFixed(4),
+            radius: [+(k0 - 1).toFixed(4), +(k1 - 1).toFixed(4)], intensity: [+(i0 - 1).toFixed(4), +(i1 - 1).toFixed(4)] };
+        };
         for (const calm of [false, true]) {
           G.settings.flicker = calm;
           for (let i = 0; i < 60; i++) L.tickLight(1 / 60);
@@ -3502,22 +3529,9 @@ const S = {
           for (let i = 0; i < 3; i++) step();
           const fp = [], gp = new Uint8Array(N);
           for (let i = 0; i < N; i++) if (all[i] - off[i] >= 0.004) { fp.push(i); if (disc[i] - off[i] >= 0.002 && Math.abs(all[i] - bare[i]) < 0.002) gp[i] = 1; }
-          const mn = new Float32Array(fp.length).fill(9), mx = new Float32Array(fp.length).fill(-9), y = new Float32Array(N), means = [];
-          let k0 = 9, k1 = -9, i0 = 9, i1 = -9;
-          for (let f = 0; f < 240; f++) {
-            step(); read(y);
-            let sum = 0; for (let j = 0; j < fp.length; j++) { const v = y[fp[j]]; sum += v; if (v < mn[j]) mn[j] = v; if (v > mx[j]) mx[j] = v; }
-            means.push(sum / fp.length); k0 = Math.min(k0, pool.k); k1 = Math.max(k1, pool.k); i0 = Math.min(i0, pool.ki); i1 = Math.max(i1, pool.ki);
-          }
-          const swAll = [], swG = []; let flash = 0, bright = 0;
-          for (let j = 0; j < fp.length; j++) { const d = mx[j] - mn[j]; swAll.push(d); if (gp[fp[j]]) swG.push(d); if (d >= 0.1 && mn[j] < 0.8) flash++; bright = Math.max(bright, mx[j]); }
-          swAll.sort((a, b) => a - b); swG.sort((a, b) => a - b);
-          let msw = 0; for (let f = 1; f < means.length; f++) msw = Math.max(msw, Math.abs(means[f] - means[f - 1]));
-          const at = (v, q) => +(v[Math.min(v.length - 1, Math.floor(v.length * q))] || 0).toFixed(4);
-          res[calm ? 'calm' : 'full'] = { footprint: fp.length, footPct: +((fp.length / N) * 100).toFixed(1), worst: at(swAll, 1), p99: at(swAll, 0.99), p50: at(swAll, 0.5), over10: swAll.filter((v) => v >= 0.1).length,
-            flashPx: flash, flashPct: +((flash / N) * 100).toFixed(4), pool: { px: swG.length, worst: at(swG, 1), p99: at(swG, 0.99), p50: at(swG, 0.5) },
-            brightest: +bright.toFixed(3), meanY: +(means.reduce((a, b) => a + b, 0) / means.length).toFixed(4), meanSwing: +(Math.max(...means) - Math.min(...means)).toFixed(4), meanStep: +msw.toFixed(4),
-            radius: [+(k0 - 1).toFixed(4), +(k1 - 1).toFixed(4)], intensity: [+(i0 - 1).toFixed(4), +(i1 - 1).toFixed(4)] };
+          // the 4 s of its own noise (reported), then its full reach (the gate)
+          const timed = measure(fp, gp, 240, step);
+          res[calm ? 'calm' : 'full'] = { ...measure(fp, gp, 21, (f) => hold(-1 + f / 10)), timed };
         }
         G.settings.flicker = calm0; R.drift = drift;
         // (one frame left as the game shows it, for the picture)
@@ -3526,10 +3540,11 @@ const S = {
       });
       await pg.screenshot({ path: `${dir}/tremble6-q${q}.png` });
       out['q' + q] = m;
+      const A = m.amp, F = m.full, C = m.calm, near = (v, x) => Math.abs(v[0] + x) < 2e-4 && Math.abs(v[1] - x) < 2e-4;
       beat(`q${q} the hearth's r 6 pool trembles (a lamp pool below the ice), its light its own`, m.trem && m.light, m);
-      beat(`q${q} the tremble under the flash threshold: no pixel of the pool on the ground swings by 0.1 of the maximum luminance (worst ${m.full?.pool.worst}), the flashing pixels anywhere ${m.full?.flashPct}% of the screen (under 2.78%)`, m.full && m.full.pool.px > 10000 && m.full.pool.worst < 0.1 && m.full.flashPct < 2.78 && m.full.footprint > 1000, m.full);
-      beat(`q${q} the radius trembles within +-8% and the intensity within +-10%, both reached at least half way`, m.full.radius[0] >= -0.0801 && m.full.radius[1] <= 0.0801 && m.full.intensity[0] >= -0.1001 && m.full.intensity[1] <= 0.1001 && m.full.radius[1] - m.full.radius[0] > 0.08 && m.full.intensity[1] - m.full.intensity[0] > 0.1, m.full);
-      beat(`q${q} 'reduce flicker': +-3% radius, no intensity swing, a smaller luminance swing (the pool's worst ${m.calm?.pool.worst}, anywhere ${m.calm?.worst})`, m.calm && m.calm.radius[0] >= -0.0301 && m.calm.radius[1] <= 0.0301 && m.calm.intensity[0] === 0 && m.calm.intensity[1] === 0 && m.calm.pool.worst < m.full.pool.worst && m.calm.pool.worst < 0.1 && m.calm.flashPct < 2.78 && m.calm.meanSwing < m.full.meanSwing, m.calm);
+      beat(`q${q} the tremble under the flash threshold at its full reach: no pixel of the pool on the ground swings by 0.1 of the maximum luminance (worst ${F?.pool.worst}; the 4 s run ${F?.timed.pool.worst}), the flashing pixels anywhere ${F?.flashPct}% of the screen (under 2.78%)`, F && F.pool.px > 10000 && F.pool.worst < 0.1 && F.flashPct < 2.78 && F.footprint > 1000 && F.timed.pool.worst <= F.pool.worst + 0.003, F);
+      beat(`q${q} the radius trembles within +-${+(A.r * 100).toFixed(1)}% and the intensity within +-${+(A.i * 100).toFixed(1)}%: the full reach held is exactly that, the 4 s run within it and past half of it`, near(F.radius, A.r) && near(F.intensity, A.i) && F.timed.radius[0] >= -A.r - 1e-4 && F.timed.radius[1] <= A.r + 1e-4 && F.timed.intensity[0] >= -A.i - 1e-4 && F.timed.intensity[1] <= A.i + 1e-4 && F.timed.radius[1] - F.timed.radius[0] > A.r && F.timed.intensity[1] - F.timed.intensity[0] > A.i, { full: [F.radius, F.intensity], timed: [F.timed.radius, F.timed.intensity], amp: A });
+      beat(`q${q} 'reduce flicker': +-3% radius, no intensity swing, a smaller luminance swing (the pool's worst ${C?.pool.worst}, anywhere ${C?.worst})`, C && near(C.radius, 0.03) && C.intensity[0] === 0 && C.intensity[1] === 0 && C.pool.worst < F.pool.worst && C.pool.worst < 0.1 && C.flashPct < 2.78 && C.meanSwing < F.meanSwing, C);
     }
     // the noise: its spectrum (a 2^14-point FFT, here in node), two seeds' correlation
     const ns = await pg.evaluate(async () => { const Gf = await import('/src/gfx/gfx.js'); const a = Gf.trembler(12345), b = Gf.trembler(777), n = 1 << 14, A = [], Bq = []; for (let i = 0; i < n; i++) { A.push(Gf.trembleStep(a, 1 / 60)); Bq.push(Gf.trembleStep(b, 1 / 60)); } return { A, B: Bq }; });
