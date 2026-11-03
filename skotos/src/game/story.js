@@ -411,6 +411,9 @@ function endMemory(it, z) {
   if (p) { glowBurst(p.x, 1.2, p.z, 0xffd070, 26, 3, 0.25, 0.8); ring(p.x, p.z, 2.6, 0xffd070, 0.6); }
   emit('toast', t('tear.buff'), 'quest');
   if (it.story && first) { emit('quest'); later(1.2, () => emit('toast', t('q.tear', tearsSeen()), 'quest')); }
+  // (a small Tear is no verse of the Long Sorrow: said while the three are still to find, so it is never taken for one;
+  // its memory and its blessing are the same)
+  else if (!it.story && it.id !== 'nursery' && tearsSeen() < 3) later(1.2, () => emit('toast', t('tear.small', tearsSeen()), 'quest'));
   checkTears();
   writeSave();
 }

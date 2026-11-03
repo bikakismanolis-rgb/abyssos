@@ -466,6 +466,63 @@ const S = {
     }
     return pg.evaluate((o) => { const G = window.__G, kinds = {}; for (const a of G.actors) if (a.team === 'foe' && !a.prop && !a.dead) kinds[a.kind] = (kinds[a.kind] || 0) + 1; return { ...o, kills: G.hero.stats.kills, lvl: G.hero.level, alive: kinds }; }, { info, q12, tears, after });
   } },
+  // the three great Tears told from the small ones, in the owner's wood (seed 780698361, difficulty 2): bigger and brighter
+  // with a ring and a halo at their foot, their own prompt; a small Tear says it is no verse of the Long Sorrow while the
+  // three are still to find (its blessing the same), never once they are known, nor the nursery's. Shots for the eye
+  tears: { q: 'auto=weep&seed=780698361&diff=2&sim=6&q=1&norender&lvl=29&cls=mage', run: async (pg, shot) => {
+    const r = {}, ok = {};
+    await A5.tick(pg);
+    await pg.evaluate(async () => {
+      const G = window.__G, z = G.zone, B = await import('/src/ui/bus.js');
+      window.__immortal = true; G.hero.quest = 12; G.hero.flags.metElati = true; G.player.hp = G.player.hpMax = 99999;
+      for (const p of z.packs) p.spawned = true; z.bossSpawned = true;
+      window.__toasts = []; B.on('toast', (m) => window.__toasts.push(m));
+    });
+    const look = () => pg.evaluate(() => window.__G.zone.interact.filter((i) => i.kind === 'tear').map((it) => { const u = it.mesh.userData; return { id: it.id, story: it.story, used: !!it.used, prompt: it.prompt, sy: +u.drop.scale.y.toFixed(3), glow: +u.drop.material.userData.u.uGlow.value.toFixed(3), cue: u.cue.length, cueOn: u.cue.filter((c) => c.visible).length }; }));
+    r.look = await look();
+    ok.look = ['planting', 'sorrow', 'breaking'].every((id) => r.look.some((l) => l.id === id && l.story)) && r.look.some((l) => l.id === 'm1') && r.look.some((l) => l.id === 'm2')
+      && r.look.every((l) => (l.story ? l.prompt === 'tear.touchGreat' && l.sy === 1.3 && l.glow === 1.65 && l.cue === 2 && l.cueOn === 2 : l.prompt === 'tear.touch' && l.sy === 0.85 && l.glow === 1 && l.cue === 0));
+    r.text = await pg.evaluate(async () => { const I = await import('/src/i18n/i18n.js'), el = [I.t('tear.touchGreat'), I.t('tear.small', 0)]; I.setLang('en'); const en = [I.t('tear.touchGreat'), I.t('tear.small', 0)]; I.setLang('el'); return { el, en }; });
+    ok.text = r.text.el[0] === 'Άγγιξε το Μεγάλο Δάκρυ' && r.text.el[1] === 'Μικρό Δάκρυ, όχι στίχος του Μακρού Θρήνου (0/3)' && r.text.en[0] === 'Touch the Great Tear' && r.text.en[1] === 'A small Tear, not a verse of the Long Sorrow (0/3)';
+    // (in front of it, away from its tree)
+    const beside = (id) => pg.evaluate((id) => { const G = window.__G, z = G.zone, it = z.interact.find((i) => i.kind === 'tear' && i.id === id), a = it.spot?.r || 0, f = z.map.nearestFloor(it.x - Math.sin(a) * 1.7, it.z - Math.cos(a) * 1.7); G.player.x = f.x; G.player.z = f.z; G.player.act = null; G.player.kx = G.player.kz = 0; return +Math.hypot(f.x - it.x, f.z - it.z).toFixed(2); }, id);
+    r.hud = {};
+    for (const id of ['planting', 'm2']) { r.hud[id + 'D'] = await beside(id); await pg.waitForTimeout(400); await shot(); r.hud[id] = await pg.evaluate(() => document.querySelector('#b-use span')?.textContent); }
+    const T = await pg.evaluate(async () => { const I = await import('/src/i18n/i18n.js'); return { great: I.t('tear.touchGreat'), touch: I.t('tear.touch'), buff: I.t('tear.buff'), small: [0, 1, 2, 3].map((n) => I.t('tear.small', n)), tear: [1, 2, 3].map((n) => I.t('q.tear', n)) }; });
+    ok.hud = r.hud.planting === T.great && r.hud.m2 === T.touch;
+    // (and 2.5 s of game time after its memory, whatever the frame rate: the small Tear's word comes 1.2 s after it)
+    const touch = async (id) => {
+      await pg.evaluate(() => { window.__toasts = []; });
+      await beside(id);
+      await pg.evaluate((id) => window.__G.zone.interact.find((i) => i.kind === 'tear' && i.id === id).use(), id);
+      const done = await A5.until(pg, (id) => !!window.__G.hero.flags['tear_' + id] && window.__G.mode === 'play', 90000, id);
+      const t0 = await pg.evaluate(() => window.__G.hero.stats.time);
+      await pg.waitForFunction((t0) => window.__G.hero.stats.time > t0 + 2.5, t0, { timeout: 60000 }).catch(() => {});
+      return pg.evaluate(([id, done]) => { const G = window.__G, it = G.zone.interact.find((i) => i.kind === 'tear' && i.id === id), u = it.mesh.userData; return { done, toasts: window.__toasts.slice(), memory: Math.round(G.player.buffs.memory || 0), quest: G.hero.quest, glow: +u.drop.material.userData.u.uGlow.value.toFixed(2), cueOn: u.cue.filter((c) => c.visible).length }; }, [id, done]);
+    };
+    const small = (o) => o.toasts.filter((m) => T.small.includes(m));
+    r.m1 = await touch('m1');
+    ok.m1 = r.m1.done && r.m1.toasts.includes(T.buff) && r.m1.toasts.includes(T.small[0]) && r.m1.memory > 0 && r.m1.quest === 12 && r.m1.glow === 0.42;
+    r.planting = await touch('planting');
+    ok.planting = r.planting.done && r.planting.toasts.includes(T.tear[0]) && !small(r.planting).length && r.planting.cueOn === 0 && r.planting.glow === 0.42;
+    r.sorrow = await touch('sorrow');
+    r.breaking = await touch('breaking');
+    r.breaking.q13 = await A5.until(pg, () => window.__G.hero.quest === 13, 10000);
+    ok.verses = r.sorrow.done && r.breaking.done && !small(r.sorrow).length && !small(r.breaking).length && r.breaking.toasts.includes(T.tear[2]) && r.breaking.q13;
+    r.m2 = await touch('m2');
+    ok.m2 = r.m2.done && r.m2.toasts.includes(T.buff) && !small(r.m2).length;
+    // the nursery (the Heartwood): never told a small Tear, even with a verse still to find (one taken back for the check)
+    r.nursery = await pg.evaluate(async () => {
+      const G = window.__G, W = await import('/src/game/world.js'); G.hero.quest = 14; G.hero.flags.hart = true; delete G.hero.flags.tear_planting;
+      await W.zoneReady('heart'); window.__D.enterZone('heart', { fresh: true }); for (const p of G.zone.packs) p.spawned = true; G.zone.bossSpawned = true;
+      const it = G.zone.interact.find((i) => i.kind === 'tear' && i.id === 'nursery');
+      return it ? { prompt: it.prompt, cue: it.mesh.userData.cue.length, sy: +it.mesh.userData.drop.scale.y.toFixed(3) } : null;
+    });
+    if (r.nursery) Object.assign(r.nursery, await touch('nursery'));
+    await pg.evaluate(() => { window.__G.hero.flags.tear_planting = true; });
+    ok.nursery = !!r.nursery && r.nursery.done && r.nursery.prompt === 'tear.touch' && r.nursery.cue === 0 && !small(r.nursery).length && r.nursery.toasts.includes(T.buff);
+    return { pass: Object.values(ok).every(Boolean), ok, r };
+  } },
   // Silverhorn in the Glade of Stones, fought to the end: the white tree, the Root Gate drawing back, quest 14
   hart: { q: 'auto=weep&sim=6&q=1&norender&lvl=18&cls=' + (process.env.CLS || 'warden'), run: async (pg, shot) => {
     await pg.evaluate(() => { const G = window.__G, b = G.zone.L.boss; window.__immortal = true; G.hero.quest = 13; G.hero.flags.metElati = true; const f = G.zone.map.nearestFloor(b.x, b.z + 9); G.player.x = f.x; G.player.z = f.z; G.player.hp = G.player.hpMax = 99999; for (const p of G.zone.packs) p.spawned = true; });
