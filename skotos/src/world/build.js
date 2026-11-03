@@ -1482,6 +1482,8 @@ function groundMat(cfg, type) {
   const X6 = !!cfg.act6;
   const X5 = { glint: !!cfg.glint && R.quality >= 1, wet: !!cfg.wet && (!X6 || R.quality >= 1), aur: !!cfg.aur, fake: !!cfg.fake, hueB: !!cfg.hueB, edge: !!cfg.edge, v5: !!cfg.act5, win: !!cfg.wins?.length };
   const V56 = X5.v5 || X6;
+  // (Act VI: the road the floor's own layer, read once: G_PA)
+  const PA = X6 && cfg.P === cfg.A;
   if (X5.win) uni.uWin = { value: Array.from({ length: 8 }, (_, i) => new THREE.Vector2(cfg.wins[i * 2] ?? -99, cfg.wins[i * 2 + 1] ?? -99)) };
   X5.any = X5.glint || X5.wet || X5.aur || X5.edge || X5.win;
   if (X5.any) { noiseTex(); Object.assign(uni, SEA_U({ uWetLevel: SEA.uWetLevel, uLevel: SEA.uLevel, uBayLevel: SEA.uBayLevel }), SEA_LIT); }
@@ -1496,7 +1498,7 @@ function groundMat(cfg, type) {
     const dual = R.quality >= 2;
     sh.defines = Object.assign(sh.defines || {}, nrm ? { G_NRM: '' } : {}, dual && cfg.dual[0] ? { G_DA: '' } : {}, dual && cfg.dual[1] ? { G_DP: '' } : {},
       X.sap ? { G_SAP: '' } : {}, X.dry ? { G_DRY: '' } : {}, X.wall ? { G_WALL: '' } : {}, X.wall && nrm && uni.tWn.value ? { G_WNRM: '' } : {},
-      X5.glint ? { G_GLINT: '' } : {}, X5.wet ? { G_WET: '' } : {}, X5.aur ? { G_AUR: '' } : {}, X5.edge ? { G_EDGE: '' } : {});
+      X5.glint ? { G_GLINT: '' } : {}, X5.wet ? { G_WET: '' } : {}, X5.aur ? { G_AUR: '' } : {}, X5.edge ? { G_EDGE: '' } : {}, PA ? { G_PA: '' } : {});
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec4 aLay;\nvarying vec4 vLay;\nvarying vec2 vGP;\nvarying vec3 vGN;' + (X.sap ? '\nattribute float aSap;\nvarying float vSap;' : '') + (X.wall ? '\nvarying float vGY;' : '') + (X5.wet ? '\nattribute float aBed;\nvarying float vBed;\nattribute float aBay;\nvarying float vBay;\nattribute float aBedW;\nvarying float vBedW;' : '') + (X5.edge ? '\nattribute float aWat;\nvarying float vWat;' : '') + (X5.any ? '\nvarying vec3 vGW;' : '') + (X5.aur ? '\n' + SEA_GLSL() + '\nvarying vec3 vGAur; varying float vGAurK;' : ''))
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLay = aLay; vGP = (modelMatrix * vec4(transformed, 1.0)).xz; vGN = normal;' + (X.sap ? ' vSap = aSap;' : '') + (X.wall ? ' vGY = (modelMatrix * vec4(transformed, 1.0)).y;' : '') + (X5.wet ? ' vBed = aBed; vBay = aBay; vBedW = aBedW;' : '') + (X5.edge ? ' vWat = aWat;' : '') + (X5.any ? ' vGW = (modelMatrix * vec4(transformed, 1.0)).xyz;' : '')
       // (the aurora's light on the ground: slow ribbons of green drifting over it, worked out at the vertices, a metre apart;
@@ -1539,16 +1541,22 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
 #else
   vec3 cA = texture2D(tA, uA).rgb;
 #endif
-  vec3 cB = texture2D(tB, uB).rgb;` + (cfg.hueA ? '\n  cA *= uHueA;' : '') + (X5.hueB ? '\n  cB *= uHueB;' : '') + (V56 ? `
+  vec3 cB = texture2D(tB, uB).rgb;` + (PA ? '\n  vec3 cA0 = cA;' : '') + (cfg.hueA ? '\n  cA *= uHueA;' : '') + (X5.hueB ? '\n  cB *= uHueB;' : '') + (V56 ? `
   // (the path's layer read only where a path lies near: off it its weight is 0 whatever it reads, and on the Shallows'
   // flats those reads cost a phone its frame, perf5's coastLow)
   vec3 cP = vec3(0.0); float gmP = 0.0;
   if (vLay.y > 0.01) {` : '') + `
 ` + (V56 ? `
+#ifdef G_PA
+    // (Act VI: the road is the floor's own layer, so its own read, paler (uHueP): the two more reads of the same scan at
+    // other scales, and their normals, cost the Drowned Wood's ground a tenth of its draw, 26 of 262 ms alone, perf6)
+    cP = cA0;
+#else
   // (two reads at two scales and angles on every quality, swapped every few metres: one read laid the same boot prints in
   // rows down the path, a stamp repeating every 2.6 m)
     gmP = smoothstep(0.3, 0.7, vLay.w + sin(vGP.x * 0.71 + sin(vGP.y * 0.53) * 1.3) * 0.22 + sin(vGP.y * 0.43 - vGP.x * 0.21) * 0.14);
-    cP = mix(texture2D(tP, uP).rgb, texture2D(tP, uP2).rgb, gmP);` : `
+    cP = mix(texture2D(tP, uP).rgb, texture2D(tP, uP2).rgb, gmP);
+#endif` : `
 #ifdef G_DP
   vec3 cP = mix(texture2D(tP, uP).rgb, texture2D(tP, uP2).rgb, gm);
 #else
@@ -1692,16 +1700,24 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
   // the second readings are rotated: turn their tangent-space xy back into the first frame` + (V56 ? `
   // (each layer's normal read only where its weight is not 0: mix() then takes the other's exactly)
   vec3 nA = vec3(0.0, 0.0, 1.0), nP = vec3(0.0, 0.0, 1.0), nB = vec3(0.0, 0.0, 1.0);
+#ifdef G_PA
+  if (wB < 0.999 || wP > 0.001) {
+#else
   if (wB < 0.999 && wP < 0.999) {
+#endif
   nA = texture2D(tAn, uA).xyz * 2.0 - 1.0;
 #ifdef G_DA
   vec3 nA2 = texture2D(tAn, uA2).xyz * 2.0 - 1.0; nA2.xy = nA2.xy * mat2(0.8, -0.6, 0.6, 0.8); nA = mix(nA, nA2, gm);
 #endif
   }
+#ifdef G_PA
+  nP = nA;
+#else
   if (wP > 0.001) {
   nP = texture2D(tPn, uP).xyz * 2.0 - 1.0;
   vec3 nP2 = texture2D(tPn, uP2).xyz * 2.0 - 1.0; nP2.xy = nP2.xy * mat2(0.8, 0.6, -0.6, 0.8); nP = mix(nP, nP2, gmP);
   }
+#endif
   if (wB > 0.001 && wP < 0.999) nB = texture2D(tBn, uB).xyz * 2.0 - 1.0;` : `
   vec3 nA = texture2D(tAn, uA).xyz * 2.0 - 1.0, nP = texture2D(tPn, uP).xyz * 2.0 - 1.0;
 #ifdef G_DA
@@ -1731,7 +1747,7 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
     diffuseColor.rgb *= clamp(1.0 + (dot(nR, Lr) - dot(gN, Lr)) * rk, 0.72, 1.28); }` : '') + `
 #endif`);
   };
-  m.customProgramCacheKey = () => 'groundPBR|' + type + (nrm ? '|n' : '') + '|q' + R.quality + (cfg.fake ? '|f' : '') + (cfg.hueB ? '|b' : '') + (cfg.edge ? '|e' : '') + (X5.win ? '|w' : '') + (cfg.hueA ? '|a' : '') + (cfg.hueP ? '|p' : '') + (cfg.hueW ? '|hw' : '');
+  m.customProgramCacheKey = () => 'groundPBR|' + type + (nrm ? '|n' : '') + '|q' + R.quality + (cfg.fake ? '|f' : '') + (cfg.hueB ? '|b' : '') + (cfg.edge ? '|e' : '') + (X5.win ? '|w' : '') + (cfg.hueA ? '|a' : '') + (cfg.hueP ? '|p' : '') + (cfg.hueW ? '|hw' : '') + (PA ? '|pa' : '');
   return m;
 }
 
