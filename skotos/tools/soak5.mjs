@@ -1,7 +1,7 @@
 // Act V soaks, headless (the scenario runner's pattern): node tools/soak5.mjs <tide|ice|perf|all> <outdir>
 //   tide  CYCLES (20) tide cycles on the coast, game logic only (&norender, SIM ticks of 1/30 s a frame), with MON (12)
-//         monsters hunting a hero who walks the flats; once a flood she stands in a cell the next step closes (her lane:
-//         held, then walked out of or washed out along). Fails on: an actor's centre in a closed cell, the hero stuck (on
+//         monsters hunting a hero who walks the flats; once a flood she stands in a cell the next step closes, inside its
+//         band (her lane: held, then walked out of or washed out along). Fails on: an actor's centre in a closed cell, the hero stuck (on
 //         fewer than 9 open cells), her centre in a closed cell after a tick (the player.js snap), a jump over 3.5 m in a
 //         tick, a wash-out leaving its lane, more than one ice-free tide bump per step, gold left lying in closed water
 //         (each lane test drops some on a cell 4-9 m off that the same step closes: it must slide to the dry).
@@ -117,13 +117,17 @@ function install(o) {
     const si = o.stepT;
     if (S.mode !== 'lane' && T.phase === 'flood' && T.step < 7 && T.since > si - 0.6 && S.laneCycle !== S.cycle) {
       // the nearest cell open now that the next step closes (not the bay's), off the ice, and one she could have walked
-      // to (on 9 open cells or more: a cell the water has already cut off is no place to drop her)
-      let best = -1, bd = 1e9;
-      for (let j = 0; j < C.idx.length; j++) { const i = C.idx[j]; if (C.thr[j] !== T.step + 1 || C.bay[i] || !m.cells[i]) continue; const x = i % L.w + 0.5, y = (i - i % L.w) / L.w + 0.5, d = Math.hypot(x - pl.x, y - pl.z); if (d < bd && comp(m, i, 9) >= 9) { bd = d; best = i; } }
+      // to (on 9 open cells or more: a cell the water has already cut off is no place to drop her); one inside the band
+      // first (its four sides closed or closing with it), so no shove or pull puts her on the dry beside her lane: there
+      // the lane ends, walked out of, and neither of its tests is had (on coast seed 203120717 eight waits of ten stood in
+      // a lane of one cell by the dry, and the hunters' shoves and pulls ended it: two tests of twenty saw a wave)
+      const inner = (i) => [1, -1, L.w, -L.w].every((d) => { const n = i + d, k = C.tk[n]; return !m.cells[n] || (k >= 1 && k <= T.step + 1 && !C.bay[n]); });
+      let best = -1, bd = 1e9, bin = false;
+      for (let j = 0; j < C.idx.length; j++) { const i = C.idx[j]; if (C.thr[j] !== T.step + 1 || C.bay[i] || !m.cells[i]) continue; const x = i % L.w + 0.5, y = (i - i % L.w) / L.w + 0.5, d = Math.hypot(x - pl.x, y - pl.z), n = inner(i); if ((n && !bin) || (n === bin && d < bd)) { if (comp(m, i, 9) >= 9) { bd = d; best = i; bin = n; } } }
       if (best >= 0) {
         S.laneCycle = S.cycle; S.mode = 'lane'; S.modeT = 0; S.tp = true;
         pl.x = best % L.w + 0.5; pl.z = (best - best % L.w) / L.w + 0.5; pl.kx = pl.kz = 0; key(0, 0);
-        S.laneTest = { cycle: S.cycle, cell: best, wait: S.cycle % 2 === 0, t0: S.time, lane: false, wash: false, closed: false, out: false };
+        S.laneTest = { cycle: S.cycle, cell: best, inner: bin, wait: S.cycle % 2 === 0, t0: S.time, lane: false, wash: false, closed: false, out: false };
         S.lanes.push(S.laneTest);
         // and gold on another cell the same step closes, 4-9 m off (out of her pickup's reach)
         for (let j = 0; j < C.idx.length && window.__pk; j++) { const i = C.idx[j]; if (C.thr[j] !== T.step + 1 || C.bay[i] || !m.cells[i]) continue; const x = i % L.w + 0.5, y = (i - i % L.w) / L.w + 0.5, d = Math.hypot(x - pl.x, y - pl.z); if (d > 4 && d < 9) { window.__pk.dropGold(x, y, 7); S.drops++; break; } }
@@ -136,6 +140,10 @@ function install(o) {
       if (!LT.wait && LT.lane && S.modeT > 2.5 && T.lane) {
         // walk out along her lane to its open end
         const g = T.lane.goal; if (g >= 0) { const gx = g % L.w + 0.5, gz = (g - g % L.w) / L.w + 0.5; key(gx - pl.x, gz - pl.z); LT.out = true; }
+      } else if (!pl.pull) {
+        // till then she stands her ground: back to her cell's middle when a body shoves her
+        const cx = LT.cell % L.w + 0.5, cz = (LT.cell - LT.cell % L.w) / L.w + 0.5;
+        key(cx - pl.x, cz - pl.z); if (IN.keys.size) LT.held = (LT.held || 0) + 1;
       } else key(0, 0);
       if (S.modeT > 1 && !T.lane && !pl.pull) { LT.closed = true; LT.dur = +S.modeT.toFixed(2); LT.cellClosed = !m.cells[LT.cell]; S.mode = 'walk'; S.walk = null; }
       if (S.modeT > 15) { LT.timeout = true; S.mode = 'walk'; S.walk = null; }
@@ -222,10 +230,10 @@ async function tideSoak() {
   });
   await page.evaluate(() => { window.__shoot = true; }); await shot('tide-end');
   const lt = res.laneTests;
-  // (a test whose lane never formed: she was shoved off the cell before the step, and it closed behind her)
+  // (a test whose lane never formed: a blow or a pull took her off the cell before the step, and it closed behind her)
   const washed = lt.filter((l) => l.wash).length, walked = lt.filter((l) => !l.wash && l.out).length, stillOpen = lt.filter((l) => !l.cellClosed && !l.timeout && l.cycle < CYCLES);
   res.pass = res.cycles >= CYCLES && res.closed === 0 && res.stuck === 0 && res.snaps === 0 && res.jumps.length === 0 && res.offLane === 0 && res.wet === 0 && (res.slid > 0 || !res.drops) && res.overdue === 0 && res.maxLaneAge < 40 && lt.length >= CYCLES - 1 && washed >= Math.min(3, CYCLES >> 2) && walked >= Math.min(3, CYCLES >> 2) && !stillOpen.length && res.verBumps <= res.steps + res.lanesLog * 2 + res.iceBumps;
-  res.laneTests = { n: lt.length, formed: lt.filter((l) => l.lane).length, washed, walkedOut: walked, cellOpen: stillOpen, sample: lt.slice(0, 6) };
+  res.laneTests = { n: lt.length, formed: lt.filter((l) => l.lane).length, inner: lt.filter((l) => l.inner).length, washed, walkedOut: walked, held: lt.filter((l) => l.held).length, cellOpen: stillOpen, sample: lt.slice(0, 6) };
   await page.close();
   return { res, logs };
 }
