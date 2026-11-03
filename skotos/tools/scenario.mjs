@@ -3110,9 +3110,14 @@ const S = {
   // same visit the Field again with each spot's crowd standing round her as it stands at the spot (the same bodies at the
   // same offsets, on the Field's floor): a person-bodied actor costs SwiftShader about 37 ms a frame (its skinning; a Hull-
   // louse 4-8, an Icemaw 10-16), so 25 of them weigh as much as the Field's whole world, and a spot is held against the
-  // Field with the same crowd ('vsField', the gate). Beside it: each spot's world alone (its crowd hidden) against the
-  // bare Field ('world', draw only; the design's estimate of 0.85-0.95 was of these terms), and the spot against the bare
-  // Field ('vsBare', the crowd counted on one side only).
+  // Field with the same crowd. The lead's bar (2 November), at quality 1, each term the median over the cycles of its
+  // per-cycle ratio: (1) 'vsField', the spot against the Field carrying the same crowd at the same offsets, within x 1.00;
+  // (2) 'world', the spot's world alone (its crowd hidden) against the bare Field, draw only, within x 1.00 (the design's
+  // estimate of 0.85-0.95 was of these terms); (3) 'crowd', reported for every spot: the crowd's own cost at the spot (its
+  // draw less its world's) against the same crowd's on the Field (the Field with it less the bare Field), so an Act VI
+  // actor is seen to cost what it costs in Acts I-V unless a named part of the zone's own design makes it dearer. Beside
+  // them 'vsBare', the spot against the bare Field (the crowd counted on one side only), reported, not gated: the crowd's
+  // size is combat's at stage B, and G2 runs this again with the real packs.
   // Stage A's stand-ins (combat's packs, the Ketos, the Faded and the Shade come at stage B and C; G2 runs this again with
   // the real ones): the Sunken for the Black Crews, the Faded and Keyx (his body people.glb's villager1), the Hull-lice, the
   // Icemaw for the pool hunters, the Ketos (x 3.4) and the Ketlings (x 0.96), the spider for the Falselights (x 1.28), the
@@ -3155,7 +3160,7 @@ const S = {
       }, seeds);
       const visit = (spot, crowds) => p.evaluate(async ({ spot, K, crew, split, crowds }) => {
         const G = window.__G, R = window.__R, D = window.__D, fx = await import('/src/gfx/fx.js'), gfx = await import('/src/gfx/gfx.js');
-        const W = await import('/src/game/world.js'), Lt = await import('/src/game/light.js'), Pj = await import('/src/game/projectiles.js'), { SEA } = await import('/src/world/sea.js');
+        const W = await import('/src/game/world.js'), Lt = await import('/src/game/light.js'), Pj = await import('/src/game/projectiles.js'), { SEA } = await import('/src/world/sea.js'), Ac = await import('/src/game/actors.js');
         const zone = spot === 'ashfield' ? 'ashfield' : spot === 'hollows' || spot === 'mere' ? 'drained' : 'bottom';
         if (G.zone.id !== zone) { await W.zoneReady(zone); D.enterZone(zone); }
         const z = G.zone, L = z.L, S = L.spots, A = z.lvl.act6, w = L.w;
@@ -3195,13 +3200,15 @@ const S = {
         G.player.x = f.x; G.player.z = f.z;
         gfx.updateCamera(0, G.player.x, G.player.z, true);
         // ---- the timing (perf5's): a few real frames for the logic, then the loop held, the particles run 12 s ahead, the
-        // water at its level, every stand-in standing where it is (a lurker gone under or a louse in its shell come up), and
+        // water at its level, every stand-in standing (a lurker gone under or a louse in its shell come up) and put back on its
+        // own place (the real frames let the crowd walk, each by its own map: on the Field two of the wood's Sunken walked off
+        // the screen and spared their skinning there, so its crowd stood at the same offsets only when it was spawned), and
         // K frames drawn and waited for ----
         R.prScale = 1; R.renderer.setPixelRatio(R.basePR); R.renderer.setSize(R.w, R.h, false); R.lastResize = 1e15;
         const gl = R.renderer.getContext(), px = new Uint8Array(4);
         const draw = () => { R.lost = false; R.skyHook?.(); R.renderer.render(R.scene, R.camera); R.lost = true; gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); };
         const time = () => { draw(); const t = []; for (let i = 0; i < K; i++) { const t0 = performance.now(); draw(); t.push(performance.now() - t0); } return +Math.min(...t).toFixed(1); };
-        const spawn = (list) => list.map((c) => { const q = z.map.nearestFloor(c.x, c.z, 3), a = D.spawnMonster(c.kind, q.x, q.z, { dormant: false, ...c.o }); G.actors.push(a); return a; });
+        const place = new Map(), spawn = (list) => list.map((c) => { const q = z.map.nearestFloor(c.x, c.z, 3), a = D.spawnMonster(c.kind, q.x, q.z, { dormant: false, ...c.o }); G.actors.push(a); place.set(a, c); return a; });
         const drop = (list) => { for (const a of list) { if (!a.removed) a.remove?.(); const i = G.actors.indexOf(a); if (i >= 0) G.actors.splice(i, 1); } };
         const run = async (actors) => {
           window.__cb.length = 0;
@@ -3211,7 +3218,8 @@ const S = {
           for (let i = 0; i < 120; i++) fx.updateFX(0.1, G.player.x, G.player.z);
           gfx.updateCamera(0, G.player.x, G.player.z, true); gfx.frame(0.016);
           if (lv != null) { SEA.uLevel.value = lv; SEA.uWetLevel.value = lv; SEA.uBayLevel.value = bay; }
-          for (const a of actors) if (!a.removed && !a.dead && a.avatar) { a.under = false; a.hidden = false; a.y = 0; a.avatar.group.visible = true; a.avatar.group.position.y = 0; }
+          for (const a of actors) if (!a.removed && !a.dead && a.avatar) { const c = place.get(a) || a; a.under = false; a.hidden = false; a.x = c.x; a.z = c.z; a.y = 0; a.avatar.group.visible = true; a.avatar.group.position.set(c.x, 0, c.z); a.mesh?.position.set(c.x, a.mesh.position.y, c.z); }
+          Ac.updateShadows();
           const d = time(), info = R.renderer.info.render;
           return { logic: +logic.toFixed(1), draw: d, calls: info.calls, tris: info.triangles, done: () => { R.lost = false; G.mode = mode0; } };
         };
@@ -3343,6 +3351,14 @@ const S = {
         o.vsField = med(o.ratios);
         o.world = med(S[z].map((m, i) => +(m.bare / F[i].draw).toFixed(3)));
         o.vsBare = med(S[z].map((m, i) => +(m.ms / F[i].ms).toFixed(3)));
+        // (3) the crowd's own cost, draws only: at the spot its draw less its world's, on the Field the Field with it less
+        // the bare Field; the term the median of the per-cycle ratios (a crowd of 3-5 costs tens of ms, so its ratio swings)
+        if (F[0].crowd[z]) {
+          const cr = S[z].map((m, i) => [m.draw - m.bare, F[i].crowd[z].draw - F[i].draw]);
+          o.crowd = { spot: +med(cr.map((c) => c[0])).toFixed(1), field: +med(cr.map((c) => c[1])).toFixed(1), ratios: cr.map((c) => +(c[0] / c[1]).toFixed(3)) };
+          o.crowd.term = med(o.crowd.ratios);
+        }
+        // (the lead's bar: vsField and world within x 1.00 at quality 1; the crowd term reported)
         o.pass = o.vsField <= 1.0 && o.world <= 1.0;
       }
       await ctx.close();
