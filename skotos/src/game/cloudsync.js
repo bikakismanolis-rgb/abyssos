@@ -46,8 +46,9 @@ export function heroSum(h) {
 }
 // the same with its play time left out too: a page only left open on a hero (its clock running, nothing done) moves
 // stats.time and nothing else, and that is no play
+// (and where she stands in a zone, the visit a wake takes up (game/wake.js): walking is no play either)
 export function workSum(h) {
-  const { played, stats, ...rest } = h || {};
+  const { played, stats, visit, ...rest } = h || {};
   const st = stats && typeof stats === 'object' && !Array.isArray(stats) ? { ...stats, time: 0 } : stats ?? null;
   return hash(JSON.stringify(rest) + '|' + JSON.stringify(st));
 }
@@ -269,6 +270,8 @@ export async function pushOne(backend, store, id) {
   if (!h || !b || b.del || typeof b.sum !== 'string') return false;
   const sum = heroSum(h);
   if (sum === b.sum) return false;
+  // (only its clock and where she stands moved since the base: no play to put up; they go with the next real change)
+  if (typeof b.work === 'string' && b.work === workSum(h)) return false;
   const data = JSON.stringify(h);
   if (data.length > MAX_HERO) return false;
   const r = await backend.put(id, { data, sum, played: num(h.played) }, b.rev, b.sum);

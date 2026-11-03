@@ -205,6 +205,27 @@ export class GridMap {
     }
   }
   flowDist(x, z) { const ix = Math.floor(x), iz = Math.floor(z); if (this.solid(ix, iz)) return 65535; return this.flow[iz * this.w + ix]; }
+  // can one walk from (x, z) to any of pts ([{ x, z }]): one BFS over the floor, 8-way with no corner cutting as the flow
+  // field, with no cap (a wake's spot is tested once, game/wake.js). this.queue is only scratch, as updateFlow's
+  reaches(x, z, pts) {
+    const { w, h, cells } = this, ix = Math.floor(x), iz = Math.floor(z);
+    if (this.solid(ix, iz)) return false;
+    const want = new Set();
+    for (const p of pts) { const px = Math.floor(p.x), pz = Math.floor(p.z); if (!this.solid(px, pz)) want.add(pz * w + px); }
+    const seen = new Uint8Array(w * h), q = this.queue; let head = 0, tail = 0;
+    seen[iz * w + ix] = 1; q[tail++] = iz * w + ix;
+    while (head < tail) {
+      const c = q[head++]; if (want.has(c)) return true;
+      const cx = c % w, cz = (c - cx) / w;
+      for (let k = 0; k < 8; k++) {
+        const nx = cx + DX[k], nz = cz + DZ[k]; if (nx < 0 || nz < 0 || nx >= w || nz >= h) continue;
+        const n = nz * w + nx; if (seen[n] || !cells[n]) continue;
+        if (k >= 4 && (!cells[cz * w + nx] || !cells[nz * w + cx])) continue;
+        seen[n] = 1; q[tail++] = n;
+      }
+    }
+    return false;
+  }
 
   // nearest floor cell center to a point
   nearestFloor(x, z, maxR = 12) {

@@ -103,9 +103,11 @@ export function zoneReady(id, onPart) {
 export const zoneParts = (id) => { const R0 = READY[ZONES[id]?.pack]; return zonePacks(id).length + zoneFolk(id).length + crew(R0?.creatures); };
 
 // a zone's layout seed, the hero's own; Act V's two are one per difficulty (a fresh coast on each), the story the same
+// (seedKey: where it is kept in hero.seeds; a wake reads it there without making one, game/wake.js)
+export const seedKey = (id, diff) => (id === 'coast' || id === 'farlight' ? id + '@' + (diff || 0) : id);
 function seedFor(id) {
   G.hero.seeds ||= {};
-  const k = id === 'coast' || id === 'farlight' ? id + '@' + (G.hero.diff || 0) : id;
+  const k = seedKey(id, G.hero.diff);
   if (!G.hero.seeds[k]) G.hero.seeds[k] = (Math.random() * 1e9) | 0;
   return G.hero.seeds[k];
 }
@@ -137,7 +139,8 @@ function createZone(id, o = {}) {
   if (ZONES[id]?.act === 5) act5Layout(id, L);
   const map = new GridMap(L.w, L.h, L.cells, L.low);
   const lvl = buildLevel(L, R.quality);
-  const z = { id, L, map, lvl, level: o.level ?? ZONES[id].level, actors: [], pickups: [], interact: [], packs: [], seed, tier: o.tier || 0, extra: [], emit4: [], ep: ++zoneEp };
+  // (ownSeed: built from the hero's own seed, not a co-op host's: only such a zone is one she may wake in, game/wake.js)
+  const z = { id, L, map, lvl, level: o.level ?? ZONES[id].level, actors: [], pickups: [], interact: [], packs: [], seed, ownSeed: o.seed == null, tier: o.tier || 0, extra: [], emit4: [], ep: ++zoneEp };
   if (id === 'coast') z.mode = coastMode(); else if (id === 'farlight') z.mode = skyMode();
   // breakables
   for (const p of lvl.breakables) {
@@ -158,24 +161,24 @@ function createZone(id, o = {}) {
     z.interact.push({ kind: 'waypoint', x: w.x, z: w.z, r: 2.2, prompt: 'wp.title', use: () => emit('openPanel', 'waypoints') });
     z.emit = (z.emit || []).concat([{ x: w.x, y: 0.4, z: w.z, type: 'bluefire', s: 0.5 }]);
   }
-  // shrines and chests
-  for (const s of L.spots.shrines || []) {
+  // shrines and chests (si, ci: their place in the layout's lists, the same on every build of the seed: game/wake.js)
+  (L.spots.shrines || []).forEach((s, si) => {
     const m = propMesh('shrine'); m.position.set(s.x, 0, s.z); z.extra.push(m);
     const kind = rand.pick(['fury', 'speed', 'fortune', 'shield']);
     const light = { x: s.x, y: 2.4, z: s.z, color: 0xffe0a0, intensity: 10, range: 7, flicker: 0.2 };
     L.lights.push(light);
-    const it = { kind: 'shrine', shrine: kind, x: s.x, z: s.z, r: 2, prompt: 'use', mesh: m, light };
+    const it = { kind: 'shrine', shrine: kind, x: s.x, z: s.z, r: 2, prompt: 'use', mesh: m, light, si };
     it.use = () => useShrine(z, it);
     z.interact.push(it);
     z.emit = (z.emit || []).concat([{ x: s.x, y: 2.25, z: s.z, type: 'fire', s: 0.45, shrine: it }]);
-  }
-  for (const c of L.spots.chests || []) {
+  });
+  (L.spots.chests || []).forEach((c, ci) => {
     const m = hasEnv('chest') ? envChest(c.rare ? 1.15 : 1) : kitMesh('dungeon', c.rare ? 'chest_gold' : 'chest', 0.55); m.position.set(c.x, 0, c.z); m.rotation.y = rand.range(-0.4, 0.4);
     z.extra.push(m);
-    const it = { kind: 'chest', rare: c.rare, x: c.x, z: c.z, r: 1.8, prompt: 'open', mesh: m };
+    const it = { kind: 'chest', rare: c.rare, x: c.x, z: c.z, r: 1.8, prompt: 'open', mesh: m, ci };
     it.use = () => openChest(z, it);
     z.interact.push(it);
-  }
+  });
   // exits
   for (const e of L.exits) z.interact.push({ kind: 'exit', to: e.to, x: e.x, z: e.z, r: 2.4, prompt: e.label, locked: e.locked, use: () => takeExit(z, e) });
   // packs spawn when the hero comes near
@@ -259,7 +262,9 @@ export function enterZone(id, o = {}) {
   else if (Z.act === 5) act5Enter(z);
   else if (id === 'town') { townFires(z); if (G.hero.flags.seaLit) { setAtmosphere(ATMOS.townAurora); SEA.sky = true; } }
   // where the hero appears
-  let at = o.at;
+  // (a function of the zone, called once it is built and its act entered (checkpoints, tide, ice, the story's openings),
+  // before she is placed: a wake, game/wake.js)
+  let at = typeof o.at === 'function' ? o.at(z) : o.at;
   if (!at || at === 'start') at = z.L.start;
   else if (at === 'waypoint') at = z.L.spots.waypoint ? { x: z.L.spots.waypoint.x, z: z.L.spots.waypoint.z + 2 } : z.L.start;
   else if (at === 'waypoint2') at = z.L.spots.camp2 ? { x: z.L.spots.camp2.x, z: z.L.spots.camp2.z + 2 } : z.L.start;
@@ -439,16 +444,20 @@ export function nearestInteract() {
   return best;
 }
 function useShrine(z, it) {
-  it.used = true;
+  shrineSpent(z, it);
   const pl = G.player;
   const dur = it.shrine === 'fortune' ? 60 : 30;
   pl.buffs['shrine' + it.shrine[0].toUpperCase() + it.shrine.slice(1)] = dur;
   ring(it.x, it.z, 4, 0xffe0a0, 0.7); glowBurst(it.x, 2.2, it.z, 0xffe0a0, 40, 5, 0.35, 0.8);
-  if (it.light) removeLight(it.light);
-  z.emit = (z.emit || []).filter((e) => e.shrine !== it);
-  setEmitters(zoneEmitters(z));
   Audio.sfx('shrine');
   emit('toast', t('shrine.' + it.shrine) + ': ' + t('shrine.' + it.shrine + '.d'));
+}
+// a shrine spent: its fire and light out (useShrine; and a wake's, game/wake.js, which gives no blessing again)
+export function shrineSpent(z, it) {
+  it.used = true;
+  if (it.light) removeLight(it.light);
+  z.emit = (z.emit || []).filter((e) => e.shrine !== it);
+  refreshEmit(z);
 }
 function openChest(z, it) {
   it.used = true;
@@ -458,15 +467,33 @@ function openChest(z, it) {
   addLight({ x: it.x, y: 1.5, z: it.z, color: 0xffd070, intensity: 25, range: 8, life: 1.2, fade: 1.2 });
   if (it.mesh?.userData.lid) swingLid(it.mesh.userData.lid);
   else if (it.mesh) { it.mesh.rotation.x = -0.15; it.mesh.position.y = 0.02; }
-  const n = it.rare ? rand.int(2, 4) : rand.int(1, 2);
-  for (let i = 0; i < n; i++) later(0.15 + i * 0.15, () => dropItem(it.x, it.z, makeItem(L, { elite: it.rare, mf: G.stats.mf, legMul: D.leg, rar: it.rare && i === 0 ? 2 : undefined })));
-  for (let i = 0; i < (it.rare ? 4 : 2); i++) later(0.1 + i * 0.1, () => dropGold(it.x, it.z, Math.round((8 + L * 3) * rand.range(0.7, 1.3) * D.gold)));
+  // (it.due: its drops still to land. A wake keeps it opened only once they have: a quit before leaves it shut, its loot
+  // never made, game/wake.js)
+  const n = it.rare ? rand.int(2, 4) : rand.int(1, 2), ng = it.rare ? 4 : 2;
+  it.due = n + ng;
+  for (let i = 0; i < n; i++) later(0.15 + i * 0.15, () => { it.due--; dropItem(it.x, it.z, makeItem(L, { elite: it.rare, mf: G.stats.mf, legMul: D.leg, rar: it.rare && i === 0 ? 2 : undefined })); });
+  for (let i = 0; i < ng; i++) later(0.1 + i * 0.1, () => { it.due--; dropGold(it.x, it.z, Math.round((8 + L * 3) * rand.range(0.7, 1.3) * D.gold)); });
+}
+// a chest a wake finds opened (game/wake.js): open as openChest leaves it, nothing in it
+export function chestOpened(it) {
+  it.used = true;
+  if (it.mesh?.userData.lid) it.mesh.userData.lid.rotation.x = -1.9;
+  else if (it.mesh) { it.mesh.rotation.x = -0.15; it.mesh.position.y = 0.02; }
 }
 // the scanned chest's lid swings back on its hinge
 function swingLid(lid) {
   let t = 0;
   const step = () => { t = Math.min(1, t + 0.06); lid.rotation.x = -1.9 * (1 - (1 - t) ** 3); if (t < 1) later(0.016, step); };
   step();
+}
+// where she gets up in a zone after a death, and wakes when the spot a save left her on will not do (game/wake.js): Act
+// IV's last waylamp she lit or touched (by the Anvil: the Great Stair), Act V's checkpoint (z.checkpoint, built from the
+// flags on entry); else the nearer of the zone's two waypoints to (x, zz) once the second is known (the Field's Elati
+// camp); else its waypoint, else its start
+export function retryAt(z, x, zz) {
+  const S = z.L.spots; let at = z.checkpoint;
+  if (!at && S.camp2 && G.hero.wps.includes(z.id + '@2')) { const d1 = S.waypoint ? Math.hypot(x - S.waypoint.x, zz - S.waypoint.z) : 1e9, d2 = Math.hypot(x - S.camp2.x, zz - S.camp2.z); at = d2 < d1 ? 'waypoint2' : 'waypoint'; }
+  return at || (S.waypoint ? 'waypoint' : 'start');
 }
 function takeExit(z, e) {
   if (e.locked && !G.hero.flags[e.locked]) {

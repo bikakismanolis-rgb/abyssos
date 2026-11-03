@@ -8,6 +8,7 @@ import { ATMOS } from '../world/atmos.js';
 import { setEmitters, setAmbient, glowBurst, ring } from '../gfx/fx.js';
 import { makeAvatar } from '../game/actors.js';
 import { deleteHero, heroBlocked, heroRepairable } from '../game/save.js';
+import { PAGE, wakeOf } from '../game/wake.js';
 import { emit, on } from './bus.js';
 import { ICON } from './icons.js';
 import { t } from '../i18n/i18n.js';
@@ -98,10 +99,12 @@ function mainMenu() {
   const lastOne = heroes.find((h) => h.id === G.save.last);
   const cont = usable(lastOne) ? lastOne : last || heroes.find((h) => fix.has(h.id));
   const sure = (h) => off.has(h.id) && TS.forceSure === h.id;
+  // (where Continue will wake her, when it is not Whitecliff: game/wake.js; startHero decides again on the record as stored)
+  const place = cont && !off.has(cont.id) && !PAGE.off && wakeOf(cont)?.id;
   const take = (h) => { if (!usable(h)) return; if (off.has(h.id) && !sure(h)) { TS.forceSure = h.id; mainMenu(); return; } TS.forceSure = null; emit('startHero', h, false, off.has(h.id)); };
   const slots = heroes.map((h) => `<div class="slot${off.has(h.id) ? ' off' : ''}" data-id="${h.id}"><span style="color:${CLASSES[h.cls]?.color || '#999'}">${ICON[h.cls === 'warden' ? 'shield' : h.cls === 'ranger' ? 'bolt' : 'flame']}</span><span class="nm">${sure(h) ? t('menu.newerSure') : off.has(h.id) ? t(fix.has(h.id) ? 'menu.newer' : 'menu.newerOnly') : t('menu.slot', t('class.' + h.cls), (+h.level || 1) + (h.mlvl ? ' ✦' + (+h.mlvl || 0) : ''), (DIFFS[h.diff] ? t('diff.' + DIFFS[h.diff].id) : ''))}</span><span class="dl" data-del="${h.id}">${TS.delSure === h.id ? t('menu.deleteSure') : t('menu.delete')}</span></div>`).join('');
   const s = screen(`<div class="logo">${t('game.title')}</div><div class="logo-rule"></div><div class="logo-sub">${t(sub5())}</div>
-    <div class="menu">${cont ? `<button class="btn" id="m-cont">${sure(cont) ? t('menu.newerSure') : `${t('menu.continue')} · ${CLASSES[cont.cls] ? t('class.' + cont.cls) : ''} ${t('hud.level', +cont.level || 1)}`}</button>` : ''}
+    <div class="menu">${cont ? `<button class="btn" id="m-cont">${sure(cont) ? t('menu.newerSure') : `${t('menu.continue')} · ${CLASSES[cont.cls] ? t('class.' + cont.cls) : ''} ${t('hud.level', +cont.level || 1)}${place ? `<span class="m-at">${t('zone.' + place)}</span>` : ''}`}</button>` : ''}
     ${last && TS.net ? `<button class="btn ghost" id="m-coop">${t('coop.title')}</button>` : ''}
     <button class="btn ${last ? 'ghost' : ''}" id="m-new">${t('menu.new')}</button>
     ${heroes.length > 1 || off.size ? `<div class="slots">${slots}</div>` : ''}

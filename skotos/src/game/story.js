@@ -159,13 +159,17 @@ on('zoneEnter', (id, z) => {
   if (NET.mode === 'guest') { if ((G.hero.__real || G.hero).flags?.gifts) refreshStats(); return; }
   const q = G.hero.quest, F = G.hero.flags;
   if (id === 'forest' && G.hero.quest < 1) setQuest(1, true);
+  // (the Weaver's and the Stonewarden's kills move the quest on a timer: a game closed before it, caught up where she wakes)
+  if (id === 'forest' && G.hero.flags.weaver && G.hero.quest < 2) setQuest(2, true);
   if (id === 'crypt' && G.hero.quest < 3 && G.hero.flags.weaver) setQuest(3);
   if (id === 'pass' && G.hero.quest >= 5 && G.hero.quest < 6) setQuest(6, true);
+  if (id === 'pass' && G.hero.flags.stonewarden && G.hero.quest === 6) setQuest(7, true);
   if (id !== 'town' && id !== 'gate' && !G.hero.wps.includes(id) && (id !== 'coast' || F.hearth)) { G.hero.wps.push(id); emit('toast', t('hud.discovered')); }
   // Act III: the Lady speaks from the still trees as soon as the fire comes in; after the Autumn, only the wind
   if (id === 'weep' && q >= 10 && q < 11) setQuest(11);
   // a step whose flags were saved but whose quest change was still on a timer when the game closed: catch up quietly
-  if (id === 'weep' && q === 12 && tearsSeen() >= 3) setQuest(13, true);
+  // (the third verse was read but the game closed before the Glade woke: it wakes now, bellow, Linden and the quest's toast)
+  if (id === 'weep' && q === 12 && tearsSeen() >= 3) checkTears();
   if ((id === 'weep' || id === 'heart') && F.hart && q >= 11 && q < 14) setQuest(14, true);
   // the Lady fell but the Autumn was never seen: her last words and the Autumn play now, where she fell
   if (id === 'heart' && F.ladyDown && !F.autumn) later(2.2, () => { if (G.zone === z) ladyFalls(z, { x: z.L.boss.x, z: z.L.boss.z, rot: 0 }); });
@@ -223,6 +227,8 @@ on('kill', (a) => {
   // an echo fades back into the amber it came from: the fight is real, the story is not touched
   if (a.echo) {
     G.bossActor = null;
+    // (its tree's echo fought to its end: a wake into this visit finds it spent, game/wake.js)
+    if (a.echoOf) a.echoOf.fought = true;
     emit('bossDown', a);
     const ash = a.kind === 'ivar' || a.kind === 'karthax', ice = a.kind === 'tower' || a.kind === 'skotos', c = ash ? 0xd8d0c0 : ice ? 0xd8ecff : 0xffc060;
     if (ash) dismiss(G.zone, a);
@@ -405,7 +411,8 @@ function endMemory(it, z) {
   const F = G.hero.flags, first = !F['tear_' + it.id];
   document.body.classList.remove('memory');
   F['tear_' + it.id] = true;
-  it.mesh?.userData.dim?.();
+  // (spent: its memory seen to its end, not just touched; a wake into this visit finds a small one spent, game/wake.js)
+  it.mesh?.userData.dim?.(); it.spent = true;
   grantBuff('memory');
   const p = G.player;
   if (p) { glowBurst(p.x, 1.2, p.z, 0xffd070, 26, 3, 0.25, 0.8); ring(p.x, p.z, 2.6, 0xffd070, 0.6); }
@@ -448,7 +455,7 @@ on('echo', (it, z) => {
     glowBurst(s.x, 1.5, s.z, c, 50, 4, 0.35, 1); ring(s.x, s.z, 5, ash ? 0xe8e0d0 : 0xffd080, 1); shake(0.3);
     const at = k === 'skotos' ? z.L.spots.skotos : s;
     const b = spawnMonster(k, at.x, at.z, { level: Math.max(z.level + (k === 'silverhorn' || k === 'ivar' || k === 'tower' ? 2 : 3), G.hero.level + 1) });
-    b.echo = true; b.rot = Math.atan2(G.player.x - b.x, G.player.z - b.z);
+    b.echo = true; b.echoOf = it; b.rot = Math.atan2(G.player.x - b.x, G.player.z - b.z);
     const T = ash ? [0x9a9690, 1.2, 0xffa040] : k === 'tower' ? [0xbcd8f0, 1.2, 0x9ad8ff] : k === 'skotos' ? [0x1a1424, 2.0, 0xb090ff] : [0xffc870, 0.4, 0xffd070];
     b.baseTint = T[0]; b.baseTintAmt = T[1]; b.avatar?.setTint(b.baseTint, b.baseTintAmt); b.avatar?.setRim?.(T[2], 1.4);
     z.actors.push(b); z.boss = b;
