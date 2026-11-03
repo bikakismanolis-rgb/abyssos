@@ -297,13 +297,14 @@ export function evict(z, list) {
   }
   slideAll(z);
 }
-// gold and items on a closed cell slide to the nearest dry one (a short glide, ice.js's drowned loot too)
+// gold and items on a closed cell slide to the nearest dry one (a short glide, never faster than the wave's 9 m/s; ice.js's
+// drowned loot too)
 function slideAll(z) {
   for (const p of z.pickups) {
     if (p.wash || p.y > 0 || p.vy > 0 || z.map.walkable(p.x, p.z)) continue;
     const f = dryNear(z, p.x, p.z); if (!f) continue;
     const d = Math.hypot(f.x - p.x, f.z - p.z);
-    p.wash = { sx: p.x, sz: p.z, x: f.x, z: f.z, t: 0, dur: clamp(d / 3, 0.4, 1.6) }; TIDE_LOG.slid++;
+    p.wash = { sx: p.x, sz: p.z, x: f.x, z: f.z, t: 0, dur: Math.max(clamp(d / 3, 0.4, 1.6), d / 9) }; TIDE_LOG.slid++;
   }
 }
 let washT = 0;
@@ -316,11 +317,14 @@ function tickWash(z, dt) {
     if (u >= 1) p.wash = null;
   }
 }
-// the nearest dry floor cell (land, thick ice, a dry flat; thin ice at a pinch) within 10 m
+// the nearest dry floor cell (land, thick ice, a dry flat; thin ice at a pinch) within 10 m; with neither within 10 m, the
+// nearest ring past it that holds either, out to 48 m (as evict's monsters): high water that takes a flat all round left
+// its gold in the closed water till the ebb (the tide soak on coast seed 189471153: the flat was dry when the gold slid
+// onto it, and the nearest floor was 11 m off once the top step closed it)
 function dryNear(z, x, zz) {
   const L = z.L, m = z.map, ix = Math.floor(x), iz = Math.floor(zz);
   let pinch = null;
-  for (let r = 0; r <= 10; r++) for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
+  for (let r = 0; r <= 48 && !(r > 10 && pinch); r++) for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) {
     if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
     const cx = ix + dx, cz = iz + dz; if (m.solid(cx, cz)) continue;
     const i = cz * L.w + cx;
