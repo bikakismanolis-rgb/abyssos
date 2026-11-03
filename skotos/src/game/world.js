@@ -526,7 +526,7 @@ function act3Zone(z) {
     const spent = !!((sp.story || sp.id === 'nursery') && F['tear_' + sp.id]);
     sp.dim = spent;
     const mesh = put(z, act3Prop('tear', sp), sp.x, sp.z, sp.r || 0);
-    const it = { kind: 'tear', id: sp.id, story: !!sp.story, x: sp.x, z: sp.z, r: 2.3, prompt: 'tear.touch', mesh, spot: sp, used: spent };
+    const it = { kind: 'tear', id: sp.id, story: !!sp.story, x: sp.x, z: sp.z, r: 2.3, prompt: sp.story ? 'tear.touchGreat' : 'tear.touch', mesh, spot: sp, used: spent };
     it.use = () => emit('tear', it, z);
     z.interact.push(it);
   }

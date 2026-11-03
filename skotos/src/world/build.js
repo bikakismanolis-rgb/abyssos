@@ -2140,16 +2140,37 @@ export function act3Prop(kind, o = {}) {
   return g;
 }
 const solid = (parts, mat) => { const m = new THREE.Mesh(bake(parts), mat || mats().lam); m.castShadow = true; m.receiveShadow = true; return m; };
+// (a verse of the Long Sorrow (o.story) is told from the small ones at a glance, on a phone too: a bigger, brighter drop,
+// and at its foot a breathing ring of light and a halo, two unlit additive draws on shared pieces, no light of their own
+// (so they show where its pool light lost its slot). Spent, it is dark and the cue goes. userData.drop, .cue: for tests)
+let TEAR_RING = null;
 function tearProp(o) {
-  const g = new THREE.Group();
-  const mat = amberMat({ alpha: 0.6, glow: o.story ? 1.15 : 1 });
+  const g = new THREE.Group(), s = o.story ? 1.3 : 0.85;
+  const mat = amberMat({ alpha: 0.6, glow: o.story ? 1.65 : 1 });
   const prof = [[0, 0], [0.18, 0.04], [0.42, 0.22], [0.58, 0.55], [0.62, 0.86], [0.52, 1.18], [0.33, 1.48], [0.15, 1.74], [0.06, 1.9], [0, 1.96]];
   const drop = new THREE.Mesh(G.lathe(prof, 20), mat); drop.position.y = 0.5; drop.renderOrder = 3;
-  const strand = new THREE.Mesh(G.cyl(0.035, 0.07, 3.6, 6), amberMat({ glow: 0.9 })); strand.position.y = 0.5 + 1.9 + 1.75;
+  if (o.story) drop.scale.set(1.22, s, 1.22); else drop.scale.setScalar(s);
+  // (the strand hangs from where it always did, down to the drop's top)
+  const top = 0.5 + 1.9 * s, strand = new THREE.Mesh(G.cyl(0.035, 0.07, 3.6, 6), amberMat({ glow: 0.9 }));
+  strand.scale.y = (5.95 - top) / 3.6; strand.position.y = (top + 5.95) / 2;
   const fig = new THREE.Mesh(bake(figureParts(0x241206, 1.2, 0.32)), new THREE.MeshBasicMaterial({ vertexColors: true }));
-  fig.position.y = 0.72; fig.rotation.y = o.r || 0;
+  fig.scale.setScalar(s); fig.position.y = 0.5 + 0.22 * s; fig.rotation.y = o.r || 0;
   g.add(fig, drop, strand);
-  g.userData.dim = () => { mat.userData.u.uGlow.value = 0.42; mat.userData.u.uA0.value = 0.8; if (o.gain) o.gain.k = 0.25; };
+  const cue = [];
+  if (o.story) {
+    // (1.3 m: clear of its tree 1.5 m behind; on the island the sorrow Tear's ring stays on the island)
+    TEAR_RING ||= new THREE.PlaneGeometry(2.6, 2.6).rotateX(-Math.PI / 2);
+    TEAR_RING.userData.shared = true;
+    const ring = new THREE.Mesh(TEAR_RING, MAT.tearRing ||= new THREE.MeshBasicMaterial({ map: ringTexture(), color: 0xffb040, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+    ring.position.y = 0.04; ring.renderOrder = 2;
+    const ph = Math.random() * 6.28;
+    ring.onBeforeRender = () => { ring.scale.x = ring.scale.z = 1 + 0.06 * Math.sin(WIND.uTime.value * 1.6 + ph); };
+    const halo = new THREE.Sprite(MAT.tearHalo ||= new THREE.SpriteMaterial({ map: tex('dot'), color: 0xffb040, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false }));
+    halo.position.y = 0.5 + 1.0 * s; halo.scale.setScalar(3.4);
+    g.add(ring, halo); cue.push(ring, halo);
+  }
+  g.userData.drop = drop; g.userData.cue = cue;
+  g.userData.dim = () => { mat.userData.u.uGlow.value = 0.42; mat.userData.u.uA0.value = 0.8; if (o.gain) o.gain.k = 0.25; for (const c of cue) c.visible = false; };
   if (o.used || o.dim) g.userData.dim();
   return g;
 }

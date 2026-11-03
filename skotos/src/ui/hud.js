@@ -314,7 +314,9 @@ function drawMinimap(big) {
     const ex = z.map.explored[Math.floor(it.z) * z.map.w + Math.floor(it.x)];
     if (!ex && z.id !== 'town') continue;
     const c = it.kind === 'waylamp' || it.kind === 'sealight' ? (it.lit ? '#ffd070' : '#8a8274') : { waypoint: '#6aa8ff', exit: '#f0e0c0', chest: '#f2d24a', shrine: '#ffe0a0', npc: '#f0c860', stash: '#c0a060', portal: '#6aa8ff', tear: '#ffa030', altar: '#ff7a40', brazier: '#ff9a40', bellows: '#ff6a20', echo: '#e8e0d0', staff: '#ffe8b0', beacon: '#ffd040', coal: '#ffd040', hearth: '#ffb060', nameStone: it.lit ? '#ffe0b0' : '#b8c8d8', window: '#bfe4ff', holeLamp: '#ffd080', cairn: '#ffa040', farLight: '#fff4d0', doorStone: '#e8e0d0', remember: '#e8f0ff' }[it.kind] || '#fff';
-    dot(it.x, it.z, it.kind === 'npc' ? 3.5 : 4, c);
+    // (a verse of the Long Sorrow still to find: a bigger, brighter dot than a small Tear's)
+    const great = it.kind === 'tear' && it.story;
+    dot(it.x, it.z, it.kind === 'npc' ? 3.5 : great ? 5.5 : 4, great ? '#ffd060' : c);
   }
   for (const a of G.actors) {
     // (nothing gives away what is under the ice or the water)
