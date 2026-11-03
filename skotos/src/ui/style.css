@@ -324,6 +324,8 @@ body.memory-ice #stage::after { opacity: 1; background: radial-gradient(ellipse 
 .logo-rule { width: min(360px, 60vw); height: 1px; margin: 14px auto; background: linear-gradient(90deg, transparent, var(--gold), transparent); }
 .menu { display: flex; flex-direction: column; gap: 10px; margin-top: 22px; min-width: min(320px, 80vw); }
 .menu .btn { font-size: 17px; padding: 11px 18px; }
+/* (Continue names the place she will wake in, on a line of its own: game/wake.js) */
+.menu .btn .m-at { display: block; margin-top: 2px; font: italic 400 13px var(--body); color: var(--ink2); letter-spacing: 0; }
 .tapgo { margin-top: 28px; font: 700 16px var(--display); color: var(--gold2); letter-spacing: 2px; animation: blink 1.6s ease infinite; }
 .credit { position: absolute; bottom: calc(8px + var(--sb)); left: 0; right: 0; font-size: 11px; color: var(--ink3); padding: 0 16px; }
 .slots { display: flex; flex-direction: column; gap: 6px; max-height: 34vh; overflow: auto; }

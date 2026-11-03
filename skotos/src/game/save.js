@@ -9,8 +9,9 @@ const SLOT = typeof location !== 'undefined' ? new URLSearchParams(location.sear
 const SUF = SLOT && /^[a-z0-9]{1,12}$/.test(SLOT) ? '.' + SLOT : '';
 const KEY = 'skotos.save.v1' + SUF;
 // (the cloud's own record and the backups of what it replaced: game/cloud.js, docs/cloudsave/README.md)
-// (game/cloud.js: told of every write, and of a change it should sync at once, a deletion or a backup taken back)
-export const saveHooks = { written: null, changed: null };
+// (game/cloud.js: told of every write, and of a change it should sync at once, a deletion or a backup taken back; and
+// game/wake.js: where she is in a zone she may wake in, set on the record being written, or let go)
+export const saveHooks = { written: null, changed: null, visit: null };
 const CLOUD_KEY = 'skotos.cloud.v1' + SUF, BAK_KEY = 'skotos.cloud.bak.v1' + SUF, BAK_GONE_KEY = 'skotos.cloud.bakgone.v1' + SUF;
 // (this page's copy of each stored hero is made whole for it (repairHero); the record it came from, as stored, is what
 // is written back: a hero this page does not play stays byte for byte as stored, so one a newer version of the game
@@ -88,6 +89,8 @@ export function writeSave() {
   if (hero) {
     const d = disk?.heroes.find((h) => h && typeof h === 'object' && h.id === hero.id), was = MINE.get(hero) ?? RAW.get(hero);
     if (d && was !== undefined && JSON.stringify(d) !== was) foreign(d);
+    // (where she is in a zone she may wake in: set on the record, or let go; game/wake.js)
+    try { saveHooks.visit?.(hero); } catch (e) { delete hero.visit; }
     hero.played = Date.now();
     const i = G.save.heroes.findIndex((h) => h.id === hero.id);
     if (i >= 0) G.save.heroes[i] = hero; else G.save.heroes.unshift(hero);
