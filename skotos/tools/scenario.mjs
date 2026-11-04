@@ -757,6 +757,12 @@ const S = {
         r.c[name] = { at: m.at, zone: c.zone, dWp: c.dWp, after: after && (typeof after === 'object' ? after.id : after) };
       }
       k.c = r.c.control.zone === 'weep' && !!r.c.control.at && Object.entries(r.c).every(([n, c]) => n === 'control' || (!c.at && town(c) && c.after === null));
+      // (voices that are not all indices, as a file or a copy may bring: taken, the others passed over, the page untouched)
+      const hv = JSON.parse(JSON.stringify(rec)); hv.visit.voices = ['__proto__', 'constructor', 'length', 0];
+      await plant(hv); await load(); await menu(); const cv = await cont();
+      r.voices = { zone: cv.zone, ...(await ev(() => ({ proto: [].done ?? null, ctor: Array.done ?? null, v0: !!window.__G.zone.voices?.[0]?.done, fail: window.__toasts.includes(window.__D.t('load.fail')) }))) };
+      r.voices.after = (await stored()).visit?.id ?? null;
+      k.voices = r.voices.zone === 'weep' && r.voices.proto === null && r.voices.ctor === null && r.voices.v0 && !r.voices.fail && r.voices.after === 'weep';
       }
       if (on('d')) {
       // d. her zone will not load (the network): Whitecliff, the visit held, and laid on the zone when she walks in

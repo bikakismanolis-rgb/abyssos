@@ -104,8 +104,9 @@ export function restoreVisit(z, v) {
     else if (it.kind === 'tear' && !it.story && it.id !== 'nursery' && has(v.tears, it.id)) { it.used = it.spent = true; it.mesh?.userData.dim?.(); }
     else if (it.kind === 'echo' && has(v.echoes, it.boss)) it.used = it.fought = true;
   }
-  // (before zoneEnter: the greeting is not said again, and the voices still to come keep their order)
-  if (Array.isArray(v.voices)) for (const i of v.voices) if (z.voices?.[i]) z.voices[i].done = true;
+  // (before zoneEnter: the greeting is not said again, and the voices still to come keep their order. Indices only: a
+  // record's text is no key to be set on, '__proto__' least)
+  if (Array.isArray(v.voices)) for (const i of v.voices) if (Number.isInteger(i) && i >= 0 && z.voices?.[i]) z.voices[i].done = true;
   if (v.greeted === 1) z.greeted = true;
   if (typeof v.seen === 'string' && /^[A-Za-z0-9+/]*={0,2}$/.test(v.seen)) seeAgain(z.map, v.seen);
 }
