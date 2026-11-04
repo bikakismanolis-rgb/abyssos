@@ -310,8 +310,15 @@ const S = {
     await pg.waitForTimeout(1500);
     r.onGround = await pg.evaluate(() => window.__G.pickups.filter((p) => p.kind === 'item' && p.own).length);
     r.notTakenWhileStanding = (await S()).inv === s3.inv - 1;
-    await pg.evaluate(() => { window.__G.player.x += 3; }); await pg.waitForTimeout(800);
-    await pg.evaluate(() => { const it = window.__G.pickups.find((p) => p.kind === 'item' && p.own), p = window.__G.player; if (it) { p.x = it.x; p.z = it.z; } }); await pg.waitForTimeout(1500);
+    // (away to open floor 3-6 m off, whichever way is free, until the game has seen her there; then back onto it)
+    r.away = await pg.evaluate(async () => {
+      const G = window.__G, p = G.player, it = G.pickups.find((q) => q.kind === 'item' && q.own); if (!it) return null;
+      for (const [dx, dz] of [[4, 0], [-4, 0], [0, 4], [0, -4], [3, 3], [-3, -3], [6, 0], [-6, 0]]) if (G.zone.map.walkable(it.x + dx, it.z + dz)) { p.x = it.x + dx; p.z = it.z + dz; break; }
+      const t0 = performance.now(); while (it.hold && performance.now() - t0 < 8000) await new Promise((ok) => setTimeout(ok, 100));
+      return { d: +Math.hypot(p.x - it.x, p.z - it.z).toFixed(2), hold: !!it.hold };
+    });
+    await pg.evaluate(() => { const it = window.__G.pickups.find((p) => p.kind === 'item' && p.own), p = window.__G.player; if (it) { p.x = it.x; p.z = it.z; } });
+    await pg.waitForFunction((n) => window.__G.hero.inv.filter(Boolean).length === n, s3.inv, { timeout: 8000 }).catch(() => {});
     r.takenBack = (await S()).inv === s3.inv;
     r.pass = r.picked === 3 && r.sellSeen && r.magicChip >= 3 && r.cleared === 0 && r.sold.n === 2 && r.sold.gold > 0 && r.legAsks && r.legSold && r.wares === 12 && r.buySeen && r.bought.n === 1 && r.bought.paid > 0 && r.dropSeen && r.onGround === 1 && r.notTakenWhileStanding && r.takenBack;
     return r;
