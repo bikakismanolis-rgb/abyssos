@@ -29,7 +29,7 @@ export function equip(invIndex, slot) {
 }
 export function unequip(slot) {
   const h = G.hero, it = h.equip[slot]; if (!it) return false;
-  if (!addToBag(it)) { Audio.sfx('denied'); return false; }
+  if (!addToBag(it, true)) { Audio.sfx('denied'); return false; }
   it.isNew = false;
   delete h.equip[slot];
   Audio.sfx('equip'); refreshStats(); emit('equipChanged', slot);
