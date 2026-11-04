@@ -267,7 +267,7 @@ body.memory-ice #frost { opacity: .75 !important; --fi: 46% !important; --fo: 10
 .pn-b.ib-b { display: flex; flex-direction: column; gap: 8px; overflow: hidden; padding: 10px 12px; touch-action: auto; }
 .ib { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) clamp(210px, 34%, 330px); gap: 12px; }
 .ib-l, .ib-r { min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-y; }
-.ib-l { align-content: start; padding: 3px; }
+.ib-l { align-content: start; padding: 4px; }
 .ib-r { border: 1px solid var(--line); border-radius: 10px; background: #0c0d11; }
 .ib-r .tip { margin: 0; border: 0; border-radius: 0; background: none; }
 .ib-r .stats { margin: 0; padding: 4px 12px 12px; }

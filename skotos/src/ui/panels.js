@@ -310,12 +310,12 @@ const SCROLLERS = ['.pn-b', '.ib-l', '.ib-r'];
 function render() {
   if (!P.name) return;
   // the same panel and tab drawn again (a tap in it): it stays scrolled where it was, the item panels' grid pane too, and
-  // their item pane while the same item stays tapped (another item's starts at its top)
-  const key = P.name + ':' + P.tab, pn = $('panel'), same = key === render.key;
-  const keep = same ? SCROLLERS.map((s, i) => (i === 2 && P.sel !== render.sel ? 0 : pn.querySelector(s)?.scrollTop || 0)) : null;
+  // their item pane while it shows the same item (another item's, a new gamble's too, starts at its top)
+  const key = P.name + ':' + P.tab, pn = $('panel'), same = key === render.key, shown = P.sel === render.sel && P.last === render.last;
+  const keep = same ? SCROLLERS.map((s, i) => (i === 2 && !shown ? 0 : pn.querySelector(s)?.scrollTop || 0)) : null;
   // (a panel that cannot be drawn still shows its close button: it never stays open and empty)
   try { $('panel').innerHTML = R[P.name] ? R[P.name]() : EXTRA[P.name]?.render(P) || ''; } catch (e) { console.error(e); $('panel').innerHTML = `<div class="pn narrow"><div class="pn-h"><h2></h2><button class="x" data-a="close" aria-label="${t('panel.close')}">${ICON.close}</button></div></div>`; }
-  render.key = key; render.sel = P.sel;
+  render.key = key; render.sel = P.sel; render.last = P.last;
   if (keep) SCROLLERS.forEach((s, i) => { const e = keep[i] && pn.querySelector(s); if (e) e.scrollTop = keep[i]; });
   if (P.name === 'map') drawBigMap($('bigmap'));
 }
