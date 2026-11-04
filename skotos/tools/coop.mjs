@@ -686,13 +686,21 @@ const SC = {
     const eq = await ev(g, async () => { const Iv = await import('/src/game/inventory.js'), h = window.__G.hero.__real, I = await import('/src/game/items.js'), i = h.inv.findIndex((it) => it && String(it.id).startsWith('stuff') && I.usable(it, h.cls)); if (i < 0) return { none: true }; const id = h.inv[i].id, ok1 = Iv.equip(i); return { ok: ok1, ring: Object.values(h.equip).some((e) => e?.id === id), dps: window.__G.stats.dps, life: window.__G.stats.lifeMax }; });
     ok(eq.ok && eq.ring && isFinite(eq.dps) && isFinite(eq.life), 'and equipping what the host sent works', eq);
     // home, and its save poisoned the old way (as a page before this fix let it be): Continue repairs it
-    // (and a save made at once as it leaves, as Save and quit does, still in the host's zone: none either)
-    await ev(g, async () => { const S = await import('/src/game/save.js'); window.__NET.leaveGame('coop.youLeft'); S.writeSave(); });
-    const leaving = await visitOf();
-    await until(g, () => window.__G.zone?.id === 'town' && !window.__NET.S.role && !window.__G.hero.__real, null, 30000, 'home');
+    // (and a save made at once as it leaves, as Save and quit does, still in the host's zone: none either. The host's forest,
+    // a zone she could wake in were it her own; the mode is already gone then, so only the zone's own seed rule holds it)
+    await until(host, () => !document.getElementById('fade').classList.contains('on'), null, 10000, 'fade'); await sleep(300);
+    await ev(host, () => window.__D.emit('travel', 'forest', { at: 'waypoint' }));
+    await until(g, () => window.__G.zone?.id === 'forest' && window.__NET.S.zoneKey === window.__G.zone.netKey, null, 60000, 'forest');
+    const leaving = await ev(g, async () => {
+      const S = await import('/src/game/save.js'), z = window.__G.zone;
+      window.__NET.leaveGame('coop.youLeft'); S.writeSave();
+      const d = JSON.parse(localStorage.getItem('skotos.save.v1.g1')), h = d.heroes.find((x) => x.id === d.last);
+      return { zone: z.id, own: !!z.ownSeed, still: window.__G.zone === z, mode: window.__NET.NET.mode, visit: h?.visit ?? null };
+    });
+    await until(g, () => window.__G.zone?.id === 'town' && window.__G.zone.ownSeed && !window.__NET.S.role && !window.__G.hero.__real, null, 30000, 'home');
     await ev(g, async () => (await import('/src/game/save.js')).writeSave());
     const home = await visitOf();
-    ok(leaving.visit === null && !leaving.own && home.visit === null && home.zone === 'town', 'leaving the host, and home again: its record keeps no place to wake', { leaving, home });
+    ok(leaving.zone === 'forest' && leaving.still && !leaving.own && !leaving.mode && leaving.visit === null && home.zone === 'town' && home.own && home.visit === null, 'leaving the host\'s forest, and home again: its record keeps no place to wake', { leaving, home });
     await ev(g, async () => {
       (await import('/src/game/save.js')).writeSave();
       const raw = JSON.parse(localStorage.getItem('skotos.save.v1.g1')), h = raw.heroes.find((x) => x.id === raw.last);
