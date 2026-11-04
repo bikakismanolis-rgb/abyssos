@@ -69,7 +69,7 @@ function head(title, gold = true) {
 function cell(item, a, extra = '', sel = false, label = '') {
   if (!item) { const sl = a.startsWith('eq:') ? a.slice(3) : null; return `<button class="cell empty ${extra}" data-a="${a}">${sl ? ICON[SLOT_ICON[sl]] : ''}${label ? `<span class="lbl">${label}</span>` : ''}</button>`; }
   const up = isUpgrade(item);
-  return `<button class="cell r${item.rar} ${sel ? 'sel' : ''} ${extra}" data-a="${a}">${ICON[ICON_OF[item.base]]}${item.isNew ? '<i class="new"></i>' : ''}${up ? '<span class="up">▲</span>' : ''}${extra.includes('tosell') ? '<i class="ck">✓</i>' : ''}${label ? `<span class="lbl pr">${label}</span>` : ''}</button>`;
+  return `<button class="cell r${item.rar} ${sel ? 'sel' : ''} ${extra}" data-a="${a}">${ICON[ICON_OF[item.base]]}${item.isNew ? '<i class="new"></i>' : ''}${up ? `<span class="up${label ? ' tl' : ''}">▲</span>` : ''}${extra.includes('tosell') ? '<i class="ck">✓</i>' : ''}${label ? `<span class="lbl pr">${label}</span>` : ''}</button>`;
 }
 function isUpgrade(item) {
   const h = G.hero;
@@ -167,7 +167,8 @@ const R = {
       const sellB = `<button class="btn ${leg ? 'red' : ''}" data-a="sellpick" ${pick.size ? '' : 'disabled'}>${P.sure ? t('shop.sure') : t('shop.sellN', pick.size)} · ${ICON.coin}${fmt(total)}</button>`;
       const chips = `<div class="chips">${RAR_PICK.map((k, r) => `<button class="chip" data-a="pkr:${r}">+ ${t(k)}</button>`).join('')}<button class="chip" data-a="pkr:x">${t('shop.none')}</button></div>`;
       const k = P.sel ? +P.sel.split(':')[1] : -1, it = h.inv[k];
-      right = acts(sellB + chips) + (it ? tip(it, usable(it, h.cls) ? `<button class="btn ghost" data-a="equip:${k}">${t('item.equip')}</button>` : '') : none(t('shop.sell.d')));
+      const eqB = it && usable(it, h.cls) ? `<button class="btn ghost" data-a="equip:${k}">${t('item.equip')}</button>` : '';
+      right = acts(sellB + eqB + chips) + (it ? tip(it, '') : none(t('shop.sell.d')));
     } else if (tab === 'buy') {
       const S = stock(npc);
       left = `<div class="bag">${S.map((it, i) => it ? cell(it, 'by:' + i, '', P.sel === 'by:' + i, fmtK(buyPrice(it))) : '<button class="cell empty" disabled></button>').join('')}</div>`;
@@ -305,14 +306,17 @@ export function diffUnlocked(i) {
   const best = a === 'any' ? Math.max(...[1, 2, 3, 4, 5].map((n) => h?.['act' + n] ?? -1)) : h?.[a] ?? -1;
   return best >= need;
 }
+const SCROLLERS = ['.pn-b', '.ib-l', '.ib-r'];
 function render() {
   if (!P.name) return;
-  // the same panel and tab drawn again (a tap in it): it stays scrolled where it was
-  const key = P.name + ':' + P.tab, body = $('panel').querySelector('.pn-b'), top = key === render.key && body ? body.scrollTop : 0;
+  // the same panel and tab drawn again (a tap in it): it stays scrolled where it was, the item panels' grid pane too, and
+  // their item pane while the same item stays tapped (another item's starts at its top)
+  const key = P.name + ':' + P.tab, pn = $('panel'), same = key === render.key;
+  const keep = same ? SCROLLERS.map((s, i) => (i === 2 && P.sel !== render.sel ? 0 : pn.querySelector(s)?.scrollTop || 0)) : null;
   // (a panel that cannot be drawn still shows its close button: it never stays open and empty)
   try { $('panel').innerHTML = R[P.name] ? R[P.name]() : EXTRA[P.name]?.render(P) || ''; } catch (e) { console.error(e); $('panel').innerHTML = `<div class="pn narrow"><div class="pn-h"><h2></h2><button class="x" data-a="close" aria-label="${t('panel.close')}">${ICON.close}</button></div></div>`; }
-  render.key = key;
-  if (top) { const b = $('panel').querySelector('.pn-b'); if (b) b.scrollTop = top; }
+  render.key = key; render.sel = P.sel;
+  if (keep) SCROLLERS.forEach((s, i) => { const e = keep[i] && pn.querySelector(s); if (e) e.scrollTop = keep[i]; });
   if (P.name === 'map') drawBigMap($('bigmap'));
 }
 

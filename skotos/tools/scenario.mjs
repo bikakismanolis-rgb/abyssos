@@ -320,7 +320,16 @@ const S = {
     await pg.evaluate(() => { const it = window.__G.pickups.find((p) => p.kind === 'item' && p.own), p = window.__G.player; if (it) { p.x = it.x; p.z = it.z; } });
     await pg.waitForFunction((n) => window.__G.hero.inv.filter(Boolean).length === n, s3.inv, { timeout: 8000 }).catch(() => {});
     r.takenBack = (await S()).inv === s3.inv;
-    r.pass = r.picked === 3 && r.sellSeen && r.magicChip >= 3 && r.cleared === 0 && r.sold.n === 2 && r.sold.gold > 0 && r.legAsks && r.legSold && r.wares === 12 && r.buySeen && r.bought.n === 1 && r.bought.paid > 0 && r.dropSeen && r.onGround === 1 && r.notTakenWhileStanding && r.takenBack;
+    // the stash: scrolled down to the bag, a tap keeps the pane where it was, and a second tap moves that item
+    await pg.evaluate(() => window.__D.openPanel('stash')); await pg.waitForTimeout(300);
+    await pg.evaluate(() => { const l = document.querySelector('.ib-l'); l.scrollTop = l.scrollHeight; }); await pg.waitForTimeout(200);
+    const st0 = await pg.evaluate(() => ({ top: document.querySelector('.ib-l').scrollTop, stash: window.__G.hero.stash.filter(Boolean).length }));
+    await tap('[data-a^="sb:"]:not(.empty)', 0);
+    r.stash = await pg.evaluate(() => ({ top: document.querySelector('.ib-l').scrollTop, sel: !!document.querySelector('.cell.sel') }));
+    await tap('.cell.sel'); r.stash.moved = (await pg.evaluate(() => window.__G.hero.stash.filter(Boolean).length)) === st0.stash + 1;
+    r.stash.kept = st0.top > 0 && Math.abs(r.stash.top - st0.top) < 2;
+    await pg.evaluate(() => window.__D.closePanel());
+    r.pass = r.stash.kept && r.stash.sel && r.stash.moved && r.picked === 3 && r.sellSeen && r.magicChip >= 3 && r.cleared === 0 && r.sold.n === 2 && r.sold.gold > 0 && r.legAsks && r.legSold && r.wares === 12 && r.buySeen && r.bought.n === 1 && r.bought.paid > 0 && r.dropSeen && r.onGround === 1 && r.notTakenWhileStanding && r.takenBack;
     return r;
   } },
   panels: { q: 'auto=town&sim=2&q=1', run: async (pg, shot) => {
