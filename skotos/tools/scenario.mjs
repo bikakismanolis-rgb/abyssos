@@ -281,6 +281,41 @@ const S = {
     await pg.waitForTimeout(2000); await shot();
     return pg.evaluate(() => { const G = window.__G; return { kills: G.hero.stats.kills }; });
   } },
+  // the vendor's Sell (several at once, the chips, a legendary asks again), Buy, and an item dropped from the bag lying at
+  // her feet until she walks away and back; every button within the panel's view without scrolling
+  shop: { q: 'auto=town&sim=2&q=0&lvl=20', run: async (pg, shot) => {
+    const r = {};
+    await pg.evaluate(async () => { const m = await import('/src/game/items.js'); const inv = await import('/src/game/inventory.js'); for (let i = 0; i < 26; i++) inv.addToBag(m.makeItem(20, { rar: [0, 1, 1, 2, 1, 0, 2, 3][i % 8], cls: window.__G.hero.cls })); window.__G.hero.gold = 1000; window.__D.refreshStats(); });
+    const tap = async (sel, n = 0) => { const b = await pg.locator(sel).nth(n).boundingBox(); if (!b) throw new Error('no ' + sel); await pg.mouse.click(b.x + b.width / 2, b.y + b.height / 2); await pg.waitForTimeout(150); };
+    // (a button within the panel and the screen: never below the fold)
+    const seen = (sel) => pg.evaluate((sel) => { const e = document.querySelector(sel), p = document.querySelector('.pn'); if (!e || !p) return false; const b = e.getBoundingClientRect(), q = p.getBoundingClientRect(); return b.top >= q.top && b.bottom <= q.bottom && b.bottom <= innerHeight && b.width > 0; }, sel);
+    const S = () => pg.evaluate(() => ({ gold: window.__G.hero.gold, inv: window.__G.hero.inv.filter(Boolean).length }));
+    await pg.evaluate(() => window.__D.openPanel('vendor')); await pg.waitForTimeout(300);
+    const s0 = await S();
+    await tap('.bag .cell.r1', 0); await tap('.bag .cell.r1', 1); await tap('.bag .cell.r0', 0);
+    r.picked = await pg.locator('.cell.tosell').count();
+    r.sellSeen = await seen('[data-a="sellpick"]');
+    await tap('[data-a="pkr:1"]'); r.magicChip = await pg.locator('.cell.tosell').count();
+    await tap('[data-a="pkr:x"]'); r.cleared = await pg.locator('.cell.tosell').count();
+    await tap('.bag .cell.r1', 0); await tap('.bag .cell.r0', 0); await shot();
+    await tap('[data-a="sellpick"]'); const s1 = await S(); r.sold = { n: s0.inv - s1.inv, gold: s1.gold - s0.gold };
+    await tap('.bag .cell.r3', 0); await tap('[data-a="sellpick"]'); r.legAsks = (await S()).inv === s1.inv;
+    await tap('[data-a="sellpick"]'); r.legSold = (await S()).inv === s1.inv - 1;
+    await tap('[data-a="tab:buy"]'); r.wares = await pg.locator('.bag .cell:not(.empty)').count();
+    await tap('.bag .cell', 0); r.buySeen = await seen('[data-a^="buy:"]'); const s2 = await S();
+    await tap('[data-a^="buy:"]'); const s3 = await S(); r.bought = { n: s3.inv - s2.inv, paid: s2.gold - s3.gold }; await shot();
+    await pg.evaluate(() => window.__D.openPanel('inventory')); await tap('.bag .cell', 0);
+    r.dropSeen = await seen('[data-a^="drop:"]'); r.equipOrDrop = await pg.locator('.ib-acts .btn').count();
+    await tap('[data-a^="drop:"]'); await pg.evaluate(() => window.__D.closePanel());
+    await pg.waitForTimeout(1500);
+    r.onGround = await pg.evaluate(() => window.__G.pickups.filter((p) => p.kind === 'item' && p.own).length);
+    r.notTakenWhileStanding = (await S()).inv === s3.inv - 1;
+    await pg.evaluate(() => { window.__G.player.x += 3; }); await pg.waitForTimeout(800);
+    await pg.evaluate(() => { const it = window.__G.pickups.find((p) => p.kind === 'item' && p.own), p = window.__G.player; if (it) { p.x = it.x; p.z = it.z; } }); await pg.waitForTimeout(1500);
+    r.takenBack = (await S()).inv === s3.inv;
+    r.pass = r.picked === 3 && r.sellSeen && r.magicChip >= 3 && r.cleared === 0 && r.sold.n === 2 && r.sold.gold > 0 && r.legAsks && r.legSold && r.wares === 12 && r.buySeen && r.bought.n === 1 && r.bought.paid > 0 && r.dropSeen && r.onGround === 1 && r.notTakenWhileStanding && r.takenBack;
+    return r;
+  } },
   panels: { q: 'auto=town&sim=2&q=1', run: async (pg, shot) => {
     await pg.evaluate(() => { const D = window.__D, G = window.__G; for (let i = 0; i < 10; i++) { const it = (window.__mk || (() => null))(); } });
     await pg.evaluate(async () => { const m = await import('/src/game/items.js'); const inv = await import('/src/game/inventory.js'); for (let i = 0; i < 14; i++) inv.addToBag(m.makeItem(8, { rar: i % 4 })); window.__G.hero.points = 3; window.__G.hero.level = 8; window.__D.refreshStats(); });
