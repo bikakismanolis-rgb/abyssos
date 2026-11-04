@@ -654,6 +654,12 @@ const SC = {
     pages.splice(pages.indexOf(v), 1); await v.close();
     await ev(g, () => window.__NET.S.T.lobby.presence({ g: null }));
 
+    // (the guest's own record never carries the host's world: no place to wake kept while it stands in the host's zone,
+    // game/wake.js)
+    const visitOf = () => ev(g, () => { const sl = new URLSearchParams(location.search).get('slot'), d = JSON.parse(localStorage.getItem('skotos.save.v1' + (sl ? '.' + sl : ''))), h = d.heroes.find((x) => x.id === d.last); return { zone: window.__G.zone?.id, own: !!window.__G.zone?.ownSeed, visit: h?.visit ?? null }; });
+    await ev(g, async () => (await import('/src/game/save.js')).writeSave());
+    const inHost = await visitOf();
+    ok(inHost.zone !== 'town' && !inHost.own && inHost.visit === null, 'the guest\'s save in the host\'s zone keeps no place to wake', inHost);
     // a world with every act done and the new fire lit (Act IV left open), and the town: the guest is offered nothing and
     // closes no act of its own
     const own0 = await ev(g, () => { const h = window.__G.hero.__real; return JSON.stringify({ boons: h.boons, a: [h.act1, h.act2, h.act3, h.act4, h.act5], quest: h.quest }); });
@@ -680,8 +686,21 @@ const SC = {
     const eq = await ev(g, async () => { const Iv = await import('/src/game/inventory.js'), h = window.__G.hero.__real, I = await import('/src/game/items.js'), i = h.inv.findIndex((it) => it && String(it.id).startsWith('stuff') && I.usable(it, h.cls)); if (i < 0) return { none: true }; const id = h.inv[i].id, ok1 = Iv.equip(i); return { ok: ok1, ring: Object.values(h.equip).some((e) => e?.id === id), dps: window.__G.stats.dps, life: window.__G.stats.lifeMax }; });
     ok(eq.ok && eq.ring && isFinite(eq.dps) && isFinite(eq.life), 'and equipping what the host sent works', eq);
     // home, and its save poisoned the old way (as a page before this fix let it be): Continue repairs it
-    await ev(g, () => window.__NET.leaveGame('coop.youLeft'));
-    await until(g, () => window.__G.zone?.id === 'town' && !window.__NET.S.role && !window.__G.hero.__real, null, 30000, 'home');
+    // (and a save made at once as it leaves, as Save and quit does, still in the host's zone: none either. The host's forest,
+    // a zone she could wake in were it her own; the mode is already gone then, so only the zone's own seed rule holds it)
+    await until(host, () => !document.getElementById('fade').classList.contains('on'), null, 10000, 'fade'); await sleep(300);
+    await ev(host, () => window.__D.emit('travel', 'forest', { at: 'waypoint' }));
+    await until(g, () => window.__G.zone?.id === 'forest' && window.__NET.S.zoneKey === window.__G.zone.netKey, null, 60000, 'forest');
+    const leaving = await ev(g, async () => {
+      const S = await import('/src/game/save.js'), z = window.__G.zone;
+      window.__NET.leaveGame('coop.youLeft'); S.writeSave();
+      const d = JSON.parse(localStorage.getItem('skotos.save.v1.g1')), h = d.heroes.find((x) => x.id === d.last);
+      return { zone: z.id, own: !!z.ownSeed, still: window.__G.zone === z, mode: window.__NET.NET.mode, visit: h?.visit ?? null };
+    });
+    await until(g, () => window.__G.zone?.id === 'town' && window.__G.zone.ownSeed && !window.__NET.S.role && !window.__G.hero.__real, null, 30000, 'home');
+    await ev(g, async () => (await import('/src/game/save.js')).writeSave());
+    const home = await visitOf();
+    ok(leaving.zone === 'forest' && leaving.still && !leaving.own && !leaving.mode && leaving.visit === null && home.zone === 'town' && home.own && home.visit === null, 'leaving the host\'s forest, and home again: its record keeps no place to wake', { leaving, home });
     await ev(g, async () => {
       (await import('/src/game/save.js')).writeSave();
       const raw = JSON.parse(localStorage.getItem('skotos.save.v1.g1')), h = raw.heroes.find((x) => x.id === raw.last);
@@ -708,6 +727,7 @@ const SC = {
     ok(!!asked && kept?.gold === -5e10 && kept.leg === 7, 'a damaged record is asked about first, and kept as stored in the backups', { asked, kept });
     const rep = await ev(g, () => { const h = window.__G.hero, find = (id) => h.inv.find((it) => it?.id === id); return { gold: h.gold, xp: h.xp, boons: h.boons, old1: find('old1')?.stats, v1: find('old1')?.value, old2: find('old2') && { dmg: find('old2').dmg, stats: find('old2').stats }, amulet: h.equip.amulet && { stats: h.equip.amulet.stats, leg: h.equip.amulet.leg ?? null }, dps: window.__G.stats.dps }; });
     ok(cont && !(await fatal(g)), 'Continue takes the repaired hero up', { cont, fatal: await fatal(g) });
+    ok(await ev(g, () => window.__G.zone?.id === 'town'), 'in Whitecliff', await ev(g, () => window.__G.zone?.id));
     ok(rep.gold === 0 && rep.xp < 2e4 && Array.isArray(rep.boons) && !('legs' in (rep.old1 || {})) && rep.v1 < 100 && Array.isArray(rep.old2?.dmg) && !rep.old2.stats.skill && rep.amulet && !('legs' in rep.amulet.stats) && rep.amulet.stats.crit <= 10 && isFinite(rep.dps), 'its save repaired on load: items rebuilt, gold, XP and blessings sound', rep);
     for (const [n, c] of [['inventory'], ['vendor', { npc: 'healer' }], ['stash']]) { const p = await panelOk(n, c); ok(p.open && p.close && p.cells > 0, 'after Continue its ' + n + ' panel opens', p); }
     const eq2 = await ev(g, async () => { const Iv = await import('/src/game/inventory.js'), h = window.__G.hero, i = h.inv.findIndex((it) => it?.id === 'old1'); return { ok: Iv.equip(i), life: window.__G.stats.lifeMax }; });

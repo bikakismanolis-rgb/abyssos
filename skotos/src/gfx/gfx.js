@@ -22,8 +22,9 @@ export const R = {
 const POOL_SIZE = [3, 6, 8];
 const SHADOW = [0, 1024, 2048];
 
-// o.mobile: a phone (boot.js); o.lost(hidden): called when the GL context is lost, before the page reloads (boot.js saves,
-// lowers the quality unless the page was hidden: a phone may drop a backgrounded tab's context; and stops the game)
+// o.mobile: a phone (boot.js); o.lost(hidden, stuck): called when the GL context is lost, before the page reloads (boot.js
+// saves, lowers the quality unless the page was hidden: a phone may drop a backgrounded tab's context; and stops the game).
+// stuck: lost again within a minute and a half at the lowest quality, when it waits for a tap rather than reload
 export function initGfx(quality, o = {}) {
   R.quality = quality;
   R.mobile = !!o.mobile;
@@ -294,7 +295,7 @@ function onContextLost(o) {
   let again = false;
   try { again = Date.now() - (+sessionStorage.getItem('skotos.glLost') || 0) < 90000; sessionStorage.setItem('skotos.glLost', String(Date.now())); } catch (e) { /* no storage: as if the first time */ }
   const low = R.quality === 0, lower = !low && !document.hidden;
-  try { o.lost?.(document.hidden); } catch (e) { /* the reload matters more */ }
+  try { o.lost?.(document.hidden, again && low); } catch (e) { /* the reload matters more */ }
   R.reload = !(again && low);
   const el = document.createElement('div');
   el.id = 'gl-lost';

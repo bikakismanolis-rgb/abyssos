@@ -9,10 +9,11 @@ import { loadCreatures, hasCreature, creatureCount } from '../gfx/creatures.js';
 import { loadEnv, loadPack } from '../gfx/env.js';
 import { WIND } from '../world/build.js';
 import { initInput, pollInput, takeEvents, IN } from '../core/input.js';
-import { loadSave, writeSave, freshHero } from './save.js';
+import { loadSave, writeSave, freshHero, saveHooks } from './save.js';
 import { refreshStats } from './stats.js';
 import { migrateHero } from './progression.js';
-import { enterZone, updatePacks, updateAct, nearestInteract, updatePortalFx, ZONES, zoneReady, zoneParts, disposeZone } from './world.js';
+import { enterZone, updatePacks, updateAct, nearestInteract, updatePortalFx, ZONES, zoneReady, zoneParts, disposeZone, retryAt } from './world.js';
+import { PAGE, wakeOf, wakeAt, noteVisit, restoreVisit, wokeLately } from './wake.js';
 import { updatePlayer } from './player.js';
 import { damage } from './combat.js';
 import { updateActors } from './ai.js';
@@ -37,6 +38,8 @@ import { initCloud } from './cloud.js';
 import { initCloudUi } from '../ui/cloudui.js';
 
 function fatal(msg) {
+  // (soon after a wake: what the visit laid on her zone may be what fails, so this page keeps no visit, game/wake.js)
+  if (wokeLately(60000)) PAGE.off = true;
   let el = document.getElementById('fatal');
   if (!el) { el = document.createElement('div'); el.id = 'fatal'; document.body.appendChild(el); }
   el.textContent += (el.textContent ? '\n' : '') + String(msg).slice(0, 500);
@@ -47,13 +50,16 @@ window.addEventListener('unhandledrejection', (e) => fatal('promise: ' + (e.reas
 export async function boot(q) {
   // the loading screen is in index.html; each finished part moves its bar
   const B = window.__boot, step = (p, text) => B?.set(p, text);
+  // (every save keeps where she is in a zone she may wake in, for Continue: game/wake.js)
+  saveHooks.visit = noteVisit;
   step(0.12, B?.L?.world);
   loadSave();
   setLang(G.settings.lang || (navigator.language?.startsWith('el') ? 'el' : (G.save.heroes.length ? 'el' : 'el')));
   const mobile = matchMedia('(pointer: coarse)').matches || /Android|iPhone|iPad/i.test(navigator.userAgent);
   if (G.settings.quality < 0) G.settings.quality = mobile ? 1 : 2;
   if (q.has('q')) G.settings.quality = +q.get('q');
-  initGfx(G.settings.quality, { mobile, lost: (hidden) => { if (!hidden) G.settings.quality = Math.max(0, G.settings.quality - 1); writeSave(); G.mode = 'lost'; } });
+  // (lost again at the lowest quality while she looks on (stuck): Continue starts in Whitecliff, not in the zone that does it)
+  initGfx(G.settings.quality, { mobile, lost: (hidden, stuck) => { if (!hidden) G.settings.quality = Math.max(0, G.settings.quality - 1); if (stuck && !hidden) PAGE.off = true; writeSave(); G.mode = 'lost'; } });
   initFX(G.settings.quality);
   initInput(); G.input = IN;
   initOverlay(); buildHud(); initPanels(); initCoopUi(); initCloudUi();
@@ -113,6 +119,10 @@ async function startHero(hero, isNew, zone = 'town', force = false) {
     if (!h) { emit('toast', t('menu.newer'), 'big'); return; }
     hero = h;
   }
+  // (where the last save left her, read off the record as stored, before anything here changes it; none on a page whose
+  // wake went wrong, game/wake.js PAGE.off)
+  PAGE.woke = 0; PAGE.held = PAGE.bound = null;
+  let wake = !isNew && !force && zone === 'town' && !PAGE.off ? wakeOf(hero) : null;
   await starterGear(hero);
   // saves from before the progression: a loadout, nothing learnt, the points kept spendable (progression.js)
   migrateHero(hero);
@@ -139,10 +149,27 @@ async function startHero(hero, isNew, zone = 'town', force = false) {
   hero.gateFound ??= 0;
   hero.fmt = SAVE_FMT;
   legBack(hero);
-  await zoneReady(zone);
+  // (her zone loads under the fade with travel's bar, Whitecliff beside it as ever, so that falling back needs no wait)
+  const fade = wake && document.getElementById('fade'), bar = wake && fadeLoad(wake.id, fade);
+  if (fade) fade.classList.add('on');
+  await Promise.all([zoneReady(zone), wake && zoneReady(wake.id, bar.part).catch((e) => {
+    // (her zone would not load (the network, most often): Whitecliff for now, and the visit kept for the next Continue,
+    // or laid on that zone if she walks in (game/wake.js PAGE.held))
+    console.error(e); PAGE.held = wake; wake = null; emit('toast', t('load.fail'), 'big');
+  })]);
   G.mode = 'play';
   showHud(true);
-  enterZone(zone, zone === 'town' ? { at: isNew ? { x: 31, z: 26 } : 'waypoint' } : {});
+  if (wake) {
+    try { enterZone(wake.id, { at: (z) => wakeAt(z, wake) }); G.player.iframes = 1.5; PAGE.woke = performance.now(); }
+    catch (e) {
+      // (Continue never breaks: whatever went wrong in her zone, Whitecliff at its waypoint, and the visit let go)
+      console.error(e); emit('toast', t('load.fail'), 'big');
+      const bad = G.zones[wake.id]; wake = null;
+      enterZone('town', { at: 'waypoint' });
+      if (bad && G.zones[bad.id] === bad) { delete G.zones[bad.id]; try { disposeZone(bad); } catch (e2) { console.error(e2); } }
+    }
+  } else enterZone(zone, zone === 'town' ? { at: isNew ? { x: 31, z: 26 } : 'waypoint' } : {});
+  if (fade) { bar.hide(); setTimeout(() => fade.classList.remove('on'), 120); }
   G.player.res = hero.cls === 'warden' ? 0 : 100;
   writeSave();
   if (isNew) later(1.2, () => emit('toast', t('q.new') + ': ' + t('q.0'), 'quest'));
@@ -173,26 +200,37 @@ let travelling = false;
 function travel(zone, o = {}) {
   if (travelling) return;
   travelling = true;
+  // (the zone she is bound for, until she is there: a save meanwhile knows she is leaving for it, game/wake.js)
+  PAGE.bound = zone;
+  // (her zone would not load at Continue and she walks in now: what that visit had done there is laid on it as it is built)
+  const H = PAGE.held;
+  if (H && zone === H.id) { const at0 = o.at; o = { ...o, at: (z) => { if (z.seed === H.seed) restoreVisit(z, H); return at0; } }; }
   const f = document.getElementById('fade'); f.classList.add('on');
   Audio.sfx('waypoint');
   // the fade covers any first-visit loading (Act II's stone and lava, Act III's wood); if that takes a while, a bar
+  const bar = fadeLoad(zone, f);
+  Promise.all([zoneReady(zone, bar.part), new Promise((r) => setTimeout(r, 450))]).then(() => {
+    bar.hide();
+    try { enterZone(zone, o); } catch (e) { fatal(e.stack || e); }
+    clearOverlay();
+    setTimeout(() => { f.classList.remove('on'); travelling = false; }, 120);
+    // (there: a visit held in Whitecliff gives way to the zone she went to, whichever it is)
+    PAGE.bound = null; if (zone !== 'town') PAGE.held = null;
+    writeSave();
+  }, (e) => {
+    // nothing has been left yet: stay here and say why (the next try fetches again)
+    bar.hide(); f.classList.remove('on'); travelling = false; PAGE.bound = null;
+    console.error(e);
+    emit('toast', t('load.fail') + (e?.message ? ': ' + e.message : ''), 'big');
+  });
+}
+// (the fade's bar while a zone's first-visit assets load, shown if that takes a while: part() moves it, hide() takes it off)
+function fadeLoad(zone, f) {
   const n = zoneParts(zone), bar = fadeBar(f);
   let k = 0, shown = false;
   const draw = () => { bar.firstChild.textContent = t('load.zone'); bar.lastChild.firstChild.style.transform = `scaleX(${n ? Math.min(1, k / n) : 0})`; };
   const show = setTimeout(() => { shown = true; draw(); bar.classList.add('on'); }, 600);
-  const hide = () => { clearTimeout(show); bar.classList.remove('on'); };
-  Promise.all([zoneReady(zone, () => { k++; if (shown) draw(); }), new Promise((r) => setTimeout(r, 450))]).then(() => {
-    hide();
-    try { enterZone(zone, o); } catch (e) { fatal(e.stack || e); }
-    clearOverlay();
-    setTimeout(() => { f.classList.remove('on'); travelling = false; }, 120);
-    writeSave();
-  }, (e) => {
-    // nothing has been left yet: stay here and say why (the next try fetches again)
-    hide(); f.classList.remove('on'); travelling = false;
-    console.error(e);
-    emit('toast', t('load.fail') + (e?.message ? ': ' + e.message : ''), 'big');
-  });
+  return { part: () => { k++; if (shown) draw(); }, hide: () => { clearTimeout(show); bar.classList.remove('on'); } };
 }
 function fadeBar(f) {
   let b = f.querySelector('.load');
@@ -214,13 +252,10 @@ on('respawn', (town) => {
   // (co-op: a guest gets up in the host's zone, net/coop.js puts it there)
   if (town === 'net') return;
   if (town || G.zone.id === 'gate') { G.gate = null; travel('town', { at: 'waypoint' }); }
-  // Act IV: she wakes at the last waylamp she lit or touched (by the Anvil: on the Great Stair), if there is one; else at
-  // the nearer of the zone's two waypoints, once the second is known (the Field's Elati camp)
-  else {
-    const z = G.zone, S = z.L.spots; let at = z.checkpoint;
-    if (!at && S.camp2 && G.hero.wps.includes(z.id + '@2')) { const d1 = S.waypoint ? Math.hypot(pl.x - S.waypoint.x, pl.z - S.waypoint.z) : 1e9, d2 = Math.hypot(pl.x - S.camp2.x, pl.z - S.camp2.z); at = d2 < d1 ? 'waypoint2' : 'waypoint'; }
-    travel(z.id, { at: at || (S.waypoint ? 'waypoint' : 'start') });
-  }
+  // the zone's retry spot: Act IV's last waylamp she lit or touched (by the Anvil: on the Great Stair), Act V's checkpoint;
+  // else the nearer of the zone's two waypoints, once the second is known (the Field's Elati camp) (world.js retryAt, a
+  // wake's too)
+  else travel(G.zone.id, { at: retryAt(G.zone, pl.x, pl.z) });
 });
 on('heroDeath', () => {
   const pl = G.player; if (pl.dead) return;
@@ -239,7 +274,7 @@ on('quit', () => {
   location.reload();
 });
 on('heroLook', () => refreshHeroLook());
-on('diffChanged', () => { for (const k of Object.keys(G.zones)) if (k !== 'town') { disposeZone(G.zones[k]); delete G.zones[k]; } G.portal = null; writeSave(); emit('toast', t('pick.diff') + ': ' + t('diff.' + DIFFS[G.hero.diff].id), 'quest'); });
+on('diffChanged', () => { for (const k of Object.keys(G.zones)) if (k !== 'town') { disposeZone(G.zones[k]); delete G.zones[k]; } G.portal = null; PAGE.held = null; writeSave(); emit('toast', t('pick.diff') + ': ' + t('diff.' + DIFFS[G.hero.diff].id), 'quest'); });
 on('settings', () => { Audio.setVolumes({ music: G.settings.music, sfx: G.settings.sfx }); setLang(G.settings.lang); if (G.hero) setupHeroHud(); writeSave(); });
 // (a channelled Ray of Dawn ends with the scene's start: its beam, an effect, runs out in the scene while the act stands)
 on('cine', (c) => { const pl = G.player; if (pl?.act?.name === 'beam') { pl.act = null; pl.avatar?.anim.stop?.(0.18); } G.cine = Object.assign({ t: 0, done: new Set() }, c); G.mode = 'cine'; showHud(false); document.getElementById('letterbox').classList.add('on'); });

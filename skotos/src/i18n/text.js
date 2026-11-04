@@ -257,7 +257,8 @@ export const TEXT = {
   'load.zone': ['Φόρτωση της περιοχής', 'Loading the area'], 'load.fail': ['Η περιοχή δεν φόρτωσε. Δοκίμασε ξανά', 'The area did not load. Try again'],
   'echo.hart': ['Θυμήσου τον Αργυρόκερω', 'Remember Silverhorn'], 'echo.lady': ['Θυμήσου την Αμαράνθη', 'Remember Amaranthe'],
   'echo.rise': ['Το κεχριμπάρι θυμάται τη μάχη...', 'The amber remembers the fight...'], 'echo.done': ['Η ηχώ σβήνει. Το δέντρο θα θυμηθεί ξανά αύριο.', 'The echo fades. The tree will remember again tomorrow.'],
-  'tear.touch': ['Άγγιξε το Δάκρυ', 'Touch the Tear'], 'tear.buff': ['Μνήμη των Αειθαλών: +12% ζημιά, +8% ταχύτητα για 60 δευτ.', 'Memory of the Evergreen: +12% damage, +8% speed for 60s'],
+  'tear.touch': ['Άγγιξε το Δάκρυ', 'Touch the Tear'], 'tear.touchGreat': ['Άγγιξε το Μεγάλο Δάκρυ', 'Touch the Great Tear'],
+  'tear.small': ['Μικρό Δάκρυ, όχι στίχος του Μακρού Θρήνου ({0}/3)', 'A small Tear, not a verse of the Long Sorrow ({0}/3)'], 'tear.buff': ['Μνήμη των Αειθαλών: +12% ζημιά, +8% ταχύτητα για 60 δευτ.', 'Memory of the Evergreen: +12% damage, +8% speed for 60s'],
   'shrine.fury': ['Βωμός της Μάχης', 'Shrine of Battle'], 'shrine.speed': ['Βωμός του Ανέμου', 'Shrine of the Wind'], 'shrine.fortune': ['Βωμός της Τύχης', 'Shrine of Fortune'], 'shrine.shield': ['Βωμός της Πέτρας', 'Shrine of Stone'],
   'shrine.fury.d': ['+50% ζημιά για 30 δευτ.', '+50% damage for 30s'], 'shrine.speed.d': ['+40% ταχύτητα για 30 δευτ.', '+40% speed for 30s'], 'shrine.fortune.d': ['+100% χρυσός και μαγικά για 60 δευτ.', '+100% gold and magic find for 60s'], 'shrine.shield.d': ['−40% ζημιά που δέχεσαι για 30 δευτ.', '−40% damage taken for 30s'],
 
