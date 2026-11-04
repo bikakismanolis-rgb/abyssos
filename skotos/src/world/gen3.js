@@ -425,7 +425,8 @@ function tryWeep(seed, o, last) {
       if (!L.cells[i]) continue;
       const edge = D[i - 1] === 1 || D[i + 1] === 1 || D[i - w] === 1 || D[i + w] === 1;
       const wet = L.sap[i] || L.low[i - 1] || L.low[i + 1] || L.low[i - w] || L.low[i + w];
-      if (edge && !wet && rng.chance(0.2)) put({ t: under(green), x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.6, 1.0) });
+      // (the edge's undergrowth stands on the wood's side, never on the path; the same draws as before)
+      if (edge && !wet && rng.chance(0.2)) { const o = [-1, 1, -w, w].find((k) => D[i + k] === 1), ox = o === -1 ? -1 : o === 1 ? 1 : 0, oz = o === -w ? -1 : o === w ? 1 : 0; put({ t: under(green), x: x + ox + rng.next(), z: z + oz + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.6, 1.0) }); }
       if (L.paint[i] < 0.3 && !L.sap[i] && rng.chance(0.26)) put({ t: 'tuft', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.7, 1.2) });
       if (rng.chance(0.01)) put({ t: 'stone', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.25, 0.5) });
       if (L.paint[i] < 0.2 && rng.chance(edge ? 0.018 : 0.004)) put({ t: 'branches', x: x + rng.next(), z: z + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.8, 1.2) });

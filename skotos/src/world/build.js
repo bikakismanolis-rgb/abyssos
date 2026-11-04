@@ -40,7 +40,12 @@ const OCC_V = `
   vec3 occC = cameraPosition - vec3(uHero.x, 0.0, uHero.z);
   vec2 occD = mix(vec2(0.0, 1.0), normalize(occC.xz + vec2(0.0, 1e-3)), occ5), occR = occW.xz - uHero.xz;
   float occDz = dot(occR, occD), occDx = abs(occR.x * occD.y - occR.y * occD.x);
-  vOcc = step(-0.8, occDz) * (1.0 - smoothstep(8.0, 11.0, occDz)) * (1.0 - smoothstep(2.2 + occDz * 0.42, 3.4 + occDz * 0.5, occDx)) * mix(smoothstep(0.7, 1.6, occW.y), smoothstep(1.2, 1.9, occW.y), occ5);
+#ifdef OCC_LOW
+  float occY = smoothstep(0.12, 0.5, occW.y);
+#else
+  float occY = smoothstep(0.7, 1.6, occW.y);
+#endif
+  vOcc = step(-0.8, occDz) * (1.0 - smoothstep(8.0, 11.0, occDz)) * (1.0 - smoothstep(2.2 + occDz * 0.42, 3.4 + occDz * 0.5, occDx)) * mix(occY, smoothstep(1.2, 1.9, occW.y), occ5);
   vec4 occH = projectionMatrix * viewMatrix * vec4(uHero.x, 1.0, uHero.z, 1.0), occP = projectionMatrix * viewMatrix * occW;
   vOccH = vec4(occH.xy / occH.w, projectionMatrix[1][1] / projectionMatrix[0][0], occH.w); vOccP = occP.xyw;`;
 const OCC_F = `
@@ -52,18 +57,19 @@ const OCC_F = `
     float b = mod(q.x * 2.0 + q.y * 3.0 + floor(q.x / 2.0) * 1.0 + q.x * q.y, 4.0) / 4.0 + mod(q.x + q.y * 2.0, 4.0) / 16.0;
     if (b < occK * 0.82) discard;
   }`;
-export function occlude(mat, extra) {
+// (low: undergrowth, which dissolves from the ground up, so the path under a fern between the camera and the hero shows)
+export function occlude(mat, extra, low = false) {
   const prev = mat.onBeforeCompile;
   mat.onBeforeCompile = (sh, r) => {
     if (extra) extra(sh, r);
     sh.uniforms.uHero = WIND.uHero; sh.uniforms.uOcc5 = WIND.uOcc5;
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform vec3 uHero; uniform float uOcc5;\nvarying float vOcc; varying vec4 vOccH; varying vec3 vOccP;')
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', (low ? '#define OCC_LOW\n' : '') + '#include <common>\nuniform vec3 uHero; uniform float uOcc5;\nvarying float vOcc; varying vec4 vOccH; varying vec3 vOccP;')
       .replace('#include <project_vertex>', OCC_V + '\n#include <project_vertex>');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uOcc5; varying float vOcc; varying vec4 vOccH; varying vec3 vOccP;')
       .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>' + OCC_F);
   };
   const key = mat.customProgramCacheKey?.() || mat.type;
-  mat.customProgramCacheKey = () => key + '|occ';
+  mat.customProgramCacheKey = () => key + (low ? '|occlow' : '|occ');
   void prev;
   return mat;
 }
@@ -150,9 +156,13 @@ function envMats() {
     MAT.rootW = worldMat('rootwall', { scale: 2.2, tri: true, rough: 0.9, tint: 0xc0b098 });
   }
   if (!MAT.barkW && ENV.layers.bark) MAT.barkW = worldMat('bark', { scale: 1.8, tri: true, rough: 0.9, tint: 0xb0a088 });
-  for (const k in ENV.props) for (const part of ENV.props[k]) if (!part.mat.userData.occ && !part.mat.transparent) { occlude(part.mat); part.mat.userData.occ = true; }
+  for (const k in ENV.props) for (const part of ENV.props[k]) if (!part.mat.userData.occ && !part.mat.transparent) { occlude(part.mat, null, UNDER.has(k.split('/').pop())); part.mat.userData.occ = true; }
   return MAT;
 }
+
+// the undergrowth scans (the Whisperwood's bushes, the Weeping Woods' bracken and shrubs): see-through near the hero from
+// the ground up, occlude's low form
+const UNDER = new Set(['fern', 'fernA', 'fernB', 'shrub']);
 
 // ---------- photoreal layers (Poly Haven, see gfx/env.js) ----------
 const Std = () => (R.quality >= 2 ? THREE.MeshStandardMaterial : THREE.MeshLambertMaterial);
@@ -1369,7 +1379,9 @@ function buildGround(L, group) {
       let walls = 0;
       if (heart) for (let dz = -2; dz <= 1; dz++) for (let dx = -2; dx <= 1; dx++) { const c = cellAt(vx + dx, vz + dz); if (c < 0 || (!cells[c] && !L.low[c])) walls++; }
       const fl2 = fl - dk;
-      k = fl2 > 0 ? (0.93 + nz * 0.18) * (heart ? 1 - Math.min(walls, 8) * 0.02 : 1) : heart ? 0.8 + nz * 0.22 : Math.max(0.3, 0.72 - dd * 0.06);
+      // (the Weeping Woods: the path lit, the wood's floor dark from its very edge, so the way reads at a glance on a phone;
+      // a corner the path only half reaches is already half in shadow)
+      k = fl2 > 0 ? (0.93 + nz * 0.18) * (heart ? 1 - Math.min(walls, 8) * 0.02 : 0.42 + 0.58 * Math.min(1, fl2)) : heart ? 0.8 + nz * 0.22 : Math.max(0.14, 0.42 - dd * 0.07);
       wp = clamp(pv * 1.25, 0, 1);
       if (heart) wb = clamp((fl2 > 0 ? walls * 0.07 - 0.15 : 1) + (nz - 0.5) * 1.6 + (big - 0.5) * 1.2, 0, 1);
       else wb = clamp((fl2 > 0 ? -0.1 : 0.3 + dd * 0.12) + (nz - 0.48) * 2.0 + (big - 0.5) * 1.8 + clamp((vz - (h - 36)) / 14, 0, 1) * 0.35, 0, 1);
@@ -1390,7 +1402,9 @@ function buildGround(L, group) {
       wp = 1 - rm;
       wb = clamp((nz - 0.5) * 1.6 + walls * 0.05, 0, 0.75);
     } else {
-      k = (fl > 0 ? 0.92 + nz * 0.25 : Math.max(0.2, 0.7 - dd * 0.07)) * (L.type === 'town' ? 1.05 : 1);
+      // (the Whisperwood: the path lit, the wood's floor dark from its very edge, so the way reads at a glance on a phone)
+      const fw = L.type === 'forest';
+      k = (fl > 0 ? (0.92 + nz * 0.25) * (fw ? 0.42 + 0.58 * fl : 1) : fw ? Math.max(0.12, 0.4 - dd * 0.07) : Math.max(0.2, 0.7 - dd * 0.07)) * (L.type === 'town' ? 1.05 : 1);
       wp = clamp(pv * 1.25, 0, 1);
       // damp earth under the trees and in hollows, leaves on the open floor
       wb = clamp((fl > 0 ? 0 : 0.25 + dd * 0.12) + (nz - 0.46) * 2.2 + (big - 0.5) * 2.0, 0, 1);
@@ -1813,10 +1827,15 @@ function buildWalls(L, I) {
     if (near) I.add('wall', x + 0.5, z + 0.5, 0, 1, 0, 1);
   }
 }
+// (a wall cut down to its stub is lit, a pale low kerb along the path's edge: dark, it vanished into the dark floor and she
+// walked into walls she could not see)
+const STUB = 0.2, _wc = new THREE.Color();
 export class WallCut {
   constructor(meshes) {
     this.meshes = meshes || [];
     this.state = new Map(); // key mesh index/instance -> current scale
+    // (each wall's colour from the first frame, so the stubs' lighting never asks for a second shader)
+    for (const im of this.meshes) if (!im.instanceColor) { _wc.setRGB(1, 1, 1); for (let i = 0; i < im.count; i++) im.setColorAt(i, _wc); }
   }
   update(dt, px, pz) {
     for (const im of this.meshes) {
@@ -1828,14 +1847,16 @@ export class WallCut {
         const it = items[i], dx = it[0] - px, dz = it[2] - pz;
         // walls between the camera and the hero (south of them) drop to a stub
         const inFront = dz > -0.6 && dz < 9 && Math.abs(dx) < 6.5 + dz * 0.4;
-        const target = inFront ? 0.14 : 1;
+        const target = inFront ? STUB : 1;
         if (Math.abs(K[i] - target) < 0.01) continue;
         K[i] += (target - K[i]) * Math.min(1, dt * 10);
         _p.set(it[0], it[1], it[2]); _e.set(0, it[3], 0); _q.setFromEuler(_e); _s.set(it[4], it[5] * K[i], it[4]);
         im.setMatrixAt(i, _m.compose(_p, _q, _s));
+        const lit = 1 + 1.6 * (1 - K[i]) / (1 - STUB);
+        if (im.instanceColor) im.setColorAt(i, _wc.setRGB(lit, lit * 0.94, lit * 0.84));
         dirty = true;
       }
-      if (dirty) im.instanceMatrix.needsUpdate = true;
+      if (dirty) { im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; }
     }
   }
 }
