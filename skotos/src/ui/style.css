@@ -267,7 +267,7 @@ body.memory-ice #frost { opacity: .75 !important; --fi: 46% !important; --fo: 10
 .pn-b.ib-b { display: flex; flex-direction: column; gap: 8px; overflow: hidden; padding: 10px 12px; touch-action: auto; }
 .ib { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) clamp(210px, 34%, 330px); gap: 12px; }
 .ib-l, .ib-r { min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-y; }
-.ib-l { align-content: start; }
+.ib-l { align-content: start; padding: 4px; }
 .ib-r { border: 1px solid var(--line); border-radius: 10px; background: #0c0d11; }
 .ib-r .tip { margin: 0; border: 0; border-radius: 0; background: none; }
 .ib-r .stats { margin: 0; padding: 4px 12px 12px; }
@@ -275,7 +275,8 @@ body.memory-ice #frost { opacity: .75 !important; --fi: 46% !important; --fo: 10
 .ib-acts .btn { padding: 8px 12px; font-size: 14px; }
 .ib-acts .btn svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 2px; }
 .ib-acts .chips { justify-content: flex-start; width: 100%; }
-.ib-acts .chip { padding: 5px 10px; font-size: 12px; }
+.ib-acts .chips { gap: 4px; }
+.ib-acts .chip { padding: 4px 8px; font-size: 11.5px; }
 .ib-acts .muted { font-size: 12px; }
 .ib-cost { font-family: var(--display); }
 .ib-none { padding: 12px; font-style: italic; color: var(--ink3); font-size: 13px; line-height: 1.45; }
@@ -289,6 +290,13 @@ body.memory-ice #frost { opacity: .75 !important; --fi: 46% !important; --fo: 10
 .cell.tosell.sel { outline-color: var(--gold2); box-shadow: 0 0 0 4px rgba(90, 255, 122, .55); }
 .cell .ck { position: absolute; top: 1px; left: 4px; font: 800 13px var(--display); font-style: normal; color: #5aff7a; text-shadow: 0 1px 2px #000; }
 .cell .lbl.pr { color: var(--gold2); font-size: 10px; text-shadow: 0 1px 2px #000; }
+.cell .up.tl { top: 1px; left: 4px; right: auto; bottom: auto; }
+/* (a small landscape phone: the doll and a six-wide bag, so neither shrinks under a fingertip) */
+@media (max-width: 760px) and (orientation: landscape) {
+  .ib { grid-template-columns: minmax(0, 1fr) clamp(190px, 32%, 330px); }
+  .inv2 { grid-template-columns: 3fr 6fr; }
+  .inv2 .bag { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
 @media (orientation: portrait) and (max-width: 700px) {
   .pn.ib-pn { height: min(800px, 100%); }
   .ib { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(150px, 42%); }

@@ -1848,12 +1848,15 @@ export class WallCut {
         // walls between the camera and the hero (south of them) drop to a stub
         const inFront = dz > -0.6 && dz < 9 && Math.abs(dx) < 6.5 + dz * 0.4;
         const target = inFront ? STUB : 1;
-        if (Math.abs(K[i] - target) < 0.01) continue;
+        // (K is a Float32Array: 0.2 is stored as its nearest float, so 'there' is a hair's width, not ===)
+        if (Math.abs(K[i] - target) < 1e-5) continue;
         K[i] += (target - K[i]) * Math.min(1, dt * 10);
+        // (it lands exactly: whole, it is the plain wall again, scale and colour)
+        if (Math.abs(K[i] - target) < 0.01) K[i] = target;
         _p.set(it[0], it[1], it[2]); _e.set(0, it[3], 0); _q.setFromEuler(_e); _s.set(it[4], it[5] * K[i], it[4]);
         im.setMatrixAt(i, _m.compose(_p, _q, _s));
-        const lit = 1 + 1.6 * (1 - K[i]) / (1 - STUB);
-        if (im.instanceColor) im.setColorAt(i, _wc.setRGB(lit, lit * 0.94, lit * 0.84));
+        const c = (1 - K[i]) / (1 - STUB);
+        if (im.instanceColor) im.setColorAt(i, _wc.setRGB(1 + 1.6 * c, 1 + 1.44 * c, 1 + 1.18 * c));
         dirty = true;
       }
       if (dirty) { im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; }
@@ -3264,7 +3267,13 @@ export function buildLevel(L, quality) {
   B.build(quality);
   const cut = [];
   for (const k in inst) if (k.includes('#wall')) cut.push(...inst[k]);
-  if (cut.length) out.walls = new WallCut(cut);
+  // (the cut walls take instance colours; any other instanced mesh drawn with the same material takes white ones from the
+  // start, so one shader serves them all instead of a second compiled in the middle of the zone)
+  if (cut.length) {
+    const cm = new Set(cut.map((m) => m.material));
+    for (const k in inst) for (const m of inst[k]) if (m.isInstancedMesh && !m.instanceColor && cm.has(m.material) && !cut.includes(m)) { _wc.setRGB(1, 1, 1); for (let i = 0; i < m.count; i++) m.setColorAt(i, _wc); }
+    out.walls = new WallCut(cut);
+  }
   if (out.houses || out.spin) out.village = new Village(out.houses, out.spin);
   return out;
 }
