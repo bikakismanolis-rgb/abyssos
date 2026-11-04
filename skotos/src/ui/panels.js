@@ -3,7 +3,9 @@ import { G } from '../game/state.js';
 import { CLASSES, SKILLS, DIFFS, SLOTS, SKILL_MAX_RANK, BASES, DODGE, BOONS, GIFTS } from '../game/data.js';
 import { computeStats, skillRank, skillUnlocked, refreshStats } from '../game/stats.js';
 import { itemName, statLines, sellValue, equipSlots, usable, withItem, bestSlotFor, itemClass } from '../game/items.js';
-import { equip, unequip, sell, sellJunk, toStash, fromStash, gamble, gambleCost, reforge, reforgeCost } from '../game/inventory.js';
+import { equip, unequip, sell, sellJunk, sellMany, toStash, fromStash, gamble, gambleCost, reforge, reforgeCost } from '../game/inventory.js';
+import { stock, buy, buyPrice } from '../game/shop.js';
+import { dropItem } from '../game/pickups.js';
 import { writeSave } from '../game/save.js';
 import { on, emit } from './bus.js';
 import { ICON, SLOT_ICON } from './icons.js';
@@ -43,7 +45,7 @@ export function initPanels() {
 }
 on('openPanel', (name, ctx) => open(name, ctx));
 export function open(name, ctx) {
-  P.name = name; P.sel = null; P.tab = 0; P.ctx = ctx || null; P.sure = false; P.msel = null;
+  P.name = name; P.sel = null; P.tab = 0; P.ctx = ctx || null; P.sure = false; P.msel = null; P.pick = new Set(); P.last = null;
   if (name === 'skills' && ctx?.tab) P.tab = ctx.tab;
   G.panel = name; render.key = null;
   $('panel').hidden = false;
@@ -67,7 +69,7 @@ function head(title, gold = true) {
 function cell(item, a, extra = '', sel = false, label = '') {
   if (!item) { const sl = a.startsWith('eq:') ? a.slice(3) : null; return `<button class="cell empty ${extra}" data-a="${a}">${sl ? ICON[SLOT_ICON[sl]] : ''}${label ? `<span class="lbl">${label}</span>` : ''}</button>`; }
   const up = isUpgrade(item);
-  return `<button class="cell r${item.rar} ${sel ? 'sel' : ''} ${extra}" data-a="${a}">${ICON[ICON_OF[item.base]]}${item.isNew ? '<i class="new"></i>' : ''}${up ? '<span class="up">▲</span>' : ''}</button>`;
+  return `<button class="cell r${item.rar} ${sel ? 'sel' : ''} ${extra}" data-a="${a}">${ICON[ICON_OF[item.base]]}${item.isNew ? '<i class="new"></i>' : ''}${up ? '<span class="up">▲</span>' : ''}${extra.includes('tosell') ? '<i class="ck">✓</i>' : ''}${label ? `<span class="lbl pr">${label}</span>` : ''}</button>`;
 }
 function isUpgrade(item) {
   const h = G.hero;
@@ -103,66 +105,106 @@ function tip(item, actions) {
       cmp = `<div class="cmp">${f(c.dps, 'stat.damage')}${f(c.tough, 'stat.toughness')}</div>`;
     } else if (ic) cmp = `<div class="sub r-2">${t('item.forOther', t('class.' + ic))}</div>`;
   }
-  return `<div class="tip"><h3 class="r-${item.rar}">${itemName(item)}</h3><div class="sub">${t('rar.' + ['common', 'magic', 'rare', 'legendary'][item.rar])} · ${t('base.' + item.base)}${eq ? ' · ' + t('item.equipped') : ''} · ${t('item.ilvl', item.ilvl)}</div>${main}<ul>${lines}${leg}</ul>${cmp}<div class="acts">${actions}</div></div>`;
+  return `<div class="tip"><h3 class="r-${item.rar}">${itemName(item)}</h3><div class="sub">${t('rar.' + ['common', 'magic', 'rare', 'legendary'][item.rar])} · ${t('base.' + item.base)}${eq ? ' · ' + t('item.equipped') : ''} · ${t('item.ilvl', item.ilvl)}</div>${main}<ul>${lines}${leg}</ul>${cmp}${actions ? `<div class="acts">${actions}</div>` : ''}</div>`;
 }
 
-// ---------- renderers ----------
-const R = {
-  inventory() {
-    const h = G.hero, s = G.stats, C = CLASSES[h.cls];
-    const doll = SLOTS.map((sl) => cell(h.equip[sl], 'eq:' + sl, '', P.sel === 'eq:' + sl, '')).join('');
-    const bag = h.inv.map((it, i) => cell(it, 'inv:' + i, '', P.sel === 'inv:' + i)).join('');
-    const red = (s.red * 100).toFixed(1);
-    const stats = `<div class="stats">
+// The item panels in two panes: the grids on the left; on the right what the tapped item is and does, with its buttons at the
+// top, so a phone shows both at once and nothing has to be scrolled down to (on a narrow upright screen the right pane sits
+// under the grids, its buttons still on top). o.top: a row over both (the vendor's tabs)
+function ibPanel(title, left, right, o = {}) {
+  return `<div class="pn ib-pn">${head(title)}<div class="pn-b ib-b">${o.top || ''}<div class="ib"><div class="ib-l">${left}</div><div class="ib-r">${right}</div></div></div></div>`;
+}
+const acts = (html) => html ? `<div class="ib-acts">${html}</div>` : '';
+const none = (text) => `<div class="ib-none">${text}</div>`;
+const RAR_PICK = ['shop.pick0', 'shop.pick1', 'shop.pick2'];
+function heroStats() {
+  const h = G.hero, s = G.stats, C = CLASSES[h.cls];
+  const red = (s.red * 100).toFixed(1);
+  return `<div class="stats">
       <div><span>${t('stat.damage')}</span><b>${fmtK(s.dps)}</b></div><div><span>${t('stat.toughness')}</span><b>${fmtK(s.toughness)}</b></div>
       <div><span>${t('stat.life')}</span><b>${fmt(s.lifeMax)}</b></div><div><span>${t('stat.armor')}</span><b>${fmt(s.armor)}</b></div>
       <div><span>${t('main.' + C.main)}</span><b>${fmt(s.main)}</b></div><div><span>${t('stat.reduction')}</span><b>${red}%</b></div>
       <div><span>${t('stat.crit')}</span><b>${s.critC.toFixed(1)}% · ${fmt(s.critD)}%</b></div><div><span>${t('stat.speed')}</span><b>${s.aps.toFixed(2)}</b></div>
       <div><span>${t('stat.kills')}</span><b>${fmt(h.stats.kills)}</b></div><div><span>${t('diff.' + DIFFS[h.diff].id)}</span><b style="color:${diffText(DIFFS[h.diff])}">●</b></div>
       ${(h.boons || []).filter(Boolean).map((id) => `<div style="grid-column:1/-1"><span>${ICON.flame} ${t('boon.' + id)}</span><b style="font-size:12px;color:var(--gold2)">${boonDesc(id)}</b></div>`).join('')}</div>`;
-    let tp = '';
+}
+// the doll and the bag side by side (one above the other on a narrow upright screen)
+function dollBag(selOf) {
+  const h = G.hero;
+  const doll = SLOTS.map((sl) => cell(h.equip[sl], 'eq:' + sl, '', P.sel === 'eq:' + sl, '')).join('');
+  const bag = h.inv.map((it, i) => cell(it, 'inv:' + i, '', P.sel === 'inv:' + i)).join('');
+  void selOf;
+  return `<div class="inv2"><div class="doll">${doll}</div><div class="bag">${bag}</div></div>`;
+}
+
+// ---------- renderers ----------
+const R = {
+  inventory() {
+    const h = G.hero;
+    let right = '';
     if (P.sel) {
       const [w, k] = P.sel.split(':');
-      if (w === 'inv') { const it = h.inv[+k]; if (it) tp = tip(it, `${usable(it, h.cls) ? `<button class="btn" data-a="equip:${k}">${t('item.equip')}</button>` : ''}${P.ctx === 'vendor' ? `<button class="btn ghost" data-a="sell:${k}">${t('item.sell')} · ${fmt(sellValue(it))}</button>` : ''}<button class="btn red" data-a="drop:${k}">${t('item.drop')}</button>`); }
-      else { const it = h.equip[k]; if (it) tp = tip(it, `<button class="btn ghost" data-a="unequip:${k}">${t('item.unequip')}</button>`); }
+      if (w === 'inv') { const it = h.inv[+k]; if (it) right = acts(`${usable(it, h.cls) ? `<button class="btn" data-a="equip:${k}">${t('item.equip')}</button>` : ''}${P.ctx === 'vendor' ? `<button class="btn ghost" data-a="sell:${k}">${t('item.sell')} · ${fmt(sellValue(it))}</button>` : ''}<button class="btn red" data-a="drop:${k}">${t('item.drop')}</button>`) + tip(it, ''); }
+      else { const it = h.equip[k]; if (it) right = acts(`<button class="btn ghost" data-a="unequip:${k}">${t('item.unequip')}</button>`) + tip(it, ''); }
     }
-    return `<div class="pn">${head(t('hud.inventory'))}<div class="pn-b"><div class="inv"><div><div class="doll">${doll}</div>${stats}</div><div><div class="bag">${bag}</div>${tp}</div></div></div></div>`;
+    // (nothing tapped: the hero's numbers, and how to see an item's)
+    if (!right) right = none(t('item.hint')) + heroStats();
+    return ibPanel(t('hud.inventory'), dollBag(), right);
   },
   // ranks, variants, the loadout and the Mastery (progpanel.js)
   skills() { return renderSkills(P, head); },
+  // Sell (several at once), Buy (shop.js's wares), Mystery (gamble)
   vendor() {
-    const h = G.hero;
-    const tabs = `<div class="tabs"><button class="tab ${P.tab === 0 ? 'on' : ''}" data-a="tab:0">${t('item.sell')}</button><button class="tab ${P.tab === 1 ? 'on' : ''}" data-a="tab:1">${t('shop.gamble')}</button></div>`;
-    let body;
-    if (P.tab === 0) {
-      const bag = h.inv.map((it, i) => cell(it, 'inv:' + i, '', P.sel === 'inv:' + i)).join('');
-      let tp = '';
-      if (P.sel) { const k = +P.sel.split(':')[1], it = h.inv[k]; if (it) tp = tip(it, `<button class="btn" data-a="sell:${k}">${t('item.sell')} · ${fmt(sellValue(it))}</button>${usable(it, h.cls) ? `<button class="btn ghost" data-a="equip:${k}">${t('item.equip')}</button>` : ''}`); }
-      body = `<div class="row" style="margin-bottom:10px"><button class="btn ghost" data-a="selljunk">${t('shop.sellAll')}</button></div><div class="bag">${bag}</div>${tp}`;
+    const h = G.hero, tab = P.tab || 'sell', npc = P.ctx?.npc || 'healer';
+    const tabs = `<div class="tabs">${['sell', 'buy', 'gamble'].map((k) => `<button class="tab ${tab === k ? 'on' : ''}" data-a="tab:${k}">${t('shop.t.' + k)}</button>`).join('')}</div>`;
+    let left, right;
+    if (tab === 'sell') {
+      const pick = P.pick;
+      for (const i of pick) if (!h.inv[i]) pick.delete(i);
+      left = `<div class="bag">${h.inv.map((it, i) => cell(it, 'pk:' + i, pick.has(i) ? 'tosell' : '', P.sel === 'inv:' + i)).join('')}</div>`;
+      let total = 0, leg = false;
+      for (const i of pick) { total += sellValue(h.inv[i]); if (h.inv[i].rar === 3) leg = true; }
+      const sellB = `<button class="btn ${leg ? 'red' : ''}" data-a="sellpick" ${pick.size ? '' : 'disabled'}>${P.sure ? t('shop.sure') : t('shop.sellN', pick.size)} · ${ICON.coin}${fmt(total)}</button>`;
+      const chips = `<div class="chips">${RAR_PICK.map((k, r) => `<button class="chip" data-a="pkr:${r}">+ ${t(k)}</button>`).join('')}<button class="chip" data-a="pkr:x">${t('shop.none')}</button></div>`;
+      const k = P.sel ? +P.sel.split(':')[1] : -1, it = h.inv[k];
+      right = acts(sellB + chips) + (it ? tip(it, usable(it, h.cls) ? `<button class="btn ghost" data-a="equip:${k}">${t('item.equip')}</button>` : '') : none(t('shop.sell.d')));
+    } else if (tab === 'buy') {
+      const S = stock(npc);
+      left = `<div class="bag">${S.map((it, i) => it ? cell(it, 'by:' + i, '', P.sel === 'by:' + i, fmtK(buyPrice(it))) : '<button class="cell empty" disabled></button>').join('')}</div>`;
+      const k = P.sel?.startsWith('by:') ? +P.sel.slice(3) : -1, it = S[k];
+      if (it) {
+        const p = buyPrice(it), poor = h.gold < p;
+        right = acts(`<button class="btn" data-a="buy:${k}" ${poor ? 'disabled' : ''}>${t('shop.buy')} · ${ICON.coin}${fmt(p)}</button>${poor ? `<span class="muted">${t('shop.noGold')}</span>` : ''}`) + tip(it, '');
+      } else right = none(t('shop.buy.d'));
     } else {
       const cost = gambleCost(h.level);
       const types = ['weapon', 'offhand', 'helm', 'chest', 'gloves', 'boots', 'amulet', 'ring'];
       const baseFor = (ty) => ty === 'weapon' ? CLASSES[h.cls].weapon : ty === 'offhand' ? CLASSES[h.cls].off : ty;
-      body = `<p class="muted">${t('shop.gamble.d')}</p><div class="doll" style="grid-template-columns:repeat(4,1fr)">${types.map((ty) => `<button class="cell" data-a="gamble:${baseFor(ty)}">${ICON[ICON_OF[baseFor(ty)]]}<span class="lbl">${t('base.' + baseFor(ty))}</span></button>`).join('')}</div><p class="r-2" style="font-family:var(--display);text-align:center">${t('shop.cost', fmt(cost))}</p>${P.last ? tip(P.last, '') : ''}`;
+      left = `<div class="doll gam">${types.map((ty) => `<button class="cell" data-a="gamble:${baseFor(ty)}">${ICON[ICON_OF[baseFor(ty)]]}<span class="lbl">${t('base.' + baseFor(ty))}</span></button>`).join('')}</div>`;
+      right = acts(`<b class="r-2 ib-cost">${t('shop.cost', fmt(cost))}</b>`) + (P.last ? tip(P.last, '') : none(t('shop.gamble.d')));
     }
-    return `<div class="pn">${head(npcName(P.ctx?.npc || 'healer') + ' · ' + t('shop.vendor'))}<div class="pn-b">${tabs}<div style="margin-top:10px">${body}</div></div></div>`;
+    return ibPanel(npcName(npc) + ' · ' + t('shop.vendor'), left, right, { top: tabs });
   },
   smith() {
     const h = G.hero;
-    const eq = SLOTS.map((sl) => cell(h.equip[sl], 'eq:' + sl, '', P.sel === 'eq:' + sl)).join('');
-    const bag = h.inv.map((it, i) => cell(it, 'inv:' + i, '', P.sel === 'inv:' + i)).join('');
-    let tp = '';
+    let right = none(t('shop.reforge.d'));
     if (P.sel) {
       const [w, k] = P.sel.split(':'); const it = w === 'inv' ? h.inv[+k] : h.equip[k];
-      if (it) tp = tip(it, it.rar > 0 ? `<button class="btn" data-a="reforge:${w}:${k}">${t('shop.reforge')} · ${fmt(reforgeCost(it))}</button>` : '');
+      if (it) right = acts(it.rar > 0 ? `<button class="btn" data-a="reforge:${w}:${k}">${t('shop.reforge')} · ${ICON.coin}${fmt(reforgeCost(it))}</button>` : `<span class="muted">${t('shop.common')}</span>`) + tip(it, '');
     }
-    return `<div class="pn">${head(t('npc.smith') + ' · ' + t('shop.reforge'))}<div class="pn-b"><p class="muted">${t('shop.reforge.d')}</p><div class="inv"><div class="doll">${eq}</div><div><div class="bag">${bag}</div>${tp}</div></div></div></div>`;
+    return ibPanel(t('npc.smith') + ' · ' + t('shop.reforge'), dollBag(), right);
   },
+  // a tap shows what it is; a second tap on it (or the button) moves it across
   stash() {
     const h = G.hero;
-    const st = h.stash.map((it, i) => cell(it, 'st:' + i)).join('');
-    const bag = h.inv.map((it, i) => cell(it, 'tostash:' + i)).join('');
-    return `<div class="pn">${head(t('stash.title'))}<div class="pn-b"><div class="bag" style="grid-template-columns:repeat(8,1fr)">${st}</div><div class="logo-rule"></div><div class="bag">${bag}</div></div></div>`;
+    const st = h.stash.map((it, i) => cell(it, 'ss:' + i, '', P.sel === 'st:' + i)).join('');
+    const bag = h.inv.map((it, i) => cell(it, 'sb:' + i, '', P.sel === 'inv:' + i)).join('');
+    let right = none(t('stash.hint'));
+    if (P.sel) {
+      const [w, k] = P.sel.split(':'), it = w === 'st' ? h.stash[+k] : h.inv[+k];
+      if (it) right = acts(w === 'st' ? `<button class="btn" data-a="st:${k}">${t('item.take')}</button>` : `<button class="btn" data-a="tostash:${k}">${t('item.stash')}</button>`) + tip(it, '');
+    }
+    return ibPanel(t('stash.title'), `<h4 class="ib-h">${t('stash.title')}</h4><div class="bag">${st}</div><h4 class="ib-h">${t('hud.inventory')}</h4><div class="bag">${bag}</div>`, right);
   },
   waypoints() {
     const h = G.hero, inTown = G.zone?.id === 'town';
@@ -286,16 +328,37 @@ function onClick(e) {
   switch (a) {
     case 'close': close(); return;
     case 'inv': case 'eq': P.sel = P.sel === a + ':' + x ? null : a + ':' + x; if (a === 'inv' && h.inv[+x]) h.inv[+x].isNew = false; break;
-    case 'equip': if (equip(+x)) { P.sel = null; emit('heroLook'); } break;
+    case 'equip': if (equip(+x)) { P.sel = null; P.pick?.delete(+x); emit('heroLook'); } break;
     case 'unequip': if (unequip(x)) { P.sel = null; emit('heroLook'); } break;
     case 'sell': { const v = sell(+x); if (v) emit('toast', t('shop.sold', fmt(v))); P.sel = null; break; }
-    case 'drop': h.inv[+x] = null; P.sel = null; break;
+    // (dropped, it lies at her feet until she takes it up again: pickups.js)
+    case 'drop': { const it = h.inv[+x], pl = G.player; h.inv[+x] = null; P.sel = null; if (it && pl) { dropItem(pl.x, pl.z, it, { own: true }); emit('toast', t('item.dropped')); } break; }
     case 'selljunk': { const v = sellJunk(); if (v) emit('toast', t('shop.sold', fmt(v))); break; }
-    case 'tab': P.tab = +x; P.sel = null; break;
+    // the vendor's Sell tab: a tap picks or unpicks an item (and shows it); the chips pick a rarity, never an upgrade or a
+    // legendary; a pick with a legendary in it asks once more before it sells
+    case 'pk': { const i = +x; if (!h.inv[i]) break; if (P.pick.has(i)) P.pick.delete(i); else P.pick.add(i); P.sel = 'inv:' + i; h.inv[i].isNew = false; P.sure = false; break; }
+    case 'pkr': { if (x === 'x') P.pick.clear(); else h.inv.forEach((it, i) => { if (it && it.rar === +x && !isUpgrade(it)) P.pick.add(i); }); P.sure = false; break; }
+    case 'sellpick': {
+      if (!P.pick.size) break;
+      if (!P.sure && [...P.pick].some((i) => h.inv[i]?.rar === 3)) { P.sure = true; break; }
+      const v = sellMany([...P.pick]); if (v) emit('toast', t('shop.sold', fmt(v)));
+      P.pick.clear(); P.sel = null; P.sure = false; break;
+    }
+    case 'by': P.sel = P.sel === 'by:' + x ? null : 'by:' + x; break;
+    case 'buy': {
+      const r = buy(P.ctx?.npc || 'healer', +x);
+      if (r === 'gold') emit('toast', t('shop.noGold')); else if (r === 'full') emit('toast', t('hud.full'));
+      else if (r) { emit('toast', t('shop.bought', itemName(r))); P.sel = null; }
+      break;
+    }
+    // the stash: a tap shows it, a second tap moves it
+    case 'ss': if (P.sel === 'st:' + x) { fromStash(+x); P.sel = null; } else P.sel = h.stash[+x] ? 'st:' + x : null; break;
+    case 'sb': if (P.sel === 'inv:' + x) { toStash(+x); P.sel = null; } else P.sel = h.inv[+x] ? 'inv:' + x : null; break;
+    case 'tab': P.tab = P.name === 'vendor' ? x : +x; P.sel = null; P.sure = false; break;
     case 'gamble': { const it = gamble(x); if (it) P.last = it; else if (h.gold < gambleCost(h.level)) emit('toast', t('shop.noGold')); break; }
     case 'reforge': { const it = reforge(x, x === 'inv' ? +y : y); if (!it && h.gold < 1e9) emit('toast', t('shop.noGold')); if (x === 'eq') emit('heroLook'); break; }
-    case 'st': fromStash(+x); break;
-    case 'tostash': toStash(+x); break;
+    case 'st': fromStash(+x); P.sel = null; break;
+    case 'tostash': toStash(+x); P.sel = null; break;
     // (in a zone with two waypoints, either one can be the way across it)
     case 'wp': { close(); const [zid, n] = x.split('@'); if (zid !== G.zone.id || n || G.zone.L.spots.camp2) emit('travel', zid, { at: n ? 'waypoint' + n : 'waypoint' }); return; }
     case 'gates': open('gates'); return;
@@ -335,6 +398,6 @@ function onInput(e) {
   if (e.target.id === 'set-sfx') { G.settings.sfx = +e.target.value; emit('settings'); }
 }
 on('equipChanged', () => { if (P.name) render(); });
-on('gold', () => { if (P.name === 'inventory' || P.name === 'vendor') { const g = document.querySelector('.pn-h .gold'); if (g) g.innerHTML = ICON.coin + fmt(G.hero.gold); } });
+on('gold', () => { if (P.name === 'inventory' || P.name === 'vendor' || P.name === 'smith' || P.name === 'stash') { const g = document.querySelector('.pn-h .gold'); if (g) g.innerHTML = ICON.coin + fmt(G.hero.gold); } });
 on('itemPicked', () => { if (P.name === 'inventory') render(); });
 export { render as renderPanel };
