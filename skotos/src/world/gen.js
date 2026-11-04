@@ -116,7 +116,9 @@ export function genForest(seed, o = {}) {
     if (d === 0) {
       // undergrowth near edges, stones on the floor
       const edge = (D[i - 1] === 1 || D[i + 1] === 1 || D[i - w] === 1 || D[i + w] === 1);
-      if (edge && rng.chance(0.3)) L.props.push({ t: 'bush', x: xx + rng.next(), z: zz + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.6, 1.1) });
+      // (the undergrowth of an edge stands on the wood's side of it, never on the path: whatever grows tall is where she
+      // cannot walk; the same draws as before, so a seed's level is the same but for where its bushes stand)
+      if (edge && rng.chance(0.3)) { const o = [-1, 1, -w, w].find((k) => D[i + k] === 1), ox = o === -1 ? -1 : o === 1 ? 1 : 0, oz = o === -w ? -1 : o === w ? 1 : 0; L.props.push({ t: 'bush', x: xx + ox + rng.next(), z: zz + oz + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.6, 1.1) }); }
       if (rng.chance(0.012)) L.props.push({ t: 'stone', x: xx + rng.next(), z: zz + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.25, 0.5) });
       if (L.paint[i] < 0.2 && rng.chance(edge ? 0.02 : 0.005)) L.props.push({ t: 'branches', x: xx + rng.next(), z: zz + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.8, 1.25) });
       if (L.paint[i] < 0.35 && rng.chance(0.42)) L.props.push({ t: 'grass', x: xx + rng.next(), z: zz + rng.next(), r: rng.range(0, 6.28), s: rng.range(0.7, 1.3) });
