@@ -5,13 +5,14 @@ import { equipSlots, usable, bestSlotFor, sellValue, makeItem } from './items.js
 import { emit } from '../ui/bus.js';
 import Audio from '../audio/audio.js';
 
-export function addToBag(item) {
+// (again: one she dropped and picks up again, already counted among her legendaries)
+export function addToBag(item, again = false) {
   const inv = G.hero.inv;
   const i = inv.indexOf(null);
   if (i < 0) return false;
   inv[i] = item;
   item.isNew = true;
-  if (item.rar === 3) G.hero.stats.legs++;
+  if (item.rar === 3 && !again) G.hero.stats.legs++;
   return true;
 }
 export function equip(invIndex, slot) {
@@ -39,6 +40,13 @@ export function sell(invIndex) {
   const v = sellValue(it); h.gold += v; h.inv[invIndex] = null;
   Audio.sfx('gold'); emit('gold');
   return v;
+}
+// several at once (the vendor's Sell tab): bag indices; the gold they bring in all
+export function sellMany(list) {
+  const h = G.hero; let total = 0;
+  for (const i of list) { const it = h.inv[i]; if (it) { total += sellValue(it); h.inv[i] = null; } }
+  if (total) { h.gold += total; Audio.sfx('gold'); emit('gold'); }
+  return total;
 }
 export function sellJunk() {
   let total = 0;
