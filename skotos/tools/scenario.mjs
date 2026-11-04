@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 import { watchFatal, fatalAll } from './fatal.mjs';
+import { perf6Out } from './perf6-terms.mjs';
 const [, , name = 'combat', out = '/tmp', W = process.env.W || '1280', H = process.env.H || '720'] = process.argv;
 const logs = [];
 // Act IV: a dialog advances on Enter (the key finishes the line, then moves on), whatever the frame rate; what is said is
@@ -3663,12 +3664,15 @@ const S = {
   // Field with the same crowd. The lead's bar (2 November), at quality 1, each term the median over the cycles of its
   // per-cycle ratio: (1) 'vsField', the spot against the Field carrying the same crowd at the same offsets, within x 1.00;
   // (2) 'world', the spot's world alone (its crowd hidden) against the bare Field, draw only, within x 1.00 (the design's
-  // estimate of 0.85-0.95 was of these terms); (3) 'crowd', reported for every spot: the crowd's own cost at the spot (its
-  // draw less its world's) against the same crowd's on the Field (the Field with it less the bare Field), so an Act VI
-  // actor is seen to cost what it costs in Acts I-V unless a named part of the zone's own design makes it dearer. Its
-  // frames are drawn in rounds, the crowd shown and hidden back to back (a cycle's single frames swing 5-10% on this
-  // machine, the crowd's whole cost at the Hearth); a crowd under half of PAD bodies is padded with itself to PAD (the
-  // Hearth's and the Mere's are cheap bodies: at 12 their cost still swung 30-50% a round). 'pooled': every round
+  // estimate of 0.85-0.95 was of these terms), both sides the same estimator: the best of the crowd-hidden frames of
+  // term 3's rounds, the spot's and the Field's with the same crowd (padded or not), as many a side ('worldOf'; with no
+  // crowd on the Field, CREW=0, one frame a side: tools/perf6-terms.mjs, worldFrames); (3) 'crowd', reported for every
+  // spot: the crowd's own cost at the spot (its draw less its world's) against the same crowd's on the Field (the Field
+  // with it less the bare Field), so an Act VI actor is seen to cost what it costs in Acts I-V unless a named part of the
+  // zone's own design makes it dearer. Its frames are drawn in rounds, the crowd shown and hidden back to back (a
+  // cycle's single frames swing 5-10% on this machine, the crowd's whole cost at the Hearth); a crowd under half of PAD
+  // bodies is padded with itself to PAD (the Hearth's and the Mere's are cheap bodies: at 12 their cost still swung
+  // 30-50% a round). 'pooled': every round
   // of every cycle, the ratio of the medians with its 98% interval, and 'dearer' when the whole interval is over 1.00
   // (the same bodies on the same pixels cost the same, so at a dry, open spot the term is 1.00 but for the machine: read
   // 'dearer', not the median's side of 1.00). With SOLO=1 each round again with all but the actors hidden: 'bodies' (the
@@ -3688,16 +3692,16 @@ const S = {
   // Env: QS ('1,0'), CYCLES (5), K (3), SEEDS ('5,3,3': Field, drained, bottom), ONLY (spots, comma-separated), CREW=0 (the
   // world alone: no actors, no spot pools), SPLIT=1 (each spot's draw again with one part hidden at a time: actors, water,
   // ground, props, decals and fx, the pool's lights off, and what each part adds to the crowd's cost), NOUNLOAD=1 (the
-  // Field kept between cycles: &nounload), CR (4: term 3's rounds), PAD (24: the bodies a small crowd is padded to for
-  // term 3), SOLO=1 (term 3's rounds with the bodies alone too: 'bodies' and 'inWorld'; about a third longer). A full run
-  // takes about 65 minutes here
+  // Field kept between cycles: &nounload), CR (4: term 3's rounds, term 2's frames a side), PAD (24: the bodies a small
+  // crowd is padded to for term 3), SOLO=1 (term 3's rounds with the bodies alone too: 'bodies' and 'inWorld'; about a
+  // third longer). A full run takes about 65 minutes here. The terms are reduced from the visits' records in
+  // tools/perf6-terms.mjs (perf6Out), tested in node by tools/test-perf6-terms.mjs
   perf6: { q: 'world=town&q=0&noenv', run: async (pg, shot) => {
     const browser = pg.context().browser(), base = process.env.BASE || 'http://localhost:5199/';
     await pg.goto('about:blank');
     const QS = (process.env.QS || '1,0').split(','), CYC = +(process.env.CYCLES || 5), K = +(process.env.K || 3), CR = +(process.env.CR || 4), PAD = +(process.env.PAD || 24), SOLO = process.env.SOLO === '1', out = {};
     const seeds = (process.env.SEEDS || '5,3,3').split(',').map(Number), ALL = ['hollows', 'mere', 'wood', 'village', 'hearth'];
     const spots = process.env.ONLY ? ALL.filter((s) => process.env.ONLY.split(',').includes(s)) : ALL, zones = ['ashfield', ...spots];
-    const med = (a) => a.slice().sort((x, y) => x - y)[a.length >> 1];
     for (const Q of QS) {
       // (term 3 in full at the bar's quality only: quality 0 is a floor, one round, no padding)
       const T3 = +Q >= 1;
@@ -3872,9 +3876,10 @@ const S = {
         P6.actors = spawn(list);
         const m = await run(P6.actors);
         const onPool = R.pool.filter((l) => l.intensity > 0).length;
-        // the world alone: the crowd hidden (its draw only)
-        // (one round of a crowd padded for term 3, or in the warm-up visit: its world's frame is term 2's)
-        const padded = crew && list.length && list.length < PAD / 2, shown = P6.actors.filter((a) => !a.removed && a.avatar?.group.visible), r = rounds(shown, solo, padded || warm ? 1 : CR), bare = Math.min(...r.map((q) => q[1]));
+        // the crowd shown and hidden in rounds: term 3's frames, and the hidden ones term 2's (the world alone, its draw only;
+        // the best of them against the Field's best of as many, perf6-terms.mjs worldFrames)
+        // (one round of a crowd padded for term 3, whose padded rounds below are both terms', or in the warm-up visit)
+        const padded = crew && list.length && list.length < PAD / 2, shown = P6.actors.filter((a) => !a.removed && a.avatar?.group.visible), r = rounds(shown, solo, padded || warm ? 1 : CR);
         // SPLIT: where the frame goes, each part hidden in turn (its draw less the whole's); the lights' share with the pool's
         // intensities at 0 (the loop is compiled for the pool's length either way)
         let parts = null;
@@ -3913,7 +3918,7 @@ const S = {
         }
         window.__p6 = P6;
         const rel = (l) => l && l.map((c) => ({ kind: c.kind, dx: +(c.x - f.x).toFixed(2), dz: +(c.z - f.z).toFixed(2), o: c.o }));
-        return { ms: +(m.draw + m.logic).toFixed(1), draw: m.draw, logic: m.logic, bare, rounds: r, rounds3: r3, calls: m.calls, tris: m.tris, wet, actors: shown.length, pools: P6.pools.length, lights: onPool, at: [+f.x.toFixed(1), +f.z.toFixed(1)], pr: R.renderer.getPixelRatio(), parts,
+        return { ms: +(m.draw + m.logic).toFixed(1), draw: m.draw, logic: m.logic, rounds: r, rounds3: r3, calls: m.calls, tris: m.tris, wet, actors: shown.length, pools: P6.pools.length, lights: onPool, at: [+f.x.toFixed(1), +f.z.toFixed(1)], pr: R.renderer.getPixelRatio(), parts,
           crowd: rel(list), crowd3: rel(list3) };
       }, { spot, K, CR: T3 ? CR : 1, PAD: T3 ? PAD : 0, solo: T3 && SOLO, crew: process.env.CREW !== '0', split: process.env.SPLIT === '1', crowds, warm });
       // (the spot let go after its visit: its actors, pools, lights, lit props and webs)
@@ -3936,47 +3941,8 @@ const S = {
         (S[z] ||= []).push(m);
         console.log('perf6 q' + Q + ' cycle ' + c + ' ' + z + ' ' + JSON.stringify(z === 'ashfield' ? m : { ...m, crowd: m.crowd.length, crowd3: m.crowd3?.length }));
       }
-      for (const z of zones) {
-        const ms = med(S[z].map((m) => m.ms)), last = S[z][S[z].length - 1];
-        out[z + '@q' + Q] = { ms, draw: med(S[z].map((m) => m.draw)), logic: med(S[z].map((m) => m.logic)), calls: last.calls, tris: last.tris, wet: last.wet, actors: last.actors, pools: last.pools, lights: last.lights, at: last.at, pr: last.pr, wouldScale: ms > 21 ? 'down (to 0.55 at worst)' : ms < 14.5 ? 'up' : 'hold' };
-      }
-      for (const z of spots) {
-        const o = out[z + '@q' + Q], F = S.ashfield;
-        o.bare = med(S[z].map((m) => m.bare));
-        if (F[0].crowd[z]) { o.field = med(F.map((m) => m.crowd[z].ms)); o.ratios = S[z].map((m, i) => +(m.ms / F[i].crowd[z].ms).toFixed(3)); }
-        else { o.field = med(F.map((m) => m.ms)); o.ratios = S[z].map((m, i) => +(m.ms / F[i].ms).toFixed(3)); }
-        o.vsField = med(o.ratios);
-        o.world = med(S[z].map((m, i) => +(m.bare / F[i].draw).toFixed(3)));
-        o.vsBare = med(S[z].map((m, i) => +(m.ms / F[i].ms).toFixed(3)));
-        // (3) the crowd's own cost, draws only: at the spot its draw less its world's, on the Field the Field with it less
-        // the bare Field, each the median of its rounds (the two frames of a round drawn back to back); the term the median
-        // of the per-cycle ratios. A crowd under PAD / 2 bodies is measured padded with itself (crowd3). Beside it, with SOLO: 'bodies',
-        // the same with all but the actors hidden (one draw wherever it stands: 1.00 but for the machine, so its spread is
-        // the measurement's own), and 'inWorld', each place's crowd cost over its bodies' cost in the same round (the
-        // machine's speed taken out: what the world adds to or takes from the same bodies, the spot's against the Field's)
-        const k3 = F[0].crowd[z + '+'] ? z + '+' : z;
-        if (F[0].crowd[k3]) {
-          const sr = (m) => (k3 === z ? m.rounds : m.rounds3), dW = (r) => med(r.map((q) => q[0] - q[1])), dA = (r) => med(r.map((q) => q[2] - q[3])), qW = (r) => med(r.map((q) => (q[0] - q[1]) / (q[2] - q[3])));
-          const cr = S[z].map((m, i) => [dW(sr(m)), dW(F[i].crowd[k3].rounds)]);
-          o.crowd = { n: F[0].crowd[k3].actors, padded: k3 !== z, spot: +med(cr.map((c) => c[0])).toFixed(1), field: +med(cr.map((c) => c[1])).toFixed(1), ratios: cr.map((c) => +(c[0] / c[1]).toFixed(3)) };
-          o.crowd.term = med(o.crowd.ratios);
-          // (every round of every cycle pooled: the ratio of the two medians and its 98% interval, resampled on a fixed
-          // seed; 'dearer' when the whole interval is over 1.00, i.e. dearer than a frame's own swing explains: 1% a spot by
-          // chance, about 5% for one of five)
-          const pool = (f) => { const x = S[z].flatMap((m) => sr(m).map(f)), y = F.flatMap((m) => m.crowd[k3].rounds.map(f)), r = []; let h = 7;
-            const rnd = () => { h = (Math.imul(h ^ (h >>> 15), 0x2c1b3c6d) + 0x9e3779b9) | 0; return ((h ^ (h >>> 13)) >>> 0) / 4294967296; }, pick = (v) => med(v.map(() => v[Math.floor(rnd() * v.length)]));
-            for (let i = 0; i < 1000; i++) r.push(pick(x) / pick(y));
-            r.sort((u, v) => u - v); return [+(med(x) / med(y)).toFixed(3), +r[10].toFixed(3), +r[989].toFixed(3)]; };
-          if (T3) { o.crowd.pooled = pool((q) => q[0] - q[1]); o.crowd.dearer = o.crowd.pooled[1] > 1; }
-          if (T3 && SOLO) {
-            o.crowd.bodiesR = S[z].map((m, i) => +(dA(sr(m)) / dA(F[i].crowd[k3].rounds)).toFixed(3)); o.crowd.bodies = med(o.crowd.bodiesR);
-            o.crowd.inWorldR = S[z].map((m, i) => +(qW(sr(m)) / qW(F[i].crowd[k3].rounds)).toFixed(3)); o.crowd.inWorld = med(o.crowd.inWorldR);
-            o.crowd.bodiesPooled = pool((q) => q[2] - q[3]);
-          }
-        }
-        // (the lead's bar: vsField and world within x 1.00 at quality 1; the crowd term reported)
-        o.pass = o.vsField <= 1.0 && o.world <= 1.0;
-      }
+      // (the terms: perf6-terms.mjs; the lead's bar there, vsField and world within x 1.00 at quality 1, the crowd term reported)
+      Object.assign(out, perf6Out(S, zones, spots, Q, { T3, SOLO }));
       await ctx.close();
     }
     // (the floor: at quality 0 each spot draws no slower than at quality 1)
