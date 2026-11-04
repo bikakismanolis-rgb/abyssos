@@ -531,7 +531,7 @@ const S = {
   // like it (a mage of 29 on difficulty 2, quest 12, two verses and both small Tears read, the owner's wood). Each part
   // plants its hero in a page that writes no more, and goes through the title and Continue as a player does
   resume: { q: 'q=0&sim=4&norender', run: async (pg, shot) => {
-    const PARTS = (process.env.PARTS || 'owner,verse,fall,lock,death,forest,crypt,pass,act4,act5').split(',');
+    const PARTS = (process.env.PARTS || 'owner,verse,fall,lock,death,forest,crypt,pass,act4,act5,tower').split(',');
     const fs = await import('node:fs');
     const R = {}, OK = {}, base = A5.base, ev = (fn, arg) => pg.evaluate(fn, arg), wait = (ms) => pg.waitForTimeout(ms);
     const SEED = 780698361, KEYS = ['id', 'seed', 'diff', 'x', 'z', 'retry', 'stamp', 'layout', 'boss', 'packs', 'chests', 'shrines', 'tears', 'echoes', 'voices', 'greeted', 'seen'];
@@ -938,6 +938,41 @@ const S = {
       await load(); await menu(); r.c2 = await cont();
       r.c2.cp = await ev(() => { const c = window.__G.zone.checkpoint; return c ? +Math.hypot(window.__G.player.x - c.x, window.__G.player.z - c.z).toFixed(2) : null; });
       k.act5 = r.saved.visit === 'coast' && r.c.zone === 'coast' && r.c.floor && !r.c.onSkerry && r.c.reachStart && r.retry === 1 && r.c2.zone === 'coast' && r.c2.cp !== null && r.c2.cp <= 2;
+    };
+    // ---- Act V: the Tower woken, not fought. A calm save near it wakes at her spot past the 24 m it rises at, or, closer
+    // and out of its sight, at the waypoint: never at the shore rock (its fight's retry, inside those 24 m); a death does ----
+    P.tower = async (r, k) => {
+      await auto('auto=coast&lvl=30&cls=warden&' + A5.url('towerWake'));
+      await A5.state(pg, 'towerWake', { zone: 'coast', at: 'waypoint', flags: { cp5: { coast: 'rock' } } });
+      await A5.until(pg, () => !window.__G.cine && window.__G.mode === 'play', 60000);
+      // (cells reachable from the start at low water, off the skerry: one 27-31 m off its centre that sees it, one within
+      // 22 m that does not)
+      r.pre = await ev(() => {
+        const z = window.__G.zone, m = z.map, sk = z.L.spots.skerry, c = z.checkpoint, on = new Set(sk.cells.map(([x, zz]) => x + ',' + zz)), far = [], hid = [];
+        for (let zz = 0; zz < z.L.h; zz++) for (let x = 0; x < z.L.w; x++) {
+          const px = x + 0.5, pz = zz + 0.5, d = Math.hypot(px - sk.x, pz - sk.z);
+          if (d > 31 || on.has(x + ',' + zz) || !m.walkable(px, pz)) continue;
+          const see = m.los(px, pz, sk.x, sk.z);
+          if (d >= 27 && see) far.push({ x: px, z: pz, d }); else if (d < 22 && !see) hid.push({ x: px, z: pz, d });
+        }
+        const pick = (a, d0) => a.sort((p, q) => Math.abs(p.d - d0) - Math.abs(q.d - d0)).find((p) => m.reaches(p.x, p.z, [z.L.start])) || null;
+        return { sk: { x: sk.x, z: sk.z }, cp: c && { x: c.x, z: c.z, d: +Math.hypot(c.x - sk.x, c.z - sk.z).toFixed(1) }, far: pick(far, 29), hid: pick(hid, 16) };
+      });
+      await hide(true); const rec = await stored();
+      r.saved = { visit: rec.visit?.id ?? null, cp5: rec.flags.cp5?.coast ?? null, wake: !!rec.flags.towerWake };
+      const calm = () => ev(() => { const G = window.__G, b = G.zone.boss; return { spawned: !!b, awake: !!b?.awake, fight: !!G.bossActor }; });
+      for (const [name, p, retry] of [['far', r.pre.far, 0], ['hid', r.pre.hid, 0], ['dead', r.pre.far, 1]]) {
+        if (!p) { r[name] = null; continue; }
+        const h = JSON.parse(JSON.stringify(rec)); h.visit.x = p.x; h.visit.z = p.z; delete h.visit.retry; if (retry) h.visit.retry = 1;
+        await plant(h); await load(); await menu(); const c = await cont();
+        const o = r[name] = { ...c, d: +Math.hypot(c.x - p.x, c.z - p.z).toFixed(2) };
+        o.cp = await ev(() => { const c = window.__G.zone.checkpoint; return c ? +Math.hypot(window.__G.player.x - c.x, window.__G.player.z - c.z).toFixed(2) : null; });
+        if (!retry) { await gameWait(3); o.after = await calm(); }
+      }
+      k.tower = r.saved.visit === 'coast' && r.saved.cp5 === 'rock' && r.saved.wake && r.pre.cp?.d < 24 && !!r.far && !!r.hid && !!r.dead
+        && r.far.zone === 'coast' && r.far.d <= 0.75 && !r.far.after.awake && !r.far.after.fight
+        && r.hid.zone === 'coast' && r.hid.dWp <= 3 && !r.hid.after.awake && !r.hid.after.fight
+        && r.dead.zone === 'coast' && r.dead.cp !== null && r.dead.cp <= 2;
     };
 
     for (const p of PARTS) {

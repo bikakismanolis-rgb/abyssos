@@ -13,12 +13,15 @@ import { dropShard } from './pickups.js';
 export const WAKE = new Set(['forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'forge', 'coast', 'farlight']);
 // a boss that rises as she comes near is not woken beside: within its reach she wakes at the zone's retry spot. Silverhorn
 // sleeps until quest 13, or until the three verses are known (the zone's entry wakes it just after: story.js), the Tower
-// until it is woken, the Skotos until the Farthest Light is touched; Karthax stirs at 13.5 m
+// until it is woken, the Skotos until the Farthest Light is touched. Karthax stirs at 13.5 m and the Tower rises at 24 m,
+// their reach a little more; the rest rise at 15 m or less and are kept 32 m off (not spawned yet there), RISE0 for a
+// retry spot. A retry spot within reach (the Tower's shore rock, 21 m off the skerry: the retry beside its fight) serves a
+// death or a fight only: any other save wakes at the waypoint then
 const ASLEEP = {
   silverhorn: (h) => h.quest < 13 && !['planting', 'sorrow', 'breaking'].every((k) => h.flags['tear_' + k]),
   tower: (h) => !h.flags.towerWake, skotos: () => true
 };
-const REACH = { karthax: 16 }, REACH0 = 32;
+const REACH = { karthax: 16, tower: 26 }, REACH0 = 32, RISE0 = 16;
 // the bosses no flag keeps down (Acts I-II): one killed this visit is kept down by the visit
 const DOWN = new Set(['weaver', 'barrowLord', 'stonewarden', 'moltenKing']);
 // what only play moves, never `played`, the clock or where she stands: a build that played her since without writing this
@@ -107,13 +110,15 @@ export function restoreVisit(z, v) {
   if (typeof v.seen === 'string' && /^[A-Za-z0-9+/]*={0,2}$/.test(v.seen)) seeAgain(z.map, v.seen);
 }
 // where she wakes: the saved spot, if it is floor she can walk from to the start, the waypoint or an open exit, and no boss
-// rises within reach of it; else the zone's retry spot, as from a death (and that too when she was dead or a boss was near)
+// rises within reach of it; else the zone's retry spot, as from a death (and that too when she was dead or a boss was near),
+// but out of a fight never one where the boss rises at once (the waypoint then)
 function wakeSpot(z, v) {
-  const L = z.L, m = z.map, h = G.hero, b = z.bossSpot;
+  const L = z.L, m = z.map, h = G.hero, b = !!z.bossSpot && !ASLEEP[z.bossSpot.kind]?.(h) ? z.bossSpot : null;
+  const within = (q, r) => !!b && Math.hypot(b.x - q.x, b.z - q.z) < r;
   const p = v.x >= 0 && v.z >= 0 && v.x < L.w && v.z < L.h ? m.nearestFloor(v.x, v.z) : null;
-  const near = !!p && !!b && !ASLEEP[b.kind]?.(h) && Math.hypot(b.x - p.x, b.z - p.z) < (REACH[b.kind] || REACH0);
-  if (!p || v.retry || near || m.solid(Math.floor(p.x), Math.floor(p.z)) || !m.reaches(p.x, p.z, goals(z))) return retryAt(z, v.x, v.z);
-  return p;
+  if (p && !v.retry && !within(p, REACH[b?.kind] || REACH0) && !m.solid(Math.floor(p.x), Math.floor(p.z)) && m.reaches(p.x, p.z, goals(z))) return p;
+  const r = retryAt(z, v.x, v.z);
+  return !v.retry && typeof r === 'object' && within(r, REACH[b?.kind] || RISE0) ? (L.spots.waypoint ? 'waypoint' : 'start') : r;
 }
 function goals(z) {
   const L = z.L, S = L.spots, F = G.hero.flags, out = [L.start];
