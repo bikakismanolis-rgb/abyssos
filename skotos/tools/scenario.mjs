@@ -31,7 +31,9 @@ const A4 = {
 // The act's flags in the order the story saves them (each before its scene), after Act IV's; A5.state(pg, f, o) gives the
 // hero the state just after flag f (its quest by the catch-up table, story.js enter5) and, with o.zone, builds that zone
 // fresh; A5.reload saves, loads the page again and takes the hero up from the title (a hero taken up again starts in
-// Whitecliff, at its waypoint); A5.until advances dialogs and waits scenes out until a condition holds
+// Whitecliff, at its waypoint: the place a save keeps for Continue (hero.visit, game/wake.js) is taken off first, unless
+// o.wake, so that these scenarios test what they were written for; scenario resume tests the wake); A5.until advances
+// dialogs and waits scenes out until a condition holds
 const A5 = {
   base: process.env.BASE || 'http://localhost:5199/',
   ACT4: ['act1', 'act2', 'act3', 'act4', 'after3', 'hart', 'autumn', 'weaver', 'lord', 'fireTaken', 'ivar', 'plug', 'karthax', 'crownUnmade', 'giftsTaken', 'unbound', 'newFire'],
@@ -68,6 +70,7 @@ const A5 = {
     if (o.write !== false) await pg.evaluate(async () => (await import('/src/game/save.js')).writeSave());
     await pg.goto(A5.base + '?' + (o.q || 'q=0&sim=4&norender'));
     await pg.waitForFunction(() => window.__ready && window.__G?.save, null, { timeout: 240000 });
+    if (!o.wake) await pg.evaluate(() => { for (const k of Object.keys(localStorage)) if (/^skotos\.save\.v1/.test(k)) { const d = JSON.parse(localStorage.getItem(k)); for (const h of d?.heroes || []) if (h) delete h.visit; localStorage.setItem(k, JSON.stringify(d)); } });
     await pg.evaluate(() => { const S = window.__G.save; window.__D.emit('startHero', S.heroes.find((h) => h.id === S.last) || S.heroes[0], false); });
     await pg.waitForFunction(() => window.__G?.zone && window.__G.mode === 'play', null, { timeout: 240000 });
     await A5.tick(pg); await A4.listen(pg);
@@ -465,6 +468,553 @@ const S = {
       await shot();
     }
     return pg.evaluate((o) => { const G = window.__G, kinds = {}; for (const a of G.actors) if (a.team === 'foe' && !a.prop && !a.dead) kinds[a.kind] = (kinds[a.kind] || 0) + 1; return { ...o, kills: G.hero.stats.kills, lvl: G.hero.level, alive: kinds }; }, { info, q12, tears, after });
+  } },
+  // the three great Tears told from the small ones, in the owner's wood (seed 780698361, difficulty 2): bigger and brighter
+  // with a ring and a halo at their foot, their own prompt; a small Tear says it is no verse of the Long Sorrow while the
+  // three are still to find (its blessing the same), never once they are known, nor the nursery's. Shots for the eye
+  tears: { q: 'auto=weep&seed=780698361&diff=2&sim=6&q=1&norender&lvl=29&cls=mage', run: async (pg, shot) => {
+    const r = {}, ok = {};
+    await A5.tick(pg);
+    await pg.evaluate(async () => {
+      const G = window.__G, z = G.zone, B = await import('/src/ui/bus.js');
+      window.__immortal = true; G.hero.quest = 12; G.hero.flags.metElati = true; G.player.hp = G.player.hpMax = 99999;
+      for (const p of z.packs) p.spawned = true; z.bossSpawned = true;
+      window.__toasts = []; B.on('toast', (m) => window.__toasts.push(m));
+    });
+    const look = () => pg.evaluate(() => window.__G.zone.interact.filter((i) => i.kind === 'tear').map((it) => { const u = it.mesh.userData; return { id: it.id, story: it.story, used: !!it.used, prompt: it.prompt, sy: +u.drop.scale.y.toFixed(3), glow: +u.drop.material.userData.u.uGlow.value.toFixed(3), cue: u.cue.length, cueOn: u.cue.filter((c) => c.visible).length }; }));
+    r.look = await look();
+    ok.look = ['planting', 'sorrow', 'breaking'].every((id) => r.look.some((l) => l.id === id && l.story)) && r.look.some((l) => l.id === 'm1') && r.look.some((l) => l.id === 'm2')
+      && r.look.every((l) => (l.story ? l.prompt === 'tear.touchGreat' && l.sy === 1.3 && l.glow === 1.65 && l.cue === 2 && l.cueOn === 2 : l.prompt === 'tear.touch' && l.sy === 0.85 && l.glow === 1 && l.cue === 0));
+    r.text = await pg.evaluate(async () => { const I = await import('/src/i18n/i18n.js'), el = [I.t('tear.touchGreat'), I.t('tear.small', 0)]; I.setLang('en'); const en = [I.t('tear.touchGreat'), I.t('tear.small', 0)]; I.setLang('el'); return { el, en }; });
+    ok.text = r.text.el[0] === 'Άγγιξε το Μεγάλο Δάκρυ' && r.text.el[1] === 'Μικρό Δάκρυ, όχι στίχος του Μακρού Θρήνου (0/3)' && r.text.en[0] === 'Touch the Great Tear' && r.text.en[1] === 'A small Tear, not a verse of the Long Sorrow (0/3)';
+    // (in front of it, away from its tree)
+    const beside = (id) => pg.evaluate((id) => { const G = window.__G, z = G.zone, it = z.interact.find((i) => i.kind === 'tear' && i.id === id), a = it.spot?.r || 0, f = z.map.nearestFloor(it.x - Math.sin(a) * 1.7, it.z - Math.cos(a) * 1.7); G.player.x = f.x; G.player.z = f.z; G.player.act = null; G.player.kx = G.player.kz = 0; return +Math.hypot(f.x - it.x, f.z - it.z).toFixed(2); }, id);
+    r.hud = {};
+    for (const id of ['planting', 'm2']) { r.hud[id + 'D'] = await beside(id); await pg.waitForTimeout(400); await shot(); r.hud[id] = await pg.evaluate(() => document.querySelector('#b-use span')?.textContent); }
+    const T = await pg.evaluate(async () => { const I = await import('/src/i18n/i18n.js'); return { great: I.t('tear.touchGreat'), touch: I.t('tear.touch'), buff: I.t('tear.buff'), small: [0, 1, 2, 3].map((n) => I.t('tear.small', n)), tear: [1, 2, 3].map((n) => I.t('q.tear', n)) }; });
+    ok.hud = r.hud.planting === T.great && r.hud.m2 === T.touch;
+    // (and 2.5 s of game time after its memory, whatever the frame rate: the small Tear's word comes 1.2 s after it)
+    const touch = async (id) => {
+      await pg.evaluate(() => { window.__toasts = []; });
+      await beside(id);
+      await pg.evaluate((id) => window.__G.zone.interact.find((i) => i.kind === 'tear' && i.id === id).use(), id);
+      const done = await A5.until(pg, (id) => !!window.__G.hero.flags['tear_' + id] && window.__G.mode === 'play', 90000, id);
+      const t0 = await pg.evaluate(() => window.__G.hero.stats.time);
+      await pg.waitForFunction((t0) => window.__G.hero.stats.time > t0 + 2.5, t0, { timeout: 60000 }).catch(() => {});
+      return pg.evaluate(([id, done]) => { const G = window.__G, it = G.zone.interact.find((i) => i.kind === 'tear' && i.id === id), u = it.mesh.userData; return { done, toasts: window.__toasts.slice(), memory: Math.round(G.player.buffs.memory || 0), quest: G.hero.quest, glow: +u.drop.material.userData.u.uGlow.value.toFixed(2), cueOn: u.cue.filter((c) => c.visible).length }; }, [id, done]);
+    };
+    const small = (o) => o.toasts.filter((m) => T.small.includes(m));
+    r.m1 = await touch('m1');
+    ok.m1 = r.m1.done && r.m1.toasts.includes(T.buff) && r.m1.toasts.includes(T.small[0]) && r.m1.memory > 0 && r.m1.quest === 12 && r.m1.glow === 0.42;
+    r.planting = await touch('planting');
+    ok.planting = r.planting.done && r.planting.toasts.includes(T.tear[0]) && !small(r.planting).length && r.planting.cueOn === 0 && r.planting.glow === 0.42;
+    r.sorrow = await touch('sorrow');
+    r.breaking = await touch('breaking');
+    r.breaking.q13 = await A5.until(pg, () => window.__G.hero.quest === 13, 10000);
+    ok.verses = r.sorrow.done && r.breaking.done && !small(r.sorrow).length && !small(r.breaking).length && r.breaking.toasts.includes(T.tear[2]) && r.breaking.q13;
+    r.m2 = await touch('m2');
+    ok.m2 = r.m2.done && r.m2.toasts.includes(T.buff) && !small(r.m2).length;
+    // the nursery (the Heartwood): never told a small Tear, even with a verse still to find (one taken back for the check)
+    r.nursery = await pg.evaluate(async () => {
+      const G = window.__G, W = await import('/src/game/world.js'); G.hero.quest = 14; G.hero.flags.hart = true; delete G.hero.flags.tear_planting;
+      await W.zoneReady('heart'); window.__D.enterZone('heart', { fresh: true }); for (const p of G.zone.packs) p.spawned = true; G.zone.bossSpawned = true;
+      const it = G.zone.interact.find((i) => i.kind === 'tear' && i.id === 'nursery');
+      return it ? { prompt: it.prompt, cue: it.mesh.userData.cue.length, sy: +it.mesh.userData.drop.scale.y.toFixed(3) } : null;
+    });
+    if (r.nursery) Object.assign(r.nursery, await touch('nursery'));
+    await pg.evaluate(() => { window.__G.hero.flags.tear_planting = true; });
+    ok.nursery = !!r.nursery && r.nursery.done && r.nursery.prompt === 'tear.touch' && r.nursery.cue === 0 && !small(r.nursery).length && r.nursery.toasts.includes(T.buff);
+    return { pass: Object.values(ok).every(Boolean), ok, r };
+  } },
+  // Continue where the last save left her (game/wake.js). PARTS=owner,verse,fall,lock,death,forest,crypt,pass,act4,act5
+  // (default all). OWNER=<file>: the hero to play the owner's part with, read at run time and never copied; else one built
+  // like it (a mage of 29 on difficulty 2, quest 12, two verses and both small Tears read, the owner's wood). Each part
+  // plants its hero in a page that writes no more, and goes through the title and Continue as a player does
+  resume: { q: 'q=0&sim=4&norender', run: async (pg, shot) => {
+    const PARTS = (process.env.PARTS || 'owner,verse,fall,lock,death,forest,crypt,pass,act4,act5,tower,act6').split(',');
+    const fs = await import('node:fs');
+    const R = {}, OK = {}, base = A5.base, ev = (fn, arg) => pg.evaluate(fn, arg), wait = (ms) => pg.waitForTimeout(ms);
+    const SEED = 780698361, KEYS = ['id', 'seed', 'diff', 'x', 'z', 'retry', 'stamp', 'layout', 'boss', 'packs', 'chests', 'shrines', 'tears', 'echoes', 'voices', 'greeted', 'seen'];
+    const ownerLike = (o = {}) => {
+      const now = Date.now(), flags = {};
+      for (const k of ['metSmith', 'weaver', 'metHealer', 'lord', 'act1', 'stonewarden', 'king', 'act2', 'metElati', 'metLinden', 'tear_sorrow', 'tear_breaking', 'tear_m1', 'tear_m2', ...(o.flags || [])]) if (!(o.drop || []).includes(k)) flags[k] = true;
+      return { id: o.id || 'hOwnr', cls: 'mage', level: 29, xp: 1200.5, gold: 24149, diff: 2, skills: {}, points: 28, inv: new Array(32).fill(null), equip: {}, stash: new Array(48).fill(null), quest: o.quest ?? 12, flags, wps: ['town', 'forest', 'crypt', 'pass', 'halls', 'weep'], act1: 1, act2: 1, act3: -1, act4: -1, act5: -1, gateBest: 0, boons: ['hearth', 'anvil'], stats: { kills: 591, deaths: 0, time: 2400, legs: 0, elites: 0 }, created: now, played: now, seeds: { weep: SEED } };
+    };
+    // (the stored record of the hero last played, as stored)
+    const stored = () => ev(() => { const d = JSON.parse(localStorage.getItem('skotos.save.v1') || 'null'); return d?.heroes?.find((h) => h && h.id === d.last) || null; });
+    const hide = (freeze) => ev((fr) => { window.dispatchEvent(new Event('pagehide')); if (fr) window.__G.save = null; }, !!freeze);
+    // (this page writes no more, the store is emptied, and the hero is put in it alone)
+    const plant = (h) => ev((h) => { window.__G.save = null; for (const k of Object.keys(localStorage)) if (k.startsWith('skotos.')) localStorage.removeItem(k); if (h) localStorage.setItem('skotos.save.v1', JSON.stringify({ heroes: [h], settings: { quality: 0, helpSeen: true }, last: h.id })); }, h);
+    const listen = () => ev(async () => { if (window.__lis) return; window.__lis = true; const B = await import('/src/ui/bus.js'); window.__toasts = []; window.__says = []; B.on('toast', (m) => window.__toasts.push(m)); B.on('say', (k) => window.__says.push(k)); });
+    const ready = async () => { await pg.waitForFunction(() => window.__ready && window.__G?.save, null, { timeout: 240000 }); await listen(); };
+    const load = async (q = 'q=0&sim=4&norender') => { await pg.goto(base + '?' + q); await ready(); };
+    // the title's menu (the tap screen first): what Continue says, and the place it names
+    const menu = async () => {
+      await pg.click('#screen'); await pg.waitForSelector('#m-cont', { timeout: 60000 }); await wait(600);
+      return ev(() => ({ text: document.getElementById('m-cont').textContent, at: document.querySelector('#m-cont .m-at')?.textContent || null }));
+    };
+    const where = () => ev(() => { const G = window.__G, z = G.zone, pl = G.player, w = z.L.spots.waypoint, B = z.L.boss, f = (v) => +v.toFixed(2); return { zone: z.id, x: f(pl.x), z: f(pl.z), dWp: w ? f(Math.hypot(pl.x - w.x, pl.z - w.z - 2)) : null, dBoss: B ? f(Math.hypot(pl.x - B.x, pl.z - B.z)) : null, quest: G.hero.quest, dead: !!pl.dead, full: pl.hp >= pl.hpMax, floor: z.map.walkable(pl.x, pl.z), reachStart: z.map.reaches(pl.x, pl.z, [z.L.start]) }; });
+    const cont = async () => {
+      await pg.click('#m-cont');
+      await pg.waitForFunction(() => window.__G?.zone && window.__G.mode === 'play' && window.__G.player && !document.getElementById('fade').classList.contains('on'), null, { timeout: 300000 });
+      const w = await where();
+      await A5.tick(pg); await ev(() => { window.__immortal = true; });
+      return w;
+    };
+    const gameWait = async (s) => { const t0 = await ev(() => window.__G.hero.stats.time); await pg.waitForFunction(([t0, s]) => window.__G.hero.stats.time > t0 + s, [t0, s], { timeout: 180000 }).catch(() => {}); };
+    // (every live foe within r of her struck down, until none is left)
+    const calm = async (r = 35) => { for (let i = 0; i < 20; i++) { const n = await ev((r) => { const G = window.__G, pl = G.player; let n = 0; for (const a of G.zone.actors) if (a.team === 'foe' && !a.prop && !a.dead && !a.boss && Math.hypot(a.x - pl.x, a.z - pl.z) < r) { n++; a.hidden = false; a.under = false; a.buried = false; a.dormant = false; a.invuln = 0; window.__D.kill(a); } return n; }, r); if (!n) return true; await wait(300); } return false; };
+    const put = (x, z) => ev(([x, z]) => { const G = window.__G, f = G.zone.map.nearestFloor(x, z); G.player.x = f.x; G.player.z = f.z; G.player.act = null; G.player.kx = G.player.kz = 0; return f; }, [x, z]);
+    const tearIt = (id) => `z.interact.find((i) => i.kind === 'tear' && i.id === '${id}')`;
+    const spentT = (id) => A5.until(pg, (id) => { const it = window.__G.zone.interact.find((i) => i.kind === 'tear' && i.id === id); return !!it?.spent && window.__G.mode === 'play'; }, 120000, id);
+    const clearPack = async (id) => {
+      const p = await ev((id) => { const p = window.__G.zone.packs.find((q) => q.id === id); return { x: p.x, z: p.z }; }, id);
+      await put(p.x, p.z + 4);
+      await pg.waitForFunction((id) => window.__G.zone.packs.find((q) => q.id === id)?.spawned, id, { timeout: 60000 });
+      for (let i = 0; i < 30; i++) {
+        const n = await ev((id) => { let n = 0; for (const a of window.__G.zone.actors) if (a.packId === id && !a.dead) { n++; a.hidden = false; a.under = false; a.buried = false; a.dormant = false; a.invuln = 0; window.__D.kill(a); } return n; }, id);
+        if (!n) return true;
+        await wait(300);
+      }
+      return false;
+    };
+    const chest = async (ci, take) => {
+      await ev((ci) => window.__G.zone.interact.find((i) => i.kind === 'chest' && i.ci === ci).use(), ci);
+      await pg.waitForFunction((ci) => window.__G.zone.interact.find((i) => i.kind === 'chest' && i.ci === ci).due === 0, ci, { timeout: 60000 });
+      await gameWait(1);
+      if (take) await ev(async () => (await import('/src/game/pickups.js')).gatherPickups());
+    };
+    const die = async (panel = true) => {
+      await ev(() => { const G = window.__G; window.__immortal = false; G.player.hp = 0; window.__D.emit('heroDeath'); });
+      if (panel) await pg.waitForFunction(() => window.__G.panel === 'dead', null, { timeout: 60000 });
+    };
+    // an owner-like hero planted, taken up (Whitecliff), and walked into her wood by its road
+    const fresh = async (o) => {
+      await plant(ownerLike(o)); await load(); await menu(); await cont();
+      await A5.travel(pg, 'weep', 'town'); await calm();
+    };
+    const quit = async (before) => { const nav = pg.waitForNavigation({ timeout: 240000 }); const out = await ev(before || (() => null)); await ev(() => setTimeout(() => window.__D.emit('quit'), 0)); await nav; await ready(); return out; };
+    const P = {};
+
+    // ---- the owner's own case ----
+    P.owner = async (r, k) => {
+      const hero = process.env.OWNER ? JSON.parse(fs.readFileSync(process.env.OWNER, 'utf8')) : ownerLike();
+      r.who = process.env.OWNER ? 'file' : 'built';
+      await plant(hero); await load();
+      // 1. an old hero (no visit): Whitecliff at its waypoint, as ever
+      r.m1 = await menu(); r.c1 = await cont(); r.v1 = (await stored()).visit ?? null;
+      k.old = !r.m1.at && r.c1.zone === 'town' && r.c1.dWp <= 3 && r.v1 === null;
+      // 2. into the wood
+      await A5.travel(pg, 'weep', 'town');
+      const v2 = (await stored()).visit; r.v2 = v2 && { id: v2.id, seed: v2.seed, diff: v2.diff };
+      k.inWood = !!v2 && v2.id === 'weep' && v2.seed === SEED && v2.diff === 2;
+      // 3. progress: the two packs nearest the start, chest A looted, chest B's loot left lying, shrine 0, m2 seen through
+      const packIds = await ev(() => { const z = window.__G.zone, s = z.L.start; return z.packs.map((p) => ({ id: p.id, d: Math.hypot(p.x - s.x, p.z - s.z) })).sort((a, b) => a.d - b.d).slice(0, 2).map((p) => p.id); });
+      r.packs = packIds; r.cleared = [];
+      for (const id of packIds) r.cleared.push(await clearPack(id));
+      await chest(0, true); await chest(1, false);
+      await ev(() => window.__G.zone.interact.find((i) => i.kind === 'shrine' && i.si === 0).use());
+      await A5.use(pg, tearIt('m2')); r.m2 = await spentT('m2');
+      // a memory cut off: m1 touched, the page hidden with its dialog open
+      await A5.use(pg, tearIt('m1'));
+      await pg.waitForFunction(() => !!document.querySelector('#dialog:not([hidden])'), null, { timeout: 60000 });
+      await hide(); r.cut = (await stored()).visit?.tears ?? null;
+      k.cut = JSON.stringify(r.cut) === '["m2"]';
+      r.m1 = await spentT('m1');
+      // 4. Save and quit, by the planting Tear
+      r.kept = await quit(() => {
+        const G = window.__G, z = G.zone, it = z.interact.find((i) => i.kind === 'tear' && i.id === 'planting'), S = z.map.nearestFloor(it.x, it.z + 4);
+        G.player.x = S.x; G.player.z = S.z; G.player.act = null; G.player.kx = G.player.kz = 0;
+        const ex = []; z.map.explored.forEach((v, i) => { if (v) ex.push(i); });
+        // (the voices as the last write saw them, the page's own on pagehide just before this: the frames before the reload
+        // may let the clearing's voice by the Tear speak)
+        window.addEventListener('pagehide', () => sessionStorage.setItem('__kept', JSON.stringify({ voices: (z.voices || []).map((v, i) => (v.done ? i : -1)).filter((i) => i >= 0), greeted: !!z.greeted })));
+        return { S, ex };
+      });
+      Object.assign(r.kept, await ev(() => { const k = JSON.parse(sessionStorage.getItem('__kept') || '{}'); sessionStorage.removeItem('__kept'); return k; }));
+      const S = r.kept.S, v4 = (await stored()).visit, idx = packIds.map((id) => +id.slice(4));
+      r.v4 = { keys: Object.keys(v4 || {}), x: v4?.x, z: v4?.z, packs: v4?.packs, chests: v4?.chests, shrines: v4?.shrines, tears: v4?.tears, voices: v4?.voices, greeted: v4?.greeted, retry: v4?.retry, boss: v4?.boss, len: JSON.stringify(v4 || {}).length, seen: v4?.seen?.length, keptVoices: r.kept.voices, explored: r.kept.ex.length };
+      r.v4.fits = await ev(async () => { const S = await import('/src/game/save.js'), d = JSON.parse(localStorage.getItem('skotos.save.v1')); return S.heroFits(d.heroes.find((h) => h.id === d.last)); });
+      const strs = []; JSON.stringify(v4 || {}, (key, val) => { if (key) strs.push(key); if (typeof val === 'string') strs.push(val); return val; });
+      r.v4.unsafe = strs.some((s) => /[<>"'`&\\]/.test(s));
+      const keyIdx = r.v4.keys.map((x) => KEYS.indexOf(x));
+      k.saved = !!v4 && keyIdx.every((i, j) => i >= 0 && (j === 0 || i > keyIdx[j - 1])) && v4.x * 2 === Math.round(v4.x * 2) && v4.z * 2 === Math.round(v4.z * 2) && Math.abs(v4.x - S.x) <= 0.5 && Math.abs(v4.z - S.z) <= 0.5
+        && idx.every((i) => (v4.packs || []).includes(i)) && JSON.stringify(v4.chests) === '[0,1]' && JSON.stringify(v4.shrines) === '[0]' && JSON.stringify(v4.tears) === '["m1","m2"]'
+        && JSON.stringify(v4.voices || []) === JSON.stringify(r.kept.voices) && v4.greeted === (r.kept.greeted ? 1 : undefined) && v4.retry === undefined && v4.boss === undefined
+        && r.v4.len < 2048 && !r.v4.unsafe && r.v4.fits === null;
+      // 5. the title names her wood; 6. Continue wakes her there, the visit laid on it
+      r.m5 = await menu(); r.zoneName = await ev(() => window.__D.t('zone.weep'));
+      k.title = (r.m5.at || '') === r.zoneName && r.m5.text.includes(r.zoneName);
+      r.c6 = await cont();
+      await gameWait(4);
+      r.s6 = await ev(([kept, packIds]) => {
+        const G = window.__G, z = G.zone, chest = (ci) => z.interact.find((i) => i.kind === 'chest' && i.ci === ci), open = (it) => !!it && !!it.used && (it.mesh?.userData.lid ? Math.abs(it.mesh.userData.lid.rotation.x + 1.9) < 1e-6 : Math.abs(it.mesh.rotation.x + 0.15) < 1e-6);
+        const B = chest(1), tear = (id) => z.interact.find((i) => i.kind === 'tear' && i.id === id);
+        return { packs: packIds.map((id) => ({ id, spawned: !!z.packs.find((p) => p.id === id)?.spawned, actors: z.actors.filter((a) => a.packId === id).length })),
+          chests: [open(chest(0)), open(B)], lootAtB: G.pickups.filter((p) => p.kind === 'item' && Math.hypot(p.x - B.x, p.z - B.z) < 3).length,
+          shrine0: !!z.interact.find((i) => i.kind === 'shrine' && i.si === 0)?.used,
+          tears: ['m1', 'm2'].map((id) => ({ id, used: !!tear(id)?.used, glow: +tear(id)?.mesh.userData.drop.material.userData.u.uGlow.value.toFixed(2) })),
+          explored: kept.ex.every((i) => z.map.explored[i]), voices: kept.voices.every((i) => z.voices[i]?.done), greeted: !!z.greeted,
+          greet: (window.__says || []).filter((s) => /^d\.lady\.w1/.test(s)).length, quest: G.hero.quest, planting: !!G.hero.flags.tear_planting };
+      }, [r.kept, packIds]);
+      r.c6.d = +Math.hypot(r.c6.x - S.x, r.c6.z - S.z).toFixed(2);
+      k.woke = r.c6.zone === 'weep' && r.c6.d <= 0.75 && r.s6.packs.every((p) => p.spawned && !p.actors) && r.s6.chests.every(Boolean) && !r.s6.lootAtB && r.s6.shrine0
+        && r.s6.tears.every((t) => t.used && t.glow === 0.42) && r.s6.explored && r.s6.voices && r.s6.greeted && !r.s6.greet && r.s6.quest === 12 && !r.s6.planting;
+      // 7. standing still writes the same visit; a walk moves only where she is, which is no work
+      const spot = await ev((ids) => { const z = window.__G.zone, open = z.packs.filter((p) => !ids.includes(p.id)); for (const id of ids) { const p = z.packs.find((q) => q.id === id); if (!open.some((q) => Math.hypot(q.x - p.x, q.z - p.z) < 40)) return { x: p.x, z: p.z }; } const p = z.packs.find((q) => q.id === ids[0]); return { x: p.x, z: p.z }; }, packIds);
+      await put(spot.x, spot.z); await calm(); await wait(500); await calm();
+      const snap = () => ev(async () => { const C = await import('/src/game/cloudsync.js'), d = JSON.parse(localStorage.getItem('skotos.save.v1')), h = d.heroes.find((x) => x.id === d.last), h0 = JSON.parse(JSON.stringify(h)); h0.stats.time = 0; return { visit: JSON.stringify(h.visit), sum: C.heroSum(h), sum0: C.heroSum(h0), work: C.workSum(h) }; });
+      await hide(); const a = await snap(); await wait(1000); await hide(); const b = await snap();
+      await ev(() => { const G = window.__G, z = G.zone; for (const [dx, dz] of [[6, 0], [-6, 0], [0, 6], [0, -6]]) { const x = G.player.x + dx, zz = G.player.z + dz; if (z.map.walkable(x, zz) && z.map.clear(G.player.x, G.player.z, x, zz)) { G.player.x = x; G.player.z = zz; return; } } });
+      await hide(); const c = await snap();
+      r.idle = { same: a.visit === b.visit, work: a.work === b.work, sumNoClock: a.sum0 === b.sum0, sumRaw: a.sum === b.sum, walkVisit: c.visit !== b.visit, walkSum: c.sum0 !== b.sum0, walkWork: c.work === b.work };
+      k.idle = r.idle.same && r.idle.work && r.idle.sumNoClock && r.idle.walkVisit && r.idle.walkSum && r.idle.walkWork;
+      // 8. the planting Tear: the third verse, and the Glade wakes
+      await ev(() => { window.__toasts = []; });
+      await A5.use(pg, tearIt('planting'));
+      await A5.until(pg, () => window.__G.hero.flags.tear_planting && window.__G.mode === 'play', 120000);
+      const t8 = await ev(() => window.__G.hero.stats.time);
+      await pg.waitForFunction((t0) => window.__G.hero.quest === 13 || window.__G.hero.stats.time > t0 + 10, t8, { timeout: 180000 }).catch(() => {});
+      r.p8 = await ev(() => ({ quest: window.__G.hero.quest, toasts: window.__toasts.slice(), three: window.__D.t('q.tear', 3) }));
+      k.planting = r.p8.quest === 13 && r.p8.toasts.includes(r.p8.three);
+      // 9. a boss fight: a save beside the Hart wakes her at the retry spot; one broken off is left to its spot
+      const B = await ev(() => window.__G.zone.L.boss);
+      await put(B.x, B.z + 9);
+      await pg.waitForFunction(() => window.__G.zone.boss && window.__G.bossActor, null, { timeout: 120000 });
+      await hide(); r.b9 = { near: (await stored()).visit?.retry ?? null };
+      r.b9.off = await ev(() => { const G = window.__G, w = G.zone.L.spots.waypoint, f = G.zone.map.nearestFloor(w.x, w.z + 2); G.player.x = f.x; G.player.z = f.z; window.dispatchEvent(new Event('pagehide')); const d = JSON.parse(localStorage.getItem('skotos.save.v1')); return d.heroes.find((h) => h.id === d.last).visit?.retry ?? null; });
+      r.b9.back = await ev(() => { const G = window.__G, b = G.zone.boss, f = G.zone.map.nearestFloor(b.x, b.z + 6); G.player.x = f.x; G.player.z = f.z; window.dispatchEvent(new Event('pagehide')); G.save = null; const d = JSON.parse(localStorage.getItem('skotos.save.v1')); return d.heroes.find((h) => h.id === d.last).visit?.retry ?? null; });
+      await load(); await menu(); r.c9 = await cont();
+      k.bossFight = r.b9.near === 1 && r.b9.off === null && r.b9.back === 1 && r.c9.zone === 'weep' && r.c9.dWp <= 3 && r.c9.dBoss >= 40 && r.c9.quest === 13;
+      // 10. the Hart killed: the gate open, and a wake at her spot finds the white tree and the echo
+      await put(B.x, B.z + 9);
+      await pg.waitForFunction(() => window.__G.zone.boss, null, { timeout: 120000 });
+      await A5.hit(pg, null);
+      await gameWait(7); await A5.until(pg, () => window.__G.mode === 'play' && !window.__G.cine, 60000);
+      r.h10 = await ev(() => { const G = window.__G, z = G.zone, s = z.L.spots.rootGate; return { hart: !!G.hero.flags.hart, hartAt: !!G.hero.flags.hartAt, quest: G.hero.quest, open: s.cells.every(([x, zz]) => z.map.walkable(x + 0.5, zz + 0.5)), gate: z.act3.gate.userData.progress }; });
+      await hide(true); const v10 = (await stored()).visit;
+      await load(); await menu(); r.c10 = await cont();
+      r.c10.d = +Math.hypot(r.c10.x - v10.x, r.c10.z - v10.z).toFixed(2); r.c10.retry = v10.retry ?? null;
+      r.c10.after = await ev(() => { const G = window.__G, z = G.zone, s = z.L.spots.rootGate; return { open: s.cells.every(([x, zz]) => z.map.walkable(x + 0.5, zz + 0.5)), whiteTree: !!z.act3.whiteTree, echo: !!z.interact.find((i) => i.kind === 'echo' && i.boss === 'silverhorn') }; });
+      k.hart = r.h10.hart && r.h10.hartAt && r.h10.quest === 14 && r.h10.open && r.c10.zone === 'weep' && r.c10.d <= 0.75 && r.c10.retry === null && r.c10.after.open && r.c10.after.whiteTree && r.c10.after.echo && r.c10.quest === 14;
+      // 11. the echo: kept only once fought to its end
+      await A5.use(pg, "z.interact.find((i) => i.kind === 'echo')");
+      await hide(); r.e11 = { touched: (await stored()).visit?.echoes ?? null };
+      await pg.waitForFunction(() => window.__G.zone.boss?.echo && !window.__G.zone.boss.dead, null, { timeout: 120000 });
+      await hide(); r.e11.risen = (await stored()).visit?.echoes ?? null;
+      await A5.hit(pg, null); await gameWait(1);
+      r.e11.fought = (await stored()).visit?.echoes ?? null;
+      await load(); await menu(); r.e11.c = await cont();
+      r.e11.used = await ev(() => !!window.__G.zone.interact.find((i) => i.kind === 'echo')?.used);
+      k.echo = r.e11.touched === null && r.e11.risen === null && JSON.stringify(r.e11.fought) === '["silverhorn"]' && r.e11.c.zone === 'weep' && r.e11.used;
+    };
+
+    // ---- the third verse read just before the quit: the Glade wakes at once on the wake, and she is kept from the Hart ----
+    P.verse = async (r, k) => {
+      await fresh({ flags: ['tear_planting'], drop: ['tear_breaking'] });
+      await A5.use(pg, tearIt('breaking'));
+      r.hidden = await A5.until(pg, () => { const G = window.__G; if (G.hero.flags.tear_breaking && G.mode === 'play') { window.dispatchEvent(new Event('pagehide')); G.save = null; return true; } return false; }, 120000);
+      const v = (await stored()); r.saved = { quest: v.quest, flag: !!v.flags.tear_breaking, x: v.visit?.x, z: v.visit?.z };
+      await load(); await menu(); r.c = await cont();
+      r.c.dTear = await ev(([x, z]) => +Math.hypot(window.__G.player.x - x, window.__G.player.z - z).toFixed(1), [r.saved.x, r.saved.z]);
+      await gameWait(6);
+      r.after = await ev(() => { const G = window.__G, z = G.zone, pre = window.__D.t('q.new'); return { quest: G.hero.quest, newQ: window.__toasts.some((m) => m.startsWith(pre)), bellow: window.__says.some((s) => /^d\.linden\.bellow/.test(s)), hart: !!z.bossSpawned || z.actors.some((a) => a.kind === 'silverhorn') }; });
+      k.verse = r.hidden && r.saved.quest === 12 && r.saved.flag && r.c.zone === 'weep' && r.c.dWp <= 3 && r.c.dTear > 5 && r.after.quest === 13 && r.after.newQ && r.after.bellow && !r.after.hart;
+    };
+
+    // ---- Whitecliff at its waypoint, as before, whenever the visit is not to be taken ----
+    // (FALL=a,...,h: some of its cases; each one not run is stood in for by the state it would have left)
+    P.fall = async (r, k) => {
+      const CASES = (process.env.FALL || 'a,b,c,d,e,f,g,h').split(','), on = (c) => CASES.includes(c);
+      const town = (c) => c.zone === 'town' && c.dWp <= 3;
+      const inTown = async () => { await plant(ownerLike()); await load(); await menu(); await cont(); };
+      const woken = async () => { await fresh(); await quit(); await menu(); return cont(); };
+      if (on('a')) {
+      // a. Return to town
+      await fresh();
+      await ev(() => window.__D.emit('townPortal'));
+      await pg.waitForFunction(() => window.__G.zone?.id === 'town' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 120000 });
+      await wait(400);
+      r.a = { visit: (await stored()).visit ?? null };
+      await load(); r.a.m = await menu(); r.a.c = await cont(); r.a.after = (await stored()).visit ?? null;
+      k.a = r.a.visit === null && !r.a.m.at && town(r.a.c) && r.a.after === null;
+      }
+      if (on('b')) {
+      if (!on('a')) await inTown();
+      // b. a Shadow Gate
+      await ev(() => window.__D.emit('startGate', 1));
+      await pg.waitForFunction(() => window.__G.zone?.id === 'gate' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 120000 });
+      await hide(); r.b = { visit: (await stored()).visit ?? null };
+      await load(); r.b.m = await menu(); r.b.c = await cont();
+      k.b = r.b.visit === null && !r.b.m.at && town(r.b.c) && (await stored()).visit === undefined;
+      }
+      if (on('c')) {
+      // c. a visit not to be taken: each edit planted, the title and Continue
+      await fresh(); await hide(true);
+      const rec = await stored();
+      const edits = { control: (h) => h, seed: (h) => { h.visit.seed += 1; }, diff: (h) => { h.visit.diff = 3; }, nowhere: (h) => { h.visit.id = 'nowhere'; }, gate: (h) => { h.visit.id = 'gate'; }, str: (h) => { h.visit = 'x'; }, arr: (h) => { h.visit = [1]; }, x: (h) => { h.visit.x = 'a'; }, stamp: (h) => { h.visit.stamp[3] += 1; } };
+      r.c = {};
+      for (const [name, f] of Object.entries(edits)) {
+        const h = JSON.parse(JSON.stringify(rec)); f(h);
+        await plant(h); await load();
+        const m = await menu(), c = await cont(), after = (await stored()).visit ?? null;
+        r.c[name] = { at: m.at, zone: c.zone, dWp: c.dWp, after: after && (typeof after === 'object' ? after.id : after) };
+      }
+      k.c = r.c.control.zone === 'weep' && !!r.c.control.at && Object.entries(r.c).every(([n, c]) => n === 'control' || (!c.at && town(c) && c.after === null));
+      // (voices that are not all indices, as a file or a copy may bring: taken, the others passed over, the page untouched)
+      const hv = JSON.parse(JSON.stringify(rec)); hv.visit.voices = ['__proto__', 'constructor', 'length', 0];
+      await plant(hv); await load(); await menu(); const cv = await cont();
+      r.voices = { zone: cv.zone, ...(await ev(() => ({ proto: [].done ?? null, ctor: Array.done ?? null, v0: !!window.__G.zone.voices?.[0]?.done, fail: window.__toasts.includes(window.__D.t('load.fail')) }))) };
+      r.voices.after = (await stored()).visit?.id ?? null;
+      k.voices = r.voices.zone === 'weep' && r.voices.proto === null && r.voices.ctor === null && r.voices.v0 && !r.voices.fail && r.voices.after === 'weep';
+      }
+      if (on('d')) {
+      // d. her zone will not load (the network): Whitecliff, the visit held, and laid on the zone when she walks in
+      await fresh();
+      const pid = await ev(() => { const z = window.__G.zone, s = z.L.start; return z.packs.map((p) => ({ id: p.id, d: Math.hypot(p.x - s.x, p.z - s.z) })).sort((a, b) => a.d - b.d)[0].id; });
+      r.d = { cleared: await clearPack(pid) }; await chest(0, true);
+      await quit();
+      // (the wood's files themselves refused, not the modules that name them: a page keeps a module import that failed, as
+      // it would a chunk of the built game's, so a walk-in in that page could never fetch them again)
+      const block = (u) => /\/src\/assets\/wood(\.glb|\/[^/]+\.webp)$/.test(u.pathname) && !u.search;
+      await pg.route(block, (rt) => rt.abort());
+      r.d.m = await menu(); r.d.c = await cont();
+      const held = () => ev(async () => { const W = await import('/src/game/wake.js'), d = JSON.parse(localStorage.getItem('skotos.save.v1')), h = d.heroes.find((x) => x.id === d.last), v = W.wakeOf(h); return v && { id: v.id, packs: v.packs, chests: v.chests }; });
+      r.d.fail = await ev(() => window.__toasts.includes(window.__D.t('load.fail')));
+      r.d.held = await held();
+      await ev(() => { window.__G.hero.gold += 7; }); await hide();
+      r.d.held2 = await held();
+      await pg.unroute(block);
+      await A5.travel(pg, 'weep', 'town');
+      r.d.walked = await ev((pid) => { const G = window.__G, z = G.zone, e = z.L.exits.find((x) => x.to === 'town'), c = z.interact.find((i) => i.kind === 'chest' && i.ci === 0), p = z.packs.find((q) => q.id === pid); return { zone: z.id, dExit: +Math.hypot(G.player.x - e.x, G.player.z - e.z).toFixed(1), pack: !!p.spawned && !z.actors.some((a) => a.packId === pid), chest: !!c.used }; }, pid);
+      const vd = (await stored()).visit; r.d.now = vd && { id: vd.id, packs: vd.packs, chests: vd.chests };
+      const pi = +pid.slice(4);
+      k.d = r.d.cleared && town(r.d.c) && r.d.fail && !!r.d.m.at && r.d.held?.id === 'weep' && (r.d.held.packs || []).includes(pi) && JSON.stringify(r.d.held.chests) === '[0]' && r.d.held2?.id === 'weep'
+        && r.d.walked.zone === 'weep' && r.d.walked.dExit < 6 && r.d.walked.pack && r.d.walked.chest && r.d.now?.id === 'weep' && (r.d.now.packs || []).includes(pi) && JSON.stringify(r.d.now.chests) === '[0]';
+      // (and with the network there at the next Continue: she wakes where she was)
+      const spotD = await quit(() => ({ x: window.__G.player.x, z: window.__G.player.z }));
+      await menu(); r.d.c2 = await cont(); r.d.c2.d = +Math.hypot(r.d.c2.x - spotD.x, r.d.c2.z - spotD.z).toFixed(2);
+      k.d2 = r.d.c2.zone === 'weep' && r.d.c2.d <= 0.75;
+      }
+      if (on('e')) {
+      if (!on('d')) await woken();
+      // e. a lost context, stuck (lost again at the lowest quality): no visit kept; a first loss keeps it and reloads
+      await ev(() => { window.__mark = 1; sessionStorage.setItem('skotos.glLost', String(Date.now())); window.__R.renderer.getContext().getExtension('WEBGL_lose_context').loseContext(); });
+      await wait(3500);
+      r.e = await ev(() => ({ note: !!document.getElementById('gl-lost'), same: window.__mark === 1 }));
+      r.e.visit = (await stored()).visit ?? null;
+      await load(); await menu(); r.e.c = await cont();
+      k.e = r.e.note && r.e.same && r.e.visit === null && town(r.e.c);
+      await A5.travel(pg, 'weep', 'town'); await calm();
+      await quit(); await menu(); r.e.c1 = await cont();
+      const nav = pg.waitForNavigation({ timeout: 240000 });
+      await ev(() => { sessionStorage.removeItem('skotos.glLost'); window.__R.renderer.getContext().getExtension('WEBGL_lose_context').loseContext(); });
+      r.e.first = { visit: (await stored()).visit?.id ?? null };
+      await nav; await ready();
+      r.e.first.m = await menu(); r.e.first.c = await cont();
+      k.e2 = r.e.c1.zone === 'weep' && r.e.first.visit === 'weep' && !!r.e.first.m.at && r.e.first.c.zone === 'weep';
+      }
+      if (on('f')) {
+      if (!on('e')) await woken();
+      // f. a fault soon after a wake: no visit kept for that page (this case sets off the #fatal box on purpose)
+      r.allowFatal = ['resume test'];
+      await ev(() => window.dispatchEvent(new ErrorEvent('error', { message: 'resume test' })));
+      await hide(); r.f = { visit: (await stored()).visit ?? null };
+      await load(); r.f.m = await menu(); r.f.c = await cont();
+      k.f = r.f.visit === null && !r.f.m.at && town(r.f.c);
+      }
+      if (on('g')) {
+      if (!on('f')) await inTown();
+      // g. on the way out: a travel to Whitecliff, and the death panel's Respawn in town, in their fade
+      await A5.travel(pg, 'weep', 'town'); await calm();
+      r.g = { travel: await ev(() => { window.__D.emit('travel', 'town', { at: 'waypoint' }); window.dispatchEvent(new Event('pagehide')); const d = JSON.parse(localStorage.getItem('skotos.save.v1')); return d.heroes.find((h) => h.id === d.last).visit?.id ?? null; }) };
+      await pg.waitForFunction(() => window.__G.zone?.id === 'town' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 120000 });
+      await A5.travel(pg, 'weep', 'town'); await calm();
+      await die();
+      r.g.respawnTown = await ev(() => { window.__D.closePanel(); window.__D.emit('respawn', true); window.dispatchEvent(new Event('pagehide')); window.__immortal = true; const d = JSON.parse(localStorage.getItem('skotos.save.v1')); return d.heroes.find((h) => h.id === d.last).visit?.id ?? null; });
+      await pg.waitForFunction(() => window.__G.zone?.id === 'town' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 120000 });
+      k.g = r.g.travel === null && r.g.respawnTown === null;
+      }
+      if (on('h')) {
+      if (!on('g')) await inTown();
+      // h. the respawn's fade, in her zone: she is up already, and the visit says to wake at the retry spot
+      await A5.travel(pg, 'weep', 'town'); await calm();
+      const died = await ev(() => ({ x: window.__G.player.x, z: window.__G.player.z }));
+      await die();
+      r.h = await ev(() => { window.__D.closePanel(); window.__D.emit('respawn', false); window.dispatchEvent(new Event('pagehide')); window.__G.save = null; const d = JSON.parse(localStorage.getItem('skotos.save.v1')), v = d.heroes.find((h) => h.id === d.last).visit; return { retry: v?.retry ?? null, dead: window.__G.player.dead }; });
+      await load(); await menu(); r.h.c = await cont(); r.h.c.dDied = +Math.hypot(r.h.c.x - died.x, r.h.c.z - died.z).toFixed(1);
+      k.h = r.h.retry === 1 && !r.h.dead && r.h.c.zone === 'weep' && r.h.c.dWp <= 3 && r.h.c.dDied > 10;
+      }
+    };
+
+    // ---- the soft-lock guard: a spot cut off from the start, the waypoint and every open exit ----
+    P.lock = async (r, k) => {
+      await fresh(); await hide(true);
+      const rec = await stored();
+      const north = await ev(() => { const z = window.__G.zone, g = z.L.spots.rootGate, f = z.map.nearestFloor(g.x, g.z - 2); return { x: f.x, z: f.z, cut: !z.map.reaches(f.x, f.z, [z.L.start]) }; });
+      for (const [name, p] of [['north', north], ['rock', { x: 0.5, z: 0.5 }]]) {
+        const h = JSON.parse(JSON.stringify(rec)); h.visit.x = p.x; h.visit.z = p.z;
+        await plant(h); await load(); const m = await menu(), c = await cont();
+        r[name] = { at: m.at, ...c, d: +Math.hypot(c.x - p.x, c.z - p.z).toFixed(1), cut: p.cut };
+      }
+      k.lock = r.north.cut && r.north.zone === 'weep' && r.north.dWp <= 3 && r.north.d > 3 && r.rock.zone === 'weep' && r.rock.floor && r.rock.reachStart;
+    };
+
+    // ---- dead at the save: up at the retry spot, alive and whole ----
+    P.death = async (r, k) => {
+      await fresh(); await die();
+      await hide(true); r.retry = (await stored()).visit?.retry ?? null;
+      await load(); await menu(); r.c = await cont();
+      k.death = r.retry === 1 && r.c.zone === 'weep' && !r.c.dead && r.c.full && r.c.dWp <= 3;
+    };
+
+    // an auto hero of the test hook, written as the only hero (the auto page saves it)
+    const auto = async (q) => { await plant(null); await pg.goto(base + '?' + q + '&sim=4&q=0&norender'); await pg.waitForFunction(() => window.__ready && window.__G?.player && window.__G.mode === 'play', null, { timeout: 300000 }); await listen(); await A5.tick(pg); await ev(() => { window.__immortal = true; }); };
+    const killBoss = async () => {
+      const s = await ev(() => { const z = window.__G.zone, s = z.bossSpot; return s && { x: s.x, z: s.z }; });
+      await put(s.x, s.z + 7);
+      await pg.waitForFunction(() => window.__G.zone.boss, null, { timeout: 120000 });
+      return A5.hit(pg, null);
+    };
+    // ---- an Acts I-II boss killed this visit stays down on the wake; the forest's quest caught up ----
+    P.forest = async (r, k) => {
+      await auto('auto=forest&lvl=6&quest=1');
+      r.killed = await killBoss();
+      r.saved = await ev(() => { const G = window.__G, z = G.zone, s = z.L.boss, f = z.map.nearestFloor(s.x, s.z - 2); G.player.x = f.x; G.player.z = f.z; G.player.act = null; window.dispatchEvent(new Event('pagehide')); G.save = null; const d = JSON.parse(localStorage.getItem('skotos.save.v1')), h = d.heroes.find((x) => x.id === d.last); return { retry: h.visit?.retry ?? null, boss: h.visit?.boss ?? null, x: h.visit?.x, z: h.visit?.z, weaver: !!h.flags.weaver, quest: h.quest }; });
+      await load(); r.m = await menu(); r.c = await cont(); r.c.d = +Math.hypot(r.c.x - r.saved.x, r.c.z - r.saved.z).toFixed(2);
+      await gameWait(3);
+      r.after = await ev(() => { const G = window.__G, z = G.zone; return { spot: z.bossSpot ?? null, spawned: !!z.bossSpawned, weaver: z.actors.some((a) => a.kind === 'weaver' && !a.dead), quest: G.hero.quest }; });
+      await hide(); r.after.boss = (await stored()).visit?.boss ?? null;
+      // (out by the portal and back by the waypoint after a reload: a walk-in from town meets it again, as ever)
+      await ev(() => window.__D.emit('townPortal'));
+      await pg.waitForFunction(() => window.__G.zone?.id === 'town' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 120000 });
+      await load(); await menu(); r.back = await cont();
+      await A5.travel(pg, 'forest', 'waypoint');
+      r.back.spot = await ev(() => window.__G.zone.bossSpot?.kind ?? null);
+      k.forest = r.killed && r.saved.retry === null && r.saved.boss === 1 && r.saved.weaver && r.saved.quest === 1 && r.c.zone === 'forest' && r.c.d <= 0.75 && r.after.spot === null && r.after.spawned && !r.after.weaver && r.after.quest === 2 && r.after.boss === 1 && r.back.zone === 'town' && r.back.spot === 'weaver';
+    };
+    // ---- the Barrow Lord's shard, not taken before the quit, lies by its spot again; taken, it does not ----
+    P.crypt = async (r, k) => {
+      for (const take of [false, true]) {
+        const o = r[take ? 'taken' : 'left'] = {};
+        await auto('auto=crypt&lvl=8&quest=3&flags=weaver,metSmith&cls=mage');
+        o.killed = await killBoss();
+        await pg.waitForFunction(() => window.__G.pickups.some((p) => p.kind === 'shard'), null, { timeout: 60000 }).catch(() => {});
+        if (take) { await ev(() => { const G = window.__G, s = G.pickups.find((p) => p.kind === 'shard'); G.player.x = s.x; G.player.z = s.z; }); await pg.waitForFunction(() => window.__G.hero.quest === 4, null, { timeout: 60000 }).catch(() => {}); }
+        else await ev(() => { const G = window.__G, s = G.pickups.find((p) => p.kind === 'shard'), f = G.zone.map.nearestFloor(s.x + 5, s.z + 3); G.player.x = f.x; G.player.z = f.z; });
+        await gameWait(1);
+        await hide(true); const h = await stored(); o.saved = { boss: h.visit?.boss ?? null, quest: h.quest };
+        await load(); await menu(); o.c = await cont(); await gameWait(3);
+        o.after = await ev(() => { const G = window.__G, B = G.zone.L.boss, sh = G.pickups.filter((p) => p.kind === 'shard'); return { lord: G.zone.actors.some((a) => a.kind === 'barrowLord' && !a.dead), shards: sh.length, d: sh[0] ? +Math.hypot(sh[0].x - B.x, sh[0].z - B.z - 1).toFixed(2) : null }; });
+        if (!take && o.after.shards) {
+          await ev(() => { window.__toasts = []; const G = window.__G, s = G.pickups.find((p) => p.kind === 'shard'); G.player.x = s.x; G.player.z = s.z; });
+          await pg.waitForFunction(() => window.__G.hero.quest === 4, null, { timeout: 60000 }).catch(() => {});
+          o.picked = await ev(() => ({ quest: window.__G.hero.quest, toast: window.__toasts.includes(window.__D.t('q.shard')) }));
+        }
+      }
+      k.crypt = r.left.killed && r.left.saved.boss === 1 && r.left.saved.quest === 3 && r.left.c.zone === 'crypt' && !r.left.after.lord && r.left.after.shards === 1 && r.left.after.d <= 2 && r.left.picked?.quest === 4 && r.left.picked.toast
+        && r.taken.saved.boss === 1 && r.taken.saved.quest === 4 && r.taken.c.zone === 'crypt' && !r.taken.after.lord && r.taken.after.shards === 0;
+    };
+    // ---- the Stonewarden killed, a save in the gateway: no Stonewarden there on the wake, the quest caught up ----
+    P.pass = async (r, k) => {
+      await auto('auto=pass&lvl=12&quest=6&flags=weaver,lord,metSmith,act1');
+      r.killed = await killBoss();
+      r.saved = await ev(() => { const G = window.__G, z = G.zone, g = z.L.gate, f = z.map.nearestFloor(g.x, g.z + 3); G.player.x = f.x; G.player.z = f.z; G.player.act = null; window.dispatchEvent(new Event('pagehide')); G.save = null; const d = JSON.parse(localStorage.getItem('skotos.save.v1')), h = d.heroes.find((x) => x.id === d.last); return { boss: h.visit?.boss ?? null, retry: h.visit?.retry ?? null, x: h.visit?.x, z: h.visit?.z, quest: h.quest, toBoss: +Math.hypot(f.x - z.L.boss.x, f.z - z.L.boss.z).toFixed(1) }; });
+      await load(); await menu(); r.c = await cont(); r.c.d = +Math.hypot(r.c.x - r.saved.x, r.c.z - r.saved.z).toFixed(2);
+      await gameWait(5);
+      r.after = await ev(() => { const G = window.__G, z = G.zone, e = z.interact.find((i) => i.kind === 'exit' && i.to === 'halls'); return { warden: z.actors.some((a) => a.kind === 'stonewarden' && !a.dead), open: !e?.locked || !!G.hero.flags[e.locked], quest: G.hero.quest }; });
+      k.pass = r.killed && r.saved.boss === 1 && r.saved.toBoss < 32 && r.c.zone === 'pass' && r.c.d <= 0.75 && !r.after.warden && r.after.open && r.after.quest === 7;
+    };
+    // ---- Act IV: dead in the Field, up by the last waylamp after the Continue ----
+    P.act4 = async (r, k) => {
+      await auto('auto=ashfield&lvl=24&quest=18&flags=act1,act2,act3,after3,hart,autumn,weaver,lord,fireTaken');
+      r.cp = await ev(() => { const G = window.__G, it = G.zone.act4.lamps[0]; G.hero.flags['lamp_' + it.id] = true; G.hero.flags.lastLamp = it.id; window.__D.enterZone('ashfield', { fresh: true, at: 'start' }); const c = G.zone.checkpoint; return c ? { x: c.x, z: c.z } : null; });
+      await die(); await hide(true); r.retry = (await stored()).visit?.retry ?? null;
+      await load(); await menu(); r.c = await cont();
+      r.c.cp = await ev(() => { const c = window.__G.zone.checkpoint; return c ? +Math.hypot(window.__G.player.x - c.x, window.__G.player.z - c.z).toFixed(2) : null; });
+      k.act4 = !!r.cp && r.retry === 1 && r.c.zone === 'ashfield' && r.c.cp !== null && r.c.cp <= 1.5;
+    };
+    // ---- Act V: a spot on the skerry, shut again under the dead Tower; and a death by the island checkpoint ----
+    P.act5 = async (r, k) => {
+      await auto('auto=coast&lvl=30&cls=warden&' + A5.url('towerDown'));
+      await A5.state(pg, 'towerDown', { zone: 'coast', at: 'waypoint', flags: { cp5: { coast: 'island' } } });
+      await hide(true); const rec = await stored();
+      const sk = await ev(() => { const s = window.__G.zone.L.spots.skerry; return { x: s.x, z: s.z }; });
+      r.saved = { cp5: rec.flags.cp5, visit: rec.visit?.id ?? null };
+      const h = JSON.parse(JSON.stringify(rec)); h.visit.x = sk.x; h.visit.z = sk.z;
+      await plant(h); await load(); await menu(); r.c = await cont();
+      r.c.onSkerry = await ev(() => { const G = window.__G, s = G.zone.L.spots.skerry, ix = Math.floor(G.player.x), iz = Math.floor(G.player.z); return s.cells.some(([x, z]) => x === ix && z === iz); });
+      await die(false); await hide(true); r.retry = (await stored()).visit?.retry ?? null;
+      await load(); await menu(); r.c2 = await cont();
+      r.c2.cp = await ev(() => { const c = window.__G.zone.checkpoint; return c ? +Math.hypot(window.__G.player.x - c.x, window.__G.player.z - c.z).toFixed(2) : null; });
+      k.act5 = r.saved.visit === 'coast' && r.c.zone === 'coast' && r.c.floor && !r.c.onSkerry && r.c.reachStart && r.retry === 1 && r.c2.zone === 'coast' && r.c2.cp !== null && r.c2.cp <= 2;
+    };
+    // ---- Act V: the Tower woken, not fought. A calm save near it wakes at her spot past the 24 m it rises at, or, closer
+    // and out of its sight, at the waypoint: never at the shore rock (its fight's retry, inside those 24 m); a death does ----
+    P.tower = async (r, k) => {
+      // (TSEED=<seed>: the bay's layout; else one of chance)
+      await auto('auto=coast&lvl=30&cls=warden&' + A5.url('towerWake') + (process.env.TSEED ? '&seed=' + process.env.TSEED : ''));
+      await A5.state(pg, 'towerWake', { zone: 'coast', at: 'waypoint', flags: { cp5: { coast: 'rock' } } });
+      await A5.until(pg, () => !window.__G.cine && window.__G.mode === 'play', 60000);
+      // (cells reachable from the start at low water, off the skerry: one 27-31 m off its centre that sees it, else one there
+      // that does not (the bowl's rim hides it from all of that band on about a quarter of seeds), and one within 22 m that
+      // does not)
+      r.pre = await ev(() => {
+        const z = window.__G.zone, m = z.map, sk = z.L.spots.skerry, c = z.checkpoint, on = new Set(sk.cells.map(([x, zz]) => x + ',' + zz)), far = [], farHid = [], hid = [];
+        for (let zz = 0; zz < z.L.h; zz++) for (let x = 0; x < z.L.w; x++) {
+          const px = x + 0.5, pz = zz + 0.5, d = Math.hypot(px - sk.x, pz - sk.z);
+          if (d > 31 || on.has(x + ',' + zz) || !m.walkable(px, pz)) continue;
+          const see = m.los(px, pz, sk.x, sk.z);
+          if (d >= 27) (see ? far : farHid).push({ x: px, z: pz, d, see }); else if (d < 22 && !see) hid.push({ x: px, z: pz, d });
+        }
+        const pick = (a, d0) => a.sort((p, q) => Math.abs(p.d - d0) - Math.abs(q.d - d0)).find((p) => m.reaches(p.x, p.z, [z.L.start])) || null;
+        return { seed: z.seed, sk: { x: sk.x, z: sk.z }, cp: c && { x: c.x, z: c.z, d: +Math.hypot(c.x - sk.x, c.z - sk.z).toFixed(1) }, far: pick(far, 29) || pick(farHid, 29), hid: pick(hid, 16) };
+      });
+      await hide(true); const rec = await stored();
+      r.saved = { visit: rec.visit?.id ?? null, cp5: rec.flags.cp5?.coast ?? null, wake: !!rec.flags.towerWake };
+      const calm = () => ev(() => { const G = window.__G, b = G.zone.boss; return { spawned: !!b, awake: !!b?.awake, fight: !!G.bossActor }; });
+      for (const [name, p, retry] of [['far', r.pre.far, 0], ['hid', r.pre.hid, 0], ['dead', r.pre.far, 1]]) {
+        if (!p) { r[name] = null; continue; }
+        const h = JSON.parse(JSON.stringify(rec)); h.visit.x = p.x; h.visit.z = p.z; delete h.visit.retry; if (retry) h.visit.retry = 1;
+        await plant(h); await load(); await menu(); const c = await cont();
+        const o = r[name] = { ...c, d: +Math.hypot(c.x - p.x, c.z - p.z).toFixed(2) };
+        o.cp = await ev(() => { const c = window.__G.zone.checkpoint; return c ? +Math.hypot(window.__G.player.x - c.x, window.__G.player.z - c.z).toFixed(2) : null; });
+        if (!retry) { await gameWait(3); o.after = await calm(); }
+      }
+      k.tower = r.saved.visit === 'coast' && r.saved.cp5 === 'rock' && r.saved.wake && r.pre.cp?.d < 24 && !!r.far && !!r.hid && !!r.dead
+        && r.far.zone === 'coast' && r.far.d <= 0.75 && !r.far.after.awake && !r.far.after.fight
+        && r.hid.zone === 'coast' && r.hid.dWp <= 3 && !r.hid.after.awake && !r.hid.after.fight
+        && r.dead.zone === 'coast' && r.dead.cp !== null && r.dead.cp <= 2;
+    };
+
+    // ---- Act VI: the Mere and the Bottom wake her where she stood (the layout naming the zone's mode), and after a death at
+    // the zone's checkpoint (flags.cp6, the camp from the first arrival) ----
+    P.act6 = async (r, k) => {
+      for (const id of ['drained', 'bottom']) {
+        const o = r[id] = {};
+        await auto('auto=' + id + '&lvl=36');
+        await calm();
+        o.saved = await ev(() => { const G = window.__G, z = G.zone, c = z.L.spots.camp || z.L.start, f = z.map.nearestFloor(c.x + 5, c.z + 5); G.player.x = f.x; G.player.z = f.z; G.player.act = null; return { x: f.x, z: f.z, mode: z.mode, cp6: G.hero.flags.cp6?.[z.id] ?? null }; });
+        await hide(true); const rec = await stored();
+        o.visit = rec.visit ? { id: rec.visit.id, layout: rec.visit.layout } : null;
+        await plant(rec); await load(); o.m = await menu(); o.c = await cont(); o.c.d = +Math.hypot(o.c.x - o.saved.x, o.c.z - o.saved.z).toFixed(2);
+        await die(false); await hide(true); o.retry = (await stored()).visit?.retry ?? null;
+        await load(); await menu(); o.c2 = await cont();
+        o.c2.cp = await ev(() => { const c = window.__G.zone.checkpoint; return c ? +Math.hypot(window.__G.player.x - c.x, window.__G.player.z - c.z).toFixed(2) : null; });
+        k[id] = o.saved.cp6 === 'camp' && o.visit?.id === id && o.visit.layout?.length === 6 && o.visit.layout[5] === o.saved.mode && !!o.m.at
+          && o.c.zone === id && o.c.d <= 0.75 && o.retry === 1 && o.c2.zone === id && o.c2.cp !== null && o.c2.cp <= 2;
+      }
+    };
+
+    for (const p of PARTS) {
+      const r = R[p] = {}, k = {};
+      const t0 = Date.now();
+      try { await P[p](r, k); } catch (e) { r.error = e.message.split('\n')[0]; k.error = false; }
+      r.secs = Math.round((Date.now() - t0) / 1000);
+      OK[p] = Object.keys(k).length > 0 && Object.values(k).every(Boolean); r.ok = k;
+      console.error('[resume] ' + p + ' ' + (OK[p] ? 'ok' : 'FAIL') + ' ' + JSON.stringify(k) + ' ' + r.secs + 's');
+    }
+    return { pass: PARTS.every((p) => OK[p]), ok: OK, r: R, allowFatal: R.fall?.allowFatal };
   } },
   // Silverhorn in the Glade of Stones, fought to the end: the white tree, the Root Gate drawing back, quest 14
   hart: { q: 'auto=weep&sim=6&q=1&norender&lvl=18&cls=' + (process.env.CLS || 'warden'), run: async (pg, shot) => {
@@ -3840,7 +4390,9 @@ let res;
 try { res = await sc.run(page, shot); } catch (e) { logs.push('scenario error: ' + e.message); }
 await page.waitForTimeout(250).catch(() => {});
 // (a runtime error on the game's #fatal box fails the scenario, whatever it checked)
-const fatal = await fatalAll(browser, FATAL);
+let fatal = await fatalAll(browser, FATAL);
+// (a fault a scenario sets off on purpose, named by its exact text: resume's fall f)
+if (Array.isArray(res?.allowFatal)) fatal = fatal.filter((l) => !res.allowFatal.includes(l));
 if (fatal.length) res = { ...(res && typeof res === 'object' ? res : { res }), pass: false, fatal: fatal.slice(0, 10) };
 console.log(name, JSON.stringify(res));
 if (fatal.length) console.log('FATAL ' + fatal.slice(0, 10).join('\nFATAL '));

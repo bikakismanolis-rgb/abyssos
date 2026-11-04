@@ -4,7 +4,7 @@
 // pages of one browser as two instances of it): backups, a newer version's records, a restore against another page's
 // deletion; and game/cloud.js's triggers for a view-only visitor. The Supabase backend and the migration:
 // tools/cloud/test-saves.mjs.
-import { syncAll, pushOne, dirty, heroSum, forked, MAX_HERO, MAX_HEROES } from '../../src/game/cloudsync.js';
+import { syncAll, pushOne, dirty, heroSum, workSum, forked, MAX_HERO, MAX_HEROES } from '../../src/game/cloudsync.js';
 import { artifactBackend } from '../../src/net/cloudart.js';
 import { device, hero, artifactDb } from './fakes.mjs';
 
@@ -947,6 +947,67 @@ await T('a page left open writes nothing: a clock-only change is no change to pu
   ok(A.net.sets === s0 && !r.pushed.length, 'ten minutes open and a sync: nothing written', { sets: A.net.sets - s0, r });
   a.play('h1', (h) => { h.gold += 1; });
   ok(dirty(a.store, a.B.who) && (await sync(a)).pushed.join() === 'h1', 'a real change goes up (its clock with it)');
+});
+
+// ---------- where she stands (hero.visit, game/wake.js): Continue's place, which is no play ----------
+const visit = (o = {}) => ({ id: 'weep', seed: 780698361, diff: 0, x: 30.5, z: 141, stamp: [5, 0, 100, 3, 0, 2, 0], layout: [112, 176, 12, 2, 2], packs: [4, 9], chests: [0, 1], greeted: 1, seen: 'AAAA', ...o });
+await T('where she stands is no work: neither a sync nor hiding puts it up', async () => {
+  const { A, devs: [a] } = await setup(1);
+  a.add(hero('h1', { visit: visit() })); await sync(a);
+  a.D.cur = 'h1';
+  const s0 = A.net.sets;
+  a.play('h1', (h) => { h.visit.x = 40; h.visit.z = 120.5; h.visit.seen = 'AAAB'; h.stats.time += 30; });
+  ok(!dirty(a.store, a.B.who), 'only where she stands (and the clock) moved: not dirty');
+  const r = await sync(a);
+  ok(!r.pushed.length && A.net.sets === s0, 'a sync puts nothing up', { r, sets: A.net.sets - s0 });
+  ok(await pushOne(a.B, a.store, 'h1') === false && A.net.sets === s0, 'nor the page going away (pushOne)', A.net.sets - s0);
+  a.play('h1', (h) => { h.gold += 1; });
+  ok(dirty(a.store, a.B.who), 'a real change is dirty');
+  ok(await pushOne(a.B, a.store, 'h1') === true && A.net.sets > s0 && !dirty(a.store, a.B.who), 'and goes up, agreed');
+  const c = JSON.parse((await a.B.get('h1')).data);
+  ok(c.visit.x === 40 && c.visit.seen === 'AAAB' && c.gold === 101, 'where she stands goes up with it', c.visit);
+  ok(workSum(hero('h2')) === workSum(hero('h2', { visit: visit() })) && heroSum(hero('h2')) !== heroSum(hero('h2', { visit: visit() })), 'the work sum leaves it out, the sum does not');
+});
+await T('a record with a visit goes up and comes back byte for byte', async () => {
+  const { devs: [a, b] } = await setup();
+  const h = hero('hV', { visit: visit({ retry: 1, boss: 1, tears: ['m1'], echoes: ['silverhorn'], voices: [0, 2] }) });
+  a.add(h); await sync(a); await sync(b);
+  ok(JSON.stringify(b.hero('hV')) === JSON.stringify(h), 'byte for byte on the other device');
+  ok(JSON.stringify(a.hero('hV')) === JSON.stringify(h), 'and untouched here');
+  ok(SV.heroFits(h) === null, 'a record with one fits');
+});
+await T('a hero only walked on one device: the real change of another goes up, no conflict', async () => {
+  const { A, devs: [P, L] } = await setup();
+  P.add(hero('hW', { visit: visit(), played: 1000 })); await sync(P); await sync(L);
+  P.play('hW', (h) => { h.visit.x = 50; h.visit.z = 60; }, 5000);
+  const s0 = A.net.sets;
+  ok(await pushOne(P.B, P.store, 'hW') === false && !(await sync(P)).pushed.length && A.net.sets === s0, 'P walked only: nothing sent', A.net.sets - s0);
+  L.play('hW', (h) => { h.gold += 5; }, 4000);
+  const r = await sync(L);
+  ok(r.pushed.join() === 'hW' && !L.D.bak.some((b) => b.why === 'conflict'), 'L\'s real change goes up, no conflict', { r, bak: L.D.bak });
+  const s = await sync(P);
+  ok(s.pulled.join() === 'hW' && P.hero('hW').gold === 105 && !P.D.bak.some((b) => b.why === 'conflict'), 'P takes L\'s copy, its own idle by work', { s, bak: P.D.bak });
+  // (a walk-only copy already in the cloud, as an older page of this build could have put up: a real change goes over it)
+  const { devs: [Q, M] } = await setup();
+  Q.add(hero('hZ', { visit: visit(), played: 1000 })); await sync(Q); await sync(M);
+  const walked = JSON.parse(JSON.stringify(Q.hero('hZ'))); walked.visit.x = 77; walked.played = 9000;
+  const rec = await Q.B.get('hZ');
+  await Q.B.put('hZ', { data: JSON.stringify(walked), sum: heroSum(walked), played: walked.played }, rec.rev, rec.sum);
+  M.play('hZ', (h) => { h.gold += 9; }, 5000);
+  const t = await sync(M);
+  ok(t.pushed.join() === 'hZ' && !M.D.bak.some((b) => b.why === 'conflict') && JSON.parse((await M.B.get('hZ')).data).gold === 109, 'M\'s real change goes over the walk-only copy, no conflict backup', { t, bak: M.D.bak });
+});
+await T('a save with no visit hook leaves a stored visit as it is; a hook that fails lets it go', async () => {
+  const v = visit();
+  fresh([hero('hV', { visit: v }), hero('hO', { visit: visit({ x: 3 }) })], 'hV');
+  ok(SV.saveHooks.visit === null, 'no hook in node (boot.js sets it)');
+  G.hero = G.save.heroes.find((h) => h.id === 'hV'); SV.writeSave();
+  ok(JSON.stringify(SV.storedHeroes().find((h) => h.id === 'hV').visit) === JSON.stringify(v), 'the hero played: its visit kept as stored');
+  SV.saveHooks.visit = () => { throw new Error('x'); };
+  try { G.hero.gold++; SV.writeSave(); } finally { SV.saveHooks.visit = null; }
+  ok(SV.storedHeroes().find((h) => h.id === 'hV').visit === undefined, 'a hook that throws: no visit written');
+  ok(SV.storedHeroes().find((h) => h.id === 'hO').visit?.x === 3, 'another hero\'s untouched');
+  G.hero = null;
 });
 
 await T('the README publishes rules that keep every player\'s own saves readable, and co-op\'s send advice true', async () => {
