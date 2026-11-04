@@ -63,8 +63,10 @@ export function dropGold(x, z, amount) {
   const mesh = kitMesh('dungeon', amount > 60 ? 'coin_stack_medium' : 'coin_stack_small', 0.38);
   return add(Object.assign(p, { kind: 'gold', amount, mesh, t: 0 }));
 }
-export function dropItem(x, z, item) {
-  const p = launch(x, z, 1.8);
+// (o.own: one the hero drops from her bag: it falls at her feet and waits there, taken up again only once she has walked
+// away from it and comes back; no fanfare, and a legendary she drops is not counted twice)
+export function dropItem(x, z, item, o = {}) {
+  const p = o.own ? { x, z, y: 0.5, vx: 0, vz: 0, vy: 2.5 } : launch(x, z, 1.8);
   const mesh = new THREE.Group(); mesh.add(itemMesh(item));
   let beam = null, light = null;
   if (item.rar >= 1) {
@@ -77,6 +79,7 @@ export function dropItem(x, z, item) {
     beam.visible = false;
   }
   if (item.rar === 3) light = addLight({ x, y: 1.5, z, color: 0xff8a2a, intensity: 18, range: 8, flicker: 0.1 });
+  if (o.own) { Audio.sfx('itemDrop', { x, z }); return add(Object.assign(p, { kind: 'item', item, mesh, beam, light, t: 0, own: true, hold: true })); }
   Audio.sfx(item.rar === 3 ? 'itemDropLegendary' : item.rar === 2 ? 'itemDropRare' : 'itemDrop', { x, z });
   if (item.rar === 3) { Audio.sting('legendary'); emit('legendaryDrop', item); }
   return add(Object.assign(p, { kind: 'item', item, mesh, beam, light, t: 0 }));
@@ -108,7 +111,7 @@ export function gatherPickups() {
   for (let i = G.pickups.length - 1; i >= 0; i--) {
     const p = G.pickups[i];
     if (p.kind === 'gold') { G.hero.gold += p.amount; out.gold += p.amount; removePickup(p, i); }
-    else if (p.kind === 'item') { if (addToBag(p.item)) { out.items++; emit('itemPicked', p.item); removePickup(p, i); } else out.left++; }
+    else if (p.kind === 'item') { if (addToBag(p.item, p.own)) { out.items++; emit('itemPicked', p.item); removePickup(p, i); } else out.left++; }
   }
   if (out.gold) emit('gold');
   return out;
@@ -134,14 +137,15 @@ export function updatePickups(dt) {
     if (p.light) { p.light.x = p.x; p.light.z = p.z; }
     if (!pl || pl.dead || G.mode !== 'play') continue;
     const dx = pl.x - p.x, dz = pl.z - p.z, d = Math.hypot(dx, dz);
+    if (p.hold && d > 1.8) p.hold = false;
     if (p.kind === 'gold' && p.y === 0) {
       if (d < 3) { p.x += (dx / d) * dt * 9; p.z += (dz / d) * dt * 9; }
       if (d < 0.7) { G.hero.gold += p.amount; number(pl.x, 2.6, pl.z, '+' + fmt(p.amount), 'gold'); Audio.sfx('gold', { vol: 0.7 }); emit('gold'); removePickup(p, i); }
     } else if (p.kind === 'globe' && p.t > 0.4) {
       if (d < 3.5) { p.x += (dx / d) * dt * 8; p.z += (dz / d) * dt * 8; }
       if (d < 0.8) { healHero(pl.hpMax * 0.25); glowBurst(pl.x, 1, pl.z, 0xff4030, 16, 2.5, 0.25, 0.6); Audio.sfx('heal'); removePickup(p, i); }
-    } else if (p.kind === 'item' && p.y === 0 && p.t > 0.5 && d < 1.1) {
-      if (addToBag(p.item)) {
+    } else if (p.kind === 'item' && p.y === 0 && p.t > 0.5 && d < 1.1 && !p.hold) {
+      if (addToBag(p.item, p.own)) {
         number(pl.x, 2.6, pl.z, itemName(p.item), 'text', itemColor(p.item));
         Audio.sfx('pickup'); emit('itemPicked', p.item);
         removePickup(p, i);
