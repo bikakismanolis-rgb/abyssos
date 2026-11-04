@@ -626,8 +626,12 @@ const S = {
         const G = window.__G, z = G.zone, it = z.interact.find((i) => i.kind === 'tear' && i.id === 'planting'), S = z.map.nearestFloor(it.x, it.z + 4);
         G.player.x = S.x; G.player.z = S.z; G.player.act = null; G.player.kx = G.player.kz = 0;
         const ex = []; z.map.explored.forEach((v, i) => { if (v) ex.push(i); });
-        return { S, ex, voices: (z.voices || []).map((v, i) => (v.done ? i : -1)).filter((i) => i >= 0), greeted: !!z.greeted };
+        // (the voices as the last write saw them, the page's own on pagehide just before this: the frames before the reload
+        // may let the clearing's voice by the Tear speak)
+        window.addEventListener('pagehide', () => sessionStorage.setItem('__kept', JSON.stringify({ voices: (z.voices || []).map((v, i) => (v.done ? i : -1)).filter((i) => i >= 0), greeted: !!z.greeted })));
+        return { S, ex };
       });
+      Object.assign(r.kept, await ev(() => { const k = JSON.parse(sessionStorage.getItem('__kept') || '{}'); sessionStorage.removeItem('__kept'); return k; }));
       const S = r.kept.S, v4 = (await stored()).visit, idx = packIds.map((id) => +id.slice(4));
       r.v4 = { keys: Object.keys(v4 || {}), x: v4?.x, z: v4?.z, packs: v4?.packs, chests: v4?.chests, shrines: v4?.shrines, tears: v4?.tears, voices: v4?.voices, greeted: v4?.greeted, retry: v4?.retry, boss: v4?.boss, len: JSON.stringify(v4 || {}).length, seen: v4?.seen?.length, keptVoices: r.kept.voices, explored: r.kept.ex.length };
       r.v4.fits = await ev(async () => { const S = await import('/src/game/save.js'), d = JSON.parse(localStorage.getItem('skotos.save.v1')); return S.heroFits(d.heroes.find((h) => h.id === d.last)); });
@@ -948,21 +952,23 @@ const S = {
     // ---- Act V: the Tower woken, not fought. A calm save near it wakes at her spot past the 24 m it rises at, or, closer
     // and out of its sight, at the waypoint: never at the shore rock (its fight's retry, inside those 24 m); a death does ----
     P.tower = async (r, k) => {
-      await auto('auto=coast&lvl=30&cls=warden&' + A5.url('towerWake'));
+      // (TSEED=<seed>: the bay's layout; else one of chance)
+      await auto('auto=coast&lvl=30&cls=warden&' + A5.url('towerWake') + (process.env.TSEED ? '&seed=' + process.env.TSEED : ''));
       await A5.state(pg, 'towerWake', { zone: 'coast', at: 'waypoint', flags: { cp5: { coast: 'rock' } } });
       await A5.until(pg, () => !window.__G.cine && window.__G.mode === 'play', 60000);
-      // (cells reachable from the start at low water, off the skerry: one 27-31 m off its centre that sees it, one within
-      // 22 m that does not)
+      // (cells reachable from the start at low water, off the skerry: one 27-31 m off its centre that sees it, else one there
+      // that does not (the bowl's rim hides it from all of that band on about a quarter of seeds), and one within 22 m that
+      // does not)
       r.pre = await ev(() => {
-        const z = window.__G.zone, m = z.map, sk = z.L.spots.skerry, c = z.checkpoint, on = new Set(sk.cells.map(([x, zz]) => x + ',' + zz)), far = [], hid = [];
+        const z = window.__G.zone, m = z.map, sk = z.L.spots.skerry, c = z.checkpoint, on = new Set(sk.cells.map(([x, zz]) => x + ',' + zz)), far = [], farHid = [], hid = [];
         for (let zz = 0; zz < z.L.h; zz++) for (let x = 0; x < z.L.w; x++) {
           const px = x + 0.5, pz = zz + 0.5, d = Math.hypot(px - sk.x, pz - sk.z);
           if (d > 31 || on.has(x + ',' + zz) || !m.walkable(px, pz)) continue;
           const see = m.los(px, pz, sk.x, sk.z);
-          if (d >= 27 && see) far.push({ x: px, z: pz, d }); else if (d < 22 && !see) hid.push({ x: px, z: pz, d });
+          if (d >= 27) (see ? far : farHid).push({ x: px, z: pz, d, see }); else if (d < 22 && !see) hid.push({ x: px, z: pz, d });
         }
         const pick = (a, d0) => a.sort((p, q) => Math.abs(p.d - d0) - Math.abs(q.d - d0)).find((p) => m.reaches(p.x, p.z, [z.L.start])) || null;
-        return { sk: { x: sk.x, z: sk.z }, cp: c && { x: c.x, z: c.z, d: +Math.hypot(c.x - sk.x, c.z - sk.z).toFixed(1) }, far: pick(far, 29), hid: pick(hid, 16) };
+        return { seed: z.seed, sk: { x: sk.x, z: sk.z }, cp: c && { x: c.x, z: c.z, d: +Math.hypot(c.x - sk.x, c.z - sk.z).toFixed(1) }, far: pick(far, 29) || pick(farHid, 29), hid: pick(hid, 16) };
       });
       await hide(true); const rec = await stored();
       r.saved = { visit: rec.visit?.id ?? null, cp5: rec.flags.cp5?.coast ?? null, wake: !!rec.flags.towerWake };
