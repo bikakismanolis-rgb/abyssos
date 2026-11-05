@@ -329,17 +329,19 @@ function onContextLost(o) {
   try { again = Date.now() - (+sessionStorage.getItem('skotos.glLost') || 0) < 90000; sessionStorage.setItem('skotos.glLost', String(Date.now())); } catch (e) { /* no storage: as if the first time */ }
   const low = R.quality === 0, lower = !low && !document.hidden;
   try { o.lost?.(document.hidden, again && low); } catch (e) { /* the reload matters more */ }
-  R.reload = !(again && low);
+  // (the player chooses: Continue, where she was, or back to the village (o.home lets the visit go); nothing reloads alone)
+  R.reload = false;
+  void lower;
   const el = document.createElement('div');
   el.id = 'gl-lost';
-  el.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;background:rgba(5,7,10,0.92);color:#e8dcc8;font:16px/1.5 serif';
-  const en = lang() === 'en';
-  el.textContent = !R.reload ? (en ? 'The graphics ran out of memory again. Saved. Tap to reload.' : 'Η μνήμη γραφικών εξαντλήθηκε ξανά. Αποθηκεύτηκε. Πάτησε για επαναφόρτωση.')
-    : lower ? (en ? 'The graphics ran out of memory. Saved; reloading at a lower quality...' : 'Η μνήμη γραφικών εξαντλήθηκε. Αποθηκεύτηκε· επαναφόρτωση σε χαμηλότερη ποιότητα...')
-    : (en ? 'The graphics were lost. Saved; reloading...' : 'Τα γραφικά χάθηκαν. Αποθηκεύτηκε· επαναφόρτωση...');
-  el.onclick = () => location.reload();
+  el.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;gap:14px;align-items:center;justify-content:center;text-align:center;padding:16px;background:rgba(5,7,10,0.94);color:#e8dcc8;font:17px/1.5 Georgia,serif';
+  const en = lang() === 'en', msg = document.createElement('div');
+  msg.textContent = en ? 'The graphics were lost. The game is saved.' : 'Τα γραφικά χάθηκαν. Το παιχνίδι σώθηκε.';
+  const btn = (id, text, go) => { const b = document.createElement('button'); b.id = id; b.textContent = text; b.style.cssText = 'min-width:220px;padding:11px 18px;border-radius:9px;border:1px solid #d8b46a;background:#2a1e0e;color:#f0d89a;font:700 16px Georgia,serif;cursor:pointer'; b.onclick = go; return b; };
+  el.append(msg,
+    btn('gl-cont', en ? 'Continue' : 'Συνέχεια', () => location.reload()),
+    btn('gl-home', en ? 'Back to the village' : 'Επιστροφή στο χωριό', () => { try { o.home?.(); } catch (e) { /* the reload matters more */ } location.reload(); }));
   document.body.appendChild(el);
-  if (R.reload) setTimeout(() => location.reload(), 1800);
 }
 
 // ---------- projections ----------

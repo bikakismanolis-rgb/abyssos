@@ -13,8 +13,8 @@ import { loadSave, writeSave, freshHero, saveHooks } from './save.js';
 import { refreshStats } from './stats.js';
 import { migrateHero } from './progression.js';
 import { enterZone, updatePacks, updateAct, nearestInteract, updatePortalFx, ZONES, zoneReady, zoneParts, disposeZone, retryAt } from './world.js';
-import { PAGE, wakeOf, wakeAt, noteVisit, restoreVisit, wokeLately, noteCrash, clearCrash, crashFor, WAKE } from './wake.js';
-import { diagBoot, diagLost, diagLoad, diagZone, diagFrame, diagShow, diagKept, diagLines } from '../gfx/diag.js';
+import { PAGE, wakeOf, wakeAt, noteVisit, restoreVisit, wokeLately } from './wake.js';
+import { diagLost, diagLoad, diagZone, diagFrame } from '../gfx/diag.js';
 import { updatePlayer } from './player.js';
 import { damage } from './combat.js';
 import { updateActors } from './ai.js';
@@ -67,9 +67,6 @@ function noGL(B, err) {
   why.style.cssText = 'margin:12px auto 0;color:#6a604c;font:400 11px/1.4 Georgia,serif;letter-spacing:0;max-width:80vw';
   why.textContent = (R.glWhy || String(err?.message || err)).slice(0, 200);
   msg.after(how, btn, why);
-  // (and what the graphics were doing when they went down last, gfx/diag.js: a photo of it tells memory from a shader)
-  const lines = diagLines(diagKept(), { zone: (id) => t('zone.' + id) });
-  if (lines.length) { const d = document.createElement('div'); d.style.cssText = 'margin:10px auto 0;max-width:80vw;color:#8a7a5a;font:400 11px/1.45 Georgia,serif;letter-spacing:0;text-align:left;white-space:pre-wrap'; d.textContent = lines.join('\n'); why.after(d); }
 }
 
 export async function boot(q) {
@@ -85,18 +82,18 @@ export async function boot(q) {
   if (q.has('q')) G.settings.quality = +q.get('q');
   // (lost again at the lowest quality while she looks on (stuck): Continue starts in Whitecliff, not in the zone that does it)
   // (lost while she looks on in a zone, or on her way into one: Continue does not wake her there again on this device, wake.js)
-  diagBoot();
   const gfxO = { mobile, lost: (hidden, stuck) => {
     diagLost();
     // (the zone it went down in: the one she is bound for, the one this page is waking her in or walking her into (PAGE.mark),
     // else the one she is in; recorded while she looks on, or hidden while that mark still stands: a backgrounded tab whose
     // context the phone took back is no fault of the zone)
-    const m = PAGE.mark, zid = PAGE.bound || (m && m.hero === G.hero?.id ? m.zone : null) || G.zone?.id, q0 = G.settings.quality;
-    if (!hidden) G.settings.quality = Math.max(0, q0 - 1);
-    if (G.hero && zid && zid !== 'town' && (!hidden || m)) { noteCrash(G.hero, zid, 'lost', { q0, q1: G.settings.quality }); PAGE.mark = null; }
-    if (stuck && !hidden) PAGE.off = true;
+    if (!hidden) G.settings.quality = Math.max(0, G.settings.quality - 1);
+    // (lost again soon at the lowest quality, too: the visit kept, the player chooses on the lost screen)
+    void stuck;
     writeSave(); G.mode = 'lost';
-  } };
+  },
+  // (the lost screen's Back to the village: the visit let go, so Continue starts in the village)
+  home: () => { PAGE.off = true; writeSave(); } };
   // (no GL context at all: gfx.js asks three ways; it is asked again after a pause, the time a phone's GPU process takes to
   // start again, and once more; then the screen says what to do, with a button to try again)
   let glErr = null;
@@ -121,8 +118,6 @@ export async function boot(q) {
   preloadModels(['goblin', 'skeleton', 'warg', 'spider'].filter((m) => !hasCreature(m)));
   buildTitleScene();
   B?.done();
-  // (the graphics went down last time: what they were doing, on the title until its × is tapped, gfx/diag.js)
-  diagShow(t('diag.title'), (id) => t('zone.' + id));
   // co-op: a room to play in, if this page has one (the artifact's, a test's, Supabase's); none: the game as ever
   initNet(q);
   // cloud saves: the artifact's db or the web build's Supabase, when this page has one (game/cloud.js)
@@ -158,15 +153,6 @@ async function starterGear(hero) {
   if (hero.cls === 'warden') hero.equip.offhand ||= makeItem(1, { base: 'shield', rar: 0, cls: hero.cls });
   hero.equip.chest ||= makeItem(1, { base: 'chest', rar: 0, cls: hero.cls });
 }
-// a zone she is woken in or walked into, marked until she has played 30 s there (this page's own mark, wake.js)
-function markZone(hero, zone) { const c = noteCrash(hero, zone, 'wake'); PAGE.mark = c && { hero: hero.id, zone, t: c.t, secs: 0 }; }
-function unmark() { const m = PAGE.mark; PAGE.mark = null; if (m) clearCrash({ id: m.hero }, m.t); }
-// (each frame: 30 s of play drawn in the marked zone, the context alive, and the mark is let go)
-function markTick(dt) {
-  const m = PAGE.mark;
-  if (!m || R.lost || G.mode !== 'play' || G.zone?.id !== m.zone || G.hero?.id !== m.hero) return;
-  if ((m.secs += dt) >= 30) unmark();
-}
 async function startHero(hero, isNew, zone = 'town', force = false, home = false) {
   if (!isNew) {
     // (a hero a newer version of the game wrote: not taken up here, so that its record is never written back stripped,
@@ -177,7 +163,7 @@ async function startHero(hero, isNew, zone = 'town', force = false, home = false
   }
   // (where the last save left her, read off the record as stored, before anything here changes it; none on a page whose
   // wake went wrong, game/wake.js PAGE.off)
-  PAGE.woke = 0; PAGE.held = PAGE.bound = null; PAGE.mark = null;
+  PAGE.woke = 0; PAGE.held = PAGE.bound = null;
   // (home: the title's Start in the village, which takes no visit)
   let wake = !isNew && !force && !home && zone === 'town' && !PAGE.off ? wakeOf(hero) : null;
   await starterGear(hero);
@@ -206,18 +192,14 @@ async function startHero(hero, isNew, zone = 'town', force = false, home = false
   hero.gateFound ??= 0;
   hero.fmt = SAVE_FMT;
   legBack(hero);
-  // (a zone that took this device's graphics down last time: Whitecliff, said once; this hero's record is let go after the
-  // save, whatever zone it names)
-  const rec = !isNew ? crashFor(hero) : null, downed = rec && !wake && !home && rec.zone === hero.visit?.id ? rec : null;
-  // (waking in a zone: marked until she has played there 30 s, wake.js)
-  if (wake) { markZone(hero, wake.id); diagLoad(wake.id); }
+  if (wake) diagLoad(wake.id);
   // (her zone loads under the fade with travel's bar, Whitecliff beside it as ever, so that falling back needs no wait)
   const fade = wake && document.getElementById('fade'), bar = wake && fadeLoad(wake.id, fade);
   if (fade) fade.classList.add('on');
   await Promise.all([zoneReady(zone), wake && zoneReady(wake.id, bar.part).catch((e) => {
     // (her zone would not load (the network, most often): Whitecliff for now, and the visit kept for the next Continue,
     // or laid on that zone if she walks in (game/wake.js PAGE.held))
-    console.error(e); PAGE.held = wake; wake = null; unmark(); emit('toast', t('load.fail'), 'big');
+    console.error(e); PAGE.held = wake; wake = null; emit('toast', t('load.fail'), 'big');
   })]);
   G.mode = 'play';
   showHud(true);
@@ -226,7 +208,7 @@ async function startHero(hero, isNew, zone = 'town', force = false, home = false
     catch (e) {
       // (Continue never breaks: whatever went wrong in her zone, Whitecliff at its waypoint, and the visit let go)
       console.error(e); emit('toast', t('load.fail'), 'big');
-      const bad = G.zones[wake.id]; wake = null; unmark();
+      const bad = G.zones[wake.id]; wake = null;
       enterZone('town', { at: 'waypoint' });
       if (bad && G.zones[bad.id] === bad) { delete G.zones[bad.id]; try { disposeZone(bad); } catch (e2) { console.error(e2); } }
     }
@@ -234,12 +216,6 @@ async function startHero(hero, isNew, zone = 'town', force = false, home = false
   if (fade) { bar.hide(); setTimeout(() => fade.classList.remove('on'), 120); }
   G.player.res = hero.cls === 'warden' ? 0 : 100;
   writeSave();
-  if (rec) clearCrash(hero, rec.t);
-  // (said as it was: a loss and how the quality went, or a page that stopped soon after she got there)
-  if (downed) {
-    const zn = t('zone.' + downed.zone), key = downed.kind === 'lost' ? (downed.q1 < downed.q0 ? 'wake.lost' : 'wake.lost0') : 'wake.died';
-    later(2.2, () => emit('toast', t(key, zn), 'hint'));
-  }
   if (isNew) later(1.2, () => emit('toast', t('q.new') + ': ' + t('q.0'), 'quest'));
   // the first game on this device: how to play, once
   if (isNew && !G.settings.helpSeen) later(2.4, () => { G.settings.helpSeen = true; writeSave(); if (G.mode === 'play' && !G.panel) openPanel('help'); });
@@ -271,8 +247,6 @@ function travel(zone, o = {}) {
   // (the zone she is bound for, until she is there: a save meanwhile knows she is leaving for it, game/wake.js)
   PAGE.bound = zone;
   diagLoad(zone);
-  // (walked into a zone she could wake in: marked as a wake is, wake.js)
-  if (WAKE.has(zone) && G.hero && NET.mode !== 'guest') markZone(G.hero, zone);
   // (her zone would not load at Continue and she walks in now: what that visit had done there is laid on it as it is built)
   const H = PAGE.held;
   if (H && zone === H.id) { const at0 = o.at; o = { ...o, at: (z) => { if (z.seed === H.seed) restoreVisit(z, H); return at0; } }; }
@@ -405,9 +379,6 @@ window.addEventListener('keydown', (e) => { if (G.mode !== 'play') return; const
 document.addEventListener('visibilitychange', () => { if (document.hidden) { Audio.suspend(); writeSave(); } else Audio.resume(); });
 window.addEventListener('pagehide', () => writeSave());
 on('zoneEnter', (id) => diagZone(id));
-// (a page that goes away of itself has not lost its graphics: its own mark is let go; a lost context's reload keeps it, and
-// so does a page that died with its GPU, which says nothing. Only this page's mark: never one another page left)
-window.addEventListener('pagehide', (e) => { if (e.isTrusted && !R.lost && PAGE.mark) unmark(); });
 
 // ---------- the loop ----------
 let last = performance.now(), saveT = 0;
@@ -421,7 +392,7 @@ function loop(now) {
     if (SIM) { for (let i = 0; i < SIM; i++) tick(1 / 30, i < SIM - 1); }
     else tick(dt);
   } catch (e) { fatal(e.stack || e); }
-  if (G.mode === 'play' || G.mode === 'cine') { diagFrame(dt); markTick(dt); }
+  if (G.mode === 'play' || G.mode === 'cine') diagFrame(dt);
   requestAnimationFrame(loop);
 }
 function tick(dt, noDraw) {
