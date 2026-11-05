@@ -13,7 +13,7 @@ import { loadSave, writeSave, freshHero, saveHooks } from './save.js';
 import { refreshStats } from './stats.js';
 import { migrateHero } from './progression.js';
 import { enterZone, updatePacks, updateAct, nearestInteract, updatePortalFx, ZONES, zoneReady, zoneParts, disposeZone, retryAt } from './world.js';
-import { PAGE, wakeOf, wakeAt, noteVisit, restoreVisit, wokeLately } from './wake.js';
+import { PAGE, wakeOf, wakeAt, noteVisit, restoreVisit, wokeLately, noteCrash, clearCrash, crashOf } from './wake.js';
 import { updatePlayer } from './player.js';
 import { damage } from './combat.js';
 import { updateActors } from './ai.js';
@@ -79,7 +79,8 @@ export async function boot(q) {
   if (G.settings.quality < 0) G.settings.quality = mobile ? 1 : 2;
   if (q.has('q')) G.settings.quality = +q.get('q');
   // (lost again at the lowest quality while she looks on (stuck): Continue starts in Whitecliff, not in the zone that does it)
-  const gfxO = { mobile, lost: (hidden, stuck) => { if (!hidden) G.settings.quality = Math.max(0, G.settings.quality - 1); if (stuck && !hidden) PAGE.off = true; writeSave(); G.mode = 'lost'; } };
+  // (lost while she looks on in a zone, or on her way into one: Continue does not wake her there again on this device, wake.js)
+  const gfxO = { mobile, lost: (hidden, stuck) => { if (!hidden) { G.settings.quality = Math.max(0, G.settings.quality - 1); const zid = PAGE.bound || G.zone?.id; if (G.hero && zid && zid !== 'town') noteCrash(G.hero, zid, 'lost'); } if (stuck && !hidden) PAGE.off = true; writeSave(); G.mode = 'lost'; } };
   // (no GL context at all: gfx.js asks three ways; it is asked again after a pause, the time a phone's GPU process takes to
   // start again, and once more; then the screen says what to do, with a button to try again)
   let glErr = null;
@@ -170,6 +171,10 @@ async function startHero(hero, isNew, zone = 'town', force = false) {
   // and from before Act V: an Act IV hero reads as Act IV's end (quest 23, the new fire burning)
   hero.act5 ??= -1;
   if (hero.act5 >= 0) hero.flags.act5 = true;
+  // (a zone that took this device's graphics down last time: Whitecliff, said once, and the record let go after the save)
+  const downed = !isNew && !force && !wake && crashOf(hero);
+  // (waking in a zone: marked until she has played there 30 s, or the page goes away of itself, wake.js)
+  if (wake) noteCrash(hero, wake.id, 'wake');
   // (her zone loads under the fade with travel's bar, Whitecliff beside it as ever, so that falling back needs no wait)
   const fade = wake && document.getElementById('fade'), bar = wake && fadeLoad(wake.id, fade);
   if (fade) fade.classList.add('on');
@@ -193,6 +198,8 @@ async function startHero(hero, isNew, zone = 'town', force = false) {
   if (fade) { bar.hide(); setTimeout(() => fade.classList.remove('on'), 120); }
   G.player.res = hero.cls === 'warden' ? 0 : 100;
   writeSave();
+  if (downed) { clearCrash(); later(1.4, () => emit('toast', t('wake.crash', t('zone.' + downed.zone)), 'big')); }
+  if (wake) setTimeout(() => { if (!R.lost && G.hero === hero) clearCrash('wake'); }, 30000);
   if (isNew) later(1.2, () => emit('toast', t('q.new') + ': ' + t('q.0'), 'quest'));
   // the first game on this device: how to play, once
   if (isNew && !G.settings.helpSeen) later(2.4, () => { G.settings.helpSeen = true; writeSave(); if (G.mode === 'play' && !G.panel) openPanel('help'); });
@@ -337,6 +344,10 @@ on('key', (k) => {
 window.addEventListener('keydown', (e) => { if (G.mode !== 'play') return; const k = e.key.toLowerCase(); if ((k === 'enter' || k === ' ') && dialogOpen()) { advanceDialog(); e.preventDefault(); } });
 document.addEventListener('visibilitychange', () => { if (document.hidden) { Audio.suspend(); writeSave(); } else Audio.resume(); });
 window.addEventListener('pagehide', () => writeSave());
+// (a page that goes away of itself, or is put aside, has not lost its graphics: a wake's mark is let go; a lost context's
+// reload keeps it, and so does a page that died with its GPU, which says nothing)
+window.addEventListener('pagehide', (e) => { if (e.isTrusted && !R.lost) clearCrash('wake'); });
+document.addEventListener('visibilitychange', () => { if (document.hidden && !R.lost) clearCrash('wake'); });
 
 // ---------- the loop ----------
 let last = performance.now(), saveT = 0;

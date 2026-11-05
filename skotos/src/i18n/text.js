@@ -263,6 +263,7 @@ export const TEXT = {
   'zone.heart': ['Το Καρδιόξυλο', 'The Heartwood'], 'zone.heart.s': ['Μέσα στην Πρώτη Δρυ', 'Inside the First Oak'],
   'exit.pass': ['Στο βουνό', 'To the mountain'], 'exit.halls': ['Η Βαθύπετρα', 'Deepstone'],
   'exit.weep': ['Στα Δάση που Κλαίνε', 'To the Weeping Woods'], 'exit.heart': ['Η Πύλη των Ριζών', 'The Root Gate'],
+  'wake.crash': ['{0}: η συσκευή σου έχασε τα γραφικά εκεί την τελευταία φορά, γι’ αυτό ξυπνάς στο χωριό. Η ποιότητα χαμήλωσε.', '{0}: this device lost its graphics there last time, so you wake in the village. The quality was lowered.'],
   'load.zone': ['Φόρτωση της περιοχής', 'Loading the area'], 'load.fail': ['Η περιοχή δεν φόρτωσε. Δοκίμασε ξανά', 'The area did not load. Try again'],
   'echo.hart': ['Θυμήσου τον Αργυρόκερω', 'Remember Silverhorn'], 'echo.lady': ['Θυμήσου την Αμαράνθη', 'Remember Amaranthe'],
   'echo.rise': ['Το κεχριμπάρι θυμάται τη μάχη...', 'The amber remembers the fight...'], 'echo.done': ['Η ηχώ σβήνει. Το δέντρο θα θυμηθεί ξανά αύριο.', 'The echo fades. The tree will remember again tomorrow.'],

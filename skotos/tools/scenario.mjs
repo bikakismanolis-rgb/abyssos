@@ -944,6 +944,33 @@ const S = {
       r.back.spot = await ev(() => window.__G.zone.bossSpot?.kind ?? null);
       k.forest = r.killed && r.saved.retry === null && r.saved.boss === 1 && r.saved.weaver && r.saved.quest === 1 && r.c.zone === 'forest' && r.c.d <= 0.75 && r.after.spot === null && r.after.spawned && !r.after.weaver && r.after.quest === 2 && r.after.boss === 1 && r.back.zone === 'town' && r.back.spot === 'weaver';
     };
+    // ---- a zone that took the device's graphics down is not woken into again, once (the owner's Mage on the coast) ----
+    P.crash = async (r, k) => {
+      const mark = () => ev(() => JSON.parse(localStorage.getItem('skotos.crash') || 'null'));
+      // (1) the context lost in the forest: the record, the quality lowered, Continue in Whitecliff with a word, the record gone
+      await auto('auto=forest&lvl=6&quest=1&q=1');
+      await hide();
+      await ev(() => window.__R.renderer.forceContextLoss());
+      await pg.waitForFunction(() => !!localStorage.getItem('skotos.crash'), null, { timeout: 20000 }).catch(() => {});
+      r.rec = await mark();
+      r.q = await ev(() => JSON.parse(localStorage.getItem('skotos.save.v1')).settings.quality);
+      await load(); r.m = await menu(); r.c = await cont();
+      r.toast = await pg.waitForFunction(() => (window.__toasts || []).some((m) => /χωριό|village/.test(String(m))), null, { timeout: 30000 }).then(() => true, () => false);
+      r.left = await mark();
+      // (2) woken in the forest again, as ever: marked while she wakes, the mark gone after 30 s of play there
+      await A5.travel(pg, 'forest', 'waypoint'); await hide();
+      await load(); r.m2 = await menu(); r.c2 = await cont();
+      r.wakeMark = await mark();
+      await wait(31000);
+      r.after30 = await mark();
+      // (3) a page that died with its GPU right after a wake leaves the wake's mark, and that is enough (a dead page says
+      // nothing as it goes: R.lost stands for that here, so its pagehide lets nothing go)
+      await hide();
+      await ev(() => { const d = JSON.parse(localStorage.getItem('skotos.save.v1')); window.__R.lost = true; localStorage.setItem('skotos.crash', JSON.stringify({ hero: d.last, zone: 'forest', kind: 'wake', t: Date.now() })); });
+      await load(); r.m3 = await menu(); r.c3 = await cont();
+      k.crash = r.rec?.zone === 'forest' && r.rec.kind === 'lost' && r.q === 0 && !r.m.at && r.c.zone === 'town' && r.toast && r.left === null
+        && r.m2.at && r.c2.zone === 'forest' && r.wakeMark?.kind === 'wake' && r.after30 === null && !r.m3.at && r.c3.zone === 'town';
+    };
     // ---- the Barrow Lord's shard, not taken before the quit, lies by its spot again; taken, it does not ----
     P.crypt = async (r, k) => {
       for (const take of [false, true]) {
