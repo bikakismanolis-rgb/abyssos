@@ -856,16 +856,18 @@ const S = {
       r.e = await ev(() => ({ note: !!document.getElementById('gl-lost'), same: window.__mark === 1 }));
       r.e.visit = (await stored()).visit ?? null;
       await load(); await menu(); r.e.c = await cont();
-      k.e = r.e.note && r.e.same && r.e.visit === null && town(r.e.c);
+      // (the visit kept: the lost screen lets the player choose, Continue or Back to the village)
+      k.e = r.e.note && r.e.same && r.e.visit?.id === 'weep' && r.e.c.zone === 'weep';
       await A5.travel(pg, 'weep', 'town'); await calm();
       await quit(); await menu(); r.e.c1 = await cont();
       const nav = pg.waitForNavigation({ timeout: 240000 });
       await ev(() => { sessionStorage.removeItem('skotos.glLost'); window.__R.renderer.getContext().getExtension('WEBGL_lose_context').loseContext(); });
       r.e.first = { visit: (await stored()).visit?.id ?? null };
+      // (nothing reloads alone: the lost screen's Continue does)
+      await pg.waitForSelector('#gl-cont', { timeout: 20000 }); await ev(() => document.getElementById('gl-cont').click());
       await nav; await ready();
       r.e.first.m = await menu(); r.e.first.c = await cont();
-      // (a first loss in the wood keeps the visit, and the next Continue does not wake her there: wake.js skotos.crash)
-      k.e2 = r.e.c1.zone === 'weep' && r.e.first.visit === 'weep' && !r.e.first.m.at && r.e.first.c.zone === 'town';
+      k.e2 = r.e.c1.zone === 'weep' && r.e.first.visit === 'weep' && !!r.e.first.m.at && r.e.first.c.zone === 'weep';
       }
       if (on('f')) {
       if (!on('e')) await woken();
@@ -946,42 +948,29 @@ const S = {
       r.back.spot = await ev(() => window.__G.zone.bossSpot?.kind ?? null);
       k.forest = r.killed && r.saved.retry === null && r.saved.boss === 1 && r.saved.weaver && r.saved.quest === 1 && r.c.zone === 'forest' && r.c.d <= 0.75 && r.after.spot === null && r.after.spawned && !r.after.weaver && r.after.quest === 2 && r.after.boss === 1 && r.back.zone === 'town' && r.back.spot === 'weaver';
     };
-    // ---- a zone that took the device's graphics down is not woken into again, once (the owner's Mage on the coast) ----
+    // ---- the graphics lost: the player chooses, Continue (where she was) or Back to the village; and the title's Start in
+    // the village (the owner's Mage on the coast, whose phone lost its GPU there) ----
     P.crash = async (r, k) => {
-      // (this hero's record in skotos.crash, wake.js)
-      const mark = () => ev(() => { const o = JSON.parse(localStorage.getItem('skotos.crash') || 'null'), d = JSON.parse(localStorage.getItem('skotos.save.v1') || 'null'); return o && d ? o[d.last] || null : null; });
-      const told = (re) => pg.waitForFunction((re) => (window.__toasts || []).some((m) => new RegExp(re).test(String(m))), re, { timeout: 30000 }).then(() => true, () => false);
-      // (1) the context lost in the forest: the record (quality 1 to 0), Continue in Whitecliff with its word, the record gone
+      const lose = async () => { await ev(() => window.__R.renderer.forceContextLoss()); await pg.waitForSelector('#gl-home', { timeout: 20000 }).catch(() => {}); return ev(() => ({ cont: !!document.getElementById('gl-cont'), home: !!document.getElementById('gl-home') })); };
+      // (clicked from the page: the harness's own frame ticker leaves Playwright's stability check waiting)
+      const reloaded = async (sel) => { const nav = pg.waitForNavigation({ timeout: 120000 }); await ev((sel) => document.querySelector(sel).click(), sel); await nav; await ready(); };
+      // (1) Back to the village: the visit let go, Continue starts in the village
+      // (from the title, as a player comes: a reload keeps the page's address, and the auto hook's would make a new hero)
       await auto('auto=forest&lvl=6&quest=1&q=1');
-      await hide();
-      await ev(() => window.__R.renderer.forceContextLoss());
-      await pg.waitForFunction(() => !!localStorage.getItem('skotos.crash'), null, { timeout: 20000 }).catch(() => {});
-      r.rec = await mark();
-      await load(); r.m = await menu(); r.c = await cont();
-      r.toast = await told('χωριό.*χαμήλωσε|village.*lowered');
-      r.left = await mark();
-      // (2) walked into the forest and woken there again: marked while she is new there, let go after 30 s of play there
+      await hide(); await load(); await menu(); r.c0 = await cont();
+      r.b1 = await lose();
+      await reloaded('#gl-home'); r.m1 = await menu(); r.c1 = await cont();
+      // (2) Continue: the visit kept, Continue wakes her where she was
       await A5.travel(pg, 'forest', 'waypoint'); await hide();
-      await load(); r.m2 = await menu(); r.c2 = await cont();
-      r.wakeMark = await mark();
-      await pg.waitForFunction(() => { const o = JSON.parse(localStorage.getItem('skotos.crash') || 'null'), d = JSON.parse(localStorage.getItem('skotos.save.v1')); return !o || !o[d.last]; }, null, { timeout: 120000 }).catch(() => {});
-      r.after30 = await mark();
-      // (3) a page that died with its GPU right after a wake leaves its mark, and that is enough (a dead page says nothing as
-      // it goes: R.lost stands for that here, so its pagehide lets nothing go)
-      await hide();
-      await ev(() => { const d = JSON.parse(localStorage.getItem('skotos.save.v1')); window.__R.lost = true; localStorage.setItem('skotos.crash', JSON.stringify({ [d.last]: { zone: 'forest', kind: 'wake', t: Date.now() } })); });
-      await load(); r.m3 = await menu(); r.c3 = await cont();
-      r.toast3 = await told('σταμάτησε|stopped');
-      // (4) Start in the village: offered when Continue names a place, it takes no visit
-      await A5.travel(pg, 'forest', 'waypoint'); await hide();
-      await load(); r.m4 = await menu();
+      r.b2 = await lose();
+      await reloaded('#gl-cont'); r.m2 = await menu(); r.c2 = await cont();
+      // (3) the title's Start in the village, offered when Continue names a place
+      await hide(); await load(); r.m3 = await menu();
       r.home = await ev(() => !!document.getElementById('m-home'));
       await pg.click('#m-home');
       await pg.waitForFunction(() => window.__G?.zone && window.__G.mode === 'play' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 300000 });
-      r.c4 = await where(); await hide(); r.v4 = (await stored()).visit?.id ?? null;
-      k.crash = r.rec?.zone === 'forest' && r.rec.kind === 'lost' && r.rec.q0 === 1 && r.rec.q1 === 0 && !r.m.at && r.c.zone === 'town' && r.toast && r.left === null
-        && r.m2.at && r.c2.zone === 'forest' && r.wakeMark?.kind === 'wake' && r.after30 === null && !r.m3.at && r.c3.zone === 'town' && r.toast3
-        && !!r.m4.at && r.home && r.c4.zone === 'town' && r.v4 === null;
+      r.c3 = await where();
+      k.crash = r.c0.zone === 'forest' && r.b1.cont && r.b1.home && !r.m1.at && r.c1.zone === 'town' && r.b2.cont && r.b2.home && !!r.m2.at && r.c2.zone === 'forest' && !!r.m3.at && r.home && r.c3.zone === 'town';
     };
     // ---- the Barrow Lord's shard, not taken before the quit, lies by its spot again; taken, it does not ----
     P.crypt = async (r, k) => {
