@@ -47,6 +47,27 @@ function fatal(msg) {
 window.addEventListener('error', (e) => fatal((e.message || e.error) + (e.filename ? ' @ ' + e.filename.split('/').pop() + ':' + e.lineno : '')));
 window.addEventListener('unhandledrejection', (e) => fatal('promise: ' + (e.reason && e.reason.message || e.reason)));
 
+// the boot screen when the device gives no GL context: what it means, what to do, a button to try again, and what the
+// browser said (small, for a report)
+function noGL(B, err) {
+  const el = (G.settings.lang || 'el') === 'en' ? 1 : 0, msg = document.getElementById('boot-msg');
+  B?.fail('');
+  if (!msg) return;
+  msg.textContent = ['Η συσκευή δεν έδωσε στο παιχνίδι τρισδιάστατα γραφικά (WebGL).', 'This device gave the game no 3D graphics (WebGL).'][el];
+  const how = document.createElement('div'), btn = document.createElement('button'), why = document.createElement('div');
+  // (each line held to 80% of the screen and centred: an upright phone keeps a margin either side)
+  msg.style.margin = '12px auto 0';
+  how.style.cssText = 'margin:10px auto 0;max-width:80vw;color:#d8ccb4;font:400 14px/1.5 Alegreya,Georgia,serif;letter-spacing:0';
+  how.textContent = ['Κλείσε τελείως την εφαρμογή (ή τον browser) και άνοιξέ την ξανά. Αν μένει, κάνε επανεκκίνηση στο κινητό.', 'Close the app (or the browser) completely and open it again. If it stays, restart the phone.'][el];
+  btn.id = 'gl-retry';
+  btn.style.cssText = 'margin-top:14px;padding:9px 18px;border-radius:9px;border:1px solid #d8b46a;background:#2a1e0e;color:#f0d89a;font:700 15px Alegreya SC,Georgia,serif;letter-spacing:1px;cursor:pointer';
+  btn.textContent = ['Δοκίμασε ξανά', 'Try again'][el];
+  btn.onclick = () => location.reload();
+  why.style.cssText = 'margin:12px auto 0;color:#6a604c;font:400 11px/1.4 Georgia,serif;letter-spacing:0;max-width:80vw';
+  why.textContent = (R.glWhy || String(err?.message || err)).slice(0, 200);
+  msg.after(how, btn, why);
+}
+
 export async function boot(q) {
   // the loading screen is in index.html; each finished part moves its bar
   const B = window.__boot, step = (p, text) => B?.set(p, text);
@@ -59,7 +80,15 @@ export async function boot(q) {
   if (G.settings.quality < 0) G.settings.quality = mobile ? 1 : 2;
   if (q.has('q')) G.settings.quality = +q.get('q');
   // (lost again at the lowest quality while she looks on (stuck): Continue starts in Whitecliff, not in the zone that does it)
-  initGfx(G.settings.quality, { mobile, lost: (hidden, stuck) => { if (!hidden) G.settings.quality = Math.max(0, G.settings.quality - 1); if (stuck && !hidden) PAGE.off = true; writeSave(); G.mode = 'lost'; } });
+  const gfxO = { mobile, lost: (hidden, stuck) => { if (!hidden) G.settings.quality = Math.max(0, G.settings.quality - 1); if (stuck && !hidden) PAGE.off = true; writeSave(); G.mode = 'lost'; } };
+  // (no GL context at all: gfx.js asks three ways; it is asked again after a pause, the time a phone's GPU process takes to
+  // start again, and once more; then the screen says what to do, with a button to try again)
+  let glErr = null;
+  for (const wait of [0, 1200, 2500]) {
+    if (wait) await new Promise((ok) => setTimeout(ok, wait));
+    try { initGfx(G.settings.quality, gfxO); glErr = null; break; } catch (e) { glErr = e; console.error(e); }
+  }
+  if (glErr) { noGL(B, glErr); return; }
   initFX(G.settings.quality);
   initInput(); G.input = IN;
   initOverlay(); buildHud(); initPanels(); initCoopUi(); initCloudUi();

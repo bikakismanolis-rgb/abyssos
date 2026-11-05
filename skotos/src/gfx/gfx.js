@@ -10,6 +10,8 @@ export const R = {
   quality: 1,           // 0 low, 1 medium, 2 high
   mobile: false,        // a phone or tablet: high quality is capped (shadow map, pixel ratio) and maps are halved (gltf.js)
   lost: false, reload: false, // the GL context was lost: nothing is drawn any more, the page reloads (onContextLost)
+  leaving: false,       // the page is going away and let its context go itself (pagehide): no loss to mend
+  glWhy: '',            // what the browser said when it refused a context (webglcontextcreationerror), for the boot screen
   basePR: 1, prScale: 1,
   w: 1, h: 1,
   hemi: null, moon: null, heroLight: null, hemiBase: new THREE.Color(), drift: 0, driftCol: new THREE.Color(0x6af0b0), driftCol2: null,
@@ -25,10 +27,40 @@ const SHADOW = [0, 1024, 2048];
 // o.mobile: a phone (boot.js); o.lost(hidden, stuck): called when the GL context is lost, before the page reloads (boot.js
 // saves, lowers the quality unless the page was hidden: a phone may drop a backgrounded tab's context; and stops the game).
 // stuck: lost again within a minute and a half at the lowest quality, when it waits for a tap rather than reload
+// The GL context is asked for three ways: as the quality wants it; without antialias or the high-performance GPU; at low
+// power. A phone's GPU that has just come back, or a WebView at its limit of contexts, can refuse the first and give a
+// later one. All refused: the last error, with what the browser said in R.glWhy (boot.js waits and asks again, then says
+// what to do). Anything after the context that fails lets it go again, so a second try starts clean.
+const GL_ASKS = (q) => [
+  { antialias: q >= 1, powerPreference: 'high-performance', stencil: false },
+  { antialias: false, powerPreference: 'default', stencil: false },
+  { antialias: false, powerPreference: 'low-power', stencil: false }
+];
+function makeRenderer(q) {
+  let err = null;
+  for (const ask of GL_ASKS(q)) {
+    const canvas = document.createElement('canvas');
+    canvas.addEventListener('webglcontextcreationerror', (e) => { if (e.statusMessage) R.glWhy = String(e.statusMessage).slice(0, 160); });
+    try { return new THREE.WebGLRenderer({ ...ask, canvas }); } catch (e) { err = e; }
+  }
+  throw err;
+}
 export function initGfx(quality, o = {}) {
   R.quality = quality;
   R.mobile = !!o.mobile;
-  const renderer = new THREE.WebGLRenderer({ antialias: quality >= 1, powerPreference: 'high-performance', stencil: false });
+  const renderer = makeRenderer(quality);
+  try { setupGfx(renderer, quality, o); } catch (e) { R.renderer = null; R.pool.length = 0; try { renderer.domElement.remove(); renderer.dispose(); renderer.forceContextLoss(); } catch (er) { /* gone anyway */ } throw e; }
+  if (!initGfx.once) {
+    initGfx.once = true;
+    window.addEventListener('resize', () => resize(true));
+    window.addEventListener('orientationchange', () => setTimeout(() => resize(true), 200));
+    // (a page going away lets its context go at once: a WebView that opens the game again, as the claude.ai app does on
+    // each opening and each new version, need not wait for the old one to be collected; a page kept for going back keeps it)
+    // (only the browser's own: a test's synthetic pagehide, which saves, keeps a page that goes on)
+    window.addEventListener('pagehide', (e) => { if (!e.isTrusted || e.persisted || !R.renderer) return; R.leaving = true; try { R.renderer.forceContextLoss(); } catch (er) { /* going anyway */ } });
+  }
+}
+function setupGfx(renderer, quality, o) {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.15;
@@ -36,7 +68,8 @@ export function initGfx(quality, o = {}) {
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.domElement.id = 'gl';
   document.getElementById('stage').prepend(renderer.domElement);
-  renderer.domElement.addEventListener('webglcontextlost', () => onContextLost(o));
+  // (a context let go after a failed setup, gfx.js initGfx, is no loss of the game's: R.renderer is no longer it)
+  renderer.domElement.addEventListener('webglcontextlost', () => { if (R.renderer === renderer) onContextLost(o); });
   renderer.domElement.addEventListener('webglcontextrestored', () => { if (R.reload) location.reload(); });
   R.renderer = renderer;
 
@@ -80,8 +113,6 @@ export function initGfx(quality, o = {}) {
   }
 
   resize(true);
-  window.addEventListener('resize', () => resize(true));
-  window.addEventListener('orientationchange', () => setTimeout(() => resize(true), 200));
 }
 
 export function resize(force) {
@@ -290,7 +321,7 @@ export function render() { if (R.lost) return; R.skyHook?.(); R.renderer.render(
 // cannot be drawn again as it was: the game is saved (o.lost, which also lowers the quality one step) and the page reloads,
 // with a word on the screen. If it is lost again within a minute and a half at the lowest quality, it waits for a tap.
 function onContextLost(o) {
-  if (R.lost) return;
+  if (R.lost || R.leaving) return;
   R.lost = true;
   let again = false;
   try { again = Date.now() - (+sessionStorage.getItem('skotos.glLost') || 0) < 90000; sessionStorage.setItem('skotos.glLost', String(Date.now())); } catch (e) { /* no storage: as if the first time */ }
