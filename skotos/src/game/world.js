@@ -1,7 +1,7 @@
 // Zones: building, entering and leaving, monster packs, interactables, shadow gates.
 import * as THREE from 'three';
 import { G, later } from './state.js';
-import { R, setAtmosphere, addLight, clearLights, updateCamera, removeLight, shake } from '../gfx/gfx.js';
+import { R, setAtmosphere, addLight, clearLights, updateCamera, removeLight, shake, heavyZone } from '../gfx/gfx.js';
 import { genForest, genCrypt, genTown } from '../world/gen.js';
 import { genPass, genHalls } from '../world/gen2.js';
 import { genWeep, genHeart } from '../world/gen3.js';
@@ -289,6 +289,8 @@ export function enterZone(id, o = {}) {
   else if (Z.act === 5) act5Enter(z);
   else if (Z.act === 6) act6Enter(z);
   else if (id === 'town') { townFires(z); if (G.hero.flags.seaLit) { setAtmosphere(ATMOS.townAurora); SEA.sky = true; } }
+  // (a phone draws Act V's zones at a lower resolution: gfx.js heavyZone)
+  heavyZone(Z.act === 5);
   // where the hero appears
   // (a function of the zone, called once it is built and its act entered (checkpoints, tide, ice, the story's openings),
   // before she is placed: a wake, game/wake.js)
