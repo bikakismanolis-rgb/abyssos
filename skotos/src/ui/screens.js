@@ -105,6 +105,7 @@ function mainMenu() {
   const slots = heroes.map((h) => `<div class="slot${off.has(h.id) ? ' off' : ''}" data-id="${h.id}"><span style="color:${CLASSES[h.cls]?.color || '#999'}">${ICON[h.cls === 'warden' ? 'shield' : h.cls === 'ranger' ? 'bolt' : 'flame']}</span><span class="nm">${sure(h) ? t('menu.newerSure') : off.has(h.id) ? t(fix.has(h.id) ? 'menu.newer' : 'menu.newerOnly') : t('menu.slot', t('class.' + h.cls), (+h.level || 1) + (h.mlvl ? ' ✦' + (+h.mlvl || 0) : ''), (DIFFS[h.diff] ? t('diff.' + DIFFS[h.diff].id) : ''))}</span><span class="dl" data-del="${h.id}">${TS.delSure === h.id ? t('menu.deleteSure') : t('menu.delete')}</span></div>`).join('');
   const s = screen(`<div class="logo">${t('game.title')}</div><div class="logo-rule"></div><div class="logo-sub">${t(sub5())}</div>
     <div class="menu">${cont ? `<button class="btn" id="m-cont">${sure(cont) ? t('menu.newerSure') : `${t('menu.continue')} · ${CLASSES[cont.cls] ? t('class.' + cont.cls) : ''} ${t('hud.level', +cont.level || 1)}${place ? `<span class="m-at">${t('zone.' + place)}</span>` : ''}`}</button>` : ''}
+    ${place ? `<button class="btn ghost sm" id="m-home">${t('menu.home')}</button>` : ''}
     ${last && TS.net ? `<button class="btn ghost" id="m-coop">${t('coop.title')}</button>` : ''}
     <button class="btn ${last ? 'ghost' : ''}" id="m-new">${t('menu.new')}</button>
     ${heroes.length > 1 || off.size ? `<div class="slots">${slots}</div>` : ''}
@@ -114,6 +115,8 @@ function mainMenu() {
   // and the menu ignores touches for a moment after it appears, whatever brought it up
   const at = performance.now(), ready = () => performance.now() - at > 450;
   if (cont) $('m-cont').onclick = () => { if (!ready()) return; Audio.sfx('click'); take(cont); };
+  // (Continue names a place: she can start in Whitecliff instead, as before Continue woke her where she was)
+  if (place) $('m-home').onclick = () => { if (!ready()) return; Audio.sfx('click'); emit('startHero', cont, false, off.has(cont.id), true); };
   // co-op: the hero taken up, then the lobby (ui/coopui.js)
   if (last && TS.net) $('m-coop').onclick = () => { if (!ready()) return; Audio.sfx('click'); G.flags.coopOpen = true; emit('startHero', last, false); };
   TS.menu = true;
