@@ -136,6 +136,17 @@ export function resize(force) {
 const resizeHooks = [];
 export const onResize = (fn) => resizeHooks.push(fn);
 
+// A heavy zone on a phone (Act V's coast and Farthest Light: water, ice and snow over the whole screen, which took the
+// owner's phone's GPU down) is drawn at no more than 0.6 of its resolution, at once and for as long as she is there; the
+// rest of the game as before
+R.prCap = 1;
+export function heavyZone(on) {
+  const cap = on && R.mobile ? 0.6 : 1;
+  if (cap === R.prCap) return;
+  R.prCap = cap;
+  const s = cap < 1 ? Math.min(R.prScale, cap) : R.prScale;
+  if (s !== R.prScale || cap < 1) { R.prScale = s; R.renderer.setPixelRatio(R.basePR * s); R.renderer.setSize(R.w, R.h, false); }
+}
 // keeps the frame time near 60 fps by trading resolution
 export function adaptResolution(dtMs) {
   R.frameMs = R.frameMs * 0.95 + dtMs * 0.05;
@@ -145,7 +156,7 @@ export function adaptResolution(dtMs) {
   if (R.frameMs < 14.5) R.fastT += dtMs; else R.fastT = 0;
   let s = R.prScale;
   if (R.slowT > 1200) s = Math.max(0.55, s - 0.12);
-  else if (R.fastT > 4000) s = Math.min(1, s + 0.08);
+  else if (R.fastT > 4000) s = Math.min(R.prCap, s + 0.08);
   if (s !== R.prScale) {
     R.prScale = s; R.slowT = R.fastT = 0; R.lastResize = now;
     R.renderer.setPixelRatio(R.basePR * s);
