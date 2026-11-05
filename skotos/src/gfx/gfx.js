@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { clamp, damp, noise2 } from '../core/util.js';
 import { lang } from '../i18n/i18n.js';
+import { diagInit } from './diag.js';
 
 export const R = {
   renderer: null, scene: null, camera: null,
@@ -48,6 +49,7 @@ export function initGfx(quality, o = {}) {
   R.quality = quality;
   R.mobile = !!o.mobile;
   const renderer = makeRenderer(quality);
+  diagInit(renderer);
   try { setupGfx(renderer, quality, o); } catch (e) { R.renderer = null; R.pool.length = 0; try { renderer.domElement.remove(); renderer.dispose(); renderer.forceContextLoss(); } catch (er) { /* gone anyway */ } throw e; }
   if (!initGfx.once) {
     initGfx.once = true;

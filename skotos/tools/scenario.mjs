@@ -863,7 +863,8 @@ const S = {
       r.e.first = { visit: (await stored()).visit?.id ?? null };
       await nav; await ready();
       r.e.first.m = await menu(); r.e.first.c = await cont();
-      k.e2 = r.e.c1.zone === 'weep' && r.e.first.visit === 'weep' && !!r.e.first.m.at && r.e.first.c.zone === 'weep';
+      // (a first loss in the wood keeps the visit, and the next Continue does not wake her there: wake.js skotos.crash)
+      k.e2 = r.e.c1.zone === 'weep' && r.e.first.visit === 'weep' && !r.e.first.m.at && r.e.first.c.zone === 'town';
       }
       if (on('f')) {
       if (!on('e')) await woken();
@@ -946,30 +947,40 @@ const S = {
     };
     // ---- a zone that took the device's graphics down is not woken into again, once (the owner's Mage on the coast) ----
     P.crash = async (r, k) => {
-      const mark = () => ev(() => JSON.parse(localStorage.getItem('skotos.crash') || 'null'));
-      // (1) the context lost in the forest: the record, the quality lowered, Continue in Whitecliff with a word, the record gone
+      // (this hero's record in skotos.crash, wake.js)
+      const mark = () => ev(() => { const o = JSON.parse(localStorage.getItem('skotos.crash') || 'null'), d = JSON.parse(localStorage.getItem('skotos.save.v1') || 'null'); return o && d ? o[d.last] || null : null; });
+      const told = (re) => pg.waitForFunction((re) => (window.__toasts || []).some((m) => new RegExp(re).test(String(m))), re, { timeout: 30000 }).then(() => true, () => false);
+      // (1) the context lost in the forest: the record (quality 1 to 0), Continue in Whitecliff with its word, the record gone
       await auto('auto=forest&lvl=6&quest=1&q=1');
       await hide();
       await ev(() => window.__R.renderer.forceContextLoss());
       await pg.waitForFunction(() => !!localStorage.getItem('skotos.crash'), null, { timeout: 20000 }).catch(() => {});
       r.rec = await mark();
-      r.q = await ev(() => JSON.parse(localStorage.getItem('skotos.save.v1')).settings.quality);
       await load(); r.m = await menu(); r.c = await cont();
-      r.toast = await pg.waitForFunction(() => (window.__toasts || []).some((m) => /χωριό|village/.test(String(m))), null, { timeout: 30000 }).then(() => true, () => false);
+      r.toast = await told('χωριό.*χαμήλωσε|village.*lowered');
       r.left = await mark();
-      // (2) woken in the forest again, as ever: marked while she wakes, the mark gone after 30 s of play there
+      // (2) walked into the forest and woken there again: marked while she is new there, let go after 30 s of play there
       await A5.travel(pg, 'forest', 'waypoint'); await hide();
       await load(); r.m2 = await menu(); r.c2 = await cont();
       r.wakeMark = await mark();
-      await wait(31000);
+      await pg.waitForFunction(() => { const o = JSON.parse(localStorage.getItem('skotos.crash') || 'null'), d = JSON.parse(localStorage.getItem('skotos.save.v1')); return !o || !o[d.last]; }, null, { timeout: 120000 }).catch(() => {});
       r.after30 = await mark();
-      // (3) a page that died with its GPU right after a wake leaves the wake's mark, and that is enough (a dead page says
-      // nothing as it goes: R.lost stands for that here, so its pagehide lets nothing go)
+      // (3) a page that died with its GPU right after a wake leaves its mark, and that is enough (a dead page says nothing as
+      // it goes: R.lost stands for that here, so its pagehide lets nothing go)
       await hide();
-      await ev(() => { const d = JSON.parse(localStorage.getItem('skotos.save.v1')); window.__R.lost = true; localStorage.setItem('skotos.crash', JSON.stringify({ hero: d.last, zone: 'forest', kind: 'wake', t: Date.now() })); });
+      await ev(() => { const d = JSON.parse(localStorage.getItem('skotos.save.v1')); window.__R.lost = true; localStorage.setItem('skotos.crash', JSON.stringify({ [d.last]: { zone: 'forest', kind: 'wake', t: Date.now() } })); });
       await load(); r.m3 = await menu(); r.c3 = await cont();
-      k.crash = r.rec?.zone === 'forest' && r.rec.kind === 'lost' && r.q === 0 && !r.m.at && r.c.zone === 'town' && r.toast && r.left === null
-        && r.m2.at && r.c2.zone === 'forest' && r.wakeMark?.kind === 'wake' && r.after30 === null && !r.m3.at && r.c3.zone === 'town';
+      r.toast3 = await told('σταμάτησε|stopped');
+      // (4) Start in the village: offered when Continue names a place, it takes no visit
+      await A5.travel(pg, 'forest', 'waypoint'); await hide();
+      await load(); r.m4 = await menu();
+      r.home = await ev(() => !!document.getElementById('m-home'));
+      await pg.click('#m-home');
+      await pg.waitForFunction(() => window.__G?.zone && window.__G.mode === 'play' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 300000 });
+      r.c4 = await where(); await hide(); r.v4 = (await stored()).visit?.id ?? null;
+      k.crash = r.rec?.zone === 'forest' && r.rec.kind === 'lost' && r.rec.q0 === 1 && r.rec.q1 === 0 && !r.m.at && r.c.zone === 'town' && r.toast && r.left === null
+        && r.m2.at && r.c2.zone === 'forest' && r.wakeMark?.kind === 'wake' && r.after30 === null && !r.m3.at && r.c3.zone === 'town' && r.toast3
+        && !!r.m4.at && r.home && r.c4.zone === 'town' && r.v4 === null;
     };
     // ---- the Barrow Lord's shard, not taken before the quit, lies by its spot again; taken, it does not ----
     P.crypt = async (r, k) => {

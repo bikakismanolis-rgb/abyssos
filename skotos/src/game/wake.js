@@ -32,18 +32,37 @@ const MAX = 2048, half = (v) => Math.round(v * 2) / 2;
 // this page's part (boot.js): woke, when she woke here; off, no visit kept for the rest of the page (a lost context that
 // is stuck, or a fault soon after a wake: Whitecliff next time); held, a visit whose zone would not load, kept while she
 // waits in Whitecliff and laid on that zone if she walks in; bound, the zone a travel is taking her to, until she is there
-export const PAGE = { woke: 0, off: false, held: null, bound: null };
+export const PAGE = { woke: 0, off: false, held: null, bound: null, mark: null };
 export const wokeLately = (ms) => PAGE.woke > 0 && performance.now() - PAGE.woke < ms;
 
 // A zone that took this device's graphics down is not woken into again (the owner's level 50 Mage on the Frozen Coast:
 // each Continue woke her there, the phone's GPU went down, and the browser then held WebGL back; every restart did the
-// same). Kept in this device's storage, never in the hero: 'wake' while she wakes in a zone, until she has played there
-// 30 s or the page goes away of itself (a page that died with its GPU leaves it); 'lost' when the GL context was lost in
-// a zone (boot.js). Either one makes the next Continue Whitecliff, once (boot.js lets it go when she has started there).
+// same). Kept per hero in this device's storage, never in the hero: 'lost', the GL context lost in that zone or on the
+// way into it (boot.js, with the quality before and after); 'wake', this page woke her there or walked her in and she has
+// not yet played 30 s there (a page that dies with its GPU says nothing and leaves it; only the page that set it lets it
+// go, boot.js PAGE.mark). Either makes the next Continue Whitecliff, once: startHero lets the hero's record go.
 const CRASH = 'skotos.crash';
-export function noteCrash(h, zone, kind) { try { if (h?.id && zone) localStorage.setItem(CRASH, JSON.stringify({ hero: h.id, zone, kind, t: Date.now() })); } catch (e) { /* no storage: as before */ } }
-export function clearCrash(kind) { try { const c = JSON.parse(localStorage.getItem(CRASH) || 'null'); if (c && (!kind || c.kind === kind)) localStorage.removeItem(CRASH); } catch (e) { /* no storage */ } }
-export function crashOf(h) { try { const c = JSON.parse(localStorage.getItem(CRASH) || 'null'); return c && h?.id && c.hero === h.id && c.zone === h.visit?.id ? c : null; } catch (e) { return null; } }
+function crashes() {
+  try { const o = JSON.parse(localStorage.getItem(CRASH) || '{}'); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch (e) { return {}; }
+}
+function keep(o) { try { if (Object.keys(o).length) localStorage.setItem(CRASH, JSON.stringify(o)); else localStorage.removeItem(CRASH); } catch (e) { /* no storage: as before */ } }
+export function noteCrash(h, zone, kind, extra) {
+  if (!h?.id || !zone) return null;
+  const o = crashes(), c = { zone, kind, t: Date.now(), ...extra };
+  o[h.id] = c; keep(o);
+  return c;
+}
+// this hero's record, whatever zone it names
+export function crashFor(h) { const c = h?.id && crashes()[h.id]; return c && typeof c === 'object' && typeof c.zone === 'string' ? c : null; }
+// let it go (only the one set at t, when t is given: a page lets go only of its own mark)
+export function clearCrash(h, t) {
+  if (!h?.id) return;
+  const o = crashes(), c = o[h.id];
+  if (!c || (t != null && c.t !== t)) return;
+  delete o[h.id]; keep(o);
+}
+// the record that keeps her from waking where her visit names
+export function crashOf(h) { const c = crashFor(h); return c && c.zone === h.visit?.id ? c : null; }
 
 // the visit she can wake into, or null (Whitecliff)
 export function wakeOf(h) {
