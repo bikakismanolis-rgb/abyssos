@@ -55,7 +55,8 @@ export function initGfx(quality, o = {}) {
     window.addEventListener('orientationchange', () => setTimeout(() => resize(true), 200));
     // (a page going away lets its context go at once: a WebView that opens the game again, as the claude.ai app does on
     // each opening and each new version, need not wait for the old one to be collected; a page kept for going back keeps it)
-    window.addEventListener('pagehide', (e) => { if (e.persisted || !R.renderer) return; R.leaving = true; try { R.renderer.forceContextLoss(); } catch (er) { /* going anyway */ } });
+    // (only the browser's own: a test's synthetic pagehide, which saves, keeps a page that goes on)
+    window.addEventListener('pagehide', (e) => { if (!e.isTrusted || e.persisted || !R.renderer) return; R.leaving = true; try { R.renderer.forceContextLoss(); } catch (er) { /* going anyway */ } });
   }
 }
 function setupGfx(renderer, quality, o) {
@@ -66,7 +67,8 @@ function setupGfx(renderer, quality, o) {
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.domElement.id = 'gl';
   document.getElementById('stage').prepend(renderer.domElement);
-  renderer.domElement.addEventListener('webglcontextlost', () => onContextLost(o));
+  // (a context let go after a failed setup, gfx.js initGfx, is no loss of the game's: R.renderer is no longer it)
+  renderer.domElement.addEventListener('webglcontextlost', () => { if (R.renderer === renderer) onContextLost(o); });
   renderer.domElement.addEventListener('webglcontextrestored', () => { if (R.reload) location.reload(); });
   R.renderer = renderer;
 

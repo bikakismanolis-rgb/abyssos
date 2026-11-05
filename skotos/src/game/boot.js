@@ -54,13 +54,15 @@ function noGL(B, err) {
   if (!msg) return;
   msg.textContent = ['Η συσκευή δεν έδωσε στο παιχνίδι τρισδιάστατα γραφικά (WebGL).', 'This device gave the game no 3D graphics (WebGL).'][el];
   const how = document.createElement('div'), btn = document.createElement('button'), why = document.createElement('div');
-  how.style.cssText = 'margin-top:10px;color:#d8ccb4;font:400 14px/1.5 Alegreya,Georgia,serif;letter-spacing:0';
+  // (each line held to 80% of the screen and centred: an upright phone keeps a margin either side)
+  msg.style.margin = '12px auto 0';
+  how.style.cssText = 'margin:10px auto 0;max-width:80vw;color:#d8ccb4;font:400 14px/1.5 Alegreya,Georgia,serif;letter-spacing:0';
   how.textContent = ['Κλείσε τελείως την εφαρμογή (ή τον browser) και άνοιξέ την ξανά. Αν μένει, κάνε επανεκκίνηση στο κινητό.', 'Close the app (or the browser) completely and open it again. If it stays, restart the phone.'][el];
   btn.id = 'gl-retry';
   btn.style.cssText = 'margin-top:14px;padding:9px 18px;border-radius:9px;border:1px solid #d8b46a;background:#2a1e0e;color:#f0d89a;font:700 15px Alegreya SC,Georgia,serif;letter-spacing:1px;cursor:pointer';
   btn.textContent = ['Δοκίμασε ξανά', 'Try again'][el];
   btn.onclick = () => location.reload();
-  why.style.cssText = 'margin-top:12px;color:#6a604c;font:400 11px/1.4 Georgia,serif;letter-spacing:0;max-width:80vw';
+  why.style.cssText = 'margin:12px auto 0;color:#6a604c;font:400 11px/1.4 Georgia,serif;letter-spacing:0;max-width:80vw';
   why.textContent = (R.glWhy || String(err?.message || err)).slice(0, 200);
   msg.after(how, btn, why);
 }
