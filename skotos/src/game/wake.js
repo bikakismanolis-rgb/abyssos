@@ -35,10 +35,21 @@ const MAX = 2048, half = (v) => Math.round(v * 2) / 2;
 export const PAGE = { woke: 0, off: false, held: null, bound: null };
 export const wokeLately = (ms) => PAGE.woke > 0 && performance.now() - PAGE.woke < ms;
 
+// A zone that took this device's graphics down is not woken into again (the owner's level 50 Mage on the Frozen Coast:
+// each Continue woke her there, the phone's GPU went down, and the browser then held WebGL back; every restart did the
+// same). Kept in this device's storage, never in the hero: 'wake' while she wakes in a zone, until she has played there
+// 30 s or the page goes away of itself (a page that died with its GPU leaves it); 'lost' when the GL context was lost in
+// a zone (boot.js). Either one makes the next Continue Whitecliff, once (boot.js lets it go when she has started there).
+const CRASH = 'skotos.crash';
+export function noteCrash(h, zone, kind) { try { if (h?.id && zone) localStorage.setItem(CRASH, JSON.stringify({ hero: h.id, zone, kind, t: Date.now() })); } catch (e) { /* no storage: as before */ } }
+export function clearCrash(kind) { try { const c = JSON.parse(localStorage.getItem(CRASH) || 'null'); if (c && (!kind || c.kind === kind)) localStorage.removeItem(CRASH); } catch (e) { /* no storage */ } }
+export function crashOf(h) { try { const c = JSON.parse(localStorage.getItem(CRASH) || 'null'); return c && h?.id && c.hero === h.id && c.zone === h.visit?.id ? c : null; } catch (e) { return null; } }
+
 // the visit she can wake into, or null (Whitecliff)
 export function wakeOf(h) {
   const v = h?.visit;
   if (!v || typeof v !== 'object' || Array.isArray(v) || !WAKE.has(v.id)) return null;
+  if (crashOf(h)) return null;
   if (v.diff !== h.diff || !Number.isFinite(v.x) || !Number.isFinite(v.z)) return null;
   if (!v.seed || v.seed !== h.seeds?.[seedKey(v.id, h.diff)]) return null;
   const s = stampOf(h);
