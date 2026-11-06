@@ -4,6 +4,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { clamp, damp, noise2 } from '../core/util.js';
 import { lang } from '../i18n/i18n.js';
 import { diagInit } from './diag.js';
+import { reportInit, reportEvent } from './report.js';
 
 export const R = {
   renderer: null, scene: null, camera: null,
@@ -49,7 +50,7 @@ export function initGfx(quality, o = {}) {
   R.quality = quality;
   R.mobile = !!o.mobile;
   const renderer = makeRenderer(quality);
-  diagInit(renderer);
+  diagInit(renderer); reportInit(renderer);
   try { setupGfx(renderer, quality, o); } catch (e) { R.renderer = null; R.pool.length = 0; try { renderer.domElement.remove(); renderer.dispose(); renderer.forceContextLoss(); } catch (er) { /* gone anyway */ } throw e; }
   if (!initGfx.once) {
     initGfx.once = true;
@@ -290,6 +291,7 @@ export function render() { if (R.lost) return; R.skyHook?.(); R.renderer.render(
 function onContextLost(o) {
   if (R.lost || R.leaving) return;
   R.lost = true;
+  reportEvent('lost', { hidden: document.hidden });
   let again = false;
   try { again = Date.now() - (+sessionStorage.getItem('skotos.glLost') || 0) < 90000; sessionStorage.setItem('skotos.glLost', String(Date.now())); } catch (e) { /* no storage: as if the first time */ }
   const low = R.quality === 0, lower = !low && !document.hidden;
