@@ -15,6 +15,7 @@ import { migrateHero } from './progression.js';
 import { enterZone, updatePacks, updateAct, nearestInteract, updatePortalFx, ZONES, zoneReady, zoneParts, disposeZone, retryAt } from './world.js';
 import { PAGE, wakeOf, wakeAt, noteVisit, restoreVisit, wokeLately } from './wake.js';
 import { diagLost, diagLoad, diagZone, diagFrame } from '../gfx/diag.js';
+import { reportBind, reportEvent } from '../gfx/report.js';
 import { updatePlayer } from './player.js';
 import { damage } from './combat.js';
 import { updateActors } from './ai.js';
@@ -95,12 +96,13 @@ export async function boot(q) {
   home: () => { PAGE.off = true; writeSave(); } };
   // (no GL context at all: gfx.js asks three ways; it is asked again after a pause, the time a phone's GPU process takes to
   // start again, and once more; then the screen says what to do, with a button to try again)
+  reportBind();
   let glErr = null;
   for (const wait of [0, 1200, 2500]) {
     if (wait) await new Promise((ok) => setTimeout(ok, wait));
     try { initGfx(G.settings.quality, gfxO); glErr = null; break; } catch (e) { glErr = e; console.error(e); }
   }
-  if (glErr) { noGL(B, glErr); return; }
+  if (glErr) { reportEvent('nogl', { why: (R.glWhy || String(glErr?.message || glErr)).slice(0, 200) }); noGL(B, glErr); return; }
   initFX(G.settings.quality);
   initInput(); G.input = IN;
   initOverlay(); buildHud(); initPanels(); initCoopUi(); initCloudUi();
@@ -353,7 +355,7 @@ on('key', (k) => {
 window.addEventListener('keydown', (e) => { if (G.mode !== 'play') return; const k = e.key.toLowerCase(); if ((k === 'enter' || k === ' ') && dialogOpen()) { advanceDialog(); e.preventDefault(); } });
 document.addEventListener('visibilitychange', () => { if (document.hidden) { Audio.suspend(); writeSave(); } else Audio.resume(); });
 window.addEventListener('pagehide', () => writeSave());
-on('zoneEnter', (id) => diagZone(id));
+on('zoneEnter', (id) => { diagZone(id); reportEvent('zone'); });
 
 // ---------- the loop ----------
 let last = performance.now(), saveT = 0;

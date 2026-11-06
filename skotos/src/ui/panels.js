@@ -211,9 +211,12 @@ const R = {
     const h = G.hero, inTown = G.zone?.id === 'town';
     // Act IV's Field has a second waypoint, at Elati's camp at the mouth of the Lantern Graves ('ashfield@2'); Act V's are
     // named for their place (the Landing, the Icebound Ship)
-    const list = ['town', 'forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'ashfield@2', 'forge', 'coast', 'farlight'].filter((z) => h.wps.includes(z)).map((w) => {
+    // (the Frozen Coast from the start of Act V, before its own waypoint is lit: she arrives where the Anvil's Neck brings
+    // her, so no one has to find the Neck in the Field of Ash first)
+    const neck = !h.wps.includes('coast') && h.quest >= 25;
+    const list = ['town', 'forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'ashfield@2', 'forge', 'coast', 'farlight'].filter((z) => h.wps.includes(z) || (z === 'coast' && neck)).map((w) => {
       const z = w.split('@')[0], sub = w.endsWith('@2') ? t('wp.graves') : z === 'coast' || z === 'farlight' ? t('wp.' + z) : t('zone.' + z + '.s');
-      return `<button class="wp ${G.zone?.id === z ? 'here' : ''}" data-a="wp:${w}">${ICON.portal}<b>${t('zone.' + z)}</b><span class="muted">${sub}</span></button>`;
+      return `<button class="wp ${G.zone?.id === z ? 'here' : ''}" data-a="${z === 'coast' && neck ? 'wpn:coast' : 'wp:' + w}">${ICON.portal}<b>${t('zone.' + z)}</b><span class="muted">${sub}</span></button>`;
     }).join('');
     const gates = h.quest >= 5 ? `<button class="wp" data-a="gates">${ICON.gate}<b>${t('gate.title')}</b><span class="muted">${t('gate.best', h.gateBest)}</span></button>` : '';
     const diffs = DIFFS.map((d, i) => { const lock = !diffUnlocked(i); return `<button class="chip ${h.diff === i ? 'on' : ''} ${lock ? 'lock' : ''}" data-a="diff:${i}" style="${h.diff === i ? 'color:' + diffText(d) : ''}">${t('diff.' + d.id)}</button>`; }).join('');
@@ -363,6 +366,7 @@ function onClick(e) {
     case 'tostash': toStash(+x); P.sel = null; break;
     // (in a zone with two waypoints, either one can be the way across it)
     case 'wp': { close(); const [zid, n] = x.split('@'); if (zid !== G.zone.id || n || G.zone.L.spots.camp2) emit('travel', zid, { at: n ? 'waypoint' + n : 'waypoint' }); return; }
+    case 'wpn': close(); if (G.zone.id !== x) emit('travel', x, { at: 'ashfield' }); return;
     case 'gates': open('gates'); return;
     case 'tier': P.tier = +x; break;
     case 'gateGo': close(); emit('startGate', P.tier); return;
