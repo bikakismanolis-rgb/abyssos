@@ -1532,10 +1532,13 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
       .replace('#include <map_fragment>', (X5.win ? `
   // the ice windows: the ground runs over their cells and leaves a round hole of clear ice (the pane, sea.js, the same
   // outline): cut square to the cells they read as glass skylights
-  for (int i = 0; i < 8; i++) { if (uWin[i].x < -50.0) break; if (winR(vGW.xz - uWin[i], uWin[i]) < 1.0) discard; }` + (X5.edge ? `
+  // (no discard and no break inside a loop: the Adreno drivers of phones like the owner's take that down)
+  bool gHole = false;
+  for (int i = 0; i < 8; i++) { if (uWin[i].x > -50.0 && winR(vGW.xz - uWin[i], uWin[i]) < 1.0) gHole = true; }
+  if (gHole) discard;` + (X5.edge ? `
   // (the Farthest Light's windows each hold a drowned lantern: its warm light caught in the snow and the ice a metre or two
   // round the hole, so the window reads as lit from below at the play camera)
-  for (int i = 0; i < 8; i++) { if (uWin[i].x < -50.0) break; vec2 wq = vGW.xz - uWin[i]; gEm += vec3(1.0, 0.52, 0.18) * 0.06 * exp(-dot(wq, wq) * 0.5); }` : '') : '') + (X5.wet ? `
+  for (int i = 0; i < 8; i++) { if (uWin[i].x > -50.0) { vec2 wq = vGW.xz - uWin[i]; gEm += vec3(1.0, 0.52, 0.18) * 0.06 * exp(-dot(wq, wq) * 0.5); } }` : '') : '') + (X5.wet ? `
   // (under closed water the sea, 95% opaque from 0.43 m, hides the bed: past 0.5 m it is not drawn at all, its layers and
   // its lights spared, the open sea's floor at low water too. Skerry Bay keeps its own level: sea.js. The rest of the
   // shader stands in a branch closed after its last chunk: a discard alone spares a software GPU none of what follows)
