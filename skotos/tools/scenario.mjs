@@ -969,7 +969,13 @@ const S = {
       await pg.click('#m-home');
       await pg.waitForFunction(() => window.__G?.zone && window.__G.mode === 'play' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 300000 });
       r.c3 = await where();
-      k.crash = r.c0.zone === 'forest' && r.b1.cont && r.b1.home && !r.m1.at && r.c1.zone === 'town' && r.b2.cont && r.b2.home && !!r.m2.at && r.c2.zone === 'forest' && !!r.m3.at && r.home && r.c3.zone === 'town';
+      // (4) a page that died in the forest without a word (its wake's mark left: R.lost stands for that here): the next
+      // Continue is the village, said in one line
+      await A5.travel(pg, 'forest', 'waypoint'); await hide(); await load(); await menu(); r.c5 = await cont();
+      await ev(() => { window.__R.lost = true; });
+      await load(); r.m6 = await menu(); r.c6 = await cont();
+      r.told = await pg.waitForFunction(() => (window.__toasts || []).some((m) => /σταμάτησε|stopped/.test(String(m))), null, { timeout: 30000 }).then(() => true, () => false);
+      k.crash = r.c5.zone === 'forest' && !r.m6.at && r.c6.zone === 'town' && r.told && r.c0.zone === 'forest' && r.b1.cont && r.b1.home && !r.m1.at && r.c1.zone === 'town' && r.b2.cont && r.b2.home && !!r.m2.at && r.c2.zone === 'forest' && !!r.m3.at && r.home && r.c3.zone === 'town';
     };
     // ---- the Barrow Lord's shard, not taken before the quit, lies by its spot again; taken, it does not ----
     P.crypt = async (r, k) => {

@@ -306,7 +306,7 @@ function onContextLost(o) {
   msg.textContent = en ? 'The graphics were lost. The game is saved.' : 'Τα γραφικά χάθηκαν. Το παιχνίδι σώθηκε.';
   const btn = (id, text, go) => { const b = document.createElement('button'); b.id = id; b.textContent = text; b.style.cssText = 'min-width:220px;padding:11px 18px;border-radius:9px;border:1px solid #d8b46a;background:#2a1e0e;color:#f0d89a;font:700 16px Georgia,serif;cursor:pointer'; b.onclick = go; return b; };
   el.append(msg,
-    btn('gl-cont', en ? 'Continue' : 'Συνέχεια', () => location.reload()),
+    btn('gl-cont', en ? 'Continue' : 'Συνέχεια', () => { try { o.cont?.(); } catch (e) { /* the reload matters more */ } location.reload(); }),
     btn('gl-home', en ? 'Back to the village' : 'Επιστροφή στο χωριό', () => { try { o.home?.(); } catch (e) { /* the reload matters more */ } location.reload(); }));
   document.body.appendChild(el);
 }
