@@ -9,6 +9,15 @@ const KEY = 'skotos.report', MAX = 24;
 const REP = { gpu: '', lim: null, errors: [], events: [] };
 let send = null, due = 0;
 try { const o = JSON.parse(localStorage.getItem(KEY) || 'null'); if (o && Array.isArray(o.events)) { REP.events = o.events.slice(-MAX); REP.errors = (o.errors || []).slice(-5); } } catch (e) { /* none kept */ }
+// the graphics' snapshots (game/diag.js: frames drawn in the zone, textures, programs, the heap): the last one the page
+// before left (it may have died with its GPU, or drawn nothing), sent from the start; and this page's, through each
+// zone's first minute. A zone that loads and then shows only black can be told apart: no frame, a frame and a stop, or
+// frames drawn behind something
+REP.diag = null; REP.prev = null;
+try { REP.prev = { last: JSON.parse(localStorage.getItem('skotos.diag') || 'null'), crash: JSON.parse(localStorage.getItem('skotos.diag.crash') || 'null') }; } catch (e) { /* none kept */ }
+export function reportDiag(s) { if (!s || (s.phase === 'play' && s.secs > 60)) return; REP.diag = s; flush(); }
+// and the script errors (the game's own red box shows them; they are kept here too)
+export function reportErr(m) { REP.errors.push({ t: Date.now(), zone: G.zone?.id || '', js: String(m).slice(0, 600) }); REP.errors = REP.errors.slice(-6); flush(); }
 function keep() { try { localStorage.setItem(KEY, JSON.stringify({ events: REP.events, errors: REP.errors })); } catch (e) { /* no storage */ } }
 function flush() {
   keep();
