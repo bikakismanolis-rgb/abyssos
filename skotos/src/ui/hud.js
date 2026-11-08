@@ -5,7 +5,7 @@ import { skillUnlocked } from '../game/stats.js';
 import { canUse } from '../game/skills.js';
 import { vulnOf, VULN } from '../game/combat.js';
 import { slotSkill, variantOf } from '../game/progression.js';
-import { IN, bindButton } from '../core/input.js';
+import { IN, bindButton, armGhost } from '../core/input.js';
 import { on, emit } from './bus.js';
 import { ICON } from './icons.js';
 import { t } from '../i18n/i18n.js';
@@ -81,7 +81,7 @@ export function buildHud() {
   $('h-skills').onclick = () => { Audio.sfx('open'); emit('openPanel', 'skills'); };
   $('h-menu').onclick = () => { Audio.sfx('open'); emit('openPanel', 'pause'); };
   $('minimap').onclick = () => emit('openPanel', 'map');
-  $('dialog').addEventListener('pointerdown', (e) => { e.stopPropagation(); advanceDialog(); });
+  $('dialog').addEventListener('pointerdown', (e) => { e.stopPropagation(); armGhost(e); advanceDialog(); });
   if (!('ontouchstart' in window)) document.body.classList.add('desk');
 }
 export function setupHeroHud() {
