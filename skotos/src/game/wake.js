@@ -149,7 +149,7 @@ export function restoreVisit(z, v) {
 // where she wakes: the saved spot, if it is floor she can walk from to the start, the waypoint or an open exit, and no boss
 // rises within reach of it; else the zone's retry spot, as from a death (and that too when she was dead or a boss was near),
 // but out of a fight never one where the boss rises at once (the waypoint then)
-function wakeSpot(z, v) {
+export function wakeSpot(z, v) {
   const L = z.L, m = z.map, h = G.hero, b = !!z.bossSpot && !ASLEEP[z.bossSpot.kind]?.(h) ? z.bossSpot : null;
   const within = (q, r) => !!b && Math.hypot(b.x - q.x, b.z - q.z) < r;
   const p = v.x >= 0 && v.z >= 0 && v.x < L.w && v.z < L.h ? m.nearestFloor(v.x, v.z) : null;
