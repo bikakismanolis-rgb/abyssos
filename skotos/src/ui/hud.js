@@ -6,6 +6,7 @@ import { canUse } from '../game/skills.js';
 import { vulnOf, VULN } from '../game/combat.js';
 import { slotSkill, variantOf } from '../game/progression.js';
 import { IN, bindButton, armGhost } from '../core/input.js';
+import { R, toScreen } from '../gfx/gfx.js';
 import { on, emit } from './bus.js';
 import { ICON } from './icons.js';
 import { t } from '../i18n/i18n.js';
@@ -59,6 +60,7 @@ export function buildHud() {
     <div id="zonename"><div class="a"></div><div class="rule"></div><div class="b"></div></div>
     <div id="levelup"><div class="a"></div><div class="b"></div></div>
     <div id="massacre"></div>
+    <div id="goalArrow" hidden><i></i><b></b></div>
     <div id="cluster">
       <button class="sk big" id="b-attack"></button>
       <button class="sk" id="b-s1"></button><button class="sk" id="b-s2"></button><button class="sk" id="b-s3"></button><button class="sk" id="b-s4"></button>
@@ -178,7 +180,7 @@ export function updateHud(dt) {
   coldHud(pl, cz);
   tideHud();
   // Act V: the first time she stands on webbed thin ice, what it means
-  if (cz && (S.iceT = (S.iceT || 0) - dt) <= 0) { S.iceT = 0.25; if (stageAt(pl.x, pl.z) >= 2) hint('ice'); }
+  if (cz && (S.iceT = (S.iceT || 0) - dt) <= 0) { S.iceT = 0.25; if (stageAt(pl.x, pl.z) >= 2) hint('ice'); const zb = G.zone.boss; if (zb?.holdWake && zb.kind === 'tower' && Math.hypot(zb.x - pl.x, zb.z - pl.z) < 16) hint('skerry'); }
   // Act IV: Ember Ticks on her back (a dodge throws them off)
   const nc = pl.cling?.length || 0, cl = $('cling');
   if (cl.hidden === nc > 0) cl.hidden = !(nc > 0);
@@ -210,6 +212,7 @@ export function updateHud(dt) {
   const q = h.quest >= 5 && G.zone?.id === 'gate' ? '' : `<b>${t('q.title')}</b>${questText()}`;
   if (q !== S.q) { $('quest').innerHTML = q; S.q = q; }
   for (const a of G.actors) if (a.npc) a.quest = npcHasNews(a.npc, a);
+  goalArrow(pl);
   // minimap at 15 fps
   S.minimapT -= dt;
   if (S.minimapT <= 0) { S.minimapT = 0.066; drawMinimap(); }
@@ -292,6 +295,20 @@ function paintMap(z) {
   g.putImageData(img, 0, 0);
 }
 export function revealMap() { mapDirty++; }
+// the goal's way, around her on the screen: a gold arrow and the metres to it (hidden near it, in a talk or a panel)
+const _a = {}, _b = {};
+function goalArrow(pl) {
+  const ga = $('goalArrow'), gl = S.goal, d = gl ? Math.hypot(gl.x - pl.x, gl.z - pl.z) : 0;
+  const show = !!gl && d > 8 && G.mode === 'play' && !G.panel && $('dialog').hidden;
+  if (ga.hidden === show) ga.hidden = !show;
+  if (!show) return;
+  toScreen(pl.x, 1, pl.z, _a); toScreen(gl.x, 1, gl.z, _b);
+  const an = Math.atan2(_b.y - _a.y, _b.x - _a.x), rr = Math.min(110, Math.max(70, Math.min(R.w, R.h) * 0.2));
+  ga.style.transform = `translate(${(_a.x + Math.cos(an) * rr).toFixed(1)}px,${(_a.y + Math.sin(an) * rr).toFixed(1)}px)`;
+  ga.firstChild.style.transform = `rotate(${(an + Math.PI / 2).toFixed(3)}rad)`;
+  const m = (d < 40 ? Math.round(d) : Math.round(d / 5) * 5) + ' μ';
+  if (S.gm !== m) { ga.lastChild.textContent = m; S.gm = m; }
+}
 function drawMinimap(big) {
   const z = G.zone, pl = G.player; if (!z || !pl) return;
   const cv = big || $('minimap'), g = cv.getContext('2d'), W = cv.width, H = cv.height;
@@ -312,22 +329,32 @@ function drawMinimap(big) {
     // a lit waylamp is spent as a thing to touch, but it is still a light on the map
     if (it.used && !((it.kind === 'waylamp' || it.kind === 'sealight' || it.kind === 'nameStone') && it.lit)) continue;
     const ex = z.map.explored[Math.floor(it.z) * z.map.w + Math.floor(it.x)];
-    if (!ex && z.id !== 'town') continue;
-    const c = it.kind === 'waylamp' || it.kind === 'sealight' ? (it.lit ? '#ffd070' : '#8a8274') : { waypoint: '#6aa8ff', exit: '#f0e0c0', chest: '#f2d24a', shrine: '#ffe0a0', npc: '#f0c860', stash: '#c0a060', portal: '#6aa8ff', tear: '#ffa030', altar: '#ff7a40', brazier: '#ff9a40', bellows: '#ff6a20', echo: '#e8e0d0', staff: '#ffe8b0', beacon: '#ffd040', coal: '#ffd040', hearth: '#ffb060', nameStone: it.lit ? '#ffe0b0' : '#b8c8d8', window: '#bfe4ff', holeLamp: '#ffd080', cairn: '#ffa040', farLight: '#fff4d0', doorStone: '#e8e0d0', remember: '#e8f0ff' }[it.kind] || '#fff';
+    // (the Coast's three sea-lights are the goal: on the map from the start, a dark one pale against the floor)
+    if (!ex && z.id !== 'town' && it.kind !== 'sealight') continue;
+    const c = it.kind === 'sealight' ? (it.lit ? '#ffd070' : '#dce8f2') : it.kind === 'waylamp' ? (it.lit ? '#ffd070' : '#8a8274') : { waypoint: '#6aa8ff', exit: '#f0e0c0', chest: '#f2d24a', shrine: '#ffe0a0', npc: '#f0c860', stash: '#c0a060', portal: '#6aa8ff', tear: '#ffa030', altar: '#ff7a40', brazier: '#ff9a40', bellows: '#ff6a20', echo: '#e8e0d0', staff: '#ffe8b0', beacon: '#ffd040', coal: '#ffd040', hearth: '#ffb060', nameStone: it.lit ? '#ffe0b0' : '#b8c8d8', window: '#bfe4ff', holeLamp: '#ffd080', cairn: '#ffa040', farLight: '#fff4d0', doorStone: '#e8e0d0', remember: '#e8f0ff' }[it.kind] || '#fff';
     // (a verse of the Long Sorrow still to find: a bigger, brighter dot than a small Tear's)
     const great = it.kind === 'tear' && it.story;
-    dot(it.x, it.z, it.kind === 'npc' ? 3.5 : great ? 5.5 : 4, great ? '#ffd060' : c);
+    dot(it.x, it.z, it.kind === 'npc' ? 3.5 : great || it.kind === 'sealight' ? 5.5 : 4, great ? '#ffd060' : c);
   }
   for (const a of G.actors) {
     // (nothing gives away what is under the ice or the water)
-    if (a.dead || a.team !== 'foe' || a.prop || a.under) continue;
+    if (a.dead || a.team !== 'foe' || a.prop || a.under || a.holdWake) continue;
     if (Math.hypot(a.x - pl.x, a.z - pl.z) > 22 && !a.boss) continue;
     dot(a.x, a.z, a.boss ? 6 : a.elite ? 3.5 : 2.2, a.boss ? '#ff3020' : a.elite === 'rare' ? '#f2d24a' : a.elite ? '#6a90ff' : '#e04030');
   }
   for (const p of G.pickups) if (p.kind === 'item' && p.item.rar >= 2) dot(p.x, p.z, 2.5, p.item.rar === 3 ? '#ff8a2a' : '#f2d24a');
   // quest marker
   const goal = questGoal();
-  if (goal) { const [gx, gy] = P(goal.x, goal.z); const s = 5 + Math.sin(performance.now() / 250) * 1.5; g.fillStyle = '#ffd040'; g.beginPath(); for (let i = 0; i < 10; i++) { const a = (i / 10) * 6.283 - 1.57, r = i % 2 ? s * 0.45 : s; g.lineTo(gx + Math.cos(a) * r, gy + Math.sin(a) * r); } g.fill(); }
+  S.goal = goal || null;
+  if (goal) {
+    let [gx, gy] = P(goal.x, goal.z);
+    // (out of the minimap's reach: on its rim, toward it)
+    if (!big) { const dx = gx - W / 2, dy = gy - H / 2, l = Math.hypot(dx, dy), Rr = W / 2 - 14; if (l > Rr) { gx = W / 2 + (dx / l) * Rr; gy = H / 2 + (dy / l) * Rr; } }
+    const s = (big ? 13 : 10) + Math.sin(performance.now() / 250) * 2;
+    g.fillStyle = '#ffd040'; g.strokeStyle = '#000'; g.lineWidth = 3; g.beginPath();
+    for (let i = 0; i < 10; i++) { const a = (i / 10) * 6.283 - 1.57, r = i % 2 ? s * 0.45 : s; g.lineTo(gx + Math.cos(a) * r, gy + Math.sin(a) * r); }
+    g.closePath(); g.stroke(); g.fill();
+  }
   // hero arrow
   const [hx, hy] = P(pl.x, pl.z);
   g.translate(hx, hy); g.rotate(-pl.rot + Math.PI);
