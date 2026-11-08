@@ -8,6 +8,7 @@ import { stock, buy, buyPrice } from '../game/shop.js';
 import { dropItem } from '../game/pickups.js';
 import { writeSave } from '../game/save.js';
 import { on, emit } from './bus.js';
+import { armGhost } from '../core/input.js';
 import { ICON, SLOT_ICON } from './icons.js';
 import { t, has, setLang, lang } from '../i18n/i18n.js';
 import { npcName } from '../game/story.js';
@@ -39,7 +40,7 @@ const ALTAR_ICON = { throne: 'shield', forge: 'flame', unfading: 'potion' };
 
 export function initPanels() {
   const p = document.createElement('div'); p.id = 'panel'; p.hidden = true; document.getElementById('app').appendChild(p);
-  p.addEventListener('pointerdown', (e) => { if (e.target === p && P.name !== 'dead' && P.name !== 'act' && P.name !== 'boon') close(); });
+  p.addEventListener('pointerdown', (e) => { if (e.target === p && P.name !== 'dead' && P.name !== 'act' && P.name !== 'boon') { armGhost(e); close(); } });
   p.addEventListener('click', onClick);
   p.addEventListener('input', onInput);
 }
