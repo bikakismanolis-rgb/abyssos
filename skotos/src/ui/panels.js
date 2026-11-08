@@ -213,12 +213,6 @@ const R = {
     // Act VI's are named for their place (the Landing, the Icebound Ship; the Rope, the Well's Foot)
     const named = new Set(['coast', 'farlight', 'drained', 'bottom']);
     // (the Frozen Coast from the start of Act V, before its own waypoint is lit: she arrives where the Anvil's Neck brings
-    // her, so no one has to find the Neck in the Field of Ash first)
-    const neck = !h.wps.includes('coast') && h.quest >= 25;
-    // Act IV's Field has a second waypoint, at Elati's camp at the mouth of the Lantern Graves ('ashfield@2'); Act V's and
-    // Act VI's are named for their place (the Landing, the Icebound Ship; the Rope, the Well's Foot)
-    const named = new Set(['coast', 'farlight', 'drained', 'bottom']);
-    // (the Frozen Coast from the start of Act V, before its own waypoint is lit: she arrives where the Anvil's Neck brings
     // her, so no one has to find the Neck in the Field of Ash first; and then first in the list, marked as the way on)
     const neck = !h.wps.includes('coast') && h.quest >= 25;
     const all = ['town', 'forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'ashfield@2', 'forge', 'coast', 'farlight', 'drained', 'bottom'];
