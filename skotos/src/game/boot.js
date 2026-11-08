@@ -1,7 +1,7 @@
 // Startup and the main loop.
 import * as THREE from 'three';
 import { G, later } from './state.js';
-import { initGfx, R, frame as gfxFrame, render, updateCamera, adaptResolution, setAtmosphere, shake } from '../gfx/gfx.js';
+import { initGfx, R, frame as gfxFrame, render, updateCamera, adaptResolution, setAtmosphere, shake, warmZone } from '../gfx/gfx.js';
 import { initFX, updateFX, glowBurst, ring, P, clearFX } from '../gfx/fx.js';
 import { loadKits } from '../gfx/kits.js';
 import { loadPeople } from '../gfx/people.js';
@@ -14,7 +14,7 @@ import { refreshStats } from './stats.js';
 import { migrateHero } from './progression.js';
 import { enterZone, updatePacks, updateAct, nearestInteract, updatePortalFx, ZONES, zoneReady, zoneParts, disposeZone, retryAt } from './world.js';
 import { PAGE, wakeOf, wakeAt, wakeSpot, noteVisit, restoreVisit, wokeLately, noteCrash, clearCrash, crashFor, WAKE } from './wake.js';
-import { diagLost, diagLoad, diagZone, diagFrame } from '../gfx/diag.js';
+import { diagLost, diagLoad, diagZone, diagFrame, diagStep } from '../gfx/diag.js';
 import { reportBind, reportEvent, reportErr } from '../gfx/report.js';
 import { updatePlayer } from './player.js';
 import { damage } from './combat.js';
@@ -257,10 +257,11 @@ function travel(zone, o = {}) {
   Audio.sfx('waypoint');
   // the fade covers any first-visit loading (Act II's stone and lava, Act III's wood); if that takes a while, a bar
   const bar = fadeLoad(zone, f);
-  Promise.all([zoneReady(zone, bar.part), new Promise((r) => setTimeout(r, 450))]).then(() => {
+  Promise.all([zoneReady(zone, bar.part), new Promise((r) => setTimeout(r, 450))]).then(async () => {
     bar.hide();
     try { enterZone(zone, o); } catch (e) { fatal(e.stack || e); }
     clearOverlay();
+    if (R.mobile && ZONES[zone]?.act === 5) await warm();
     setTimeout(() => { f.classList.remove('on'); travelling = false; }, 120);
     // (there: a visit held in Whitecliff gives way to the zone she went to, whichever it is)
     PAGE.bound = null; if (zone !== 'town') PAGE.held = null;
@@ -271,6 +272,13 @@ function travel(zone, o = {}) {
     console.error(e);
     emit('toast', t('load.fail') + (e?.message ? ': ' + e.message : ''), 'big');
   });
+}
+// (Act V on a phone: nothing drawn and nothing moving while its shaders and textures go to the GPU under the fade, at most
+// 25 s: gfx.js warmZone)
+async function warm() {
+  const m = G.mode; G.mode = 'warm'; diagStep('warm');
+  try { await Promise.race([warmZone(), new Promise((ok) => setTimeout(ok, 25000))]); } catch (e) { console.error(e); }
+  R.warm = false; if (G.mode === 'warm') G.mode = m; diagStep('warmed');
 }
 // (the fade's bar while a zone's first-visit assets load, shown if that takes a while: part() moves it, hide() takes it off)
 function fadeLoad(zone, f) {
