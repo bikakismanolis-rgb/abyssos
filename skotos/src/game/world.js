@@ -1899,7 +1899,10 @@ export function spawnTownPortal(z) {
   portalObj = { mesh, x, z: zz };
   z.extra.push(mesh);
   z.interact = z.interact.filter((i) => i.kind !== 'portal');
-  z.interact.push({ kind: 'portal', x, z: zz, r: 2, prompt: 'wp.back', use: () => { const P0 = G.portal; G.portal = null; z.interact = z.interact.filter((i) => i.kind !== 'portal'); R.scene.remove(mesh); z.extra.splice(z.extra.indexOf(mesh), 1); emit('travel', P0.zone, { at: { x: P0.x, z: P0.z }, portal: true }); } });
+  // (the portal opens the waypoint list like the stone beside it, with the way back first: tapping either never sends her
+  // off without a choice)
+  const back = () => { const P0 = G.portal; if (!P0) return; G.portal = null; z.interact = z.interact.filter((i) => i.kind !== 'portal'); R.scene.remove(mesh); z.extra.splice(z.extra.indexOf(mesh), 1); emit('travel', P0.zone, { at: { x: P0.x, z: P0.z }, portal: true }); };
+  z.interact.push({ kind: 'portal', x, z: zz, r: 2, prompt: 'wp.title', back, use: () => emit('openPanel', 'waypoints') });
   addLight({ x, y: 1.3, z: zz, color: 0x4a90ff, intensity: 16, range: 8, flicker: 0.2 });
 }
 export function updatePortalFx(dt) {

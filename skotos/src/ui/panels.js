@@ -221,10 +221,12 @@ const R = {
       const z = w.split('@')[0], sub = w.endsWith('@2') ? t('wp.graves') : named.has(z) ? t('wp.' + z) : t('zone.' + z + '.s');
       const next = z === 'coast' && neck;
       return `<button class="wp ${G.zone?.id === z ? 'here' : ''}" data-a="${next ? 'wpn:coast' : 'wp:' + w}"${next ? ' style="border-color:var(--gold2);box-shadow:0 0 0 1px var(--gold2)"' : ''}>${ICON.portal}<b>${t('zone.' + z)}${next ? ' ★' : ''}</b><span class="muted">${next ? t('wp.next') : sub}</span></button>`;
-    }).join('');
+    });
+    const portal = inTown && G.portal && G.zone.interact.find((i) => i.kind === 'portal');
+    if (portal) list.splice(neck ? 1 : 0, 0, `<button class="wp" data-a="wpp">${ICON.portal}<b>${t('wp.back')}</b><span class="muted">${t('zone.' + G.portal.zone)}</span></button>`);
     const gates = h.quest >= 5 ? `<button class="wp" data-a="gates">${ICON.gate}<b>${t('gate.title')}</b><span class="muted">${t('gate.best', h.gateBest)}</span></button>` : '';
     const diffs = DIFFS.map((d, i) => { const lock = !diffUnlocked(i); return `<button class="chip ${h.diff === i ? 'on' : ''} ${lock ? 'lock' : ''}" data-a="diff:${i}" style="${h.diff === i ? 'color:' + diffText(d) : ''}">${t('diff.' + d.id)}</button>`; }).join('');
-    return `<div class="pn narrow">${head(t('wp.title'), false)}<div class="pn-b"><div style="display:grid;gap:6px">${list}${gates}</div><div class="logo-rule"></div><b style="font-family:var(--display);color:var(--gold)">${t('pick.diff')}</b><div class="chips" style="justify-content:flex-start;margin-top:6px">${diffs}</div><p class="muted">${inTown ? t('diff.' + DIFFS[h.diff].id + '.d') : t('wp.diffNote')}</p></div></div>`;
+    return `<div class="pn narrow">${head(t('wp.title'), false)}<div class="pn-b"><div style="display:grid;gap:6px">${list.join('')}${gates}</div><div class="logo-rule"></div><b style="font-family:var(--display);color:var(--gold)">${t('pick.diff')}</b><div class="chips" style="justify-content:flex-start;margin-top:6px">${diffs}</div><p class="muted">${inTown ? t('diff.' + DIFFS[h.diff].id + '.d') : t('wp.diffNote')}</p></div></div>`;
   },
   gates() {
     const h = G.hero, max = h.gateBest + 1;
@@ -371,6 +373,7 @@ function onClick(e) {
     case 'tostash': toStash(+x); P.sel = null; break;
     // (in a zone with two waypoints, either one can be the way across it)
     case 'wp': { close(); const [zid, n] = x.split('@'); if (zid !== G.zone.id || n || G.zone.L.spots.camp2) emit('travel', zid, { at: n ? 'waypoint' + n : 'waypoint' }); return; }
+    case 'wpp': close(); G.zone.interact.find((i) => i.kind === 'portal')?.back(); return;
     case 'wpn': close(); if (G.zone.id !== x) emit('travel', x, { at: 'ashfield' }); return;
     case 'gates': open('gates'); return;
     case 'tier': P.tier = +x; break;
