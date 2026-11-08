@@ -214,9 +214,12 @@ const R = {
     // (the Frozen Coast from the start of Act V, before its own waypoint is lit: she arrives where the Anvil's Neck brings
     // her, so no one has to find the Neck in the Field of Ash first)
     const neck = !h.wps.includes('coast') && h.quest >= 25;
-    const list = ['town', 'forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'ashfield@2', 'forge', 'coast', 'farlight'].filter((z) => h.wps.includes(z) || (z === 'coast' && neck)).map((w) => {
+    // (and then first in the list, marked as the way on: at the foot of a long list a phone never scrolled to it)
+    const order = neck ? ['coast', 'town', 'forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'ashfield@2', 'forge', 'farlight'] : ['town', 'forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'ashfield@2', 'forge', 'coast', 'farlight'];
+    const list = order.filter((z) => h.wps.includes(z) || (z === 'coast' && neck)).map((w) => {
       const z = w.split('@')[0], sub = w.endsWith('@2') ? t('wp.graves') : z === 'coast' || z === 'farlight' ? t('wp.' + z) : t('zone.' + z + '.s');
-      return `<button class="wp ${G.zone?.id === z ? 'here' : ''}" data-a="${z === 'coast' && neck ? 'wpn:coast' : 'wp:' + w}">${ICON.portal}<b>${t('zone.' + z)}</b><span class="muted">${sub}</span></button>`;
+      const next = z === 'coast' && neck;
+      return `<button class="wp ${G.zone?.id === z ? 'here' : ''}" data-a="${next ? 'wpn:coast' : 'wp:' + w}"${next ? ' style="border-color:var(--gold2);box-shadow:0 0 0 1px var(--gold2)"' : ''}>${ICON.portal}<b>${t('zone.' + z)}${next ? ' ★' : ''}</b><span class="muted">${next ? t('wp.next') : sub}</span></button>`;
     }).join('');
     const gates = h.quest >= 5 ? `<button class="wp" data-a="gates">${ICON.gate}<b>${t('gate.title')}</b><span class="muted">${t('gate.best', h.gateBest)}</span></button>` : '';
     const diffs = DIFFS.map((d, i) => { const lock = !diffUnlocked(i); return `<button class="chip ${h.diff === i ? 'on' : ''} ${lock ? 'lock' : ''}" data-a="diff:${i}" style="${h.diff === i ? 'color:' + diffText(d) : ''}">${t('diff.' + d.id)}</button>`; }).join('');
