@@ -15,7 +15,7 @@ import { migrateHero } from './progression.js';
 import { enterZone, updatePacks, updateAct, nearestInteract, updatePortalFx, ZONES, zoneReady, zoneParts, disposeZone, retryAt } from './world.js';
 import { PAGE, wakeOf, wakeAt, wakeSpot, noteVisit, restoreVisit, wokeLately, noteCrash, clearCrash, crashFor, WAKE } from './wake.js';
 import { diagLost, diagLoad, diagZone, diagFrame } from '../gfx/diag.js';
-import { reportBind, reportEvent } from '../gfx/report.js';
+import { reportBind, reportEvent, reportErr } from '../gfx/report.js';
 import { updatePlayer } from './player.js';
 import { damage } from './combat.js';
 import { updateActors } from './ai.js';
@@ -44,6 +44,7 @@ function fatal(msg) {
   let el = document.getElementById('fatal');
   if (!el) { el = document.createElement('div'); el.id = 'fatal'; document.body.appendChild(el); }
   el.textContent += (el.textContent ? '\n' : '') + String(msg).slice(0, 500);
+  reportErr(msg);
 }
 window.addEventListener('error', (e) => fatal((e.message || e.error) + (e.filename ? ' @ ' + e.filename.split('/').pop() + ':' + e.lineno : '')));
 window.addEventListener('unhandledrejection', (e) => fatal('promise: ' + (e.reason && e.reason.message || e.reason)));
