@@ -268,6 +268,7 @@ export const TEXT = {
   'wake.lost0': ['{0}: η συσκευή σου έχασε τα γραφικά εκεί και στη χαμηλή ποιότητα, γι’ αυτό ξυπνάς στο χωριό. Η περιοχή ίσως είναι βαριά για αυτή τη συσκευή.', '{0}: this device lost its graphics there even at low quality, so you wake in the village. The area may be too heavy for this device.'],
   'wake.died': ['{0}: την τελευταία φορά το παιχνίδι σταμάτησε λίγο αφού μπήκες εκεί, γι’ αυτό για σιγουριά ξυπνάς στο χωριό.', '{0}: last time the game stopped soon after you got there, so to be safe you wake in the village.'],
   'wake.stopped': ['{0}: το παιχνίδι σταμάτησε εκεί την τελευταία φορά, γι’ αυτό ξεκινάς στο χωριό.', '{0}: the game stopped there last time, so you start in the village.'],
+  'wp.next': ['Εδώ συνεχίζει η ιστορία σου', 'Your story goes on here'],
   'menu.home': ['Ξεκίνα στο χωριό', 'Start in the village'],
   'load.zone': ['Φόρτωση της περιοχής', 'Loading the area'], 'load.fail': ['Η περιοχή δεν φόρτωσε. Δοκίμασε ξανά', 'The area did not load. Try again'],
   'echo.hart': ['Θυμήσου τον Αργυρόκερω', 'Remember Silverhorn'], 'echo.lady': ['Θυμήσου την Αμαράνθη', 'Remember Amaranthe'],
