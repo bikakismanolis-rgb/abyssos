@@ -46,6 +46,8 @@ function snap(phase) {
 }
 // a zone begins to load (travel, Continue)
 export function diagLoad(zone) { D.zone = zone; D.phase = 'load'; D.t0 = performance.now(); D.frames = 0; snap('load'); }
+// a step of a zone's warming (gfx.js warmZone)
+export function diagStep(phase) { snap(phase); }
 // a zone entered
 export function diagZone(zone) { D.zone = zone; D.phase = 'play'; D.t0 = performance.now(); D.frames = 0; D.every = 0; snap('enter'); }
 // each frame drawn in play

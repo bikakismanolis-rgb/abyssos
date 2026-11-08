@@ -329,7 +329,24 @@ export function frame(dt) {
 }
 
 // (R.skyHook: sea.js shows the aurora dome when a cine lowers the camera, and runs its freeze waves)
-export function render() { if (R.lost) return; R.skyHook?.(); R.renderer.render(R.scene, R.camera); }
+export function render() { if (R.lost || R.warm) return; R.skyHook?.(); R.renderer.render(R.scene, R.camera); }
+// Act V on a phone: its shaders compiled (in the background where the GPU allows it) and its textures sent to the GPU a
+// few a frame, under the fade, before its first frame is drawn. The owner's phone froze two frames into the Frozen Coast
+// when the whole coast arrived in one frame, and held when she walked into it bit by bit, the same spot included
+export async function warmZone() {
+  const r = R.renderer; R.warm = true;
+  try {
+    if (r.compileAsync) await r.compileAsync(R.scene, R.camera);
+    const tex = new Set(), add = (t) => { if (t && t.isTexture && !t.isRenderTargetTexture) tex.add(t); };
+    R.scene.traverse((o) => {
+      const ms = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+      for (const m of ms) { for (const k in m) add(m[k]); if (m.uniforms) for (const k in m.uniforms) add(m.uniforms[k]?.value); }
+    });
+    let n = 0;
+    for (const t of tex) { try { r.initTexture(t); } catch (e) { /* one that cannot go yet goes at its first frame */ } if (++n % 4 === 0) await new Promise((ok) => requestAnimationFrame(ok)); }
+    return n;
+  } finally { R.warm = false; }
+}
 
 // A lost GL context (a phone out of memory, a GPU reset). The decoded images were let go once uploaded (gltf.js), so it
 // cannot be drawn again as it was: the game is saved (o.lost, which also lowers the quality one step) and the page reloads,
