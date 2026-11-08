@@ -6,6 +6,7 @@
 // the no-GL boot screen, to be photographed and sent; a tap on its × lets it go.
 import { R } from './gfx.js';
 import { G } from '../game/state.js';
+import { reportDiag } from './report.js';
 
 const KEY = 'skotos.diag', KEPT = 'skotos.diag.crash', FIRST = new Set([1, 2, 5, 10, 30, 60]);
 const D = { gpu: '', zone: '', phase: '', t0: 0, frames: 0, every: 0 };
@@ -40,7 +41,7 @@ function snap(phase) {
     progs: info.programs?.length || 0, calls: info.render.calls, tris: info.render.triangles,
     heap: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : null
   };
-  store(KEY, s);
+  store(KEY, s); reportDiag(s);
   return s;
 }
 // a zone begins to load (travel, Continue)
