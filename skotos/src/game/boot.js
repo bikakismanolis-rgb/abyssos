@@ -13,7 +13,7 @@ import { loadSave, writeSave, freshHero, saveHooks } from './save.js';
 import { refreshStats } from './stats.js';
 import { migrateHero } from './progression.js';
 import { enterZone, updatePacks, updateAct, nearestInteract, updatePortalFx, ZONES, zoneReady, zoneParts, disposeZone, retryAt } from './world.js';
-import { PAGE, wakeOf, wakeAt, noteVisit, restoreVisit, wokeLately, noteCrash, clearCrash, crashFor, WAKE } from './wake.js';
+import { PAGE, wakeOf, wakeAt, wakeSpot, noteVisit, restoreVisit, wokeLately, noteCrash, clearCrash, crashFor, WAKE } from './wake.js';
 import { diagLost, diagLoad, diagZone, diagFrame } from '../gfx/diag.js';
 import { reportBind, reportEvent } from '../gfx/report.js';
 import { updatePlayer } from './player.js';
@@ -181,6 +181,11 @@ async function startHero(hero, isNew, zone = 'town', force = false, home = false
   PAGE.woke = 0; PAGE.held = PAGE.bound = null; PAGE.mark = null;
   // (home: the title's Start in the village, which takes no visit)
   let wake = !isNew && !force && !home && zone === 'town' && !PAGE.off ? wakeOf(hero) : null;
+  // (a phone wakes in Whitecliff, not straight in Act V's coast or Farthest Light: there the owner's phone stuck on the
+  // loading bar at Continue, twice, while walking in from the waypoint loads. She walks in a moment later, and the visit
+  // is laid on that zone as it is built: PAGE.held, travel)
+  let walkIn = null;
+  if (wake && R.mobile && (wake.id === 'coast' || wake.id === 'farlight')) { walkIn = wake; wake = null; PAGE.held = walkIn; }
   await starterGear(hero);
   // saves from before the progression: a loadout, nothing learnt, the points kept spendable (progression.js)
   migrateHero(hero);
@@ -234,6 +239,7 @@ async function startHero(hero, isNew, zone = 'town', force = false, home = false
   G.player.res = hero.cls === 'warden' ? 0 : 100;
   writeSave();
   if (rec) clearCrash(hero, rec.t);
+  if (walkIn) later(1.5, () => { if (G.hero === hero && G.mode === 'play' && G.zone?.id === 'town' && PAGE.held === walkIn) travel(walkIn.id, { at: (z) => wakeSpot(z, walkIn) }); });
   if (downed) later(2.2, () => emit('toast', t('wake.stopped', t('zone.' + downed.zone)), 'hint'));
   if (isNew) later(1.2, () => emit('toast', t('q.new') + ': ' + t('q.0'), 'quest'));
   // the first game on this device: how to play, once
@@ -270,7 +276,7 @@ function travel(zone, o = {}) {
   if (WAKE.has(zone) && G.hero && NET.mode !== 'guest') markZone(G.hero, zone);
   // (her zone would not load at Continue and she walks in now: what that visit had done there is laid on it as it is built)
   const H = PAGE.held;
-  if (H && zone === H.id) { const at0 = o.at; o = { ...o, at: (z) => { if (z.seed === H.seed) restoreVisit(z, H); return at0; } }; }
+  if (H && zone === H.id) { const at0 = o.at; o = { ...o, at: (z) => { if (z.seed === H.seed) restoreVisit(z, H); return typeof at0 === 'function' ? at0(z) : at0; } }; }
   const f = document.getElementById('fade'); f.classList.add('on');
   Audio.sfx('waypoint');
   // the fade covers any first-visit loading (Act II's stone and lava, Act III's wood); if that takes a while, a bar
