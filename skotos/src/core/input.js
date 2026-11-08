@@ -85,7 +85,11 @@ export function takeEvents() { const e = IN.events; IN.events = []; return e; }
 // A tap on a HUD button that opens a panel (the stone's list, a shop, a talk): the browser's own click for that same tap
 // comes after the panel is up and lands on whatever the panel has under the finger (the list's Field of Ash, sending her
 // there without a choice). The next click at that spot, that soon, is the tap's own and is dropped.
+// Armed by such a tap at its pointerup, or at its pointerdown (the talk box, a panel's backdrop) and then timed again from
+// the pointerup. Only a primary pointer's plain tap gets a click at all: a second finger or a drag-aim arms nothing.
 let ghost = null;
+export function armGhost(e) { if (e.isPrimary) ghost = { t: performance.now(), x: e.clientX, y: e.clientY, id: e.pointerId }; }
+window.addEventListener('pointerup', (e) => { if (ghost && ghost.id === e.pointerId) ghost.t = performance.now(); }, true);
 window.addEventListener('click', (e) => {
   const g = ghost; if (!g) return;
   ghost = null;
@@ -115,7 +119,7 @@ export function bindButton(el, opts) {
     const aim = aiming && IN.aiming ? { dir: { x: IN.aiming.x, z: IN.aiming.z }, far: IN.aiming.far } : null;
     IN.aiming = null;
     if (e.type === 'pointercancel') { opts.up?.(null, true); return; }
-    ghost = { t: performance.now(), x: e.clientX, y: e.clientY };
+    if (!aiming) armGhost(e);
     opts.up?.(aim);
   };
   el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
