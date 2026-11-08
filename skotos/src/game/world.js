@@ -1136,7 +1136,7 @@ function act5Zone(z) {
   if (z.id === 'coast') {
     S.sealights.forEach((s, k) => {
       const mesh = put(z, act5Prop('sealight', { v: k, id: s.id }), s.x, s.z, s.r);
-      const it = inter({ kind: 'sealight', id: s.id, x: s.base.x, z: s.base.z, r: 2.4, lightR: 7, prompt: 'sealight.light', mesh, spot: s, lit: false }, 'sealight');
+      const it = inter({ kind: 'sealight', id: s.id, x: s.base.x, z: s.base.z, r: 3.4, lightR: 7, prompt: 'sealight.light', mesh, spot: s, lit: false }, 'sealight');
       it.window = put(z, act5Prop('iceWindow', { id: s.id }), s.window.x, s.window.z, s.r);
       // the window offers its memory while the light burns and the memory is unseen ("Remember": story.js 'iceWindow')
       it.win = inter({ kind: 'window', id: s.id, light: it, x: s.window.x, z: s.window.z, r: 2.2, prompt: 'lamp.remember', used: true }, 'iceWindow');
