@@ -505,6 +505,9 @@ function takeExit(z, e) {
     if (why) emit('say', why);
     return;
   }
+  // (Act V begun and its coast not yet reached: the road out of Whitecliff to the Field asks where to, the Frozen Coast first
+  // (ui/panels.js waypoints): it only ever led to the Field, where the Anvil's Neck was easy to miss)
+  if (z.id === 'town' && e.to === 'ashfield' && G.hero.quest >= 25 && !G.hero.wps.includes('coast')) { emit('openPanel', 'waypoints'); return; }
   emit('travel', e.to, { at: z.id });
 }
 on('propBroken', (a) => {
