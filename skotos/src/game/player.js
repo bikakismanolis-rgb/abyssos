@@ -56,7 +56,7 @@ export function updatePlayer(dt) {
       else if (useSkill(ev.i, ev)) lastHit = 0;
     } else if (ev.t === 'dodge') dodge(ev);
     else if (ev.t === 'potion') drinkPotion();
-    else if (ev.t === 'tapAttack') { if (!pl.act) basicAttack(ev.aim ? { aim: ev.aim } : null); }
+    else if (ev.t === 'tapAttack') { const f = G.focus; if (f && ev.aim && f.x != null && Math.hypot(ev.aim.x - f.x, ev.aim.z - f.z) < 3.5) f.use(); else if (!pl.act) basicAttack(ev.aim ? { aim: ev.aim } : null); }
     else if (ev.t === 'interact') emit('interact');
     else if (ev.t === 'key') emit('key', ev.k);
   }

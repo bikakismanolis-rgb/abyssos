@@ -750,6 +750,7 @@ export const TEXT = {
   'hud.lane': ['Το νερό σε κυκλώνει. Βγες στη στεριά!', 'The water is closing round you. Get to dry ground!'],
   'q.tideTurn': ['Γυρίζει η παλίρροια', 'The tide turns'],
   'hint.tide': ['Άκου την καμπάνα: η θάλασσα γυρίζει', 'Listen for the bell: the sea is turning'],
+  'hint.skerry': ['Το νησί στον κόλπο κοιμάται. Θα ξυπνήσει όταν ανάψεις και τους τρεις φάρους της Ακτής.', 'The island in the bay sleeps. It wakes when you have lit all three sea-lights of the Coast.'],
   'hint.ice': ['Ο πάγος ραγίζει. Μη στέκεσαι.', 'The ice is cracking. Don\'t stand still.'],
   'hint.louse': ['Κύλησε πάνω τους όταν κουλουριαστούν', 'Roll into them when they curl up'],
   'hint.cold': ['Ζεστάσου σε φωτιά ή στη δέσμη ενός φάρου', 'Warm yourself at a fire or in a sea-light\'s beam'],

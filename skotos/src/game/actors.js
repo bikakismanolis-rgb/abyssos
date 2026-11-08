@@ -100,11 +100,19 @@ export function updateShadows() {
   for (const a of all) {
     if (!a.avatar || a.removed || !a.avatar.group.visible) continue;
     if (n < 160) { _p.set(a.x, 0.04, a.z); _s.setScalar(a.radius * 2.6 * (a.dead ? Math.max(0, 1 - a.deadT * 0.5) : 1)); _q.identity(); blobs.setMatrixAt(n++, _m.compose(_p, _q, _s)); }
-    if ((a.elite || a.boss || a.pet) && !a.dead && !a.disguised && k < 40) {
+    if ((a.elite || a.boss || a.pet) && !a.dead && !a.disguised && !a.holdWake && k < 40) {
       _p.set(a.x, 0.06, a.z); _s.setScalar(a.radius * 1.5); rings.setMatrixAt(k, _m.compose(_p, _q, _s));
       rings.setColorAt(k, _c.set(a.boss ? 0xff4020 : a.elite === 'rare' ? 0xffc030 : a.pet ? 0x60c0ff : 0x5080ff));
       k++;
     }
+  }
+  // (what she can use right now gets a gold ring where to stand, and Act V's dark sea-lights show theirs from afar: a
+  // sleeping boss gets none, it is not a thing to walk up to yet)
+  const gold = (it) => { if (k >= 40 || it.x == null) return; _q.identity(); _p.set(it.x, 0.06, it.z); _s.setScalar(it.r || 2); rings.setMatrixAt(k, _m.compose(_p, _q, _s)); rings.setColorAt(k++, _c.set(0xffd070)); };
+  const pl = G.player;
+  if (pl && G.mode === 'play') {
+    if (G.focus) gold(G.focus);
+    for (const it of G.zone?.act5?.lights || []) if (!it.lit && it !== G.focus && Math.hypot(it.x - pl.x, it.z - pl.z) < 22) gold(it);
   }
   blobs.count = n; blobs.instanceMatrix.needsUpdate = true;
   rings.count = k; rings.instanceMatrix.needsUpdate = true; if (rings.instanceColor) rings.instanceColor.needsUpdate = true;

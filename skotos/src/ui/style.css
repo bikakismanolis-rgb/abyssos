@@ -202,8 +202,11 @@ body.memory-ice #frost { opacity: .75 !important; --fi: 46% !important; --fo: 10
 #b-s1 { right: 104px; bottom: 2px; } #b-s2 { right: 98px; bottom: 74px; } #b-s3 { right: 56px; bottom: 136px; } #b-s4 { right: -4px; bottom: 156px; }
 #b-dodge { right: 178px; bottom: 6px; } #b-potion { right: 172px; bottom: 76px; }
 #b-potion { color: #ff7a6a; }
-#b-use { position: absolute; right: 104px; bottom: 150px; height: 40px; padding: 0 16px 0 10px; border-radius: 20px; border: 1px solid var(--gold); background: linear-gradient(180deg, #3a2e1c, #1a140c); color: var(--gold2); font: 700 14px var(--display); display: flex; align-items: center; gap: 6px; box-shadow: 0 0 16px rgba(255, 180, 70, .35); animation: pulse 1.6s ease infinite; white-space: nowrap; }
+#b-use { position: absolute; right: 140px; bottom: 150px; height: 40px; padding: 0 16px 0 10px; border-radius: 20px; border: 1px solid var(--gold); background: linear-gradient(180deg, #3a2e1c, #1a140c); color: var(--gold2); font: 700 14px var(--display); display: flex; align-items: center; gap: 6px; box-shadow: 0 0 16px rgba(255, 180, 70, .35); animation: pulse 1.6s ease infinite; white-space: nowrap; }
 #b-use svg { width: 20px; height: 20px; }
+#goalArrow { position: fixed; left: 0; top: 0; width: 0; height: 0; pointer-events: none; z-index: 3; }
+#goalArrow i { position: absolute; left: -11px; top: -14px; width: 0; height: 0; border: 11px solid transparent; border-top: 0; border-bottom: 22px solid #ffd040; filter: drop-shadow(0 0 2px #000) drop-shadow(0 0 4px rgba(0,0,0,.8)); }
+#goalArrow b { position: absolute; left: -30px; top: 12px; width: 60px; text-align: center; font: 700 12px var(--display); color: #ffe7a0; text-shadow: 0 1px 2px #000, 0 0 6px #000; }
 @keyframes pulse { 50% { box-shadow: 0 0 26px rgba(255, 180, 70, .65); } }
 #aimhint { position: absolute; pointer-events: none; }
 .desk .sk.small, .desk #b-s1, .desk #b-s2, .desk #b-s3, .desk #b-s4 { opacity: .92; }
@@ -446,7 +449,7 @@ body:not(.desk) .sk .key { display: none; }
   #tide { width: 38px; height: 38px; left: -15px; bottom: -7px; }
   .hbtn { width: 34px; height: 34px; }
   #quest { max-width: 30vw; font-size: 11.5px; }
-  #quest b { display: none; }
+  #quest b { font-size: 10px; }
   #hud-tr { gap: 4px; }
 }
 @media (max-height: 360px) { #quest { display: none; } }
