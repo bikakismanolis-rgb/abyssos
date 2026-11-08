@@ -205,6 +205,7 @@ const BS = 4;
 function seaMat(o = {}) {
   const hi = R.quality >= 1, key = (o.low ? 'l' : 't') + (o.far ? 'f' : '') + (hi ? 'h' : '') + (R.quality >= 2 ? '2' : '');
   if (SEA_MATS.has(key)) return SEA_MATS.get(key);
+  if (R.mobile) { const m = safeSea(o); SEA_MATS.set(key, m); return m; }
   noiseTex();
   // (the Farthest Light's leads have no tide and are never see-through: opaque, drawn first with the ice, so the sea bed
   // under them is turned away by the depth test instead of shaded)
@@ -588,6 +589,32 @@ float sq256(float x) { x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; r
 // per-vertex fields for the water (and the ground's G_WET): w+1 x h+1 corners, each from its four cells
 const CORNER = [[-1, -1], [0, -1], [-1, 0], [0, 0]];
 // the bed at every corner: L.vbed (gen5), or the mean of its cells' beds (open sea beyond the map's edge)
+// A phone's sea (and ice, sky, ground below): the water at the tide's height, coloured by its depth and see-through where
+// it is shallow, and nothing else: no loop, no derivative, no texture read. The owner's phone (an Adreno 618) froze a few
+// frames into the Frozen Coast every time, its programs compiled and its memory low, while every zone without Act V's own
+// shaders runs on it
+function safeSea(o) {
+  const m = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: !o.low, depthWrite: !!o.low });
+  const u = { uLevel: SEA.uLevel, uBayLevel: SEA.uBayLevel, uTime: SEA.uTime };
+  const vy = o.low ? 'float dep = 0.6; float y = -0.08 + sw * 0.025;'
+    : 'float dep = mix(uLevel, uBayLevel, aBay) - aBed; float lift = clamp(dep, -0.05, 0.3); float y = lift + sw * 0.06 * clamp(lift * 8.0, 0.0, 1.0); y = mix(y, -0.08 + sw * 0.02, aHold);';
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, u);
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', `#include <common>
+attribute float aBed; attribute float aHold; attribute float aBay;
+uniform float uLevel; uniform float uBayLevel; uniform float uTime;
+varying float vDep;`).replace('#include <begin_vertex>', `#include <begin_vertex>
+  vec3 wp0 = (modelMatrix * vec4(position, 1.0)).xyz;
+  float sw = (sin(wp0.x * 0.21 + wp0.z * 0.13 + uTime * 1.1) + sin(-wp0.x * 0.09 + wp0.z * 0.27 + uTime * 0.83)) * 0.5;
+  ${vy}
+  transformed.y = y; vDep = dep;`);
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vDep;').replace('#include <color_fragment>', `#include <color_fragment>
+  float dk = clamp(vDep / 1.4, 0.0, 1.0);
+  diffuseColor = vec4(mix(vec3(0.11, 0.18, 0.21), vec3(0.015, 0.035, 0.05), dk), mix(0.45, 0.92, clamp(vDep / 0.5, 0.0, 1.0)) * clamp((vDep + 0.03) / 0.06, 0.0, 1.0));`);
+  };
+  m.customProgramCacheKey = () => 'safeSea' + (o.low ? 'L' : '');
+  return m;
+}
 export function cornerBeds(L) {
   if (L.vbed) return L.vbed;
   const { w, h } = L, W = w + 1, out = new Float32Array(W * (h + 1));
@@ -972,6 +999,12 @@ const ICE_MATS = new Map();
 export function iceMat(o = {}) {
   const hi = R.quality >= 1, key = (o.far ? 'f' + (o.far === 'dark' ? 'd' : '') : '') + (o.window ? 'w' : '') + (o.floe ? 'o' : '') + (hi ? 'h' : '') + (R.quality >= 2 ? '2' : '');
   if (ICE_MATS.has(key)) return ICE_MATS.get(key);
+  // (a phone's ice: plain lit ice, its windows dark glass: safeSea)
+  if (R.mobile) {
+    const m = new THREE.MeshLambertMaterial({ color: o.window ? 0x223240 : o.far === 'dark' ? 0x364350 : 0x9fb1bf });
+    if (o.window) { m.transparent = true; m.opacity = 0.6; m.depthWrite = false; }
+    ICE_MATS.set(key, m); return m;
+  }
   noiseTex(); crackTex();
   const lay = ENV.layers['rime/ice'] || null;
   // (Lambert, and the glints worked out here: the hero's lantern, small and hard, and the lit lanterns, uLights. A Phong
@@ -1531,7 +1564,8 @@ let tickT = -1;
 // gfx.js render(): the dome shows while the sky may (SEA.sky) and the camera looks low enough to see any of it
 R.skyHook = () => {
   frameHook();
-  const on = SEA.sky && R.cam.pitch <= 0.4;
+  // (a phone's sky is the fog's colour: safeSea)
+  const on = SEA.sky && R.cam.pitch <= 0.4 && !R.mobile;
   if (on && !dome) auroraSky();
   if (dome) { dome.visible = on; if (on && dome.parent !== R.scene) R.scene.add(dome); }
   tickTweens();

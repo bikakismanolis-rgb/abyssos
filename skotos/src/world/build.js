@@ -1442,7 +1442,9 @@ function groundMat(cfg, type) {
   if (X.dry) { const Dr = ENV.layers.dryleaf; Object.assign(uni, { tD: { value: (Dr || A).d }, uDryTint: { value: new THREE.Color(Dr ? 0xffffff : 0xc89a70).multiplyScalar(cfg.dryK ?? 1) }, uAut: WIND.uAutumn }); }
   if (X.wall) { const W = lay(cfg.W); Object.assign(uni, { tW: { value: W.d }, tWn: { value: W.n }, uWS: { value: 1 / (cfg.ws || 2.4) } }); }
   // Act V (sea.js): the snow's glints (not on low quality), the wet sand behind the ebb, the aurora's light on the ground
-  const X5 = { glint: !!cfg.glint && R.quality >= 1, wet: !!cfg.wet, aur: !!cfg.aur, fake: !!cfg.fake, hueB: !!cfg.hueB, edge: !!cfg.edge, v5: !!cfg.act5, win: !!cfg.wins?.length };
+  // (a phone's: none of them, sea.js safeSea)
+  const ph = !!R.mobile;
+  const X5 = { glint: !!cfg.glint && R.quality >= 1 && !ph, wet: !!cfg.wet && !ph, aur: !!cfg.aur && !ph, fake: !!cfg.fake, hueB: !!cfg.hueB, edge: !!cfg.edge && !ph, v5: !!cfg.act5 && !ph, win: !!cfg.wins?.length && !ph };
   if (X5.win) uni.uWin = { value: Array.from({ length: 8 }, (_, i) => new THREE.Vector2(cfg.wins[i * 2] ?? -99, cfg.wins[i * 2 + 1] ?? -99)) };
   X5.any = X5.glint || X5.wet || X5.aur || X5.edge || X5.win;
   if (X5.any) { noiseTex(); Object.assign(uni, SEA_U({ uWetLevel: SEA.uWetLevel, uLevel: SEA.uLevel, uBayLevel: SEA.uBayLevel }), SEA_LIT); }
