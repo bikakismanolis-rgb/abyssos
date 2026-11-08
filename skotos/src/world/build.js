@@ -1494,7 +1494,9 @@ function groundMat(cfg, type) {
   // Act VI (the X6 set, ground6): the coast's ground with only its wet rims (on quality 1 and up; quality 0 draws the dry
   // seabed alone) and its cheaper reads (V56: the path read where a path lies, the wobbling edges, the walls' strata)
   const X6 = !!cfg.act6;
-  const X5 = { glint: !!cfg.glint && R.quality >= 1, wet: !!cfg.wet && (!X6 || R.quality >= 1), aur: !!cfg.aur, fake: !!cfg.fake, hueB: !!cfg.hueB, edge: !!cfg.edge, v5: !!cfg.act5, win: !!cfg.wins?.length };
+  // (Act V on a phone: none of its own, sea.js safeSea)
+  const ph = !!R.mobile;
+  const X5 = { glint: !!cfg.glint && R.quality >= 1 && !ph, wet: !!cfg.wet && (!X6 || R.quality >= 1) && !ph, aur: !!cfg.aur && !ph, fake: !!cfg.fake, hueB: !!cfg.hueB, edge: !!cfg.edge && !ph, v5: !!cfg.act5 && !ph, win: !!cfg.wins?.length && !ph };
   const V56 = X5.v5 || X6;
   // (Act VI: the road the floor's own layer, read once: G_PA)
   const PA = X6 && cfg.P === cfg.A;
