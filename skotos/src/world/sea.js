@@ -192,11 +192,11 @@ vec3 freezeAt(vec2 p, float lead, float shore) {
   float fr = (1.0 - smoothstep(0.0, 2.5, abs(shore - fa + 1.0))) * step(0.001, uFreezeAll) * step(uFreezeAll, 0.995);
   for (int k = 0; k < 3; k++) {
     vec4 f = uFreeze[k];
-    if (f.w == 0.0 || f.z == 0.0) continue;
-    if (f.z > 0.0 && abs(lead - float(k + 1)) > 0.5) continue;
+    if (!(f.w == 0.0 || f.z == 0.0) && !(f.z > 0.0 && abs(lead - float(k + 1)) > 0.5)) {
     float R = abs(f.z), d = length(p - f.xy), e;
     if (f.w > 0.0) { e = R * f.w; fl = max(fl, 1.0 - smoothstep(e - 1.2, e, d)); fr = max(fr, (1.0 - smoothstep(0.0, 1.6, abs(d - e + 0.6))) * step(f.w, 0.999)); }
     else { e = R * (1.0 + f.w); fl = max(fl, smoothstep(e - 0.15, e + 0.25, d) * (1.0 - smoothstep(R + 0.6, R + 1.6, d))); fr = max(fr, (1.0 - smoothstep(0.0, 0.7, abs(d - e))) * step(-0.999, f.w)); }
+    }
   }
   return vec3(fz * step(0.001, uFreezeAll), fl, fr);
 }
@@ -475,11 +475,11 @@ float sq256(float x) { x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; r
   vec3 Ng = normalize(vec3((n2.a - 0.5) * 0.22 + g.x * 0.05, 1.0, (n2.b - 0.5) * 0.22 + g.y * 0.05)), Rg = reflect(-V, Ng);
   for (int i = 0; i < 2; i++) {
     vec4 Lp = uLights[i];
-    if (Lp.w <= 0.0) continue;
+    if (!(Lp.w <= 0.0)) {
     vec3 ld = Lp.xyz - vWP; float dl = length(ld); ld /= dl;
     vec2 lq = P - Lp.xz;
     // (none past where its path or its pool shows: the path's broad glow is under 1e-4 below 0.55, the pool's past 30 m)
-    if (dot(Rc, ld) < 0.55 && dot(lq, lq) > 900.0) continue;
+    if (!(dot(Rc, ld) < 0.55 && dot(lq, lq) > 900.0)) {
     // (and its fire on the water round the tower's foot, so lighting it changes the play frame: a broad warm path, its sparks,
     // and a glow on the water within a dozen metres)
     // (the sparks thinned within a dozen metres of the fire, where its pool already lights the water: there they lay round
@@ -487,6 +487,8 @@ float sq256(float x) { x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; x *= x; r
     float s = sq256(max(dot(Rg, ld), 0.0)) * 2.15 * smoothstep(0.34, 0.64, n1.r) * (0.25 + 0.75 * smoothstep(6.0, 16.0, length(ld.xz) * dl)) + sq16(max(dot(Rc, ld), 0.0)) * 0.2;
     float pool = exp(-dot(lq, lq) * 0.012) * (0.6 + 0.4 * n1.g);
     col += vec3(1.0, 0.72, 0.42) * (s * deep / (1.0 + dl * 0.04) + pool * 0.05 * mix(0.6, 1.0, deep)) * Lp.w;
+    }
+    }
   }
 #endif
   float plateK = 0.0;
@@ -1179,11 +1181,12 @@ vec3 iceEm = vec3(0.0);`)
     if (clu > 0.01) for (int j = 0; j < 3; j++) {
       float dj = 0.18 + float(j) * 0.26;
       vec2 bq = (P + par * dj) * 2.2 + bw, bc = floor(bq), bh = sH2(bc + 0.37);
-      if (bh.x < 0.93) continue;
+      if (!(bh.x < 0.93)) {
       vec2 bo = sH2(bc + 5.13);
       float br = length((bq - bc - 0.15 - bo * 0.7) * vec2(1.0, 0.7 + 0.6 * bh.y)) * 0.45;
       bub = max(bub, (1.0 - smoothstep(0.008, 0.02 + 0.022 * bh.y + float(j) * 0.006, br)) * (1.0 - float(j) * 0.25) * clu);
     }
+  }
   }
   col += vec3(0.15, 0.18, 0.2) * bub;
   // (old pressure cracks: long, few, straight, white with a faint glow in the ice round them, where a Voronoi of 5 m cells
@@ -1220,23 +1223,26 @@ vec3 iceEm = vec3(0.0);`)
   // dark shapes passing under the ice (kept on every quality: the Icemaw's tell)
   for (int i = 0; i < 4; i++) {
     vec4 s = uShade[i];
-    if (s.w <= 0.0) continue;
+    if (!(s.w <= 0.0)) {
     float dpt = i == 3 ? 3.2 : 1.3;
     vec2 qq = P + par * dpt - s.xy;
     float d = length(qq) / max(s.z, 0.1) + (nD.g - 0.5) * 0.35;
     col *= 1.0 - s.w * 0.92 * (1.0 - smoothstep(0.45, 1.0, d));
+    }
   }
 #if defined(ICE_HI) && !defined(ICE_WINDOW)
   // drowned lanterns glowing a few metres down, and their light caught in the ice (only while one is near the camera)
   if (uGlowOn > 0.5) for (int i = 0; i < 8; i++) {
     vec4 gl = uGlow[i];
-    if (gl.w <= 0.0) continue;
+    if (!(gl.w <= 0.0)) {
     // (seen at less than its depth: the ice bends the view, and the lantern stays under its window)
     vec2 qq = P + par * gl.y * 0.45 - gl.xz; float d2 = dot(qq, qq);
-    if (d2 > 900.0) continue;
+    if (d2 <= 900.0) {
     vec2 q2 = P + par * gl.y * 0.2 - gl.xz; float e2 = dot(q2, q2);
     // (its wide light kept close round the window: a wash metres off read as a stain attached to nothing)
     iceEm += vec3(1.0, 0.56, 0.2) * gl.w * (exp(-d2 * 1.6) * 0.5 + exp(-e2 * 0.4) * 0.12) * (0.85 + 0.15 * sin(t * 2.3 + gl.x));
+    }
+    }
   }
 #endif
 #if defined(ICE_HI) && defined(ICE_WINDOW)
@@ -1245,14 +1251,16 @@ vec3 iceEm = vec3(0.0);`)
   // blank pale puddle), a soft halo a metre across at its depth, a slow warm caustic ripple over the pane, the cross of glints
   if (uGlowOn > 0.5) for (int i = 0; i < 8; i++) {
     vec4 gl = uGlow[i];
-    if (gl.w <= 0.0) continue;
+    if (!(gl.w <= 0.0)) {
     vec2 off = par * gl.y * 0.4; off *= min(1.0, 0.28 / max(length(off), 1e-3));
     vec2 qq = P + off - gl.xz; float d2 = dot(qq, qq);
-    if (d2 > 9.0) continue;
+    if (d2 <= 9.0) {
     vec2 qh = P + par * gl.y * 0.22 - gl.xz; float h2 = dot(qh, qh);
     float cau = 0.5 + 0.5 * sin(qh.x * 7.0 + sin(qh.y * 5.0 + t * 0.9) * 1.6 + t * 0.7) * sin(qh.y * 6.0 - sin(qh.x * 4.0 - t * 0.8) * 1.4 - t * 0.6);
     float fl = 0.88 + 0.12 * sin(t * 2.3 + gl.x);
     iceEm += vec3(1.0, 0.6, 0.26) * gl.w * fl * (exp(-d2 * 70.0) * 3.2 + exp(-d2 * 9.0) * 0.45 + exp(-h2 * 3.2) * (0.06 + 0.16 * cau * cau) + (exp(-abs(qq.x) * 30.0) + exp(-abs(qq.y) * 30.0)) * exp(-d2 * 3.0) * 0.25);
+    }
+    }
   }
 #endif
   // cracks, stage by stage: a hairline through the cell, a star of three, then crazed white; slush: grey brash with
@@ -1269,12 +1277,14 @@ vec3 iceEm = vec3(0.0);`)
       vec2 ic = floor(P), hc = sH2(ic), cv = Pw - (ic + 0.5 + (hc - 0.5) * 0.4);
       float c = 0.0, reach = st > 1.5 ? 0.75 : 0.42;
       for (int j = 0; j < 3; j++) {
-        if (j > 0 && st < 1.5) break;
+        // (no break inside a loop, for the Adreno drivers: the later rays are only skipped)
+        if (!(j > 0 && st < 1.5)) {
         float an = hc.x * 6.283 + float(j) * 2.09 + (sH(ic + float(j) * 3.7) - 0.5) * 0.9;
         vec2 dir = vec2(cos(an), sin(an));
         // (straight, bent once where it starts: a sine along it read as a worm)
         float along = dot(cv, dir), dd = abs(dot(cv, vec2(-dir.y, dir.x)) + abs(along) * (hc.y - 0.5) * 0.3);
         c = max(c, (1.0 - smoothstep(0.004, 0.02, dd)) * (1.0 - smoothstep(reach * 0.5, reach, abs(along))));
+      }
       }
       if (st > 2.5) { c = max(c, (1.0 - smoothstep(0.0, 0.035, vEdge(Pw * 3.2))) * 0.7); col = mix(col, vec3(0.32, 0.37, 0.42), 0.25 + 0.3 * nB.g); }
       col = mix(col, vec3(0.62, 0.7, 0.75), c * 0.9);
@@ -1337,9 +1347,10 @@ vec3 iceEm = vec3(0.0);`)
 #endif
   for (int i = 0; i < 2; i++) {
     vec4 Lp = uLights[i];
-    if (Lp.w <= 0.0) continue;
+    if (!(Lp.w <= 0.0)) {
     vec3 ld = Lp.xyz - vIP; float dl = length(ld); ld /= dl;
     iceEm += vec3(1.0, 0.82, 0.55) * (pow(max(dot(Rf, ld), 0.0), 60.0) + pow(max(dot(Rf, ld), 0.0), 8.0) * 0.05) * Lp.w * 0.9 / (1.0 + dl * 0.04);
+    }
   }
 #endif
 #ifdef ICE_GLINT
