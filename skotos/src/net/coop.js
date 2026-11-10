@@ -17,8 +17,8 @@ import { G, later } from '../game/state.js';
 import { NET, MIRROR, heroes } from './state.js';
 import { pickTransport, bytesOf, MAX_MSG, TERMINAL } from './transport.js';
 import { SUPABASE } from './netcfg.js';
-import { enterZone, zoneReady, disposeZone, act3Presence, act4Presence, act5Presence, townFires, storyOpenings, light5, ZONES } from '../game/world.js';
-import { skerryClose } from '../game/ai.js';
+import { enterZone, zoneReady, disposeZone, act3Presence, act4Presence, act5Presence, act6Presence, townFires, storyOpenings, light5, ZONES } from '../game/world.js';
+import { skerryClose, unseenTick } from '../game/ai.js';
 import { spawnMonster, Actor, heroAvatar, freshStatus, frozenLook, restoreRim } from '../game/actors.js';
 import { damage, gainXP, healHero } from '../game/combat.js';
 import { MONSTERS, DIFFS, monsterXP, COOP, BASES, MAX_LEVEL, CLASSES, PACKS, PACK_LEAD } from '../game/data.js';
@@ -37,10 +37,12 @@ import Audio from '../audio/audio.js';
 import { on, emit } from '../ui/bus.js';
 import { t, has } from '../i18n/i18n.js';
 import { clamp, rand } from '../core/util.js';
+import { FIRE, fireOn, fireDrain, ringOf, setRemoteLight, lightPools, lightAt, lightKind, NAMES, namesFromHost } from '../game/light.js';
+import { cells6, cells6Apply } from '../game/tide.js';
 
 // (the game's version: pages of another do not list or join each other's games. 4: the Supabase wire of the economy
 // (docs/coop/diet.md), which a page of 3 cannot read nor be read by)
-export const VER = 4;
+export const VER = 5;
 const SNAP_HZ = 10, SNAP_MAX = 3900, REL_MAX = 1700, REL_Q = 200, FX_MAX = 900, FX_MIN = 500, FX_RATE = 600, NEAR = 40, NEAREST = 10, OVERDUE = 1000, CHUNK = 3300, HOST_LOST = 25000, HOST_GONE = 10000, STALL = 6000, DOWNED = 30, REVIVE = 2.5, LAG = 130, WAIT_MAX = 300000, NO_WORLD = 15000;
 const CODE_CH = 'abcdefghjkmnpqrstuvwxyz23456789';
 const KINDS = Object.keys(MONSTERS), KIDX = new Map(KINDS.map((k, i) => [k, i]));
@@ -51,6 +53,8 @@ export const S = {
   // answer, not advice); the room's end for this page (a terminal code: the game plays on alone)
   send: null, sendSure: false, dead: null,
   hostPeer: null, peers: new Map(), roster: [], hosts: [], names: {}, me: null,
+  // (Act VI, a guest: the Lampbearers drinking its ring as the host told it, id -> until)
+  drinks: new Map(),
   // the host: each guest's reliable events (one count for all), their acks, the guests' events done, the raises given,
   // the clip names given out; the world and ice versions
   rel: new Map(), relSeq: 0, done: new Map(), rvT: new Map(), clips: new Map(), worldSent: '', worldT: 0, iceT: 0, iceKey: '', snapT: 0, lobbyT: 0, hostAt: [],
@@ -305,7 +309,9 @@ function relayOf(ev, d, k) {
       p.lk = { c: own(CLASSES, lk.c) ? lk.c : 'warden', l: clamp(lk.l | 0, 0, MAX_LEVEL), ml: clamp(lk.ml | 0, 0, 1e4), w, o };
     }
     if (zk) p.zk = zk;
-    if (Array.isArray(d.h)) p.h = d.h.slice(0, 8).map((x) => (fin(x) ? clamp(Math.round(x), -1e8, 1e8) : 0));
+    if (Array.isArray(d.h)) p.h = d.h.slice(0, 9).map((x) => (fin(x) ? clamp(Math.round(x), -1e8, 1e8) : 0));
+    // (Act VI: the ring byte rides at h[8]; up to three light pools, nine finite numbers)
+    const lp = lpOf(d.lp); if (lp) p.lp = lp;
     if (Array.isArray(d.c2) && short(d.c2[0], 47)) p.c2 = [d.c2[0], num(d.c2[1], 0.05, 5, 1), d.c2[2] | 0];
     return bytesOf(p) <= RELAY_PRES ? p : null;
   }
@@ -390,6 +396,9 @@ function readPeer(P, moved) {
     P.state = st;
     pushSample(P.buf, P.state, P.ago);
   }
+  // (Act VI: its ring, its light pools: light.js setRemoteLight on its stand-in, each frame, remotesTick)
+  if (Array.isArray(p.h)) P.ringR = fin(p.h[8]) ? clamp(p.h[8], 0, 255) / 20 : null;
+  P.lp = lpOf(p.lp);
   if (Array.isArray(p.c2) && typeof p.c2[0] === 'string' && p.c2[0].length < 48) P.clip = { name: p.c2[0], spd: num(p.c2[1], 0.05, 5, 1), seq: p.c2[2] | 0 };
   P.ack = p.ak | 0;
   P.ev = Array.isArray(p.ev) ? p.ev : [];
@@ -496,7 +505,7 @@ function guestPresence(force) {
   if (!S.ch || !G.hero || (!force && !S.ch.presenceDue())) return;
   const h = S.real || G.hero, pl = G.player, s = G.stats;
   const p = { h: null, c2: null, nd: null, ev: null, r: 'g', c: S.code, v: VER, hb: Math.floor(now() / 1000) & 1023, lk: { c: h.cls, l: h.level, ml: h.mlvl || 0, w: h.equip.weapon ? [h.equip.weapon.base, h.equip.weapon.rar | 0, h.equip.weapon.leg || 0] : 0, o: h.equip.offhand ? [h.equip.offhand.rar | 0, h.equip.offhand.leg || 0] : 0 }, zk: S.zoneKey, ak: S.relDone, mf: Math.round(s?.mf || 0), gf: Math.round(s?.gold || 0), dm: Math.round((s?.wmax || 1) * (s?.dmgMult || 1)), cd: Math.round(s?.critD ?? 50) };
-  if (pl && S.zoneKey && S.zoneKey === myKey()) { p.h = heroState(); const av = pl.avatar; if (av?.netSeq) p.c2 = [av.netClip, Math.round((av.netSpd || 1) * 100) / 100, av.netSeq]; }
+  if (pl && S.zoneKey && S.zoneKey === myKey()) { p.h = heroState(); if (fireOn()) { p.h[8] = ringByte(); const lp = myPools(); if (lp) p.lp = lp; } const av = pl.avatar; if (av?.netSeq) p.c2 = [av.netClip, Math.round((av.netSpd || 1) * 100) / 100, av.netSeq]; }
   if (!S.world) p.nd = 'w';
   // the events the host has not acked, oldest first, as many as fit
   const ev = []; let b = bytesOf(p) + 10;
@@ -555,6 +564,8 @@ function hostTick(dt) {
   // the ice: what changed, at most twice a second, all of it every 3 s
   const I = z.ice;
   if (I && S.roster.length && now() - S.iceT > 500) { const dg = iceDigest(z); if (dg && (dg.key !== S.iceKey || now() - S.iceT > 3000)) { S.iceKey = dg.key; S.iceT = now(); sendBig('i', { k: key, d: dg.d }); } }
+  // (Act VI: the shards and the slush, on the same topic and terms, tide.js cells6)
+  else if (z.act6 && S.roster.length && now() - S.iceT > 500) { const c6 = cells6(z); if (c6.key !== S.iceKey || now() - S.iceT > 3000) { S.iceKey = c6.key; S.iceT = now(); sendBig('i', { k: key, c6: c6.d }); } }
   // the snapshot
   if (S.roster.length && S.started && now() - S.snapT >= 1000 / (S.ch.econ?.snap || SNAP_HZ) && S.ch.ready?.() !== false) { S.snapT = now(); sendSnap(); }
   if (!S.roster.length || !S.started) S.fxHost = [];
@@ -571,7 +582,7 @@ function hostTick(dt) {
 }
 function worldOf() {
   const h = G.hero;
-  return { flags: h.flags, quest: h.quest, diff: h.diff, wps: h.wps, a: [h.act1, h.act2, h.act3, h.act4, h.act5], gb: h.gateBest | 0, gate: G.gate ? { tier: G.gate.tier } : null, clips: [...S.clips] };
+  return { flags: h.flags, quest: h.quest, diff: h.diff, wps: h.wps, a: [h.act1, h.act2, h.act3, h.act4, h.act5, h.act6 ?? -1], gb: h.gateBest | 0, gate: G.gate ? { tier: G.gate.tier } : null, clips: [...S.clips] };
 }
 function worldKey() { const h = G.hero, f = JSON.stringify(h.flags); return f.length + ':' + h.quest + ':' + h.diff + ':' + hashStr(f); }
 function hashStr(s) { let x = 0; for (let i = 0; i < s.length; i++) x = (x * 31 + s.charCodeAt(i)) | 0; return x; }
@@ -615,11 +626,16 @@ function sendSnap() {
   // the host's hero
   const av = pl.avatar;
   o.h = heroState().concat([clipIdx(av?.netClip), (av?.netSeq || 0) & 1023, Math.round((av?.netSpd || 1) * 100)]);
+  // (Act VI: the host's ring at h[11], its light pools)
+  if (fireOn()) { o.h[11] = ringByte(); const lp = myPools(); if (lp) o.lp = lp; }
   // the tide as it stands (a guest's clock follows it), a boss's hold on it, the gusts and their clock (a guest's follows it)
   const z = G.zone, T = z.tide;
   if (T) o.w = [q(T.t, 10), T.force ? q(T.force.h, 100) : -1, T.force ? q(T.force.rate, 1000) : 0, z.gust?.on ? 1 : 0];
   else if (z.gust) o.w = [0, -1, 0, z.gust.on ? 1 : 0];
   if (z.gust) o.w.push(q(z.gust.t % 40, 10));
+  // (Act VI: the Mere's own level and its rate at o.w[5..6], the gusts' clock at [4] null below the ice; the names' window)
+  if (z.act6 && T) { o.w[4] = z.gust ? o.w[4] : null; o.w[5] = T.mere ? q(T.mere.h, 100) : -1; o.w[6] = T.mere ? q(T.mere.rate, 1000) : 0; }
+  if (z.act6 && NAMES.on) o.n = [Math.round(NAMES.left * 10), NAMES.falls];
   // the fires on the ice, lit by a touch or put out by the dark: the cairns, the open holes' lamps (bits)
   if (z.act5 && z.id === 'farlight') o.l = [bits(z.act5.cairns, (it) => it.i), bits(z.act5.lamps, (it) => it.hole * 4 + it.i)];
   // acks of each guest's events
@@ -695,8 +711,10 @@ function pickActors(A, gs, cap) {
 function actorEntry(a, t) {
   const av = a.avatar, hpF = a.hpMax > 0 ? Math.round(clamp(a.hp / a.hpMax, 0, 1) * 255) : 0;
   const sp = a.netSentT == null ? 0 : Math.hypot(a.x - a.netLx, a.z - a.netLz) / Math.max(0.03, (t - a.netSentT) / 1000);
-  const fl = (a.dead ? 1 : 0) | (a.hidden || a.under || (a.avatar && !a.avatar.group.visible && !a.dead) ? 2 : 0) | (a.aggro ? 4 : 0) | (a.status.freeze > 0 ? 8 : 0) | (a.status.stun > 0 ? 16 : 0)
+  let fl = (a.dead ? 1 : 0) | (a.hidden || a.under || (a.avatar && !a.avatar.group.visible && !a.dead) ? 2 : 0) | (a.aggro ? 4 : 0) | (a.status.freeze > 0 ? 8 : 0) | (a.status.stun > 0 ? 16 : 0)
     | (a.elite === 'champion' ? 32 : 0) | (a.elite === 'rare' ? 64 : 0) | (a.minion ? 128 : 0) | (a.flash > 0.5 ? 256 : 0) | (a.dormant ? 512 : 0) | (a.airborne ? 1024 : 0) | (a.statue && !a.awake ? 2048 : 0) | (a.team === 'hero' ? 4096 : 0) | (a.boss ? 8192 : 0) | (a.drowned ? 16384 : 0);
+  // (Act VI: lit on the host, bit 15: a guest draws an unseen Faded solid when this says so)
+  if (lightKind() === 'under' && a.def?.unseen && lightAt(a.x, a.z, { pad: a.radius * 0.5 })) fl |= 32768;
   return [a.id, KIDX.get(a.kind), q(a.x, 10), q(a.z, 10), q(((a.rot % 6.2832) + 6.2832) % 6.2832, 20), hpF, fl, clipIdx(av?.netClip), (av?.netSeq || 0) & 1023, q(Math.min(sp, 30), 10), q(a.y || 0, 10), a.level | 0, Math.round((av?.netSpd || 1) * 100), Math.round(a.hpMax)];
 }
 // the monsters' life (and a boss's) and their blows by the players here (data.js COOP), each keeping its share of life; in
@@ -832,7 +850,7 @@ function standByTick(dt) {
   }
 }
 // a host's monster strikes a guest's stand-in: the blow goes to the guest (its armour, block and dodge take it there)
-const HURT_KEYS = ['dot', 'pure', 'freeze', 'poison', 'burn', 'root', 'push', 'kx', 'kz', 'cold', 'seen', 'interrupt', 'plunge', 'wash', 'stun'];
+const HURT_KEYS = ['dot', 'pure', 'freeze', 'poison', 'burn', 'root', 'push', 'kx', 'kz', 'cold', 'seen', 'interrupt', 'plunge', 'wash', 'stun', 'ring'];
 NET.h.hurtRemote = (src, tg, amount, o = {}) => {
   if (!tg.peer || tg.dead || !(amount > 0)) return 0;
   const P = S.peers.get(tg.peer); if (!P) return 0;
@@ -847,6 +865,8 @@ NET.h.hurtRemote = (src, tg, amount, o = {}) => {
   return Math.round(amount);
 };
 // rewards: each guest here gets its own share of a kill, rolled on the host for its class and its magic find
+// (Act VI, the host: a Lampbearer's Drink on a guest, t s of it, 0 ends it)
+NET.h.drink = (tg, a, t) => { if (S.role === 'host' && tg?.remote && tg.peer) relTo(tg.peer, ['dr', a.id | 0, Math.round(clamp(t, 0, 2.5) * 10) / 10]); };
 NET.h.reward = (a, dx, dz) => {
   const K = coopK(), D = DIFFS[G.hero.diff], def = a.def, L = a.level;
   const em = a.boss ? 1 : a.elite === 'rare' ? 5 : a.elite === 'champion' ? 3 : a.minion ? 1.5 : 1;
@@ -892,12 +912,12 @@ function guestTick(dt) {
   // the host's zone: built here from its seed with the host's world (once the world has come); and again when this page
   // stands in another (its own travel, begun while it waited, that landed after it entered)
   if (H?.on && H.zone && S.world && !S.loading && (H.zone.k !== S.zoneKey || G.zone?.netKey !== S.zoneKey)) guestEnter(H.zone);
-  if (S.zoneKey && S.zoneKey === myKey()) { MIRROR.rec = recGuestFx; puppetsTick(dt); flushPulls(); }
+  if (S.zoneKey && S.zoneKey === myKey()) { MIRROR.rec = recGuestFx; puppetsTick(dt); flushPulls(); drinkTick(dt); }
   // presence each frame (sent coalesced), after the events of this frame
   guestPresence();
 }
 // the host's world on this page: G.hero becomes a view of the guest's own record with the host's story laid over it
-const WORLD = new Set(['flags', 'quest', 'diff', 'wps', 'act1', 'act2', 'act3', 'act4', 'act5', 'gateBest', 'seeds']);
+const WORLD = new Set(['flags', 'quest', 'diff', 'wps', 'act1', 'act2', 'act3', 'act4', 'act5', 'act6', 'gateBest', 'seeds']);
 // (the flags that are the hero's own, not the story's: a later skill seen in the panel, the hint given once; read and
 // written in the guest's own record)
 const OWN_FLAG = /^(seen_|tickHint$)/;
@@ -924,9 +944,9 @@ function onWorld(w) {
   const a = Array.isArray(w.a) ? w.a : [];
   const real = S.real || G.hero, own = real.flags || {};
   // (the blessings' multipliers stay the guest's own: Unbound, Remembered)
-  const flags = Object.assign({}, w.flags, { unbound: own.unbound, remembered: own.remembered });
+  const flags = Object.assign({}, w.flags, { unbound: own.unbound, remembered: own.remembered, lostAll: own.lostAll });
   const act = (v) => num(v, -1, DIFFS.length - 1, -1) | 0;
-  const W = { flags, quest: num(w.quest, 0, 99), diff: clamp(w.diff | 0, 0, DIFFS.length - 1), wps: Array.isArray(w.wps) ? w.wps.filter((z) => typeof z === 'string' && z.length < 24).slice(0, 40) : ['town'], act1: act(a[0]), act2: act(a[1]), act3: act(a[2]), act4: act(a[3]), act5: act(a[4]), gateBest: num(w.gb, 0, 999) | 0, seeds: {} };
+  const W = { flags, quest: num(w.quest, 0, 99), diff: clamp(w.diff | 0, 0, DIFFS.length - 1), wps: Array.isArray(w.wps) ? w.wps.filter((z) => typeof z === 'string' && z.length < 24).slice(0, 40) : ['town'], act1: act(a[0]), act2: act(a[1]), act3: act(a[2]), act4: act(a[3]), act5: act(a[4]), act6: act(a[5]), gateBest: num(w.gb, 0, 999) | 0, seeds: {} };
   const key = JSON.stringify(W);
   if (key === S.wkey) return;
   const first = !S.world;
@@ -947,7 +967,7 @@ function presenceAgain(z) {
     const sk = z.id === 'coast' && G.hero.flags.towerDown && z.L.spots.skerry;
     if (sk && sk.cells.some(([x, zz]) => z.map.walkable(x + 0.5, zz + 0.5))) skerryClose(z, sk);
     const act = ZONES[z.id]?.act;
-    if (act === 5) act5Presence(z); else if (act === 4) act4Presence(z); else if (act === 3) act3Presence(z); else if (z.id === 'town') townFires(z);
+    if (act === 6) act6Presence(z); else if (act === 5) act5Presence(z); else if (act === 4) act4Presence(z); else if (act === 3) act3Presence(z); else if (z.id === 'town') townFires(z);
   } catch (e) { console.error(e); }
 }
 async function guestEnter(Z) {
@@ -1031,6 +1051,7 @@ function onSnap(o) {
     H.state = { x: num(h[0], -10, 1e4) / 20, z: num(h[1], -10, 1e4) / 20, r: num(h[2], -1e3, 1e3) / 100, sp: num(h[3], 0, 400) / 10, hp: num(h[4], 0, 1e8), hpMax: Math.max(1, num(h[5], 1, 1e8)), fl: h[6] | 0, y: num(h[7], -100, 400) / 20 };
     pushSample(H.buf, H.state);
     const name = S.hclips.get(h[8]); if (name) H.clip = { name, seq: h[9] | 0, spd: num(h[10], 1, 500, 100) / 100 };
+    H.ringR = fin(h[11]) ? clamp(h[11], 0, 255) / 20 : null; H.lp = lpOf(o.lp);
     H.zk = o.k;
     // (the first snapshot of a zone just entered: a guest that came in far from the host, its place unknown, is put by it)
     const pl = G.player;
@@ -1043,12 +1064,40 @@ function onSnap(o) {
   // the tide and the gusts; the fires on the ice
   if (Array.isArray(o.w)) worldState(o.w);
   if (Array.isArray(o.l)) lit5(o.l);
+  if (Array.isArray(o.n) && G.zone?.act6) namesFromHost(num(o.n[0], 0, 600) / 10, o.n[1] | 0);
   // the monsters
   if (Array.isArray(o.a)) for (const e of o.a) if (Array.isArray(e)) puppetEntry(e);
   // (the look of this guest's own blows it has shown already: passed over)
   if (Array.isArray(o.f)) { const sk = o.fs && typeof o.fs === 'object' && own(o.fs, S.ch.me) && Array.isArray(o.fs[S.ch.me]) ? new Set(o.fs[S.ch.me]) : null; replayFx(sk ? o.f.filter((e, i) => !sk.has(i)) : o.f, S.hostPeer); }
 }
-function onIce(o) { if (o && o.k === S.zoneKey && o.k === myKey()) netIce(G.zone, o.d); }
+function onIce(o) { if (!o || o.k !== S.zoneKey || o.k !== myKey()) return; if (o.c6 && G.zone?.act6) cells6Apply(G.zone, sane6(o.c6)); else if (o.d) netIce(G.zone, o.d); }
+// ---------- Act VI (docs/act6-contract.md, Co-op beneath the ice) ----------
+// the ring as one byte (0-12.75 m in twentieths, the Lamplight bonus, a flare and the chain inside); this page's moving
+// light pools (the wolf's lantern, a Bulwark ward) as [x, z, r, ...] in tenths, at most three; a pool list read back
+const ringByte = () => clamp(Math.round(ringOf(G.player) * 20), 0, 255);
+function myPools() {
+  const out = [];
+  for (const p of lightPools()) { if (out.length >= 9) break; const f = p.follow; if (!f || p.fake || !(f === G.player || (f.pet && !f.remote && !f.puppet))) continue; out.push(q(p.x, 10), q(p.z, 10), q(p.r, 10)); }
+  return out.length ? out : null;
+}
+function lpOf(lp) {
+  if (!Array.isArray(lp)) return null;
+  const out = [];
+  for (let i = 0; i + 2 < Math.min(lp.length, 9); i += 3) { const x = lp[i], z = lp[i + 1], r = lp[i + 2]; if (fin(x) && fin(z) && fin(r)) out.push({ x: clamp(x, -10, 1e4) / 10, z: clamp(z, -10, 1e4) / 10, r: clamp(r, 0, 60) / 10 }); }
+  return out.length ? out : null;
+}
+// the host's shards and slush, bounded before tide.js takes them
+function sane6(d) {
+  const s = Array.isArray(d?.s) ? d.s.slice(0, 64).filter((e) => Array.isArray(e) && fin(e[0]) && fin(e[1]) && fin(e[2])).map((e) => [e[0] | 0, e[1] | 0, clamp(e[2], 0, 200)]) : [];
+  const l = Array.isArray(d?.l) ? d.l.slice(0, 32).filter((e) => Array.isArray(e) && e.every(fin)).map((e) => [clamp(e[0], 0, 1e4), clamp(e[1], 0, 1e4), clamp(e[2], 0, 6), clamp(e[3], 0, 120)]) : [];
+  return { s, l };
+}
+// a Lampbearer's Drink on this guest, as the host told it: this page drains its own ring at the Drink's rate
+function drinkTick(dt) {
+  if (!S.drinks?.size) return;
+  const t = now(), rate = MONSTERS.lampbearer?.drinker?.rate ?? 0.5;
+  for (const [id, until] of S.drinks) { if (until <= t) { S.drinks.delete(id); continue; } fireDrain(rate * dt, { src: 'drink', half: true }); }
+}
 function worldState(w) {
   const z = G.zone, T = z?.tide;
   if (T) {
@@ -1058,6 +1107,8 @@ function worldState(w) {
     const fh = w[1];
     if (fin(fh) && fh >= 0) T.force = { h: Math.min(fh, 1000) / 100, rate: num(w[2], 10, 1e4, 10) / 1000 };
     else if (T.force) T.force = null;
+    // (Act VI: the Mere as the host has it; this page's tide.js steps its cells toward it)
+    if (z.act6 && w.length >= 7) { const mh = w[5]; T.mere = fin(mh) && mh >= 0 ? { h: Math.min(mh, 300) / 100, rate: num(w[6], 1, 1e5, 300) / 1000 } : null; }
   }
   // (the gusts: this page's clock put right to the host's, both running the same 40 s, so its warning, its snow and its
   // Cold come with the host's and nothing else writes them; only a host that sends no clock has its 'on' laid over)
@@ -1075,7 +1126,7 @@ function lit5(l) {
 }
 // what the host may lay on this guest's hero, at most (the game's own sizes): hurtHero halves a freeze, roots stop at
 // 1.2 s; a stun does nothing to a hero, so it is not taken
-const HURT_MAX = { freeze: 4, seen: 6, root: 1.2, push: 40, cold: 100, poison: 1e8, burn: 1e8 };
+const HURT_MAX = { freeze: 4, seen: 6, root: 1.2, push: 40, cold: 100, poison: 1e8, burn: 1e8, ring: 1.5 };
 function hurtOpts(oo) {
   const o = {}; if (!oo || typeof oo !== 'object') return o;
   // (the rest are marks: a burn's tick, a blow armour does not take, a shriek, the sea's)
@@ -1090,7 +1141,7 @@ function hurtOpts(oo) {
 // own claim, as a guest's is (bounded by the game's top): never a number past what a hero of that level meets
 const zoneTop = () => { const z = G.zone, H = S.peers.get(S.hostPeer), hl = clamp(H?.lk?.l | 0 || MAX_LEVEL, 1, MAX_LEVEL); return Math.min(MAX_ILVL, Math.max(z?.level | 0, hl + 2) + 3); };
 // each zone's boss (the story's, and its echo): the only boss a kill there is paid as (in a Shadow Gate, its guardian)
-const ZONE_BOSS = { forest: 'weaver', crypt: 'barrowLord', pass: 'stonewarden', halls: 'moltenKing', weep: 'silverhorn', heart: 'amaranthe', ashfield: 'ivar', forge: 'karthax', coast: 'tower', farlight: 'skotos' };
+const ZONE_BOSS = { forest: 'weaver', crypt: 'barrowLord', pass: 'stonewarden', halls: 'moltenKing', weep: 'silverhorn', heart: 'amaranthe', ashfield: 'ivar', forge: 'karthax', coast: 'tower', farlight: 'skotos' , drained: 'ketos', bottom: 'shade' };
 const GUARDS = new Set(['barrowLord', 'weaver', 'troll']);
 // a monster as the host's snapshots showed it (its kind, level and rank; where and when it was seen dead): what a kill of
 // it can be paid. One the host never showed, or never showed dead, is paid nothing
@@ -1098,7 +1149,7 @@ function pupSeen(e, a) {
   const id = e[0] | 0, kind = KINDS[e[1] | 0], fl = e[6] | 0; if (!kind || !MONSTERS[kind]) return null;
   let I = S.pupInfo.get(id);
   if (!I) {
-    const zid = G.zone?.id, boss = zid === 'gate' ? !!(fl & 8192) && GUARDS.has(kind) : !!MONSTERS[kind].boss && ZONE_BOSS[zid] === kind;
+    const zid = G.zone?.id, boss = zid === 'gate' ? !!(fl & 8192) && GUARDS.has(kind) : !!MONSTERS[kind].boss && ZONE_BOSS[zid] === (MONSTERS[kind].legKey ?? kind);
     I = { kind, level: a ? a.level : clamp(e[11] | 0 || G.zone.level, 1, zoneTop()), boss, elite: fl & 64 ? 'rare' : fl & 32 ? 'champion' : null, minion: !!(fl & 128), deadT: 0 };
     S.pupInfo.set(id, I); if (S.pupInfo.size > 3000) S.pupInfo.delete(S.pupInfo.keys().next().value);
   }
@@ -1142,7 +1193,16 @@ function relEvent(e) {
     const src = S.pup.get(e[1] | 0) || { team: 'foe', level: clamp(e[3] | 0, 1, zoneTop()), x: pl.x, z: pl.z, def: {}, dead: false, affixes: [] };
     const o = hurtOpts(e[4]);
     if (o.kx == null) { o.kx = pl.x - src.x; o.kz = pl.z - src.z; }
+    const ring = o.ring; delete o.ring;
     damage(src, pl, num(e[2], 0, 1e8), o);
+    // (Act VI: what the blow took of this hero's ring: a Forgetting Touch, a snap)
+    if (ring) fireDrain(ring, { src: 'host', half: true });
+    return;
+  }
+  if (type === 'dr') {
+    // (Act VI: a Lampbearer's Drink on this hero: t s of it, 0 ends it; at most two at once)
+    const id = e[1] | 0, t = num(e[2], 0, 2.5);
+    if (t > 0 && (S.drinks.size < 2 || S.drinks.has(id))) S.drinks.set(id, now() + t * 1000); else S.drinks.delete(id);
     return;
   }
   if (type === 'k') {
@@ -1243,6 +1303,8 @@ function puppetEntry(e) {
   a.netFl = fl;
   a.aggro = !!(fl & 4);
   a.hidden = !!(fl & 2) && !(fl & 1); a.airborne = !!(fl & 1024);
+  // (Act VI: lit on the host; a Faded's look on this page, ai.js unseenTick in puppetsTick)
+  if (a.def.unseen) a.hostLit = !!(fl & 32768);
   a.status.freeze = fl & 8 ? 0.2 : 0; a.status.stun = fl & 16 ? 0.2 : 0;
   if (a.dormant && !(fl & 512)) { a.dormant = false; a.disguised = false; if (a.mesh) { a.mesh.parent?.remove(a.mesh); a.mesh = null; } }
   // the clip the host's avatar last played
@@ -1271,6 +1333,7 @@ function puppetsTick(dt) {
   for (const [id, a] of S.pup) {
     if (a.removed) { S.pup.delete(id); continue; }
     if (now() - a.seen > 2500 && !a.dead) { killPuppet(a); S.pup.delete(id); continue; }
+    if (a.def?.unseen && !a.dead && G.player) unseenTick(a, dt, G.player);
     const p = interp(a.buf);
     if (p) { a.x = p.x; a.z = p.z; a.rot = p.r; a.y = p.y; }
     a.flash = Math.max(0, (a.flash || 0) - dt * 6);
@@ -1338,6 +1401,7 @@ function remotesTick(dt) {
     if (dead && !a.dead) { a.dead = true; a.downT = now(); a.avatar?.play('die', 1); }
     else if (!dead && a.dead) { a.dead = false; a.avatar?.anim.stop?.(0.2); }
     a.iframes = P.state.fl & 8 ? 0.2 : 0; a.y = a.y || 0;
+    if (fireOn()) setRemoteLight(a, P.ringR ?? (ZONES[G.zone?.id]?.ring ?? 4.5), P.lp || []);
     a.flash = Math.max(0, (a.flash || 0) - dt * 4);
     const av = a.avatar; if (!av) continue;
     if (P.clip && P.clip.seq !== a.clipSeq) { if (a.clipSeq !== -1 && !dead) av.play(P.clip.name, P.clip.spd); a.clipSeq = P.clip.seq; }
@@ -1411,7 +1475,7 @@ const GUEST_OK = new Set(['chest', 'shrine', 'stash']);
 NET.h.canUse = (it) => {
   if (NET.mode !== 'guest') return true;
   if (GUEST_OK.has(it.kind)) return true;
-  if (it.kind === 'npc') return ['smith', 'healer', 'brokka', 'elati'].includes(it.npc);
+  if (it.kind === 'npc') return ['smith', 'healer', 'brokka', 'elati', 'glaukos', 'tamarisk', 'selna'].includes(it.npc);
   return false;
 };
 NET.h.guestUse = (it) => {

@@ -983,21 +983,22 @@ function pullHero(x, z, dist, dur, key, stop = 1.2) {
 // ---------- Act VI: below the ice (docs/act6-contract.md, Combat; the design's Enemies) ----------
 const h6 = () => HAZ6[G.hero?.diff ?? 1] || HAZ6[1];
 const DARK6 = 0x8a70ff;
-// what the dark's blows take from a hero's ring: this page's own through fireDrain; a co-op guest's goes in its blow's
-// statuses (net/coop.js reads o.ring on hurtRemote)
-function drainOf(tg, v, src) { if (tg === G.player) fireDrain(v, { src, half: true }); else if (tg?.remote) tg.ringHit = (tg.ringHit || 0) + v; }
+// what the dark's blows take from a hero's ring: this page's own through fireDrain; a co-op guest's rides its blow's
+// statuses (o.ring, net/coop.js HURT_KEYS: the guest drains its own) and a Drink goes as its own event (NET.h.drink)
+function drainOf(tg, v, src) { if (tg === G.player) fireDrain(v, { src, half: true }); }
+const ringOpt = (tg, v) => (tg && tg !== G.player && tg.remote ? v : 0);
 // the Faded's Forgetting Touch: 1.1x and 0.5 m of her ring
 function touchStrike(a, pl, tg) {
   killTele(a.tele); a.tele = null;
   if (!meleeLands(a, tg, 2.0, 0.7)) { tally(a, 'touchMissed'); return; }
-  const n = hitHero(a, pl, 1.1, { target: tg });
+  const n = hitHero(a, pl, 1.1, { target: tg, ring: ringOpt(tg, 0.5) });
   if (n > 0) { drainOf(tg, 0.5, 'touch'); puff(tg.x, 1.2, tg.z, 6, 0x1a1c24, 0.6, 0.8, 1.0); tally(a, 'touched'); }
 }
 // unseen: outside light drawn dissolved (85%), solid in light, from its wind-up whenever its target is within reach + 1 m,
 // while it listens, while Revealed; a.unseenNow for the health bar and the skills' aim (skills.js nearestFoe)
-function unseenTick(a, dt, pl) {
+export function unseenTick(a, dt, pl) {
   const tg = a.tgt || pl, close = !!tg && (a.state === 'attack' || a.state === 'wind' || a.state === 'aim') && Math.hypot(tg.x - a.x, tg.z - a.z) <= a.def.reach + 1 + (tg.radius || 0.5);
-  const lit = !(fireOn() && FIRE.state === 'out') && lightAt(a.x, a.z, { pad: a.radius * 0.5 });
+  const lit = a.hostLit || (!(fireOn() && FIRE.state === 'out') && lightAt(a.x, a.z, { pad: a.radius * 0.5 }));
   const solid = lit || close || a.listenT > 0 || a.revealed > 0 || a.dormant;
   a.unseenNow = !solid;
   const v = solid ? 0 : 0.85;
@@ -1032,8 +1033,8 @@ function drinkerAI(a, dt, pl, d) {
   if (a.state === 'drinkTell' || a.state === 'drink') {
     face(a, tg, dt, 6); a.atkT += dt;
     const broke = a.hpMark - a.hp >= a.hpMax * 0.06 || a.status.stun > 0 || a.status.freeze > 0 || (tg === G.player && lampLightAt(tg.x, tg.z)) || td > D.t * 0 + 13 || !map.los(a.x, a.z, tg.x, tg.z);
-    if (broke) { killTele(a.tele); a.tele = null; a.state = 'chase'; a.cd = 3; a.avatar?.play('idle', 1); tally(a, 'drinkBroken'); return 0; }
-    if (a.state === 'drinkTell' && a.atkT >= 0.6) { a.state = 'drink'; a.atkT = 0; tally(a, 'drink'); a.avatar?.play('channel', 1, { loop: true }); }
+    if (broke) { killTele(a.tele); a.tele = null; a.state = 'chase'; a.cd = 3; a.avatar?.play('idle', 1); tally(a, 'drinkBroken'); if (tg.remote) NET.h.drink?.(tg, a, 0); return 0; }
+    if (a.state === 'drinkTell' && a.atkT >= 0.6) { a.state = 'drink'; a.atkT = 0; tally(a, 'drink'); a.avatar?.play('channel', 1, { loop: true }); if (tg.remote) NET.h.drink?.(tg, a, D.t); }
     if (a.state === 'drink') {
       const before = tg === G.player ? FIRE.r : 0;
       drainOf(tg, D.rate * dt, 'drink');
@@ -1096,7 +1097,7 @@ function lureAI(a, dt, pl, d) {
       const inPool = Math.hypot(tg.x - a.bait.x, tg.z - a.bait.z) < a.lureR + 0.4;
       // (the tail strikes from the dark: a roll in the tell slips it)
       if (inPool && !(tg.iframes > 0)) {
-        const n = hitHero(a, pl, 1.3, { target: tg });
+        const n = hitHero(a, pl, 1.3, { target: tg, ring: ringOpt(tg, L.drain) });
         if (n > 0) { drainOf(tg, L.drain, 'snap'); if (tg === G.player) pullHero(a.x, a.z, L.pull, 0.25, 'hud.hooked', a.radius + tg.radius + 0.4); tally(a, 'snap'); }
       } else tally(a, 'snapMissed');
       sparks(a.bait.x, 0.4, a.bait.z, 8, 0xd8f0ff, 3);
@@ -1383,14 +1384,21 @@ function louseUnder(a, dt, pl, d) {
 function boilOut(a, pk, flood) {
   for (const b of G.actors) if (b.under && b.def.curl && !b.dead && b.emergeIn == null && (b === a || (a.packId != null && b.packId === a.packId))) { b.emergeIn = b === a ? 0 : rand.range(0.1, 0.6); b.seenRelease = pk?.release || 0; if (flood) b.aggro = true; }
   if (!pk) return;
-  // the hull rattles, the crack opens wider (the 3 x 3 round it to stage 2), the den spills
+  // the hull rattles, the crack opens wider (the 3 x 3 round it to stage 2), the den spills; (Act VI) from the vault: a white
+  // circle of 2 m for 0.8 s and a patter of grit, then they drop (louseOut: 0.5x to a hero under them)
   if (a.burst === 'ice') crackAt(pk.x, pk.z, 1.5, 1, { src: 'lice' });
+  if (a.burst === 'vault') {
+    teleCircle(pk.x, pk.z, 2, 0.8, 0xe8f4ff);
+    for (let i = 0; i < 10; i++) P({ add: false, x: pk.x + rand.range(-1.5, 1.5), y: 8, z: pk.z + rand.range(-1.5, 1.5), vy: -10, life: 0.8, size: 0.08, size1: 0.05, color: 0xd8e0e8 });
+    for (const b of G.actors) if (b.under && b.def.curl && b.burstPack === pk && b.emergeIn != null) b.emergeIn = Math.max(b.emergeIn, 0.8);
+  }
   Audio.sfx('louseSkitter', { x: pk.x, z: pk.z }); tally(a, 'boil:' + a.burst);
 }
 function louseOut(a) {
   a.under = false; a.hidden = false; a.emergeIn = null; a.y = 0; a.aggro = true; a.rising = 0.9;
   if (a.avatar) { a.avatar.group.visible = true; a.avatar.play('spawn', 1.2); }
   if (a.burst === 'ice') { iceShards(a.x, a.z, 8); splashFx(a.x, a.z, 0.5); }
+  else if (a.burst === 'vault') { puff(a.x, 0.3, a.z, 6, 0xd8e0e8, 0.6, 0.8, 0.9); for (const h of heroes()) if (!h.dead && Math.hypot(h.x - a.x, h.z - a.z) < 1.2 + (h.radius || 0.5)) hitHero(a, G.player, 0.5, { target: h }); }
   else if (a.burst === 'hull') { puff(a.x, 0.4, a.z, 5, 0x5a4a38, 0.6, 0.8, 0.9); for (let i = 0; i < 6; i++) P({ add: false, x: a.x, y: 0.4, z: a.z, vx: rand.range(-2, 2), vy: rand.range(1, 3), vz: rand.range(-2, 2), life: 0.7, size: 0.08, size1: 0.05, color: 0x3a3024, alpha: 1, grav: 12 }); }
   else puff(a.x, 0.2, a.z, 5, 0x8a8478, 0.6, 0.7, 0.8);
   tally(a, 'out');

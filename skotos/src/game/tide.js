@@ -468,7 +468,7 @@ export function tideDial() {
   const T = TIDE; if (!T) return null;
   const H = haz(), ph = H.phases, ends = [ph[0], ph[0] + ph[1], ph[0] + ph[1] + ph[2], ph[0] + ph[1] + ph[2] + ph[3]];
   const pi = PH.indexOf(T.phase), next = T.force ? 0 : Math.max(0, ends[pi] - T.t);
-  return { h: T.h, u: T.u, k: clamp(T.u / lv(H.top ?? TOP8), 0, 1), groan: !!H.groan, dir: T.force ? Math.sign(Math.round((T.force.h || 0) / TIDE_STEP) - T.step) : T.phase === 'flood' ? 1 : T.phase === 'ebb' ? -1 : 0, phase: T.phase, next, bell: T.bell, lane: !!T.lane, laneT: T.lane ? Math.max(0, T.laneT) : 0, forced: !!T.force };
+  return { h: T.h, u: T.u, k: clamp(T.u / lv(H.top ?? TOP8), 0, 1), groan: !!H.groan, len: ph[pi] || 0, dir: T.force ? Math.sign(Math.round((T.force.h || 0) / TIDE_STEP) - T.step) : T.phase === 'flood' ? 1 : T.phase === 'ebb' ? -1 : 0, phase: T.phase, next, bell: T.bell, lane: !!T.lane, laneT: T.lane ? Math.max(0, T.laneT) : 0, forced: !!T.force };
 }
 // the flood waves' clock: one each 25 s while the water stands at 0.75 m or more (world.js updatePacks asks while fewer
 // than two are alive and spawns the 'floodWave' pack): a wading cell at the water's edge 14-26 m from her, or null

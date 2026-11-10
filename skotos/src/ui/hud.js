@@ -17,6 +17,7 @@ import Audio from '../audio/audio.js';
 import { mapTone, tideDial } from '../game/tide.js';
 import { stageAt } from '../game/ice.js';
 import { COLD } from '../game/cold.js';
+import { fireOn, FIRE } from '../game/light.js';
 
 const $ = (id) => document.getElementById(id);
 const el = (html) => { const d = document.createElement('div'); d.innerHTML = html.trim(); return d.firstChild; };
@@ -50,7 +51,7 @@ export function buildHud() {
       <div id="bars"><div class="bar hp"><i class="lag"></i><i class="fill"></i><i class="shield"></i><span></span></div><div class="bar res"><i class="fill"></i></div><div id="xpbar"><i></i></div><div id="buffs"></div>
         <div id="amber" hidden><span class="ic">${TEAR}</span><div class="ab"><i></i></div><b></b></div>
         <div id="cling" hidden><span class="ic">${TICK}</span><b></b></div>
-        <div id="cold" hidden><span class="ic">${SNOW}</span><div class="cb"><i></i><u></u></div><b></b></div></div></div>
+        <div id="cold" hidden><span class="fl" hidden>${ICON.flame}</span><span class="ic">${SNOW}</span><div class="cb"><i></i><u></u></div><b></b></div></div></div>
     <div id="hud-tr"><div id="mmw"><canvas id="minimap" width="264" height="264"></canvas><div id="tide" hidden>${DIAL}</div></div>
       <div id="hud-btns"><button class="hbtn" id="h-bag" aria-label="bag">${ICON.bag}</button><button class="hbtn" id="h-skills" aria-label="skills">${ICON.book}</button><button class="hbtn" id="h-menu" aria-label="menu">${ICON.menu}</button></div>
       <div id="quest"></div></div>
@@ -227,9 +228,13 @@ function setBadge(id, n) {
 // Act V: the Cold, in the amber meter's place: a snowflake, a blue fill with marks at Chilled (50) and Freezing (75), the
 // state's name, an arrow while it climbs or falls, and a warm edge while she is Warmed
 function coldHud(pl, on) {
-  const el = $('cold'), v = COLD.v, st = COLD.state, show = on && (v >= 1 || st !== 'none');
+  // (Act VI, systems' hook: below the ice the Carried Fire's small flame beside the meter, grey while Dim, dark while Out;
+  // the meter shows with it)
+  const fo = fireOn(), el = $('cold'), v = COLD.v, st = COLD.state, show = on && (fo || v >= 1 || st !== 'none');
   if (el.hidden === show) el.hidden = !show;
   if (!show) return;
+  const fl = el.querySelector('.fl'), fk = fo ? FIRE.state : '';
+  if (S.fk !== fk) { S.fk = fk; fl.hidden = !fo; fl.className = 'fl ' + fk; fl.title = fo && FIRE.state !== 'full' ? t('hud.dim') : ''; }
   const w = (v / 100).toFixed(3);
   if (S.cw !== w) { el.querySelector('i').style.transform = `scaleX(${w})`; S.cw = w; }
   const cls = st + (COLD.dir > 0 ? ' up' : COLD.dir < 0 ? ' down' : '') + (pl.buffs.warmed > 0 ? ' warm' : '');
@@ -246,10 +251,10 @@ function tideHud() {
   const el = $('tide'), d = G.zone?.water && G.mode === 'play' ? tideDial() : null;
   if (el.hidden === !!d) el.hidden = !d;
   if (!d) { S.lane = false; return; }
-  const H = HAZ5[G.hero.diff] || HAZ5[1], len = H.phases[TIDE_PH.indexOf(d.phase)] || 40;
+  const H = HAZ5[G.hero.diff] || HAZ5[1], len = d.len || H.phases[TIDE_PH.indexOf(d.phase)] || 40;
   const arc = d.lane ? Math.min(1, d.laneT / 6) : d.forced ? 0 : Math.min(1, Math.max(0, d.next / len));
   const y = (31.5 - 24.5 * Math.min(1, Math.max(0, d.k))).toFixed(1), dir = d.dir > 0 ? 1 : d.dir < 0 ? -1 : 0;
-  const cls = (d.lane ? 'lane' : d.bell ? 'bell' : '') + (d.forced ? ' forced' : '') + (dir > 0 ? ' up' : dir < 0 ? ' down' : ' slack');
+  const cls = (d.lane ? 'lane' : d.bell ? 'bell' : '') + (d.forced ? ' forced' : '') + (d.groan ? ' groan' : '') + (dir > 0 ? ' up' : dir < 0 ? ' down' : ' slack');
   const key = cls + '|' + arc.toFixed(3) + '|' + y + '|' + dir;
   if (S.tk !== key) {
     S.tk = key;

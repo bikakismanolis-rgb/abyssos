@@ -1522,6 +1522,61 @@ const SC = {
     for (const k of ['flare', 'drink', 'cone']) ok(isDark(onGuest[k]), `on the guest: the ${k} is the dark telegraph (premultiplied, the violet rim, the 2 Hz clock), not a white one`, onGuest[k]);
     ok(isWhite(onGuest.white), 'on the guest: the white circle stays an ordinary additive tell, its own colour', onGuest.white);
   }
+  ,
+  // Act VI: net (docs/act6-contract.md, Co-op beneath the ice; protocol 5): the Mere's level from the host's o.w[5..6]; a
+  // guest's ring byte on the host's stand-in; a guest's light pool (the wolf's lantern) lifts the dark on the host; a host
+  // Lampbearer's Drink drains the guest's own ring ('dr'); the names' window reaches the guest (o.n) and fills its ring;
+  // the host's slush reaches the guest on 'i' (cells6); a Faded lit on the host is drawn solid on the guest (bit 15)
+  async act6() {
+    const { host, guests: [g] } = await party('drained', 1, { lvl: 36, glvl: 36, hq: '&quest=31' });
+    ok(await ev(host, async () => (await import('/src/net/coop.js')).VER === 5), 'protocol 5');
+    await ev(host, () => { const z = window.__G.zone; for (const p of z.packs) p.spawned = true; for (const a of z.actors) if (a.team === 'foe' && !a.prop) { a.hp = 0; a.dead = true; a.remove?.(); } window.__immortal = true; window.__act6.NAMES.t = -999; });
+    await ev(g, () => { window.__immortal = true; });
+    ok(await ev(g, () => !!window.__G.zone.tide && window.__G.zone.tide.mstep === 11), 'the guest\'s Drained Sea has the black water and the Mere at 1.65 m');
+    // the Mere: the host lowers it, the guest's follows
+    await ev(host, () => { window.__G.zone.tide.mere = { h: 0.9, rate: 3 }; });
+    const mere = await until(g, () => { const T = window.__G.zone.tide; return T.mere && Math.abs(T.mere.h - 0.9) < 0.02 && T.mstep === 6; }, null, 20000, 'mere');
+    ok(mere, 'the host\'s Mere (o.w[5..6]) moves the guest\'s', await ev(g, () => ({ mere: window.__G.zone.tide.mere, mstep: window.__G.zone.tide.mstep })));
+    // a dark place for the guest, far from the host
+    const spot = await ev(host, () => {
+      const z = window.__G.zone, m = z.map, fa = window.__act6.fire, pl = window.__G.player;
+      for (let k = 0; k < 12000; k++) { const x = 8 + Math.random() * (z.L.w - 16), zz = 8 + Math.random() * (z.L.h - 16); if (!m.walkable(x, zz) || !m.walkable(x + 2.5, zz) || !m.walkable(x + 8, zz) || Math.hypot(x - pl.x, zz - pl.z) < 25 || z.L.bed[Math.floor(zz) * z.L.w + Math.floor(x)] < 9) continue; let dark = true; for (let j = 0; j < 12 && dark; j++) { const a = j / 12 * 6.28; for (const r of [0, 3, 6, 9]) { if (window.__act6.lightAt(x + Math.sin(a) * r, zz + Math.cos(a) * r, { ring: false }) || fa.skyAt(x + Math.sin(a) * r, zz + Math.cos(a) * r)) dark = false; } } if (dark) return { x, z: zz }; }
+      return null;
+    });
+    ok(!!spot, 'a dark place for the guest', spot);
+    if (!spot) return;
+    await ev(g, (s) => { const pl = window.__G.player; pl.x = s.x; pl.z = s.z; window.__act6.FIRE.r = 0.6; window.__act6.FIRE.state = 'dim'; }, spot);
+    const rr = await until(host, async () => { const N = await import('/src/net/state.js'); const a = N.NET.remotes[0]; return a && Math.abs((a.ringR || 0) - 0.6) < 0.06; }, null, 15000, 'ring byte');
+    ok(rr, 'the guest\'s ring byte (h[8]) is its stand-in\'s ring on the host', await ev(host, async () => { const N = await import('/src/net/state.js'); return N.NET.remotes.map((a) => a.ringR); }));
+    const lit0 = await ev(host, (s) => window.__act6.lightAt(s.x + 2.5, s.z), spot);
+    await ev(g, async () => { const L = await import('/src/game/light.js'), pl = window.__G.player; const q = L.addLightPool(pl.x, pl.z, 3.5, Infinity, 'wolf6t', { tremble: true }); q.follow = pl; });
+    const lit1 = await until(host, (s) => window.__act6.lightAt(s.x + 2.5, s.z), spot, 15000, 'guest pool');
+    ok(!lit0 && lit1, 'a guest\'s light pool (lp: the wolf\'s lantern) lifts the dark 2.5 m off it on the host', { lit0, lit1 });
+    await ev(g, async () => { (await import('/src/game/light.js')).removeLightPool('wolf6t'); window.__act6.FIRE.r = 4.5; window.__act6.FIRE.state = 'full'; });
+    // a host Lampbearer drinks the guest's ring
+    await ev(host, async (s) => { const A = await import('/src/game/actors.js'), G = window.__G; const f = G.zone.map.nearestFloor(s.x + 8, s.z, 3); const a = A.spawnMonster('lampbearer', f.x, f.z, { level: 36 }); G.actors.push(a); a.wake = null; a.dormant = false; a.aggro = true; a.cd = 0; a.hp = a.hpMax = 1e7; window.__lb6 = a; }, spot);
+    const drank = await until(g, () => window.__act6.FIRE.r < 3.9, null, 30000, 'drink');
+    const gr = await ev(g, () => ({ r: window.__act6.FIRE.r, drinks: window.__NET.S.drinks?.size }));
+    ok(drank, 'a host Lampbearer\'s Drink drains the guest\'s own ring (\'dr\')', { guest: gr, log: await ev(host, () => ({ drink: window.__act6.AI_LOG['lampbearer:drink'] || 0, tell: window.__act6.AI_LOG['lampbearer:drinkTell'] || 0 })) });
+    await ev(host, () => { window.__lb6.hp = 0; window.__lb6.dead = true; window.__lb6.remove?.(); });
+    // the names' window: the host's clock, the guest's window and its ring filling
+    await ev(g, () => { window.__act6.FIRE.r = 1.6; window.__act6.FIRE.state = 'full'; });
+    await ev(host, () => { window.__G.bossActor = null; window.__act6.NAMES.t = 999; });
+    const nm = await until(g, () => window.__act6.NAMES.on, null, 15000, 'names on guest');
+    const r0 = await ev(g, () => window.__act6.FIRE.r); await sleep(1200); const r1 = await ev(g, () => window.__act6.FIRE.r);
+    ok(nm && r1 > r0 + 0.3, 'the names\' window reaches the guest (o.n) and fills its ring', { on: nm, r0, r1 });
+    // the host's slush on the guest's page ('i', cells6)
+    await ev(host, () => { const z = window.__G.zone, L = z.L; for (let i = 0; i < L.w * L.h; i++) if (L.pocket[i] === 1) { window.__act6.tide.slushAt(i % L.w + 0.5, Math.floor(i / L.w) + 0.5, 2, 30); return; } });
+    const sl = await until(g, () => (window.__G.zone.tide.sl?.calls.length || 0) >= 1, null, 15000, 'slush on guest');
+    ok(sl, 'the host\'s slush reaches the guest on \'i\' (cells6)', await ev(g, () => window.__G.zone.tide.sl?.calls.length || 0));
+    // a Faded in the host's light, solid on the guest (the guest beside the host, so the Faded is in its snapshot)
+    const hp = await ev(host, () => ({ x: window.__G.player.x, z: window.__G.player.z }));
+    await ev(g, (h) => { const pl = window.__G.player, f = window.__G.zone.map.nearestFloor(h.x - 2, h.z, 3); pl.x = f.x; pl.z = f.z; }, hp);
+    await sleep(1500);
+    await ev(host, async () => { const A = await import('/src/game/actors.js'), G = window.__G, pl = G.player; window.__act6.FIRE.r = 4.5; window.__act6.FIRE.state = 'full'; const f = G.zone.map.nearestFloor(pl.x + 2, pl.z, 2); const a = A.spawnMonster('faded', f.x, f.z, { level: 36 }); G.actors.push(a); a.aggro = false; a.speed = 0; a.hp = a.hpMax = 1e7; window.__fd6 = a; });
+    const fdOk = await until(g, async () => { const N = await import('/src/net/coop.js'); for (const a of N.S.pup.values()) if (a.kind === 'faded') return a.hostLit && !a.unseenNow; return false; }, null, 20000, 'faded lit');
+    ok(fdOk, 'a Faded lit on the host (bit 15) is drawn solid on the guest');
+  }
 };
 
 try {

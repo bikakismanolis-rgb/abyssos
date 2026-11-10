@@ -69,6 +69,12 @@ button { font: inherit; color: inherit; }
 #cold { display: flex; align-items: center; gap: 5px; height: 18px; font: 700 10px var(--display); color: #bfe0f6; letter-spacing: .5px; text-shadow: 0 1px 2px #000; }
 #cold .ic { width: 18px; height: 18px; display: grid; place-items: center; color: #a8d8ff; filter: drop-shadow(0 0 4px rgba(120, 190, 255, .55)); transition: color .4s, filter .4s; }
 #cold .ic svg { width: 16px; height: 16px; }
+/* Act VI (systems' hook): the Carried Fire's flame beside the Cold, grey while Dim, dark while Out; the black water's dial violet */
+#cold .fl { width: 16px; height: 16px; display: grid; place-items: center; color: #ffb050; filter: drop-shadow(0 0 4px rgba(255, 160, 60, .7)); transition: color .3s, filter .3s; }
+#cold .fl svg { width: 14px; height: 14px; }
+#cold .fl.dim { color: #8a8a8a; filter: none; animation: fl6 1s ease-in-out infinite; }
+#cold .fl.out { color: #3a3a3a; filter: none; }
+@keyframes fl6 { 50% { opacity: .45; } }
 #cold .cb { position: relative; width: 74px; height: 7px; border-radius: 4px; background: #0a0d12; border: 1px solid rgba(150, 200, 240, .5); overflow: hidden; }
 #cold .cb i { position: absolute; inset: 0; display: block; background: linear-gradient(90deg, #2a5a8a, #7ab8e8 60%, #e8f6ff); transform-origin: left; transition: transform .15s linear; }
 #cold .cb u { position: absolute; inset: 0; background: linear-gradient(90deg, transparent calc(50% - 1px), rgba(0, 0, 0, .75) calc(50% - 1px), rgba(0, 0, 0, .75) 50%, transparent 50%, transparent calc(75% - 1px), rgba(0, 0, 0, .75) calc(75% - 1px), rgba(0, 0, 0, .75) 75%, transparent 75%); }
@@ -122,6 +128,8 @@ body.memory-ice #frost { opacity: .75 !important; --fi: 46% !important; --fo: 10
 #tide.slack .ta { display: none; }
 #tide.slack .tl { display: inline; }
 #tide.bell .tr { stroke: #ffd070; animation: tideBell .5s ease-in-out infinite alternate; }
+#tide.groan .tr { stroke: #b8a8ff; }
+#tide.groan.bell .tr { stroke: #8a70ff; }
 #tide.lane .tr { stroke: #ff5a40; }
 #tide.lane { animation: tideLane .35s ease-in-out infinite alternate; }
 #tide.lane .tw { fill: #4a8ad0; }

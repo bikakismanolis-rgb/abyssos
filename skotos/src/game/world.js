@@ -356,6 +356,8 @@ export function storyOpenings(z) {
   if (z.id === 'forge' && F.plug && open(L.plug?.cells)) z.act4?.plug?.userData.melt?.();
   if (z.id === 'ashfield' && F.ivar && open(L.gate?.cells)) z.act4?.gate?.userData.setOpen(true);
   if (z.id === 'coast' && F.towerWake && !F.towerDown) open(L.spots.skerry?.cells);
+  // (Act VI: the Stair's walls of the lamps put out, the Heap's gaps shut while the Ketos is awake: openings6 may also close)
+  if (ZONES[z.id]?.act === 6) n += openings6(z);
   if (z.id === 'farlight' && z.act5) for (const ho of L.spots.holes) {
     const A = z.act5; if (!F['hole' + ho.id] || !A.lamps.some((it) => it.hole === ho.id)) continue;
     for (const it of A.lamps.filter((l) => l.hole === ho.id)) { light5(z, it, false); const i = z.interact.indexOf(it); if (i >= 0) z.interact.splice(i, 1); showExtra(z, it.mesh, false); }

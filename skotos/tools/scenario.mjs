@@ -4842,6 +4842,31 @@ const S = {
     beat('a respec gives the Lamplight points back (pointsSpent counts them)', r4.ok && r4.lamp === 0 && r4.spent >= 40 && r4.after === r4.earned && r4.after >= r4.before + 40, r4);
     return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
   } }
+  ,
+  // Act VI: assets
+  // The act's creatures in a cold session (docs/act6-contract.md, Lead decisions: stand-ins everywhere): each new kind
+  // spawns with a drawn body, its chain ending in a model this session holds (the Falselight as the spider, the Ketling as
+  // the Icemaw or the warg, the Faded as one of the villagers, the Lampbearer as the Sunken or its villager), none untextured
+  // or missing, no error
+  cast6: { q: 'auto=drained&q=0&sim=2&norender&lvl=36&cloud=off', run: async (pg) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    await pg.waitForFunction(() => window.__ready && window.__G?.player && window.__G.zone?.id === 'drained' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 240000 });
+    const r = await pg.evaluate(async () => {
+      const A = await import('/src/game/actors.js'), G = window.__G, pl = G.player, out = {};
+      for (const k of ['lampbearer', 'faded', 'gateFallen', 'gateFallenBow', 'falselight', 'ketling']) {
+        try {
+          const f = G.zone.map.nearestFloor(pl.x + 3, pl.z, 3), a = A.spawnMonster(k, f.x, f.z, { level: 36 }); G.actors.push(a);
+          let meshes = 0, bad = 0; a.avatar?.group.traverse((o) => { if (o.isMesh || o.isSkinnedMesh) { meshes++; const ms = [].concat(o.material || []); if (!ms.length || ms.some((m) => !m)) bad++; } });
+          out[k] = { model: a.avatar?.modelName, standIn: !!a.avatar?.standIn, meshes, bad, radius: +a.radius.toFixed(2) };
+          a.hp = 0; a.dead = true; a.remove?.();
+        } catch (e) { out[k] = { error: String(e.message || e) }; }
+      }
+      return out;
+    });
+    for (const [k, v] of Object.entries(r)) beat(`${k}: a drawn body (${v.model || '?'}${v.standIn ? ', a stand-in' : ''})`, !v.error && v.meshes > 0 && !v.bad && !!v.model, v);
+    beat('the Falselight stands in as the spider, the Ketling as the Icemaw or the warg, the Faded as a villager', r.falselight?.model === 'spider' && ['icemaw', 'warg'].includes(r.ketling?.model) && /^villager[012]$/.test(r.faded?.model || ''), { f: r.falselight?.model, k: r.ketling?.model, d: r.faded?.model });
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
+  } }
 };
 const sc = S[name];
 // (a scenario run in a child process of its own, as the soaks: this runner's browser is never opened beside it)

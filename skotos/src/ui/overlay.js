@@ -125,7 +125,8 @@ export function drawOverlay(dt) {
   for (const a of G.actors) {
     if (a.dead || a.team !== 'foe' || !a.avatar || a.boss) continue;
     // nothing gives away what cannot be seen: an archer gone into the trees, a rootling underground, a Hollowed passing for dead wood
-    if (!a.avatar.group.visible || a.disguised) continue;
+    // (and an unseen Faded outside light, Act VI; a Gate-Fallen lying in its bones)
+    if (!a.avatar.group.visible || a.disguised || a.unseenNow || a.down > 0 || a.def?.noBar) continue;
     const show = a.hpShow > 0 || a.elite;
     if (!show) continue;
     a.hpShow -= dt;

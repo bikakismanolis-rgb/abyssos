@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { G, later } from './state.js';
 import { SKILLS, DODGE, POTION, CLASSES } from './data.js';
 import { skillMult, skillRank, skillUnlocked } from './stats.js';
-import { damage, heroHit, healHero, freeHero, shakeOff, addVuln } from './combat.js';
+import { damage, heroHit, healHero, freeHero, shakeOff, addVuln, litFoe } from './combat.js';
 import { fireOn, flareRing, addLightPool } from './light.js';
 import { slushAt } from './tide.js';
 import { foes, spawnMonster, Actor } from './actors.js';
@@ -194,7 +194,6 @@ export function useSkill(i, ev) {
 // Frost Nova freezes the black water to slush (r 5.5, 8 s); Iron Bulwark's ward is a true light (r 3) while it holds;
 // Dawnbreaker and Ray of Dawn light and Reveal the unlit along their way for a moment. (The vault's icicles are forge.js's,
 // at the ground blows; Frozen Orb's slush trail is skillsx.js's)
-const litFoe = (f, t) => { if (!f || f.dead || !f.def?.unlit) return; f.revealed = Math.max(f.revealed || 0, t); addVuln(f, 'lit', t, { quiet: true }); };
 function underHook(sk, v, aim, rank) {
   const pl = p(); if (!pl) return;
   const id = sk.id;

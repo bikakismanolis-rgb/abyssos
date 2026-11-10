@@ -564,6 +564,9 @@ export function kill(a, src, o = {}) {
   if (s.legs.has('barrowCrown') && !a.boss && Math.random() < 0.12) emit('raiseAlly', a);
   killed(a, def);
 }
+// Act VI: a foe kept lit by a hero's light for t s (Snare's hold, the Hawks' stoop, Challenge's taunt): not Shrouded, the
+// act's Lit factor (VULN lit, HAZ6.reveal)
+export function litFoe(f, t) { if (!f || f.dead || !f.def?.unlit) return; f.revealed = Math.max(f.revealed || 0, t); addVuln(f, 'lit', t, { quiet: true }); }
 // a lightRest creature stays down where it falls: in true light (her coal not Out), or on a shard's cell (forge.js)
 function restsHere(a) {
   if (a.underShard) return true;

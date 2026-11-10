@@ -245,9 +245,19 @@ export const NAMES = { t: 0, on: false, left: 0, list: null, i: 0, sayT: 0, fall
 let rollNamesFn = null;
 // (story.js hands over its list; light.js cannot import story.js)
 export function setNamesRoll(fn) { rollNamesFn = fn; }
+// a co-op guest: the host's window, its time left and its index (the host's clock decides; this page fills its own ring)
+export function namesFromHost(left, idx) {
+  if (NAMES.on && NAMES.idx === idx) { NAMES.left = left; return; }
+  if (NAMES.idx === idx) return;
+  NAMES.idx = idx; NAMES.on = true; NAMES.left = left; NAMES.i = 0; NAMES.sayT = 0.2;
+  NAMES.list = rollNamesFn ? rollNamesFn(false) : null;
+  emit('namesFall', G.zone, NAMES.list);
+}
 export function namesTick(z, dt) {
   if (z?.id !== 'drained' || !G.player) return;
   const H = h6();
+  // (a co-op guest keeps no clock of its own: the host's window comes in its snapshot, namesFromHost)
+  if (NET.mode === 'guest') { if (NAMES.list && NAMES.i < NAMES.list.length && (NAMES.sayT -= dt) <= 0) { NAMES.sayT = 0.8; emit('say', NAMES.list[NAMES.i++]); } if (NAMES.on && (NAMES.left -= dt) <= 0) { NAMES.on = false; emit('namesEnd', z); } return; }
   // (the names fall 0.8 s apart to the last, «Σκότος.», after the window too, with no effect then)
   if (NAMES.list && NAMES.i < NAMES.list.length && (NAMES.sayT -= dt) <= 0) { NAMES.sayT = 0.8; emit('say', NAMES.list[NAMES.i++]); }
   if (NAMES.on) {

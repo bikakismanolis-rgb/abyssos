@@ -2,7 +2,7 @@
 // Each is called like a skill in skills.js: (sk, aim, rank, mult, ci), ci the skill's cooldown slot.
 import * as THREE from 'three';
 import { G, later } from './state.js';
-import { damage, heroHit, healHero } from './combat.js';
+import { damage, heroHit, healHero, litFoe } from './combat.js';
 import { foes, spawnMonster } from './actors.js';
 import { fire, area } from './projectiles.js';
 import { act, arcHit, circleHit, swingFx, staffTip, handPoint, nearestFoe } from './skills.js';
@@ -692,7 +692,7 @@ export const NEW_FN = {
             ring(tx, tz, sk.radius, 0xe8eef4, 0.4);
             for (let i = 0; i < 18; i++) { const a = (i / 18) * 6.28; P({ add: false, x: tx, y: 0.3, z: tz, vx: Math.sin(a) * 9, vy: rand.range(1, 3), vz: Math.cos(a) * 9, life: 0.4, size: 0.12, size1: 0.08, color: 0x9aa4b0, alpha: 1, grav: 10, drag: 3 }); }
             Audio.sfx('chainSnap', { x: tx, z: tz }); Audio.sfx('hitMetal', { x: tx, z: tz });
-            circleHit(tx, tz, sk.radius, (f) => damage(pl, f, heroHit(mult, { area: true }), { stun: 1.3 + 0.1 * rank, burn: heroHit(mult * 0.35), area: true, breakGuard: true }));
+            circleHit(tx, tz, sk.radius, (f) => { damage(pl, f, heroHit(mult, { area: true }), { stun: 1.3 + 0.1 * rank, burn: heroHit(mult * 0.35), area: true, breakGuard: true }); if (vaultOn()) litFoe(f, 1.3 + 0.1 * rank); });
           };
           effect(tx, tz, sk.radius, 4.6, {
             vis: ['trap'],
@@ -755,7 +755,7 @@ export const NEW_FN = {
                 if (u >= 1) {
                   b.dive = null; b.cd = 0.9 - 0.05 * rank;
                   sparks(b.x, 1, b.z, 10, 0xc8f0ff, 5, { color1: 0x3080ff }); glowBurst(b.x, 1, b.z, 0x9ad8ff, 10, 3, 0.25, 0.4);
-                  circleHit(b.x, b.z, 1.7, (f) => damage(pl, f, heroHit(mult, { area: true }), { knock: 2, kx: f.x - b.x, kz: f.z - b.z, area: true, quiet: true, burn: heroHit(mult * 0.15) }));
+                  circleHit(b.x, b.z, 1.7, (f) => { damage(pl, f, heroHit(mult, { area: true }), { knock: 2, kx: f.x - b.x, kz: f.z - b.z, area: true, quiet: true, burn: heroHit(mult * 0.15) }); if (vaultOn()) litFoe(f, 3); });
                   Audio.sfx('hitSpirit', { x: b.x, z: b.z, vol: 0.5 });
                 }
               } else {

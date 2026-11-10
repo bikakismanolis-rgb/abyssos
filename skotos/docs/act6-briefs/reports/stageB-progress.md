@@ -69,11 +69,34 @@ One session does every lane in turn (no parallel agents); the lanes' file owners
   tools/vite.nohmr.mjs with this machine's path): with a server that has seen edits, a scenario's `import('/src/...')`
   gets a second copy of a module (no `?t=` stamp) and reads the wrong FIRE, bus and pools.
 
+## Net, assets and the rest of the hooks (10 November, later): done, scenarios pass
+
+- **coop.js, protocol 5** (`VER = 5`): the ring byte at a guest presence's `h[8]` and at the host snapshot's `h[11]`
+  (`round(ringOf(G.player) x 20)`), the moving light pools `lp` (`[x, z, r, ...]` in tenths, at most three: pools that
+  `follow` this page's hero or its pet), `relayOf` keeps `h.slice(0, 9)` and rebuilds `lp`; `remotesTick` calls
+  `setRemoteLight` on every remote stand-in each frame (missing byte: the zone's ring); `o.w[5..6]` the Mere (h, rate;
+  `o.w[4]` null below the ice without gusts) and `worldState` sets `T.mere`; `o.n = [window left x 10, falls]` and the
+  guest's `namesFromHost` (light.js; the guest keeps no names clock of its own); actor flag bit 15 (32768) lit on the host
+  for an unseen kind, `a.hostLit`, and the guest runs `unseenTick` on its puppets; `HURT_KEYS`/`HURT_MAX` `ring` (1.5): a
+  Forgetting Touch or a snap on a guest rides the blow and the guest drains its own ring; the Drink as `['dr', id, t]`
+  (`NET.h.drink`, the guest's `S.drinks` and `drinkTick`); the world `w` carries `a[5]` (act6), `WORLD` and `onWorld` take
+  it, a guest keeps its own `lostAll`; `presenceAgain` calls `act6Presence`; `storyOpenings` runs `openings6` for act-6
+  zones; the 'i' topic carries `cells6` below the ice (`onIce` applies `cells6Apply` after `sane6` bounds it);
+  `ZONE_BOSS` `drained: 'ketos'`, `bottom: 'shade'` compared with `legKey ?? kind`; vendors `glaukos`, `tamarisk`,
+  `selna` for a guest. Not yet: the guest's `lit` blow option, the 'u' interactables (their things are stage C-D's), the
+  Budget measured on `NET=supa four`.
+- **Hooks**: Snare Trap's held foes and Storm of Hawks' stoops lit (`litFoe`, combat.js, shared); the louse's burst
+  'vault' (a white circle 2 m for 0.8 s, grit, then 0.5x to a hero under it); the health bar hidden for an unseen Faded,
+  a downed Gate-Fallen and a `noBar` def (overlay.js); the HUD's small flame beside the Cold below the ice (grey Dim, dark
+  Out; the meter shows with it) and the dial violet at the groan, its arc from the act's own phases (`tideDial().len`).
+- **Scenarios**: `coop.mjs act6` (protocol 5; the Mere; the ring byte; a guest's pool lifting the dark on the host; a host
+  Lampbearer draining a guest's ring; the names' window on a guest; the slush on 'i'; a Faded lit on the host drawn solid
+  on the guest) and `cast6` (every new kind's body and its stand-in). Regressions: coop join, act5, world, loot, cheat,
+  darkmirror, test-transport: pass.
+
 ## Next
 
-- Still to do in B: Snare Trap's held foe and Storm of Hawks' stoops lit; Piercing Shot breaking casks on its line (check
-  the shipped projectile); the louse's burst 'vault'; the unseen Faded's health bar hidden, its footprints and veil (look);
-  the hud flame icon beside the Cold and the dial's violet pulse (story's hud.js hooks); `skillsfx` in an 'under' zone.
-- Assets: the Ketos and the Falselight by their fallbacks (no downloads from this container), `cast6`.
-- Net: protocol 5 (ring byte, light pools, cells6 on `i`, the names window, Act VI's masks), `coop.mjs act6`.
-- G2.
+- Left in B: the guest's `lit` blow option; the Faded's footprints and veil (look); Piercing Shot and the casks (check the
+  shipped projectile against the act's casks once gen6 places them); `skillsfx` in an 'under' zone; then **G2**: the
+  soaks (`carry`, `blackwater`, `drips` as soaks over time, `lure`, `names6`), `cast6` cold, `coop.mjs act6`, `darktele`,
+  `prog6`, new phone texture (none added: stand-ins), perf6 again with the real packs, regress-B.
