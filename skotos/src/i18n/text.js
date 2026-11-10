@@ -1140,5 +1140,15 @@ export const TEXT = {
   'd.skotos6.w6': ['...ένας βασιλιάς, ένας ιστός, ένα χωριό... τα ξέχασαν... εγώ όχι πια...', '...a king, a web, a village... they forgot them... not i, not any more...'],
   'd.skotos6.w7': ['...ποιος σου έμαθε να κουβαλάς φωτιά;... κάποια σου το έμαθε... κάποια πολύ παλιά...', '...who taught you to carry fire?... someone taught you... someone very old...'],
   // Act VI: look (the 'reduce flicker' setting: true light's tremble cut to a steady glow; the story lane owns it from D)
-  'set.flicker': ['Λιγότερο τρεμόπαιγμα', 'Reduce flicker']
+  'set.flicker': ['Λιγότερο τρεμόπαιγμα', 'Reduce flicker'],
+  // Act VI: systems (the Carried Fire, the names from above; the story lane owns them from D and may reword them)
+  'q.fireOut': ['Η φωτιά σου έσβησε. Βρες αληθινό φως.', 'Your fire is out. Find true light.'],
+  'q.fireBack': ['Η φωτιά σου ξανάναψε.', 'Your fire burns again.'],
+  'hint.carry': ['Η φωτιά σου λιγοστεύει. Στάσου σε αληθινό φως να ξαναγεμίσει.', 'Your fire is low. Stand in true light to fill it.'],
+  'hud.dim': ['Αδύναμη φωτιά', 'Fire low'],
+  'hud.lit': ['Φωτισμένο', 'Lit'],
+  'hud.stunned': ['Ζαλισμένο', 'Stunned'],
+  'name.first6': ['Φέρουσα, η Πρώτη.', 'Pherousa, the First.'],
+  'name.someone': ['Κάποιος.', 'Someone.'],
+  'name.goodnight': ['Καληνύχτα.', 'Goodnight.']
 };

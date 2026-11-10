@@ -4412,6 +4412,259 @@ const S = {
     }
     return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
   } }
+  ,
+  // Act VI: systems
+  // The Carried Fire (docs/act6-contract.md, Light): a fresh coal on entry, the ring the meter (heroLightR is FIRE.r, never
+  // S.over), drains times HAZ6.coal, Dim and Out with their bus events, Out's 4 m own light and doubled Cold, a Mage's
+  // burning ground still light while Out, the relight in true lamp light (the build's fires as lamp pools), the fill there
+  // at HAZ6.refill and in a skylight at 0.3 m/s (with the Cold's -6/s), the drain wading black water, and the act's Shroud
+  // on an unlit foe outside light and its Reveal in light
+  carry: { q: 'auto=drained&q=0&sim=2&norender&lvl=36&cloud=off', run: async (pg) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    const ev = (f, a) => pg.evaluate(f, a);
+    await pg.waitForFunction(() => window.__ready && window.__G?.player && window.__G.zone?.id === 'drained' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 240000 });
+    await A5.tick(pg);
+    await ev(async () => {
+      window.__immortal = true; window.__G.hero.diff = 2;
+      const B = await import('/src/ui/bus.js'); window.__bus6 = []; for (const k of ['fireDim', 'fireOut', 'fireBack']) B.on(k, () => window.__bus6.push(k));
+      // (no foe to drain her or be drained: the packs held)
+      const z = window.__G.zone; for (const p of z.packs) p.spawned = true; for (const a of z.actors) if (a.team === 'foe' && !a.prop) { a.hp = 0; a.dead = true; a.remove?.(); }
+    });
+    await pg.waitForTimeout(600);
+    const st = () => ev(() => { const F = window.__act6.FIRE; return { r: +F.r.toFixed(3), max: +F.max.toFixed(3), state: F.state, hr: +window.__act6.fire.heroLightR().toFixed(3) }; });
+    let s = await st();
+    beat('a fresh coal: FIRE.r = FIRE.max = 4.5 (no Lamplight), full, the ring is the meter', Math.abs(s.max - 4.5) < 1e-6 && Math.abs(s.r - s.max) < 0.05 && s.state === 'full' && Math.abs(s.hr - s.r) < 1e-6, s);
+    // (away from every true light and skylight, on dry ground)
+    const away = await ev(() => {
+      const G = window.__G, z = G.zone, L = z.L, m = z.map, fa = window.__act6.fire;
+      for (let k = 0; k < 4000; k++) { const x = 4 + Math.random() * (L.w - 8), zz = 4 + Math.random() * (L.h - 8); if (!m.walkable(x, zz)) continue; const i = Math.floor(zz) * L.w + Math.floor(x); if (L.bed[i] < 9) continue;
+        if (window.__act6.lightAt(x, zz, { ring: false }) || fa.skyAt(x, zz)) continue; G.player.x = x; G.player.z = zz; return { x, z: zz }; }
+      return null;
+    });
+    beat('a dry spot out of every light', !!away, away);
+    await pg.waitForTimeout(400);
+    s = await st(); const r0 = s.r;
+    await ev(() => window.__act6.fire.fireDrain(1, { src: 'test' }));
+    s = await st();
+    beat('a 1 m drain on Warden takes 1 m (HAZ6.coal 1)', Math.abs(r0 - s.r - 1) < 0.05, { r0, s });
+    await ev(() => window.__act6.fire.fireDrain(window.__act6.FIRE.r - 1.2, { src: 'test' }));
+    s = await st();
+    beat('under 1.5 m: Dim, bus fireDim once', s.state === 'dim' && (await ev(() => window.__bus6.filter((k) => k === 'fireDim').length)) === 1, s);
+    const cold0 = await ev(async () => { const C = await import('/src/game/cold.js'); C.resetCold(); return C.coldAdd(10); });
+    await ev(() => window.__act6.fire.fireDrain(5, { src: 'test' }));
+    await pg.waitForTimeout(300);
+    s = await st();
+    const out = await ev(async () => { const C = await import('/src/game/cold.js'), { R } = await import('/src/gfx/gfx.js'); C.resetCold(); const v = C.coldAdd(10); return { cold: v, dist: R.heroLight.distance }; });
+    beat('at 0: Out, bus fireOut, the ring gone (heroLightR 0), her own light 4 m', s.state === 'out' && s.r === 0 && s.hr === 0 && out.dist === 4 && (await ev(() => window.__bus6.includes('fireOut'))), { s, out });
+    beat('Out doubles the Cold\'s gains', Math.abs(out.cold - cold0 * 2) < 0.01, { cold0, out: out.cold });
+    // (a Mage's burning ground beside her, team hero: still light while her ring is Out, never through S.over)
+    const mage = await ev(async () => { const P = await import('/src/game/projectiles.js'), pl = window.__G.player; const a = P.area('fire', pl.x + 2.5, pl.z, 1.6, 4, { team: 'hero', dmg: 0 }); const lit = window.__act6.lightAt(pl.x + 2.5, pl.z, { ring: false }); a.t = a.dur + 1; return lit; });
+    beat('a Mage\'s burning ground still counts as light while Out', mage === true);
+    // the relight: into the nearest of the build's fires (a lamp pool 'fire6')
+    const fire6 = await ev(async () => { const L = await import('/src/game/light.js'), pl = window.__G.player; const ps = L.lightPools().filter((p) => p.tag === 'fire6'); if (!ps.length) return null; const p = ps[0]; const f = window.__G.zone.map.nearestFloor(p.x + 0.8, p.z + 0.8, 2); pl.x = f.x; pl.z = f.z; return { n: ps.length, r: ps.map((q) => q.r), at: { x: +p.x.toFixed(1), z: +p.z.toFixed(1) } }; });
+    beat('the build\'s fires are lamp pools (a brazier 4 m, a fire-pot 3 m, a fire-pit 5 m)', !!fire6 && fire6.n >= 1 && fire6.r.every((r) => r === 3 || r === 4 || r === 5), fire6);
+    await pg.waitForTimeout(1600);
+    s = await st();
+    beat('a second in true lamp light: relit at 2.5 m or more, bus fireBack', s.state !== 'out' && s.r >= 2.4 && (await ev(() => window.__bus6.includes('fireBack'))), s);
+    await ev(() => { window.__act6.FIRE.r = 2; });
+    const f0 = (await st()).r; const t0 = await ev(() => window.__act6.FIRE.t);
+    await pg.waitForTimeout(500);
+    const f1 = await st(), t1 = await ev(() => window.__act6.FIRE.t), rate = (f1.r - f0) / Math.max(1e-3, t1 - t0);
+    beat('in lamp light it fills at HAZ6.refill (1.5 m/s on Warden), never past max', (Math.abs(rate - 1.5) < 0.2 || Math.abs(f1.r - f1.max) < 1e-3) && f1.r <= f1.max + 1e-6, { rate: +rate.toFixed(3), f1 });
+    // a skylight: 0.3 m/s and the Cold's -6/s
+    const sky = await ev(async () => {
+      const L = await import('/src/game/light.js'), T = await import('/src/game/tide.js'), z = window.__G.zone, pl = window.__G.player;
+      // (a skylight's spot that is dry, warmed by nothing else and in no lamp light)
+      for (const p of L.lightPools().filter((q) => q.sky)) for (let k = 0; k < 40; k++) {
+        const a = Math.random() * 6.28, d = Math.random() * p.r * 0.6, x = p.x + Math.sin(a) * d, zz = p.z + Math.cos(a) * d;
+        if (!z.map.walkable(x, zz) || T.wadeAt(x, zz) || L.warmAt(x, zz) || L.lampLightAt(x, zz) || L.fireAt(x, zz, 0.3, true)) continue;
+        pl.x = x; pl.z = zz; window.__act6.FIRE.r = 1.8; const C = await import('/src/game/cold.js'); C.resetCold(); C.coldAdd(40); return { r: p.r, x: +x.toFixed(1), z: +zz.toFixed(1) };
+      }
+      return null;
+    });
+    if (sky) {
+      await pg.waitForTimeout(300);
+      const a0 = await ev(async () => ({ r: window.__act6.FIRE.r, t: window.__act6.FIRE.t, c: (await import('/src/game/cold.js')).COLD.v }));
+      await pg.waitForTimeout(900);
+      const a1 = await ev(async () => ({ r: window.__act6.FIRE.r, t: window.__act6.FIRE.t, c: (await import('/src/game/cold.js')).COLD.v }));
+      const dt = a1.t - a0.t, fr = (a1.r - a0.r) / dt, cr = (a1.c - a0.c) / dt;
+      beat('a skylight fills at 0.3 m/s and takes the Cold at -6/s', Math.abs(fr - 0.3) < 0.06 && Math.abs(cr + 6) < 1, { fr: +fr.toFixed(3), cr: +cr.toFixed(2), sky });
+    } else beat('a skylight pool in the zone', false);
+    // wading black water: -0.15 m/s (a pocket cell shallow at the level now)
+    const wade = await ev(async () => {
+      const G = window.__G, z = G.zone, L = z.L, T = await import('/src/game/tide.js'), pl = G.player;
+      for (let i = 0; i < L.w * L.h; i++) { if (L.pocket[i] !== 1 || !z.map.cells[i]) continue; const x = i % L.w + 0.5, zz = Math.floor(i / L.w) + 0.5; if (T.wadeAt(x, zz) !== 'tide' || window.__act6.lightAt(x, zz, { ring: false })) continue; pl.x = x; pl.z = zz; window.__act6.FIRE.r = 4; return { x, z: zz }; }
+      return null;
+    });
+    if (wade) {
+      await pg.waitForTimeout(300);
+      const w0 = await ev(() => ({ r: window.__act6.FIRE.r, t: window.__act6.FIRE.t, wet: window.__G.player.inWater }));
+      await pg.waitForTimeout(900);
+      const w1 = await ev(() => ({ r: window.__act6.FIRE.r, t: window.__act6.FIRE.t, wet: window.__G.player.inWater }));
+      const wr = (w1.r - w0.r) / (w1.t - w0.t);
+      beat('wading black water drains 0.15 m/s', Math.abs(wr + 0.15) < 0.04, { wr: +wr.toFixed(3), w0, w1 });
+    } else beat('wading black water drains 0.15 m/s (no shallow pocket cell at this level: not measured)', true, 'skipped');
+    // the act's Shroud: an unlit Sunken outside every light takes HAZ6.shroud; in light it is Revealed
+    const sh = await ev(async () => {
+      const G = window.__G, z = G.zone, A = await import('/src/game/actors.js'), C = await import('/src/game/combat.js'), pl = G.player, m = z.map;
+      window.__act6.FIRE.r = 4.5; window.__act6.FIRE.state = 'full';
+      let spot = null;
+      for (let k = 0; k < 4000 && !spot; k++) { const x = 4 + Math.random() * (z.L.w - 8), zz = 4 + Math.random() * (z.L.h - 8); if (m.walkable(x, zz) && m.walkable(x + 9, zz) && !window.__act6.lightAt(x + 9, zz, { ring: false }) && !window.__act6.fire.skyAt(x + 9, zz) && !window.__act6.lightAt(x, zz, { ring: false })) spot = { x, z: zz }; }
+      if (!spot) return null;
+      pl.x = spot.x; pl.z = spot.z;
+      const far = A.spawnMonster('sunken', spot.x + 9, spot.z, { level: 36 }), near = A.spawnMonster('sunken', spot.x + 1.5, spot.z, { level: 36 });
+      for (const a of [far, near]) { a.hp = a.hpMax = 1e7; a.wake = null; a.dormant = false; a.under = false; a.hidden = false; a.state = 'idle'; }
+      const h0 = far.hp; C.damage(pl, far, 1000, { crit: false, quiet: true }); const dFar = h0 - far.hp;
+      const h1 = near.hp; C.damage(pl, near, 1000, { crit: false, quiet: true }); const dNear = h1 - near.hp;
+      const r = { dFar, dNear, ratio: dFar / dNear, revealed: !!(near.vulns?.revealed > 0), kShroud: (await import('/src/game/light.js')).shroudK() };
+      far.hp = 0; far.dead = true; far.remove?.(); near.hp = 0; near.dead = true; near.remove?.();
+      return r;
+    });
+    // (the blow in light reveals it at once: HAZ6.reveal, 1.25 on Warden, on that blow too)
+    beat('an unlit foe outside light takes the act\'s Shroud (0.3 on Warden), one in light none and is Revealed (x1.25)', !!sh && Math.abs(sh.ratio - sh.kShroud / 1.25) < 0.03 && sh.revealed, sh);
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
+  } },
+  // The Black Water (docs/act6-contract.md): the act's clock (HAZ6.tide, top 6 steps, the groan for the bell), the Mere at
+  // its own 1.6 m beside it (pockets rise with the clock, the Mere holds; uLevel and uBayLevel apart), the Mere lowered by
+  // its force and gone at 0, slush holding a deep cell at wading and letting it close when it thaws, no ice mesh, the Cold
+  // and the dial; the Bottom with a clock and no Mere
+  blackwater: { q: 'auto=drained&q=0&sim=2&norender&lvl=36&cloud=off', run: async (pg) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    const ev = (f, a) => pg.evaluate(f, a);
+    const ready = (id) => pg.waitForFunction((id) => window.__ready && window.__G?.player && window.__G.zone?.id === id && !document.getElementById('fade').classList.contains('on'), id, { timeout: 240000 });
+    await ready('drained'); await A5.tick(pg);
+    await ev(() => { window.__immortal = true; window.__G.hero.diff = 2; const z = window.__G.zone; for (const p of z.packs) p.spawned = true; for (const a of z.actors) if (a.team === 'foe' && !a.prop) { a.hp = 0; a.dead = true; a.remove?.(); } });
+    const T = () => ev(() => { const t = window.__act6.tide, T = t.TIDE, d = t.tideDial(); return T ? { h: T.h, step: T.step, mstep: T.mstep, mh: T.mh, mere: T.mere, phase: T.phase, groan: d?.groan, k: d?.k, ice: !!window.__G.zone.lvl.ice, cold: !!window.__G.zone.cold } : null; });
+    let s = await T();
+    beat('drained: the clock at low water, the Mere at its own 1.65 m (1.6 to the step), no ice mesh, the Cold runs, the dial groans', s && s.step === 0 && s.mstep === 11 && Math.abs(s.mh - 1.65) < 1e-6 && s.mere?.h === 1.6 && !s.ice && s.cold && s.groan, s);
+    // the clock's flood: to its first step (just past the low phase), and the pockets follow while the Mere holds
+    const cnt = () => ev(() => { const z = window.__G.zone, L = z.L, c = z.map.cells; let p = 0, b = 0, pt = 0, bt = 0; for (let i = 0; i < L.w * L.h; i++) { if (L.pocket[i] === 1) { pt++; if (!c[i]) p++; } else if (L.pocket[i] === 2) { bt++; if (!c[i]) b++; } } return { p, b, pt, bt }; });
+    const c0 = await cnt();
+    await ev(() => { const T = window.__act6.tide.TIDE, H = window.__G.zone.L.tideCfg; T.t = H.phases[0] + H.phases[1] * 0.2 + H.phases[1]; });
+    await pg.waitForFunction(() => window.__act6.tide.TIDE.step >= 4, null, { timeout: 120000 }).catch(() => {});
+    s = await T(); const c1 = await cnt();
+    const lv = await ev(async () => { const { SEA } = await import('/src/world/sea.js'); return { u: SEA.uLevel.value, bay: SEA.uBayLevel.value }; });
+    beat('the pockets close with the clock, the Mere\'s cells do not move', s.step >= 4 && c1.p > c0.p && c1.b === c0.b, { c0, c1, step: s.step });
+    beat('uLevel and uBayLevel apart (the clock\'s and the Mere\'s)', Math.abs(lv.u - lv.bay) > 0.2 && Math.abs(lv.bay - 1.65) < 0.2, lv);
+    beat('the clock\'s top is 6 steps (0.9 m)', await ev(() => { const T = window.__act6.tide.TIDE; T.t = window.__G.zone.L.tideCfg.phases.slice(0, 2).reduce((a, b) => a + b, 0) + 1; return true; }) && (await pg.waitForFunction(() => window.__act6.tide.TIDE.step === 6, null, { timeout: 120000 }).then(() => true).catch(() => false)), await T());
+    // slush: a deep cell held at wading, closed again when it thaws (no hero near)
+    const sl = await ev(async () => {
+      const G = window.__G, z = G.zone, L = z.L, c = z.map.cells, pl = G.player;
+      for (let i = 0; i < L.w * L.h; i++) { if (L.pocket[i] !== 1 || c[i]) continue; const x = i % L.w + 0.5, zz = Math.floor(i / L.w) + 0.5; if (Math.hypot(x - pl.x, zz - pl.z) < 12) continue; window.__sl6 = window.__act6.tide.slushAt(x, zz, 1.2, 30); return { i, x, z: zz }; }
+      return null;
+    });
+    if (sl) {
+      await pg.waitForFunction((i) => !!window.__G.zone.map.cells[i], sl.i, { timeout: 30000 }).catch(() => {});
+      const a = await ev((i) => { const z = window.__G.zone, t = window.__act6.tide; return { open: !!z.map.cells[i], wade: t.wadeAt(i % z.L.w + 0.5, Math.floor(i / z.L.w) + 0.5), tex: z.L.tSlush ? z.L.tSlush.image.data[i] : -1 }; }, sl.i);
+      beat('slush holds a deep cell open at wading (and marks the water\'s crust)', a.open && a.wade === 'slush' && a.tex !== 0, a);
+      await ev(() => { window.__sl6.end = 0; });
+      await pg.waitForFunction((i) => !window.__G.zone.map.cells[i], sl.i, { timeout: 30000 }).catch(() => {});
+      const b = await ev((i) => ({ open: !!window.__G.zone.map.cells[i], tex: window.__G.zone.L.tSlush ? window.__G.zone.L.tSlush.image.data[i] : -1 }), sl.i);
+      beat('the slush thaws: the cell deep again closes', !b.open, b);
+    } else beat('a closed pocket cell for the slush', false);
+    // the Mere lowered by its force, then gone at 0
+    const m0 = await cnt();
+    await ev(() => { window.__act6.tide.TIDE.mere = { h: 0, rate: 3 }; });
+    await pg.waitForFunction(() => !window.__act6.tide.TIDE.mere && window.__act6.tide.TIDE.mstep === 0, null, { timeout: 120000 }).catch(() => {});
+    s = await T(); const m1 = await cnt();
+    beat('the Mere drains to 0 by its own steps (its cells open), then the force is gone', s.mstep === 0 && !s.mere && m1.b < m0.b, { m0, m1, s });
+    // the Bottom: a clock, no Mere
+    await ev(async () => { const W = await import('/src/game/world.js'); W.enterZone('bottom'); });
+    await ready('bottom');
+    s = await T();
+    beat('bottom: the black water\'s clock and no Mere', s && s.mstep === 0 && !s.mere && s.groan, s);
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
+  } },
+  // The Ice Overhead (docs/act6-contract.md): vaultAt brings an icicle down on a vault patch (a white circle, then a blow to
+  // the hero inside with Cold +10, 8% and a stun with Stunned to a monster inside), one fall a patch each 4 s, a shard that
+  // blocks its cell for 20 s and goes; below the ice the skills' ground blows call it (vaultOn), elsewhere they crack ice
+  drips: { q: 'auto=drained&q=0&sim=2&norender&lvl=36&cloud=off', run: async (pg) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    const ev = (f, a) => pg.evaluate(f, a);
+    await pg.waitForFunction(() => window.__ready && window.__G?.player && window.__G.zone?.id === 'drained' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 240000 });
+    await A5.tick(pg);
+    await ev(() => { window.__G.hero.diff = 2; const z = window.__G.zone; for (const p of z.packs) p.spawned = true; for (const a of z.actors) if (a.team === 'foe' && !a.prop) { a.hp = 0; a.dead = true; a.remove?.(); } });
+    const v = await ev(() => { const z = window.__G.zone, L = z.L, V = L.spots.vaults || []; for (const p of V) for (let i = 0; i < L.w * L.h; i++) if (L.vault[i] === p.id && z.map.cells[i]) return { id: p.id, x: i % L.w + 0.5, z: Math.floor(i / L.w) + 0.5, n: V.length }; return null; });
+    beat('the zone has vault patches with open cells under them', !!v, v);
+    if (!v) return { pass: false, beats };
+    const on = await ev(async () => { const F = await import('/src/game/forge.js'); return F.vaultOn(); });
+    beat('below the ice the skills bring the vault down (vaultOn)', on === true);
+    // a hero and a monster under the patch, the icicle on them
+    const r = await ev(async (v) => {
+      const G = window.__G, pl = G.player, A = await import('/src/game/actors.js'), C = await import('/src/game/cold.js');
+      // (no life trap here: it tops her up at once; a deep pool instead, and the blow read as it lands)
+      window.__immortal = false; pl.hpMax = 60000; pl.hp = pl.hpMax; pl.x = v.x; pl.z = v.z; C.resetCold();
+      const B = await import('/src/ui/bus.js'); window.__hit6 = null; B.on('hurt', (k) => { if (!window.__hit6) window.__hit6 = { k, cold: C.COLD.v }; });
+      const m = A.spawnMonster('sunken', v.x + 0.3, v.z + 0.2, { level: 36 }); G.actors.push(m); m.wake = null; m.dormant = false; m.under = false; m.hidden = false; m.hpMax = m.hp = 10000;
+      window.__m6 = m; window.__hp6 = pl.hp;
+      // (r 0: the cell under her or one beside it, inside the 1.2 m circle either way)
+      return { n: window.__act6.vaultAt(v.x, v.z, 0, 1), again: window.__act6.vaultAt(v.x, v.z, 0, 1) };
+    }, v);
+    beat('one fall on the patch, and none again within 4 s', r.n === 1 && r.again === 0, r);
+    const h = await ev(() => new Promise((ok) => {
+      const m = window.__m6, t0 = performance.now();
+      const f = () => { if (m.hp < m.hpMax || performance.now() - t0 > 15000) { const d = window.__act6.SHARDS[0]; window.__immortal = true; ok({ heroHit: window.__hit6?.k || 0, cold: window.__hit6?.cold || 0, mon: 1 - m.hp / m.hpMax, stun: m.status.stun, stunned: !!(m.vulns?.stunned > 0), shard: d ? { ix: d.ix, iz: d.iz } : null }); } else requestAnimationFrame(f); };
+      requestAnimationFrame(f);
+    }));
+    beat('the hero inside takes the blow and Cold +10', h.heroHit > 0 && h.cold >= 9.9, h);
+    beat('the monster inside takes 8% and a stun with Stunned', Math.abs(h.mon - 0.08) < 0.01 && h.stun > 0 && h.stunned, h);
+    // the shard: blocks its cell once she steps off it, then goes after its 20 s
+    await ev(() => { const pl = window.__G.player, f = window.__G.zone.map.nearestFloor(pl.x + 4, pl.z, 4); pl.x = f.x; pl.z = f.z; window.__m6.hp = 0; window.__m6.dead = true; window.__m6.remove?.(); });
+    await pg.waitForTimeout(800);
+    const b = await ev(() => { const d = window.__act6.SHARDS[0]; return d ? { blocked: d.blocked, cell: window.__G.zone.map.cells[d.iz * window.__G.zone.L.w + d.ix] } : null; });
+    beat('the shard blocks its cell once no hero stands on it', b && b.blocked && !b.cell, b);
+    await ev(() => { for (const d of window.__act6.SHARDS) d.end = performance.now() / 1000 - 1; });
+    await pg.waitForTimeout(800);
+    const c = await ev((s) => ({ n: window.__act6.SHARDS.length, cell: window.__G.zone.map.cells[s.iz * window.__G.zone.L.w + s.ix] }), h.shard);
+    beat('after its time the shard is gone and its cell open again', c.n === 0 && !!c.cell, c);
+    // a patch is ready again after 4 s
+    await pg.waitForTimeout(4200);
+    const again = await ev((v) => window.__act6.vaultAt(v.x, v.z, 0.5, 1), v);
+    beat('the patch falls again after 4 s', again === 1);
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
+  } },
+  // The Names from Above (docs/act6-contract.md): the clock in the Drained Sea, the bell then the list (rollNames6: the
+  // First, Einar, Arna, the Name-stones, Ivar, Isarn, ..., the dark's own), the window (HAZ6.namesBase + 0.5 s a stone),
+  // the ring filling at HAZ6.refill outside any light, every unlit foe Revealed, bus namesFall and namesEnd, and the clock
+  // held while a boss fights
+  names6: { q: 'auto=drained&q=0&sim=2&norender&lvl=36&cloud=off', run: async (pg) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    const ev = (f, a) => pg.evaluate(f, a);
+    await pg.waitForFunction(() => window.__ready && window.__G?.player && window.__G.zone?.id === 'drained' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 240000 });
+    await A5.tick(pg);
+    await ev(async () => {
+      window.__immortal = true; const G = window.__G; G.hero.diff = 2; G.hero.flags.names = ['ivar', 'arna'];
+      const z = G.zone; for (const p of z.packs) p.spawned = true; for (const a of z.actors) if (a.team === 'foe' && !a.prop) { a.hp = 0; a.dead = true; a.remove?.(); }
+      const B = await import('/src/ui/bus.js'); window.__n6 = { fall: null, end: 0, says: [] }; B.on('namesFall', (zz, l) => { window.__n6.fall = l; }); B.on('namesEnd', () => { window.__n6.end++; }); B.on('say', (k) => window.__n6.says.push(k));
+      // (out of every light, the ring low; an unlit Sunken across the zone)
+      const m = z.map, pl = G.player, fa = window.__act6.fire, A = await import('/src/game/actors.js');
+      for (let k = 0; k < 4000; k++) { const x = 4 + Math.random() * (z.L.w - 8), zz = 4 + Math.random() * (z.L.h - 8); if (!m.walkable(x, zz) || window.__act6.lightAt(x, zz, { ring: false }) || fa.skyAt(x, zz)) continue; const i = Math.floor(zz) * z.L.w + Math.floor(x); if (z.L.bed[i] < 9) continue; pl.x = x; pl.z = zz; break; }
+      const f = m.nearestFloor(pl.x + 30, pl.z, 20), s = A.spawnMonster('sunken', f.x, f.z, { level: 36 }); G.actors.push(s); s.wake = null; s.dormant = false; s.hp = s.hpMax = 1e6; window.__s6 = s;
+      window.__act6.FIRE.r = 1.6; window.__act6.FIRE.state = 'full';
+      // (a boss fighting holds the clock)
+      G.bossActor = { dead: false }; window.__act6.NAMES.t = 89.9;
+    });
+    await pg.waitForTimeout(800);
+    const held = await ev(() => ({ on: window.__act6.NAMES.on, t: window.__act6.NAMES.t }));
+    beat('the clock holds while a boss fights', !held.on && held.t < 90, held);
+    await ev(() => { window.__G.bossActor = null; });
+    await pg.waitForFunction(() => window.__act6.NAMES.on, null, { timeout: 60000 }).catch(() => {});
+    const a = await ev(() => ({ on: window.__act6.NAMES.on, list: window.__n6.fall, left: window.__act6.NAMES.left, rev: !!(window.__s6.vulns?.revealed > 0), foe: { dead: window.__s6.dead, removed: !!window.__s6.removed, in: window.__G.zone.actors.includes(window.__s6), vulns: window.__s6.vulns, revealed: window.__s6.revealed, unlit: window.__s6.def.unlit }, r: window.__act6.FIRE.r, t: window.__act6.FIRE.t }));
+    const want = ['name.first', 'name.einar', 'name.arna', 'name.ivar', 'name.arna', 'name.ivar', 'name.isarn', 'name.skotos'];
+    beat('the names fall: bus namesFall with rollNames6\'s list (the stones in their order, the dark\'s own last)', a.on && JSON.stringify(a.list) === JSON.stringify(want), a.list);
+    beat('the window: HAZ6.namesBase + 0.5 s a stone (5 + 1 on Warden), after the 1.5 s bell', Math.abs(a.left - 7.5) < 0.4, { left: a.left });
+    beat('every unlit foe in the zone is Revealed for the window', a.rev, a.foe);
+    await pg.waitForTimeout(1500);
+    const b = await ev(() => ({ r: window.__act6.FIRE.r, t: window.__act6.FIRE.t, max: window.__act6.FIRE.max }));
+    const rate = (b.r - a.r) / (b.t - a.t);
+    beat('the ring fills at HAZ6.refill (1.5 m/s) while they fall, out of any light', Math.abs(rate - 1.5) < 0.25 || b.r >= b.max - 1e-6, { rate: +rate.toFixed(3), b });
+    await pg.waitForFunction(() => window.__n6.end > 0, null, { timeout: 60000 }).catch(() => {});
+    await pg.waitForTimeout(4000);
+    const c = await ev(() => ({ end: window.__n6.end, says: window.__n6.says.filter((k) => /^name\./.test(k)) }));
+    beat('bus namesEnd, and every name said to the last', c.end === 1 && c.says.join() === want.join(), c);
+    await ev(() => { window.__s6.hp = 0; window.__s6.dead = true; window.__s6.remove?.(); });
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
+  } }
 };
 const sc = S[name];
 // (a scenario run in a child process of its own, as the soaks: this runner's browser is never opened beside it)

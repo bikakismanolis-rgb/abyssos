@@ -5,7 +5,8 @@
 //   (combat.js hurtHero): a wash-out 20, a plunge 35, a Skua's bite 3, a Sunken's blow from the water 4, an Ice Singer's
 //   wail 10, the Rime Bear's roar 15, the Black Wave and the Black Breath 20, the Deep Cold 30.
 // - Out: -3/s anywhere dry and out of a gust; -12/s in a warm pool (light.js warmAt: lamp light, a lit hole lamp, the
-//   camp's brazier); -8/s in burning ground; a beam: warmHero (-15 at once, then Warmed: 4 s with no build-up).
+//   camp's brazier); -8/s in burning ground; -6/s in a skylight below the ice; a beam: warmHero (-15 at once, then Warmed:
+//   4 s with no build-up). Below the ice every gain is doubled while her coal is Out (light.js FIRE).
 // - What it does: 50 Chilled (-8% move and attack speed), 75 Freezing (-15%, no regeneration), 100 Frostbite: frozen in
 //   place 1 s with an ice tint (rootHero; a dodge breaks it), HAZ5.frost% of her life (5 on Warden, 2.5 on Wanderer), then
 //   70. In a boss fight Frostbite is a 50% slow for 2 s instead, and it waits while a red telegraph is under her.
@@ -14,7 +15,7 @@
 import { G } from './state.js';
 import { HAZ5, HAZ6 } from './data.js';
 import { damage, rootHero } from './combat.js';
-import { warmAt, fireAt } from './light.js';
+import { warmAt, fireAt, skyAt, FIRE, fireOn } from './light.js';
 import { FX, freezeCrystals, glowBurst } from '../gfx/fx.js';
 import { emit, on } from '../ui/bus.js';
 import Audio from '../audio/audio.js';
@@ -35,6 +36,8 @@ export function coldAdd(v, o = {}) {
   if (v > 0) {
     if (pl.buffs?.warmed > 0 && !o.pierce) return 0;
     v *= haz().cold;
+    // (below the ice, with her coal Out, every gain is doubled: light.js FIRE)
+    if (fireOn() && FIRE.state === 'out') v *= 2;
   }
   const v0 = COLD.v;
   COLD.v = clamp(COLD.v + v, 0, 100);
@@ -75,12 +78,14 @@ export function tickCold(dt) {
   const pl = G.player, z = G.zone;
   if (!pl || pl.dead || !coldZone()) { if (COLD.v || COLD.state !== 'none') resetCold(); return; }
   const v0 = COLD.v, wet = !!pl.inWater, gust = !!z.gust?.on && !lee(z, pl.x, pl.z);
-  const warm = warmAt(pl.x, pl.z), fire = !warm && fireAt(pl.x, pl.z, 0.3, true);
+  const warm = warmAt(pl.x, pl.z), fire = !warm && fireAt(pl.x, pl.z, 0.3, true), sky = !warm && !fire && fireOn() && skyAt(pl.x, pl.z);
   COLD.warmT = pl.buffs.warmed || 0;
   let gain = (wet ? 4 : 0) + (gust ? 2.5 : 0);
   if (gain) coldAdd(gain * dt);
   if (warm) COLD.v -= 12 * dt;
   else if (fire) COLD.v -= 8 * dt;
+  // (a skylight below the ice: -6/s)
+  else if (sky) COLD.v -= 6 * dt;
   else if (!gain || COLD.warmT > 0) COLD.v -= 3 * dt;
   COLD.v = clamp(COLD.v, 0, 100);
   const dv = COLD.v - v0; COLD.dir = dv > 1e-4 ? 1 : dv < -1e-4 ? -1 : 0;

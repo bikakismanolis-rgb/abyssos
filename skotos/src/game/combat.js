@@ -1,6 +1,6 @@
 // Damage, status effects, deaths, experience and drops.
 import { G, later, vibrate } from './state.js';
-import { DIFFS, monsterXP, xpToNext, mxpToNext, MAX_LEVEL, SKILLS, CLASSES, BUFFS, HAZ5, LEG_FROM, COOP } from './data.js';
+import { DIFFS, monsterXP, xpToNext, mxpToNext, MAX_LEVEL, SKILLS, CLASSES, BUFFS, HAZ5, HAZ6, LEG_FROM, COOP } from './data.js';
 import { makeItem } from './items.js';
 import { refreshStats } from './stats.js';
 import { number } from '../ui/overlay.js';
@@ -15,7 +15,7 @@ import { foes, spawnMonster, restoreRim } from './actors.js';
 import { dropGold, dropItem, dropGlobe } from './pickups.js';
 import { area } from './projectiles.js';
 import { addSapPool, oilBurst } from './sap.js';
-import { lightAt, shroudOn, addLightPool, relightNear } from './light.js';
+import { lightAt, shroudOn, shroudK, lightKind, FIRE, addLightPool, relightNear } from './light.js';
 import { coldAdd, coldMul } from './cold.js';
 import { staticGeo, makeCharMat } from '../gfx/rig.js';
 import { slagParts } from '../gfx/models.js';
@@ -240,10 +240,13 @@ function actHit(src, a, o, fromHero) {
       }
     }
   }
-  if ((def.shroud || a.shrouded) && !(a.unshroud > 0) && shroudOn()) {
-    if (lightAt(a.x, a.z, { pad: a.radius * 0.5 })) a.revealed = 3;
+  // (below the ice every unlit foe is Shrouded outside light, and wherever it stands while her coal is Out; a blow in light
+  // there also leaves it Revealed for 3 s; a wearer of the Shade's Ring takes half, not the act's Shroud)
+  const under = lightKind() === 'under';
+  if ((def.shroud || a.shrouded || (under && def.unlit)) && !(a.unshroud > 0) && shroudOn()) {
+    if (!(under && def.unlit && FIRE.state === 'out') && lightAt(a.x, a.z, { pad: a.radius * 0.5 })) { a.revealed = 3; if (under && fromHero) addVuln(a, 'revealed', 3, { quiet: true }); }
     else if (!(a.revealed > 0)) {
-      k *= 0.3;
+      k *= under && fromHero && G.stats?.legs?.has('shadeRing') ? 0.5 : shroudK();
       if (!o.dot && !(a.shroudTxt > 0)) { a.shroudTxt = 0.8; number(a.x, 2.7 * (a.scale || 1), a.z, tx('hud.shrouded', 'Σκιασμένος', 'Shrouded'), 'text', '#9aa8c0'); }
     }
   }
@@ -263,10 +266,13 @@ export const VULN = {
   seared: { k: 1.5, key: 'hud.seared', rim: 0xffb070 },
   blinded: { k: 1.6, key: 'hud.blinded', rim: 0xffffff },
   floundering: { k: 2, key: 'hud.floundering', rim: 0xffa060 },
-  overturned: { k: 2, key: 'hud.overturned', rim: 0xffa060 }
+  overturned: { k: 2, key: 'hud.overturned', rim: 0xffa060 },
+  // Act VI: Lit (the act's reveal, k from its row) and Stunned (an icicle's)
+  lit: { k: 0, key: 'hud.lit', rim: 0xffe0b0 },
+  stunned: { k: 1.5, key: 'hud.stunned', rim: 0xe0f0ff }
 };
-const VULN_TX = { revealed: ['Στο φως!', 'In the light!'], exposed: ['Εκτεθειμένο!', 'Exposed!'], beached: ['Στην ξέρα!', 'Beached!'], stranded: ['Εγκλωβισμένο!', 'Stranded!'], seared: ['Πυρωμένο!', 'Seared!'], blinded: ['Τυφλωμένο!', 'Blinded!'], floundering: ['Βουλιάζει!', 'Floundering!'], overturned: ['Αναποδογύρισε!', 'Overturned!'] };
-const vulnK = (kind) => VULN[kind]?.k || (HAZ5[G.hero?.diff ?? 1] || HAZ5[1]).reveal;
+const VULN_TX = { lit: ['Φωτισμένο!', 'Lit!'], stunned: ['Ζαλισμένο!', 'Stunned!'], revealed: ['Στο φως!', 'In the light!'], exposed: ['Εκτεθειμένο!', 'Exposed!'], beached: ['Στην ξέρα!', 'Beached!'], stranded: ['Εγκλωβισμένο!', 'Stranded!'], seared: ['Πυρωμένο!', 'Seared!'], blinded: ['Τυφλωμένο!', 'Blinded!'], floundering: ['Βουλιάζει!', 'Floundering!'], overturned: ['Αναποδογύρισε!', 'Overturned!'] };
+const vulnK = (kind) => VULN[kind]?.k || ((G.zone?.act6 ? HAZ6 : HAZ5)[G.hero?.diff ?? 1] || HAZ5[1]).reveal;
 export function vuln(a) {
   let v = a.dmgTaken > 1 ? a.dmgTaken : 1;
   if (a.vulns) for (const kind in a.vulns) v = Math.max(v, vulnK(kind));

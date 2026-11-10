@@ -23,10 +23,10 @@ import { Actor, spawnMonster, spawnNpc, createPlayer, rollAffixes, monsterLevel,
 import { PACKS, DIFFS, MONSTERS, PACK_LEAD, packKinds, HAZ5, monsterDmg, COOP } from './data.js';
 import { NET, heroes } from '../net/state.js';
 import { startDrips, stopDrips } from './sap.js';
-import { addLightPool, removeLightPool, cradlePoint, addBeam, removeBeam, getLightPool, getBeam, snuffLamp } from './light.js';
+import { addLightPool, removeLightPool, cradlePoint, addBeam, removeBeam, getLightPool, getBeam, snuffLamp, fireEnter, namesTick } from './light.js';
 import { resetTide, floodWave } from './tide.js';
 import { resetIce, freezeCells, crackCone } from './ice.js';
-import { startFlues, stopFlues, setFlueHeat, flues, BREATH } from './forge.js';
+import { startFlues, stopFlues, setFlueHeat, flues, BREATH, vaultEnter } from './forge.js';
 import { makeItem } from './items.js';
 import { dropGold, dropItem, dropGlobe, clearPickups } from './pickups.js';
 import { clearProjs } from './projectiles.js';
@@ -1654,6 +1654,11 @@ function act6Enter(z) {
   // the place to wake, as the save keeps it (a Continue builds the zone again); the camp from the first arrival, and again
   // once the one kept no longer holds (the Heap's gap after the Ketos, the Stair's foot after the Shade)
   if (!checkpoint6(z, F.cp6?.[z.id])) checkpoint6(z, 'camp');
+  // (systems: the black water's clock at low water and the Mere at 1.6 m while the Ketos lives; a fresh coal and the
+  // build's fires as true light; no shards)
+  resetTide(z, z.id === 'drained' && !F.ketosDown ? { mere: 1.6 } : {});
+  fireEnter(z);
+  vaultEnter(z);
   act6Presence(z);
 }
 // what the story has lit or moved, on every entry and as it moves (story's people6 joins it): in the act's zones; on the
@@ -1674,7 +1679,9 @@ function ropeHole(z) {
   z.interact.push({ kind: 'exit', to: e.to, x: e.x, z: e.z, r: 2.4, prompt: e.label, locked: e.locked, use: () => takeExit(z, e) });
 }
 // per frame in an Act VI zone (the names' clock, the shadow-walls' thinning, the bells, the walks: systems' and story's)
-function act6Tick() {}
+function act6Tick(z, dt) {
+  namesTick(z, dt);
+}
 
 // ---------- scripted walks and fades (npc() has no feet of its own) ----------
 const WALKS = [], FADES = [];

@@ -6,13 +6,20 @@
 // Periods: 10 s, 6.5 s while a Hammerhorn pumps its station (setFluePumping), 0.75 s less per stage of the Forge Heat,
 // never under 6 s. Only flues within 40 m breathe. Also here: slag dripping from the dark over the Slag Rivers, and the vents of
 // a Great Bellows chamber that has breathed. startFlues(L.flues) / stopFlues() from world.js; ticked from updateAreas.
+// Act VI (docs/act6-contract.md, The Ice Overhead): drip() is the slag drip made generic (a colour, a blow, a landing hook,
+// a shard left behind), vaultAt() brings icicles down from the low vault (L.vault patches) where the ground is struck below
+// the ice, and the shards they leave block their cells for 20 s (SHARDS, for co-op's cells6).
+import * as THREE from 'three';
 import { G, later } from './state.js';
-import { DIFFS, monsterDmg } from './data.js';
-import { damage } from './combat.js';
+import { DIFFS, HAZ6, monsterDmg } from './data.js';
+import { damage, addVuln } from './combat.js';
 import { area } from './projectiles.js';
-import { teleLine, teleCircle, killTele, P, explosion } from '../gfx/fx.js';
+import { heroes } from '../net/state.js';
+import { R } from '../gfx/gfx.js';
+import { teleLine, teleCircle, killTele, P, explosion, puff } from '../gfx/fx.js';
 import { addLight, removeLight, shake } from '../gfx/gfx.js';
-import { emit } from '../ui/bus.js';
+import { emit, on } from '../ui/bus.js';
+import { lightKind } from './light.js';
 import Audio from '../audio/audio.js';
 import { rand } from '../core/util.js';
 
@@ -51,6 +58,7 @@ export function inFlue(f, x, z, pad = 0) {
 }
 
 export function tickFlues(dt) {
+  tickDrips(dt);
   if (!F.list || G.zone !== F.zone) { if (F.list && G.zone !== F.zone) stopFlues(); return; }
   const pl = G.player; if (!pl || G.hero.flags.crownUnmade) return;
   for (const f of F.list) {
@@ -134,17 +142,128 @@ function drips(dt, pl) {
   slag(x, z, 1.6, 1.0, 1.0);
 }
 export function slag(x, z, r, dur, mult) {
-  const zone = G.zone;
-  teleCircle(x, z, r, dur, 0xffa040); // amber: not the Hammerfall's red
-  for (let k = 0; k < 8; k++) later(dur * (0.5 + k * 0.06), () => { if (G.zone === zone) P({ x, y: 9 - k, z, vy: -14, life: 0.12, size: 0.5, size1: 0.3, color: 0xffb040, color1: 0xff3000 }); });
+  drip(x, z, r, dur, { mult, burn: 0.4, onLand: (lx, lz) => { const D = DIFFS[G.hero.diff], dmg = monsterDmg(G.zone.level || 25) * D.dmg; area('fire', lx, lz, r * 0.8, 3, { team: 'foe', dmg: dmg * 0.2, tick: 0.5 }); } });
+}
+// something falls from the dark at (x, z): a teleCircle of r for dur s (amber for slag; o.color white 0xe8f4ff for ice),
+// then the blow, o.mult times the zone's monster blow, to every hero inside (heroes(): a guest's stand-in through
+// hurtRemote, combat.js damage), with o.burn (a share of the blow) and o.cold (the Cold). Ice (o.color set) also strikes the
+// monsters inside: 8% of their life and a 1.5 s stun with Stunned (x1.5; o.stun for longer), and o.shard leaves an icicle
+// on its cell, blocked for 20 s. o.onLand(x, z) after
+export function drip(x, z, r, dur, o = {}) {
+  const zone = G.zone, ice = o.color != null, c = o.color ?? 0xffb040;
+  teleCircle(x, z, r, dur, ice ? c : 0xffa040); // (amber: not the Hammerfall's red)
+  for (let k = 0; k < 8; k++) later(dur * (0.5 + k * 0.06), () => { if (G.zone === zone) P({ x, y: 9 - k, z, vy: -14, life: 0.12, size: ice ? 0.32 : 0.5, size1: ice ? 0.16 : 0.3, color: c, color1: ice ? 0x9ad8ff : 0xff3000 }); });
   later(dur, () => {
     if (G.zone !== zone) return;
-    explosion(x, z, r, 0xff6a10, { smoke: 0x2a1a10, shake: 0.08 });
-    Audio.sfx('lavaBurst', { x, z, vol: 0.6 });
-    const D = DIFFS[G.hero.diff], dmg = monsterDmg(zone.level || 25) * D.dmg, pl = G.player;
-    if (pl && Math.hypot(pl.x - x, pl.z - z) < r + pl.radius * 0.5) damage(null, pl, dmg * mult, { burn: dmg * 0.4 });
-    area('fire', x, z, r * 0.8, 3, { team: 'foe', dmg: dmg * 0.2, tick: 0.5 });
+    if (ice) { puff(x, 0.4, z, 14, 0xe8f4ff, 1.4, 0.6, 1.0); explosion(x, z, r, 0xcfe8ff, { shake: 0.06 }); Audio.sfx('iceBreak', { x, z, vol: 0.7 }); }
+    else { explosion(x, z, r, 0xff6a10, { smoke: 0x2a1a10, shake: 0.08 }); Audio.sfx('lavaBurst', { x, z, vol: 0.6 }); }
+    const D = DIFFS[G.hero.diff], dmg = monsterDmg(zone.level || 25) * D.dmg * (o.mult ?? 1);
+    for (const h of heroes()) if (!h.dead && Math.hypot(h.x - x, h.z - z) < r + (h.radius || 0.5) * 0.5) damage(null, h, dmg, { burn: o.burn ? dmg * o.burn : 0, cold: o.cold || 0, drip: true });
+    if (ice) for (const a of zone.actors) {
+      if (a.dead || a.removed || a.team !== 'foe' || a.prop || a.airborne || a.under || Math.hypot(a.x - x, a.z - z) > r + a.radius * 0.5) continue;
+      const st = o.stun ?? (a.def.vaultStun || 1.5);
+      damage(null, a, a.hpMax * 0.08, { pure: true, quiet: true, icicle: true });
+      if (!a.dead && !a.boss) { a.status.stun = Math.max(a.status.stun || 0, st); addVuln(a, 'stunned', st); }
+      if (a.dead && o.shard) a.underShard = true;
+    }
+    if (o.shard) addShard(x, z);
+    o.onLand?.(x, z);
   });
+}
+
+// ---------- Act VI: the vault's icicles and the shards they leave ----------
+// SHARDS: [{ id, ix, iz, end (s, performance clock), mesh }]. A shard blocks its cell for 20 s (never a cell a hero stands
+// on); the cells change in batches at most every 0.25 s (the slush's are tide.js's)
+export const SHARDS = [];
+const SH = { id: 0, open: [], close: [], t: 0, falls: new Map(), geo: null, mat: null, log: { falls: 0, shards: 0, skipped: 0 } };
+const nowS = () => performance.now() / 1000;
+function shardMesh() {
+  SH.geo ||= new THREE.ConeGeometry(0.22, 1.3, 5, 1).translate(0, 0.45, 0);
+  SH.mat ||= new THREE.MeshStandardMaterial({ color: 0xdcecff, roughness: 0.25, metalness: 0.05, transparent: true, opacity: 0.88, emissive: 0x2a3c50 });
+  const m = new THREE.Mesh(SH.geo, SH.mat); m.rotation.set(Math.PI + 0.35, Math.random() * 6.28, 0.2); m.castShadow = false;
+  return m;
+}
+function addShard(x, z, t = 20, ixz = null) {
+  const zone = G.zone, map = zone?.map; if (!map) return null;
+  const ix = ixz ? ixz[0] : Math.floor(x), iz = ixz ? ixz[1] : Math.floor(z);
+  if (SHARDS.some((d) => d.ix === ix && d.iz === iz)) return null;
+  const d = { id: ++SH.id, ix, iz, end: nowS() + t, mesh: shardMesh(), blocked: false };
+  d.mesh.position.set(ix + 0.5, 0, iz + 0.5); R.scene.add(d.mesh);
+  // (never under a hero: the cell stays open while someone stands on it, closed once they step off)
+  if (map.walkable(ix + 0.5, iz + 0.5)) SH.close.push(d);
+  SHARDS.push(d); SH.log.shards++;
+  return d;
+}
+function dropShard(i) {
+  const d = SHARDS[i]; SHARDS.splice(i, 1);
+  R.scene.remove(d.mesh);
+  if (d.blocked) SH.open.push([d.ix, d.iz]);
+}
+// the falls: n icicles on random vault cells within r + 1 of (x, z), one per patch, a patch at most once each 4 s; a white
+// circle of 1.2 m for 1 s, 0.9 x the zone's blow x HAZ6.icicle, Cold +10, a shard. o.mult multiplies the blow (a troll's)
+export function vaultAt(x, z, r, n = 1, o = {}) {
+  const zone = G.zone, L = zone?.L; if (!L?.vault || !(n > 0)) return 0;
+  const now = nowS(), byPatch = new Map(), w = L.w, R1 = r + 1;
+  for (let iz = Math.max(0, Math.floor(z - R1)); iz <= Math.min(L.h - 1, Math.floor(z + R1)); iz++) for (let ix = Math.max(0, Math.floor(x - R1)); ix <= Math.min(w - 1, Math.floor(x + R1)); ix++) {
+    const id = L.vault[iz * w + ix]; if (!id || (ix + 0.5 - x) ** 2 + (iz + 0.5 - z) ** 2 > R1 * R1 || !zone.map.walkable(ix + 0.5, iz + 0.5)) continue;
+    if ((SH.falls.get(id) ?? -99) > now - 4) continue;
+    (byPatch.get(id) || byPatch.set(id, []).get(id)).push([ix, iz]);
+  }
+  const ids = [...byPatch.keys()].sort(() => Math.random() - 0.5).slice(0, n), H = HAZ6[G.hero?.diff ?? 1] || HAZ6[1];
+  for (const id of ids) {
+    const cs = byPatch.get(id), [ix, iz] = cs[(Math.random() * cs.length) | 0];
+    SH.falls.set(id, now); SH.log.falls++;
+    drip(ix + 0.5, iz + 0.5, 1.2, 1.0, { color: 0xe8f4ff, mult: 0.9 * (H.icicle ?? 0.9) * (o.mult ?? 1), cold: 10, shard: true, stun: o.stun });
+  }
+  if (!ids.length) SH.log.skipped++;
+  return ids.length;
+}
+// below the ice the skills' blows on the ground bring the vault down instead of cracking ice (skills.js, skillsx.js)
+export const vaultOn = () => lightKind() === 'under';
+// along a line (Earthsplitter): one icicle each 4 m of it; round a ring (its Ring variant): one each 4 m of the ring
+export function vaultLine(x0, z0, x1, z1, w = 2) {
+  const len = Math.hypot(x1 - x0, z1 - z0), n = Math.max(1, Math.round(len / 4)); let k = 0;
+  for (let i = 0; i < n; i++) { const u = (i + 0.5) / n; k += vaultAt(x0 + (x1 - x0) * u, z0 + (z1 - z0) * u, w, 1); }
+  return k;
+}
+export function vaultRing(x, z, r) {
+  const n = Math.max(1, Math.round(Math.PI * 2 * r / 4)); let k = 0;
+  for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; k += vaultAt(x + Math.sin(a) * r, z + Math.cos(a) * r, 1, 1); }
+  return k;
+}
+// the black water's breath shakes the vault: at the start of each high water one icicle on each patch within 20 m of her
+on('tideTurn', (ph, z) => {
+  if (ph !== 'high' || !z?.act6 || z !== G.zone) return;
+  const pl = G.player; if (!pl || pl.dead) return;
+  for (const v of z.L.spots?.vaults || []) if (Math.hypot(v.x - pl.x, v.z - pl.z) < 20) vaultAt(v.x, v.z, v.r || 3, 1);
+});
+// on every entry to an act-6 zone (world.js act6Enter): no shards, every patch ready
+export function vaultEnter() {
+  while (SHARDS.length) { const d = SHARDS.pop(); R.scene.remove(d.mesh); }
+  SH.open.length = 0; SH.close.length = 0; SH.falls.clear(); SH.t = 0;
+}
+// a co-op guest: the host's shards, with their time left (tide.js cells6Apply)
+export function setShards(list) {
+  const keep = new Set(list.map(([ix, iz]) => ix + ',' + iz));
+  for (let i = SHARDS.length - 1; i >= 0; i--) if (!keep.has(SHARDS[i].ix + ',' + SHARDS[i].iz)) dropShard(i);
+  for (const [ix, iz, t] of list) { const d = SHARDS.find((s) => s.ix === ix && s.iz === iz); if (d) d.end = nowS() + t / 10; else addShard(0, 0, t / 10, [ix, iz]); }
+}
+// each frame (tickFlues' first line): the shards' 20 s and their cells, in batches at most every 0.25 s
+function tickDrips(dt) {
+  if (!SHARDS.length && !SH.open.length && !SH.close.length) return;
+  const zone = G.zone, map = zone?.map; if (!map) return;
+  const now = nowS();
+  for (let i = SHARDS.length - 1; i >= 0; i--) if (SHARDS[i].end <= now) dropShard(i);
+  if ((SH.t -= dt) > 0) return;
+  SH.t = 0.25;
+  const hs = heroes(), close = [], open = SH.open.splice(0);
+  for (let j = SH.close.length - 1; j >= 0; j--) {
+    const d = SH.close[j];
+    if (!SHARDS.includes(d)) { SH.close.splice(j, 1); continue; }
+    if (hs.some((h) => !h.dead && Math.floor(h.x) === d.ix && Math.floor(h.z) === d.iz)) continue;
+    SH.close.splice(j, 1); d.blocked = true; close.push([d.ix, d.iz]);
+  }
+  if ((open.length || close.length) && map.change(open, close)) emit('mapChanged');
 }
 // a Great Bellows chamber that has breathed: its vents erupt along a line through the hero every 12 s while she is inside
 function vents(dt, pl) {
@@ -169,4 +288,9 @@ function vent(f) {
     const dx = pl.x - f.x, dz = pl.z - f.z, u = dx * ux + dz * uz, v = -dx * uz + dz * ux;
     if (!pl.dead && pl.iframes <= 0 && u > 0 && u < f.len && Math.abs(v) < f.w / 2 + pl.radius * 0.5) damage(null, pl, pl.hpMax * VENT.hitBy[di()], { pure: true, burn: pl.hpMax * VENT.burnBy[di()] });
   });
+}
+
+if (import.meta.env?.DEV && typeof window !== 'undefined') {
+  window.__act6 ||= {};
+  Object.assign(window.__act6, { drip, vaultAt, vaultLine, vaultRing, SHARDS, shardLog: SH.log });
 }

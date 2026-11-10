@@ -14,30 +14,50 @@
 //   a wave washes her along the lane (pl.pull with a polyline path, never a jump), and the lane closes. (Cut off by more
 //   than the tide, broken ice say, the lane wades back through the water: those cells reopen in the same batch.)
 // - Pickups on a closing cell slide to the nearest dry one; monsters caught in one are put on the nearest floor.
+// - Act VI's black water (docs/act6-contract.md, The Black Water): a layout with L.tideCfg runs the clock from it (its
+//   phases and step times x HAZ6.tide / 120, its top hMax / 0.15 steps, the ice's groan HAZ6.groan s before the rise, the
+//   wash-out HAZ6.wash). The Mere (L.pocket 2) has its own level beside the clock (z.tide.mere = { h, rate }: the cells
+//   of the bay channel follow it, never the clock; the Ketos lowers it); slush (slushAt: Frost Nova, Frozen Orb) holds
+//   the cells in a circle at wading for a while whatever the level (L.tSlush for the water's crust). cells6/cells6Apply:
+//   the shards and the slush for a co-op guest.
 // - The bell (HAZ5.bell s before the flood and the ebb): sfx and bus 'tideBell' (the coming phase); bus 'tideTurn' at
 //   each phase. The flood waves' clock (floodWave: world.js updatePacks spawns the pack). The HUD's dial: tideDial().
 import { G } from './state.js';
-import { HAZ5 } from './data.js';
+import { HAZ5, HAZ6 } from './data.js';
 import { damage } from './combat.js';
 import { coldAdd } from './cold.js';
 import { sapAt } from './sap.js';
 import { emit } from '../ui/bus.js';
 import { splash } from '../gfx/fx.js';
 import Audio from '../audio/audio.js';
-import { SEA } from '../world/sea.js';
+import { SEA, slushSet } from '../world/sea.js';
+import { SHARDS, setShards } from './forge.js';
 import { wetAt, BED_DRY, TIDE_STEP } from '../world/genlib.js';
 import { tidal, inBay } from '../world/gen5.js';
 import { clamp } from '../core/util.js';
 
-const TOP = 8, MAXK = 12, PH = ['low', 'flood', 'high', 'ebb'], GRACE = 6, WAVE_T = 25, ISLE = 9;
+const TOP8 = 8, MAXK = 12, PH = ['low', 'flood', 'high', 'ebb'], GRACE = 6, WAVE_T = 25, ISLE = 9;
 const N4 = [1, -1, 0, 0], M4 = [0, 0, 1, -1];
 export let TIDE = null;
 // Skerry Bay's own level for the water's look (the clock never reaches it: 0, or the Walking Tower's while it owns the
 // water); a uniform object beside SEA's for sea.js to read over the bay (L.boss + 4)
 export const BAY = (SEA.uBayLevel ||= { value: 0 });
 // what the scenarios read (counts and the last lanes and wash-outs)
-export const TIDE_LOG = { steps: 0, lanes: 0, washes: [], bells: 0, turns: 0, waves: 0, evicted: 0, slid: 0, cost: { n: 0, ms: 0, max: 0 } };
-const haz = () => HAZ5[G.hero?.diff ?? 1] || HAZ5[1];
+export const TIDE_LOG = { steps: 0, lanes: 0, washes: [], bells: 0, turns: 0, waves: 0, evicted: 0, slid: 0, msteps: 0, slush: 0, cost: { n: 0, ms: 0, max: 0 } };
+// the clock's row: Act V's (HAZ5) or, for a layout with its own clock (Act VI's L.tideCfg), that clock scaled by the act's
+// cycle (HAZ6.tide: 120 s on Warden, 150 s on Wanderer), the groan's lead for the bell, the act's wash-out and its top
+let H6C = null;
+const haz = () => {
+  const L = G.zone?.L, d = G.hero?.diff ?? 1;
+  if (L?.tideCfg) {
+    if (H6C?.L !== L || H6C.d !== d) {
+      const H = HAZ6[d] || HAZ6[1], k = (H.tide ?? 120) / 120, c = L.tideCfg;
+      H6C = { L, d, row: { phases: c.phases.map((p) => p * k), stepT: c.stepT * k, bell: H.groan ?? 6, wash: H.wash ?? 6, top: Math.round(c.hMax / TIDE_STEP), groan: true } };
+    }
+    return H6C.row;
+  }
+  return HAZ5[d] || HAZ5[1];
+};
 const lv = (k) => Math.round(k * TIDE_STEP * 100) / 100;
 
 // ---------- the zone's tidal cells (once per zone: L.bed never changes) ----------
@@ -52,34 +72,39 @@ function cellsOf(z) {
     let k = 0; while (k <= MAXK && wetAt(L.bed[i], lv(k)) < 2) k++;
     if (k === 0 || k > MAXK) { tk[i] = k ? 255 : 254; continue; }
     idx.push(i); thr.push(k); tk[i] = k;
-    if (inBay(L, i % L.w, (i - i % L.w) / L.w)) bay[i] = 1;
+    if (L.pocket ? L.pocket[i] === 2 : inBay(L, i % L.w, (i - i % L.w) / L.w)) bay[i] = 1;
   }
   return (z.tideC = { idx: Int32Array.from(idx), thr: Uint8Array.from(thr), bay, tk, mk: new Uint8Array(N), par: new Int32Array(N), q: new Int32Array(N), seen: new Uint8Array(N), st: new Int32Array(N), sq: new Int32Array(N), gen: 0, own: 0, safe: {} });
 }
-// the level a cell sees: the bay keeps low water under the clock
-const levelAt = (z, i) => (z.tideC?.bay[i] && !z.tide.force ? 0 : z.tide.h);
-// is cell i deep (closed) at level index k by the current rule
-function deepAt(z, j, k) { const C = z.tideC; return C.bay[C.idx[j]] && !z.tide.force ? false : k >= C.thr[j]; }
+// the level a cell sees: the bay keeps its own under the clock (low water on the coast, the Mere's below the ice)
+const levelAt = (z, i) => (z.tideC?.bay[i] && !z.tide.force ? z.tide.mh || 0 : z.tide.h);
+// is cell i deep (closed) at level index k by the current rule (a bay cell by its own level's step)
+function deepAt(z, j, k) { const C = z.tideC; return C.bay[C.idx[j]] && !z.tide.force ? (z.tide.mstep | 0) >= C.thr[j] : k >= C.thr[j]; }
 
 // on every entry (act5Enter): the clock at the start of low water, and every tidal cell as its bed has it at h = 0, in
 // one batch (a hero who left at high water comes back to the map at low water, cached or fresh)
-export function resetTide(z) {
+// o.mere (Act VI): the Mere's own level in metres (1.6 while the Ketos lives; none: 0), at 0.3 m/s when moved
+export function resetTide(z, o = {}) {
   const L = z?.L;
   if (!L?.bed) { TIDE = null; return; }
-  z.tide = Object.assign(z.tide || {}, { h: 0, step: 0, t: 0, phase: 'low', force: null, wet: 0, lane: null, laneT: 0, u: 0, since: 99, dir: 0, wetHold: 0, bell: '', waveT: WAVE_T, wash: null, forced: false, moodT: 0, waves: z.tide?.waves || 0 });
+  const ms = clamp(Math.round((o.mere || 0) / TIDE_STEP), 0, MAXK);
+  if (z.tide?.sl) for (let i = 0; i < z.tide.sl.m.length; i++) if (z.tide.sl.m[i]) slushSet(L, i, false);
+  z.tide = Object.assign(z.tide || {}, { h: 0, step: 0, t: 0, phase: 'low', force: null, wet: 0, lane: null, laneT: 0, u: 0, since: 99, dir: 0, wetHold: 0, bell: '', waveT: WAVE_T, wash: null, forced: false, moodT: 0, waves: z.tide?.waves || 0,
+    mere: o.mere ? { h: o.mere, rate: 0.3 } : null, mstep: ms, mh: lv(ms), mu: lv(ms), mdir: 0, msince: 99,
+    sl: { calls: [], m: new Uint8Array(L.w * L.h), now: 0, t: 0, id: 0, dirty: false } });
   TIDE = z.tide;
-  cellsOf(z);
+  const C = cellsOf(z), T = z.tide;
   const { w } = L, open = [], close = [];
   for (let i = 0; i < L.cells.length; i++) {
     if (!tidal(L, i)) continue;
-    const want = wetAt(L.bed[i], 0) < 2;
+    const want = wetAt(L.bed[i], C.bay[i] ? T.mh : 0) < 2;
     if (want && !L.cells[i]) open.push([i % w, (i - i % w) / w]);
     else if (!want && L.cells[i]) close.push([i % w, (i - i % w) / w]);
   }
   if (z.map.change(open, close)) { z.tideC.own++; emit('mapChanged'); }
   // (the clock's safe ground built now, behind the loading, not on the first flood step)
   safeOf(z);
-  SEA.uLevel.value = 0; SEA.uWetLevel.value = 0; BAY.value = 0;
+  SEA.uLevel.value = 0; SEA.uWetLevel.value = 0; BAY.value = T.mh;
 }
 
 // ---------- per frame (projectiles.js updateAreas, before tickIce) ----------
@@ -94,7 +119,7 @@ function tick(dt) {
   if (z?.water) tickWash(z, dt);
   TIDE = z?.L?.bed && z.tide ? z.tide : null;
   const T = TIDE; if (!T) return;
-  const H = haz(), pl = G.player;
+  const H = haz(), pl = G.player, TOP = H.top ?? TOP8;
   T.since += dt;
   let k, si, pi = -1, upAt = 0;
   if (T.force) {
@@ -113,7 +138,7 @@ function tick(dt) {
     if (PH[pi] !== T.phase) { T.phase = PH[pi]; TIDE_LOG.turns++; emit('tideTurn', T.phase, z); }
     // the bell, HAZ5.bell s before the flood and before the ebb
     const bell = t >= b1 - H.bell && t < b1 ? 'flood' : t >= b3 - H.bell && t < b3 ? 'ebb' : '';
-    if (bell && T.bell !== bell) { TIDE_LOG.bells++; emit('tideBell', bell, z); Audio.sfx('tideBell'); z.act5?.bell?.userData.ring?.(1); }
+    if (bell && T.bell !== bell) { TIDE_LOG.bells++; emit('tideBell', bell, z); Audio.sfx(H.groan ? 'iceGroan' : 'tideBell'); z.act5?.bell?.userData.ring?.(1); }
     T.bell = bell;
     k = pi === 0 ? 0 : pi === 1 ? Math.min(TOP, Math.floor((t - b1) / si) + 1) : pi === 2 ? TOP : Math.max(0, TOP - Math.floor((t - b3) / si) - 1);
     upAt = b1 - t; // (the flood's steps up: the first at its start, then one each stepT)
@@ -124,7 +149,9 @@ function tick(dt) {
   // the water the eye sees: ahead of the grid while it rises, behind it while it falls
   T.u = T.h + TIDE_STEP * (ttn < Infinity ? clamp(1 - ttn / si, 0, 1) : T.dir < 0 ? clamp(1 - T.since / si, 0, 1) : 0);
   if (T.u >= T.wet) { T.wet = T.u; T.wetHold = 20; } else if ((T.wetHold -= dt) <= 0) T.wet = Math.max(T.u, T.wet - 0.05 * dt);
-  SEA.uLevel.value = T.u; SEA.uWetLevel.value = T.wet; BAY.value = T.force ? T.u : 0;
+  if (T.mere || T.mstep || T.mdir) mereTick(z, T, dt);
+  if (T.sl) slushTick(z, T, dt);
+  SEA.uLevel.value = T.u; SEA.uWetLevel.value = T.wet; BAY.value = T.force ? T.u : T.mu || 0;
   if ((T.moodT -= dt) <= 0) { T.moodT = 0.5; Audio.mood({ tide: clamp(T.u / lv(TOP), 0, 1) }); }
   if (T.h >= 0.75 - 1e-6 && !T.force) T.waveT -= dt;
   if (T.lane && pl) tickLane(z, T, pl, dt);
@@ -132,12 +159,33 @@ function tick(dt) {
 
 // ---------- a step: the band of cells crossing the deep line, closed and opened in one batch ----------
 function stepTo(z, k) {
-  const T = z.tide, C = cellsOf(z), cells = z.map.cells, L = z.L, w = L.w;
+  const T = z.tide;
   T.dir = Math.sign(k - T.step); T.step = k; T.h = lv(k); T.since = 0; TIDE_LOG.steps++;
+  batch(z);
+}
+// the Mere's own step (Act VI): its cells only change, by the same rules
+function mereStepTo(z, k) {
+  const T = z.tide;
+  T.mdir = Math.sign(k - T.mstep); T.mstep = k; T.mh = lv(k); T.msince = 0; TIDE_LOG.msteps++;
+  batch(z);
+}
+// the Mere's level toward z.tide.mere.h, one 0.15 m step each 0.15 / rate s (at most one a frame); the level the eye sees
+// a step ahead while it rises, a step behind while it falls; gone once it has drained to 0
+function mereTick(z, T, dt) {
+  const M = T.mere, km = M ? clamp(Math.round((M.h || 0) / TIDE_STEP), 0, MAXK) : 0, msi = TIDE_STEP / Math.max(M?.rate || 0.3, 1e-3);
+  T.msince += dt;
+  if (T.mstep !== km && T.msince >= msi - 1e-6) mereStepTo(z, T.mstep + Math.sign(km - T.mstep));
+  T.mu = T.mh + TIDE_STEP * (T.mstep < km ? clamp(T.msince / msi, 0, 1) : T.mdir < 0 ? clamp(1 - T.msince / msi, 0, 1) : 0);
+  if (T.mdir < 0 && T.msince >= msi) T.mdir = 0;
+  if (M && !(M.h > 0) && !T.mstep) T.mere = null;
+}
+// one batch: every cell crossing the deep line at the levels now, closed and opened together (a slush cell stays open)
+function batch(z) {
+  const T = z.tide, C = cellsOf(z), cells = z.map.cells, L = z.L, w = L.w, k = T.step, sm = T.sl?.m;
   const close = [], open = [], mk = C.mk, def = T.lane?.def, held = T.wash?.cells;
   for (let j = 0; j < C.idx.length; j++) {
     const i = C.idx[j];
-    if (def?.has(i) || held?.has(i)) continue;
+    if (def?.has(i) || held?.has(i) || sm?.[i]) continue;
     const deep = deepAt(z, j, k);
     if (deep && cells[i]) { close.push(i); mk[i] = 1; } else if (!deep && !cells[i]) open.push(i);
   }
@@ -151,7 +199,7 @@ function stepTo(z, k) {
   if (T.lane && !laneDeep(z, T.lane)) T.lane = null;
 }
 // a lane cell still wants to close at this level
-function wantsDeep(z, i) { const L = z.L; return tidal(L, i) && wetAt(L.bed[i], levelAt(z, i)) === 2; }
+function wantsDeep(z, i) { const L = z.L; return tidal(L, i) && !z.tide.sl?.m[i] && wetAt(L.bed[i], levelAt(z, i)) === 2; }
 function laneDeep(z, ln) { for (const i of ln.def) if (wantsDeep(z, i)) return true; return false; }
 
 // the cells she could stand on after this step: open now, not closing, not a deep lane cell
@@ -161,12 +209,14 @@ function staysOpen(z, i) { const C = z.tideC, T = z.tide; return z.map.cells[i] 
 // is 3 x 3). Rebuilt when the top changes or when something other than the tide has changed the grid (ice, the skerry)
 function safeOf(z) {
   const T = z.tide, C = z.tideC, L = z.L, m = z.map, w = L.w, h = L.h, f = !!T.force, S = C.safe, tk = C.tk;
-  const top = f ? Math.max(T.step, clamp(Math.round((T.force.h || 0) / TIDE_STEP), 0, MAXK)) : TOP, key = (f ? 'f' : 'c') + top, ext = m.ver - C.own;
+  const top = f ? Math.max(T.step, clamp(Math.round((T.force.h || 0) / TIDE_STEP), 0, MAXK)) : haz().top ?? TOP8, ext = m.ver - C.own;
+  // (the Mere's top: a bay cell is ground its water never takes only above the highest it holds or is going to)
+  const mtop = f ? 0 : Math.max(T.mstep | 0, T.mere ? clamp(Math.round((T.mere.h || 0) / TIDE_STEP), 0, MAXK) : 0), key = (f ? 'f' : 'c') + top + (mtop ? 'm' + mtop : '');
   // (one mask per top, kept while nothing but the tide changes the grid: a boss's ebb asks for a new top each step)
   if (S.ext !== ext) { S.ext = ext; S.m = {}; }
   if (S.m[key]) return S.m[key];
   const M = (S.m[key] = new Uint8Array(w * h)), q = C.sq;
-  const ok = (i) => { const k = tk[i]; return k === 0 ? m.cells[i] === 1 : k === 255 || (k !== 254 && ((C.bay[i] && !f) || k > top)); };
+  const ok = (i) => { const k = tk[i]; return k === 0 ? m.cells[i] === 1 : k === 255 || (k !== 254 && (C.bay[i] && !f ? k > mtop : k > top)); };
   for (let s = 0; s < M.length; s++) {
     if (M[s] || !ok(s)) continue;
     let tail = 1; q[0] = s; M[s] = 1;
@@ -335,6 +385,62 @@ function dryNear(z, x, zz) {
   return pinch;
 }
 
+// ---------- Act VI: slush (Frost Nova 8 s in r 5.5, Frozen Orb 6 s in r 1.2 each 1.2 m of its trail) ----------
+// slushAt(x, z, r, t): every tidal cell whose centre lies within r is held at wading for t s whatever the level. The calls
+// are kept as they were made ({ id, x, z, r, end }); the grid follows them in batches at most every 0.25 s (one map.change
+// each, so with the shards no more than four map.ver bumps a second). A cell that thaws deep under her or across her only
+// way out is held by the tide's own lane (her 6 s of grace, then the wash-out), as a step would
+export function slushAt(x, zz, r, t) {
+  const z = G.zone, T = z?.tide; if (!T?.sl || !z.L?.bed || !(t > 0)) return null;
+  const sl = T.sl, c = { id: ++sl.id, x, z: zz, r, end: sl.now + t };
+  sl.calls.push(c); sl.dirty = true; TIDE_LOG.slush++;
+  return c;
+}
+function slushTick(z, T, dt) {
+  const sl = T.sl; sl.now += dt;
+  for (let j = sl.calls.length - 1; j >= 0; j--) if (sl.calls[j].end <= sl.now) { sl.calls.splice(j, 1); sl.dirty = true; }
+  if ((sl.t -= dt) > 0 || !sl.dirty) return;
+  sl.t = 0.25; sl.dirty = false;
+  const C = cellsOf(z), L = z.L, w = L.w, h = L.h, cells = z.map.cells, tk = C.tk, now = new Uint8Array(sl.m.length);
+  for (const c of sl.calls) {
+    const x0 = Math.max(0, Math.floor(c.x - c.r)), x1 = Math.min(w - 1, Math.floor(c.x + c.r)), z0 = Math.max(0, Math.floor(c.z - c.r)), z1 = Math.min(h - 1, Math.floor(c.z + c.r));
+    for (let iz = z0; iz <= z1; iz++) for (let ix = x0; ix <= x1; ix++) {
+      const i = iz * w + ix, k = tk[i];
+      if ((k >= 1 && k <= MAXK) || k === 254) if ((ix + 0.5 - c.x) ** 2 + (iz + 0.5 - c.z) ** 2 <= c.r * c.r) now[i] = 1;
+    }
+  }
+  const open = [], close = [], mk = C.mk;
+  for (let i = 0; i < now.length; i++) {
+    if (now[i] === sl.m[i]) continue;
+    sl.m[i] = now[i]; slushSet(L, i, !!now[i]);
+    if (now[i]) { if (!cells[i]) open.push(i); }
+    else if (cells[i] && wantsDeep(z, i) && !T.lane?.def.has(i) && !T.wash?.cells?.has(i)) { close.push(i); mk[i] = 1; }
+  }
+  const pl = G.player;
+  if (close.length && pl && !pl.dead) shelter(z, T, pl, close, open);
+  for (const i of close) mk[i] = 0;
+  const xz = (i) => [i % w, (i - i % w) / w];
+  if (z.map.change(open.map(xz), close.map(xz))) { C.own++; emit('mapChanged'); evict(z, close); }
+}
+// the co-op cells (the host's, on the 'i' topic): the shards (forge.js SHARDS: a cell each, the tenths of a second left)
+// and the slush as its calls (x, z, r to a tenth, the tenths left); key changes only when one is added or ends
+export function cells6(z) {
+  const sl = z?.tide?.sl, q = (v) => Math.round(v * 10) / 10, now = performance.now() / 1000;
+  const s = SHARDS.map((d) => [d.ix, d.iz, Math.max(0, Math.round((d.end - now) * 10))]);
+  const l = (sl?.calls || []).map((c) => [q(c.x), q(c.z), q(c.r), Math.max(0, Math.round((c.end - sl.now) * 10))]);
+  let k = 0; for (const d of SHARDS) k = (k * 31 + d.id) | 0; for (const c of sl?.calls || []) k = (k * 37 + c.id) | 0;
+  return { key: k + ':' + s.length + ':' + l.length, d: { s, l } };
+}
+// a guest: the host's shards and slush as its own, with their time left, in one batch
+export function cells6Apply(z, d) {
+  const T = z?.tide;
+  if (d?.s) setShards(d.s);
+  if (!T?.sl || !d?.l) return;
+  const sl = T.sl;
+  sl.calls = d.l.map(([x, zz, r, t]) => ({ id: ++sl.id, x, z: zz, r, end: sl.now + t / 10 }));
+  sl.dirty = true; sl.t = 0;
+}
+
 // ---------- queries ----------
 // the water at (x, z): 'dry', 'shallow' (wading) or 'deep' (closed water, the open sea, a hole, broken ice)
 export function waterAt(x, z) {
@@ -342,6 +448,7 @@ export function waterAt(x, z) {
   const ix = Math.floor(x), iz = Math.floor(z); if (ix < 0 || iz < 0 || ix >= L.w || iz >= L.h) return 'dry';
   const i = iz * L.w + ix;
   if (L.sea?.[i] || (zn.ice && L.ice?.[i] && zn.ice.stage[i] === 4)) return 'deep';
+  if (zn.tide?.sl?.m[i]) return 'shallow';
   if (L.bed && zn.tide && tidal(L, i)) { const d = wetAt(L.bed[i], levelAt(zn, i)); return d === 2 ? 'deep' : d ? 'shallow' : 'dry'; }
   return 'dry';
 }
@@ -351,7 +458,7 @@ export function wadeAt(x, z) {
   const zn = G.zone, L = zn?.L; if (!L || !(L.bed || L.ice)) return null;
   const ix = Math.floor(x), iz = Math.floor(z); if (ix < 0 || iz < 0 || ix >= L.w || iz >= L.h) return null;
   const i = iz * L.w + ix;
-  if (zn.ice && L.ice?.[i] && zn.ice.stage[i] === 5) return 'slush';
+  if ((zn.ice && L.ice?.[i] && zn.ice.stage[i] === 5) || zn.tide?.sl?.m[i]) return 'slush';
   if (L.bed && zn.tide && tidal(L, i) && wetAt(L.bed[i], levelAt(zn, i)) > 0) return 'tide';
   const s = sapAt(x, z); return s === 'brine' || s === 'slush' ? s : null;
 }
@@ -361,7 +468,7 @@ export function tideDial() {
   const T = TIDE; if (!T) return null;
   const H = haz(), ph = H.phases, ends = [ph[0], ph[0] + ph[1], ph[0] + ph[1] + ph[2], ph[0] + ph[1] + ph[2] + ph[3]];
   const pi = PH.indexOf(T.phase), next = T.force ? 0 : Math.max(0, ends[pi] - T.t);
-  return { h: T.h, u: T.u, k: clamp(T.u / lv(TOP), 0, 1), dir: T.force ? Math.sign(Math.round((T.force.h || 0) / TIDE_STEP) - T.step) : T.phase === 'flood' ? 1 : T.phase === 'ebb' ? -1 : 0, phase: T.phase, next, bell: T.bell, lane: !!T.lane, laneT: T.lane ? Math.max(0, T.laneT) : 0, forced: !!T.force };
+  return { h: T.h, u: T.u, k: clamp(T.u / lv(H.top ?? TOP8), 0, 1), groan: !!H.groan, dir: T.force ? Math.sign(Math.round((T.force.h || 0) / TIDE_STEP) - T.step) : T.phase === 'flood' ? 1 : T.phase === 'ebb' ? -1 : 0, phase: T.phase, next, bell: T.bell, lane: !!T.lane, laneT: T.lane ? Math.max(0, T.laneT) : 0, forced: !!T.force };
 }
 // the flood waves' clock: one each 25 s while the water stands at 0.75 m or more (world.js updatePacks asks while fewer
 // than two are alive and spawns the 'floodWave' pack): a wading cell at the water's edge 14-26 m from her, or null
@@ -385,6 +492,7 @@ export function mapTone(z, i) {
   const L = z.L;
   if (L.thick?.[i] || L.window?.[i]) return 0xe2eaf0;
   if (L.ice?.[i]) { const s = z.ice?.stage[i] || 0; return s === 4 ? 0x1c3a6a : s === 5 ? 0x7896ae : s >= 2 ? 0xc4dcec : 0x98c4e2; }
+  if (z.tide?.sl?.m[i]) return 0x7896ae;
   if (L.sea?.[i]) return 0x1c3a6a;
   if (L.bed && L.bed[i] < BED_DRY && !L.deck?.[i]) { if (!z.map.cells[i]) return 0x1c3a6a; return z.tide && tidal(L, i) && wetAt(L.bed[i], levelAt(z, i)) > 0 ? 0x5e96c4 : 0; }
   return 0;
@@ -393,4 +501,6 @@ export function mapTone(z, i) {
 if (import.meta.env?.DEV && typeof window !== 'undefined') {
   window.__act5 ||= {};
   window.__act5.tide = { get TIDE() { return TIDE; }, LOG: TIDE_LOG, tideDial, waterAt, wadeAt, resetTide, floodWave, mapTone };
+  window.__act6 ||= {};
+  window.__act6.tide = { get TIDE() { return TIDE; }, LOG: TIDE_LOG, tideDial, waterAt, wadeAt, resetTide, slushAt, cells6, cells6Apply, levelAt: (i) => levelAt(G.zone, i) };
 }

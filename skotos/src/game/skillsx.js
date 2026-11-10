@@ -13,6 +13,7 @@ import Audio from '../audio/audio.js';
 import { rand, angleTo, angleDiff, clamp } from '../core/util.js';
 import { emit } from '../ui/bus.js';
 import { crackAt, crackLine, crackRing, refreezeAt } from './ice.js';
+import { vaultOn, vaultAt, vaultLine, vaultRing } from './forge.js';
 import { NET } from '../net/state.js';
 
 const V = new THREE.Vector3();
@@ -182,7 +183,7 @@ export const VARIANT_FN = {
           puff(x0, 0.3, z0, 4, 0x4a4038, 1.2, r, 0.7);
           Audio.sfx('stoneCrack', { vol: 0.6 });
           // Act V: each ring cracks the thin ice it opens (+1 stage), never the ground she stands on
-          crackRing(x0, z0, r - 0.5, r + 0.5, 1, { src: 'quake' });
+          if (vaultOn()) vaultRing(x0, z0, r); else crackRing(x0, z0, r - 0.5, r + 0.5, 1, { src: 'quake' });
           circleHit(x0, z0, r + 0.9, (f) => { if (hit.has(f)) return; hit.add(f); damage(pl, f, heroHit(mult * 0.9, { area: true }), { knock: 3, kx: f.x - x0, kz: f.z - z0, stun: 0.8, area: true, breakGuard: true }); });
         }));
       }]]
@@ -279,7 +280,7 @@ export const VARIANT_FN = {
       events: [[0.22, () => {
         const o = staffTip(V); Audio.sfx('fireball', { pitch: 1.2 });
         fire('cinder', pl, o.x, o.z, pl.rot, { y: Math.max(1, o.y), homing: 6, onHit: (f, pr) => { pr.life = 0; }, look: cinderLook,
-          onEnd: (x, z) => { wayfarer(pl, x, z, mult, 3); const r = (sk.radius + 0.15 * rank) * 0.85; explosion(x, z, r, 0xfff0c0, { shake: 0.22, smoke: 0x4a4440 }); crackAt(x, z, 1.5, 1, { src: 'fireball' }); Audio.sfx('explosion', { x, z, vol: 0.8 }); circleHit(x, z, r, (f) => damage(pl, f, heroHit(mult * 0.8, { area: true }), { knock: 3, kx: f.x - x, kz: f.z - z, burn: heroHit(mult * 0.3), area: true })); area('fire', x, z, 1.9, 3, { tick: 0.5, dmg: heroHit(mult * 0.14, { area: true }), look: paleFire, light: { color: 0xffe8b0, intensity: 12 }, dim: true }); } });
+          onEnd: (x, z) => { wayfarer(pl, x, z, mult, 3); const r = (sk.radius + 0.15 * rank) * 0.85; explosion(x, z, r, 0xfff0c0, { shake: 0.22, smoke: 0x4a4440 }); (vaultOn() ? vaultAt(x, z, 1.5, 1) : crackAt(x, z, 1.5, 1, { src: 'fireball' })); Audio.sfx('explosion', { x, z, vol: 0.8 }); circleHit(x, z, r, (f) => damage(pl, f, heroHit(mult * 0.8, { area: true }), { knock: 3, kx: f.x - x, kz: f.z - z, burn: heroHit(mult * 0.3), area: true })); area('fire', x, z, 1.9, 3, { tick: 0.5, dmg: heroHit(mult * 0.14, { area: true }), look: paleFire, light: { color: 0xffe8b0, intensity: 12 }, dim: true }); } });
       }]]
     });
   },
@@ -364,7 +365,7 @@ export const VARIANT_FN = {
         const n = 5 + (rank >= 4 ? 1 : 0);
         for (let i = 0; i < n; i++) {
           const a = (i / n) * 6.28 + rand.range(-0.4, 0.4), r = i === 0 ? 0 : rand.range(1.2, sk.radius + 0.8), mx = x + Math.sin(a) * r, mz = z + Math.cos(a) * r;
-          meteorFall(mx, mz, 0.55 + i * 0.22, 0.7, () => { explosion(mx, mz, 1.9, 0xff5a10, { shake: 0.25 }); crackAt(mx, mz, 2, 1, { src: 'meteor' }); Audio.sfx('explosion', { x: mx, z: mz, vol: 0.6 }); circleHit(mx, mz, 2.0, (f) => damage(pl, f, heroHit(mult * 0.55, { area: true }), { knock: 3, kx: f.x - mx, kz: f.z - mz, burn: heroHit(mult * 0.1), area: true })); });
+          meteorFall(mx, mz, 0.55 + i * 0.22, 0.7, () => { explosion(mx, mz, 1.9, 0xff5a10, { shake: 0.25 }); if (vaultOn()) vaultAt(mx, mz, 2, 1); else crackAt(mx, mz, 2, 1, { src: 'meteor' }); Audio.sfx('explosion', { x: mx, z: mz, vol: 0.6 }); circleHit(mx, mz, 2.0, (f) => damage(pl, f, heroHit(mult * 0.55, { area: true }), { knock: 3, kx: f.x - mx, kz: f.z - mz, burn: heroHit(mult * 0.1), area: true })); });
         }
       }]]
     });
@@ -380,7 +381,7 @@ export const VARIANT_FN = {
         meteorFall(x, z, 0.95, 1.4, () => {
           explosion(x, z, r, 0x9ad8ff, { shake: 0.7, smoke: 0xb0c8e0 });
           // Act V: a stone of ice is a stone still: it breaks thin ice wide open as a Meteor does (+2 stages, r 3.5)
-          crackAt(x, z, 3.5, 2, { src: 'meteor' });
+          if (vaultOn()) vaultAt(x, z, 3.5, 3); else crackAt(x, z, 3.5, 2, { src: 'meteor' });
           for (let i = 0; i < 26; i++) { const a = Math.random() * 6.28, s = rand.range(3, 9); P({ x, y: 0.5, z, vx: Math.cos(a) * s, vy: rand.range(2, 6), vz: Math.sin(a) * s, life: 0.7, size: rand.range(0.15, 0.3), size1: 0.05, color: 0xffffff, color1: 0x80c0ff, grav: 12 }); }
           Audio.sfx('explosion', { x, z }); Audio.sfx('frost', { x, z });
           G.hitstop = 0.08;
@@ -418,7 +419,7 @@ function leapCore(sk, aim, mult, o) {
     events: [[0.56, () => {
       pl.y = 0;
       // Act V: her landing cracks thin ice round it (+1 stage), as wide as the fall
-      crackAt(tx, tz, 3 * R0 / sk.radius, 1, { src: 'leap' });
+      if (vaultOn()) vaultAt(tx, tz, 3 * R0 / sk.radius, 2); else crackAt(tx, tz, 3 * R0 / sk.radius, 1, { src: 'leap' });
       if (o.seismic) for (const f of foes(tx, tz, R0 * 2)) if (live(f)) pull(f, tx, tz, 9);
       const n = circleHit(tx, tz, R0, (f) => damage(pl, f, heroHit(mult * o.m, { area: true }), { knock: o.seismic ? 0 : 5, kx: f.x - tx, kz: f.z - tz, stun: o.seismic ? 1.8 : 1.0, area: true, breakGuard: true }));
       explosion(tx, tz, R0 * 0.8, o.seismic ? 0xffa060 : 0x9ad8ff, { smoke: 0x5a4a3a, shake: o.seismic ? 0.8 : 0.4 });
@@ -438,7 +439,7 @@ function quakeLines(dir, offs, len, m) {
       Audio.sfx('slam'); shake(0.5); G.hitstop = 0.06;
       const x0 = pl.x, z0 = pl.z;
       // Act V: every fissure cracks thin ice along it (+1 stage)
-      for (const da of offs) crackLine(x0 + Math.sin(dir + da) * 1.2, z0 + Math.cos(dir + da) * 1.2, x0 + Math.sin(dir + da) * (1.2 + len), z0 + Math.cos(dir + da) * (1.2 + len), 2, 1, { src: 'quake' });
+      for (const da of offs) (vaultOn() ? vaultLine : crackLine)(x0 + Math.sin(dir + da) * 1.2, z0 + Math.cos(dir + da) * 1.2, x0 + Math.sin(dir + da) * (1.2 + len), z0 + Math.cos(dir + da) * (1.2 + len), 2, 1, { src: 'quake' });
       for (const da of offs) for (let i = 0; i < len; i++) later(i * 0.035, () => {
         const a = dir + da, x = x0 + Math.sin(a) * (1.2 + i), z = z0 + Math.cos(a) * (1.2 + i);
         if (!G.zone.map.walkable(x, z)) return;
@@ -460,7 +461,7 @@ function rainCore(sk, aim, rank, drop, tele) {
       teleCircle(x, z, sk.radius, 0.35, tele);
       drop(x, z, sk.dur + 0.2 * (rank - 1));
       // Act V: +1 stage under the rain, once a cast (the Ranger cracks from range, whatever falls)
-      later(0.4, here(() => crackAt(x, z, 3.5, 1, { src: 'rain' })));
+      later(0.4, here(() => (vaultOn() ? vaultAt(x, z, 3.5, 1) : crackAt(x, z, 3.5, 1, { src: 'rain' }))));
     }]]
   });
 }
@@ -516,7 +517,7 @@ function wayfarer(pl, x, z, mult, n) {
 function fireBoom(x, z, r, m, small, crack = 0) {
   const pl = p();
   explosion(x, z, r, 0xff7a20, { shake: small ? 0.12 : 0.3 });
-  if (crack) crackAt(x, z, crack, 1, { src: 'fireball' });
+  if (crack) { if (vaultOn()) vaultAt(x, z, crack, 1); else crackAt(x, z, crack, 1, { src: 'fireball' }); }
   Audio.sfx('explosion', { x, z, vol: small ? 0.6 : 1 });
   circleHit(x, z, r, (f) => damage(pl, f, heroHit(m, { area: true }), { knock: small ? 2 : 4, kx: f.x - x, kz: f.z - z, burn: heroHit(m * 0.3), area: true }));
 }

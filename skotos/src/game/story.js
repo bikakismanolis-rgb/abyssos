@@ -18,7 +18,7 @@ import { tex } from '../gfx/textures.js';
 import { titleCard } from '../ui/overlay.js';
 import { act3Prop, act4Prop } from '../world/build.js';
 import { loadFolk } from '../gfx/people.js';
-import { addLightPool, removeLightPool, cradlePoint } from './light.js';
+import { addLightPool, removeLightPool, cradlePoint, setNamesRoll } from './light.js';
 import { angleTo } from '../core/util.js';
 import { openDeepGate, FAR_BEACONS, farFire, openRootGate, witherWall, firstAutumn, growProp, zoneEmitters, setFar, setBeacon, townFires, townPresence, walkTo, stopWalk, vanish, release,
   act4Presence, isarnLantern, setLastLamp, openAnvilGate, meltPlug, forgeCold, bellowsDone, echoAt,
@@ -1654,6 +1654,15 @@ on('skotosRoll', (a) => {
   const next = () => { if (G.zone !== z || !a || a.dead || i >= list.length) return; emit('say', list[i++]); later(3, next); };
   next();
 });
+// Act VI (systems; story's from D): the names that fall through the ice in the Drained Sea and that the rite says after the
+// act: the First (by her own name once it is given back), Einar, Arna, every Name-stone lit in Act V in its order, Ivar,
+// Isarn, the Lost in the order freed, after the act up to three forgotten ones freed in the Gates, the dark's own, and
+// after the act Tern's good night (docs/act6-contract.md, The Names from Above)
+export function rollNames6(after) {
+  const h = G.hero, F = h.flags;
+  return [F.nameBack ? 'name.first6' : 'name.first', 'name.einar', 'name.arna', ...(F.names || []).map((id) => 'name.' + id), 'name.ivar', 'name.isarn', ...(F.lost6 || []).map((id) => 'name.' + id), ...(after ? Array(Math.min(3, h.gateFound | 0)).fill('name.someone') : []), 'name.skotos', ...(after ? ['name.goodnight'] : [])];
+}
+setNamesRoll(rollNames6);
 // the names the Saltborn say into the dark: the old ones, every Name-stone the hero lit in the order she lit them, and (in
 // the rite after the act) the two she carved; the dark's own last
 function rollNames(rite) {

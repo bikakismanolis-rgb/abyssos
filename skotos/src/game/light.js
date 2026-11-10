@@ -20,7 +20,11 @@ import { ZONES } from './world.js';
 import { warmHero } from './cold.js';
 import { stageAt } from './ice.js';
 import Audio from '../audio/audio.js';
-import { emit } from '../ui/bus.js';
+import { emit, on } from '../ui/bus.js';
+import { t } from '../i18n/i18n.js';
+import { addVuln } from './combat.js';
+import { HAZ6 } from './data.js';
+import { NET } from '../net/state.js';
 import { clamp, damp, rand, angleDiff } from '../core/util.js';
 
 export const LIGHT = { force: false, base: 6, swell: 9, swellT: 8 };
@@ -39,9 +43,13 @@ export function lightKind() {
   return ZONES[G.zone?.id]?.light || null;
 }
 export const lightOn = () => !!lightKind();
-// the Shroud and the Cradle's drinking belong to the ember zones only
-export const shroudOn = () => lightKind() === 'ember';
+// the Shroud belongs to the ember zones and to the act below the ice ('under'); the Cradle's drinking and its swell to the
+// ember zones only
+export const shroudOn = () => { const k = lightKind(); return k === 'ember' || k === 'under'; };
 const ember = () => lightKind() === 'ember';
+// what a Shrouded foe outside light takes: 30% (Act IV), the act's row below the ice (HAZ6.shroud: 45% on Wanderer)
+export const shroudK = () => (lightKind() === 'under' ? h6().shroud ?? 0.3 : 0.3);
+const h6 = () => HAZ6[G.hero?.diff ?? 1] || HAZ6[1];
 
 // ---------- queries ----------
 // is (x, z) in light? Everywhere is, in a zone with no light. o.ring === false: the hero's own ring does not count (the
@@ -56,6 +64,12 @@ export function lightAt(x, z, o = {}) {
   if (S.dark) return false;
   const pl = G.player, hr = heroLightR();
   if (o.ring !== false && pl && !pl.dead && hr > 0 && (pl.x - x) ** 2 + (pl.z - z) ** 2 < (hr + pad) ** 2) return true;
+  // (below the ice every hero's ring is light, not only the page's own: the other heroes here, each with its own light pools)
+  if (NET.remotes.length && fireOn()) for (const a of NET.remotes) {
+    if (a.dead || a.removed) continue;
+    const rr = ringOf(a); if (rr > 0 && (a.x - x) ** 2 + (a.z - z) ** 2 < (rr + pad) ** 2) return true;
+    for (const p of a.lightPools || []) if ((p.x - x) ** 2 + (p.z - z) ** 2 < (p.r + pad) ** 2) return true;
+  }
   if (lampAt(x, z, pad)) return true;
   return !!fireAt(x, z, 1.5 + pad);
 }
@@ -94,7 +108,14 @@ export function warmAt(x, z) {
 // Smoke-eater gets a claw in it; a boss may set it
 export function heroLightR() {
   if (S.over != null) return S.over;
+  // (below the ice the ring is the Carried Fire's: FIRE.r, a War Cry's flare, the lantern chain; never S.over there)
+  if (fireOn()) return ringOf(G.player);
   return (S.swellT > 0 && ember() ? LIGHT.swell : LIGHT.base) * (S.halfT > 0 ? 0.5 : 1);
+}
+// a skylight's pool at (x, z) (Act VI: it fills the Carried Fire a little and warms against the Cold, cold.js)
+export function skyAt(x, z) {
+  for (const p of S.pools) if (p.sky && p.r > 0 && (p.x - x) ** 2 + (p.z - z) ** 2 < p.r * p.r) return p;
+  return null;
 }
 // a boss's darkness: r metres (3.5 in Ivar's dark, 0 in Karthax's last fire) until null, or until the owner dies
 export function setHeroLight(r, owner = null) { S.over = r; S.owner = r == null ? null : owner; }
@@ -102,6 +123,152 @@ export function setHeroLight(r, owner = null) { S.over = r; S.owner = r == null 
 export function setLightDark(on, owner = null) { S.dark = on ? owner || true : null; }
 export function halveCradle(t = 4) { S.halfT = Math.max(S.halfT, t); }
 export const cradleSwollen = () => S.swellT > 0;
+
+// ---------- Act VI: the Carried Fire (docs/act6-contract.md, Light) ----------
+// Below the ice ('under' zones) the Cradle's ring is a meter, FIRE.r metres between 0 and FIRE.max (ZONES[id].ring, 4.5 m,
+// times the Lamplight track's bonus). It never drains by itself: only the dark's actions take it (fireDrain: a Drink, a
+// Forgetting Touch, a snap, wading black water, a Black Flare...), each times HAZ6.coal; only true light fills it (standing
+// in lamp light at HAZ6.refill m/s, 1.5 on Warden; a skylight 0.3 m/s; the names falling from above; a burning cask
+// 1 m/s; fireFill for the kills and a Lampbearer's death). Dim under 1.5 m (the ring pulses; bus 'fireDim'), Out at 0
+// (bus 'fireOut': the ring gone, her own light 4 m, the Cold's gains doubled, every unlit foe Shrouded wherever it
+// stands); a second in true lamp light brings it back at 2.5 m (fireRelight, bus 'fireBack'). Every entry starts full
+// (fireEnter: a fresh coal from the camp). Co-op: a remote hero's ring is a.ringR (setRemoteLight, from its presence),
+// and each ring gains 1 m for every other living hero within 6 m (at most 2: the lantern chain), drawn and as light
+export const FIRE = { r: 4.5, max: 4.5, state: 'full', t: 0 };
+export const fireOn = () => lightKind() === 'under';
+// the Lamplight Mastery track (progression.js 'lamp': ringPct): the base ring, never a swell or a boss's override
+export const lampBonus = () => G.stats?.ringPct || 0;
+export const fireMax = () => (ZONES[G.zone?.id]?.ring ?? 4.5) * (1 + lampBonus() / 100);
+// o: { src (the log), half (a Drink, a snap, a Gnaw: halved for a wearer of the Lure-bone) }; the Shade's Ring floors it
+export function fireDrain(v, o = {}) {
+  if (!fireOn() || !(v > 0) || FIRE.state === 'out') return 0;
+  const legs = G.stats?.legs;
+  let d = v * (h6().coal ?? 1);
+  if (o.half && legs?.has('ketosLure')) d *= 0.5;
+  const floor = legs?.has('shadeRing') ? Math.min(1.5, FIRE.r) : 0, r0 = FIRE.r;
+  FIRE.r = Math.max(floor, FIRE.r - d);
+  if (o.src) { FIRE_LOG.drains[o.src] = (FIRE_LOG.drains[o.src] || 0) + (r0 - FIRE.r); }
+  fireState();
+  return r0 - FIRE.r;
+}
+export function fireFill(v) {
+  if (!fireOn() || !(v > 0) || FIRE.state === 'out') return 0;
+  const r0 = FIRE.r; FIRE.r = Math.min(FIRE.max, FIRE.r + v); fireState();
+  return FIRE.r - r0;
+}
+export function fireRelight() {
+  if (!fireOn() || FIRE.state !== 'out') return;
+  FIRE.r = Math.min(FIRE.max, 2.5); FIRE_LOG.relit++; fireState();
+  const pl = G.player; if (pl) FXM.glowBurst?.(pl.x, 1.1, pl.z, 0xffb050, 16, 2.2, 0.3, 0.6);
+  Audio.sfx('lanternDrink', { vol: 0.8 });
+  emit('toast', t('q.fireBack'), 'quest'); emit('fireBack');
+}
+// on every entry to an act-6 zone (world.js act6Enter): a fresh coal, the build's true fires as lamp light (their light is
+// the layout's own, L.lights: a brazier 4 m, a fire-pot 3 m, a fire-pit 5 m, her fire at the centre 5 m), and the names'
+// clock set to fall half a minute into the black water's first rise
+export function fireEnter(z) {
+  FIRE.max = fireMax(); FIRE.r = FIRE.max; FIRE.state = 'full'; FIRE.t = 0; S.relightT = 0; S.flareT = 0; S.dimHint = S.dimHint || false;
+  for (const l of z?.L?.lights || []) {
+    if (!(l.flicker === 0.35 || l.flicker === 'tremble' || l.centre)) continue;
+    const r = l.centre ? 5 : l.range <= 7 ? 3 : l.intensity >= 22 ? 5 : 4;
+    addLightPool(l.x, l.z, r, Infinity, 'fire6', { lamp: true, light: false, tremble: true });
+  }
+  // the skylights: the aurora through the vault's thinnest places (gen6 L.spots.sky, r 3-5), true light that fills a little
+  for (const sk of z?.L?.spots?.sky || []) addLightPool(sk.x, sk.z, sk.r || 4, Infinity, 'sky6', { sky: true, light: false });
+  const H = h6(), cfg = z?.L?.tideCfg, first = cfg ? cfg.phases[0] * (H.tide ?? 120) / 120 : 0;
+  Object.assign(NAMES, { t: Math.max(0, (H.namesEvery ?? 90) - first - 30), on: false, left: 0, list: null, i: 0, sayT: 0 });
+}
+// the ring at r for t seconds (War Cry 8 m for 3 s), drawn and counted; never through S.over
+export function flareRing(r, t) { S.flareR = Math.max(S.flareT > 0 ? S.flareR : 0, r); S.flareT = Math.max(S.flareT || 0, t); }
+// the radius a hero's ring lights with: this page's (FIRE.r or a flare) or a remote stand-in's (a.ringR), with the chain
+export function ringOf(a) {
+  if (!a) return 0;
+  const r = a === G.player ? Math.max(FIRE.r, S.flareT > 0 ? S.flareR : 0) : a.ringR || 0;
+  if (r <= 0) return 0;
+  let n = 0;
+  const near = (b) => b && b !== a && !b.dead && !b.removed && (b.x - a.x) ** 2 + (b.z - a.z) ** 2 < 36;
+  if (near(G.player)) n++;
+  for (const b of NET.remotes) if (near(b)) n++;
+  return r + Math.min(2, n);
+}
+// another hero's ring and its light pools (up to three: { x, z, r }), from its presence or the host's snapshot (net)
+export function setRemoteLight(a, r, pools) { if (!a) return; a.ringR = r || 0; a.lightPools = (pools || []).slice(0, 3); }
+export const FIRE_LOG = { drains: {}, fills: 0, relit: 0, outs: 0, dims: 0, min: Infinity };
+function fireState() {
+  const st = FIRE.r <= 1e-3 ? 'out' : FIRE.r < 1.5 ? 'dim' : 'full';
+  if (st === 'out') FIRE.r = 0;
+  FIRE_LOG.min = Math.min(FIRE_LOG.min, FIRE.r);
+  if (st === FIRE.state) return;
+  const was = FIRE.state; FIRE.state = st;
+  if (st === 'dim' && was === 'full') {
+    FIRE_LOG.dims++; emit('fireDim');
+    if (!S.dimHint) { S.dimHint = true; emit('toast', t('hint.carry')); }
+  } else if (st === 'out') {
+    FIRE_LOG.outs++; S.relightT = 0;
+    const pl = G.player; if (pl) FXM.puff?.(pl.x, 1.0, pl.z, 8, 0x2a2624, 1, 0.8, 1.2);
+    Audio.sfx('torchOut', { vol: 0.8 });
+    emit('toast', t('q.fireOut'), 'quest'); emit('fireOut');
+  }
+}
+// each frame below the ice (tickLight, before the Cold reads FIRE.state): what drains and fills the ring, its turns, and
+// the relight. Fills do not add: the strongest true light she stands in counts
+function fireTick(dt, pl) {
+  const H = h6();
+  FIRE.max = fireMax(); if (FIRE.r > FIRE.max) FIRE.r = FIRE.max;
+  if (S.flareT > 0) S.flareT -= dt;
+  if (pl.dead) return;
+  FIRE.t += dt;
+  const lamp = lampLightAt(pl.x, pl.z);
+  if (FIRE.state === 'out') {
+    // (Out: a second in true lamp light lights the coal again)
+    if (lamp) { if ((S.relightT += dt) >= 1) fireRelight(); } else S.relightT = 0;
+    return;
+  }
+  // the dark's slow drain: wading black water, a Black Spray's puddle
+  let drain = pl.inWater === 'tide' ? 0.15 : 0;
+  if (!drain) for (const a of G.areas) if (a.kind === 'black' && a.t <= a.dur && (a.x - pl.x) ** 2 + (a.z - pl.z) ** 2 < a.r * a.r) { drain = 0.15; break; }
+  if (drain) fireDrain(drain * dt, { src: 'wade' });
+  let fill = 0;
+  if (lamp) fill = H.refill ?? 1.5;
+  if (NAMES.on) fill = Math.max(fill, H.refill ?? 1.5);
+  if (fill < 1) { const f = fireAt(pl.x, pl.z, 0, true); if (f?.floats) fill = Math.max(fill, 1.0); }
+  if (fill < 0.3 && skyAt(pl.x, pl.z)) fill = 0.3;
+  if (fill) FIRE_LOG.fills += fireFill(fill * dt);
+}
+
+// ---------- Act VI: the Names from Above (the Drained Sea; docs/act6-contract.md, Names from Above) ----------
+// Every HAZ6.namesEvery s (paused while a boss fights) a low bell, then the names the Saltborn say each night fall through
+// the ice (story.js rollNames6), one each 0.8 s, for HAZ6.namesBase + 0.5 s for each Name-stone she lit (at most four):
+// while they fall every hero's ring fills at HAZ6.refill m/s and every unlit foe in the zone is Revealed (the listening
+// ones stop, ai.js). Bus 'namesFall' (z, list) and 'namesEnd' (z)
+export const NAMES = { t: 0, on: false, left: 0, list: null, i: 0, sayT: 0, falls: 0 };
+let rollNamesFn = null;
+// (story.js hands over its list; light.js cannot import story.js)
+export function setNamesRoll(fn) { rollNamesFn = fn; }
+export function namesTick(z, dt) {
+  if (z?.id !== 'drained' || !G.player) return;
+  const H = h6();
+  // (the names fall 0.8 s apart to the last, «Σκότος.», after the window too, with no effect then)
+  if (NAMES.list && NAMES.i < NAMES.list.length && (NAMES.sayT -= dt) <= 0) { NAMES.sayT = 0.8; emit('say', NAMES.list[NAMES.i++]); }
+  if (NAMES.on) {
+    NAMES.left -= dt;
+    if (NAMES.left <= 0) { NAMES.on = false; emit('namesEnd', z); }
+    return;
+  }
+  if (G.bossActor && !G.bossActor.dead) return;
+  if ((NAMES.t += dt) < (H.namesEvery ?? 90)) return;
+  NAMES.t = 0; NAMES.falls++;
+  const F = G.hero.flags;
+  NAMES.list = rollNamesFn ? rollNamesFn(false) : ['name.first', 'name.einar', 'name.arna', 'name.skotos'];
+  NAMES.left = (H.namesBase ?? 5) + 0.5 * Math.min(4, (F.names || []).length);
+  NAMES.on = true; NAMES.i = 0; NAMES.sayT = 1.5; NAMES.left += 1.5;
+  Audio.sfx('nameBell', { vol: 0.8 });
+  // (every unlit foe in the zone is Revealed for the window: the act's Lit factor, HAZ6.reveal)
+  for (const a of G.zone.actors) if (!a.dead && !a.removed && a.team === 'foe' && a.def?.unlit) { a.revealed = Math.max(a.revealed || 0, NAMES.left); addVuln(a, 'revealed', NAMES.left, { quiet: true }); }
+  emit('namesFall', z, NAMES.list);
+}
+// the high water dims the skylights to half for 10 s (the black water's breath on the vault)
+on('tideTurn', (ph, z) => { if (ph === 'high' && z?.act6 && z === G.zone) for (const p of S.pools) if (p.sky) shrinkPool(p, p.r0 * 0.5, 10); });
 
 // ---------- the lamps a Smoke-eater eats: interactables that say they can be put out (it.snuff), or of a lamp kind ----------
 const LAMPS = new Set(['waylamp', 'brazier', 'bellows', 'firepit']);
@@ -377,7 +544,7 @@ export function tickLight(dt) {
   const z = G.zone, pl = G.player;
   // a new zone (leaveZone has already cleared the last one's pools and darkness): the atmosphere's reach for the hero's light
   // (and the Cradle's ring for its kind of light: 6 m in Act IV, 4 m in Act V)
-  if (z !== S.zone) { S.zone = z; S.range0 = R.heroLight.distance; LIGHT.base = ZONES[z?.id]?.ring ?? 6; S.ringR = LIGHT.base; if (S.ring && S.footK) { S.footK = 0; S.footBad = false; S.ring.userData.setColor?.(RING_C) ?? S.ring.material?.uniforms?.uColor.value.copy(RING_C); } }
+  if (z !== S.zone) { S.zone = z; S.range0 = R.heroLight.distance; LIGHT.base = baseRing(); S.ringR = LIGHT.base; if (S.ring && S.footK) { S.footK = 0; S.footBad = false; S.ring.userData.setColor?.(RING_C) ?? S.ring.material?.uniforms?.uColor.value.copy(RING_C); } }
   const on = lightOn() && pl;
   if (S.owner && (S.owner.dead || S.owner.removed)) { S.over = null; S.owner = null; }
   if (S.dark && S.dark !== true && (S.dark.dead || S.dark.removed)) S.dark = null;
@@ -405,6 +572,8 @@ export function tickLight(dt) {
   if (!on) { if (S.ring) S.ring.visible = false; if (S.cradle) S.cradle.visible = false; return; }
   if (S.swellT > 0) S.swellT -= dt;
   if (S.halfT > 0) S.halfT -= dt;
+  LIGHT.base = baseRing();
+  if (fireOn()) fireTick(dt, pl);
   // (the Cradle drinks only in the ember zones: whale oil and her own fire keep their time by the sea)
   if (!pl.dead && ember()) drink(dt, pl);
   // the ring: eases to its radius, follows the hero, gone in the dark
@@ -413,7 +582,9 @@ export function tickLight(dt) {
   FXM.FIRE_U.uFireR.value = pl.dead ? 0 : S.ringR; FXM.FIRE_U.uFireP.value.set(pl.x, pl.z);
   if (!ring.parent) R.scene.add(ring);
   ring.visible = S.ringR > 0.15 && !pl.dead;
-  ring.position.set(pl.x, 0, pl.z); ring.scale.set(Math.max(0.01, S.ringR), 1, Math.max(0.01, S.ringR));
+  // (a Dim ring pulses: the coal is nearly out)
+  const pulse = fireOn() && FIRE.state === 'dim' ? 1 + 0.07 * Math.sin(R.time * 9) : 1, rr = Math.max(0.01, S.ringR * pulse);
+  ring.position.set(pl.x, 0, pl.z); ring.scale.set(rr, 1, rr);
   if (ring.visible) B.drape(ring, z.L);
   // on thin ice webbed or worse (stage 2+) the ring at her feet turns white and pulses, with a creak as she steps onto it
   if (lightKind() === 'sea') footIce(ring, pl);
@@ -431,13 +602,29 @@ export function tickLight(dt) {
   const kk = clamp(S.ringR / LIGHT.base, 0, 1.5), dim = S.over != null || !!S.dark;
   R.heroLight.distance = Math.max(dim ? 6 : 2, S.range0 * Math.max(dim ? 0.45 : 0.3, kk));
   R.heroLight.intensity *= Math.max(dim ? 0.4 : 0.12, Math.min(1.25, kk));
+  // (her coal Out: enough of her own light to read the floor by, 4 m, set here and never through setHeroLight: S.over
+  // would make it count as ring and put out a Mage's burning ground in fireAt)
+  if (fireOn() && FIRE.state === 'out') { R.heroLight.distance = 4; R.heroLight.intensity = Math.max(R.heroLight.intensity, 0.6); }
+}
+// the Cradle's base ring for the zone: below the ice FIRE.max; elsewhere ZONES[id].ring with the Lamplight bonus, held
+// half a metre under Act IV's swell (6 -> 7.9 m at rank 40 never reaches its 9 m)
+function baseRing() {
+  if (fireOn()) return fireMax();
+  const r = (ZONES[G.zone?.id]?.ring ?? 6) * (1 + lampBonus() / 100);
+  return ember() ? Math.min(r, Math.max(ZONES[G.zone?.id]?.ring ?? 6, LIGHT.swell - 0.5)) : r;
 }
 // on leaving a zone (projectiles.js clearProjs) and on entering one: no beams, no pools, no darkness, the Cradle at rest
 export function clearLight() {
   while (S.beams.length) dropBeam(S.beams.length - 1);
   while (S.pools.length) dropPool(S.pools.length - 1);
   lanterns();
-  S.over = null; S.owner = null; S.dark = null; S.swellT = 0; S.halfT = 0;
+  S.over = null; S.owner = null; S.dark = null; S.swellT = 0; S.halfT = 0; S.flareT = 0; S.relightT = 0;
+  NAMES.on = false;
   if (S.ring) S.ring.visible = false;
   if (S.cradle) S.cradle.visible = false;
+}
+
+if (import.meta.env?.DEV && typeof window !== 'undefined') {
+  window.__act6 ||= {};
+  Object.assign(window.__act6, { FIRE, NAMES, lightAt, ringOf, addLightPool, fire: { FIRE, LOG: FIRE_LOG, fireDrain, fireFill, fireRelight, fireEnter, flareRing, ringOf, setRemoteLight, fireMax, skyAt, heroLightR, namesTick } });
 }

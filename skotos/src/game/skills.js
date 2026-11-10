@@ -13,6 +13,7 @@ import Audio from '../audio/audio.js';
 import { rand, angleTo, angleDiff, clamp } from '../core/util.js';
 import { t } from '../i18n/i18n.js';
 import { crackAt, crackLine, refreezeAt, iceAt } from './ice.js';
+import { vaultOn, vaultAt, vaultLine } from './forge.js';
 import { coldMul } from './cold.js';
 import { slotSkill, variantOf } from './progression.js';
 import { VARIANT_FN, NEW_FN } from './skillsx.js';
@@ -232,7 +233,7 @@ const SKILL_FN = {
         explosion(tx, tz, sk.radius * 0.8, 0xffc080, { smoke: 0x5a4a3a, shake: 0.55 });
         for (let i = 0; i < 16; i++) { const a = Math.random() * 6.28; P({ add: false, x: tx, y: 0.2, z: tz, vx: Math.cos(a) * 6, vy: rand.range(2, 5), vz: Math.sin(a) * 6, life: 0.8, size: 0.18, size1: 0.12, color: 0x5a4a3a, alpha: 1, grav: 14 }); }
         // Act V: the Warden is the ice-breaker: her landing cracks thin ice round it (+1 stage, r 3)
-        crackAt(tx, tz, 3, 1, { src: 'leap' });
+        if (vaultOn()) vaultAt(tx, tz, 3, 2); else crackAt(tx, tz, 3, 1, { src: 'leap' });
         Audio.sfx('slam'); kick(0, 0.4, 1);
         G.hitstop = n ? 0.09 : 0.03;
       }]]
@@ -262,7 +263,8 @@ const SKILL_FN = {
       events: [[0.45, () => {
         Audio.sfx('slam'); shake(0.5); G.hitstop = 0.06;
         // Act V: the Earthsplitter's line cracks thin ice along it (+1 stage)
-        crackLine(pl.x + Math.sin(dir) * 1.2, pl.z + Math.cos(dir) * 1.2, pl.x + Math.sin(dir) * 11.2, pl.z + Math.cos(dir) * 11.2, 2, 1, { src: 'quake' });
+        if (vaultOn()) vaultLine(pl.x + Math.sin(dir) * 1.2, pl.z + Math.cos(dir) * 1.2, pl.x + Math.sin(dir) * 11.2, pl.z + Math.cos(dir) * 11.2, 2);
+        else crackLine(pl.x + Math.sin(dir) * 1.2, pl.z + Math.cos(dir) * 1.2, pl.x + Math.sin(dir) * 11.2, pl.z + Math.cos(dir) * 11.2, 2, 1, { src: 'quake' });
         for (let i = 0; i < 11; i++) later(i * 0.035, () => {
           const x = pl.x + Math.sin(dir) * (1.2 + i), z = pl.z + Math.cos(dir) * (1.2 + i);
           if (!G.zone.map.walkable(x, z)) return;
@@ -295,7 +297,7 @@ const SKILL_FN = {
         teleCircle(x, z, sk.radius, 0.35, 0xffe0a0);
         area('rain', x, z, sk.radius, sk.dur + 0.2 * (rank - 1), { tick: 0.25, delay: 0.35, dmg: heroHit(mult * 0.42, { area: true }), opts: { slow: { k: 0.45, t: 0.6 }, quiet: true } });
         // Act V: the Ranger cracks from range: +1 stage under the rain, once a cast
-        later(0.4, () => crackAt(x, z, 3.5, 1, { src: 'rain' }));
+        later(0.4, () => (vaultOn() ? vaultAt(x, z, 3.5, 1) : crackAt(x, z, 3.5, 1, { src: 'rain' })));
       }]]
     });
   },
@@ -335,7 +337,7 @@ const SKILL_FN = {
     const boom = (x, z, r, m, small) => {
       explosion(x, z, r, 0xff7a20, { shake: small ? 0.12 : 0.3 });
       // Act V: the Mage breaks ice with fire (+1 stage, r 1.5)
-      if (!small) crackAt(x, z, 1.5, 1, { src: 'fireball' });
+      if (!small) { if (vaultOn()) vaultAt(x, z, 1.5, 1); else crackAt(x, z, 1.5, 1, { src: 'fireball' }); }
       Audio.sfx('explosion', { x, z, vol: small ? 0.6 : 1 });
       circleHit(x, z, r, (f) => damage(pl, f, heroHit(m, { area: true }), { knock: small ? 2 : 4, kx: f.x - x, kz: f.z - z, burn: heroHit(m * 0.3), area: true }));
     };
@@ -411,7 +413,7 @@ const SKILL_FN = {
           circleHit(x, z, r, (f) => damage(pl, f, heroHit(mult, { area: true }), { knock: 6, kx: f.x - x, kz: f.z - z, burn: heroHit(mult * 0.2), area: true }));
           area('fire', x, z, r * 0.8, 3 + rank * 0.3, { tick: 0.5, dmg: heroHit(mult * 0.12, { area: true }) });
           // Act V: a Meteor breaks thin ice wide open (+2 stages, r 3.5)
-          crackAt(x, z, 3.5, 2, { src: 'meteor' });
+          if (vaultOn()) vaultAt(x, z, 3.5, 3); else crackAt(x, z, 3.5, 2, { src: 'meteor' });
         });
       }]]
     });
