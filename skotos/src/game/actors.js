@@ -59,11 +59,14 @@ const STAND_IN = {
   // boot-loaded or code-built model
   tower: ['spider'], reefback: ['spider'], skotos: ['troll'], skotosHand: 'heartroot', icemaw: ['warg'], hullLouse: 'spiderling',
   skua: ['caveBat', 'spiderling'], rimeBear: ['amberBear', 'troll'],
+  // Act VI: the creatures (tools/creatures/act6, or these until they are built)
+  falselight: ['spider'], ketling: ['icemaw', 'warg'], ketos: ['icemaw', 'warg'],
   sunken: 'villager0', icesinger: 'healer', alkyone: 'healer', selna: 'smith', tern: 'villager0', tamarisk: 'ranger', glaukos: 'wayfarer'
 };
 // a stand-in drawn at another size than the model it stands for (model>stand-in)
 const STAND_SCALE = { 'ashwing>caveBat': 2.6, 'smokeEater>spider': 0.75, 'isarnBoy>wayfarer': 0.62,
-  'tower>spider': 0.8, 'reefback>spider': 0.8, 'skotos>troll': 0.75, 'icemaw>warg': 0.75, 'tern>villager0': 0.62 };
+  'tower>spider': 0.8, 'reefback>spider': 0.8, 'skotos>troll': 0.75, 'icemaw>warg': 0.75, 'tern>villager0': 0.62,
+  'falselight>spider': 0.8, 'ketling>icemaw': 0.6, 'ketling>warg': 0.45, 'ketos>icemaw': 3.4, 'ketos>warg': 2.6 };
 const ready = (m) => hasPerson(m) || hasCreature(m) || !!BUILD[m];
 export function standIn(model) {
   for (let i = 0; i < 4 && !ready(model) && STAND_IN[model]; i++) { const s = STAND_IN[model]; model = Array.isArray(s) ? s.find(ready) || s[s.length - 1] : s; }
@@ -184,7 +187,9 @@ export function spawnMonster(id, x, z, o = {}) {
     : id === 'moltenKing' ? { head: 0x2a2220, glow: 0.9, rune: 0xff6a10 } : id === 'deadDwarf' ? { blade: 0x5a5248 } : id === 'runepriest' ? { gem: 0xff8a30, wood: 0x3a3028 } : {});
   // a keeper's statue wears the keeper (o.model, o.scale: Karthax's cages)
   if (o.scale) scale = o.scale;
-  const av = makeAvatar(o.model || def.model, { style, animSet: def.animSet || (def.ai === 'melee' && (id === 'skeleton') ? 'undead' : undefined), hunch: def.hunch, weapon, look: wlook, scale });
+  // (the Faded are people the world forgot: one of the villagers' bodies, picked per spawn)
+  const model = o.model || (def.model === 'faded' ? 'villager' + rand.int(0, 2) : def.model);
+  const av = makeAvatar(model, { style, animSet: def.animSet || (def.ai === 'melee' && (id === 'skeleton') ? 'undead' : undefined), hunch: def.hunch, weapon, look: wlook, scale });
   if (id === 'skeleton' && Math.random() < 0.5) av.hold('L', 'shield', { face: 0x4a3a2a, rim: 0x5a5248, emblem: 0x3a3028, r: 0.26 });
   if (id === 'stoneborn') av.hold('L', 'shield', { face: 0x3a2a24, rim: 0x8a6a3a, emblem: 0xb07a30, r: 0.3 });
   if (def.shield) av.hold('L', 'shield', def.shield);

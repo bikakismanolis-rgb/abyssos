@@ -27,7 +27,9 @@ const ICON_OF = { sword: 'sword', axe: 'sword', mace: 'sword', crossbow: 'bolt',
 const unboundBoon = (id) => !!G.hero?.flags?.unbound && BOONS[4].some((b) => b.id === id);
 // (and Act V's, for a hero who lit all four Name-stones: Memory of the Lost)
 const rememberedBoon = (id) => !!G.hero?.flags?.remembered && !!BOONS[5]?.some((b) => b.id === id);
-const boonDesc = (id) => t('boon.' + id + (unboundBoon(id) || (rememberedBoon(id) && has('boon.' + id + '.du')) ? '.du' : '.d'));
+// (and Act VI's, for a hero who freed all seven of the Lost)
+const lostBoon = (id) => !!G.hero?.flags?.lostAll && !!BOONS[6]?.some((b) => b.id === id);
+const boonDesc = (id) => t('boon.' + id + (unboundBoon(id) || ((rememberedBoon(id) || lostBoon(id)) && has('boon.' + id + '.du')) ? '.du' : '.d'));
 // a difficulty's colour as text: a dark one (Skotos's night blue) is lifted toward white so it reads on the panels
 function diffText(d) {
   const c = parseInt(d.color.slice(1), 16), r = c >> 16, g = (c >> 8) & 255, b = c & 255;

@@ -15,7 +15,8 @@ import { foes, spawnMonster, restoreRim } from './actors.js';
 import { dropGold, dropItem, dropGlobe } from './pickups.js';
 import { area } from './projectiles.js';
 import { addSapPool, oilBurst } from './sap.js';
-import { lightAt, shroudOn, shroudK, lightKind, FIRE, addLightPool, relightNear } from './light.js';
+import { lightAt, shroudOn, shroudK, lightKind, FIRE, fireOn, fireFill, fireRelight, ringOf, addLightPool, relightNear } from './light.js';
+import { SHARDS } from './forge.js';
 import { coldAdd, coldMul } from './cold.js';
 import { staticGeo, makeCharMat } from '../gfx/rig.js';
 import { slagParts } from '../gfx/models.js';
@@ -475,6 +476,15 @@ export function moveMul(a) {
 // ---------- death ----------
 export function kill(a, src, o = {}) {
   if (a.dead) return;
+  // Act VI: a Gate-Fallen that falls in the dark lies in its bones and rises 4 s later at half life, once; in true light
+  // (her ring while it burns, a lamp, a fire) or under a shard it stays down (lightRest)
+  if (a.def?.lightRest && !a.restUsed && !o.drown && !a.echo && a.team === 'foe' && !restsHere(a)) {
+    a.restUsed = true; a.down = 4; a.hp = 1; a.invuln = 4.5; a.state = 'chase'; a.dash = null; a.vulns = null;
+    if (a.tele) { a.tele.alive = false; a.tele = null; }
+    a.avatar?.anim?.stop?.(0.1); a.avatar?.play('dieBones', 1);
+    Audio.sfx('skeletonRattle', { x: a.x, z: a.z, vol: 0.7 });
+    return;
+  }
   a.dead = true; a.deadT = 0; a.hp = 0;
   const def = a.def;
   // a whale-oil cask spills its burning oil (sap.js)
@@ -507,6 +517,12 @@ export function kill(a, src, o = {}) {
   else if (def.flesh === 'spirit') { decal(a.x, a.z, 'ecto', 1.4); glowBurst(a.x, 1.2, a.z, 0x7ae0ff, 24, 3, 0.3, 0.9); }
   if (o.overkill || (src?.hero && Math.random() < 0.15)) { puff(a.x, 0.8, a.z, 4, 0x2a1a14, 0.6, 0.6, 0.6); }
   if (a.team !== 'foe') return;
+  // Act VI: an unlit foe killed inside her ring gives back 0.2 m of it (0.4 with the Lure-bone); a Lampbearer's death
+  // pours back all it drank and 1 m more, and lights her coal again if it was out
+  if (fireOn() && G.player && !G.player.dead) {
+    if (def.drinker) { if (FIRE.state === 'out') fireRelight(); fireFill((a.drank || 0) + (def.drinker.back ?? 1)); }
+    else if (def.unlit && Math.hypot(a.x - G.player.x, a.z - G.player.z) <= ringOf(G.player)) fireFill(G.stats?.legs?.has('ketosLure') ? 0.4 : 0.2);
+  }
   // (a co-op host is paid as its guests are: within 50 m of the kill, a boss anywhere in the zone; theirs go to them)
   if (NET.mode === 'host' && !a.boss && Math.hypot(G.player.x - a.x, G.player.z - a.z) > 50) { NET.h.reward(a, a.dropAt?.x ?? a.x, a.dropAt?.z ?? a.z); killed(a, def); return; }
   const hero = G.hero, D = DIFFS[hero.diff], s = G.stats;
@@ -532,9 +548,10 @@ export function kill(a, src, o = {}) {
   else if (Math.random() < 0.085 * D.loot * CK.loot) items = 1;
   if (NET.mode === 'host') NET.h.reward(a, dx, dz);
   for (let i = 0; i < items; i++) {
-    const firstBoss = a.boss && i === 0 && !hero.flags['legFrom_' + a.kind];
-    const it = makeItem(L, { elite: !!a.elite, boss: a.boss, mf, legMul: D.leg, rar: firstBoss ? 3 : (a.boss && i === 1 ? 2 : undefined), leg: firstBoss ? LEG_FROM[a.kind] : undefined });
-    if (firstBoss) hero.flags['legFrom_' + a.kind] = true;
+    // (a boss of many kinds, the Shade's forms, keys its first kill and its legendary by its def's legKey)
+    const lk = def.legKey ?? a.kind, firstBoss = a.boss && i === 0 && !hero.flags['legFrom_' + lk];
+    const it = makeItem(L, { elite: !!a.elite, boss: a.boss, mf, legMul: D.leg, rar: firstBoss ? 3 : (a.boss && i === 1 ? 2 : undefined), leg: firstBoss ? LEG_FROM[lk] : undefined });
+    if (firstBoss) hero.flags['legFrom_' + lk] = true;
     later(i * 0.12, () => dropItem(dx, dz, it));
   }
   if (Math.random() < (a.elite || a.boss ? 1 : 0.07)) dropGlobe(dx + rand.range(-0.5, 0.5), dz + rand.range(-0.5, 0.5));
@@ -546,6 +563,13 @@ export function kill(a, src, o = {}) {
   }
   if (s.legs.has('barrowCrown') && !a.boss && Math.random() < 0.12) emit('raiseAlly', a);
   killed(a, def);
+}
+// a lightRest creature stays down where it falls: in true light (her coal not Out), or on a shard's cell (forge.js)
+function restsHere(a) {
+  if (a.underShard) return true;
+  const ix = Math.floor(a.x), iz = Math.floor(a.z);
+  if (SHARDS.some((d) => d.ix === ix && d.iz === iz)) return true;
+  return !(fireOn() && FIRE.state === 'out') && lightAt(a.x, a.z, { pad: a.radius * 0.5 });
 }
 // what a monster's death does whoever is paid for it: its affixes' last blows, and the story hears of it
 function killed(a, def) {

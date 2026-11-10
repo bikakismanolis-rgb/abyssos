@@ -552,6 +552,8 @@ export function tickLight(dt) {
     const p = S.pools[i];
     p.t += dt;
     if (p.t > p.dur || (p.owner && (p.owner.dead || p.owner.removed))) { dropPool(i); continue; }
+    // (a pool that goes with someone: the Spirit Wolf's lantern, Iron Bulwark's ward)
+    if (p.follow) { if (p.follow.dead || p.follow.removed) { dropPool(i); continue; } p.x = p.follow.x; p.z = p.follow.z; }
     if (p.shrinkT > 0 && (p.shrinkT -= dt) <= 0) p.r = p.r0;
     const fade = Math.min(1, (p.dur - p.t) / 1.5);
     // (true light's tremble: its drawn radius and its intensity, never p.r; with 'reduce flicker' +-3% and steady)

@@ -192,6 +192,19 @@ export const MONSTERS = {
   skotos: { model: 'skotos', hp: 170, dmg: 2.3, speed: 0, underSpeed: 4.0, radius: 0.8, ai: 'skotos', reach: 7, atk: 'smash', atkTime: 1.8, flesh: 'skotos', xp: 260, boss: true, anchored: true, float: true, dieSfx: 'skotosRoar', dieClip: 'sink', look: { scale: 3.2, rim: 0x6a4a9a, rimI: 0.6, vulnRim: 0.5 } },
   skotosHand: { model: 'skotosHand', hp: 5, dmg: 0, speed: 0, radius: 0.8, ai: 'node', reach: 0, atk: 'cast', atkTime: 9, flesh: 'skotos', xp: 0, big: true, anchored: true, weight: 0, dieClip: 'sink', look: { rim: 0x8a6ac0, rimI: 0.5 } },
   skotosCoil: { model: 'skotosHand', hp: 4, dmg: 0, speed: 0, radius: 0.8, ai: 'node', reach: 0, atk: 'cast', atkTime: 9, flesh: 'skotos', xp: 0, big: true, anchored: true, weight: 0, dieClip: 'sink', look: { scale: 0.85, rim: 0xc0a0ff, rimI: 0.8 } },
+  // Act VI: below the ice (docs/act6-contract.md, Combat; the design's Enemies). unlit: Shrouded outside true light in the
+  // 'under' zones (combat.js); drinker { rate, t, back }: a Drink on the hero's ring (ai.js drinkerAI: rate m/s for t s,
+  // a hit worth 6% of its life breaks it; its death gives back what it drank + back m); unseen: drawn dissolved outside
+  // light, solid from its wind-up within reach + 1 m; listens: stops 3 s face up when the names fall; touchEvery: every n-th
+  // blow a Forgetting Touch (-0.5 m of ring); lightRest: a rising dead that dies in true light or under a shard stays down
+  // (else it rises 4 s later at half life, once); lure { r, bait, tell, pull, drain }: the Falselight's false pool and
+  // snap (ai.js lure); gnaw: makes for the nearest lit lamp and puts it out (never while a hero stands in its light)
+  lampbearer: { model: 'sunken', hp: 1.1, dmg: 0.9, speed: 3.6, radius: 0.48, ai: 'tether', reach: 9, atk: 'cast', atkTime: 2.5, flesh: 'drowned', xp: 2.2, weapon: 'blackLamp', style: 'none', animSet: 'singer', wake: { d: 5, clip: 'rise', pose: 'kelpPile', sfx: 'splash', t: 2.0 }, tideWake: true, unlit: true, drinker: { rate: 0.5, t: 2.5, back: 1.0 }, look: { scale: 1.02 } },
+  faded: { model: 'faded', hp: 1.2, dmg: 1.1, speed: 4.4, radius: 0.48, ai: 'melee', reach: 1.8, atk: 'punch', atkTime: 1.2, flesh: 'spirit', xp: 1.8, animSet: 'undead', unlit: true, unseen: true, listens: true, touchEvery: 3, look: { tint: 0x1a1c24, tintAmt: 2.2, rim: 0x8a9ab8, rimI: 0.3 } },
+  gateFallen: { model: 'skeleton', hp: 0.9, dmg: 1.0, speed: 3.8, radius: 0.45, ai: 'melee', reach: 1.6, atk: 'slash1', atkTime: 1.1, flesh: 'bone', xp: 1.3, weapon: 'sword', style: 'undead', sfx: 'skeleton', rises: true, lightRest: true, unlit: true, wake: { d: 6, clip: 'rise', pose: 'bonePile', sfx: 'skeletonRattle', t: 2.0 }, look: { tint: 0xb8d0e0, tintAmt: 0.5, rim: 0xc8e0ff, rimI: 0.2 } },
+  gateFallenBow: { model: 'skeletonArcher', hp: 0.7, dmg: 0.9, speed: 3.6, radius: 0.45, ai: 'ranged', reach: 11, atk: 'shoot', atkTime: 1.7, flesh: 'bone', xp: 1.3, weapon: 'crossbow', style: 'bow', sfx: 'skeleton', proj: 'arrow', rises: true, lightRest: true, unlit: true, wake: { d: 6, clip: 'rise', pose: 'bonePile', sfx: 'skeletonRattle', t: 2.0 }, look: { tint: 0xb8d0e0, tintAmt: 0.5, rim: 0xc8e0ff, rimI: 0.2 } },
+  falselight: { model: 'falselight', hp: 1.2, dmg: 1.3, speed: 4.6, radius: 0.55, ai: 'lure', reach: 2.4, atk: 'bite', atkTime: 1.1, flesh: 'chitin', xp: 2.4, sfx: 'spider', unlit: true, lure: { r: 3, bait: 0.8, tell: 0.8, pull: 2, drain: 1.0 }, look: { scale: 1.6, tint: 0xd8d4cc, tintAmt: 0.7, rim: 0xd8f0ff, rimI: 0.25 } },
+  ketling: { model: 'ketling', hp: 0.8, dmg: 0.6, speed: 4.0, radius: 0.4, ai: 'melee', reach: 2.0, atk: 'bite', atkTime: 1.0, flesh: 'flesh', xp: 1, swim: true, unlit: true, gnaw: 1 },
   // the ranger's companion
   spiritWolf: { model: 'spiritWolf', hp: 2, dmg: 1, speed: 7.5, radius: 0.55, ai: 'pet', reach: 1.7, atk: 'bite', atkTime: 0.8, flesh: 'spirit', xp: 0, pet: true }
 };
@@ -249,15 +262,27 @@ export const PACKS = {
   skuaFlock: [['skua', 1]],
   frozenCrew: [['sunken', 3], ['harpooner', 2], ['iceSinger', 0.6]],
   iceMixed: [['sunken', 2], ['hullLouse', 2], ['harpooner', 1], ['icemaw', 0.6], ['iceSinger', 0.6]],
-  holeRise: [['sunken', 1]]
+  holeRise: [['sunken', 1]],
+  // Act VI (the design's packs: where they lie is gen6's; a pack spot may say chores and burst)
+  blackCrew: [['sunken', 4], ['lampbearer', 1.5]],
+  shoreFaded: [['faded', 3], ['sunken', 1]],
+  keelLice: [['hullLouse', 1]],
+  poolHunter: [['icemaw', 1], ['hullLouse', 2]],
+  heapLice: [['hullLouse', 1]],
+  lures: [['falselight', 1]],
+  gateFallen: [['gateFallen', 4], ['gateFallenBow', 2]],
+  drownedWood: [['faded', 3], ['falselight', 1]],
+  forgotten: [['faded', 4], ['lampbearer', 1]],
+  stairCrew: [['sunken', 3], ['lampbearer', 1]]
 };
 // packs built around one creature: it comes first, exactly once (or the count given), and the rest are drawn without it
 export const PACK_LEAD = { weepDen: ['amberBear'], weepWeepers: ['rootwarden'], weepMourners: ['mourner'], heartWarden: ['rootwarden'], heartChoir: ['mourner', 'mourner'],
   ashLine: ['ashSpear'], snuffers: ['smokeEater', 'smokeEater'], smiths: ['ashsmith'], mouldHall: ['ashsmith'], bellowsWave: ['ashsmith'],
-  tideChoir: ['iceSinger'], reefRocks: ['reefback'], strandBear: ['rimeBear'], fallHunters: ['icemaw'] };
+  tideChoir: ['iceSinger'], reefRocks: ['reefback'], strandBear: ['rimeBear'], fallHunters: ['icemaw'],
+  blackCrew: ['lampbearer'], poolHunter: ['icemaw'] };
 // packs whose dead wait in disguise (Hollowed as dead trees and amber cocoons, the Ash-Fallen under the ash, the Sunken under
 // the kelp and as ice at the rails, the Reefbacks as rocks) until the hero is close
-export const PACK_DORMANT = { weepHollow: true, heartSleepers: true, ashLine: true, sunkenCrew: true, tideChoir: true, reefRocks: true, frozenCrew: true };
+export const PACK_DORMANT = { weepHollow: true, heartSleepers: true, ashLine: true, sunkenCrew: true, tideChoir: true, reefRocks: true, frozenCrew: true, blackCrew: true, gateFallen: true, forgotten: true };
 // packs that stand in a line, the shields toward the hero (the Ash-Fallen still holding the battle line where they fell)
 export const PACK_LINE = { ashLine: true };
 // the kinds to spawn for a pack of n: the leads, then weighted picks of the rest (pick = rand.weighted)
@@ -295,6 +320,12 @@ export const BOONS = {
     { id: 'einar', icon: 'star', stats: { eliteDmg: 15, crit: 5 } },
     { id: 'tide', icon: 'roll', stats: { atkSpd: 8, resRegen: 15 } },
     { id: 'name', icon: 'shield', stats: { lifePct: 12, armorPct: 12 } }
+  ],
+  // her hearth: worth a quarter again to a hero who freed all seven of the Lost (h.flags.lostAll, stats.js)
+  6: [
+    { id: 'bearer', icon: 'fire', stats: { area: 12, dmgPct: 10 } },
+    { id: 'word', icon: 'shield', stats: { lifePct: 12, lifeOnHit: 12 } },
+    { id: 'shade', icon: 'star', stats: { cdr: 8, critDmg: 20 } }
   ]
 };
 export const UNBOUND = 1.5;
@@ -383,10 +414,16 @@ export const LEGENDARIES = [
   // Act V: the bosses' own, never a random drop (drop: false; items.js gives them only when asked, LEG_FROM): the sea takes
   // no life from her (plunges, wash-outs); what she strikes is Revealed for 2 s
   { id: 'skerryShell', base: 'chest', cls: null, v: 1, drop: false },
-  { id: 'einarLantern', base: 'amulet', cls: null, v: 2, drop: false }
+  { id: 'einarLantern', base: 'amulet', cls: null, v: 2, drop: false },
+  // Act VI: the Lure-bone (kills in her ring give back twice the light; a Drink, a snap or a Gnaw on her takes half) and
+  // the Shade's Ring (her Cradle never under 1.5 m; her hits on the Shrouded outside light x0.5): light.js, combat.js
+  { id: 'ketosLure', base: 'amulet', cls: null, v: 0.4, drop: false },
+  { id: 'shadeRing', base: 'ring', cls: null, v: 1.5, drop: false }
 ];
-// a boss's first kill drops its own legendary (combat.js kill)
-export const LEG_FROM = { tower: 'skerryShell', skotos: 'einarLantern' };
+// a boss's first kill drops its own legendary (combat.js kill: by its def's legKey, else its kind)
+export const LEG_FROM = { tower: 'skerryShell', skotos: 'einarLantern', ketos: 'ketosLure', shade: 'shadeRing' };
+// the act's hazard row for a rule Acts V and VI share (ZONES is world's: the act number is the caller's)
+export const actHaz = (act, diff) => { const H = act === 6 ? HAZ6 : HAZ5; return H[diff ?? 1] || H[1]; };
 export const POTION = { cd: 18, heal: 0.6 };
 export const INV_SIZE = 32;
 export const STASH_SIZE = 48;

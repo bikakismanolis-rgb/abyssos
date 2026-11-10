@@ -18,7 +18,10 @@ export const MASTERY = [
   { id: 'iron', stat: 'armorPct', max: 80, k: 40, icon: 'shield', pct: true },
   { id: 'leech', stat: 'lifeOnHit', max: 2, k: 30, icon: 'potion', per: 'lvl' },
   { id: 'fortune', stat: 'gold', max: 150, k: 30, icon: 'coin', pct: true },
-  { id: 'seeker', stat: 'mf', max: 150, k: 30, icon: 'star', pct: true }
+  { id: 'seeker', stat: 'mf', max: 150, k: 30, icon: 'star', pct: true },
+  // Act VI: Lamplight, the Cradle's base ring (light.js lampBonus: Act IV's 6 m to 7.9 m at rank 40, held under its swell;
+  // Act V's 4 m; the Carried Fire's FIRE.max), never a swell or a boss's darkness
+  { id: 'lamp', stat: 'ringPct', max: 50, k: 40, icon: 'flame', pct: true }
 ];
 export const MASTERY_BY = Object.fromEntries(MASTERY.map((m) => [m.id, m]));
 export function masteryValue(m, r, L = G.hero?.level || 1) {

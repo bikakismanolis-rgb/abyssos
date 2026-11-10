@@ -194,10 +194,12 @@ export function weaponGeo(type, look = {}) {
       p.push({ geo: G.torus(0.035, 0.012, 4, 8), color: 0x8a7a52, o: { y: top - 0.16, rx: Math.PI / 2 } });
       return { parts: p, tip: top + 0.24, base: top - 0.2 };
     }
+    // Act VI: a Lampbearer's black lamp, the sea-lantern with the Skotos's dead-still black-violet flame in it
+    case 'blackLamp':
     case 'seaLantern': {
       // a sea-lantern carried by its bail: hanging under the hand, an iron cap and base, the glass alight (look.lamp, look.glow;
       // look.k its size: a child's is small)
-      const k = look.k ?? 1, iron = 0x2a2826, gl = look.glow ?? 2.4, lamp = look.lamp ?? 0xfff0d0;
+      const dark = type === 'blackLamp', k = look.k ?? 1, iron = 0x2a2826, gl = look.glow ?? (dark ? 1.3 : 2.4), lamp = look.lamp ?? (dark ? 0x3a1e66 : 0xfff0d0);
       const bail = G.torus(0.05 * k, 0.006 * k, 3, 8, Math.PI); bail.rotateY(Math.PI / 2);
       p.push({ geo: bail, color: iron, o: { y: -0.05 * k, metal: 0.8, rz: Math.PI } });
       p.push({ geo: G.cone(0.075 * k, 0.07 * k, 6), color: iron, o: { y: -0.1 * k, metal: 0.8 } });

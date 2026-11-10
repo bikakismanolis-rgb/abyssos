@@ -4595,10 +4595,13 @@ const S = {
       // (no life trap here: it tops her up at once; a deep pool instead, and the blow read as it lands)
       window.__immortal = false; pl.hpMax = 60000; pl.hp = pl.hpMax; pl.x = v.x; pl.z = v.z; C.resetCold();
       const B = await import('/src/ui/bus.js'); window.__hit6 = null; B.on('hurt', (k) => { if (!window.__hit6) window.__hit6 = { k, cold: C.COLD.v }; });
-      const m = A.spawnMonster('sunken', v.x + 0.3, v.z + 0.2, { level: 36 }); G.actors.push(m); m.wake = null; m.dormant = false; m.under = false; m.hidden = false; m.hpMax = m.hp = 10000;
+      // (r 0: the cell under her or one beside it; she and the monster then stand where its white circle fell)
+      const n = window.__act6.vaultAt(v.x, v.z, 0, 1), again = window.__act6.vaultAt(v.x, v.z, 0, 1);
+      const { FX } = await import('/src/gfx/fx.js'), tl = (FX.teles || []).filter((q) => q.alive).pop(), c = tl ? { x: tl.m.position.x, z: tl.m.position.z } : v;
+      pl.x = c.x - 0.3; pl.z = c.z;
+      const m = A.spawnMonster('sunken', c.x + 0.3, c.z, { level: 36 }); G.actors.push(m); m.wake = null; m.dormant = false; m.under = false; m.hidden = false; m.hpMax = m.hp = 10000; m.speed = 0;
       window.__m6 = m; window.__hp6 = pl.hp;
-      // (r 0: the cell under her or one beside it, inside the 1.2 m circle either way)
-      return { n: window.__act6.vaultAt(v.x, v.z, 0, 1), again: window.__act6.vaultAt(v.x, v.z, 0, 1) };
+      return { n, again, c };
     }, v);
     beat('one fall on the patch, and none again within 4 s', r.n === 1 && r.again === 0, r);
     const h = await ev(() => new Promise((ok) => {
@@ -4663,6 +4666,180 @@ const S = {
     const c = await ev(() => ({ end: window.__n6.end, says: window.__n6.says.filter((k) => /^name\./.test(k)) }));
     beat('bus namesEnd, and every name said to the last', c.end === 1 && c.says.join() === want.join(), c);
     await ev(() => { window.__s6.hp = 0; window.__s6.dead = true; window.__s6.remove?.(); });
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
+  } }
+  ,
+  // Act VI: combat
+  // The Falselight (docs/act6-contract.md, Combat: the 'lure' AI): its false pool counts as light for nothing (no lightAt,
+  // no lamp light, no warmth, no fill); a hero in it for its bait time sets off the tell and the snap (a blow, 1 m of her
+  // ring, a pull toward it); a roll in the tell slips it; true light within 4 m shows it (Revealed) and puts its lure out
+  // for a while, after which it lights it again
+  lure: { q: 'auto=drained&q=0&sim=2&norender&lvl=36&cloud=off', run: async (pg) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    const ev = (f, a) => pg.evaluate(f, a);
+    await pg.waitForFunction(() => window.__ready && window.__G?.player && window.__G.zone?.id === 'drained' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 240000 });
+    await A5.tick(pg);
+    const spot = await ev(async () => {
+      const G = window.__G, z = G.zone, m = z.map, pl = G.player; G.hero.diff = 2; window.__immortal = false; pl.hpMax = 60000; pl.hp = pl.hpMax;
+      for (const p of z.packs) p.spawned = true; for (const a of z.actors) if (a.team === 'foe' && !a.prop) { a.hp = 0; a.dead = true; a.remove?.(); }
+      const dark = (x, zz, r) => { for (let k = 0; k < 16; k++) { const a = k / 16 * 6.28; if (window.__act6.lightAt(x + Math.sin(a) * r, zz + Math.cos(a) * r, { ring: false }) || window.__act6.fire.skyAt(x + Math.sin(a) * r, zz + Math.cos(a) * r)) return false; } return !window.__act6.lightAt(x, zz, { ring: false }); };
+      for (let k = 0; k < 8000; k++) { const x = 6 + Math.random() * (z.L.w - 12), zz = 6 + Math.random() * (z.L.h - 12); if (![0, 1.8, 3, 4.2, 9, 12].every((dx) => m.walkable(x + dx, zz)) || z.L.bed[Math.floor(zz) * z.L.w + Math.floor(x)] < 9 || !dark(x, zz, 6) || !dark(x + 4.2, zz, 6) || !dark(x + 12, zz, 3)) continue;
+        const A = await import('/src/game/actors.js'), f = A.spawnMonster('falselight', x, zz, { level: 36 }); G.actors.push(f); f.rot = Math.PI / 2; f.hp = f.hpMax = 1e6; window.__f6 = f;
+        // (its bait 1.8 m east of it, set before it thinks)
+        f.bait = { x: x + 1.8, z: zz }; f.lair = { x, z: zz }; f.lureR = 3; f.l6 = 'lurk';
+        pl.x = x + 12; pl.z = zz; window.__act6.FIRE.r = 1.2; window.__act6.FIRE.state = 'dim'; window.__act6.NAMES.t = -999;
+        const B = await import('/src/ui/bus.js'); window.__hurt6 = []; B.on('hurt', (k) => window.__hurt6.push(k));
+        return { x, z: zz };
+      }
+      return null;
+    });
+    beat('a dark spot for the Falselight', !!spot, spot);
+    if (!spot) return { pass: false, beats };
+    await pg.waitForFunction(() => !!window.__f6.pool, null, { timeout: 30000 }).catch(() => {});
+    const pool = await ev(async () => { const f = window.__f6, L = await import('/src/game/light.js'); const p = f.pool; if (!p) return null; return { x: p.x, z: p.z, r: p.r, fake: !!p.fake, lit: window.__act6.lightAt(p.x, p.z, { ring: false }), lamp: !!L.lampLightAt(p.x, p.z), warm: !!L.warmAt(p.x, p.z) }; });
+    beat('its false pool (r 3, fake) counts as light for nothing: no lightAt, no lamp light, no warmth', pool && pool.fake && pool.r === 3 && !pool.lit && !pool.lamp && !pool.warm, pool);
+    // into the pool: no fill there, then the tell and the snap
+    const r0 = await ev((p) => { const pl = window.__G.player; pl.x = p.x + 2.4; pl.z = p.z; pl.iframes = 0; window.__hurt6.length = 0; return { r: window.__act6.FIRE.r, d: Math.hypot(pl.x - window.__f6.x, pl.z - window.__f6.z) }; }, pool);
+    await pg.waitForFunction(() => window.__act6.AI_LOG['falselight:snap'] || window.__act6.AI_LOG['falselight:snapMissed'], null, { timeout: 30000 }).catch(() => {});
+    const s0 = await ev(() => ({ r: window.__act6.FIRE.r, drains: { ...window.__act6.fire.LOG.drains }, names: window.__act6.NAMES.on }));
+    await pg.waitForTimeout(400);
+    const s1 = await ev(() => { const pl = window.__G.player, f = window.__f6, L = window.__act6.AI_LOG; return { tell: L['falselight:tell'] || 0, snap: L['falselight:snap'] || 0, hurt: window.__hurt6.length, r: window.__act6.FIRE.r, d: Math.hypot(pl.x - f.x, pl.z - f.z) }; }); s1.s0 = s0;
+    beat('a hero in the pool: the tell, then the snap (a blow, 1 m of her ring, pulled toward it)', s1.tell >= 1 && s1.snap === 1 && s1.hurt >= 1 && r0.r - s1.s0.r > 0.9 && s1.d < r0.d - 1, { r0, s1 });
+    // the roll: in the pool again (the lure lit again after the fight is left), a roll as the tell starts
+    await ev(() => { const f = window.__f6; f.l6 = 'lurk'; f.aggro = false; f.x = f.lair.x; f.z = f.lair.z; f.revealed = 0; f.lureOut = 0; window.__G.player.x = f.bait.x + 9; });
+    await pg.waitForFunction(() => !!window.__f6.pool, null, { timeout: 30000 }).catch(() => {});
+    await ev(() => { const pl = window.__G.player, f = window.__f6; pl.x = f.bait.x; pl.z = f.bait.z; window.__hurt6.length = 0; });
+    await pg.waitForFunction(() => window.__f6.l6 === 'tell', null, { timeout: 30000 }).catch(() => {});
+    await ev(() => { window.__G.player.iframes = 2; });
+    await pg.waitForFunction(() => window.__act6.AI_LOG['falselight:snapMissed'], null, { timeout: 30000 }).catch(() => {});
+    const s2 = await ev(() => ({ missed: window.__act6.AI_LOG['falselight:snapMissed'] || 0, snap: window.__act6.AI_LOG['falselight:snap'] || 0, hurt: window.__hurt6.length }));
+    beat('a roll in the tell slips the snap', s2.missed === 1 && s2.snap === 1 && s2.hurt === 0, s2);
+    // true light within 4 m shows it: Revealed, its lure out, then lit again
+    await ev(() => { const f = window.__f6; f.l6 = 'lurk'; f.aggro = false; f.x = f.lair.x; f.z = f.lair.z; f.revealed = 0; f.lureOut = 0; f.hp = f.hpMax; window.__G.player.x = f.bait.x + 12; });
+    await pg.waitForFunction(() => !!window.__f6.pool, null, { timeout: 30000 }).catch(() => {});
+    const sh = await ev(async () => { const f = window.__f6, L = await import('/src/game/light.js'); window.__lamp6 = L.addLightPool(f.x + 2.5, f.z, 2, Infinity, 'lamp6t', { lamp: true }); window.__G.zone.interact.push(window.__lit6 = { kind: 'test6', lit: true, lightR: 2, x: f.x + 2.5, z: f.z }); return true; });
+    await pg.waitForFunction(() => window.__act6.AI_LOG['falselight:shown'], null, { timeout: 30000 }).catch(() => {});
+    const s3 = await ev(() => { const f = window.__f6; return { shown: window.__act6.AI_LOG['falselight:shown'] || 0, rev: !!(f.vulns?.revealed > 0), out: f.lureOut > 0, pool: !!f.pool }; });
+    beat('true light within 4 m shows it: Revealed, its lure out', s3.shown >= 1 && s3.rev && s3.out && !s3.pool, s3);
+    await ev(async () => { const L = await import('/src/game/light.js'); L.removeLightPool('lamp6t'); const I = window.__G.zone.interact; I.splice(I.indexOf(window.__lit6), 1); const f = window.__f6; f.l6 = 'lurk'; f.revealed = 0; f.aggro = false; window.__G.player.x = f.lair.x + 14; });
+    await pg.waitForFunction(() => !!window.__f6.pool, null, { timeout: 30000 }).then(() => true).catch(() => false);
+    beat('its lure lit again once the light is gone', await ev(() => !!window.__f6.pool));
+    await ev(() => { window.__f6.hp = 0; window.__f6.dead = true; window.__f6.remove?.(); window.__immortal = true; });
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
+  } },
+  // The act's other new creatures (the design's Enemies; this lane's own check): the Lampbearer's Drink takes her ring and
+  // its death pours it back (+1 m), never begun in true lamp light; the Faded unseen outside light and solid in it, still
+  // and Revealed when the names fall, its Forgetting Touch taking 0.5 m; a Gate-Fallen that falls in the dark rises 4 s
+  // later at half life and stays down the second time, one that falls in her ring stays down at once; a Ketling gnaws out
+  // a lit lamp no hero stands in, and leaves one she guards
+  foes6: { q: 'auto=drained&q=0&sim=2&norender&lvl=36&cloud=off', run: async (pg) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    const ev = (f, a) => pg.evaluate(f, a);
+    await pg.waitForFunction(() => window.__ready && window.__G?.player && window.__G.zone?.id === 'drained' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 240000 });
+    await A5.tick(pg);
+    await ev(async () => {
+      const G = window.__G, z = G.zone, m = z.map, pl = G.player; G.hero.diff = 2; window.__immortal = true;
+      for (const p of z.packs) p.spawned = true; for (const a of z.actors) if (a.team === 'foe' && !a.prop) { a.hp = 0; a.dead = true; a.remove?.(); }
+      const fa = window.__act6.fire;
+      window.__dark6 = () => { for (let k = 0; k < 12000; k++) { const x = 8 + Math.random() * (z.L.w - 16), zz = 8 + Math.random() * (z.L.h - 16); let ok = m.walkable(x, zz) && z.L.bed[Math.floor(zz) * z.L.w + Math.floor(x)] >= 9; for (let j = 0; ok && j < 12; j++) { const a = j / 12 * 6.28; for (const r of [0, 5, 9]) { const X = x + Math.sin(a) * r, Z = zz + Math.cos(a) * r; if (window.__act6.lightAt(X, Z, { ring: false }) || fa.skyAt(X, Z)) ok = false; } } if (ok && m.walkable(x + 8, zz)) return { x, z: zz }; } return null; };
+      window.__mk6 = async (k, x, zz) => { const A = await import('/src/game/actors.js'), a = A.spawnMonster(k, x, zz, { level: 36 }); G.actors.push(a); a.wake = null; a.dormant = false; a.under = false; a.hidden = false; return a; };
+    });
+    // the Lampbearer
+    const lb = await ev(async () => {
+      const s = window.__dark6(); if (!s) return null; const pl = window.__G.player; pl.x = s.x; pl.z = s.z;
+      const a = await window.__mk6('lampbearer', s.x + 8, s.z); a.aggro = true; a.cd = 0; a.hp = a.hpMax = 1e6; window.__lb6 = a;
+      window.__act6.FIRE.r = 4.5; window.__act6.FIRE.state = 'full'; return s;
+    });
+    beat('a dark spot for the Lampbearer', !!lb, lb);
+    await pg.waitForFunction(() => window.__lb6.state === 'drink', null, { timeout: 40000 }).catch(() => {});
+    await pg.waitForFunction(() => window.__lb6.state !== 'drink', null, { timeout: 40000 }).catch(() => {});
+    const d1 = await ev(() => ({ drank: window.__lb6.drank || 0, r: window.__act6.FIRE.r, log: window.__act6.AI_LOG['lampbearer:drink'] || 0 }));
+    beat('its Drink takes her ring (0.5 m/s for 2.5 s on Warden: about 1.25 m)', d1.log >= 1 && Math.abs(d1.drank - 1.25) < 0.2 && Math.abs(4.5 - d1.r - d1.drank) < 0.05, d1);
+    await ev(() => { window.__lb6.hp = window.__lb6.hpMax = 100; window.__D.kill(window.__lb6); });
+    const d2 = await ev(() => ({ r: window.__act6.FIRE.r, max: window.__act6.FIRE.max, dead: window.__lb6.dead }));
+    beat('its death pours back what it drank and 1 m more (to her max)', d2.dead && Math.abs(d2.r - Math.min(d2.max, d1.r + d1.drank + 1)) < 0.05, { d1, d2 });
+    // never begun while she stands in true lamp light
+    const noDrink = await ev(async () => { const L = await import('/src/game/light.js'), p = L.lightPools().find((q) => q.tag === 'fire6'), pl = window.__G.player; pl.x = p.x; pl.z = p.z + 0.5; const f = window.__G.zone.map.nearestFloor(p.x + 8, p.z, 4); const a = await window.__mk6('lampbearer', f.x, f.z); a.aggro = true; a.cd = 0; a.hp = a.hpMax = 1e6; window.__lb7 = a; window.__act6.AI_LOG['lampbearer:drink'] = 0; return true; });
+    await pg.waitForTimeout(4000);
+    beat('no Drink while she stands in true lamp light', (await ev(() => (window.__act6.AI_LOG['lampbearer:drinkTell'] || 0) + (window.__act6.AI_LOG['lampbearer:drink'] || 0))) === 0 && noDrink);
+    await ev(() => { window.__lb7.hp = 0; window.__lb7.dead = true; window.__lb7.remove?.(); });
+    // the Faded
+    const fd = await ev(async () => { const s = window.__dark6(), pl = window.__G.player; pl.x = s.x; pl.z = s.z; window.__act6.FIRE.r = 3; window.__act6.FIRE.state = 'full'; const a = await window.__mk6('faded', s.x + 9, s.z); a.hp = a.hpMax = 1e6; a.aggro = false; a.speed = 0; window.__fd6 = a; return s; });
+    await pg.waitForTimeout(800);
+    const u1 = await ev(() => ({ unseen: window.__fd6.unseenNow, dis: +(window.__fd6.dissolve || 0).toFixed(2) }));
+    beat('the Faded outside light: unseen, drawn dissolved', u1.unseen && u1.dis > 0.6, u1);
+    await ev(() => { const pl = window.__G.player, a = window.__fd6; pl.x = a.x - 2; pl.z = a.z; });
+    await pg.waitForTimeout(800);
+    const u2 = await ev(() => ({ unseen: window.__fd6.unseenNow, dis: +(window.__fd6.dissolve || 0).toFixed(2) }));
+    beat('in her ring: solid', !u2.unseen && u2.dis < 0.1, u2);
+    await ev(async () => { const B = await import('/src/ui/bus.js'); const pl = window.__G.player, a = window.__fd6; pl.x = a.x - 12; B.emit('namesFall', window.__G.zone, []); });
+    const u3 = await ev(() => ({ listen: window.__fd6.listenT, rev: !!(window.__fd6.vulns?.revealed > 0), unseen: window.__fd6.unseenNow }));
+    beat('the names fall: it stands listening 3 s, Revealed', u3.listen > 2.5 && u3.rev, u3);
+    // its Forgetting Touch: the third blow
+    await ev(() => { const pl = window.__G.player, a = window.__fd6; a.listenT = 0; a.speed = 4; a.aggro = true; a.swings = 2; a.cd = 0; pl.x = a.x - 1.4; pl.z = a.z; a.rot = -Math.PI / 2; window.__act6.FIRE.r = 3; window.__act6.AI_LOG['faded:touched'] = 0; });
+    await pg.waitForFunction(() => window.__act6.AI_LOG['faded:touched'] || window.__act6.AI_LOG['faded:touchMissed'], null, { timeout: 20000 }).catch(() => {});
+    const u4 = await ev(() => ({ touched: window.__act6.AI_LOG['faded:touched'] || 0, r: window.__act6.FIRE.r }));
+    beat('its Forgetting Touch takes 0.5 m of her ring', u4.touched === 1 && Math.abs(3 - u4.r - 0.5) < 0.12, u4);
+    await ev(() => { window.__fd6.hp = 0; window.__fd6.dead = true; window.__fd6.remove?.(); });
+    // the Gate-Fallen
+    const gf = await ev(async () => {
+      const s = window.__dark6(), pl = window.__G.player; pl.x = s.x; pl.z = s.z; window.__act6.FIRE.r = 1.5; window.__act6.FIRE.state = 'dim';
+      const a = await window.__mk6('gateFallen', s.x + 10, s.z); a.aggro = false; a.speed = 0; window.__gf6 = a;
+      window.__D.kill(a); return { dead: a.dead, down: a.down, hp: a.hp };
+    });
+    beat('a Gate-Fallen falling in the dark lies down, not dead', gf && !gf.dead && gf.down > 3.5, gf);
+    await pg.waitForFunction(() => !(window.__gf6.down > 0), null, { timeout: 30000 }).catch(() => {});
+    const g2 = await ev(() => ({ hp: window.__gf6.hp / window.__gf6.hpMax, dead: window.__gf6.dead, rose: window.__act6.AI_LOG['gateFallen:rose'] || 0 }));
+    beat('it rises 4 s later at half life', g2.rose === 1 && !g2.dead && Math.abs(g2.hp - 0.5) < 0.02, g2);
+    const g3 = await ev(() => { window.__D.kill(window.__gf6); return { dead: window.__gf6.dead, down: window.__gf6.down || 0 }; });
+    beat('the second time it stays down', g3.dead, g3);
+    const g4 = await ev(async () => { const pl = window.__G.player; window.__act6.FIRE.r = 4.5; window.__act6.FIRE.state = 'full'; const f = window.__G.zone.map.nearestFloor(pl.x + 2, pl.z, 2); const a = await window.__mk6('gateFallen', f.x, f.z); a.aggro = false; a.speed = 0; window.__D.kill(a); return { dead: a.dead, down: a.down || 0 }; });
+    beat('one that falls in her ring stays down at once', g4.dead && !g4.down, g4);
+    // the Ketling
+    const kt = await ev(async () => { const s = window.__dark6(), pl = window.__G.player, z = window.__G.zone; pl.x = s.x - 30 > 4 ? s.x - 30 : s.x + 30; pl.z = s.z; const it = { kind: 'test6', lit: true, lightR: 3, x: s.x, z: s.z, snuff() { this.lit = false; } }; z.interact.push(it); window.__it6 = it; const f = z.map.nearestFloor(s.x + 5, s.z, 3); const a = await window.__mk6('ketling', f.x, f.z); a.hp = a.hpMax = 1e6; window.__kt6 = a; return s; });
+    await pg.waitForFunction(() => !window.__it6.lit, null, { timeout: 30000 }).catch(() => {});
+    beat('a Ketling gnaws out a lit lamp no one stands in', await ev(() => !window.__it6.lit && (window.__act6.AI_LOG['ketling:gnawed'] || 0) === 1));
+    await ev(() => { const it = window.__it6, pl = window.__G.player; it.lit = true; pl.x = it.x + 0.5; pl.z = it.z; });
+    await pg.waitForTimeout(3000);
+    beat('it leaves a lamp she stands in (and turns on her)', await ev(() => window.__it6.lit && (window.__act6.AI_LOG['ketling:gnawed'] || 0) === 1 && window.__kt6.aggro));
+    await ev(() => { window.__kt6.hp = 0; window.__kt6.dead = true; window.__kt6.remove?.(); const I = window.__G.zone.interact; I.splice(I.indexOf(window.__it6), 1); });
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
+  } }
+  ,
+  // Act VI: progression
+  // The Lamplight track (docs/act6-contract.md, Progression): 13 Mastery tiles on an 844 x 390 phone, every one in view;
+  // G.stats.ringPct finite at rank 0 and 40; rank 40 grows Act IV's base ring 6 -> 7.9 m and never its 9 m swell, Act V's
+  // 4 m, the Carried Fire's max 4.5 -> 5.9 m; never a boss's S.over; a respec gives its points back
+  prog6: { q: 'auto=ashfield&sim=2&q=0&norender&lvl=50&mlvl=60&cls=warden&cloud=off', run: async (pg) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    const ev = (f, a) => pg.evaluate(f, a);
+    await pg.setViewportSize({ width: 844, height: 390 });
+    await pg.waitForFunction(() => window.__ready && window.__G?.player && window.__G.zone?.id === 'ashfield' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 240000 });
+    await A5.tick(pg);
+    await ev(() => { window.__immortal = true; window.__D.openPanel('skills'); });
+    await pg.waitForTimeout(400);
+    await pg.click('[data-a="ptab:1"]').catch(() => {});
+    await pg.waitForTimeout(400);
+    const tiles = await ev(() => { const T = [...document.querySelectorAll('.pg-mg > *')]; const vw = innerWidth, vh = innerHeight; const box = (e) => e.getBoundingClientRect(); const sc = document.querySelector('.pg-mg')?.closest('.pn-body, .pn, .panel') || document.body; return { n: T.length, lamp: T.some((e) => /lamp/.test(e.outerHTML)), inView: T.every((e) => { const b = box(e); return b.width > 20 && b.height > 20 && b.left >= -1 && b.right <= vw + 1; }), rows: new Set(T.map((e) => Math.round(box(e).top))).size }; });
+    beat('13 Mastery tiles (Lamplight among them), all within the 844 px width', tiles.n === 13 && tiles.lamp && tiles.inView, tiles);
+    await ev(() => window.__D.closePanel());
+    const r0 = await ev(async () => { const S = await import('/src/game/stats.js'), L = await import('/src/game/light.js'), h = window.__G.hero; h.mast = h.mast || {}; h.mast.lamp = 0; S.refreshStats(); return { pct: window.__G.stats.ringPct, base: L.LIGHT.base, hr: L.heroLightR() }; });
+    beat('rank 0: ringPct 0 (finite), Act IV\'s base ring 6 m', r0.pct === 0 && Number.isFinite(r0.pct) && Math.abs(r0.base - 6) < 1e-6, r0);
+    await ev(async () => { const S = await import('/src/game/stats.js'), h = window.__G.hero; h.mast.lamp = 40; S.refreshStats(); });
+    await pg.waitForTimeout(400);
+    const r1 = await ev(async () => { const L = await import('/src/game/light.js'); return { pct: window.__G.stats.ringPct, base: L.LIGHT.base, swell: L.LIGHT.swell, hr: L.heroLightR() }; });
+    beat('rank 40: ringPct ~31.6, Act IV\'s base ring 7.9 m, under its 9 m swell', Number.isFinite(r1.pct) && Math.abs(r1.pct - 31.6) < 0.2 && Math.abs(r1.base - 7.9) < 0.02 && r1.base < r1.swell, r1);
+    const r2 = await ev(async () => { const L = await import('/src/game/light.js'); L.setHeroLight(3.5, null); const a = L.heroLightR(); L.setHeroLight(null); return { over: a }; });
+    beat('a boss\'s darkness (S.over) is never scaled', r2.over === 3.5, r2);
+    // Act V's ring and the Carried Fire's max
+    await ev(async () => { const W = await import('/src/game/world.js'); W.enterZone('drained'); });
+    await pg.waitForFunction(() => window.__G.zone?.id === 'drained' && window.__G.player && !document.getElementById('fade').classList.contains('on'), null, { timeout: 240000 });
+    await pg.waitForTimeout(500);
+    const r3 = await ev(() => ({ max: window.__act6.FIRE.max, r: window.__act6.FIRE.r }));
+    beat('the Carried Fire\'s max 4.5 -> 5.92 m at rank 40', Math.abs(r3.max - 4.5 * 1.316) < 0.03, r3);
+    // (the points as if the 40 ranks had been bought: what pointsSpent counts, Lamplight included)
+    const r4 = await ev(async () => { const P = await import('/src/game/progression.js'), h = window.__G.hero; const spent = P.pointsSpent(h); h.points = P.pointsEarned(h) - spent; const before = h.points; h.gold = 1e9; const ok = P.respec(h); return { spent, before, after: h.points, earned: P.pointsEarned(h), lamp: h.mast?.lamp || 0, ok }; });
+    beat('a respec gives the Lamplight points back (pointsSpent counts them)', r4.ok && r4.lamp === 0 && r4.spent >= 40 && r4.after === r4.earned && r4.after >= r4.before + 40, r4);
     return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
   } }
 };

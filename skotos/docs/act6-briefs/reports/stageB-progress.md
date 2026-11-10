@@ -35,14 +35,45 @@ One session does every lane in turn (no parallel agents); the lanes' file owners
 - **Scenarios** (`// Act VI: systems`): `carry`, `blackwater`, `drips`, `names6`: all pass. Regressions run: coast, tower,
   tide (4 cycles), ashfield, combat, test-sync (263): pass.
 
+## Combat and progression (10 November): done, scenarios pass
+
+- **data.js**: MONSTERS `lampbearer`, `faded`, `gateFallen`, `gateFallenBow`, `falselight`, `ketling` (the design's numbers);
+  PACKS (the ten tags), PACK_LEAD (`blackCrew`, `poolHunter`), PACK_DORMANT (`blackCrew`, `gateFallen`, `forgotten`);
+  BOONS[6] (`bearer`, `word`, `shade`; x REMEMBERED with `flags.lostAll` in stats.js, `.du` in panels.js); LEGENDARIES
+  `ketosLure`, `shadeRing` (drop: false); LEG_FROM `ketos`, `shade`; `actHaz(act, diff)`.
+- **ai.js**: `drinkerAI` (the Lampbearer: Drink tell 0.6 s, channel t s at rate m/s, broken by 6% of its life / stun /
+  freeze / her standing in lamp light, 7 s cooldown; cornered lantern swing, Cold +8); `touchStrike` (the Faded's
+  Forgetting Touch every `touchEvery` blows, -0.5 m); `unseenTick` (dissolve 0.85 outside light, solid in light / in its
+  wind-up within reach + 1 m / listening / Revealed; `a.unseenNow`); `namesFall` makes every `listens` foe stand 3 s,
+  Revealed; `restTick` (a downed Gate-Fallen rises at half life after 4 s); `lureAI` (the Falselight: modes `a.l6` lurk /
+  tell / fight, its fake pool r 3 at the bait, the snap 1.3x, -1 m, a 2 m pull, a roll slips it, shown by a lamp within 4 m /
+  her ring / a hit in light, lure out 3 s then lit again); `gnawTick` (a Ketling puts out the nearest lit lamp no hero
+  stands in). `drainOf(tg, v, src)`: this page's ring through fireDrain, a remote's into `tg.ringHit` for net.
+- **combat.js**: `kill`: lightRest (falls in the dark: down 4 s, invulnerable, then up at half life once; in light or on a
+  shard: dead), the kill refill (+0.2 m for an unlit foe in her ring, 0.4 with the Lure-bone), a Lampbearer's death pours
+  back what it drank + 1 m and relights an Out coal; the first-kill legendary by `def.legKey ?? kind`.
+- **actors.js**: STAND_IN `falselight: ['spider']`, `ketling` / `ketos: ['icemaw', 'warg']` with their scales; the Faded
+  pick `villager0-2` per spawn. **models.js**: weapon `blackLamp` (the sea-lantern with a dark violet flame).
+- **skills.js**: `nearestFoe` skips a downed Gate-Fallen and puts an unseen Faded after every lit foe; `skillUsed` now
+  carries `(i, id, aim, v)`; `underHook`: War Cry's flare (8 m, 3 s; Challenge's taunted foes lit 4 s), the wolf's lantern
+  (3.5 / The Pack 2 / The Alpha 5, a following pool), Frost Nova's slush (5.5 m, 8 s), Iron Bulwark's ward pool (3 m),
+  Dawnbreaker and Ray of Dawn light the unlit in a 3 m way along the aim for 1.5 s. **skillsx.js**: Frozen Orb leaves slush
+  (1.2 m, 6 s) every 1.2 m. **light.js**: a pool may `follow` an actor.
+- **progression.js**: MASTERY `lamp` (ringPct, max 50, k 40); stats.js `ringPct: 0`. **text.js**: "Act VI: progression"
+  and "Act VI: combat" blocks (names, blessings, legendaries, hint.unseen, hint.flicker).
+- **Scenarios**: `lure`, `foes6` (this lane's own: Lampbearer, Faded, Gate-Fallen, Ketling), `prog6`: pass.
+- **Deviations to write in the stage report**: no downloads from this container, so the Falselight and the Ketos stand
+  in as the spider (x0.8) and the Icemaw (x0.6, x3.4); the Lampbearer's lamp is a code sea-lantern; the Faded's attack is
+  people.js's `punch` (Punch_Cross); Dawnbreaker and Ray of Dawn light a 3 m way at the cast, not along their moving waves.
+- **Testing note:** the dev server must run without HMR (`npx vite --config /tmp/vite.nohmr.mjs --port 5199`, a copy of
+  tools/vite.nohmr.mjs with this machine's path): with a server that has seen edits, a scenario's `import('/src/...')`
+  gets a second copy of a module (no `?t=` stamp) and reads the wrong FIRE, bus and pools.
+
 ## Next
 
-- Systems part 2: the class hooks that are light (War Cry's flare, the wolf's lantern, Bulwark's ward, Dawnbreaker, Ray of
-  Dawn, Frost Nova / Frozen Orb slush, Piercing Shot's casks), the hud flame icon and the dial's violet pulse.
-- Combat: traits (drinker, unseen, lightRest, listens, lure, gnaw, touchEvery), the lure AI, the five new defs and the
-  Ketling, PACKS / PACK_LEAD / PACK_DORMANT, BOONS[6], the two legendaries and `legKey`, `actHaz`, `nearestFoe`'s lit
-  preference; scenarios `lure`, `skillsfx` in an 'under' zone.
-- Progression: the Lamplight track (`MASTERY` row, `ringPct`, progpanel 13 tiles, `prog6`).
+- Still to do in B: Snare Trap's held foe and Storm of Hawks' stoops lit; Piercing Shot breaking casks on its line (check
+  the shipped projectile); the louse's burst 'vault'; the unseen Faded's health bar hidden, its footprints and veil (look);
+  the hud flame icon beside the Cold and the dial's violet pulse (story's hud.js hooks); `skillsfx` in an 'under' zone.
 - Assets: the Ketos and the Falselight by their fallbacks (no downloads from this container), `cast6`.
 - Net: protocol 5 (ring byte, light pools, cells6 on `i`, the names window, Act VI's masks), `coop.mjs act6`.
 - G2.

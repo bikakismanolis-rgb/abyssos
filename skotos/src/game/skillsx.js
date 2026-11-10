@@ -14,6 +14,7 @@ import { rand, angleTo, angleDiff, clamp } from '../core/util.js';
 import { emit } from '../ui/bus.js';
 import { crackAt, crackLine, crackRing, refreezeAt } from './ice.js';
 import { vaultOn, vaultAt, vaultLine, vaultRing } from './forge.js';
+import { slushAt } from './tide.js';
 import { NET } from '../net/state.js';
 
 const V = new THREE.Vector3();
@@ -787,7 +788,7 @@ export const NEW_FN = {
         let t0 = 0, spin = Math.random() * 6.28;
         const shard = (x, z, a) => fire('shard', pl, x, z, a, { y: 1.1, dmg: heroHit(mult), opts: { chill: 1.5, quiet: true }, look: shardLook });
         fire('frostorb', pl, o.x, o.z, pl.rot, { y: 1.2, pierce: 999, onHit: (f) => damage(pl, f, heroHit(mult * 0.6), { chill: 2, quiet: true }), look: orbLook,
-          onTick(pr, dt) { t0 -= dt; if (t0 > 0) return; t0 = 0.1; spin += 2.4; shard(pr.x, pr.z, spin); if (rank >= 4) shard(pr.x, pr.z, spin + 3.14); },
+          onTick(pr, dt) { if (vaultOn()) { pr.sl6 ||= { x: pr.x, z: pr.z, n: 0 }; if (pr.sl6.n === 0 || Math.hypot(pr.x - pr.sl6.x, pr.z - pr.sl6.z) >= 1.2) { pr.sl6.x = pr.x; pr.sl6.z = pr.z; pr.sl6.n++; slushAt(pr.x, pr.z, 1.2, 6); } } t0 -= dt; if (t0 > 0) return; t0 = 0.1; spin += 2.4; shard(pr.x, pr.z, spin); if (rank >= 4) shard(pr.x, pr.z, spin + 3.14); },
           onEnd: (x, z) => { for (let k = 0; k < 12; k++) shard(x, z, (k / 12) * 6.28); glowBurst(x, 1.2, z, 0xd8f4ff, 26, 5, 0.3, 0.5); Audio.sfx('frost', { x, z }); } });
       }]]
     });

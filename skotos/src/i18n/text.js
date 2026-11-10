@@ -1150,5 +1150,21 @@ export const TEXT = {
   'hud.stunned': ['Ζαλισμένο', 'Stunned'],
   'name.first6': ['Φέρουσα, η Πρώτη.', 'Pherousa, the First.'],
   'name.someone': ['Κάποιος.', 'Someone.'],
-  'name.goodnight': ['Καληνύχτα.', 'Goodnight.']
+  'name.goodnight': ['Καληνύχτα.', 'Goodnight.'],
+  // Act VI: progression (the Lamplight track)
+  'mast.lamp': ['Λυχνοφώς', 'Lamplight'], 'mast.lamp.d': ['Ακτίνα του φωτός σου', 'Your light\'s reach'],
+  // Act VI: combat (the act's creatures, blessings and the bosses' legendaries; story owns them from D and may reword them)
+  'mon.lampbearer': ['Θαλασσόπνικτος Λυχνοφόρος', 'Sunken Lampbearer'], 'mon.faded': ['Ξέθωρος', 'Faded'],
+  'mon.gateFallen': ['Πεσμένος των Πυλών', 'Gate-Fallen'], 'mon.gateFallenBow': ['Τοξότης των Πυλών', 'Gate-Fallen Bowman'],
+  'mon.falselight': ['Δολοφέγγης', 'Falselight'], 'mon.ketling': ['Κητόπουλο', 'Ketling'],
+  'boon.bearer': ['Η Φέρουσα', 'The Bearer'], 'boon.bearer.d': ['+12% εμβέλεια, +10% ζημιά', '+12% area, +10% damage'], 'boon.bearer.du': ['+15% εμβέλεια, +12% ζημιά', '+15% area, +12% damage'],
+  'boon.bearer.q': ['Ό,τι κουβάλησες ως κάτω, σε κουβαλά τώρα εκείνο.', 'What you carried all the way down now carries you.'],
+  'boon.word': ['Ο Λόγος του Γλαύκου', 'Glaukos\'s Word'], 'boon.word.d': ['+12% ζωή, +12 ζωή ανά χτύπημα', '+12% life, +12 life on hit'], 'boon.word.du': ['+15% ζωή, +15 ζωή ανά χτύπημα', '+15% life, +15 life on hit'],
+  'boon.word.q': ['Κανείς δεν κρατά φως μόνος. Πήγαινε.', 'No one keeps a light alone. Go.'],
+  'boon.shade': ['Ο Ίσκιος σου', 'Your Shadow'], 'boon.shade.d': ['−8% χρόνος επαναφόρτισης, +20% κρίσιμη ζημιά', '−8% cooldowns, +20% critical damage'], 'boon.shade.du': ['−10% χρόνος επαναφόρτισης, +25% κρίσιμη ζημιά', '−10% cooldowns, +25% critical damage'],
+  'boon.shade.q': ['Ίσκιος θέλει φως. Όσο ρίχνεις ίσκιο, καις ακόμα.', 'A shadow needs a light. While you cast one, you still burn.'],
+  'leg.ketosLure': ['Το Κόκαλο του Δολώματος', 'The Lure-bone'], 'leg.ketosLure.d': ['Οι νίκες σου μέσα στον κύκλο σου δίνουν πίσω διπλό φως, και κάθε ρούφηγμα, δάγκωμα ή ροκάνισμα της φωτιάς σου παίρνει το μισό.', 'Your kills inside your ring give back twice the light, and a Drink, a snap or a Gnaw on your fire takes half.'],
+  'leg.shadeRing': ['Το Δαχτυλίδι του Ίσκιου', 'The Shade\'s Ring'], 'leg.shadeRing.d': ['Η φωτιά σου δεν πέφτει ποτέ κάτω από 1,5 μ., και τα χτυπήματά σου σε Σκιασμένους έξω από το φως κάνουν ×0,5 αντί για ×0,3.', 'Your fire never falls below 1.5 m, and your hits on Shrouded foes outside light deal ×0.5 instead of ×0.3.'],
+  'hint.unseen': ['Οι Ξέθωροι φαίνονται μόνο στο φως σου. Κράτα τη φωτιά σου ψηλά.', 'The Faded show only in your light. Keep your fire high.'],
+  'hint.flicker': ['Το αληθινό φως τρέμει. Αυτό το φως δεν τρέμει.', 'True light trembles. This light does not.']
 };

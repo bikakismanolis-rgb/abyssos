@@ -1,7 +1,8 @@
 // Monster, pet and boss behaviour.
 import * as THREE from 'three';
 import { G, later } from './state.js';
-import { MONSTERS, HAZ5 } from './data.js';
+import { MONSTERS, HAZ5, HAZ6 } from './data.js';
+import { FIRE, fireOn, fireDrain, removeLightPool as dropPool6 } from './light.js';
 import { rebuildHash, foes, near, spawnMonster, restoreRim, spawnNpc, lieDown } from './actors.js';
 import { damage, kill, tickStatus, moveMul, heroHit, seeHero, clingHero, shakeOff, rootHero, REMAINS, remainsNear, takeRemains, addVuln, clearVuln, vuln, vulnOf } from './combat.js';
 import { LIGHT, lightOn, shroudOn, lightAt, lampAt, lampNear, snuffLamp, isLamp, halveCradle, heroLightR, setHeroLight, setLightDark, addLightPool, getLightPool, shrinkPool, lightPools, addBeam, removeBeam, beams, inBeam, beamHas, lampLightAt, warmAt, cradlePoint } from './light.js';
@@ -47,6 +48,7 @@ if (import.meta.env?.DEV && typeof window !== 'undefined') {
   window.__act3 = { AI_LOG, damage, addSapPool, sapPools, spawnNpc, moveMul, heroHit, startDrips, grantBuff };
   window.__act4 = { AI_LOG, LIGHT, lightAt, heroLightR, addLightPool, setHeroLight, getLightPool, lightPools, seeHero, clingHero, shakeOff, REMAINS, startFlues, flues, fluePeriod, setFlueHeat, setFluePumping, spawnNpc, damage, moveMul };
   window.__act5 = Object.assign(window.__act5 || {}, { AI_LOG, LIGHT, lightAt, lampLightAt, warmAt, addBeam, removeBeam, beams, inBeam, addVuln, vuln, vulnOf, COLD, coldAdd, spawnNpc, spawnMonster, damage, moveMul, addSapPool, placeCasks });
+  window.__act6 = Object.assign(window.__act6 || {}, { AI_LOG, addVuln, vuln, spawnMonster, spawnNpc, damage, kill });
 }
 
 export function updateActors(dt) {
@@ -65,6 +67,8 @@ export function updateActors(dt) {
     if (a.remote || a.puppet) continue;
     if (a.prop) { if (a.dead) { a.deadT += dt; if (a.deadT > 0.05) { a.remove(); G.actors.splice(i, 1); } } continue; }
     if (a.dead) { dying(a, dt); if (a.removed) G.actors.splice(i, 1); continue; }
+    // Act VI: a Gate-Fallen that fell in the dark, lying in its bones until it rises (combat.js kill, lightRest)
+    if (a.down > 0) { restTick(a, dt); continue; }
     // Act V: gone through the ice, coming up through another hole (ice.js FALLS)
     if (a.sunk > 0) { sunkTick(a, dt); continue; }
     // the hero it is after: on a co-op host the nearest of the party, held until another is 3 m nearer
@@ -115,6 +119,8 @@ export function updateActors(dt) {
     if (G.zone.water) waterTick(a, dt);
     // a sea-light's beam: the unlit dazzled and revealed, the light-shy scattered
     if (a.def.unlit || a.def.lightShy) beamTick(a);
+    // Act VI: the Faded drawn by light, the rising dead lying down a while
+    if (a.def.unseen) unseenTick(a, dt, pl);
     // floundering in a broken hole: no actions until it hauls out (ice.js)
     if (a.flounder > 0) { a.state = 'chase'; if (a.tele) { killTele(a.tele); a.tele = null; } }
     // stunned, frozen or terrified, a Mourner loses her song
@@ -127,6 +133,8 @@ export function updateActors(dt) {
     else if (a.status.fear > 0 && !a.def.lightShy) speed = flee(a, dt, pl);
     // the Sunken the flood woke, back to their kelp at the ebb if she never came
     else if (a.tideRisen && !a.aggro && ebbing()) speed = goRest(a, dt);
+    // Act VI: the names falling, a listening Faded stands face up (listens)
+    else if (a.listenT > 0) { a.listenT -= dt; a.state = HELD.has(a.state) ? 'chase' : a.state; if (a.tele) { killTele(a.tele); a.tele = null; } }
     else {
       speed = (AI[a.def.ai] || AI.melee)(a, dt, pl, d);
       // no affix from what cannot be struck yet: a rootling still underground, an archer in the trees, a Rootwarden asleep,
@@ -344,6 +352,8 @@ const AI = {
   melee(a, dt, pl, d) {
     // a Hull-louse waiting in its hull, curled into a ball, or bowled (louse)
     if (a.def.curl && (a.under || a.curled > 0 || a.bowling || a.bowl)) return louse(a, dt, pl, d);
+    // Act VI: a Ketling makes for a lit lamp and gnaws it out (never while a hero stands in its light)
+    if (a.def.gnaw) { const s = gnawTick(a, dt, pl); if (s != null) return s; }
     if (!aggroCheck(a, pl, d)) return idle(a, dt);
     const tg = victim(a, pl), td = Math.hypot(tg.x - a.x, tg.z - a.z);
     if (a.state === 'attack') {
@@ -352,6 +362,7 @@ const AI = {
         if (a.spin) { killTele(a.tele); a.tele = null; tally(a, 'spin'); if (td < 2.5 + tg.radius) hitHero(a, pl, 1.1, { target: tg }); }
         else if (a.bash) { killTele(a.tele); a.tele = null; Audio.sfx('shieldBlock', { x: a.x, z: a.z, pitch: 0.8 }); if (meleeLands(a, tg, 2.6, 0.95)) hitHero(a, pl, 1.0, { push: 12, target: tg }); }
         else if (a.hook) hookStrike(a, pl, tg);
+        else if (a.touch) touchStrike(a, pl, tg);
         else if (meleeLands(a, tg, a.def.reach)) hitHero(a, pl, 1, { poison: a.def.poison ? a.dmg * 0.6 : 0, burn: a.def.burns ? a.dmg * 0.5 : 0, target: tg });
       }
       return 0;
@@ -365,9 +376,12 @@ const AI = {
         a.bash = !a.spin && !!a.def.bashEvery && !(a.guardDown > 0) && a.swings % a.def.bashEvery === 0;
         // the Sunken hook her with the boat-hook every third blow: a sea-green cone, and a pull
         a.hook = !a.spin && !a.bash && !!a.def.hookEvery && a.swings % a.def.hookEvery === 0;
+        // the Faded's Forgetting Touch every third blow: a dark cone, and her ring a little shorter
+        a.touch = !a.spin && !a.bash && !a.hook && !!a.def.touchEvery && a.swings % a.def.touchEvery === 0;
         if (a.spin) { a.tele = teleCircle(a.x, a.z, 2.5, 0.55, 0xff9030); startAttack(a, 'spinOnce'); }
         else if (a.bash) { a.tele = teleCone(a.x, a.z, a.rot, 2.6, 0.95, 0.6, 0xffa040); startAttack(a, 'Shield_Dash', { hit: 0.6, dur: 1.0, speed: 1.3 }); tally(a, 'bash'); }
         else if (a.hook) { a.tele = teleCone(a.x, a.z, a.rot, 2.4, 0.62, 0.6, SEA); startAttack(a, 'Melee_Hook', { hit: 0.6, dur: 1.1, speed: 0.48 }); tally(a, 'hook'); }
+        else if (a.touch) { a.tele = teleCone(a.x, a.z, a.rot, 2.0, 0.7, 0.7, 'dark'); startAttack(a, a.def.atk, { hit: 0.7, dur: 1.1 }); tally(a, 'touch'); }
         else startAttack(a, a.def.atk);
       }
       return 0;
@@ -504,6 +518,8 @@ const AI = {
     if (a.cd <= 0 && td < 7) { a.state = 'attack'; a.atkT = 0; a.atkHit = false; a.avatar?.play('bite', 1.4); if (Math.random() < 0.5) Audio.sfx('batScreech', { x: a.x, z: a.z, vol: 0.5 }); return 0; }
     return fly(a, tg.x + Math.sin(a.orb) * 3.4, tg.z + Math.cos(a.orb) * 3.4, a.speed, dt);
   },
+  // Act VI: the Falselight
+  lure(a, dt, pl, d) { return lureAI(a, dt, pl, d); },
   burrow(a, dt, pl, d) {
     // below: a ridge of churned earth that hunts the hero; above: bites what is close, spits at what is not, then dives again
     if (a.under == null) { a.under = true; a.y = -3; }
@@ -741,6 +757,8 @@ const AI = {
     return 0;
   },
   tether(a, dt, pl, d) {
+    // Act VI: a Lampbearer drinks her fire instead (drinker)
+    if (a.def.drinker) return drinkerAI(a, dt, pl, d);
     // a Keening Mourner: binds the toughest guard near her (immune while she sings; a boss is only warded),
     // keeps 8-11 m off, and keens at the hero while unbonded
     if (!aggroCheck(a, pl, d)) return idle(a, dt);
@@ -962,6 +980,188 @@ function pullHero(x, z, dist, dur, key, stop = 1.2) {
   return true;
 }
 // the Sunken's boat-hook: every third blow, a sea-green cone, and on a hit she is pulled 1.5 m in
+// ---------- Act VI: below the ice (docs/act6-contract.md, Combat; the design's Enemies) ----------
+const h6 = () => HAZ6[G.hero?.diff ?? 1] || HAZ6[1];
+const DARK6 = 0x8a70ff;
+// what the dark's blows take from a hero's ring: this page's own through fireDrain; a co-op guest's goes in its blow's
+// statuses (net/coop.js reads o.ring on hurtRemote)
+function drainOf(tg, v, src) { if (tg === G.player) fireDrain(v, { src, half: true }); else if (tg?.remote) tg.ringHit = (tg.ringHit || 0) + v; }
+// the Faded's Forgetting Touch: 1.1x and 0.5 m of her ring
+function touchStrike(a, pl, tg) {
+  killTele(a.tele); a.tele = null;
+  if (!meleeLands(a, tg, 2.0, 0.7)) { tally(a, 'touchMissed'); return; }
+  const n = hitHero(a, pl, 1.1, { target: tg });
+  if (n > 0) { drainOf(tg, 0.5, 'touch'); puff(tg.x, 1.2, tg.z, 6, 0x1a1c24, 0.6, 0.8, 1.0); tally(a, 'touched'); }
+}
+// unseen: outside light drawn dissolved (85%), solid in light, from its wind-up whenever its target is within reach + 1 m,
+// while it listens, while Revealed; a.unseenNow for the health bar and the skills' aim (skills.js nearestFoe)
+function unseenTick(a, dt, pl) {
+  const tg = a.tgt || pl, close = !!tg && (a.state === 'attack' || a.state === 'wind' || a.state === 'aim') && Math.hypot(tg.x - a.x, tg.z - a.z) <= a.def.reach + 1 + (tg.radius || 0.5);
+  const lit = !(fireOn() && FIRE.state === 'out') && lightAt(a.x, a.z, { pad: a.radius * 0.5 });
+  const solid = lit || close || a.listenT > 0 || a.revealed > 0 || a.dormant;
+  a.unseenNow = !solid;
+  const v = solid ? 0 : 0.85;
+  a.dissolve = damp(a.dissolve ?? v, v, 9, dt);
+  const av = a.avatar; if (!av?.setDissolve) return;
+  if (!a.burnSet) { a.burnSet = true; av.mat?.userData?.u?.uBurn?.value?.set?.(0, 0, 0); }
+  av.setDissolve(a.dissolve < 0.02 ? 0 : a.dissolve);
+}
+// the names fall: every listening foe stands 3 s with its face up, Revealed and solid, once a window
+on('namesFall', () => { for (const a of G.actors || []) if (a.def?.listens && !a.dead && !a.dormant && a.team === 'foe') { a.listenT = 3; addVuln(a, 'revealed', 3, { quiet: true }); tally(a, 'listen'); } });
+// a Gate-Fallen lying in its bones (combat.js kill: it fell in the dark): it rattles up at half life when its 4 s are over
+function restTick(a, dt) {
+  a.down -= dt;
+  const av = a.avatar; if (av) { av.group.position.set(a.x, 0, a.z); av.update(dt, { speed: 0 }); }
+  if (a.down > 0) return;
+  a.down = 0; a.hp = Math.max(1, a.hpMax * 0.5); a.invuln = 0; a.rising = 1.4; a.aggro = true;
+  av?.play('rise', 1.1); Audio.sfx('skeletonRattle', { x: a.x, z: a.z }); tally(a, 'rose');
+}
+// a Lampbearer (the 'tether' AI's keeping off: 7-9 m, backing away under 4.5 m): the Drink, a 0.6 s tell with a dark line
+// to her, then a 2.5 s channel that takes rate m/s of her ring (x HAZ6.coal), broken by a hit worth 6% of its life, a stun
+// or a freeze, never begun while she stands in true lamp light; 7 s between. Cornered (under 2.4 m): its lantern swung
+// (teleCone 2.2 m, 0.8 s, 0.9x, Cold +8). What it drank comes back with its death (combat.js kill)
+function drinkerAI(a, dt, pl, d) {
+  if (!aggroCheck(a, pl, d)) return idle(a, dt);
+  const D = a.def.drinker, tg = victim(a, pl), td = Math.hypot(tg.x - a.x, tg.z - a.z), map = G.zone.map;
+  if (a.state === 'swing') {
+    face(a, tg, dt, 6); a.atkT += dt;
+    if (!a.atkHit && a.atkT >= 0.8) { a.atkHit = true; killTele(a.tele); a.tele = null; if (meleeLands(a, tg, 2.2, 0.8)) hitHero(a, pl, 0.9, { target: tg, cold: 8 }); }
+    if (a.atkT >= 1.2) { a.state = 'chase'; a.cd = 1.5; }
+    return 0;
+  }
+  if (a.state === 'drinkTell' || a.state === 'drink') {
+    face(a, tg, dt, 6); a.atkT += dt;
+    const broke = a.hpMark - a.hp >= a.hpMax * 0.06 || a.status.stun > 0 || a.status.freeze > 0 || (tg === G.player && lampLightAt(tg.x, tg.z)) || td > D.t * 0 + 13 || !map.los(a.x, a.z, tg.x, tg.z);
+    if (broke) { killTele(a.tele); a.tele = null; a.state = 'chase'; a.cd = 3; a.avatar?.play('idle', 1); tally(a, 'drinkBroken'); return 0; }
+    if (a.state === 'drinkTell' && a.atkT >= 0.6) { a.state = 'drink'; a.atkT = 0; tally(a, 'drink'); a.avatar?.play('channel', 1, { loop: true }); }
+    if (a.state === 'drink') {
+      const before = tg === G.player ? FIRE.r : 0;
+      drainOf(tg, D.rate * dt, 'drink');
+      if (tg === G.player) a.drank = (a.drank || 0) + Math.max(0, before - FIRE.r);
+      a.beamT = (a.beamT ?? 0) - dt;
+      if (a.beamT <= 0) { a.beamT = 0.2; bolt(tg.x, 1.0, tg.z, a.x, 1.3, a.z, DARK6, 0.5); }
+      if (a.atkT >= D.t) { killTele(a.tele); a.tele = null; a.state = 'chase'; a.cd = 7; a.avatar?.play('idle', 1); }
+    }
+    return 0;
+  }
+  if (td < 2.4 + tg.radius && a.cd <= 0) {
+    a.state = 'swing'; a.atkT = 0; a.atkHit = false; a.tele = teleCone(a.x, a.z, angleTo(a.x, a.z, tg.x, tg.z), 2.2, 0.9, 0.8, 0xffa040); a.avatar?.play('cast', 1.2); tally(a, 'swing');
+    return 0;
+  }
+  // keep 7-9 m off; back away under 4.5 m
+  if (td < 4.5) { const ang = angleTo(tg.x, tg.z, a.x, a.z), nx = a.x + Math.sin(ang) * 3, nz = a.z + Math.cos(ang) * 3; if (map.walkable(nx, nz)) return seek(a, nx, nz, a.speed, dt); }
+  if (td > 9.5 || !map.los(a.x, a.z, tg.x, tg.z)) return seek(a, tg.x, tg.z, a.speed, dt);
+  face(a, tg, dt);
+  if (a.cd <= 0 && fireOn() && !(tg === G.player && (FIRE.state === 'out' || lampLightAt(tg.x, tg.z)))) {
+    a.state = 'drinkTell'; a.atkT = 0; a.hpMark = a.hp;
+    a.tele = teleLine(a.x, a.z, angleTo(a.x, a.z, tg.x, tg.z), td, 0.5, 0.6 + D.t, 'dark');
+    Audio.sfx('mournerKeen', { x: a.x, z: a.z, vol: 0.35, pitch: 0.6 }); a.avatar?.play('castUp', 1);
+  }
+  return 0;
+}
+// the Falselight: sits in the dark by a dead lamp post with its false pool (r 3, steady, cold) on the floor beside it. A
+// hero in the pool for its bait time (0.8 s x HAZ6.bait / 0.8) sets off the tell (the rim sea-green, 0.8 s); then the snap:
+// 1.3x, 1 m of her ring and a 2 m pull toward it (a roll in the tell escapes). True light within 4 m, her ring touching it,
+// or a hit in light shows it (Revealed 3 s) and puts its lure out for 3 s: it flees to the dark 2 s and sits, then lights
+// it again. Shown, it pinches (reach 1.6, 0.8x) and stings (a 2.4 m line, 0.7 s, 1.2x); left alone 6 s it lurks again
+const SEA6 = 0x40d8b0;
+// (its own mode, a.l6: 'lurk', 'tell', 'fight'; a.state is the shared attack timer's)
+function lureAI(a, dt, pl, d) {
+  const L = a.def.lure, H = h6(), map = G.zone.map, tg = victim(a, pl), td = Math.hypot(tg.x - a.x, tg.z - a.z);
+  if (!a.bait) {
+    const S = G.zone.L.spots?.lures || [], post = S.reduce((b, s) => (!b || Math.hypot(s.x - a.x, s.z - a.z) < Math.hypot(b.x - a.x, b.z - a.z) ? s : b), null);
+    const bp = post && Math.hypot(post.x - a.x, post.z - a.z) < 10 ? post.bait || post : { x: a.x + Math.sin(a.rot) * 1.8, z: a.z + Math.cos(a.rot) * 1.8 };
+    const f = map.nearestFloor(bp.x, bp.z, 3); a.bait = { x: f.x, z: f.z }; a.lair = { x: a.x, z: a.z }; a.lureR = L.r * (a.elite === 'rare' ? 4 / 3 : 1); a.l6 = 'lurk';
+  }
+  if (a.lureOut > 0) a.lureOut -= dt;
+  // shown by true light: a lamp near it, her ring on it, a hit in light (combat.js sets a.revealed)
+  const ringOn = fireOn() && FIRE.state !== 'out' && tg === G.player && td < heroLightR() + a.radius;
+  if ((ringOn || lampAt(a.x, a.z, 4) || a.revealed > 0) && !(a.lureOut > 0) && a.l6 !== 'fight') {
+    a.lureOut = 3; a.fleeT = 2; a.revealed = Math.max(a.revealed || 0, 3); addVuln(a, 'revealed', 3, { quiet: true }); a.aggro = true; a.l6 = 'fight'; a.fightT = 0;
+    killTele(a.tele); a.tele = null; tally(a, 'shown');
+  }
+  // its pool: lit while it lurks (and in its tell)
+  const pooled = a.l6 !== 'fight' && !(a.lureOut > 0);
+  if (pooled && !a.pool) { a.pool = addLightPool(a.bait.x, a.bait.z, a.lureR, Infinity, null, { fake: true, light: false, owner: a }); a.baitT = 0; }
+  if (!pooled && a.pool) { dropPool6(a.pool); a.pool = null; }
+  if (a.lureOut > 0 && a.fleeT > 0) {
+    a.fleeT -= dt;
+    const ang = angleTo(tg.x, tg.z, a.x, a.z), nx = a.x + Math.sin(ang) * 3, nz = a.z + Math.cos(ang) * 3;
+    if (map.walkable(nx, nz)) return seek(a, nx, nz, a.speed, dt);
+  }
+  if (a.l6 === 'tell') {
+    face(a, tg, dt, 8); a.atkT6 += dt;
+    if (a.atkT6 >= L.tell) {
+      if (a.pool) a.pool.mesh?.material?.uniforms?.uColor?.value?.set(0xd8e0ff);
+      const inPool = Math.hypot(tg.x - a.bait.x, tg.z - a.bait.z) < a.lureR + 0.4;
+      // (the tail strikes from the dark: a roll in the tell slips it)
+      if (inPool && !(tg.iframes > 0)) {
+        const n = hitHero(a, pl, 1.3, { target: tg });
+        if (n > 0) { drainOf(tg, L.drain, 'snap'); if (tg === G.player) pullHero(a.x, a.z, L.pull, 0.25, 'hud.hooked', a.radius + tg.radius + 0.4); tally(a, 'snap'); }
+      } else tally(a, 'snapMissed');
+      sparks(a.bait.x, 0.4, a.bait.z, 8, 0xd8f0ff, 3);
+      a.l6 = 'fight'; a.fightT = 0; a.aggro = true;
+    }
+    return 0;
+  }
+  if (a.l6 === 'fight') {
+    if (a.lureOut > 0 && td > 6) { face(a, tg, dt, 2); return 0; }
+    a.fightT = (a.fightT || 0) + dt;
+    if (td <= 6) a.fightT = 0;
+    else if (a.fightT > 6) { a.l6 = 'lurk'; a.aggro = false; a.revealed = 0; return seek(a, a.lair.x, a.lair.z, a.speed, dt); }
+    if (a.sting6 != null) {
+      face(a, tg, dt, 4); a.sting6 += dt;
+      if (!a.stingHit && a.sting6 >= 0.7) { a.stingHit = true; killTele(a.tele); a.tele = null; if (meleeLands(a, tg, 2.4, 0.4)) hitHero(a, pl, 1.2, { target: tg }); }
+      if (a.sting6 >= 1.0) a.sting6 = null;
+      return 0;
+    }
+    if (a.state === 'attack') { face(a, tg, dt, 6); if (attackTick(a, dt) && meleeLands(a, tg, 1.6)) hitHero(a, pl, 0.8, { target: tg }); return 0; }
+    if (td < 2.4 + tg.radius) {
+      face(a, tg, dt);
+      if (a.cd <= 0) {
+        a.swings = (a.swings || 0) + 1;
+        if (a.swings % 2 === 0 || td > 1.6 + tg.radius) { a.sting6 = 0; a.stingHit = false; a.tele = teleLine(a.x, a.z, a.rot, 2.4, 0.8, 0.7, 0xff6030); a.avatar?.play('bite', 0.8); a.cd = a.def.atkTime * rand.range(0.9, 1.2); tally(a, 'sting'); }
+        else startAttack(a, a.def.atk);
+      }
+      return 0;
+    }
+    return seek(a, tg.x, tg.z, a.speed, dt);
+  }
+  // lurking: back at its lair and still; a hero in the pool long enough sets off the tell (a blow from the dark wakes it)
+  if (a.hp < a.hpMax - 1e-6) { a.l6 = 'fight'; a.fightT = 0; a.aggro = true; return 0; }
+  if (a.lureOut > 0) { face(a, tg, dt, 2); return 0; }
+  if (Math.hypot(a.x - a.lair.x, a.z - a.lair.z) > 0.8) return seek(a, a.lair.x, a.lair.z, a.speed * 0.7, dt);
+  const inPool = Math.hypot(tg.x - a.bait.x, tg.z - a.bait.z) < a.lureR;
+  if (inPool) {
+    a.baitT = (a.baitT || 0) + dt;
+    if (a.baitT >= L.bait * (H.bait ?? 0.8) / 0.8) {
+      a.l6 = 'tell'; a.atkT6 = 0; a.baitT = 0;
+      if (a.pool) a.pool.mesh?.material?.uniforms?.uColor?.value?.set(SEA6);
+      Audio.sfx('spiderHiss', { x: a.x, z: a.z, vol: 0.6 }); tally(a, 'tell');
+    }
+  } else a.baitT = 0;
+  return 0;
+}
+// a Ketling (gnaw): the nearest lit lamp within 25 m (an interactable lit with a light), gnawed out in 1 s; never while a
+// hero stands in its light (it turns on her instead). null: no lamp to go for, the melee AI goes on
+function gnawTick(a, dt, pl) {
+  let it = a.gnawAt;
+  if (it && (!it.lit || it.snuffed)) { it = a.gnawAt = null; }
+  if (!it) {
+    let bd = 25 * 25;
+    for (const c of G.zone.interact || []) { if (!c.lit || !c.lightR) continue; const d2 = (c.x - a.x) ** 2 + (c.z - a.z) ** 2; if (d2 < bd) { bd = d2; it = c; } }
+    a.gnawAt = it || null; a.gnawT = 0;
+  }
+  if (!it) return null;
+  const guarded = heroes().some((h) => !h.dead && (h.x - it.x) ** 2 + (h.z - it.z) ** 2 < it.lightR * it.lightR);
+  if (guarded) { a.aggro = true; a.gnawT = 0; return null; }
+  const dd = Math.hypot(it.x - a.x, it.z - a.z);
+  if (dd > 1.6) { a.gnawT = 0; return seek(a, it.x, it.z, a.speed, dt); }
+  face(a, it, dt, 6);
+  if ((a.gnawT = (a.gnawT || 0) + dt) >= 1) { snuffLamp(it, a); a.gnawAt = null; a.gnawT = 0; tally(a, 'gnawed'); }
+  return 0;
+}
+
 function hookStrike(a, pl, tg) {
   killTele(a.tele); a.tele = null;
   for (let i = 1; i <= 6; i++) P({ x: a.x + Math.sin(a.rot) * i * 0.4, y: 1.1, z: a.z + Math.cos(a.rot) * i * 0.4, life: 0.25, size: 0.22, size1: 0.04, color: 0x9affd8 });

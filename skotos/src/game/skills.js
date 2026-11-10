@@ -3,7 +3,9 @@ import * as THREE from 'three';
 import { G, later } from './state.js';
 import { SKILLS, DODGE, POTION, CLASSES } from './data.js';
 import { skillMult, skillRank, skillUnlocked } from './stats.js';
-import { damage, heroHit, healHero, freeHero, shakeOff } from './combat.js';
+import { damage, heroHit, healHero, freeHero, shakeOff, addVuln } from './combat.js';
+import { fireOn, flareRing, addLightPool } from './light.js';
+import { slushAt } from './tide.js';
 import { foes, spawnMonster, Actor } from './actors.js';
 import { fire, area } from './projectiles.js';
 import { sparks, glowBurst, explosion, ring, bolt, puff, P, flash, decal, teleCircle } from '../gfx/fx.js';
@@ -28,9 +30,10 @@ export function nearestFoe(range, dir = null, from = p()) {
   for (const f of foes(from.x, from.z, range)) {
     // a Hollowed passing for dead wood is no target until it shows itself (aim at it, or catch it in an area); a keeper's
     // statue in Karthax's cage never is (only his hammer breaks it)
-    if ((f.prop && !f.hp) || f.hidden || f.disguised || f.keeper) continue;
+    if ((f.prop && !f.hp) || f.hidden || f.disguised || f.keeper || f.down > 0) continue;
     const d = Math.hypot(f.x - from.x, f.z - from.z) - f.radius;
-    let s = d + (f.prop ? 4 : 0);
+    // (a lit foe before an unseen Faded in range, which is never skipped when it is all there is)
+    let s = d + (f.prop ? 4 : 0) + (f.unseenNow ? 100 : 0);
     if (dir != null) s += Math.abs(angleDiff(dir, angleTo(from.x, from.z, f.x, f.z))) * 1.6;
     if (s < bs) { bs = s; best = f; }
   }
@@ -181,8 +184,32 @@ export function useSkill(i, ev) {
   const rank = Math.max(1, skillRank(sk.id)), mult = skillMult(sk), v = variantOf(sk.id);
   const aim = resolveAim(ev, sk.range || CLASSES[G.hero.cls].range, !!sk.ground);
   (v && VARIANT_FN[sk.id + '.' + v] || SKILL_FN[sk.id] || NEW_FN[sk.id])(sk, aim, rank, mult, ci);
-  emit('skillUsed', i);
+  if (fireOn()) underHook(sk, v, aim, rank);
+  emit('skillUsed', i, sk.id, aim, v);
   return true;
+}
+// ---------- Act VI: the class hooks below the ice (docs/act6-contract.md, Light; the design's Class hooks) ----------
+// light where each class's skills already act, every variant as its base: War Cry flares her ring to 8 m for 3 s (and
+// Challenge's taunted foes stay lit); the Spirit Wolf carries a lantern (r 3.5; The Pack's three r 2; The Alpha's r 5);
+// Frost Nova freezes the black water to slush (r 5.5, 8 s); Iron Bulwark's ward is a true light (r 3) while it holds;
+// Dawnbreaker and Ray of Dawn light and Reveal the unlit along their way for a moment. (The vault's icicles are forge.js's,
+// at the ground blows; Frozen Orb's slush trail is skillsx.js's)
+const litFoe = (f, t) => { if (!f || f.dead || !f.def?.unlit) return; f.revealed = Math.max(f.revealed || 0, t); addVuln(f, 'lit', t, { quiet: true }); };
+function underHook(sk, v, aim, rank) {
+  const pl = p(); if (!pl) return;
+  const id = sk.id;
+  if (id === 'cry') { later(0.3, () => { flareRing(8, 3); if (v === 'challenge') for (const f of foes(pl.x, pl.z, 7)) litFoe(f, 4); }); }
+  else if (id === 'wolf') later(0.35, () => {
+    const r = v === 'pack' ? 2 : v === 'alpha' ? 5 : 3.5;
+    for (const w of G.actors) if (w.kind === 'spiritWolf' && w.pet && !w.dead && !w.lamp6) { w.lamp6 = addLightPool(w.x, w.z, r, Infinity, null, { owner: w, tremble: true, color: 0xffd9a0 }); w.lamp6.follow = w; }
+  });
+  else if (id === 'nova') later(0.2, () => slushAt(pl.x, pl.z, 5.5, 8));
+  else if (id === 'bulwark') later(0.25, () => { const q = addLightPool(pl.x, pl.z, 3, pl.buffs.bulwark || 4, null, { tremble: true, light: false, color: 0xffd070 }); q.follow = pl; });
+  else if (id === 'dawn' || id === 'beam') {
+    // (their waves and beam: the unlit in a 3 m way along the aim, out to the skill's reach, lit for a moment)
+    const dir = aim?.dir ?? pl.rot, len = sk.range || 14, ux = Math.sin(dir), uz = Math.cos(dir);
+    later(0.3, () => { for (const f of foes(pl.x, pl.z, len + 2)) { const dx = f.x - pl.x, dz = f.z - pl.z, u = dx * ux + dz * uz; if (u > 0 && u < len && Math.abs(-dx * uz + dz * ux) < 1.5 + f.radius) litFoe(f, 1.5); } });
+  }
 }
 export { resolveAim };
 
