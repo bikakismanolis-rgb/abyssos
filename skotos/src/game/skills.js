@@ -202,7 +202,7 @@ function underHook(sk, v, aim, rank) {
     const r = v === 'pack' ? 2 : v === 'alpha' ? 5 : 3.5;
     for (const w of G.actors) if (w.kind === 'spiritWolf' && w.pet && !w.dead && !w.lamp6) { w.lamp6 = addLightPool(w.x, w.z, r, Infinity, null, { owner: w, tremble: true, color: 0xffd9a0 }); w.lamp6.follow = w; }
   });
-  else if (id === 'nova') later(0.2, () => slushAt(pl.x, pl.z, 5.5, 8));
+  else if (id === 'nova') later(0.2, () => slushAt(pl.x, pl.z, 5.5, 8, { mine: true }));
   else if (id === 'bulwark') later(0.25, () => { const q = addLightPool(pl.x, pl.z, 3, pl.buffs.bulwark || 4, null, { tremble: true, light: false, color: 0xffd070 }); q.follow = pl; });
   else if (id === 'dawn' || id === 'beam') {
     // (their waves and beam: the unlit in a 3 m way along the aim, out to the skill's reach, lit for a moment)

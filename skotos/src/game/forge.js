@@ -14,7 +14,7 @@ import { G, later } from './state.js';
 import { DIFFS, HAZ6, monsterDmg } from './data.js';
 import { damage, addVuln } from './combat.js';
 import { area } from './projectiles.js';
-import { heroes } from '../net/state.js';
+import { heroes, NET, MIRROR } from '../net/state.js';
 import { R } from '../gfx/gfx.js';
 import { teleLine, teleCircle, killTele, P, explosion, puff } from '../gfx/fx.js';
 import { addLight, removeLight, shake } from '../gfx/gfx.js';
@@ -201,8 +201,13 @@ function dropShard(i) {
 }
 // the falls: n icicles on random vault cells within r + 1 of (x, z), one per patch, a patch at most once each 4 s; a white
 // circle of 1.2 m for 1 s, 0.9 x the zone's blow x HAZ6.icicle, Cold +10, a shard. o.mult multiplies the blow (a troll's)
+// (co-op, on a guest: the vault falls on the host's only, which keeps the shards and sends them on 'i'; what the guest's
+// own hero (MIRROR.hero) or its own high water (o.mine) brings down is asked of the host, net/coop.js 'ic' 'v', 'vl',
+// 'vr'; nothing falls on the guest's own)
+const guestFall = (o) => (NET.mode === 'guest' ? ((MIRROR.hero || o?.mine) && NET.h.iceOp) || (() => 0) : null);
 export function vaultAt(x, z, r, n = 1, o = {}) {
   const zone = G.zone, L = zone?.L; if (!L?.vault || !(n > 0)) return 0;
+  const gf = guestFall(o); if (gf) return gf('v', x, z, r, n);
   const now = nowS(), byPatch = new Map(), w = L.w, R1 = r + 1;
   for (let iz = Math.max(0, Math.floor(z - R1)); iz <= Math.min(L.h - 1, Math.floor(z + R1)); iz++) for (let ix = Math.max(0, Math.floor(x - R1)); ix <= Math.min(w - 1, Math.floor(x + R1)); ix++) {
     const id = L.vault[iz * w + ix]; if (!id || (ix + 0.5 - x) ** 2 + (iz + 0.5 - z) ** 2 > R1 * R1 || !zone.map.walkable(ix + 0.5, iz + 0.5)) continue;
@@ -222,11 +227,15 @@ export function vaultAt(x, z, r, n = 1, o = {}) {
 export const vaultOn = () => lightKind() === 'under';
 // along a line (Earthsplitter): one icicle each 4 m of it; round a ring (its Ring variant): one each 4 m of the ring
 export function vaultLine(x0, z0, x1, z1, w = 2) {
+  if (!G.zone?.L?.vault) return 0;
+  const gf = guestFall(); if (gf) return gf('vl', x0, z0, x1, z1, w);
   const len = Math.hypot(x1 - x0, z1 - z0), n = Math.max(1, Math.round(len / 4)); let k = 0;
   for (let i = 0; i < n; i++) { const u = (i + 0.5) / n; k += vaultAt(x0 + (x1 - x0) * u, z0 + (z1 - z0) * u, w, 1); }
   return k;
 }
 export function vaultRing(x, z, r) {
+  if (!G.zone?.L?.vault) return 0;
+  const gf = guestFall(); if (gf) return gf('vr', x, z, r);
   const n = Math.max(1, Math.round(Math.PI * 2 * r / 4)); let k = 0;
   for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; k += vaultAt(x + Math.sin(a) * r, z + Math.cos(a) * r, 1, 1); }
   return k;
@@ -235,7 +244,7 @@ export function vaultRing(x, z, r) {
 on('tideTurn', (ph, z) => {
   if (ph !== 'high' || !z?.act6 || z !== G.zone) return;
   const pl = G.player; if (!pl || pl.dead) return;
-  for (const v of z.L.spots?.vaults || []) if (Math.hypot(v.x - pl.x, v.z - pl.z) < 20) vaultAt(v.x, v.z, v.r || 3, 1);
+  for (const v of z.L.spots?.vaults || []) if (Math.hypot(v.x - pl.x, v.z - pl.z) < 20) vaultAt(v.x, v.z, v.r || 3, 1, { mine: true });
 });
 // on every entry to an act-6 zone (world.js act6Enter): no shards, every patch ready
 export function vaultEnter() {

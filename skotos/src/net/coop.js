@@ -38,7 +38,8 @@ import { on, emit } from '../ui/bus.js';
 import { t, has } from '../i18n/i18n.js';
 import { clamp, rand } from '../core/util.js';
 import { FIRE, fireOn, fireDrain, ringOf, setRemoteLight, lightPools, lightAt, lightKind, NAMES, namesFromHost } from '../game/light.js';
-import { cells6, cells6Apply } from '../game/tide.js';
+import { cells6, cells6Apply, slushAt } from '../game/tide.js';
+import { vaultAt, vaultLine, vaultRing } from '../game/forge.js';
 
 // (the game's version: pages of another do not list or join each other's games. 4: the Supabase wire of the economy
 // (docs/coop/diet.md), which a page of 3 cannot read nor be read by)
@@ -564,10 +565,22 @@ function hostTick(dt) {
   // the ice: what changed, at most twice a second, all of it every 3 s
   const I = z.ice;
   if (I && S.roster.length && now() - S.iceT > 500) { const dg = iceDigest(z); if (dg && (dg.key !== S.iceKey || now() - S.iceT > 3000)) { S.iceKey = dg.key; S.iceT = now(); sendBig('i', { k: key, d: dg.d }); } }
-  // (Act VI: the shards and the slush, on the same topic and terms, tide.js cells6)
-  else if (z.act6 && S.roster.length && now() - S.iceT > 500) { const c6 = cells6(z); if (c6.key !== S.iceKey || now() - S.iceT > 3000) { S.iceKey = c6.key; S.iceT = now(); sendBig('i', { k: key, c6: c6.d }); } }
+  // (Act VI: the shards and the slush, on the same topic and terms, tide.js cells6; sent with the snapshot, just before
+  // it, and where the channel bundles only while the snapshot still has 2.4 KB of room beside it, else at a later one,
+  // 1.5 s at most: act6-contract, Budget)
+  const ice6 = z.act6 && !I && S.roster.length && now() - S.iceT > 500;
   // the snapshot
-  if (S.roster.length && S.started && now() - S.snapT >= 1000 / (S.ch.econ?.snap || SNAP_HZ) && S.ch.ready?.() !== false) { S.snapT = now(); sendSnap(); }
+  if (S.roster.length && S.started && now() - S.snapT >= 1000 / (S.ch.econ?.snap || SNAP_HZ) && S.ch.ready?.() !== false) {
+    S.snapT = now();
+    if (ice6) {
+      const c6 = cells6(z);
+      if (c6.key !== S.iceKey || now() - S.iceT > 3000) {
+        const m = { k: key, c6: c6.d }, room = S.ch.room ? S.ch.room() - bytesOf({ id: 1e9, i: 0, n: 1, s: JSON.stringify(m) }) : Infinity;
+        if (room >= 2400 || now() - (S.iceHeld ||= now()) > 1500) { S.iceHeld = 0; S.iceKey = c6.key; S.iceT = now(); sendBig('i', m); }
+      }
+    }
+    sendSnap();
+  }
   if (!S.roster.length || !S.started) S.fxHost = [];
   // each guest's reliable events it has seen are let go (and none kept past 30 s); a guest gone, its queue with it
   const tooOld = now() - 30000;
@@ -817,13 +830,19 @@ function guestEvent(P, e) {
   } else if (type === 'ic') {
     // the ice: a guest's crack or refreeze done on the host's (the only ice that cracks), near it and no wider than a skill's
     const op = e[2], a = e.slice(3, 9);
-    if (!nums(a, op === 'f' ? 3 : op === 'l' ? 6 : op === 'r' ? 5 : 4)) return reject('bad');
+    if (!nums(a, op === 'f' || op === 'vr' ? 3 : op === 'l' ? 6 : op === 'r' || op === 'vl' ? 5 : 4)) return reject('bad');
     if (over(P, 'ic', 14)) return reject('rate');
     const near = (x, z) => Math.hypot(x - me.x, z - me.z) < 28, st = clamp(a[op === 'l' ? 5 : op === 'r' ? 4 : 3] | 0, 1, 2);
     if (op === 'c') { if (!near(a[0], a[1]) || a[2] > 4) return reject('ice'); crackAt(a[0], a[1], a[2], st, { src: 'guest' }); }
     else if (op === 'l') { if (!near(a[0], a[1]) || !near(a[2], a[3]) || Math.hypot(a[2] - a[0], a[3] - a[1]) > 14 || a[4] > 2.5) return reject('ice'); crackLine(a[0], a[1], a[2], a[3], a[4], st, { src: 'guest' }); }
     else if (op === 'r') { if (!near(a[0], a[1]) || a[3] > 8 || a[3] - a[2] > 1.5 || a[2] < 0) return reject('ice'); crackRing(a[0], a[1], a[2], a[3], st, { src: 'guest' }); }
     else if (op === 'f') { if (!near(a[0], a[1]) || a[2] > 6) return reject('ice'); if (now() - (P.freezeT || 0) < 2000) return reject('rate'); P.freezeT = now(); refreezeAt(a[0], a[1], a[2]); emit('frostNova', a[0], a[1], a[2]); }
+    // (Act VI: a guest's slush, Frost Nova's 5.5 m for 8 s at most, the Frozen Orb's trail; the vault's falls, as its
+    // skills ask them, vaultAt, vaultLine, vaultRing: each patch still once in 4 s)
+    else if (op === 's') { if (!G.zone?.act6 || !near(a[0], a[1]) || !(a[2] > 0 && a[2] <= 6) || !(a[3] > 0 && a[3] <= 8)) return reject('ice'); slushAt(a[0], a[1], a[2], a[3]); }
+    else if (op === 'v') { if (!G.zone?.act6 || !near(a[0], a[1]) || !(a[2] >= 0 && a[2] <= 4)) return reject('ice'); vaultAt(a[0], a[1], a[2], clamp(a[3] | 0, 1, 3)); }
+    else if (op === 'vl') { if (!G.zone?.act6 || !near(a[0], a[1]) || !near(a[2], a[3]) || Math.hypot(a[2] - a[0], a[3] - a[1]) > 14 || !(a[4] > 0 && a[4] <= 2.5)) return reject('ice'); vaultLine(a[0], a[1], a[2], a[3], a[4]); }
+    else if (op === 'vr') { if (!G.zone?.act6 || !near(a[0], a[1]) || !(a[2] > 0 && a[2] <= 8)) return reject('ice'); vaultRing(a[0], a[1], a[2]); }
     else return reject('bad');
   } else if (type === 'rv') {
     // a revive: the reviver (this guest) has stood by another hero, down a moment, as long as a raise takes (the host's

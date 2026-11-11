@@ -35,6 +35,7 @@ import { SHARDS, setShards } from './forge.js';
 import { wetAt, BED_DRY, TIDE_STEP } from '../world/genlib.js';
 import { tidal, inBay } from '../world/gen5.js';
 import { clamp } from '../core/util.js';
+import { NET, MIRROR } from '../net/state.js';
 
 const TOP8 = 8, MAXK = 12, PH = ['low', 'flood', 'high', 'ebb'], GRACE = 6, WAVE_T = 25, ISLE = 9;
 const N4 = [1, -1, 0, 0], M4 = [0, 0, 1, -1];
@@ -389,10 +390,15 @@ function dryNear(z, x, zz) {
 // slushAt(x, z, r, t): every tidal cell whose centre lies within r is held at wading for t s whatever the level. The calls
 // are kept as they were made ({ id, x, z, r, end }); the grid follows them in batches at most every 0.25 s (one map.change
 // each, so with the shards no more than four map.ver bumps a second). A cell that thaws deep under her or across her only
-// way out is held by the tide's own lane (her 6 s of grace, then the wash-out), as a step would
-export function slushAt(x, zz, r, t) {
+// way out is held by the tide's own lane (her 6 s of grace, then the wash-out), as a step would. (Co-op, on a guest: its
+// own hero's slush, o.mine or MIRROR.hero, is asked of the host too (net/coop.js 'ic' 's'), whose cells6 on 'i' are the
+// party's; the guest keeps its own call meanwhile, through the host's next 'i' or two: cells6Apply)
+export function slushAt(x, zz, r, t, o = {}) {
   const z = G.zone, T = z?.tide; if (!T?.sl || !z.L?.bed || !(t > 0)) return null;
+  const mine = NET.mode === 'guest' && (o.mine || MIRROR.hero);
+  if (mine) NET.h.iceOp?.('s', x, zz, r, t);
   const sl = T.sl, c = { id: ++sl.id, x, z: zz, r, end: sl.now + t };
+  if (mine) c.mine = sl.now;
   sl.calls.push(c); sl.dirty = true; TIDE_LOG.slush++;
   return c;
 }
@@ -431,13 +437,14 @@ export function cells6(z) {
   let k = 0; for (const d of SHARDS) k = (k * 31 + d.id) | 0; for (const c of sl?.calls || []) k = (k * 37 + c.id) | 0;
   return { key: k + ':' + s.length + ':' + l.length, d: { s, l } };
 }
-// a guest: the host's shards and slush as its own, with their time left, in one batch
+// a guest: the host's shards and slush as its own, with their time left, in one batch (and its own slush of the last
+// 1.5 s, which the host may not have had yet when it sent these: slushAt)
 export function cells6Apply(z, d) {
   const T = z?.tide;
   if (d?.s) setShards(d.s);
   if (!T?.sl || !d?.l) return;
-  const sl = T.sl;
-  sl.calls = d.l.map(([x, zz, r, t]) => ({ id: ++sl.id, x, z: zz, r, end: sl.now + t / 10 }));
+  const sl = T.sl, keep = sl.calls.filter((c) => c.mine != null && sl.now - c.mine < 1.5 && c.end > sl.now);
+  sl.calls = d.l.map(([x, zz, r, t]) => ({ id: ++sl.id, x, z: zz, r, end: sl.now + t / 10 })).concat(keep);
   sl.dirty = true; sl.t = 0;
 }
 
