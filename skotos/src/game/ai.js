@@ -9,7 +9,7 @@ import { LIGHT, lightOn, shroudOn, lightAt, lampAt, lampNear, snuffLamp, isLamp,
 import { setFluePumping, startFlues, flues, fluePeriod, setFlueHeat } from './forge.js';
 import { refreshStats } from './stats.js';
 import { fire, area } from './projectiles.js';
-import { teleCircle, teleCone, teleLine, killTele, sparks, glowBurst, explosion, ring, bolt, P, puff, decal, flash, splash as splashFx, iceShards, freezeCrystals, breath, fireStream } from '../gfx/fx.js';
+import { teleCircle, teleCone, teleLine, killTele, sparks, glowBurst, explosion, ring, bolt, P, puff, decal, flash, splash as splashFx, iceShards, freezeCrystals, breath, fireStream, footprint } from '../gfx/fx.js';
 import { shake, addLight, removeLight, R, setAtmosphere } from '../gfx/gfx.js';
 import { drape } from '../world/build.js';
 import { emit, on } from '../ui/bus.js';
@@ -1003,6 +1003,11 @@ export function unseenTick(a, dt, pl) {
   a.unseenNow = !solid;
   const v = solid ? 0 : 0.85;
   a.dissolve = damp(a.dissolve ?? v, v, 9, dt);
+  // (its wet footprints darken ahead of it while it walks unseen, one each 0.4 s, seen only within 8 m of a hero)
+  if (a.unseenNow && !a.dead && G.player && (a.x - G.player.x) ** 2 + (a.z - G.player.z) ** 2 < 64) {
+    const moved = Math.hypot(a.x - (a.fpX ?? a.x), a.z - (a.fpZ ?? a.z));
+    if ((a.fpT = (a.fpT ?? 0) - dt) <= 0 && moved > 0.25) { a.fpT = 0.4; a.fpS = -(a.fpS || 1); footprint(a.x + Math.cos(a.rot) * 0.12 * a.fpS, a.z - Math.sin(a.rot) * 0.12 * a.fpS, a.rot); a.fpX = a.x; a.fpZ = a.z; }
+  }
   const av = a.avatar; if (!av?.setDissolve) return;
   if (!a.burnSet) { a.burnSet = true; av.mat?.userData?.u?.uBurn?.value?.set?.(0, 0, 0); }
   av.setDissolve(a.dissolve < 0.02 ? 0 : a.dissolve);
