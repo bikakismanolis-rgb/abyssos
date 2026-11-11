@@ -4596,7 +4596,7 @@ const S = {
       const G = window.__G, pl = G.player, A = await import('/src/game/actors.js'), C = await import('/src/game/cold.js');
       // (no life trap here: it tops her up at once; a deep pool instead, and the blow read as it lands)
       window.__immortal = false; pl.hpMax = 60000; pl.hp = pl.hpMax; pl.x = v.x; pl.z = v.z; C.resetCold();
-      const B = await import('/src/ui/bus.js'); window.__hit6 = null; B.on('hurt', (k) => { if (!window.__hit6) window.__hit6 = { k, cold: C.COLD.v }; });
+      const B = await import('/src/ui/bus.js'); window.__hit6 = null; B.on('hurt', (k) => { if (!window.__hit6 || (window.__hit6.cold < 9.9 && C.COLD.v >= 9.9)) window.__hit6 = { k, cold: C.COLD.v }; }); // (the icicle's, not a blow of the monster beside her that may land first)
       // (r 0: the cell under her or one beside it; she and the monster then stand where its white circle fell)
       const n = window.__act6.vaultAt(v.x, v.z, 0, 1), again = window.__act6.vaultAt(v.x, v.z, 0, 1);
       const { FX } = await import('/src/gfx/fx.js'), tl = (FX.teles || []).filter((q) => q.alive).pop(), c = tl ? { x: tl.m.position.x, z: tl.m.position.z } : v;

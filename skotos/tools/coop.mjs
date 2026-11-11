@@ -26,7 +26,9 @@ const pages = [];
 // window.__roomViewer(v) makes its sends refused from then on. use('user'): profiles 'Name-<id>', canEdit() false,
 // can('data.write') true but for a Viewer
 let HUB = null;
-if (name === 'room' || name === 'access') {
+// (NET=room: any scenario on the fake room, as 'room' and 'access' always are; budget6 on the claude.ai artifact's wire)
+const ROOMNET = name === 'room' || name === 'access' || process.env.NET === 'room';
+if (ROOMNET) {
   const { Hub } = await import('./net/fakeroom.mjs');
   HUB = new Hub({ loss: name === 'room' ? +(process.env.LOSS || 0.05) : 0, lag: 30, topics: { s: 'interact', w: 'interact', i: 'interact', f: 'interact', c: 'interact' } });
   const state = new Map();
@@ -143,7 +145,7 @@ if (process.env.NET === 'supa' && name !== 'room' && name !== 'access') {
     window.__skotosSupa = { url: 'https://fake.supabase.co', anonKey: 'k', stamped: true, createClient: client, economy: econ ? undefined : false };
   }, process.env.ECON !== '0');
 }
-const NETQ = name === 'room' || name === 'access' ? '' : SUPA ? 'net=supabase&' : 'net=local&';
+const NETQ = ROOMNET ? '' : SUPA ? 'net=supabase&' : 'net=local&';
 async function open(peer, q) {
   const pg = await ctx.newPage();
   // (THROTTLE=<n>: the page's CPU n times slower, as a busy phone, or four pages on a few cores)
@@ -1553,8 +1555,8 @@ const SC = {
     const lit1 = await until(host, (s) => window.__act6.lightAt(s.x + 2.5, s.z), spot, 15000, 'guest pool');
     ok(!lit0 && lit1, 'a guest\'s light pool (lp: the wolf\'s lantern) lifts the dark 2.5 m off it on the host', { lit0, lit1 });
     await ev(g, async () => { (await import('/src/game/light.js')).removeLightPool('wolf6t'); window.__act6.FIRE.r = 4.5; window.__act6.FIRE.state = 'full'; });
-    // a host Lampbearer drinks the guest's ring
-    await ev(host, async (s) => { const A = await import('/src/game/actors.js'), G = window.__G; const f = G.zone.map.nearestFloor(s.x + 8, s.z, 3); const a = A.spawnMonster('lampbearer', f.x, f.z, { level: 36 }); G.actors.push(a); a.wake = null; a.dormant = false; a.aggro = true; a.cd = 0; a.hp = a.hpMax = 1e7; window.__lb6 = a; }, spot);
+    // a host Lampbearer drinks the guest's ring (put in its sight, 4-8 m off: its Drink needs both)
+    await ev(host, async (s) => { const A = await import('/src/game/actors.js'), G = window.__G; const m = G.zone.map; let f = null; for (let k = 0; k < 24 && !f; k++) { const q = m.nearestFloor(s.x + Math.sin(k * 0.79) * 6, s.z + Math.cos(k * 0.79) * 6, 1.5); if (q && Math.hypot(q.x - s.x, q.z - s.z) > 4 && Math.hypot(q.x - s.x, q.z - s.z) < 8 && m.los(q.x, q.z, s.x, s.z)) f = q; } f ||= m.nearestFloor(s.x + 8, s.z, 3); const a = A.spawnMonster('lampbearer', f.x, f.z, { level: 36 }); G.actors.push(a); a.wake = null; a.dormant = false; a.aggro = true; a.cd = 0; a.hp = a.hpMax = 1e7; window.__lb6 = a; }, spot);
     const drank = await until(g, () => window.__act6.FIRE.r < 3.9, null, 30000, 'drink');
     const gr = await ev(g, () => ({ r: window.__act6.FIRE.r, drinks: window.__NET.S.drinks?.size }));
     ok(drank, 'a host Lampbearer\'s Drink drains the guest\'s own ring (\'dr\')', { guest: gr, log: await ev(host, () => ({ drink: window.__act6.AI_LOG['lampbearer:drink'] || 0, tell: window.__act6.AI_LOG['lampbearer:drinkTell'] || 0 })) });
@@ -1576,6 +1578,130 @@ const SC = {
     await ev(host, async () => { const A = await import('/src/game/actors.js'), G = window.__G, pl = G.player; window.__act6.FIRE.r = 4.5; window.__act6.FIRE.state = 'full'; const f = G.zone.map.nearestFloor(pl.x + 2, pl.z, 2); const a = A.spawnMonster('faded', f.x, f.z, { level: 36 }); G.actors.push(a); a.aggro = false; a.speed = 0; a.hp = a.hpMax = 1e7; window.__fd6 = a; });
     const fdOk = await until(g, async () => { const N = await import('/src/net/coop.js'); for (const a of N.S.pup.values()) if (a.kind === 'faded') return a.hostLit && !a.unseenNow; return false; }, null, 20000, 'faded lit');
     ok(fdOk, 'a Faded lit on the host (bit 15) is drawn solid on the guest');
+    // a guest's own slush and falls are the host's ('ic' 's', 'vr'): they reach the host and come back on 'i', and the
+    // guest's slush is not lost meanwhile
+    const vs = await ev(host, () => { const z = window.__G.zone, v = (z.L.spots?.vaults || [])[0]; if (!v) return null; const f = z.map.nearestFloor(v.x, v.z, 4); return f && { x: f.x, z: f.z }; });
+    ok(!!vs, 'a vault patch for the guest', vs);
+    if (vs) {
+      await ev(g, (s) => { const pl = window.__G.player; pl.x = s.x; pl.z = s.z; }, vs);
+      ok(await until(host, async (s) => { const N = await import('/src/net/state.js'), a = N.NET.remotes[0]; return a && Math.hypot(a.x - s.x, a.z - s.z) < 2; }, vs, 20000, 'stand-in'), 'the guest\'s stand-in by the vault on the host');
+      const h0 = await ev(host, () => ({ falls: window.__act6.shardLog.falls, slush: window.__act6.tide.LOG.slush }));
+      const g0 = await ev(g, async () => { const M = (await import('/src/net/state.js')).MIRROR, A = window.__act6, pl = window.__G.player; const f0 = A.shardLog.falls; M.hero = true; try { A.vaultRing(pl.x, pl.z, 3); A.tide.slushAt(pl.x, pl.z, 5.5, 8); } finally { M.hero = false; } return { falls: A.shardLog.falls - f0, mine: window.__G.zone.tide.sl.calls.filter((c) => c.mine != null).length }; });
+      ok(g0.falls === 0 && g0.mine === 1, 'on the guest: no icicle of its own, its slush kept as its own meanwhile', g0);
+      const hf = await until(host, (h0) => window.__act6.shardLog.falls > h0.falls && window.__act6.tide.LOG.slush > h0.slush, h0, 10000, 'guest ice ops');
+      const hs = await ev(host, ([h0, s]) => ({ falls: window.__act6.shardLog.falls - h0.falls, near: window.__G.zone.tide.sl.calls.some((c) => Math.hypot(c.x - s.x, c.z - s.z) < 1.5 && c.r > 5) }), [h0, vs]);
+      ok(hf && hs.near, 'the guest\'s Quake ring and Frost Nova slush done on the host (\'ic\' \'vr\', \'s\')', hf && hs.near ? hs : { ...hs, why: await ev(host, () => window.__NET.S.stats.why), gev: await ev(g, () => window.__NET.S.ev.map((e) => e.slice(0, 4))), act6: await ev(host, () => !!window.__G.zone.act6) });
+      const back = await until(g, (s) => window.__act6.SHARDS.length > 0 && window.__G.zone.tide.sl.calls.some((c) => c.mine == null && Math.hypot(c.x - s.x, c.z - s.z) < 1.5), vs, 10000, 'shards back');
+      ok(back, 'the host\'s shards and the slush come back to the guest on \'i\'', await ev(g, () => ({ shards: window.__act6.SHARDS.length, calls: window.__G.zone.tide.sl.calls.map((c) => [c.x, c.z, c.r, c.mine ?? null]) })));
+    }
+  },
+
+  // Act VI's Budget (act6-contract, Net): a party of four in the Keels (hearth 3) under the vault, a Mage host and a Mage
+  // guest casting Frost Novas (their icicles and shards, the slush on 'i'), the others striking the host's monsters, for
+  // SEC seconds (20). Counted on every page: what it says by topic (bytes, messages a second) and its presence; on the
+  // host its snapshots' bytes and ch.room() at each (econ channels only); each guest's presence on the host and its
+  // relayed copy on another guest; NET=supa, the project's events a second, relayStats and the day caps (bytes a second
+  // of the project and of the busiest user: the minutes of a party of four a 40 MiB day). ZONE=forest for the same party
+  // where nothing of Act VI is sent (the 'before')
+  async budget6() {
+    const Z = process.env.ZONE || 'drained', SEC = +(process.env.SEC || 20), six = Z === 'drained';
+    const { host, guests } = await party(Z, 3, { lvl: 36, glvl: 36, hcls: 'mage', hq: six ? '&quest=31' : '' });
+    const all = [host, ...guests];
+    await ev(host, () => { const z = window.__G.zone; for (const p of z.packs) p.spawned = true; for (const a of window.__G.actors) if (a.team === 'foe' && !a.prop) { a.hp = 0; a.dead = true; a.remove?.(); } });
+    for (const pg of all) await ev(pg, () => { window.__immortal = true; });
+    // the Keels: hearth 3 (below the ice), else where the host stands
+    // (under the vault patch nearest the hearth: the vault hangs over some clearings and not others, layout by layout)
+    const at = await ev(host, (six) => { const z = window.__G.zone, p = window.__G.player, h = six && z.L.spots?.hearths?.find((q) => q.k === 3); const v = h && (z.L.spots.vaults || []).slice().sort((a, b) => Math.hypot(a.x - h.x, a.z - h.z) - Math.hypot(b.x - h.x, b.z - h.z))[0]; const c = v || (h ? { x: h.x + 2, z: h.z } : p), f = z.map.nearestFloor(c.x, c.z, 6); return { x: f.x, z: f.z, keels: !!h, vault: !!v, fromHearth: v && h ? +Math.hypot(v.x - h.x, v.z - h.z).toFixed(1) : null }; }, six);
+    ok(!six || at.keels, 'the Keels\' hearth (3) found', at);
+    await place(host, at.x, at.z);
+    await sleep(600);
+    for (const [i, g] of guests.entries()) await place(g, at.x + Math.sin(i * 2.1) * 2.5, at.z + Math.cos(i * 2.1) * 2.5);
+    // (the host holds a guest to a run along the floor but for the jumps the game makes itself: an entry by the host, a
+    // rise. The test's jump is told to the host as an entry (heldMove: P.mzk), so their stand-ins stand by it at once.
+    // What they ask is weighed where the host has them)
+    // (told again each 2 s while any stands elsewhere: a sample from before the jump may come after and take the entry)
+    const entry = () => ev(host, () => { for (const P of window.__NET.S.peers.values()) if (P.role === 'guest') P.mzk = null; });
+    await sleep(1200); await entry();
+    // (and where the guests are now: the black water may have moved one off a cell closing under her)
+    let caught = false, gp = [], rp = [];
+    for (const t1 = Date.now(); Date.now() - t1 < 60000 && !caught; await sleep(500)) {
+      gp = []; for (const g of guests) gp.push(await ev(g, () => ({ x: window.__G.player.x, z: window.__G.player.z })));
+      rp = await ev(host, async () => (await import('/src/net/state.js')).NET.remotes.map((a) => ({ x: a.x, z: a.z })));
+      caught = rp.length === 3 && gp.every((q) => rp.some((a) => Math.hypot(a.x - q.x, a.z - q.z) < 2) && Math.hypot(q.x - at.x, q.z - at.z) < 10);
+      if (!caught && (Date.now() - t1) % 2000 < 500) await entry();
+    }
+    ok(caught, 'the guests\' stand-ins with the host in the Keels, where the guests are', caught ? undefined : { guests: gp, standIns: rp, at, peers: await ev(host, () => [...window.__NET.S.peers.values()].map((P) => ({ peer: P.peer, role: P.role, zk: P.zk, st: P.state && [P.state.x, P.state.z], buf: P.buf?.length, last: P.buf?.[P.buf.length - 1] && [P.buf[P.buf.length - 1].x, P.buf[P.buf.length - 1].z], actor: P.actor && [P.actor.x, P.actor.z] }))), hostHeard: await ev(host, () => { const S = window.__NET.S; return { jumps: S.stats.jumps, me: [window.__G.player.x, window.__G.player.z], heard: S.ch.peers().filter((q) => !q.isMe).map((q) => { const P = S.peers.get(q.peer); return { h: q.presence?.h?.slice(0, 2), same: P?.src === q.presence, presH: P?.pres?.h?.slice(0, 2), mzk: P?.mzk, zk: P?.zk, moveB: P?.moveB }; }) }; }), gsent: await Promise.all(guests.map((g) => ev(g, () => ({ zk: window.__NET.S.zoneKey, net: window.__G.zone?.netKey, h: window.__NET.S.ch.peers().find((q) => q.isMe)?.presence?.h?.slice(0, 3), pl: [window.__G.player.x, window.__G.player.z], t: window.__G.hero.stats.time })))) });
+    // the host's monsters round them (hard to kill: they fight the whole time)
+    const kinds = six ? ['lampbearer', 'gateFallen', 'gateFallenBow', 'ketling', 'faded', 'lampbearer', 'gateFallen', 'ketling', 'faded', 'gateFallen'] : ['skeleton', 'goblin', 'skeleton', 'goblin', 'skeleton', 'goblin', 'skeleton', 'goblin', 'skeleton', 'goblin'];
+    const nf = await ev(host, async ([kinds, at]) => {
+      const A = await import('/src/game/actors.js'), G = window.__G; let n = 0;
+      for (const [i, k] of kinds.entries()) { const f = G.zone.map.nearestFloor(at.x + Math.sin(i * 0.63) * 6, at.z + Math.cos(i * 0.63) * 6, 3); if (!f) continue; const a = A.spawnMonster(k, f.x, f.z, { level: 36 }); a.hp = a.hpMax = a.hpMax * 40; a.dormant = false; a.wake = null; a.aggro = true; G.actors.push(a); n++; }
+      return n;
+    }, [kinds, at]);
+    ok(nf >= 8, 'the host\'s monsters round the party', nf);
+    // the counters, on every page: what it says by topic, its presence patches; on the host ch.room() as it is asked
+    for (const pg of all) await ev(pg, () => {
+      const S = window.__NET.S, ch = S.ch, B = (v) => new TextEncoder().encode(JSON.stringify(v ?? null)).length;
+      const C = (window.__bud = { by: {}, pres: { n: 0, b: 0 }, room: [], t0: 0 });
+      C.recent = []; C.lows = [];
+      const em = ch.emit.bind(ch); ch.emit = (topic, data, o) => { const e = (C.by[topic] ||= { n: 0, b: 0 }), b = B(data); e.n++; e.b += b; C.recent.push([performance.now(), topic, b]); if (C.recent.length > 40) C.recent.shift(); return em(topic, data, o); };
+      const pr = ch.presence.bind(ch); ch.presence = (patch) => { C.pres.n++; C.pres.b += B(patch); C.lastP = patch; return pr(patch); };
+      if (ch.room) { const r0 = ch.room; ch.room = () => { const v = r0(); if (C.room.length < 4000 && /sendSnap/.test(new Error().stack)) { C.room.push(v); if (v < 2400 && C.lows.length < 6) { const t = performance.now(); C.lows.push({ v, emits: C.recent.filter((r) => t - r[0] < 450).map((r) => r[1] + ':' + r[2] + '@' + Math.round(t - r[0])) }); } } return v; }; }
+    });
+    for (const pg of guests) await ev(pg, async () => { const N = await import('/src/net/state.js'), f = N.NET.h.iceOp; window.__bud.ops = {}; N.NET.h.iceOp = (op, ...a) => { window.__bud.ops[op] = (window.__bud.ops[op] || 0) + 1; return f(op, ...a); }; });
+    await sleep(2000);
+    const zero = async () => { for (const pg of all) await ev(pg, () => { const C = window.__bud; C.by = {}; C.pres = { n: 0, b: 0 }; C.room = []; C.t0 = performance.now(); C.snaps = window.__NET.S.stats.snaps; C.snapBytes = window.__NET.S.stats.snapBytes; C.shards = window.__act6?.shardLog ? { ...window.__act6.shardLog } : null; }); };
+    await zero();
+    const e0 = supaCount(), q0 = SUPA && { bytes: SUPA.bus.srv.quota.bytes, users: [...SUPA.bus.srv.rates.values()].map((r) => r.spent) }, rs0 = SUPA ? await ev(host, () => ({ ...window.__NET.S.ch.relayStats })) : null;
+    // (a skill cast as the player would: first in the loadout, the resource full, no cooldown; aimed at the nearest foe)
+    const cast = (pg, id) => ev(pg, (id) => { const G = window.__G, h = G.hero, pl = G.player; if (pl.dead || pl.act) return 0; h.skills[id] = 5; const j = h.loadout.indexOf(id); if (j !== 0) { if (j > 0) h.loadout[j] = h.loadout[0]; h.loadout[0] = id; window.__D.emit('loadout'); } pl.res = G.stats.resMax; pl.cds.fill(0); let f = null, d = 1e9; for (const a of [...G.actors, ...(window.__NET.S.pup?.values() || [])]) if (a.team === 'foe' && !a.dead) { const q = Math.hypot(a.x - pl.x, a.z - pl.z); if (q < d) { d = q; f = a; } } window.__D.IN.events.push({ t: 'skill', i: 1, aim: f ? { x: f.x, z: f.z } : null }); return 1; }, id);
+    const nova = (pg) => cast(pg, 'nova');
+    const strike = (pg) => ev(pg, async () => { const C = await import('/src/game/combat.js'), G = window.__G; G.player.hp = G.player.hpMax; for (const a of window.__NET.S.pup.values()) if (!a.dead && a.team === 'foe' && Math.hypot(a.x - G.player.x, a.z - G.player.z) < 14) { C.damage(G.player, a, G.stats.wmax * G.stats.dmgMult * 0.2, { crit: false }); break; } });
+    // the drip soak: the guest Warden's Quakes (asked of the host: 'ic' 'vr') and the host's Meteors bring the vault down
+    const t0 = Date.now(); let casts = 0, heavy = 0, k = 0;
+    while (Date.now() - t0 < SEC * 1000) {
+      if (k % 3 === 0) { casts += await nova(host); casts += await nova(guests[1]); }
+      if (k % 6 === 1) heavy += await cast(guests[2], 'quake');
+      if (k % 9 === 4) heavy += await cast(host, 'meteor');
+      await strike(guests[0]); if (k % 6 !== 1) await strike(guests[2]);
+      k++; await sleep(400);
+    }
+    const sec = (Date.now() - t0) / 1000;
+    const per = []; for (const pg of all) per.push(await ev(pg, () => { const C = window.__bud, S = window.__NET.S, s = (performance.now() - C.t0) / 1000, by = {}; for (const [t, e] of Object.entries(C.by)) by[t] = { n: +(e.n / s).toFixed(2), b: Math.round(e.b / s) }; const r = C.room; return { by, pres: { n: +(C.pres.n / s).toFixed(2), b: Math.round(C.pres.b / s) }, snaps: S.stats.snaps - C.snaps, snapBytes: S.stats.snapBytes - C.snapBytes, s, room: r.length ? { n: r.length, min: Math.min(...r), low: r.filter((v) => v < 2400).length } : null, shards: C.shards && window.__act6.shardLog ? { falls: window.__act6.shardLog.falls - C.shards.falls, shards: window.__act6.shardLog.shards - C.shards.shards } : null, drops: S.ch.meter.tx.drops, why: S.ch.meter.tx.why }; }));
+    const H = per[0];
+    const ops = []; for (const g of guests) ops.push(await ev(g, () => window.__bud.ops));
+    console.log('     the guests\' ice asks ' + JSON.stringify(ops) + '; the host refused ' + JSON.stringify(await ev(host, () => window.__NET.S.stats.why)));
+    console.log('     ' + Z + ', ' + sec.toFixed(0) + ' s, ' + casts + ' Novas, ' + heavy + ' Quakes and Meteors; the host: ' + H.snaps + ' snapshots (' + (H.snaps / H.s).toFixed(1) + ' a second), ' + Math.round(H.snapBytes / Math.max(1, H.snaps)) + ' bytes each' + (H.shards ? '; icicles ' + H.shards.falls + ', shards ' + H.shards.shards : ''));
+    for (const [i, P] of per.entries()) console.log('     ' + (i ? 'guest ' + i : 'host   ') + ' by topic ' + JSON.stringify(P.by) + ', presence ' + P.pres.n + '/s ' + P.pres.b + ' B/s, drops ' + P.drops + (P.drops ? ' ' + JSON.stringify(P.why) : ''));
+    ok(H.snaps > 0, 'the host sent its snapshots', H.snaps);
+    if (six) ok(casts >= SEC / 3, 'the Mages cast their Novas', casts);
+    if (six) ok(H.shards && H.shards.falls >= 3, 'the vault came down round them (the drip soak: ' + heavy + ' Quakes and Meteors)', H.shards);
+    if (six && per[0].by.i) console.log('     the host\'s \'i\': ' + per[0].by.i.n + ' a second, ' + Math.round(per[0].by.i.b / Math.max(0.01, per[0].by.i.n)) + ' bytes each');
+    if (six && per[2].by.i) console.log('     the Mage guest\'s \'i\': ' + per[2].by.i.n + ' a second, ' + Math.round(per[2].by.i.b / Math.max(0.01, per[2].by.i.n)) + ' bytes each');
+    // each guest's presence on the host, and its relayed copy on another guest
+    const B = (v) => JSON.stringify(v ?? null).length;
+    const onHost = await ev(host, () => [...window.__NET.S.peers.values()].filter((P) => P.role === 'guest').map((P) => JSON.stringify(P.pres || null).length));
+    const relayed = await ev(guests[0], () => [...window.__NET.S.peers.values()].filter((P) => P.role === 'guest').map((P) => JSON.stringify(P.pres || null).length));
+    console.log('     a guest\'s presence on the host ' + onHost.join(', ') + ' bytes; its relayed copy on guest 1 ' + relayed.join(', ') + ' bytes');
+    ok(per.every((P) => !P.drops || !Object.keys(P.why).some((w) => w !== 'budget' || P.why[w] > 3)), 'no page gave up its sends (beyond a few for its own budget)', per.map((P) => P.why));
+    if (HUB) {
+      const L = HUB.log, pk = []; for (const pg of all) pk.push(+((await stats(pg)).peak || 0).toFixed(1));
+      console.log('     the room: emits ' + L.emits + ', delivered ' + L.delivered + ', presence sends ' + L.presSends + ', budget drops ' + L.budgetDrops + ', rejects ' + JSON.stringify(L.rejects) + '; each page\'s peak sends a second ' + pk.join(', '));
+      ok(L.budgetDrops === 0 && !Object.keys(L.rejects).length, 'the room never dropped or refused a send', { drops: L.budgetDrops, rejects: L.rejects });
+      ok(pk.every((v) => v <= 20), 'every page under 20 sends a second on the room (it allows ~40)', pk);
+    }
+    if (H.room) { console.log('     ch.room() at the host: ' + H.room.n + ' asks, the least ' + H.room.min + ' bytes, ' + H.room.low + ' under 2400' + (H.room.low ? '; beside the low ones, the host\'s own sends: ' + JSON.stringify(await ev(host, () => window.__bud.lows)) : '')); ok(H.room.low === 0, 'ch.room() at least 2.4 KB beside every snapshot', H.room); }
+    if (SUPA) {
+      const e1 = supaCount(), r = supaRate(e0, e1), Q = SUPA.bus.srv.quota, users = [...SUPA.bus.srv.rates.values()].map((x) => x.spent);
+      const projBs = (Q.bytes - q0.bytes) / sec, userBs = Math.max(...users.map((u, i) => (u - (q0.users[i] || 0)) / sec)), MiB = 40 * 1048576;
+      console.log('     the project: ' + Math.round(r.evs) + ' events a second (' + r.msgs.toFixed(1) + ' messages in ' + r.calls.toFixed(1) + ' calls); ' + Math.round(projBs) + ' bytes a second for the project, ' + Math.round(userBs) + ' for the busiest user: ' + (MiB / projBs / 60).toFixed(1) + ' minutes of a party of four a day (project cap), ' + (MiB / userBs / 60).toFixed(1) + ' (user cap)');
+      ok(r.evs <= 65, 'a party of four: at most 65 Realtime events a second (the diet\'s 55-65)', Math.round(r.evs));
+      const rs = await ev(host, () => ({ ...window.__NET.S.ch.relayStats }));
+      console.log('     relayStats ' + JSON.stringify(rs) + ' (before ' + JSON.stringify(rs0) + ')');
+      ok(rs.cut - (rs0?.cut || 0) === 0, 'relayStats.cut 0 over the fight (every guest\'s relayed presence within its share)', { cut: rs.cut - (rs0?.cut || 0), n: rs.n - (rs0?.n || 0) });
+      ok(relayed.length === 2 && relayed.every((b) => b <= 640), 'each guest\'s relayed presence within RELAY_PRES (640 bytes; its own, with its events, ' + onHost.join(', ') + ')', relayed);
+      results.push({ budget6: { zone: Z, evs: Math.round(r.evs), projBs: Math.round(projBs), userBs: Math.round(userBs), minProj: +(MiB / projBs / 60).toFixed(1), minUser: +(MiB / userBs / 60).toFixed(1), snapB: Math.round(H.snapBytes / Math.max(1, H.snaps)), i: per.map((P) => P.by.i || null), pres: onHost, relayed, room: H.room } });
+    }
   }
 };
 
