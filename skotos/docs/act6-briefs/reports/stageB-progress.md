@@ -94,9 +94,27 @@ One session does every lane in turn (no parallel agents); the lanes' file owners
   on the guest) and `cast6` (every new kind's body and its stand-in). Regressions: coop join, act5, world, loot, cheat,
   darkmirror, test-transport: pass.
 
+## The close (11 November)
+
+- **The Faded's footprints** (ai.js `unseenTick`, fx.js `footprint`): one each 0.4 s while unseen, moved over 0.25 m,
+  within 8 m of the hero.
+- **`skillsfx` below the ice** (`ZONE=drained`, the three classes): every skill and variant deals its damage but the War
+  Cry's (none by design). The scenario puts the hero back at her start before each cast (a Charge had left her facing a
+  wall, so no dummy stood before the Warden's last two) and reports her state with `DBG=1`.
+- **A guest's own ice below the ice** (coop.js, tide.js, forge.js, skills.js): `slushAt(x, z, r, t, { mine })` on a guest
+  asks the host too (`NET.h.iceOp('s', ...)`) and keeps its own call 1.5 s through `cells6Apply`; `vaultAt`, `vaultLine`
+  and `vaultRing` on a guest ask the host (`'v'`, `'vl'`, `'vr'`) and drop nothing on the guest's own page (`guestFall`:
+  its own hero, MIRROR.hero, or its own high water, `{ mine: true }`); the host's `guestEvent` 'ic' takes them within 28 m
+  of the guest's stand-in and the skills' sizes. The Nova's slush is `{ mine: true }` (it lands in a timer).
+- **'i' with the snapshot** (coop.js): in act-6 zones 'i' goes in the snapshot's tick just before it, only while the
+  snapshot keeps 2400 bytes of `ch.room()` (else a later one; 1.5 s at most).
+- **Scenarios:** `coop.mjs budget6` (the Budget: four in the Keels under the vault, Novas, Quakes, Meteors; `ZONE`,
+  `SEC`; on `NET=supa`, LocalTransport and `NET=room`, which the runner now takes for any scenario); `coop.mjs act6`
+  gains the guest's slush and falls through the host and back; `drips` and `act6` races fixed (above, in the report).
+- **perf6 in full** (q1, 5 cycles): pass; the terms reduced from the logged visits (`perf6Out`).
+
 ## Next
 
-- Left in B: the guest's `lit` blow option; the Faded's footprints and veil (look); Piercing Shot and the casks (check the
-  shipped projectile against the act's casks once gen6 places them); `skillsfx` in an 'under' zone; then **G2**: the
-  soaks (`carry`, `blackwater`, `drips` as soaks over time, `lure`, `names6`), `cast6` cold, `coop.mjs act6`, `darktele`,
-  `prog6`, new phone texture (none added: stand-ins), perf6 again with the real packs, regress-B.
+- Stage C: the Ketos and the Shade, balance; the soaks as long runs with its gate (a harness for Act VI, as `soak5.mjs`).
+- Still open from B: the Faded's veil (look); the guest's `lit` blow option and the 'u' interactables (stages C-D);
+  Piercing Shot and the casks once gen6 places them; the Ketos's and the Falselight's own bodies.
