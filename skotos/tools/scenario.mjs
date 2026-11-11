@@ -251,6 +251,29 @@ async function BOT5(o) {
       const cw = B.curWin;
       if (cw && (!H || H.id !== cw.id)) { if (b.phase !== cw.ph || b.dead) cw.held = true; B.curWin = null; }
       if (H) { const k = H.id, dh = +(Math.hypot(H.x - pl.x, H.z - pl.z)).toFixed(1); if (!B.win[k]) B.curWin = B.win[k] = { id: k, kind: H.kind, hp0: b.hp, hit: false, ph: b.phase, t: +B.t.toFixed(1), d0: dh, dmin: dh, act: pl.act?.name || '', len: +H.t.toFixed(1) }; const w = B.win[k]; w.dmin = Math.min(w.dmin, dh); if (b.hp < w.hp0 - 1) w.hit = true; if ((b.hpFloor > 0 && b.hp <= b.hpFloor * 1.002 + 2) || b.invuln > 0) w.held = true; }
+    } else if (o.kind === 'shade') {
+      // Act VI, the Shade (its own rules, as the hints say them): the stones kept lit and the fight inside a lit stone's pool
+      // (Lit there); a web on a stone near her cut; the troll baited under the hanging ice; her own shadow brought into a
+      // lit stone's light, across the fire from it at 5.5 m (a stone lit first if none burns); nothing struck in a turn
+      const S6 = z.act6?.shade, Hh = Lz.spots.hearth, C = Hh.fire, dl = (q) => Math.hypot(q.x - pl.x, q.z - pl.z), form = b.def?.form || 1;
+      const stones = S6?.stones || [], lit = stones.filter((q) => q.lit && !q.web).sort((p, q) => dl(p) - dl(q)), dark = stones.filter((q) => !q.lit && !q.web).sort((p, q) => dl(p) - dl(q));
+      const web = stones.filter((q) => q.web && !q.web.dead && !q.web.removed).sort((p, q) => dl(p) - dl(q))[0];
+      const touch6 = (it) => { if (dl(it) < 2.0) { if (!pl.act) it.use(); } else goal = { x: it.x, z: it.z, way: true }; };
+      if (b.turning > 0) tgt = null;
+      if (pl.act?.name === 'touch') { /* lighting a stone */ }
+      else if (form === 4) {
+        const far = lit.slice().sort((p, q) => dl(q) - dl(p))[0];
+        if (!far) { if (dark[0]) touch6(dark[0]); }
+        else { const dx = C.x - far.x, dz = C.z - far.z, l = Math.hypot(dx, dz) || 1, q = z.map.nearestFloor(C.x + dx / l * 5.5, C.z + dz / l * 5.5, 2); if (dl(q) > 1.2 && !(b.holdT > 0 && !ranged)) goal = { x: q.x, z: q.z, way: true }; }
+        if (!ranged && !(b.holdT > 0)) { if (goal) tgt = Math.hypot(b.x - pl.x, b.z - pl.z) < 3 ? b : tgt; }
+      } else {
+        if (web && dl(web) < 7 && (form === 2 || Math.hypot(b.x - pl.x, b.z - pl.z) > 5)) tgt = web.web;
+        else if (!lit.length && dark[0] && Math.hypot(b.x - pl.x, b.z - pl.z) > 6) touch6(dark[0]);
+        else if (form === 3) { const v = (Lz.spots.vaults || []).filter((q) => Math.hypot(q.x - Hh.x, q.z - Hh.z) < 13).sort((p, q) => dl(p) - dl(q))[0]; if (v && dl(v) > 1.5) goal = { x: v.x, z: v.z, way: true }; }
+        else if (lit[0] && dl(lit[0]) > 2.6 && (ranged || Math.hypot(b.x - lit[0].x, b.z - lit[0].z) > 7)) goal = { x: lit[0].x, z: lit[0].z, way: true };
+        if (dark[0] && dl(dark[0]) < 2.2 && !pl.act && Math.hypot(b.x - pl.x, b.z - pl.z) > 5) dark[0].use();
+      }
+      if (b.def?.form && b.def.form !== B.lastForm) { B.lastForm = b.def.form; (B.forms ||= []).push([b.def.form, +B.t.toFixed(1)]); }
     }
     if (!goal && tgt) { const d = Math.hypot(tgt.x - pl.x, tgt.z - pl.z), want = ranged ? 8 : tgt.radius + 1.0; if (d > want + 0.8) goal = { x: tgt.x, z: tgt.z }; else if (ranged && d < want - 3) goal = { x: pl.x * 2 - tgt.x, z: pl.z * 2 - tgt.z }; }
     const u = under(pl.x, pl.z);
@@ -2525,7 +2548,7 @@ const S = {
     const wake = await pg.evaluate(() => { const G = window.__G, z = G.zone, m = z.map; return { flag: !!G.hero.flags.ketosWake, cp: G.hero.flags.cp6?.drained, gapsShut: (z.L.gaps || []).every((gp) => gp.cells.every(([x, zz]) => !m.walkable(x + 0.5, zz + 0.5))) }; });
     await shot();
     // (every blow on her: the biggest, and what dealt it, by the code that dealt it: the Ketos's move's name in its stack)
-    await pg.evaluate(async () => { const Bus = await import('/src/ui/bus.js'), G = window.__G; window.__hurts = []; window.__hurtMax = 0; window.__hurtBy = {}; Bus.on('hurt', (f) => { const bl = window.__act6.BLOW6?.().last, by = bl && Math.abs(bl.t - G.hero.stats.time) < 0.01 ? bl.kind + 'x' + bl.mult : 'other'; window.__hurtBy[by] = Math.max(window.__hurtBy[by] || 0, +f.toFixed(3)); window.__hurtMax = Math.max(window.__hurtMax, f); window.__hurts.push(+f.toFixed(3)); if (window.__hurts.length > 40) window.__hurts.shift(); }); });
+    await pg.evaluate(async () => { const Bus = await import('/src/ui/bus.js'), G = window.__G; window.__hurts = []; window.__hurtMax = 0; window.__hurtBy = {}; Bus.on('hurt', (f) => { if (!window.BOT) return; const bl = window.__act6.BLOW6?.().last, by = bl && Math.abs(bl.t - G.hero.stats.time) < 0.01 ? bl.kind + 'x' + bl.mult : 'other'; window.__hurtBy[by] = Math.max(window.__hurtBy[by] || 0, +f.toFixed(3)); window.__hurtMax = Math.max(window.__hurtMax, f); window.__hurts.push(+f.toFixed(3)); if (window.__hurts.length > 40) window.__hurts.shift(); }); });
     // (HPTRACE=1: where its life goes, by the code that took it)
     if (process.env.HPTRACE) await pg.evaluate(() => { const b = window.__G.zone.boss; let v = b.hp; window.__src = {}; Object.defineProperty(b, 'hp', { configurable: true, get: () => v, set: (n) => { if (n < v) { const st = (new Error().stack || '').split('\n').slice(2, 9).map((l) => (l.match(/at (?:Object\.)?([\w$.]+)/) || [])[1] || '?').filter((f) => !/^(damage|set|hitPuppet)$/.test(f)).slice(0, 3).join('<'); window.__src[st] = (window.__src[st] || 0) + (v - n); } v = n; } }); });
     await pg.evaluate((o) => { window.SIMK = 4; window.__immortal = false; window.__botP = (new Function('return ' + o.src)())({ kind: 'ketos', maxT: o.maxT }).catch((e) => { window.__botErr = String(e.stack || e); }); }, { src: BOT5.toString(), maxT: +(process.env.MAXT || 900) });
@@ -2556,6 +2579,130 @@ const S = {
     const ttk = bot?.t ?? null, inBand = ttk != null && ttk >= lo && ttk <= hi, cls = process.env.CLS || 'warden';
     const pass = !seen.died && !!bot?.done && wake.flag && wake.gapsShut && win.seared && win.exposed && win.blinded && (seen.mere1 ?? 99) <= 6 && (cls !== 'warden' || (wins.length > 0 && missed === 0)) && end.hurtMax <= 0.12 && end.ketosDown && inBand && (!process.env.TTK0 || +process.env.DIFF !== 0 || ttk >= 0.6 * +process.env.TTK0);
     return { pass, ttk, band: [lo, hi], design: [120, 200], diff: +(process.env.DIFF || 1), cls, win, windows: { n: wins.length, missed, byKind: wins.reduce((o, w) => ((o[w.kind] = (o[w.kind] || 0) + 1), o), {}), misses: wins.filter((w) => !w.hit), held: wins.filter((w) => w.held).length }, wake, mere1: seen.mere1, hurtMax: end.hurtMax, end, bot: bot && { t: bot.t, deaths: bot.deaths, potions: bot.potions, low: +bot.low.toFixed(2), phases: bot.phases }, seen, setup };
+  } },
+  // (a diagnostic: the boss bot's reference build (LVL, CLS) against a still, unshrouded dummy of a boss's size and life at
+  // DIST m for SEC s: its damage a second, to read the classes against each other)
+  dps6: { q: 'auto=forest&sim=4&q=0&norender&cloud=off&lvl=' + (process.env.LVL || 40) + '&cls=' + (process.env.CLS || 'warden'), run: async (pg) => {
+    await A5.tick(pg);
+    await pg.evaluate((o) => {
+      const G = window.__G, z = G.zone, pl = G.player; window.__immortal = true;
+      for (const p of z.packs) p.spawned = true; for (const a of z.actors) if (a.team === 'foe') { a.dead = true; a.remove(); }
+      const f = z.map.nearestFloor(pl.x + o.dist, pl.z, 3), m = window.__D.spawnMonster('barrowLord', f.x, f.z, { level: 41 });
+      m.hp = m.hpMax = 1e8; m.status.stun = 9999; m.awake = true; m.boss = true; m.def = Object.assign({}, m.def, { ai: 'node' }); m.hand = m;
+      G.actors.push(m); z.boss = m; window.__dum6 = m;
+    }, { dist: +(process.env.DIST || 6) });
+    await pg.evaluate((o) => { window.SIMK = 4; window.__botP = (new Function('return ' + o.src)())({ kind: 'dummy', maxT: o.sec }).catch((e) => { window.__botErr = String(e.stack || e); }); }, { src: BOT5.toString(), sec: +(process.env.SEC || 20) });
+    await A5.until(pg, () => window.BOT?.end || window.__botErr, 600000);
+    return await pg.evaluate(() => { const m = window.__dum6, B = window.BOT, G = window.__G; return { err: window.__botErr, t: +B.t.toFixed(1), dealt: Math.round(m.hpMax - m.hp), dps: Math.round((m.hpMax - m.hp) / Math.max(1, B.t)), statDps: Math.round(G.stats.dps), life: Math.round(G.stats.lifeMax), cls: G.hero.cls }; });
+  } },
+  // Act VI: the Shade of the Gate. FORMS=1 (or no bot): its relay struck through by hand: woken as she comes into the
+  // Hearth; at 75, 50 and 25% its floor and 2.5 s turn, then the next form in the same frame (one G.bossActor every frame
+  // of every swap, never two boss actors, never none: watched each animation frame), form 4 her class's body; a Light-web
+  // on a lit stone takes its pool; the Snuff, the Crown, the Roar, the Lunge and an answer each seen; the Flare after 40 s
+  // unlit; a death in form 3 back to form 3 at half its life; its death writes shadeDown and drops its first-kill
+  // legendary once (legKey). Else the boss bot fights it (LVL 40, CLS): TTK=lo,hi (150,480), the design's 240-420;
+  // form 4's time against its 55-110 s on Warden; LOST=7 with every named lamp lit; DIFF=0 with TTK0 Wanderer at 60%
+  shade: { q: 'auto=bottom&sim=4&q=0&norender&cloud=off&lvl=' + (process.env.LVL || 40) + '&diff=' + (process.env.DIFF || 1) + '&cls=' + (process.env.CLS || 'warden') + '&' + A5.url('toldChild') + ',act5,tam6,call6,coal6,ketosWake,ketosDown,blackLamp0,blackLamp1,blackLamp2', run: async (pg, shot) => {
+    await A5.tick(pg);
+    const setup = await pg.evaluate(async (lost) => {
+      const G = window.__G, z = G.zone, S = z.act6?.shade, H = z.L.spots.hearth;
+      window.__immortal = true;
+      if (!S || !H) return { err: 'no hearth fight', mode: z.L.mode };
+      if (lost) { G.hero.flags.lost6 = ['galini', 'twins', 'kranea', 'psamathe', 'sailor', 'asger', 'leif']; }
+      // (one G.bossActor every frame: counted each animation frame from here)
+      window.__bossWatch = { frames: 0, none: 0, two: 0, kinds: [] };
+      const watch = () => { const W = window.__bossWatch, zz = window.__G.zone; if (zz?.act6?.shade && zz.boss && !zz.boss.dead && zz.boss.awake) { W.frames++; const n = zz.actors.filter((a) => a.boss && !a.dead && !a.removed && a.def?.legKey === 'shade').length; if (n === 0) W.none++; if (n > 1) W.two++; if (window.__G.bossActor !== zz.boss) W.bar = (W.bar || 0) + 1; const k = zz.boss.kind; if (W.kinds[W.kinds.length - 1] !== k) W.kinds.push(k); } requestAnimationFrame(watch); };
+      requestAnimationFrame(watch);
+      const st0 = S.stones[0], g = Math.atan2(st0.x - H.x, st0.z - H.z), f = z.map.nearestFloor(st0.x + Math.sin(g) * 1.8, st0.z + Math.cos(g) * 1.8, 3);
+      G.player.x = f.x; G.player.z = f.z;
+      return { mode: z.L.mode, stones: S.stones.length, niches: S.niches.length, spot: z.bossSpot };
+    }, !!process.env.LOST);
+    if (setup.err) return { pass: false, setup };
+    await A5.until(pg, () => window.__G.zone.boss?.awake, 60000);
+    const woke = await pg.evaluate(() => { const G = window.__G, b = G.zone.boss; return { kind: b.kind, bar: G.bossActor === b, cp: G.hero.flags.cp6?.bottom, max: G.zone.act6.shade.max, lvl: b.level }; });
+    await shot();
+    if (!process.env.BOT) {
+      const out = await pg.evaluate(async () => {
+        const G = window.__G, z = G.zone, S = z.act6.shade, L = window.__act6.AI_LOG, W = await import('/src/game/world.js'), r = {};
+        const wait = (s) => new Promise((ok) => { const t0 = G.hero.stats.time, w0 = performance.now(); const f = () => (G.hero.stats.time - t0 >= s || performance.now() - w0 > s * 1000 + 15000 ? ok() : setTimeout(f, 30)); f(); });
+        for (const it of S.stones) W.light6(z, it, true);
+        const lg = (k) => L['shade1:' + k] || L['shade2:' + k] || L['shade3:' + k] || L['shade4w:' + k] || L['shade4r:' + k] || L['shade4m:' + k] || 0;
+        await wait(24); r.f1 = { crown: L['shade1:crown'] || 0, snuff: L['shade1:snuff'] || 0, snuffed: L['shade1:snuffed'] || 0, stonesLit: S.stones.filter((q) => q.lit).length };
+        // (its time served and its thing done (formT, gate), then its life to the threshold; first the floor without the thing
+        // done: it holds there)
+        const down = async (to) => { const b = z.boss; b.formT = 999; b.gate = true; b.hp = Math.max(1, S.max * to); await wait(0.2); };
+        { const b = z.boss; b.formT = 999; b.gate = false; b.hp = S.max * 0.749; await wait(0.6); r.gateHold = { turning: b.turning > 0, kind: z.boss.kind, floor: (L['shade1:floor'] || 0) > 0 }; }
+        await down(0.749); r.turn1 = { turning: +(z.boss.turning || 0).toFixed(1), inv: z.boss.invuln > 0, kind: z.boss.kind };
+        await wait(3); r.f2 = { kind: z.boss.kind, hp: +(z.boss.hp / S.max).toFixed(3), bar: G.bossActor === z.boss };
+        // (a young form: a blow of 30% of its life held to its line, just under the threshold it came in at)
+        { const C = await import('/src/game/combat.js'); C.damage(G.player, z.boss, S.max * 0.3, {}); r.line = +(z.boss.hp / S.max).toFixed(3); }
+        for (const it of S.stones) W.light6(z, it, true);
+        await wait(20); r.webs = { web: L['shade2:web'] || 0, webbed: L['shade2:webbed'] || 0, onStone: S.stones.filter((q) => q.web).length, poolGone: S.stones.filter((q) => q.web && q.lightR === 0).length };
+        await down(0.499); await wait(3); r.f3 = { kind: z.boss.kind, thunder: (z.boss.affixes || []).includes('thunder') };
+        await wait(16); r.f3moves = { slam: (L['shade3:vaultSlam'] || 0) + (L['shade3:vaultSlamIce'] || 0), ice: L['shade3:vaultSlamIce'] || 0, roar: L['shade3:roar'] || 0, iced: L['shade3:iced'] || 0 };
+        await down(0.249); await wait(3); r.f4 = { kind: z.boss.kind, cls: G.hero.cls, stonesLit: S.stones.filter((q) => q.lit).length };
+        // her skills, answered
+        for (let i = 0; i < 4; i++) { window.__D.emit('skillUsed', 1, { warden: 'whirl', ranger: 'multi', mage: 'fireball' }[G.hero.cls], null); await wait(4); }
+        await wait(10);
+        r.f4moves = Object.fromEntries(Object.entries(L).filter(([k]) => k.startsWith('shade4') && /lunge|answer|flare|handRise/.test(k)));
+        await wait(36); r.flare = lg('flare');
+        // a death in form 4: back to form 3 at half its life, by the Gate ring
+        window.__immortal = false; G.player.hp = 0; G.player.dead = true;
+        await wait(4); r.reset = { kind: z.boss.kind, hold: z.boss.holdWake, hp: +(z.boss.hp / S.max).toFixed(3), retry: G.shadeRetry };
+        return r;
+      });
+      // (up again, back into the Hearth: form 3 wakes; struck to its end: shadeDown, one legendary)
+      const fin = await pg.evaluate(async () => {
+        const G = window.__G, z = G.zone, S = z.act6.shade, H = z.L.spots.hearth;
+        const wait = (s) => new Promise((ok) => { const t0 = G.hero.stats.time, w0 = performance.now(); const f = () => (G.hero.stats.time - t0 >= s || performance.now() - w0 > s * 1000 + 15000 ? ok() : setTimeout(f, 30)); f(); });
+        window.__immortal = true; G.player.dead = false; G.player.hp = G.player.hpMax; if (G.panel) window.__D.closePanel();
+        const f = z.map.nearestFloor(H.x + 6, H.z, 3); G.player.x = f.x; G.player.z = f.z;
+        await wait(3);
+        const r = { woke: z.boss.awake, kind: z.boss.kind };
+        const legs0 = G.hero.flags.legFrom_shade;
+        z.boss.formT = 999; z.boss.gate = true; z.boss.hp = Math.max(1, S.max * 0.251); await wait(0.3); z.boss.hp = S.max * 0.249; await wait(3.5);
+        const b = z.boss; r.f4 = b.kind; b.hpFloor = 0; const C = await import('/src/game/combat.js'); C.damage(G.player, b, b.hp + 10, {}); await wait(3);
+        r.dead = b.dead; r.flag = !!G.hero.flags.shadeDown; r.leg = !legs0 && !!G.hero.flags.legFrom_shade;
+        r.drops = G.pickups.filter((p) => p.kind === 'item' && p.item?.leg === 'shadeRing').length;
+        r.bossesLeft = z.actors.filter((a) => a.boss && !a.dead && !a.removed).length;
+        return r;
+      });
+      const W = await pg.evaluate(() => window.__bossWatch);
+      await shot();
+      const r = out, okF = r.f2?.kind === 'shade2' && r.f3?.kind === 'shade3' && /^shade4[wrm]$/.test(r.f4?.kind || '') && r.f4.kind === { warden: 'shade4w', ranger: 'shade4r', mage: 'shade4m' }[r.f4.cls];
+      const pass = woke.bar && okF && !r.gateHold.turning && r.gateHold.floor && r.gateHold.kind === 'shade1' && r.line > 0.72 && r.line < 0.75 && r.turn1.inv && W.none === 0 && W.two === 0 && !(W.bar > 2) && r.f3.thunder && r.f4.stonesLit === 0 && r.reset.kind === 'shade3' && Math.abs(r.reset.hp - 0.5) < 0.01 && fin.dead && fin.flag && fin.leg && fin.bossesLeft === 0;
+      return { pass, setup, woke, ...r, fin, watch: W };
+    }
+    await pg.evaluate(async () => { const Bus = await import('/src/ui/bus.js'), G = window.__G, W = await import('/src/game/world.js'), z = G.zone; for (const it of z.act6.shade.stones) W.light6(z, it, true); window.__hurtMax = 0; window.__hurtBy = {}; Bus.on('hurt', (f) => { if (!window.BOT) return; const bl = window.__act6.BLOW6?.().last, by = bl && Math.abs(bl.t - G.hero.stats.time) < 0.01 ? bl.kind + 'x' + bl.mult : 'other'; window.__hurtBy[by] = Math.max(window.__hurtBy[by] || 0, +f.toFixed(3)); window.__hurtMax = Math.max(window.__hurtMax, f); if (f > 0.12 && (window.__bigHurt ||= []).length < 12) { const p = G.player; window.__bigHurt.push({ t: +G.hero.stats.time.toFixed(2), f: +f.toFixed(3), bl, hpMax: Math.round(p.hpMax), buffs: Object.keys(p.buffs || {}).filter((k) => p.buffs[k] > 0), boss: G.zone.boss?.kind, bmv: G.zone.boss?.move?.id || null, st: f > 0.15 ? new Error().stack.split('\n').slice(2, 9).map((l) => l.trim().replace(/https?:\/\/[^/]+/, '')).join(' | ') : undefined }); } }); });
+    // (a blow is counted from the bot's start: before it puts on its build the hero is the page's naked one, 860 life for a
+    // Mage at L40 against the build's 2 894, and a blow then reads three times its share)
+    // (per form: the time and the life lost in each state, Lit / in light or Revealed / Shrouded, frame by frame)
+    if (process.env.SHDMG) await pg.evaluate(() => { const G = window.__G, F = window.__act6, D = window.__shDmg = {}; let last = null; const tick = () => { const b = G.zone?.boss; if (b && b.def?.form && !b.dead) { const S6 = G.zone.act6.shade, mx = S6.max || b.hpMax, k = (b.vulns?.lit > 0) ? 'lit' : (b.revealed > 0 || F.lightAt(b.x, b.z, { pad: b.radius * 0.5 })) ? 'rev' : 'sh', f = D[b.def.form] ||= { lit: [0, 0], rev: [0, 0], sh: [0, 0] }, t = G.hero.stats.time; if (last && last.id === b.id) { f[k][0] += t - last.t; f[k][1] += Math.max(0, (last.hp - b.hp) / mx); } last = { id: b.id, t, hp: b.hp }; } requestAnimationFrame(tick); }; requestAnimationFrame(tick); });
+    await pg.evaluate((o) => { window.SIMK = 4; window.__immortal = false; window.__botP = (new Function('return ' + o.src)())({ kind: 'shade', maxT: o.maxT }).catch((e) => { window.__botErr = String(e.stack || e); }); }, { src: BOT5.toString(), maxT: +(process.env.MAXT || 1200) });
+    const seen = {}, shots = new Set();
+    for (const t0 = Date.now(); Date.now() - t0 < 120 * 60000;) {
+      await pg.waitForTimeout(500);
+      const s = await pg.evaluate(() => { const G = window.__G, z = G.zone, b = z.boss, B = window.BOT; if (!b || !B) return window.__botErr ? { err: window.__botErr } : null; return { t: +B.t.toFixed(1), done: B.done, end: !!B.end, dead: b.dead, kind: b.kind, hp: +(b.hp / (z.act6.shade.max || b.hpMax)).toFixed(3), vulns: Object.keys(b.vulns || {}).filter((k) => b.vulns[k] > 0), panel: G.panel, aw: !!b.awake, hw: b.holdWake, fT: +(b.formT || 0).toFixed(1), fl: +((b.hpFloor || 0) / (z.act6.shade.max || b.hpMax)).toFixed(3), tu: +(b.turning || 0).toFixed(1), st: b.stunned || b.status?.stun || 0, gate: !!b.gate, pd: +Math.hypot(G.player.x - z.L.boss.x, G.player.z - z.L.boss.z).toFixed(1), bd: +Math.hypot(G.player.x - b.x, G.player.z - b.z).toFixed(1) }; });
+      if (!s) continue;
+      if (s.err) { console.log('shade bot error: ' + s.err.slice(0, 600)); break; }
+      if (Date.now() - (seen.logT || 0) > 30000) { seen.logT = Date.now(); console.log('shade ' + JSON.stringify(s)); }
+      if (s.end) break;
+      if (s.panel === 'dead') { seen.died = { t: s.t, kind: s.kind }; console.log('shade death ' + JSON.stringify(seen.died)); break; }
+      for (const v of s.vulns) if (!seen[v]) seen[v] = s.t;
+      if (!shots.has(s.kind)) { shots.add(s.kind); await shot(); }
+      // (form 4, a line every 2 s for the report: stones lit/webbed, her ring, the hero, the shadow and how far, lamp light under it, its hold)
+      if (process.env.F4LOG && /^shade4/.test(s.kind) && (seen.f4log ||= []).length < 90 && s.t - (seen.f4t ?? -9) >= 2) { seen.f4t = s.t; seen.f4log.push(await pg.evaluate(() => { const G = window.__G, z = G.zone, b = z.boss, pl = G.player, f = (v) => +v.toFixed(1), S6 = z.act6.shade, F = window.__act6; return [f(window.BOT.t), S6.stones.map((q) => (q.lit ? 'L' : '-') + (q.web ? 'w' : '')).join(''), f(F.ringOf(pl)), f(pl.x), f(pl.z), f(b.x), f(b.z), f(Math.hypot(b.x - pl.x, b.z - pl.z)), !!F.lightAt?.(b.x, b.z), f(b.holdT || 0), Object.keys(b.vulns || {}).filter((k) => b.vulns[k] > 0).join('|'), +(b.hp / b.hpMax).toFixed(3), f(pl.hp / pl.hpMax)]; })); }
+      if (s.done || s.dead) break;
+    }
+    if (seen.f4log) console.log('shade f4log ' + JSON.stringify(seen.f4log));
+    const bot = await pg.evaluate(() => { if (window.BOT) window.BOT.stop = true; return window.__botP; });
+    await pg.waitForTimeout(3000); await shot();
+    const end = await pg.evaluate(() => { const G = window.__G, L = window.__act6.AI_LOG; return { shadeDown: !!G.hero.flags.shadeDown, leg: !!G.hero.flags.legFrom_shade, hurtMax: +window.__hurtMax.toFixed(3), hurtBy: window.__hurtBy, bigHurt: window.__bigHurt, shDmg: window.__shDmg && Object.fromEntries(Object.entries(window.__shDmg).map(([f, o]) => [f, Object.fromEntries(Object.entries(o).map(([k, v]) => [k, [+v[0].toFixed(1), +v[1].toFixed(3)]]))])), watch: window.__bossWatch, log: Object.fromEntries(Object.entries(L).filter(([k]) => k.startsWith('shade'))) }; });
+    const [lo, hi] = (process.env.TTK || '150,480').split(',').map(Number);
+    const ttk = bot?.t ?? null, inBand = ttk != null && ttk >= lo && ttk <= hi, cls = process.env.CLS || 'warden';
+    const fs4 = (bot?.forms || []).find((f) => f[0] === 4), f4 = fs4 && ttk != null ? +(ttk - fs4[1]).toFixed(1) : null;
+    const pass = !seen.died && !!bot?.done && end.shadeDown && end.watch.none === 0 && end.watch.two === 0 && end.hurtMax <= 0.12 && inBand && (!process.env.TTK0 || +process.env.DIFF !== 0 || ttk >= 0.6 * +process.env.TTK0);
+    return { pass, ttk, band: [lo, hi], design: [240, 420], f4, f4band: [55, 110], diff: +(process.env.DIFF || 1), cls, lost: !!process.env.LOST, forms: bot?.forms, hurtMax: end.hurtMax, end, bot: bot && { t: bot.t, deaths: bot.deaths, potions: bot.potions, low: +bot.low.toFixed(2), phases: bot.phases }, seen, setup, woke };
   } },
   // The Breathing-holes, sealed in turn (q28): the three lamps lit and the ring run; the Black Breath shielded (her in its
   // cone) and a lamp lost and lit again; the first hole's Sunken climbing out of the water, the second's Icemaw and lice,
@@ -4809,6 +4956,128 @@ const S = {
     await ev(() => { window.__f6.hp = 0; window.__f6.dead = true; window.__f6.remove?.(); window.__immortal = true; });
     return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
   } },
+  // The act's two legendaries and the Shade's first-kill drop (leg6): the Lure-bone (ketosLure) doubles the light a kill in
+  // her ring gives back and halves the drains it marks; the Shade's Ring (shadeRing) keeps her ring at 1.5 m at least and
+  // takes its wearer's blows on a Shrouded foe at x0.5 for the act's Shroud; each of form 4's bodies (shade4w, shade4r,
+  // shade4m) drops the Ring on the Shade's first kill, and only on it (legKey)
+  leg6: { q: 'auto=bottom&q=0&sim=2&norender&lvl=40&cloud=off&' + A5.url('toldChild') + ',act5,tam6,call6,coal6,ketosWake,ketosDown,blackLamp0,blackLamp1,blackLamp2', run: async (pg) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    const ev = (f, a) => pg.evaluate(f, a);
+    await pg.waitForFunction(() => window.__ready && window.__G?.player && window.__G.zone?.id === 'bottom' && window.__G.mode === 'play', null, { timeout: 240000 });
+    await A5.tick(pg);
+    const r = await ev(async () => {
+      const G = window.__G, z = G.zone, pl = G.player, F = window.__act6.FIRE, L = await import('/src/game/light.js'), C = await import('/src/game/combat.js'), A = await import('/src/game/actors.js'), legs = G.stats.legs;
+      window.__immortal = true; for (const p of z.packs) p.spawned = true;
+      for (const a of z.actors) if (a.team === 'foe' && !a.prop && !a.boss) { a.dead = true; a.remove?.(); }
+      const wear = (id, on) => { if (on) legs.add(id); else legs.delete(id); };
+      const out = { under: L.lightKind() };
+      // (a kill in her ring: an unlit foe struck dead at her side)
+      const killIn = (on) => { wear('ketosLure', on); const f = A.spawnMonster('faded', pl.x + 1, pl.z, { level: 40 }); G.actors.push(f); F.r = 2; const r0 = F.r; C.damage(G.player, f, 1e9, { crit: false }); const d = +(F.r - r0).toFixed(3); wear('ketosLure', false); return { dead: f.dead, d }; };
+      out.fill = { off: killIn(false), on: killIn(true) };
+      // (a drain it marks, half: 1 m of her ring; and one it does not)
+      const drain = (on, o) => { wear('ketosLure', on); F.r = 3; const r0 = F.r; L.fireDrain(1, o); const d = +(r0 - F.r).toFixed(3); wear('ketosLure', false); return d; };
+      out.drain = { off: drain(false, { half: true }), on: drain(true, { half: true }), unmarked: drain(true, {}) };
+      // (the Ring's floor: 5 m of drain from 2 m)
+      const floor = (on) => { wear('shadeRing', on); F.r = 2; F.state = 'full'; L.fireDrain(5, {}); const r = +F.r.toFixed(3); wear('shadeRing', false); return r; };
+      out.floor = { on: floor(true), off: floor(false) }; F.r = 3; F.state = 'full';
+      // (its Shroud: a blow on an unlit foe 9 m off in the dark, with and without the Ring)
+      const far = z.map.nearestFloor(pl.x + 9, pl.z, 3), f = A.spawnMonster('faded', far.x, far.z, { level: 40 }); f.hp = f.hpMax = 1e9; G.actors.push(f);
+      F.r = 1; out.dark = !window.__act6.lightAt(f.x, f.z, { pad: f.radius * 0.5 });
+      const hit = (on) => { wear('shadeRing', on); f.revealed = 0; f.vulns = null; const h0 = f.hp; C.damage(G.player, f, 10000, { crit: false }); wear('shadeRing', false); return h0 - f.hp; };
+      out.shroud = { off: hit(false), on: hit(true), k: L.shroudK() };
+      f.dead = true; f.remove();
+      F.r = 3;
+      return out;
+    });
+    beat('below the ice', r.under === 'under', r.under);
+    beat('the Lure-bone: a kill in her ring gives back twice the light (0.2 m, 0.4 m)', r.fill.off.dead && r.fill.on.dead && Math.abs(r.fill.off.d - 0.2) < 0.02 && Math.abs(r.fill.on.d - 0.4) < 0.02, r.fill);
+    beat('the Lure-bone: a drain it marks takes half, an unmarked one all', r.drain.off > 0 && Math.abs(r.drain.on - r.drain.off / 2) < 0.01 && Math.abs(r.drain.unmarked - r.drain.off) < 0.01, r.drain);
+    beat("the Shade's Ring: her ring stops at 1.5 m; without it, it goes out", Math.abs(r.floor.on - 1.5) < 0.01 && r.floor.off < 0.5, r.floor);
+    beat("the Shade's Ring: her blows on a Shrouded foe at x0.5, not the act's Shroud", r.dark && r.shroud.off > 0 && Math.abs(r.shroud.on / r.shroud.off - 0.5 / r.shroud.k) < 0.05, r.shroud);
+    // the first-kill drop, from each of form 4's bodies (the Ring counted on the ground and in the bag)
+    const drops = [];
+    for (const kind of ['shade4w', 'shade4r', 'shade4m']) {
+      drops.push(await ev(async (kind) => {
+        const G = window.__G, z = G.zone, pl = G.player, A = await import('/src/game/actors.js'), C = await import('/src/game/combat.js'), F = G.hero.flags;
+        const ring = () => G.pickups.filter((p) => p.kind === 'item' && p.item?.leg === 'shadeRing').length + G.hero.inv.filter((it) => it?.leg === 'shadeRing').length;
+        const one = async () => { const f = z.map.nearestFloor(pl.x + 3, pl.z, 3), b = A.spawnMonster(kind, f.x, f.z, { level: 40 }); G.actors.push(b); b.hpFloor = 0; C.damage(G.player, b, b.hp * 10, { crit: false }); await new Promise((ok) => setTimeout(ok, 1500)); return b.dead; };
+        const n0 = ring();
+        F.legFrom_shade = false; F.shadeDown = false; z.act6.shade.max = null;
+        const d1 = await one(), n1 = ring() - n0, flag = !!F.legFrom_shade;
+        const d2 = await one(), n2 = ring() - n0;
+        return { kind, d1, n1, flag, d2, n2 };
+      }, kind));
+    }
+    beat("each of form 4's bodies drops the Shade's Ring on the first kill, and not again", drops.every((d) => d.d1 && d.d2 && d.n1 === 1 && d.flag && d.n2 === 1), drops);
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
+  } },
+  // The act's difficulty rows read live (diff6b, Act V's diff6 for this act): on Wanderer and on the sixth difficulty,
+  // HAZ6's coal drain, its refill in lamp light, the black water's cycle and the ice's groan, a Falselight's bait time, the
+  // Names from Above (their clock and window) and the Shroud; the Falselight's tell (a telegraph) the same on both. (The
+  // black lamps' channel, HAZ6.lampT, waits for the story's lamps: stage D)
+  diff6b: { q: 'auto=drained&q=0&sim=2&norender&lvl=36&cloud=off', run: async (pg) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    const ev = (f, a) => pg.evaluate(f, a);
+    await pg.waitForFunction(() => window.__ready && window.__G?.player && window.__G.zone?.id === 'drained' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 240000 });
+    await A5.tick(pg);
+    // (a dark spot for a Falselight, as the lure scenario finds one; its pool 1.8 m east of it)
+    const spot = await ev(async () => {
+      const G = window.__G, z = G.zone, m = z.map, pl = G.player; window.__immortal = true; pl.hpMax = 60000; pl.hp = pl.hpMax;
+      for (const p of z.packs) p.spawned = true; for (const a of z.actors) if (a.team === 'foe' && !a.prop && !a.boss) { a.hp = 0; a.dead = true; a.remove?.(); }
+      const dark = (x, zz, r) => { for (let k = 0; k < 16; k++) { const a = k / 16 * 6.28; if (window.__act6.lightAt(x + Math.sin(a) * r, zz + Math.cos(a) * r, { ring: false }) || window.__act6.fire.skyAt(x + Math.sin(a) * r, zz + Math.cos(a) * r)) return false; } return !window.__act6.lightAt(x, zz, { ring: false }); };
+      for (let k = 0; k < 8000; k++) { const x = 6 + Math.random() * (z.L.w - 12), zz = 6 + Math.random() * (z.L.h - 12); if (![0, 1.8, 3, 4.2, 9, 12].every((dx) => m.walkable(x + dx, zz)) || z.L.bed[Math.floor(zz) * z.L.w + Math.floor(x)] < 9 || !dark(x, zz, 6) || !dark(x + 4.2, zz, 6) || !dark(x + 12, zz, 3)) continue; return { x, z: zz }; }
+      return null;
+    });
+    beat('a dark spot for the Falselight', !!spot, spot);
+    if (!spot) return { pass: false, beats };
+    const rows = {};
+    for (const d of [0, 5]) {
+      const r = await ev(async ([d, spot]) => {
+        const G = window.__G, z = G.zone, pl = G.player, F = window.__act6.FIRE, L = await import('/src/game/light.js'), D = await import('/src/game/data.js'), H = D.HAZ6[d], N = window.__act6.NAMES, B = await import('/src/ui/bus.js');
+        G.hero.diff = d; const out = { d, want: { coal: H.coal, refill: H.refill, tide: H.tide, groan: H.groan, bait: H.bait, namesEvery: H.namesEvery, namesBase: H.namesBase, shroud: H.shroud } };
+        const wait = (s) => new Promise((ok) => { const t0 = G.hero.stats.time, w0 = performance.now(); const f = () => (G.hero.stats.time - t0 >= s || performance.now() - w0 > s * 1000 + 8000 ? ok() : setTimeout(f, 20)); f(); });
+        // the coal: 1 m of drain
+        F.r = 3; L.fireDrain(1, {}); out.coal = +(3 - F.r).toFixed(3);
+        // the refill: in a lamp's pool, 0.8 s from 1 m
+        pl.x = spot.x + 12; pl.z = spot.z; L.addLightPool(pl.x, pl.z, 3, Infinity, 'diff6t' + d, { lamp: true }); F.r = 1; F.state = 'dim';
+        await wait(0.05); const t0 = G.hero.stats.time, r0 = F.r; await wait(0.8); out.refill = +((F.r - r0) / (G.hero.stats.time - t0)).toFixed(3);
+        L.removeLightPool('diff6t' + d); F.r = 3;
+        // the black water's cycle and the ice's groan
+        const cfg = z.L.tideCfg; out.cycle = +window.__act6.tide.cycle().toFixed(2); out.cycleWant = +(cfg.phases.reduce((s, p) => s + p, 0) * H.tide / 120).toFixed(2); out.groan = window.__act6.tide.groan();
+        // the Shroud below the ice
+        out.shroud = L.shroudK();
+        // the names: not yet 2 s short of their clock, at once 0.2 s short; their window as they fall
+        let fell = null, want = false; B.on('namesFall', () => { if (want) fell = +N.left.toFixed(2); }); want = true;
+        N.on = false; N.left = 0; N.t = H.namesEvery - 2; await wait(0.5); out.early = N.on;
+        N.on = false; N.t = H.namesEvery - 0.2; await wait(0.5); out.fell = fell; out.fellWant = +(H.namesBase + 0.5 * Math.min(4, (G.hero.flags.names || []).length) + 1.5).toFixed(2);
+        N.on = false; N.left = 0; N.t = -999; want = false;
+        // a Falselight: her time standing in its pool before the tell, and the tell's length
+        const A = await import('/src/game/actors.js'), f = A.spawnMonster('falselight', spot.x, spot.z, { level: 36 }); G.actors.push(f); f.rot = Math.PI / 2; f.hp = f.hpMax = 1e6;
+        f.bait = { x: spot.x + 1.8, z: spot.z }; f.lair = { x: spot.x, z: spot.z }; f.lureR = 3; f.l6 = 'lurk'; F.r = 1.2; F.state = 'dim';
+        for (let k = 0; k < 200 && !f.pool; k++) await wait(0.05);
+        out.pool = !!f.pool;
+        const T = { in: null, tell: null, end: null };
+        // (in its pool 2.4 m past the bait: her ring touching it would show it, the lure scenario's spot)
+        pl.x = f.bait.x + 2.4; pl.z = f.bait.z; pl.iframes = 0; T.in = G.hero.stats.time;
+        for (let k = 0; k < 400 && T.end == null; k++) { await new Promise((ok) => requestAnimationFrame(() => ok())); const t = G.hero.stats.time; pl.x = f.bait.x + 2.4; pl.z = f.bait.z; if (T.tell == null && f.l6 === 'tell') T.tell = t; else if (T.tell != null && f.l6 !== 'tell') T.end = t; }
+        out.bait = T.tell != null ? +(T.tell - T.in).toFixed(2) : null; out.tell = T.end != null ? +(T.end - T.tell).toFixed(2) : null;
+        // (its snap's pull on her, held there while she was put back in its pool each frame, let go)
+        f.dead = true; f.remove(); pl.pull = null; pl.x = spot.x + 14;
+        G.hero.diff = 1;
+        return out;
+      }, [d, spot]);
+      rows[d] = r;
+      const W = r.want, near = (a, b, e) => a != null && Math.abs(a - b) <= e;
+      beat(`diff ${d}: the coal drains x${W.coal}`, near(r.coal, W.coal, 0.005), { got: r.coal, want: W.coal });
+      beat(`diff ${d}: lamp light refills ${W.refill} m/s`, near(r.refill, W.refill, 0.12), { got: r.refill, want: W.refill });
+      beat(`diff ${d}: the black water's cycle on its ${W.tide} s row, the groan ${W.groan} s`, near(r.cycle, r.cycleWant, 0.05) && r.groan === W.groan, { cycle: r.cycle, want: r.cycleWant, groan: r.groan });
+      beat(`diff ${d}: the Shroud ${W.shroud}`, near(r.shroud, W.shroud, 1e-9), r.shroud);
+      beat(`diff ${d}: the names every ${W.namesEvery} s, their window ${W.namesBase} s (+ the stones, + the bell's 1.5 s)`, !r.early && near(r.fell, r.fellWant, 0.05), { early: r.early, fell: r.fell, want: r.fellWant });
+      beat(`diff ${d}: a Falselight's bait ${W.bait} s`, r.pool && near(r.bait, W.bait, 0.12), { pool: r.pool, bait: r.bait });
+    }
+    beat("the Falselight's tell the same on both (a telegraph never changes)", rows[0].tell != null && rows[5].tell != null && Math.abs(rows[0].tell - rows[5].tell) <= 0.06, { wanderer: rows[0].tell, sixth: rows[5].tell });
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats, rows };
+  } },
   // The act's other new creatures (the design's Enemies; this lane's own check): the Lampbearer's Drink takes her ring and
   // its death pours it back (+1 m), never begun in true lamp light; the Faded unseen outside light and solid in it, still
   // and Revealed when the names fall, its Forgetting Touch taking 0.5 m; a Gate-Fallen that falls in the dark rises 4 s
@@ -4973,6 +5242,8 @@ let n = 0;
 // with &norender the game skips drawing; a screenshot asks for one drawn frame first
 const shot = async (pg = page) => { await pg.evaluate(() => new Promise((ok) => { window.__shoot = true; requestAnimationFrame(() => requestAnimationFrame(() => { window.__shoot = false; ok(); })); })); await pg.screenshot({ path: `${out}/${name}-${n++}.png` }); };
 shot.dir = out;
+// (MLAMP=40: the hero's Lamplight Mastery at that rank before the scenario runs, G3's Acts IV-V re-run)
+if (process.env.MLAMP) await page.evaluate(async (r) => { const G = window.__G; if (!G?.hero) return; (G.hero.mast ||= {}).lamp = r; window.__D.refreshStats(); }, +process.env.MLAMP).catch(() => {});
 let res;
 try { res = await sc.run(page, shot); } catch (e) { logs.push('scenario error: ' + e.message); }
 await page.waitForTimeout(250).catch(() => {});

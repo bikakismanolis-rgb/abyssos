@@ -662,6 +662,41 @@ const SC = {
     await ev(g, async () => (await import('/src/game/save.js')).writeSave());
     const inHost = await visitOf();
     ok(inHost.zone !== 'town' && !inHost.own && inHost.visit === null, 'the guest\'s save in the host\'s zone keeps no place to wake', inHost);
+    // ---- 'u': a guest's touch on a fight's lamp, done by the host (Act VI's Hearth, its Shade down and her fire not lit, so
+    // the four stones stand and nothing wakes): another kind, a stone 18 m from its stand-in, one it says is lit when it is
+    // dark, numbers that are none: refused; ten at once: one done, the rest held to one every 0.5 s; the guest's own touch
+    // on a stone lights it on the host, and its page shows it lit by the host's bits ----
+    await ev(host, async () => { const G = window.__G, h = G.hero; window.__immortal = true; Object.assign(h.flags, { act5: true, tam6: true, call6: true, coal6: true, ketosWake: true, ketosDown: true, shadeDown: true }); const W = await import('/src/game/world.js'); await W.zoneReady('bottom'); window.__D.enterZone('bottom', { fresh: true }); const z = G.zone; for (const p of z.packs) p.spawned = true; const H = z.L.spots.hearth, f = z.map.nearestFloor(H.x, H.z + 5, 3); G.player.x = f.x; G.player.z = f.z; });
+    const inB = await until(g, () => window.__G.zone?.id === 'bottom' && window.__NET.S.zoneKey === window.__G.zone.netKey && !!window.__G.zone.act6?.shade, null, 120000, 'guest at the Bottom');
+    ok(inB, "'u': the guest followed the host to the First's Hearth");
+    const st6 = await ev(host, () => window.__G.zone.act6.shade.stones.map((q) => ({ x: q.x, z: q.z, i: q.i })));
+    await ev(g, () => { window.__immortal = true; const p = window.__G.player; p.dead = false; p.hp = p.hpMax; });
+    await place(g, st6[0].x + 1.4, st6[0].z);
+    await until(host, (s) => { const r = window.__NET.NET.remotes[0]; return r && Math.hypot(r.x - s.x, r.z - s.z) < 2.6; }, st6[0], 20000, 'stand-in by the first stone');
+    const uw0 = await ev(host, () => ({ ...window.__NET.S.stats.why }));
+    const far6 = st6.reduce((b, q) => (Math.hypot(q.x - st6[0].x, q.z - st6[0].z) > Math.hypot(b.x - st6[0].x, b.z - st6[0].z) ? q : b), st6[0]);
+    await ev(g, ([s, o]) => { const S = window.__NET.S; for (const e of [['u', 'coal', s.x, s.z, 0], ['u', 'hearthStone', o.x, o.z, 0], ['u', 'hearthStone', s.x, s.z, 1], ['u', 'hearthStone', 'x', s.z, 0]]) S.ev.push([++S.evSeq, ...e]); }, [st6[0], far6]);
+    await sleep(1800);
+    const dWhy = (w0) => ev(host, (w0) => { const S = window.__NET.S; return { lit: window.__G.zone.act6.shade.stones.map((q) => !!q.lit), uses: S.stats.uses || 0, d: Object.fromEntries(Object.entries(S.stats.why).map(([k, v]) => [k, v - (w0[k] || 0)]).filter(([, v]) => v)) }; }, w0);
+    const u1 = await dWhy(uw0);
+    ok(!u1.lit.some(Boolean) && u1.uses === 0 && u1.d.bad >= 2 && u1.d.far >= 1 && u1.d.state >= 1, "forged 'u': another kind, a stone 18 m off, a dark stone said lit, no numbers: none of them done", u1);
+    await ev(g, (s) => { const S = window.__NET.S; for (let i = 0; i < 10; i++) S.ev.push([++S.evSeq, 'u', 'hearthStone', s.x, s.z, 0]); }, st6[0]);
+    await sleep(1800);
+    const u2 = await dWhy(uw0);
+    const gLit0 = await until(g, (i) => !!window.__G.zone.act6.shade.stones.find((q) => q.i === i)?.lit, st6[0].i, 8000, 'guest sees the stone lit');
+    ok(u2.lit[0] && u2.uses === 1 && (u2.d.rate || 0) >= 8 && gLit0, "ten 'u' on one stone at once: it is lit once, the rest held (one every 0.5 s); the guest's page shows it lit", { u2, gLit0 });
+    // (the guest's own touch, as a player does it: by the next stone, its interact, a second of touch)
+    const s1 = st6.find((q) => q !== st6[0] && q !== far6);
+    await place(g, s1.x + 1.2, s1.z);
+    await until(host, (s) => { const r = window.__NET.NET.remotes[0]; return r && Math.hypot(r.x - s.x, r.z - s.z) < 2.6; }, s1, 20000, 'stand-in by the second stone');
+    await sleep(600);
+    const used = await ev(g, async () => { const W = await import('/src/game/world.js'), it = W.nearestInteract(); if (!it) return null; it.use(); return { kind: it.kind, i: it.i, litNow: !!it.lit }; });
+    await sleep(2500);
+    const u3 = await ev(host, (i) => !!window.__G.zone.act6.shade.stones.find((q) => q.i === i)?.lit, s1.i);
+    const gLit1 = await until(g, (i) => !!window.__G.zone.act6.shade.stones.find((q) => q.i === i)?.lit, s1.i, 8000, 'guest sees its stone lit');
+    ok(used?.kind === 'hearthStone' && used.i === s1.i && !used.litNow && u3 && gLit1, "the guest's own touch on a hearthstone: lit on the host's page, and on its own by the host's word", { used, host: u3, guest: gLit1 });
+    ok(!(await fatal(host)) && !(await fatal(g)), "'u': neither page broke", { host: await fatal(host), guest: await fatal(g) });
+
     // a world with every act done and the new fire lit (Act IV left open), and the town: the guest is offered nothing and
     // closes no act of its own
     const own0 = await ev(g, () => { const h = window.__G.hero.__real; return JSON.stringify({ boons: h.boons, a: [h.act1, h.act2, h.act3, h.act4, h.act5], quest: h.quest }); });
@@ -1424,15 +1459,20 @@ const SC = {
 
   // a boss of each act, the party moving from zone to zone with the host (the guest follows every change)
   async bosses() {
-    const only = process.env.ACTS ? process.env.ACTS.split(',').map(Number) : [1, 2, 3, 4, 5];
-    const { host, guests: [g] } = await party('town', 1, { lvl: 30, glvl: 28 });
+    // (ACTS=1,..,6 picks the acts, 6 both of Act VI's bosses; GUESTS=1 or 3 a party of two or four)
+    const only = process.env.ACTS ? process.env.ACTS.split(',').map(Number) : [1, 2, 3, 4, 5, 6];
+    const { host, guests } = await party('town', +(process.env.GUESTS || 1), { lvl: 30, glvl: 28 }), g = guests[0];
+    const allG = async (fn, arg, ms, what) => (await Promise.all(guests.map((q) => until(q, fn, arg, ms, what)))).every(Boolean);
     const ACT5 = 'act1,act2,act3,act4,after3,hart,autumn,weaver,lord,fireTaken,ivar,plug,karthax,crownUnmade,giftsTaken,unbound,newFire,alkyone,coastCall,cradle,coal,alkField,coastSeen,hearth,rite,tamMet,glaukosMet,light_grey,mem_i1,light_wreck,mem_i2,light_fall,mem_i3,towerWake';
+    const ACT6 = ACT5 + ',towerDown,frozen,farSeen,alkShip,hole0,hole1,hole2,ternSeen,skotosWake,skotosDown,selnaBack,seaLit,mem_i4,carved,homeSeen,toldChild,act5,tam6,call6,coal6';
     const ACTS = [
       { n: 1, z: 'crypt', kind: 'barrowLord', quest: 3, flags: 'weaver' },
       { n: 2, z: 'halls', kind: 'moltenKing', quest: 8, flags: 'stonewarden,act1' },
       { n: 3, z: 'heart', kind: 'amaranthe', quest: 14, flags: 'hart,thorn0,thorn1,thorn2,act1,act2' },
       { n: 4, z: 'ashfield', kind: 'ivar', quest: 19, flags: 'act1,act2,act3,fireTaken,lamp_l1,lamp_l2,lamp_l3,lamp_l4,lamp_l5,mem_l1,mem_l2,mem_l3,mem_l4,mem_l5' },
-      { n: 5, z: 'coast', kind: 'tower', quest: 27, flags: ACT5 }
+      { n: 5, z: 'coast', kind: 'tower', quest: 27, flags: ACT5 },
+      { n: 6, z: 'drained', kind: 'ketos', quest: 31, flags: ACT6 },
+      { n: 6, z: 'bottom', kind: 'shade1', quest: 37, flags: ACT6 + ',ketosWake,ketosDown,blackLamp0,blackLamp1,blackLamp2' }
     ].filter((a) => only.includes(a.n));
     for (const A of ACTS) {
       const t0 = Date.now();
@@ -1440,23 +1480,28 @@ const SC = {
         const G = window.__G, h = G.hero; window.__immortal = true;
         h.quest = A.quest; for (const f of A.flags.split(',')) h.flags[f] = true;
         if (A.n >= 5) { h.act1 = h.act2 = h.act3 = h.act4 = 1; h.flags.lights5 = ['grey', 'wreck', 'fall']; }
+        if (A.n >= 6) h.act5 = 1;
         const W = await import('/src/game/world.js'); await W.zoneReady(A.z);
         window.__D.enterZone(A.z, { fresh: true });
         const z = G.zone, b = z.L.boss; for (const p of z.packs) p.spawned = true;
         const f = z.map.nearestFloor(b.x + 2, b.z + 8); G.player.x = f.x; G.player.z = f.z; G.player.hp = G.player.hpMax = 99999;
       }, A);
-      const followed = await until(g, (z) => window.__G.zone?.id === z && window.__NET.S.zoneKey === window.__G.zone.netKey, A.z, 120000, 'guest follows to ' + A.z);
-      ok(followed, `act ${A.n}: the guest followed the host to ${A.z} (${Math.round((Date.now() - t0) / 1000)} s)`);
+      const followed = await allG((z) => window.__G.zone?.id === z && window.__NET.S.zoneKey === window.__G.zone.netKey, A.z, 120000, 'guest follows to ' + A.z);
+      ok(followed, `act ${A.n}: ${guests.length > 1 ? 'every guest' : 'the guest'} followed the host to ${A.z} (${Math.round((Date.now() - t0) / 1000)} s)`);
       if (!followed) console.log('     guest', JSON.stringify(await ev(g, () => { const S = window.__NET.S, H = S.peers.get(S.hostPeer); return { role: S.role, zk: S.zoneKey, zone: window.__G.zone.id, mode: window.__G.mode, panel: window.__G.panel, loading: S.loading, world: !!S.world, H: H && [H.on, H.zone?.k, H.zk], fatal: document.getElementById('fatal')?.textContent?.slice(0, 400) }; })), 'host', JSON.stringify(await ev(host, () => ({ mode: window.__G.mode, zone: window.__G.zone.id, key: window.__G.zone.netKey || window.__G.zone.ep }))));
       const hp = await hostPos(host);
-      await place(g, hp.x - 2, hp.z);
-      await ev(g, () => { window.__immortal = true; const p = window.__G.player; p.hpMax = p.hp = 99999; });
+      for (const [i, q] of guests.entries()) { await place(q, hp.x - 2 - i, hp.z + i); await ev(q, () => { window.__immortal = true; const p = window.__G.player; p.hpMax = p.hp = 99999; }); }
       const up = await until(host, (k) => window.__G.zone.boss?.kind === k, A.kind, 20000, 'boss');
-      // (the Tower is woken by its scene; the scenes are the host's)
-      if (A.kind === 'tower') await ev(host, async () => { const b = window.__G.zone.boss; if (b?.holdWake) { const B = await import('/src/ui/bus.js'); B.emit('towerWake', window.__G.zone, b); } });
+      // (the Tower is woken by its scene, the Ketos and the Shade by the host coming near; the scenes are the host's)
+      const wakeEv = { tower: 'towerWake', ketos: 'ketosWake', shade1: 'shadeWake' }[A.kind];
+      if (wakeEv) await ev(host, async (w) => { const b = window.__G.zone.boss; if (b?.holdWake) { const B = await import('/src/ui/bus.js'); if (w === 'towerWake') B.emit(w, window.__G.zone, b); else B.emit(w, b); } }, wakeEv);
       ok(up, `act ${A.n}: the host's ${A.kind} is up`);
-      const seen = await until(g, (k) => [...window.__NET.S.pup.values()].some((a) => a.kind === k && a.boss), A.kind, 20000, 'boss puppet');
-      ok(seen, `act ${A.n}: the guest sees the ${A.kind}`);
+      const seen = await allG((k) => [...window.__NET.S.pup.values()].some((a) => a.kind === k && a.boss), A.kind, 30000, 'boss puppet');
+      ok(seen, `act ${A.n}: ${guests.length > 1 ? 'every guest sees' : 'the guest sees'} the ${A.kind}`);
+      // (the Ketos's body is under the black water in its first phase: its head Seared on the shore by a lantern opens it)
+      // (the Shade's first form a while into its line, so a blow can take its life: SHADE_MIN)
+      if (A.kind === 'shade1') { await until(host, () => window.__G.zone.boss?.awake, null, 15000, 'shade awake'); await ev(host, () => { window.__G.zone.boss.formT = 35; }); }
+      if (A.kind === 'ketos') { await until(host, () => window.__G.zone.boss?.awake, null, 15000, 'ketos awake'); await ev(host, () => { const G = window.__G; window.__act6.searHead(G.zone.act6.mere.lamps[0], 25); }); }
       // the guest's blows on it land (its share of life goes down on the host)
       const h0 = await ev(host, () => { const b = window.__G.zone.boss; return b.hp / b.hpMax; });
       // (the guest walks up to it: its stand-in on the host goes only as fast as a hero, so it strikes once it is there)
@@ -1467,19 +1512,31 @@ const SC = {
       await sleep(800);
       const h1 = await ev(host, () => { const b = window.__G.zone.boss; return b.hp / b.hpMax; });
       ok(h1 < h0 || h0 <= (await ev(host, () => (window.__G.zone.boss.hpFloor || 0) / window.__G.zone.boss.hpMax)) + 0.01, `act ${A.n}: the guest's blows took the ${A.kind}'s life`, { h0: +h0.toFixed(3), h1: +h1.toFixed(3) });
+      // (the Shade: its forms one by one, each a new body with the shared life; on every guest's page one Shade, the bar on it)
+      if (A.kind === 'shade1') for (const [to, want] of [[0.749, '^shade2$'], [0.499, '^shade3$'], [0.249, '^shade4[wrm]$']]) {
+        await ev(host, (to) => { const G = window.__G, b = G.zone.boss, S = G.zone.act6.shade; b.formT = 999; b.gate = true; b.invuln = 0; b.hp = S.max * to; }, to);
+        const got = await until(host, (w) => { const b = window.__G.zone.boss; return !!b && new RegExp(w).test(b.kind) && !(b.turning > 0); }, want, 20000, 'form ' + want);
+        const k = await ev(host, () => window.__G.zone.boss.kind);
+        const views = await allG((k) => { const P = [...window.__NET.S.pup.values()].filter((a) => a.def?.legKey === 'shade' && !a.dead && !a.removed); return P.length === 1 && P[0].kind === k && window.__G.bossActor === P[0]; }, k, 20000, 'guest form ' + k);
+        ok(got && views, `act 6: the Shade turns to ${k}: one Shade on ${guests.length > 1 ? 'every guest\'s' : 'the guest\'s'} page, the boss bar on it`, { k, views });
+      }
       // the host finishes it (its phases and floors), the party paid
-      const items0 = await ev(g, () => window.__G.pickups.filter((p) => p.kind === 'item').length + window.__G.hero.inv.filter(Boolean).length);
+      const items0 = await Promise.all(guests.map((q) => ev(q, () => window.__G.pickups.filter((p) => p.kind === 'item').length + window.__G.hero.inv.filter(Boolean).length)));
       let dead = false;
       for (let k = 0; k < 40 && !dead; k++) {
-        dead = await ev(host, () => { const G = window.__G, b = G.zone.boss; if (!b || b.dead) return true; b.dazed = 0; b.hidden = false; b.invuln = 0; b.hpFloor = 0; b.holdWake = false; for (const n of b.nodes || []) if (!n.dead) window.__D.kill(n); for (const a of G.actors) if (a.bossNode === b && !a.dead) window.__D.kill(a); window.__D.kill(b); return b.dead; });
+        dead = await ev(host, () => { const G = window.__G, b = G.zone.boss; if (!b || b.dead) return true; b.dazed = 0; b.hidden = false; b.invuln = 0; b.hpFloor = 0; b.holdWake = false; b.submerged = false; for (const n of b.nodes || []) if (!n.dead) window.__D.kill(n); for (const a of G.actors) if (a.bossNode === b && !a.dead) window.__D.kill(a); window.__D.kill(b); return b.dead; });
         await sleep(1200);
       }
       ok(dead, `act ${A.n}: the ${A.kind} is down`);
-      const gotDeath = await until(g, (k) => ![...window.__NET.S.pup.values()].some((a) => a.kind === k && !a.dead), A.kind, 15000, 'boss dead on guest');
-      ok(gotDeath, `act ${A.n}: and down on the guest's page`);
-      await until(g, (n0) => window.__G.pickups.filter((p) => p.kind === 'item').length + window.__G.hero.inv.filter(Boolean).length >= n0 + 4, items0, 20000, 'boss loot');
-      const items1 = await ev(g, () => window.__G.pickups.filter((p) => p.kind === 'item').length + window.__G.hero.inv.filter(Boolean).length);
-      ok(items1 - items0 >= 4, `act ${A.n}: the guest's own boss loot dropped on its page`, items1 - items0);
+      const dk = await ev(host, () => window.__G.zone.boss?.kind);
+      const gotDeath = await allG((k) => ![...window.__NET.S.pup.values()].some((a) => a.kind === k && !a.dead), dk, 15000, 'boss dead on guest');
+      ok(gotDeath, `act ${A.n}: and down on ${guests.length > 1 ? 'every guest\'s' : 'the guest\'s'} page`);
+      const got = [];
+      for (const [i, q] of guests.entries()) {
+        await until(q, (n0) => window.__G.pickups.filter((p) => p.kind === 'item').length + window.__G.hero.inv.filter(Boolean).length >= n0 + 4, items0[i], 20000, 'boss loot');
+        got.push((await ev(q, () => window.__G.pickups.filter((p) => p.kind === 'item').length + window.__G.hero.inv.filter(Boolean).length)) - items0[i]);
+      }
+      ok(got.every((n) => n >= 4), `act ${A.n}: ${guests.length > 1 ? 'each guest\'s' : 'the guest\'s'} own boss loot dropped on its page`, got);
       await shot(g, `boss${A.n}-guest.png`).catch(() => {});
       // the guest's pickups were never the host's
       await ev(g, () => { for (const p of window.__G.pickups.slice()) if (p.kind === 'item') { /* leave them */ } });
