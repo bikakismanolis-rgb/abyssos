@@ -8,7 +8,8 @@ import { damage } from './combat.js';
 import { foes, near, makeAvatar } from './actors.js';
 import { updateSap, clearSap, addSapPool } from './sap.js';
 import { updateRemains, clearRemains } from './combat.js';
-import { clearLight } from './light.js';
+import { clearLight, fireDrain, fireOn } from './light.js';
+import { coldAdd } from './cold.js';
 import { tickFlues } from './forge.js';
 import { tickTide } from './tide.js';
 import { tickIce } from './ice.js';
@@ -210,6 +211,8 @@ function area0(kind, x, z, r, dur, o = {}) {
   if (kind === 'fire' && o.floats) decal(x, z, 'scorch', r * 2.1, dur);
   if (kind === 'poison') decal(x, z, 'goo', r * 2, dur);
   if (kind === 'web') decal(x, z, 'ecto', r * 2, dur);
+  // Act VI: a puddle of the black water (the Ketos's Black Spray): x0.7 move, the ring -0.15 m/s, Cold +4/s; no cell change
+  if (kind === 'black') decal(x, z, 'scorch', r * 2.1, dur);
   if (kind === 'amberDust' && !a.light) a.light = addLight({ x, y: 0.8, z, color: 0xffc050, intensity: 8, range: r * 3, flicker: 0.3 });
   if (kind === 'coldFire' && !a.light) a.light = addLight({ x, y: 0.6, z, color: 0x9ab8ff, intensity: 8, range: r * 3, flicker: 0.3 });
   G.areas.push(a);
@@ -266,6 +269,7 @@ export function updateAreas(dt) {
     else if (a.kind === 'tornado') { for (let k = 0; k < 3; k++) { const ang = a.t * 9 + k * 2.09, h = (a.t * 3 + k) % 2.6; P({ x: a.x + Math.cos(ang) * (0.3 + h * 0.3), y: h, z: a.z + Math.sin(ang) * (0.3 + h * 0.3), life: 0.3, size: 0.45, size1: 0.1, color: 0xffc060, color1: 0xff3000 }); } }
     else if (a.kind === 'frostOrb') { P({ x: a.x, y: 1, z: a.z, life: 0.2, size: 1.2 + Math.sin(a.t * 10) * 0.2, size1: 0.6, color: 0xc0f0ff, color1: 0x4090ff }); }
     else if (a.kind === 'web') { /* decal only */ }
+    else if (a.kind === 'black') { if (Math.random() < 0.35) P({ add: false, x: a.x + rand.range(-a.r, a.r) * 0.7, y: 0.08, z: a.z + rand.range(-a.r, a.r) * 0.7, vy: 0.25, life: 0.9, size: 0.5, size1: 1.0, color: 0x0c1014, alpha: 0.5, alpha1: 0 }); }
     // Act IV: the ash Ivar's Long Road leaves behind him, and his dead lanterns' cold fire: both only slow
     else if (a.kind === 'ash') { if (Math.random() < 0.5) P({ add: false, x: a.x + rand.range(-a.r, a.r) * 0.7, y: 0.15, z: a.z + rand.range(-a.r, a.r) * 0.7, vy: 0.3, life: 1.2, size: 0.6, size1: 1.3, color: 0x6a6660, alpha: 0.35, alpha1: 0 }); }
     else if (a.kind === 'coldFire') { if (Math.random() < 0.6) P({ x: a.x + rand.range(-a.r, a.r) * 0.7, y: 0.1, z: a.z + rand.range(-a.r, a.r) * 0.7, vy: rand.range(0.6, 1.4), life: 0.6, size: 0.35, size1: 0.05, color: 0xd0e4ff, color1: 0x4a70c0 }); }
@@ -277,6 +281,7 @@ export function updateAreas(dt) {
         const d = Math.hypot(pl.x - a.x, pl.z - a.z);
         if (d < a.r + pl.radius * 0.5) {
           if (a.kind === 'web') { pl.status.slow = Math.max(pl.status.slow, 0.4); pl.status.slowK = Math.max(pl.status.slowK, 0.55); }
+          else if (a.kind === 'black') { slowBy(pl.status, a.tick + 0.1, 0.3); coldAdd(4 * a.tick); if (fireOn()) fireDrain(0.15 * a.tick, { src: 'black' }); }
           else if (a.kind === 'ash' || a.kind === 'coldFire') slowBy(pl.status, 0.6, a.kind === 'ash' ? 0.4 : 0.2);
           else if (a.kind === 'frostOrb') { /* explodes at the end */ }
           else damage(a.src, pl, a.dmg, Object.assign({ dot: a.kind === 'poison' || a.kind === 'fire' }, a.opts));

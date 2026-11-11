@@ -50,6 +50,9 @@ export function damage(src, target, amount, o = {}) {
   // co-op: a guest's stand-in on the host (the blow is the guest's to take, net/coop.js)
   if (target.remote) return NET.mode === 'host' ? NET.h.hurtRemote(src, target, amount, o) : 0;
   if (target.team === 'npc') return 0;
+  // Act VI: a body that is only another's (the Ketos's head on the shore, def.share): every blow on it is that one's, with
+  // its guard, its vulnerability and its floor, seen where the proxy stands
+  if (target.def?.share && target.shareTo) { const to = target.shareTo; if (to.dead || to.removed) return 0; return damage(src, to, amount, Object.assign({}, o, { at: target })); }
   // stepped into the trees, gone into mist, wheeling high above, or clinging to the hero's back: nothing to hit
   if (target.hidden || target.airborne || target.cling) return 0;
   // a keeper's statue in Karthax's cage: only his own hammer breaks it (ai.js)
@@ -66,7 +69,10 @@ export function damage(src, target, amount, o = {}) {
     if (s.legs.has('einarLantern') && !o.dot && target.def.unlit) addVuln(target, 'revealed', 2, { quiet: true });
   }
   // invulnerable, or held by a Mourner's lament-bond
-  if (target.invuln > 0 || target.bondT > 0) { if (!o.dot) number(target.x, 2.2, target.z, t('hud.immune'), 'text', target.bondT > 0 ? '#ffe8a0' : '#9ab8ff'); return 0; }
+  const at = o.at || target;
+  // Act VI: the Ketos's body under the black water (its phases 1 and 3, no head on the shore): nothing reaches it there
+  if (target.submerged && !o.at) { if (!o.dot && !(target.immT > 0)) { target.immT = 0.8; number(at.x, 2.4, at.z, tx('hud.underWater', 'Κάτω από το μαύρο νερό', 'Under the black water'), 'text', '#9ab8c8'); } return 0; }
+  if (target.invuln > 0 || target.bondT > 0) { if (!o.dot) number(at.x, 2.2, at.z, t('hud.immune'), 'text', target.bondT > 0 ? '#ffe8a0' : '#9ab8ff'); return 0; }
   let blocked = 1;
   // co-op, on a guest: the host's monster takes the blow on the host (its guard, ward and vulnerabilities are counted there)
   if (target.puppet) amount = NET.h.hitPuppet(src, target, amount, o, crit);
@@ -94,9 +100,9 @@ export function damage(src, target, amount, o = {}) {
     if (!o.noFx) {
       // (co-op: a guest's blow on a puppet is seen here at once and by the others in the host's echo of it, not twice)
       const sk = MIRROR.skip, lk = MIRROR.look; if (target.puppet) MIRROR.skip = true; MIRROR.look = target;
-      hitFx(target.x, (def.big || target.boss ? 1.6 : 1.0) * (target.scale || 1), target.z, target.prop ? 'wood' : def.flesh === 'wood' ? 'bark' : def.flesh, dx / l, dz / l, crit);
-      if (!o.quiet) Audio.sfx(target.prop ? 'break' : (HIT_SFX[def.flesh] || 'hitFlesh'), { x: target.x, z: target.z, vol: crit ? 1 : 0.8 });
-      if (crit && !o.quiet) Audio.sfx('crit', { x: target.x, z: target.z, vol: 0.6 });
+      hitFx(at.x, (def.big || target.boss ? 1.6 : 1.0) * (o.at ? 1 : target.scale || 1), at.z, target.prop ? 'wood' : def.flesh === 'wood' ? 'bark' : def.flesh, dx / l, dz / l, crit);
+      if (!o.quiet) Audio.sfx(target.prop ? 'break' : (HIT_SFX[def.flesh] || 'hitFlesh'), { x: at.x, z: at.z, vol: crit ? 1 : 0.8 });
+      if (crit && !o.quiet) Audio.sfx('crit', { x: at.x, z: at.z, vol: 0.6 });
       MIRROR.skip = sk; MIRROR.look = lk;
     }
     if (o.knock && !target.boss && !target.prop && !def.anchored && blocked > 0.5 && !(target.curled > 0)) {
@@ -120,7 +126,7 @@ export function damage(src, target, amount, o = {}) {
       if (target.affixes?.includes('vampiric')) { /* nothing on hero hit */ }
     }
   }
-  number(target.x, (target.boss ? 3.2 : target.def.big ? 3.4 : 2.0) * (target.scale || 1), target.z, amount, o.dot ? 'dot' : crit ? 'crit' : 'hit');
+  number(at.x, o.at ? 2.4 : (target.boss ? 3.2 : target.def.big ? 3.4 : 2.0) * (target.scale || 1), at.z, amount, o.dot ? 'dot' : crit ? 'crit' : 'hit');
   if (target.hp <= 0 && !target.puppet) kill(target, src, o);
   return amount;
 }
@@ -517,6 +523,8 @@ export function kill(a, src, o = {}) {
   else if (def.flesh === 'spirit') { decal(a.x, a.z, 'ecto', 1.4); glowBurst(a.x, 1.2, a.z, 0x7ae0ff, 24, 3, 0.3, 0.9); }
   if (o.overkill || (src?.hero && Math.random() < 0.15)) { puff(a.x, 0.8, a.z, 4, 0x2a1a14, 0.6, 0.6, 0.6); }
   if (a.team !== 'foe') return;
+  // (a part of something else, the Ketos's lure stalk: nothing of its own to give)
+  if (def.noLoot) { killed(a, def); return; }
   // Act VI: an unlit foe killed inside her ring gives back 0.2 m of it (0.4 with the Lure-bone); a Lampbearer's death
   // pours back all it drank and 1 m more, and lights her coal again if it was out
   if (fireOn() && G.player && !G.player.dead) {

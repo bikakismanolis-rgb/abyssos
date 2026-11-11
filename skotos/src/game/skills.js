@@ -30,10 +30,11 @@ export function nearestFoe(range, dir = null, from = p()) {
   for (const f of foes(from.x, from.z, range)) {
     // a Hollowed passing for dead wood is no target until it shows itself (aim at it, or catch it in an area); a keeper's
     // statue in Karthax's cage never is (only his hammer breaks it)
-    if ((f.prop && !f.hp) || f.hidden || f.disguised || f.keeper || f.down > 0) continue;
+    if ((f.prop && !f.hp) || f.hidden || f.disguised || f.keeper || f.down > 0 || f.submerged) continue;
     const d = Math.hypot(f.x - from.x, f.z - from.z) - f.radius;
     // (a lit foe before an unseen Faded in range, which is never skipped when it is all there is)
-    let s = d + (f.prop ? 4 : 0) + (f.unseenNow ? 100 : 0);
+    // (and the Ketos's head on the shore, def.share, before whatever else is near: auto-aim prefers it while it lies there)
+    let s = d + (f.prop ? 4 : 0) + (f.unseenNow ? 100 : 0) - (f.def?.share ? 6 : 0);
     if (dir != null) s += Math.abs(angleDiff(dir, angleTo(from.x, from.z, f.x, f.z))) * 1.6;
     if (s < bs) { bs = s; best = f; }
   }

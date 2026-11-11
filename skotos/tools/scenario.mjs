@@ -161,7 +161,7 @@ async function BOT5(o) {
     await FR(1);
     const dt = 1 / 30 * (window.SIMK || 4), b = z.boss;
     if (!b || G.zone !== z) { keys(0, 0); continue; }
-    if (b.dead) { B.done = true; B.phases.push(['dead', +B.t.toFixed(1)]); break; }
+    if (b.dead) { B.done = true; B.phases.push(['dead', +B.t.toFixed(1)]); if (B.curWin) B.curWin.hit = true; break; }
     B.t = b.awake ? (B.t0 ??= G.hero.stats.time, G.hero.stats.time - B.t0) : 0;
     if (G.mode !== 'play' || pl.dead) { keys(0, 0); continue; }
     if (b.phase !== lastPhase && b.awake) { lastPhase = b.phase; B.phases.push([b.phase, +B.t.toFixed(1)]); }
@@ -224,6 +224,33 @@ async function BOT5(o) {
         else if (!lit && dark && pl.act?.name !== 'touch' && tgt !== b) { goal = { x: dark.x, z: dark.z + 1.4 }; if (Math.hypot(goal.x - pl.x, goal.z - pl.z) < 2) dark.use(); }
         else if (dark && !tgt && pl.act?.name !== 'touch') { goal = { x: dark.x, z: dark.z + 1.4 }; if (Math.hypot(goal.x - pl.x, goal.z - pl.z) < 2) dark.use(); }
       }
+    } else if (o.kind === 'ketos') {
+      // Act VI, the Ketos (its own rules, as the hints say them): by a lit lantern, in its pool, when the line comes (a
+      // dark one lit first); its head on the shore struck, the lure stalk's segments first; never waiting in the lure's
+      // false pool; blind, a bell rung beside a lit lantern, and nothing else to make a sound with while it lasts. A ranged
+      // hero shoots the body half out on the mud between the windows (phase 2: it takes 30% there)
+      const K = z.act6?.mere, H = K?.head, dl = (q) => Math.hypot(q.x - pl.x, q.z - pl.z);
+      const stalk = (K?.stalks || []).filter((q) => !q.dead && !q.removed).sort((p, q) => dl(p) - dl(q))[0];
+      tgt = H ? stalk || H.h : ranged && !b.diving && b.phase === 1 ? b : null;
+      if (!H && pl.act?.name !== 'touch') {
+        const lamps = K?.lamps || [], lit = lamps.filter((q) => q.lit).sort((p, q) => dl(p) - dl(q)), dark = lamps.filter((q) => !q.lit).sort((p, q) => dl(p) - dl(q)), M = Lz.spots.mere;
+        const spotBy = (it) => { const g = Math.atan2(it.x - M.x, it.z - M.z); return z.map.nearestFloor(it.x + Math.sin(g) * 2.0, it.z + Math.cos(g) * 2.0, 2); };
+        if (b.phase === 2) {
+          const bl = (K?.bells || []).filter((q) => lamps[q.lamp]?.lit).sort((p, q) => dl(p) - dl(q))[0];
+          if (bl) { if (dl(bl) > 1.5) goal = { x: bl.x, z: bl.z, way: true }; else if (!pl.act && !(bl.rungT > b.t - 10) && !K.bell) bl.use(); }
+          else if (dark[0]) { goal = { x: dark[0].x, z: dark[0].z, way: true }; if (dl(dark[0]) < 2 && !pl.act) dark[0].use(); }
+        } else if (!lit.length && dark[0]) { goal = { x: dark[0].x, z: dark[0].z, way: true }; if (dl(dark[0]) < 2 && !pl.act) dark[0].use(); }
+        else if (lit[0]) { const q = spotBy(lit[0]); if (dl(q) > 1.0) goal = { x: q.x, z: q.z, way: true }; if (dark[0] && dl(dark[0]) < 2.2 && !pl.act) dark[0].use(); }
+        const Lr = K?.lure; if (Lr && dl(Lr) < Lr.r + 0.5) { const g = Math.atan2(pl.x - Lr.x, pl.z - Lr.z); goal = { x: Lr.x + Math.sin(g) * (Lr.r + 1.5), z: Lr.z + Math.cos(g) * (Lr.r + 1.5), way: true }; }
+      }
+      // (a ranged hero stays where she stands, in the lantern's pool, while she can reach the window: backing off to her
+      // usual 8 m took her out of the light, and the next line ended at her, not at its flame)
+      if (H && ranged && tgt && Math.hypot(tgt.x - pl.x, tgt.z - pl.z) < 11) goal = { x: pl.x, z: pl.z };
+      // (each window seen: did a blow of hers land in it; a window its own floor, turn or death cut short is not counted)
+      B.win ||= {};
+      const cw = B.curWin;
+      if (cw && (!H || H.id !== cw.id)) { if (b.phase !== cw.ph || b.dead) cw.held = true; B.curWin = null; }
+      if (H) { const k = H.id, dh = +(Math.hypot(H.x - pl.x, H.z - pl.z)).toFixed(1); if (!B.win[k]) B.curWin = B.win[k] = { id: k, kind: H.kind, hp0: b.hp, hit: false, ph: b.phase, t: +B.t.toFixed(1), d0: dh, dmin: dh, act: pl.act?.name || '', len: +H.t.toFixed(1) }; const w = B.win[k]; w.dmin = Math.min(w.dmin, dh); if (b.hp < w.hp0 - 1) w.hit = true; if ((b.hpFloor > 0 && b.hp <= b.hpFloor * 1.002 + 2) || b.invuln > 0) w.held = true; }
     }
     if (!goal && tgt) { const d = Math.hypot(tgt.x - pl.x, tgt.z - pl.z), want = ranged ? 8 : tgt.radius + 1.0; if (d > want + 0.8) goal = { x: tgt.x, z: tgt.z }; else if (ranged && d < want - 3) goal = { x: pl.x * 2 - tgt.x, z: pl.z * 2 - tgt.z }; }
     const u = under(pl.x, pl.z);
@@ -2476,6 +2503,59 @@ const S = {
     const lg = home.log, win = { beached: !!seen.beached || !!seen.stranded || lg['tower:beached'] > 0 || lg['tower:stranded'] > 0, overturned: !!seen.overturned || lg['tower:overturned'] > 0, blinded: !!seen.blinded || lg['tower:lit'] > 0 };
     const pass = !seen.died && !!bot?.done && win.beached && win.overturned && win.blinded && (bot.near ?? 99) <= 1.5 && bellIn && home.towerDown && home.at != null && home.at <= 2.5 && home.closed > 0 && !home.heroIn && inBand && (!process.env.TTK0 || +process.env.DIFF !== 0 || ttk >= 0.6 * +process.env.TTK0);
     return { pass, win, ttk, band: [lo, hi], design: [210, 300], diff: +(process.env.DIFF || 1), cls: process.env.CLS || 'warden', bot: bot && { t: bot.t, deaths: bot.deaths, potions: bot.potions, low: +bot.low.toFixed(2), phases: bot.phases, near: +(bot.near ?? 99).toFixed(2) }, seen, home, setup };
+  } },
+  // Act VI: the Ketos, fought by the boss bot (BOT5's reference build at LVL, 36; CLS) by its rules: the lanterns she lit
+  // before the fight, the Heap's gaps shut as she comes in (ketosWake), every phase; Seared, Exposed and Blinded each seen;
+  // on Warden a blow of hers landed in every Seared and Exposed window (the head proxy, combat.js share); the Mere at
+  // 0.85 m in phase 2; no blow over 12% of her life; its death drains the Mere and writes ketosDown. TTK=lo,hi (70,330)
+  // the band, the design's 120-200 reported; DIFF=0 with TTK0 (its Warden time) checks Wanderer at 60% or more
+  ketos: { q: 'auto=drained&sim=4&q=0&norender&cloud=off&lvl=' + (process.env.LVL || 36) + '&diff=' + (process.env.DIFF || 1) + '&cls=' + (process.env.CLS || 'warden') + '&' + A5.url('toldChild') + ',act5,tam6,call6,coal6', run: async (pg, shot) => {
+    await A5.tick(pg);
+    const setup = await pg.evaluate(async () => {
+      const G = window.__G, z = G.zone, K = z.act6?.mere, W = await import('/src/game/world.js');
+      window.__immortal = true;
+      if (!K) return { err: 'no mere fight' };
+      G.hero.flags.wreck6 = [0, 1, 2]; for (const it of K.lamps) W.light6(z, it, true);
+      const l0 = K.lamps.find((q) => q.i === 0) || K.lamps[0], H = z.L.spots.heap, g = Math.atan2(l0.x - H.x, l0.z - H.z), f = z.map.nearestFloor(l0.x + Math.sin(g) * 2, l0.z + Math.cos(g) * 2, 3);
+      G.player.x = f.x; G.player.z = f.z;
+      return { mode: z.L.mode, lamps: K.lamps.length, bells: K.bells.length, mere: z.L.spots.mere };
+    });
+    if (setup.err) return { pass: false, setup };
+    await A5.until(pg, () => window.__G.zone.boss?.awake, 60000);
+    const wake = await pg.evaluate(() => { const G = window.__G, z = G.zone, m = z.map; return { flag: !!G.hero.flags.ketosWake, cp: G.hero.flags.cp6?.drained, gapsShut: (z.L.gaps || []).every((gp) => gp.cells.every(([x, zz]) => !m.walkable(x + 0.5, zz + 0.5))) }; });
+    await shot();
+    // (every blow on her: the biggest, and what dealt it, by the code that dealt it: the Ketos's move's name in its stack)
+    await pg.evaluate(async () => { const Bus = await import('/src/ui/bus.js'), G = window.__G; window.__hurts = []; window.__hurtMax = 0; window.__hurtBy = {}; Bus.on('hurt', (f) => { const bl = window.__act6.BLOW6?.().last, by = bl && Math.abs(bl.t - G.hero.stats.time) < 0.01 ? bl.kind + 'x' + bl.mult : 'other'; window.__hurtBy[by] = Math.max(window.__hurtBy[by] || 0, +f.toFixed(3)); window.__hurtMax = Math.max(window.__hurtMax, f); window.__hurts.push(+f.toFixed(3)); if (window.__hurts.length > 40) window.__hurts.shift(); }); });
+    // (HPTRACE=1: where its life goes, by the code that took it)
+    if (process.env.HPTRACE) await pg.evaluate(() => { const b = window.__G.zone.boss; let v = b.hp; window.__src = {}; Object.defineProperty(b, 'hp', { configurable: true, get: () => v, set: (n) => { if (n < v) { const st = (new Error().stack || '').split('\n').slice(2, 9).map((l) => (l.match(/at (?:Object\.)?([\w$.]+)/) || [])[1] || '?').filter((f) => !/^(damage|set|hitPuppet)$/.test(f)).slice(0, 3).join('<'); window.__src[st] = (window.__src[st] || 0) + (v - n); } v = n; } }); });
+    await pg.evaluate((o) => { window.SIMK = 4; window.__immortal = false; window.__botP = (new Function('return ' + o.src)())({ kind: 'ketos', maxT: o.maxT }).catch((e) => { window.__botErr = String(e.stack || e); }); }, { src: BOT5.toString(), maxT: +(process.env.MAXT || 900) });
+    const seen = {}, shots = new Set();
+    let last = null;
+    for (const t0 = Date.now(); Date.now() - t0 < 120 * 60000;) {
+      await pg.waitForTimeout(500);
+      const s = await pg.evaluate(() => { const G = window.__G, z = G.zone, b = z.boss, B = window.BOT, T = z.tide; if (!b || !B) return window.__botErr ? { err: window.__botErr } : null; return { t: +B.t.toFixed(1), done: B.done, end: !!B.end, dead: b.dead, phase: b.phase, hp: +(b.hp / b.hpMax).toFixed(3), vulns: Object.keys(b.vulns || {}).filter((k) => b.vulns[k] > 0), mere: T?.mstep, panel: G.panel, head: z.act6.mere?.head?.kind || null, cut: z.act6.mere?.cut }; });
+      if (!s) continue;
+      if (s.err) { console.log('ketos bot error: ' + s.err.slice(0, 600)); break; }
+      if (Date.now() - (seen.logT || 0) > 30000) { seen.logT = Date.now(); console.log('ketos ' + JSON.stringify(s)); }
+      if (s.end) break;
+      if (s.panel === 'dead') { seen.died = { t: s.t, phase: s.phase, hurts: await pg.evaluate(() => window.__hurts.slice(-8)) }; console.log('ketos death ' + JSON.stringify(seen.died)); await shot(); break; }
+      for (const v of s.vulns) if (!seen[v]) { seen[v] = s.t; if (!shots.has(v)) { shots.add(v); await shot(); } }
+      if (s.phase === 1 && s.mere != null) seen.mere1 = Math.min(seen.mere1 ?? 99, s.mere);
+      if (last && s.phase !== last.phase && !shots.has('p' + s.phase)) { shots.add('p' + s.phase); await shot(); }
+      last = s;
+      if (s.done || s.dead) break;
+    }
+    const bot = await pg.evaluate(() => { if (window.BOT) window.BOT.stop = true; return window.__botP; });
+    if (process.env.HPTRACE) console.log('ketos hp by source ' + JSON.stringify(await pg.evaluate(() => Object.fromEntries(Object.entries(window.__src || {}).sort((a, b) => b[1] - a[1]).slice(0, 14).map(([k, v]) => [k, Math.round(v)])))));
+    await pg.waitForTimeout(3000); await shot();
+    const end = await pg.evaluate(() => { const G = window.__G, z = G.zone, L = window.__act6.AI_LOG, m = z.map; return { ketosDown: !!G.hero.flags.ketosDown, mere: z.tide?.mere, mstep: z.tide?.mstep, gapsOpen: (z.L.gaps || []).every((gp) => gp.cells.some(([x, zz]) => m.walkable(x + 0.5, zz + 0.5))), hurtMax: +window.__hurtMax.toFixed(3), hurtBy: window.__hurtBy, log: Object.fromEntries(Object.entries(L).filter(([k]) => k.startsWith('ketos'))) }; });
+    const lg = end.log, win = { seared: !!seen.seared || lg['ketos:seared'] > 0, exposed: !!seen.exposed || lg['ketos:slam'] > 0, blinded: !!seen.blinded || lg['ketos:stalkCut'] > 0 };
+    // (a window its own floor or turn held shut, nothing could take its life then: not counted)
+    const wins = Object.values(bot?.win || {}), missed = wins.filter((w) => !w.hit && !w.held).length;
+    const [lo, hi] = (process.env.TTK || '70,330').split(',').map(Number);
+    const ttk = bot?.t ?? null, inBand = ttk != null && ttk >= lo && ttk <= hi, cls = process.env.CLS || 'warden';
+    const pass = !seen.died && !!bot?.done && wake.flag && wake.gapsShut && win.seared && win.exposed && win.blinded && (seen.mere1 ?? 99) <= 6 && (cls !== 'warden' || (wins.length > 0 && missed === 0)) && end.hurtMax <= 0.12 && end.ketosDown && inBand && (!process.env.TTK0 || +process.env.DIFF !== 0 || ttk >= 0.6 * +process.env.TTK0);
+    return { pass, ttk, band: [lo, hi], design: [120, 200], diff: +(process.env.DIFF || 1), cls, win, windows: { n: wins.length, missed, byKind: wins.reduce((o, w) => ((o[w.kind] = (o[w.kind] || 0) + 1), o), {}), misses: wins.filter((w) => !w.hit), held: wins.filter((w) => w.held).length }, wake, mere1: seen.mere1, hurtMax: end.hurtMax, end, bot: bot && { t: bot.t, deaths: bot.deaths, potions: bot.potions, low: +bot.low.toFixed(2), phases: bot.phases }, seen, setup };
   } },
   // The Breathing-holes, sealed in turn (q28): the three lamps lit and the ring run; the Black Breath shielded (her in its
   // cone) and a lamp lost and lit again; the first hole's Sunken climbing out of the water, the second's Icemaw and lice,

@@ -205,6 +205,13 @@ export const MONSTERS = {
   gateFallenBow: { model: 'skeletonArcher', hp: 0.7, dmg: 0.9, speed: 3.6, radius: 0.45, ai: 'ranged', reach: 11, atk: 'shoot', atkTime: 1.7, flesh: 'bone', xp: 1.3, weapon: 'crossbow', style: 'bow', sfx: 'skeleton', proj: 'arrow', rises: true, lightRest: true, unlit: true, wake: { d: 6, clip: 'rise', pose: 'bonePile', sfx: 'skeletonRattle', t: 2.0 }, look: { tint: 0xb8d0e0, tintAmt: 0.5, rim: 0xc8e0ff, rimI: 0.2 } },
   falselight: { model: 'falselight', hp: 1.2, dmg: 1.3, speed: 4.6, radius: 0.55, ai: 'lure', reach: 2.4, atk: 'bite', atkTime: 1.1, flesh: 'chitin', xp: 2.4, sfx: 'spider', unlit: true, lure: { r: 3, bait: 0.8, tell: 0.8, pull: 2, drain: 1.0 }, look: { scale: 1.6, tint: 0xd8d4cc, tintAmt: 0.7, rim: 0xd8f0ff, rimI: 0.25 } },
   ketling: { model: 'ketling', hp: 0.8, dmg: 0.6, speed: 4.0, radius: 0.4, ai: 'melee', reach: 2.0, atk: 'bite', atkTime: 1.0, flesh: 'flesh', xp: 1, swim: true, unlit: true, gnaw: 1 },
+  // Act VI's bosses (docs/act6-design.md, Bosses; ai.js KETOS, SHADE_FORM). The Ketos lies in the Black Mere, anchored to
+  // its water; its head on the shore (Seared, Exposed) is a hit proxy, ketosHead, whose every blow is the Ketos's (share);
+  // its lure stalk's segments are nodes with lives of their own (4% of its life each, set at their spawn). invisible: a
+  // body that is only there to be struck (no avatar drawn, no bar, no shadow)
+  ketos: { model: 'ketos', hp: 260, dmg: 2.0, speed: 0, underSpeed: 5.0, radius: 0.8, ai: 'ketos', reach: 10, atk: 'strike', atkTime: 1.6, flesh: 'flesh', xp: 170, boss: true, big: true, swim: true, anchored: true, legKey: 'ketos', dieSfx: 'bossRoar', dieClip: 'settle', look: { scale: 3.6, tint: 0xc8ccd0, tintAmt: 0.4, rim: 0xbfd8e8, rimI: 0.3 } },
+  ketosHead: { model: 'spiderling', hp: 1, dmg: 0, speed: 0, radius: 1.2, ai: 'node', reach: 0, atk: 'cast', atkTime: 9, flesh: 'flesh', xp: 0, big: true, anchored: true, weight: 0, share: true, noBar: true, invisible: true },
+  ketosStalk: { model: 'spiderling', hp: 1, dmg: 0, speed: 0, radius: 0.55, ai: 'node', reach: 0, atk: 'cast', atkTime: 9, flesh: 'bone', xp: 0, anchored: true, weight: 0, invisible: true, noLoot: true },
   // the ranger's companion
   spiritWolf: { model: 'spiritWolf', hp: 2, dmg: 1, speed: 7.5, radius: 0.55, ai: 'pet', reach: 1.7, atk: 'bite', atkTime: 0.8, flesh: 'spirit', xp: 0, pet: true }
 };

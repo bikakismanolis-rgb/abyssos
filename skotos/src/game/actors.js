@@ -66,7 +66,7 @@ const STAND_IN = {
 // a stand-in drawn at another size than the model it stands for (model>stand-in)
 const STAND_SCALE = { 'ashwing>caveBat': 2.6, 'smokeEater>spider': 0.75, 'isarnBoy>wayfarer': 0.62,
   'tower>spider': 0.8, 'reefback>spider': 0.8, 'skotos>troll': 0.75, 'icemaw>warg': 0.75, 'tern>villager0': 0.62,
-  'falselight>spider': 0.8, 'ketling>icemaw': 0.6, 'ketling>warg': 0.45, 'ketos>icemaw': 3.4, 'ketos>warg': 2.6 };
+  'falselight>spider': 0.8, 'ketling>icemaw': 0.6, 'ketling>warg': 0.45, 'ketos>icemaw': 3.4 / 3.6, 'ketos>warg': 2.6 / 3.6 };
 const ready = (m) => hasPerson(m) || hasCreature(m) || !!BUILD[m];
 export function standIn(model) {
   for (let i = 0; i < 4 && !ready(model) && STAND_IN[model]; i++) { const s = STAND_IN[model]; model = Array.isArray(s) ? s.find(ready) || s[s.length - 1] : s; }
@@ -211,6 +211,8 @@ export function spawnMonster(id, x, z, o = {}) {
   a.home = { x, z };
   a.cd = rand.range(0.2, 1.2);
   if (o.rising) { a.rising = 1.6; av.play('rise', 1); }
+  // (a body only there to be struck: the Ketos's head on the shore, its lure stalk's segments, drawn by the fight's code)
+  if (def.invisible) av.group.visible = false;
   actSpawn(id, def, a, av, o);
   return a;
 }

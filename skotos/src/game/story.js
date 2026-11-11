@@ -336,6 +336,9 @@ on('kill', (a) => {
   // Act V: the Walking Tower crawls home and is an island again; the Skotos is named
   if (a.kind === 'tower' && G.zone.id === 'coast') towerDown(G.zone, a);
   if (a.kind === 'skotos' && G.zone.id === 'farlight') skotosDown(G.zone, a);
+  // Act VI's bosses (stage C's part; stage D adds their lines, the lantern in the mud, the cines): the flag first, saved
+  if (a.kind === 'ketos' && G.zone.id === 'drained') boss6Down(G.zone, a, 'ketosDown');
+  if (a.def?.legKey === 'shade' && G.zone.id === 'bottom') boss6Down(G.zone, a, 'shadeDown');
   if (G.gate && G.zone.id === 'gate') emit('gateKill', a);
 });
 // Act IV's bosses take what they called up with them: Ivar's Lampless kneel and fade, Karthax's raised host falls back into
@@ -351,6 +354,14 @@ function dismiss5(z, b) {
     if (m === b || m.dead || m.prop || m.team !== 'foe' || m.boss || m.packId != null || Math.hypot(m.x - b.x, m.z - b.z) > 40) continue;
     puff(m.x, 0.6, m.z, 10, 0xd8e8f0, 1.2, 1.2, 1); release(z, m, false);
   }
+}
+function boss6Down(z, a, flag) {
+  G.bossActor = null;
+  emit('bossDown', a);
+  dismiss5(z, a);
+  if (a.echo) return;
+  G.hero.flags[flag] = true;
+  writeSave();
 }
 // her lucid moment, then the Autumn (at the kill, or on the next entry if the game closed or the hero left first)
 function ladyFalls(z, a) {

@@ -1157,6 +1157,9 @@ export const TEXT = {
   'mon.lampbearer': ['Θαλασσόπνικτος Λυχνοφόρος', 'Sunken Lampbearer'], 'mon.faded': ['Ξέθωρος', 'Faded'],
   'mon.gateFallen': ['Πεσμένος των Πυλών', 'Gate-Fallen'], 'mon.gateFallenBow': ['Τοξότης των Πυλών', 'Gate-Fallen Bowman'],
   'mon.falselight': ['Δολοφέγγης', 'Falselight'], 'mon.ketling': ['Κητόπουλο', 'Ketling'],
+  // (the bosses, stage C: their titles and taglines from the design; the forms' names as the Shade's taglines)
+  'mon.ketos': ['Το Κήτος', 'The Ketos'], 'mon.ketos.t': ['Ποτέ μην τραβάς κουπί προς φως που δεν τρέμει', 'Never row toward a light that doesn\'t flicker'],
+  'wreck.light': ['Άναψε το φανάρι', 'Light the lantern'], 'bell.ring': ['Χτύπα την καμπάνα', 'Ring the bell'], 'hud.heard': ['Σε άκουσε', 'Heard'],
   'boon.bearer': ['Η Φέρουσα', 'The Bearer'], 'boon.bearer.d': ['+12% εμβέλεια, +10% ζημιά', '+12% area, +10% damage'], 'boon.bearer.du': ['+15% εμβέλεια, +12% ζημιά', '+15% area, +12% damage'],
   'boon.bearer.q': ['Ό,τι κουβάλησες ως κάτω, σε κουβαλά τώρα εκείνο.', 'What you carried all the way down now carries you.'],
   'boon.word': ['Ο Λόγος του Γλαύκου', 'Glaukos\'s Word'], 'boon.word.d': ['+12% ζωή, +12 ζωή ανά χτύπημα', '+12% life, +12 life on hit'], 'boon.word.du': ['+15% ζωή, +15 ζωή ανά χτύπημα', '+15% life, +15 life on hit'],

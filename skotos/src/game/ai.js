@@ -23,7 +23,7 @@ import { wadeAt, waterAt, TIDE } from './tide.js';
 import { ICE, iceAt, stageAt, crackAt, crackLine, crackCone, breakAt, holeNear, FALLS, drown } from './ice.js';
 import { setShade, setWake } from '../world/sea.js';
 import { ATMOS, mixAtmos } from '../world/atmos.js';
-import { ZONES, checkpoint5 } from './world.js';
+import { ZONES, checkpoint5, light6, storyOpenings } from './world.js';
 import { tidal } from '../world/gen5.js';
 import { COLD, coldAdd } from './cold.js';
 import { dropGlobe } from './pickups.js';
@@ -48,7 +48,7 @@ if (import.meta.env?.DEV && typeof window !== 'undefined') {
   window.__act3 = { AI_LOG, damage, addSapPool, sapPools, spawnNpc, moveMul, heroHit, startDrips, grantBuff };
   window.__act4 = { AI_LOG, LIGHT, lightAt, heroLightR, addLightPool, setHeroLight, getLightPool, lightPools, seeHero, clingHero, shakeOff, REMAINS, startFlues, flues, fluePeriod, setFlueHeat, setFluePumping, spawnNpc, damage, moveMul };
   window.__act5 = Object.assign(window.__act5 || {}, { AI_LOG, LIGHT, lightAt, lampLightAt, warmAt, addBeam, removeBeam, beams, inBeam, addVuln, vuln, vulnOf, COLD, coldAdd, spawnNpc, spawnMonster, damage, moveMul, addSapPool, placeCasks });
-  window.__act6 = Object.assign(window.__act6 || {}, { AI_LOG, addVuln, vuln, spawnMonster, spawnNpc, damage, kill });
+  window.__act6 = Object.assign(window.__act6 || {}, { AI_LOG, addVuln, vuln, spawnMonster, spawnNpc, damage, kill, BLOW6: () => BLOW6 });
 }
 
 export function updateActors(dt) {
@@ -76,7 +76,7 @@ export function updateActors(dt) {
     // only think when near the hero
     const dx = pl.x - a.x, dz = pl.z - a.z, d = Math.hypot(dx, dz);
     if (d > 38 && !a.boss && !a.pet) { if (a.avatar) a.avatar.group.visible = false; continue; }
-    if (a.avatar) a.avatar.group.visible = !a.hidden;
+    if (a.avatar) a.avatar.group.visible = !a.hidden && !a.def.invisible;
     // Act V: a frozen crew stands as ice at the rails until the ice cracks beside it
     if (a.dormant && a.statue) { statueTick(a, dt, d, pl); continue; }
     if (a.dormant) {
@@ -854,6 +854,8 @@ const AI = {
   // the bosses: what runs whatever they do (the water, the Hands, the Night, the camera), then their moves
   tower: (a, dt, pl, d) => { const v = towerPre(a, dt, pl, d); const r = boss(a, dt, pl, d, TOWER); return v || r; },
   skotos: (a, dt, pl, d) => { skotosPre(a, dt, pl, d); return boss(a, dt, pl, d, SKOTOS); },
+  // Act VI: the Ketos in the Black Mere (the Shade's forms below)
+  ketos: (a, dt, pl, d) => { ketosPre(a, dt, pl, d); return boss(a, dt, pl, d, KETOS); },
   pet: null
 };
 
@@ -4737,5 +4739,424 @@ function skotosDying(a, dt) {
   av.group.position.set(a.x, a.y || 0, a.z); av.update(dt, { speed: 0, float: false }); av.setFlash(0);
   if (a.sinking > 7) a.remove();
 }
+
+// =====================================================================================================================
+// ---------- Act VI: the Ketos (docs/act6-design.md, Bosses; docs/act6-contract.md, The bosses) ----------
+// The sea-beast of the old vases, in the last black water over the Well, anchored in the Mere's core. Phase 1, the Lure
+// (100-65%): its body under, its head and lure over the water at her side; a Neck Strike that ends at the flame of a lit
+// lantern whose pool she stands in Sears it (the head on the shore: the ketosHead hit proxy there). The turn: it rears
+// (3 s, nothing hurts it) and the Mere drains, five steps to 0.85 m over 15 s. Phase 2, the Mere Drains (65-30%): its
+// Neck Slams across the mud leave the head on the shore 4 s, Exposed, with the lure stalk's segments to cut (each Blinds
+// it 4 s). Phase 3, Blind (30-0%): it strikes 0.8 s after the last sound (a skill used within 14 m of it); a bell rung
+// beside a lit lantern brings its head down on that fire (Seared 4 s). Outside its windows its body is under the black
+// water in phases 1 and 3 (nothing reaches it) and half out on the mud in phase 2 (30%); with its head on the shore the
+// whole beast is open
+const H6b = () => HAZ6[G.hero?.diff ?? 1] || HAZ6[1];
+const bcd6 = (s) => s * H6b().bossCd;
+const cdm6 = (base) => (a, ph) => bcd6(Array.isArray(base) ? base[ph] : base);
+// a blow that takes ring metres too: the page's own hero's ring drains here, a guest's rides the blow (ring)
+const BLOW6 = { last: null };
+function ringHit(a, p, mult, ring, o = {}) {
+  BLOW6.last = { kind: a.kind, mult, t: G.hero?.stats.time };
+  const n = hitHero(a, p, mult, Object.assign({ target: p, kx: p.x - a.x, kz: p.z - a.z }, o, ring ? { ring: ringOpt(p, ring) } : null));
+  if (n > 0 && ring) drainOf(p, ring, a.kind);
+  return n;
+}
+const KETOS_BODY = 0.3;
+const mereOf = () => G.zone?.L?.spots?.mere;
+const KM = () => G.zone?.act6?.mere || null;
+// the water's edge, r from the Mere's centre, on the way to p
+function edgeOf(p, r = 9.4) { const M = mereOf(), g = angleTo(M.x, M.z, p.x, p.z); return { x: M.x + Math.sin(g) * r, z: M.z + Math.cos(g) * r, g }; }
+// the lit lantern whose pool (x, z) stands in
+function litLantern(x, z) { for (const it of KM()?.lamps || []) if (it.lit && Math.hypot(it.x - x, it.z - z) < it.lightR) return it; return null; }
+const KETOS = {
+  name: 'ketos', phases: [0.65, 0.3], wake: 26,
+  intro(a) { ketosIntro(a); },
+  onPhase(a, ph) { if (ph === 1) ketosTurn(a); if (ph === 2) ketosBlind(a); },
+  // (its beats, under the water on a Dive, the party gone from the Heap: no move of its own)
+  tick(a) { if (a.beat > 0 || a.away || a.diving) return 0; return null; },
+  moves: [
+    { id: 'kets', when: (a) => a.phase <= 1 && alive(a.kets).length < 4 + H6b().adds && partyNear(a, 22), cdOf: cdm6(16), run: (a, pl) => callKetlings(a, pl) },
+    { id: 'lure', when: (a) => a.phase === 0 && !KM()?.lure && partyNear(a, 24) && roomFor(a), cdOf: cdm6(8), run: (a, pl) => lureDrift(a, pl) },
+    { id: 'slam', when: (a, d) => a.phase === 1 && d < 19 && !KM()?.head && roomFor(a), cdOf: cdm6(9), run: (a, pl) => neckSlam(a, pl) },
+    { id: 'strike', when: (a, d) => a.phase === 0 && d < 20 && !KM()?.head && !KM()?.lure?.tell && roomFor(a), cdOf: cdm6(9), run: (a, pl) => neckStrike(a, strikeEnd(pl)) },
+    { id: 'dive', when: (a) => a.phase === 2 && !!a.heard && Math.hypot(a.heard.x - mereOf().x, a.heard.z - mereOf().z) < 10.5 && !KM()?.head && roomFor(a), cdOf: cdm6(14), run: (a) => ketosDive(a) },
+    { id: 'thrash', when: (a) => a.phase >= 1 && !KM()?.head && heroesWithin(a.x, a.z, 8.5) && roomFor(a), cdOf: cdm6(10), run: (a) => thrash(a) },
+    { id: 'spray', when: (a, d) => a.phase <= 1 && d < 20 && roomFor(a), cdOf: cdm6(11), run: (a, pl) => blackSpray(a, pl) },
+    { id: 'sweep', basic: true, when: (a) => !KM()?.head && !!headNear(a) && roomFor(a), cdOf: cdm6(7), run: (a) => jawSweep(a, headNear(a)) }
+  ]
+};
+const heroesWithin = (x, z, r) => heroes().some((p) => !p.dead && Math.hypot(p.x - x, p.z - z) < r);
+// the hero its head can sweep: within 8 m of the water's edge on her side
+function headNear(a) {
+  let best = null, bd = 8;
+  for (const p of heroes()) { if (p.dead) continue; const e = edgeOf(p), d = Math.hypot(p.x - e.x, p.z - e.z); if (d < bd) { bd = d; best = p; } }
+  return best;
+}
+function ketosIntro(a) {
+  emit('bossIntro', a); tally(a, 'intro');
+  Audio.sfx('bossRoar', { vol: 0.9, pitch: 0.6 }); shake(0.4);
+  a.rooted = true; a.resist = KETOS_BODY; a.y = -1.6;
+  a.mcd.kets = bcd6(12); a.mcd.lure = bcd6(3); a.mcd.strike = bcd6(5); a.mcd.spray = bcd6(9); a.mcd.sweep = bcd6(4);
+  // (a burst may not skip the Lure: its floor holds at 65% until the turn's beat, then at 30%; each hold on a 30 s clock)
+  a.hpFloor = a.hpMax * 0.649; a.floorT = 0;
+  const K = KM(); if (K) { K.slams = 0; K.searT = 0; }
+  lureLight(a, true);
+}
+// woken by the story (world.js 'ketosWake': the Heap's gaps shut behind her); 3 s for the cine, then up
+on('ketosWake', (b) => { if (!b || b.dead) return; later(3, () => { if (b.dead || b.removed || b.awake) return; b.holdWake = false; b.awake = true; b.aggro = true; b.mcd = {}; b.phase = 0; KETOS.intro(b); b.cd = 1.5; }); });
+
+// every frame, a beat or a move included: the party in the Heap or gone, the head's window, the lure, the sounds, the
+// floor's clock, the body's depth, the camera
+function ketosPre(a, dt, pl, d) {
+  const K = KM(), M = mereOf();
+  if (!a.awake) { a.y = -3; a.submerged = true; if (a.avatar) a.avatar.group.visible = false; return 0; }
+  if (a.invuln > 0 && (a.invuln -= dt) <= 0) { a.invuln = 0; restoreRim(a); }
+  if (a.beat > 0) a.beat -= dt;
+  const away = !partyInArena(a, 2);
+  if (away && !a.away) ketosAway(a);
+  else if (!away && a.away) ketosBack(a);
+  a.away = away;
+  if (!K || !M) return 0;
+  // the head's window: a Sear or an Exposure, then back into the water
+  const H = K.head;
+  if (H && (H.t -= dt) <= 0) headDown(a);
+  // (its body: under the black water in phases 1 and 3, out of everything's reach; half out on the mud in phase 2, 30%;
+  // the whole beast open while its head lies on the shore)
+  a.resist = K.head ? 1 : KETOS_BODY; a.submerged = !K.head && a.phase !== 1;
+  if (K.lure) lureTick(a, K.lure, dt);
+  if (a.phase === 2 && !away) blindTick(a, dt);
+  // (a hold too long: the floor gives way after 30 s at it)
+  if (a.hpFloor > 0 && a.hp <= a.hpFloor + 1) { if ((a.floorT += dt) > 30) { a.hpFloor = 0; tally(a, 'floorClock'); } } else a.floorT = 0;
+  // its body: under the black water (phase 1), half out on the mud (phase 2), lower again blind, deep on a Dive
+  const want = a.diving ? -4.5 : a.phase === 1 ? -0.5 : a.phase === 2 ? -1.0 : -1.6;
+  a.y = damp(a.y ?? want, want, 2, dt);
+  if (a.avatar) a.avatar.group.visible = !a.hidden;
+  lureLight(a, !away && K.cut < 3 && a.phase < 2);
+  // the camera: a little higher and further back while she fights it, aimed toward the Mere
+  const me = G.player;
+  if (heroNear(a, 26) && !me.dead) {
+    const D = Math.hypot(a.x - me.x, a.z - me.z), k = clamp((22 - D) / 10, 0, 1), g = angleTo(me.x, me.z, M.x, M.z), ah = Math.min(3.5, D * 0.25) * k;
+    fightCam(dt, a.turnCam > 0 ? { p: 0.45, y: 2.2, z: 1.2, ax: Math.sin(g) * ah, az: Math.cos(g) * ah } : { p: 0.84 - 0.08 * k, y: 1.3 + 1.0 * k, z: 1.15 + 0.08 * k, ax: Math.sin(g) * ah, az: Math.cos(g) * ah });
+    if (a.turnCam > 0) a.turnCam -= dt;
+  } else fightCam(dt, null);
+  return 0;
+}
+
+// ---------- the lure: a light over the water at her side, a false pool on the shore ----------
+function lureLight(a, on) {
+  const K = KM(); if (!K) return;
+  if (!on) { if (K.lureL) { removeLight(K.lureL); K.lureL = null; } return; }
+  const p = G.player, e = edgeOf(p, 8.6), y = 3.4 + Math.sin(a.t * 1.3) * 0.25;
+  if (!K.lureL) K.lureL = addLight({ x: e.x, y, z: e.z, color: 0xd8f0ff, intensity: 10, range: 6, flicker: 0 });
+  const L = K.lureL; L.x += (e.x - L.x) * 0.05; L.z += (e.z - L.z) * 0.05; L.y = y;
+  if (Math.random() < 0.25) P({ x: L.x, y: L.y, z: L.z, life: 0.25, size: 0.55, size1: 0.35, color: 0xe8f8ff });
+}
+// Lure Drift: the lure glides to her side; a steady cold pool of r 4 on the shore within 5 m of her (no flicker, a pure tone)
+function lureDrift(a, pl) {
+  const M = mereOf(), map = G.zone.map, K = KM();
+  let at = null;
+  for (let k = 0; k < 16 && !at; k++) {
+    const g = rand.range(0, 6.28), r = rand.range(2, 5), x = pl.x + Math.sin(g) * r, z = pl.z + Math.cos(g) * r, dm = Math.hypot(x - M.x, z - M.z);
+    if (dm < 11 || dm > 18 || !map.walkable(x, z) || litLantern(x, z)) continue;
+    at = { x, z };
+  }
+  if (!at) return { t: 0.3, fn() {}, after: 0.2 };
+  const pool = addLightPool(at.x, at.z, 4, 12, 'ketosLure', { fake: true, color: 0xd8e8ff });
+  K.lure = { x: at.x, z: at.z, r: 4, t: 12, stand: 0, tell: 0, pool };
+  Audio.sfx('lureTone', { x: at.x, z: at.z, vol: 0.6 }); tally(a, 'lure');
+  return { t: 0.6, noFace: true, fn() {}, after: 0.3 };
+}
+function lureTick(a, L, dt) {
+  const K = KM();
+  if (L.tell > 0) {
+    if ((L.tell -= dt) <= 0) { neckStrike(a, { x: L.x, z: L.z, lure: true }, { lure: true }); dropLure(); }
+    return;
+  }
+  if ((L.t -= dt) <= 0 || a.phase !== 0) { dropLure(); return; }
+  const inIt = heroes().some((p) => !p.dead && Math.hypot(p.x - L.x, p.z - L.z) < L.r);
+  L.stand = inIt ? L.stand + dt : Math.max(0, L.stand - dt);
+  // 0.8 s in it: its rim goes sea-green (0.9 s), then the Neck Strike at the pool
+  if (L.stand >= 0.8 * (H6b().bait ?? 0.8) / 0.8 && roomFor(a) && !K.head) { L.tell = 0.9; if (L.pool) L.pool.color = SEA; ring(L.x, L.z, L.r, SEA, 0.9); tally(a, 'lureBit'); }
+}
+function dropLure() { const K = KM(); if (!K?.lure) return; dropPool6('ketosLure'); K.lure = null; }
+
+// ---------- Neck Strike: a line from the water to its end; ending at a lit lantern's flame, the head lies Seared ----------
+function strikeEnd(pl) {
+  const it = litLantern(pl.x, pl.z); if (it) return { x: it.x, z: it.z, lamp: it };
+  const L = KM()?.lure; if (L && Math.hypot(pl.x - L.x, pl.z - L.z) < L.r) return { x: L.x, z: L.z, lure: true };
+  return { x: pl.x, z: pl.z };
+}
+function neckStrike(a, end, o = {}) {
+  const e0 = edgeOf(end), rot = angleTo(e0.x, e0.z, end.x, end.z), len = clamp(Math.hypot(end.x - e0.x, end.z - e0.z) + 1, 4, 10);
+  const tele = teleLine(e0.x, e0.z, rot, len, 2.2, 1.0, o.lure ? SEA : undefined); bigTele(a, 1.0);
+  Audio.sfx('bossRoar', { x: e0.x, z: e0.z, vol: 0.5, pitch: 0.7 }); splashFx(e0.x, e0.z, 1.4);
+  a.rot = angleTo(a.x, a.z, end.x, end.z);
+  later(1.0, inZone(a, () => {
+    killTele(tele);
+    const ux = Math.sin(rot), uz = Math.cos(rot);
+    for (let d = 0; d < len; d += 0.6) P({ add: false, x: e0.x + ux * d, y: 1.2, z: e0.z + uz * d, vy: rand.range(0.5, 2), life: 0.5, size: 0.7, size1: 1.2, color: 0xc8ccd0, alpha: 0.5 });
+    splashFx(e0.x, e0.z, 1.6); shake(0.3); Audio.sfx('slam', { x: end.x, z: end.z, vol: 0.8 });
+    for (const p of heroes()) if (!p.dead && inLine(e0.x, e0.z, rot, len, 2.2, p)) {
+      ringHit(a, p, o.lure ? 1.5 : 1.4, o.lure ? 1 : 0, { push: 10 });
+      if (o.lure && p === G.player) pullHero(e0.x, e0.z, 2, 0.35, 'hud.pulled', 0.8);
+    }
+    const it = end.lamp;
+    if (it?.lit) searHead(a, it, o.t ?? 3);
+    tally(a, o.lure ? 'lureStrike' : o.sound ? 'blindStrike' : 'strike');
+  }));
+  return { t: 0.5, noFace: true, fn() {}, after: 0.6 };
+}
+// the head lies on the shore by the lantern it struck: Seared t s (x1.5), the proxy there to be struck
+function searHead(a, it, t) {
+  const M = mereOf(), g = angleTo(it.x, it.z, M.x, M.z);
+  const f = G.zone.map.nearestFloor(it.x + Math.sin(g) * 1.6, it.z + Math.cos(g) * 1.6, 2.5);
+  addVuln(a, 'seared', t);
+  headUp(a, f.x, f.z, t, 'seared');
+  glowBurst(it.x, 1.9, it.z, 0xffd080, 30, 3, 0.3, 0.8); Audio.sfx('lightCatch', { x: it.x, z: it.z, vol: 0.8 });
+  const K = KM(); if (K) K.searT = 0;
+  emit('ketosSeared', a, it); tally(a, 'seared');
+}
+// the head proxy (combat.js def.share: every blow on it is the Ketos's), t s at (x, z)
+function headUp(a, x, z, t, kind) {
+  const K = KM(); if (!K) return;
+  if (K.head) headDown(a, true);
+  const h = spawnMonster('ketosHead', x, z, { level: a.level });
+  h.shareTo = a; h.hand = a; h.awake = true; h.aggro = true; h.hp = h.hpMax = 1e9;
+  G.actors.push(h);
+  K.head = { h, t, kind, x, z, id: (K.headN = (K.headN || 0) + 1) };
+  // (its look: the stand-in's own head is out in the water; spray, a pale shape on the shore where the proxy lies)
+  splashFx(x, z, 1.4); puff(x, 0.4, z, 10, 0xc8ccd0, 1.2, 1.4, 1.2); ring(x, z, 1.4, 0xd8e0e8, t);
+}
+function headDown(a, quiet) {
+  const K = KM(), H = K?.head; if (!H) return;
+  if (!H.h.removed) H.h.remove();
+  for (const s of K.stalks || []) if (!s.dead && !s.removed) s.remove();
+  K.stalks = []; K.head = null;
+  if (!quiet) splashFx(H.x, H.z, 1.0);
+}
+
+// ---------- the turn at 65%: it rears and holds 3 s; the Skotos breathes in and the Mere drains ----------
+function ketosTurn(a) {
+  a.beat = 3; a.invuln = 3; a.move = null; killTele(a.tele); a.tele = null; a.turnCam = 3;
+  a.avatar?.setRim(0xffffff, 1.4); a.avatar?.play('rise', 1);
+  dropLure(); headDown(a, true);
+  for (const p of heroes()) if (p === G.player && !p.dead) p.iframes = Math.max(p.iframes || 0, 3);
+  Audio.sfx('bossRoar', { vol: 1, pitch: 0.55 }); Audio.sfx('iceCreak', { vol: 1 }); shake(0.6);
+  emit('ketosTurn', a); tally(a, 'turn');
+  later(3, inZone(a, () => { mereTo(0.85, 0.05); a.hpFloor = a.hpMax * 0.299; a.floorT = 0; a.mcd.slam = bcd6(3); a.mcd.thrash = bcd6(6); }));
+}
+function mereTo(h, rate) { const T = G.zone?.tide; if (T) T.mere = { h, rate }; }
+// ---------- the 30% beat: Blind; it hunts by sound now ----------
+function ketosBlind(a) {
+  a.beat = 2; a.invuln = 2; a.move = null; killTele(a.tele); a.tele = null;
+  a.avatar?.setRim(0xffffff, 1.4); a.avatar?.play('rise', 1);
+  dropLure(); headDown(a, true); lureLight(a, false);
+  a.hpFloor = 0; a.heard = null; a.blindT = 0;
+  const K = KM(); if (K) { K.searT = 0; K.bell = null; }
+  for (const it of K?.bells || []) it.prio = 1;
+  Audio.sfx('bossRoar', { vol: 1, pitch: 0.5 }); shake(0.5);
+  emit('ketosBlind', a); tally(a, 'blind');
+  later(2, inZone(a, () => { a.mcd.dive = bcd6(6); a.mcd.thrash = bcd6(4); }));
+}
+
+// ---------- phase 2: Neck Slam; the head on the shore 4 s, Exposed, the lure stalk's segments to cut ----------
+function neckSlam(a, pl) {
+  const K = KM(), rot = angleTo(a.x, a.z, pl.x, pl.z), x0 = a.x, z0 = a.z;
+  const tele = teleLine(x0, z0, rot, 16, 3, 1.3); bigTele(a, 1.3);
+  a.rot = rot; a.avatar?.play('slam', 1);
+  Audio.sfx('bossRoar', { x: a.x, z: a.z, vol: 0.6, pitch: 0.8 });
+  // the fail-safe: three slams without a cut, and Glaukos throws a flask at the sound of the stalk on this one
+  const flask = K.cut < 3 && (K.slams || 0) >= 3;
+  if (flask) { K.slams = 0; emit('ketosFailsafe', a, 'flask'); tally(a, 'flask'); } else K.slams = (K.slams || 0) + 1;
+  later(1.3, inZone(a, () => {
+    killTele(tele);
+    const ux = Math.sin(rot), uz = Math.cos(rot);
+    for (let d = 1; d < 16; d += 0.8) puff(x0 + ux * d, 0.3, z0 + uz * d, 2, 0x3a3a3a, 0.8, 0.8, 0.8);
+    shake(0.55); Audio.sfx('slam', { x: x0 + ux * 10, z: z0 + uz * 10 });
+    for (const p of heroes()) if (!p.dead && inLine(x0, z0, rot, 16, 3, p)) ringHit(a, p, 1.6, 0, { push: 14 });
+    const f = G.zone.map.nearestFloor(x0 + ux * 13.5, z0 + uz * 13.5, 3);
+    addVuln(a, 'exposed', 4);
+    headUp(a, f.x, f.z, 4, 'exposed');
+    stalks(a, f, rot, flask);
+    tally(a, 'slam');
+  }));
+  return { t: 0.6, noFace: true, fn() {}, after: 0.8 };
+}
+// the lure stalk lies beside the head, from its brow out along the shore (in sight of a bow on the shore, not behind the
+// head): the segments not yet cut, each 4% of its life
+function stalks(a, f, rot, flask) {
+  const K = KM(), n = 3 - (K.cut || 0), side = rot + Math.PI / 2 * (Math.random() < 0.5 ? 1 : -1); K.stalks = [];
+  for (let i = 0; i < n; i++) {
+    const p = G.zone.map.nearestFloor(f.x + Math.sin(side) * (1.8 + i * 1.2) - Math.sin(rot) * 0.4 * i, f.z + Math.cos(side) * (1.8 + i * 1.2) - Math.cos(rot) * 0.4 * i, 2);
+    const s = spawnMonster('ketosStalk', p.x, p.z, { level: a.level });
+    s.hp = s.hpMax = Math.max(1, a.hpMax * 0.04); s.hand = a; s.ketos = a; s.awake = true; s.aggro = true;
+    G.actors.push(s); K.stalks.push(s);
+    s.glow = addLight({ x: p.x, y: 0.6, z: p.z, color: 0xd8f0ff, intensity: 4, range: 2.4, flicker: 0 });
+  }
+  if (flask && K.stalks.length) later(0.6, inZone(a, () => { const s = K.stalks.find((q) => !q.dead && !q.removed); if (!s) return; explosion(s.x, s.z, 1.2, 0xff8a30, { smoke: 0x1a1612, shake: 0.2 }); area('fire', s.x, s.z, 1.4, 4, { team: 'hero', floats: true }); kill(s, null); }));
+}
+// a segment cut: Blinded 4 s (x1.6, its one scripted window); with all three cut the lure is gone for the fight
+on('kill', (s) => {
+  if (s.kind !== 'ketosStalk' || !s.ketos) return;
+  const a = s.ketos, K = KM();
+  if (s.glow) { removeLight(s.glow); s.glow = null; }
+  if (!K || a.dead) return;
+  K.cut = (K.cut || 0) + 1; K.slams = 0;
+  addVuln(a, 'blinded', 4);
+  glowBurst(s.x, 0.8, s.z, 0xe8f8ff, 26, 2.5, 0.3, 0.7); Audio.sfx('lampSnuff', { x: s.x, z: s.z });
+  if (K.cut >= 3) { lureLight(a, false); emit('ketosLureGone', a); }
+  tally(a, 'stalkCut');
+});
+
+// ---------- Jaw Sweep, Thrash, Black Spray, the Ketlings ----------
+function jawSweep(a, p) {
+  if (!p) return { t: 0.2, fn() {}, after: 0.2 };
+  const e = edgeOf(p, a.phase === 1 ? 8 : 9.4), rot = angleTo(e.x, e.z, p.x, p.z);
+  const tele = teleCone(e.x, e.z, rot, 8, 1.1, 1.1); bigTele(a, 1.1);
+  Audio.sfx('swingHeavy', { x: e.x, z: e.z, vol: 0.8 });
+  later(1.1, inZone(a, () => {
+    killTele(tele); splashFx(e.x, e.z, 1.2);
+    for (const q of heroes()) if (!q.dead && inCone(e.x, e.z, rot, 8, 1.1, q)) ringHit(a, q, 1.2, 0, { push: 6 });
+    tally(a, 'sweep');
+  }));
+  return { t: 0.6, noFace: true, fn() {}, after: 0.6 };
+}
+function thrash(a) {
+  const x = a.x, z = a.z, tele = teleCircle(x, z, 7, 1.2); bigTele(a, 1.2);
+  a.avatar?.play('thrash', 1); Audio.sfx('bossRoar', { x, z, vol: 0.5, pitch: 0.9 });
+  later(1.2, inZone(a, () => {
+    killTele(tele); splashFx(x, z, 3); shake(0.45);
+    for (const p of heroes()) if (!p.dead && Math.hypot(p.x - x, p.z - z) < 7 + p.radius * 0.5) ringHit(a, p, 1.3, 0, { push: 12 });
+    tally(a, 'thrash');
+  }));
+  return { t: 0.7, noFace: true, fn() {}, after: 0.7 };
+}
+function blackSpray(a, pl) {
+  const z0 = G.zone;
+  for (let k = 0; k < 3; k++) {
+    const g = rand.range(0, 6.28), r = k ? rand.range(1.5, 3) : 0, f = G.zone.map.nearestFloor(pl.x + Math.sin(g) * r, pl.z + Math.cos(g) * r, 2), dur = 1.0 + k * 0.2;
+    const tele = teleCircle(f.x, f.z, 2, dur);
+    lob(a.x, a.z, f.x, f.z, dur, 5, 0x101418, () => {
+      if (a.dead || G.zone !== z0) return;
+      killTele(tele); splashFx(f.x, f.z, 1.2);
+      for (const p of heroes()) if (!p.dead && Math.hypot(p.x - f.x, p.z - f.z) < 2 + p.radius * 0.5) ringHit(a, p, 0.8, 0);
+      area('black', f.x, f.z, 2, 6, { team: 'foe', src: a });
+    });
+  }
+  bigTele(a, 1.4); Audio.sfx('spit', { x: a.x, z: a.z, vol: 0.7 }); tally(a, 'spray');
+  return { t: 0.5, noFace: true, fn() {}, after: 0.6 };
+}
+function callKetlings(a, pl) {
+  const M = mereOf(), g0 = angleTo(M.x, M.z, pl.x, pl.z), n = 2 + (H6b().adds >= 1 ? 1 : 0);
+  a.kets ||= [];
+  for (let i = 0; i < n; i++) {
+    const g = g0 + (i - (n - 1) / 2) * 0.7, e = { x: M.x + Math.sin(g) * 10.6, z: M.z + Math.cos(g) * 10.6 };
+    for (let k = 0; k < 10; k++) later(k * 0.1, () => P({ add: false, x: M.x + (e.x - M.x) * (k / 10), y: 0.1, z: M.z + (e.z - M.z) * (k / 10), vy: 0.8, life: 0.5, size: 0.3, size1: 0.6, color: 0xd8e8f0, alpha: 0.6, alpha1: 0 }));
+    later(1.0, inZone(a, () => {
+      if (alive(a.kets).length >= 4 + H6b().adds) return;
+      const f = G.zone.map.nearestFloor(e.x, e.z, 3);
+      const m = spawnMonster('ketling', f.x, f.z, { level: Math.max(1, a.level - 2) });
+      m.aggro = true; m.boss6 = a; G.actors.push(m); a.kets.push(m); splashFx(f.x, f.z, 0.8);
+    }));
+  }
+  tally(a, 'kets');
+  return { t: 0.4, noFace: true, fn() {}, after: 0.4 };
+}
+
+// ---------- phase 3: blind, by sound; the bells ----------
+// a skill used within 14 m of it is a sound (the host's own hero here; a guest's, net/coop.js 'heroSound')
+function ketosHear(x, z, by) {
+  const a = G.zone?.boss; if (!a || a.kind !== 'ketos' || a.dead || a.phase !== 2 || a.away || !a.awake) return;
+  if (Math.hypot(x - a.x, z - a.z) > 14) return;
+  a.heard = { x, z, t: a.t, by };
+  ring(x, z, 1.2, 0x9ad8ff, 0.5);
+  if (by === G.player) number(x, 2.6, z, t('hud.heard'), 'text', '#9ad8ff');
+}
+on('skillUsed', () => { const p = G.player; if (p && !p.dead) ketosHear(p.x, p.z, p); });
+on('heroSound', (h) => { if (h && !h.dead) ketosHear(h.x, h.z, h); });
+function blindTick(a, dt) {
+  const K = KM();
+  a.blindT = (a.blindT || 0) - dt;
+  K.searT = (K.searT || 0) + dt;
+  // the fail-safe: 45 s without a Sear, and Glaukos rings a bell himself (one beside a lit lantern if there is one)
+  if (K.searT >= 45 && !K.bell) {
+    const b = (K.bells || []).find((q) => K.lamps[q.lamp]?.lit) || K.bells?.[0];
+    if (b) { ringBell(b, true); emit('ketosFailsafe', a, 'bell'); tally(a, 'bellFailsafe'); }
+    K.searT = 30;
+  }
+  if (a.beat > 0 || a.diving || a.move || a.blindT > 0 || !roomFor(a)) return;
+  // a bell rung: its next strike goes there (to the flame of the bell's lantern while it burns)
+  const B = K.bell;
+  if (B && a.t - B.t >= 0.8) {
+    const it = K.lamps[B.it.lamp], end = it?.lit ? { x: it.x, z: it.z, lamp: it } : { x: B.it.x, z: B.it.z };
+    K.bell = null; a.heard = null; a.blindT = 2.2;
+    neckStrike(a, end, { sound: true, t: 4 });
+    return;
+  }
+  const S = a.heard;
+  if (S && a.t - S.t >= 0.8) { a.heard = null; a.blindT = 2.2; neckStrike(a, { x: S.x, z: S.z, lamp: litLantern(S.x, S.z) }, { sound: true, t: 4 }); }
+}
+// a bell rung (0.5 s by the hero, at once by Glaukos's fail-safe): heard over every other sound; again after 10 s
+function ringBell(it, byGlaukos) {
+  const z = G.zone, a = z?.boss, K = KM(); if (!K) return;
+  if ((it.rungT || -99) > (a?.t ?? 0) - 10 && !byGlaukos) return;
+  it.rungT = a?.t ?? 0;
+  it.mesh?.userData.ring?.(1.2);
+  Audio.sfx('towerBell', { x: it.x, z: it.z, vol: 1, pitch: 1.4 });
+  ring(it.x, it.z, 2.4, 0xd8e8ff, 0.8);
+  if (a && a.kind === 'ketos' && a.phase === 2 && !a.dead) { K.bell = { it, t: a.t }; tally(a, byGlaukos ? 'bellGlaukos' : 'bell'); }
+}
+// (the bell's interact, world.js: 0.5 s by the hero; a guest's is the host's, net/coop.js 'u')
+export function useBell(it) {
+  const pl = G.player; if (!pl || pl.dead || (pl.act && pl.act.name !== 'basic')) return;
+  pl.rot = angleTo(pl.x, pl.z, it.x, it.z);
+  pl.act = { name: 'touch', t: 0, dur: 0.5, ev: [], clip: 0.5, move: 0, update() {}, end() { ringBell(it); } };
+  pl.avatar.play('interact', 1.6);
+}
+on('shipBell', (it, z) => { if (G.zone === z && G.mode === 'play') useBell(it); });
+// Dive: it sinks into the core and rises at the last sound (within the Mere's r 10), 1.2 s after the bubbles
+function ketosDive(a) {
+  const S = a.heard, M = mereOf(); if (!S) return { t: 0.2, fn() {}, after: 0.2 };
+  const g = angleTo(M.x, M.z, S.x, S.z), r = Math.min(9.5, Math.hypot(S.x - M.x, S.z - M.z)), x = M.x + Math.sin(g) * r, z = M.z + Math.cos(g) * r;
+  a.diving = true; a.heard = null; bigTele(a, 2.4);
+  for (let k = 0; k < 12; k++) later(k * 0.1, () => P({ add: false, x: x + rand.range(-1, 1), y: 0.1, z: z + rand.range(-1, 1), vy: 1, life: 0.5, size: 0.3, size1: 0.6, color: 0xd8e8f0, alpha: 0.6, alpha1: 0 }));
+  Audio.sfx('splash', { x: a.x, z: a.z, vol: 0.8 });
+  later(1.2, inZone(a, () => {
+    const tele = teleCircle(x, z, 4, 1.2);
+    later(1.2, inZone(a, () => {
+      killTele(tele); a.x = x; a.z = z; a.diving = false; a.y = -0.6;
+      splashFx(x, z, 3.5); shake(0.5); Audio.sfx('slam', { x, z });
+      for (const p of heroes()) if (!p.dead && Math.hypot(p.x - x, p.z - z) < 4 + p.radius * 0.5) ringHit(a, p, 1.7, 0, { push: 10 });
+      tally(a, 'dive');
+    }));
+  }));
+  return { t: 0.4, noFace: true, fn() {}, after: 0.4 };
+}
+
+// ---------- away and back: the Mere fills again, the lanterns as they were before the fight ----------
+function ketosAway(a) {
+  const K = KM(); a.move = null; killTele(a.tele); a.tele = null; a.bigs = []; a.diving = false;
+  dropLure(); headDown(a, true); lureLight(a, false);
+  mereTo(1.6, 0.3);
+  if (K) { const F = G.hero.flags; for (const it of K.lamps) light6(G.zone, it, (F.wreck6 || []).includes(it.i)); K.bell = null; K.searT = 0; }
+  if (a.home) { a.x = a.home.x; a.z = a.home.z; }
+  tally(a, 'away');
+}
+function ketosBack(a) {
+  if (a.phase >= 1) mereTo(0.85, 0.15);
+  a.mcd.slam = Math.max(a.mcd.slam || 0, bcd6(3)); a.cd = 1.5;
+  tally(a, 'back');
+}
+on('zoneEnter', (id, z) => { const b = z?.boss; if (b && b.kind === 'ketos' && b.awake && !b.dead) { b.bigs = []; b.away = true; } });
+// dead: its neck laid across the bed (the dry Mere's arch, built from the seed on the next entry); the Mere drains for good
+on('kill', (a) => {
+  if (a.kind !== 'ketos' || a.echo) return;
+  dropLure(); headDown(a, true); lureLight(a, false);
+  for (const m of a.kets || []) if (!m.dead && !m.removed) { splashFx(m.x, m.z, 0.8); m.remove(); }
+  mereTo(0, 0.15);
+  // (the Heap's gaps open again once the flag is written: story.js writes it on this same 'kill')
+  later(0.5, () => { if (G.zone?.id === 'drained') storyOpenings(G.zone); });
+});
 
 export { AI };

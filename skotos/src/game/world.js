@@ -416,6 +416,8 @@ export function spawnBoss(z) {
   if (b.kind === 'tower' && !F.towerWake) b.holdWake = true;
   // the Skotos lies under the ice edge until the Farthest Light is touched (story.js skotosRises), facing the tower
   if (b.kind === 'skotos') { b.holdWake = true; b.hidden = true; b.rot = angleTo(b.x, b.z, z.L.boss.x, z.L.boss.z); }
+  // Act VI: the Ketos lies under the Mere until she comes into the Heap (act6Tick: the story's 'ketosWake')
+  if (b.kind === 'ketos' && !F.ketosWake) b.holdWake = true;
   z.actors.push(b); z.boss = b;
   if (G.zone === z && b.avatar) R.scene.add(b.avatar.group);
   return b;
@@ -470,8 +472,9 @@ export function nearestInteract() {
   let best = null, bd = 1e9;
   for (const it of z.interact) {
     if (it.used) continue;
-    const d = Math.hypot(it.x - pl.x, it.z - pl.z);
-    if (d < it.r && d < bd) { bd = d; best = it; }
+    // (it.prio: one that wins over a nearer one without it, the Ketos's bells in its blind phase: combat's)
+    const d = Math.hypot(it.x - pl.x, it.z - pl.z), s = d - (it.prio || 0) * 100;
+    if (d < it.r && s < bd) { bd = s; best = it; }
   }
   // co-op: a guest touches only its own things (chests, shrines, its stash) and the shops; the story is the host's
   if (best && NET.mode === 'guest') {
@@ -1626,7 +1629,44 @@ function act6Zone(z) {
   // at the Mere's north edge before it drains
   z.voices = (S.voices || []).map((v) => ({ ...v }));
   if (z.id === 'drained' && L.mode === 'mere' && S.mere) z.voices.push({ x: S.mere.x, z: S.mere.z - S.mere.r - 1.5, r: 4, key: 'd.wellShut' });
+  if (z.id === 'drained' && L.mode === 'mere' && S.mere) mereFight(z);
 }
+// the Black Mere's fight (combat's, ai.js KETOS): the three wreck lanterns (lit by a 1 s touch, true lamps of r 4; the ones
+// she lit are kept in flags.wreck6 and burn again on a reset), the two ship's bells beside two of them (ai.js useBell), the
+// Ketos's spot. z.act6.mere = { lamps, bells, cut, slams, searT, lure, head, stalks, bell }
+function mereFight(z) {
+  const S = z.L.spots, A = z.act6;
+  const K = A.mere = { lamps: [], bells: [], cut: 0, slams: 0, searT: 0, lure: null, head: null, stalks: [], bell: null };
+  for (const w of A.wrecks) {
+    const it = { kind: 'wreckLantern', i: w.i, x: w.x, z: w.z, r: 2.4, lightR: 4, prompt: 'wreck.light', mesh: w.mesh, lit: false };
+    it.use = () => emit('wreckLantern', it, z); it.snuff = () => light6(z, it, false); it.relight = () => light6(z, it, true);
+    z.interact.push(it); K.lamps.push(it);
+  }
+  for (const b of A.bells) {
+    const it = { kind: 'shipBell', i: b.i, lamp: S.bells?.[b.i]?.lamp ?? 0, x: b.x, z: b.z, r: 2.0, prompt: 'bell.ring', mesh: b.mesh };
+    it.use = () => emit('shipBell', it, z);
+    z.interact.push(it); K.bells.push(it);
+  }
+  if (!G.hero.flags.ketosDown && MONSTERS.ketos) z.bossSpot = { kind: 'ketos', x: S.mere.x, z: S.mere.z };
+}
+// a light of the act lit or dark (a wreck lantern, a hearthstone): its look and its pool, true lamp light that trembles
+// (lampLightAt reads the lit interactable; lightAt the pool). Pools are the zone's while she is in it (act6Enter lays
+// them again)
+export function light6(z, it, on) {
+  if (!it) return;
+  it.lit = !!on; it.mesh?.userData.setLit?.(!!on);
+  const tag = 'l6:' + it.kind + ':' + (it.i ?? it.id);
+  if (!on || G.zone !== z) { removeLightPool(tag); return; }
+  if (it.lightR && !getLightPool(tag)) addLightPool(it.x, it.z, it.lightR, Infinity, tag, { lamp: true, tremble: true, color: 0xffb060, intensity: 20 });
+}
+on('wreckLantern', (it, z) => {
+  if (it.lit || G.mode !== 'play' || G.zone !== z) return;
+  touch(1, it, it.mesh?.userData.fireY ?? 1.9, () => {
+    const F = G.hero.flags;
+    light6(z, it, true); if (!(F.wreck6 ||= []).includes(it.i)) F.wreck6.push(it.i);
+    Audio.sfx('lampLight', { x: it.x, z: it.z }); glowBurst(it.x, 1.9, it.z, 0xffd080, 18, 2, 0.25, 0.6); ring(it.x, it.z, it.lightR, 0xffb060, 0.8);
+  }, { at: it.mesh?.userData.flameAt ? { x: it.x, y: it.mesh.userData.fireY, z: it.z } : undefined });
+});
 // the place to wake in an Act VI zone, kept in the save as Act V's is (flags.cp6[zone]): the camp (the Rope; the Well's
 // Foot), a lit hearth, a lit wreck lantern or lost light, the Heap's north gap while the Ketos is awake (its retry), the
 // Well's Foot, the Stair's foot once the three black lamps are out and until the Shade is down (its retry). Each holds
@@ -1661,6 +1701,7 @@ function act6Enter(z) {
   resetTide(z, z.id === 'drained' && !F.ketosDown ? { mere: 1.6 } : {});
   fireEnter(z);
   vaultEnter(z);
+  for (const it of z.act6?.mere?.lamps || []) light6(z, it, (F.wreck6 || []).includes(it.i));
   act6Presence(z);
 }
 // what the story has lit or moved, on every entry and as it moves (story's people6 joins it): in the act's zones; on the
@@ -1683,6 +1724,17 @@ function ropeHole(z) {
 // per frame in an Act VI zone (the names' clock, the shadow-walls' thinning, the bells, the walks: systems' and story's)
 function act6Tick(z, dt) {
   namesTick(z, dt);
+  const b = z.boss, H = z.L.spots?.heap, pl = G.player;
+  if (b && b.kind === 'ketos' && b.holdWake === true && H && pl && !pl.dead && Math.hypot(pl.x - H.x, pl.z - H.z) < 17) ketosWakes(z, b);
+}
+// she is inside the Heap: its gaps shut behind her (openings6), the Heap's north gap her place to wake while it lives,
+// and the story's cine (story.js, 'ketosWake'); ai.js raises it when the cine's 3 s are over
+function ketosWakes(z, b) {
+  const F = G.hero.flags;
+  F.ketosWake = true; b.holdWake = 'cine';
+  openings6(z); checkpoint6(z, 'heap');
+  emit('ketosWake', b);
+  writeSave();
 }
 
 // ---------- scripted walks and fades (npc() has no feet of its own) ----------
