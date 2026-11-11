@@ -17,8 +17,8 @@ import { G, later } from '../game/state.js';
 import { NET, MIRROR, heroes } from './state.js';
 import { pickTransport, bytesOf, MAX_MSG, TERMINAL } from './transport.js';
 import { SUPABASE } from './netcfg.js';
-import { enterZone, zoneReady, disposeZone, act3Presence, act4Presence, act5Presence, act6Presence, townFires, storyOpenings, light5, ZONES } from '../game/world.js';
-import { skerryClose, unseenTick } from '../game/ai.js';
+import { enterZone, zoneReady, disposeZone, act3Presence, act4Presence, act5Presence, act6Presence, townFires, storyOpenings, light5, light6, useDone, ZONES } from '../game/world.js';
+import { skerryClose, unseenTick, web6Guest, shade6Guest, shade6GuestTick } from '../game/ai.js';
 import { spawnMonster, Actor, heroAvatar, freshStatus, frozenLook, restoreRim } from '../game/actors.js';
 import { damage, gainXP, healHero } from '../game/combat.js';
 import { MONSTERS, DIFFS, monsterXP, COOP, BASES, MAX_LEVEL, CLASSES, PACKS, PACK_LEAD } from '../game/data.js';
@@ -651,6 +651,10 @@ function sendSnap() {
   if (z.act6 && NAMES.on) o.n = [Math.round(NAMES.left * 10), NAMES.falls];
   // the fires on the ice, lit by a touch or put out by the dark: the cairns, the open holes' lamps (bits)
   if (z.act5 && z.id === 'farlight') o.l = [bits(z.act5.cairns, (it) => it.i), bits(z.act5.lamps, (it) => it.hole * 4 + it.i)];
+  // (Act VI: the Hearth's stones lit and webbed, its dark and the Flare; the Mere's wreck lanterns lit)
+  const S6 = z.act6?.shade, K6 = z.act6?.mere;
+  if (S6) o.l6 = [bits(S6.stones, (it) => it.i), S6.stones.reduce((m, it) => (it.web ? m | (1 << (it.i & 31)) : m), 0), (S6.dark ? 1 : 0) | (S6.flareT > 0 ? 2 : 0)];
+  else if (K6) o.l6 = [bits(K6.lamps, (it) => it.i)];
   // acks of each guest's events
   o.ak = {}; for (const P of gs) o.ak[P.peer] = S.done.get(P.peer) || 0;
   let b = bytesOf(o) + 20;
@@ -844,6 +848,19 @@ function guestEvent(P, e) {
     else if (op === 'vl') { if (!G.zone?.act6 || !near(a[0], a[1]) || !near(a[2], a[3]) || Math.hypot(a[2] - a[0], a[3] - a[1]) > 14 || !(a[4] > 0 && a[4] <= 2.5)) return reject('ice'); vaultLine(a[0], a[1], a[2], a[3], a[4]); }
     else if (op === 'vr') { if (!G.zone?.act6 || !near(a[0], a[1]) || !(a[2] > 0 && a[2] <= 8)) return reject('ice'); vaultRing(a[0], a[1], a[2]); }
     else return reject('bad');
+  } else if (type === 'u') {
+    // a guest's touch on a fight's lamp or bell, done here: its stand-in within 3 m of it, the thing as the guest saw it,
+    // one every 0.5 s (the story's interacts stay the host's)
+    const kind = e[2], x = e[3], z = e[4], seen = e[5] | 0;
+    if (!USE_U.has(kind) || !nums([x, z], 2)) return reject('bad');
+    if (now() - (P.useT || 0) < 500) return reject('rate');
+    const it = (G.zone?.interact || []).find((q) => q.kind === kind && Math.abs(q.x - x) < 0.6 && Math.abs(q.z - z) < 0.6);
+    if (!it || !me || me.dead) return reject('use');
+    if (Math.hypot(me.x - it.x, me.z - it.z) > Math.max(3, (it.r || 2) + 0.6)) return reject('far');
+    if ((it.lit ? 1 : 0) !== seen) return reject('state');
+    P.useT = now();
+    if (!useDone(it)) return reject('use');
+    S.stats.uses = (S.stats.uses || 0) + 1;
   } else if (type === 'rv') {
     // a revive: the reviver (this guest) has stood by another hero, down a moment, as long as a raise takes (the host's
     // own count of its stand-in beside it), and that hero was not raised a moment ago
@@ -1083,6 +1100,7 @@ function onSnap(o) {
   // the tide and the gusts; the fires on the ice
   if (Array.isArray(o.w)) worldState(o.w);
   if (Array.isArray(o.l)) lit5(o.l);
+  if (Array.isArray(o.l6)) lit6(o.l6);
   if (Array.isArray(o.n) && G.zone?.act6) namesFromHost(num(o.n[0], 0, 600) / 10, o.n[1] | 0);
   // the monsters
   if (Array.isArray(o.a)) for (const e of o.a) if (Array.isArray(e)) puppetEntry(e);
@@ -1142,6 +1160,15 @@ function lit5(l) {
   const c = l[0] | 0, h = l[1] | 0;
   for (const it of A.cairns) { const on = !!(c & (1 << (it.i & 31))); if (!!it.lit !== on) light5(z, it, on); }
   for (const it of A.lamps) { const on = !!(h & (1 << ((it.hole * 4 + it.i) & 31))); if (!!it.lit !== on) light5(z, it, on); }
+}
+// Act VI's lit things as the host has them: the Hearth's stones (lit, webbed), its dark and the Flare; the Mere's lanterns
+function lit6(l) {
+  const z = G.zone, S6 = z?.act6?.shade, K6 = z?.act6?.mere, a = l[0] | 0;
+  if (S6) {
+    const w = l[1] | 0, f = l[2] | 0;
+    for (const it of S6.stones) { const on = !!(a & (1 << (it.i & 31))); if (!!it.lit !== on) light6(z, it, on); web6Guest(it, !!(w & (1 << (it.i & 31)))); }
+    shade6Guest(!!(f & 1), !!(f & 2));
+  } else if (K6) for (const it of K6.lamps) { const on = !!(a & (1 << (it.i & 31))); if (!!it.lit !== on) light6(z, it, on); }
 }
 // what the host may lay on this guest's hero, at most (the game's own sizes): hurtHero halves a freeze, roots stop at
 // 1.2 s; a stun does nothing to a hero, so it is not taken
@@ -1309,6 +1336,8 @@ function puppetEntry(e) {
     if (fl & 4096) { a.team = 'hero'; a.pet = true; }
     if (a.avatar) R.scene.add(a.avatar.group);
     G.actors.push(a); S.pup.set(id, a);
+    // (the Shade's next form: the old one goes in the same frame, the bar takes the new one's name, no second intro)
+    if (a.def.legKey === 'shade') { let had = false; for (const [k, b] of S.pup) if (b !== a && b.def?.legKey === 'shade') { if (!b.dead) had = true; killPuppet(b); S.pup.delete(k); } if (had && (fl & 4)) { a.netIntro = true; emit('shadeForm', a); } }
   }
   a.seen = now();
   pushSample(a.buf, { x, z, r: rot, y: (e[10] | 0) / 10 });
@@ -1347,6 +1376,7 @@ function interp(buf, out = _ip) {
   return out;
 }
 function puppetsTick(dt) {
+  shade6GuestTick(dt);
   // anything foe on this page that is not the host's (a story scene's, a pack's) is not this world's
   for (let i = G.actors.length - 1; i >= 0; i--) { const a = G.actors[i]; if (a.team === 'foe' && !a.prop && !a.puppet && !a.removed && !a.netKeep) { a.remove(); G.actors.splice(i, 1); } }
   for (const [id, a] of S.pup) {
@@ -1491,11 +1521,19 @@ function reviveTick(dt) {
 }
 // a guest's interactables: its own chests, shrines and stash; the shops; nothing that moves the host's story
 const GUEST_OK = new Set(['chest', 'shrine', 'stash']);
+// (the fights' lamps and bells, and Act V's cairns and hole lamps: the guest's own touch, done on the host's world, 'u')
+const USE_U = new Set(['hearthStone', 'wreckLantern', 'shipBell', 'cairn', 'holeLamp']);
 NET.h.canUse = (it) => {
   if (NET.mode !== 'guest') return true;
-  if (GUEST_OK.has(it.kind)) return true;
+  if (GUEST_OK.has(it.kind) || USE_U.has(it.kind)) return true;
   if (it.kind === 'npc') return ['smith', 'healer', 'brokka', 'elati', 'glaukos', 'tamarisk', 'selna'].includes(it.npc);
   return false;
+};
+// (a guest's touch finished: the thing, where it stands and as this page sees it, for the host to do; true when sent)
+NET.h.useOp = (it) => {
+  if (NET.mode !== 'guest' || !USE_U.has(it?.kind)) return false;
+  pushEv(['u', it.kind, R2(it.x), R2(it.z), it.lit ? 1 : 0]);
+  return true;
 };
 NET.h.guestUse = (it) => {
   if (it.kind === 'npc') { emit('openPanel', it.npc === 'smith' ? 'smith' : 'vendor', it.npc === 'brokka' || it.npc === 'elati' ? { npc: it.npc } : undefined); return; }
@@ -1572,6 +1610,8 @@ function replayFx(list, from) {
   B.tok = Math.min(FX_RATE, B.tok + (t - B.t) / 1000 * FX_RATE); B.t = t; S.fxIn.set(from, B);
   if (S.fxIn.size > 16) for (const k of S.fxIn.keys()) if (k !== from && !S.peers.has(k)) S.fxIn.delete(k);
   const n = Math.min(list.length, 120, Math.floor(B.tok)); B.tok -= n;
+  // (Act VI, the host: a guest's look calls are its casts, so a sound for the Ketos where its stand-in stands, ai.js)
+  if (S.role === 'host' && n > 0 && G.zone.act6?.mere) { const P = S.peers.get(from); if (P?.actor && !P.actor.dead && now() - (P.sndT || 0) > 400) { P.sndT = now(); emit('heroSound', P.actor); } }
   MIRROR.skip = true;
   try {
     for (const e of list.slice(0, n)) {

@@ -276,7 +276,7 @@ export function updateAreas(dt) {
     if (a.tickT <= 0 && a.t <= a.dur && a.team !== 'vis') {
       a.tickT += a.tick;
       if (a.team === 'hero') {
-        for (const f of foes(a.x, a.z, a.r)) damage(a.src || pl, f, a.dmg, Object.assign({ quiet: a.kind !== 'rain', noFx: a.kind === 'fire', dot: a.kind === 'fire', lohMul: 0.2, area: true }, a.opts));
+        for (const f of foes(a.x, a.z, a.r)) damage(a.src || pl, f, a.dmg, Object.assign({ quiet: a.kind !== 'rain', noFx: a.kind === 'fire', dot: a.kind === 'fire', fire: a.kind === 'fire', lohMul: 0.2, area: true }, a.opts));
       } else if (pl && !pl.dead) {
         const d = Math.hypot(pl.x - a.x, pl.z - a.z);
         if (d < a.r + pl.radius * 0.5) {

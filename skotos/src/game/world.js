@@ -160,6 +160,10 @@ function createZone(id, o = {}) {
   if (ZONES[id]?.act === 5) act5Layout(id, L);
   if (ZONES[id]?.act === 6) act6Layout(id, L);
   const map = new GridMap(L.w, L.h, L.cells, L.low);
+  // (Act VI: the Hearth's centre fire, its blocked 2 x 2, stops feet but not eyes or arrows: the Shade's last form stands
+  // across it from the hero, so a bow or a staff shot at it crosses the fire)
+  const HF = id === 'bottom' && L.spots?.hearth?.fire;
+  if (HF) { map.over = new Uint8Array(L.w * L.h); const fx = Math.round(HF.x), fz = Math.round(HF.z); for (const [x, zz] of [[fx - 1, fz - 1], [fx, fz - 1], [fx - 1, fz], [fx, fz]]) map.over[zz * L.w + x] = 1; }
   const lvl = buildLevel(L, R.quality);
   // (ownSeed: built from the hero's own seed, not a co-op host's: only such a zone is one she may wake in, game/wake.js)
   const z = { id, L, map, lvl, level: o.level ?? ZONES[id].level, actors: [], pickups: [], interact: [], packs: [], seed, ownSeed: o.seed == null, tier: o.tier || 0, extra: [], emit4: [], ep: ++zoneEp };
@@ -418,6 +422,8 @@ export function spawnBoss(z) {
   if (b.kind === 'skotos') { b.holdWake = true; b.hidden = true; b.rot = angleTo(b.x, b.z, z.L.boss.x, z.L.boss.z); }
   // Act VI: the Ketos lies under the Mere until she comes into the Heap (act6Tick: the story's 'ketosWake')
   if (b.kind === 'ketos' && !F.ketosWake) b.holdWake = true;
+  // the Shade of the Gate stands by the dark Gate ring until she comes into the Hearth (act6Tick: 'shadeWake')
+  if (b.def?.legKey === 'shade') { b.holdWake = true; b.rot = angleTo(b.x, b.z, z.L.boss.x, z.L.boss.z); }
   z.actors.push(b); z.boss = b;
   if (G.zone === z && b.avatar) R.scene.add(b.avatar.group);
   return b;
@@ -975,7 +981,7 @@ export function touch(dur, it, y, done, o = {}) {
       if (o.tough ? TOUCH.hurt - a.hurt >= 0.1 : (pl.blows || 0) !== a.blows) { a.dur = Infinity; pl.act = null; pl.avatar.anim.stop?.(0.15); return; }
       if ((a.st -= dt) <= 0) { a.st = 0.08; cradlePoint(c); const C = { x: c.x, y: c.y, z: c.z }; if (o.take) fireStream(to, C, 3); else fireStream(C, to, 3); }
     },
-    end() { done(); } };
+    end() { if (!NET.h.useOp?.(it)) done(); } };
   pl.avatar.play('interact', 1);
   Audio.sfx('lanternDrink', { x: it.x, z: it.z, vol: 0.5 });
 }
@@ -1576,16 +1582,27 @@ function act5Tick(z, dt) {
 // the act's lamps that light with a touch: a hole lamp (and with the first of a hole's, the seal run begins), a cairn
 on('holeLamp', (it, z) => {
   if (it.lit || G.mode !== 'play' || G.zone !== z) return;
-  touch(1, it, it.mesh.userData.flameAt?.y ?? 1.3, () => {
-    light5(z, it, true); it.used = false;
-    Audio.sfx('lampLight', { x: it.x, z: it.z }); glowBurst(it.x, 1.3, it.z, 0xffd080, 18, 2, 0.25, 0.6);
-    sealStart(z, it.ho);
-  });
+  touch(1, it, it.mesh.userData.flameAt?.y ?? 1.3, () => USE_DONE.holeLamp(z, it));
 });
 on('cairn', (it, z) => {
   if (it.lit || G.mode !== 'play' || G.zone !== z) return;
-  touch(1, it, it.mesh.userData.fireY ?? 1, () => { light5(z, it, true); Audio.sfx('lampLight', { x: it.x, z: it.z }); glowBurst(it.x, 1.2, it.z, 0xffb050, 24, 2.5, 0.3, 0.7); ring(it.x, it.z, it.lightR, 0xffb060, 0.8); });
+  touch(1, it, it.mesh.userData.fireY ?? 1, () => USE_DONE.cairn(z, it));
 });
+// what a finished touch does to each lamp a guest may use too (net/coop.js 'u': the host does it for the guest, its page
+// sees it lit by the host's bits), and the bell's ring (ai.js)
+const USE_DONE = {
+  holeLamp(z, it) { light5(z, it, true); it.used = false; Audio.sfx('lampLight', { x: it.x, z: it.z }); glowBurst(it.x, 1.3, it.z, 0xffd080, 18, 2, 0.25, 0.6); sealStart(z, it.ho); },
+  cairn(z, it) { light5(z, it, true); Audio.sfx('lampLight', { x: it.x, z: it.z }); glowBurst(it.x, 1.2, it.z, 0xffb050, 24, 2.5, 0.3, 0.7); ring(it.x, it.z, it.lightR, 0xffb060, 0.8); },
+  hearthStone(z, it) { light6(z, it, true); Audio.sfx('lampLight', { x: it.x, z: it.z }); glowBurst(it.x, 1.2, it.z, 0xffb050, 20, 2.2, 0.3, 0.6); ring(it.x, it.z, it.lightR0 || 4, 0xffb060, 0.8); },
+  wreckLantern(z, it) {
+    const F = G.hero.flags;
+    light6(z, it, true); if (!(F.wreck6 ||= []).includes(it.i)) F.wreck6.push(it.i);
+    Audio.sfx('lampLight', { x: it.x, z: it.z }); glowBurst(it.x, 1.9, it.z, 0xffd080, 18, 2, 0.25, 0.6); ring(it.x, it.z, it.lightR, 0xffb060, 0.8);
+  },
+  shipBell(z, it) { emit('bellRing', it); }
+};
+// (the host, for a guest: the touch done, on the thing as it is here; false if it is not one of these)
+export function useDone(it) { const f = USE_DONE[it?.kind], z = G.zone; if (!f || !z || !z.interact.includes(it)) return false; if (it.kind !== 'shipBell' && it.lit) return false; f(z, it); return true; }
 
 // ---------- Act VI: the Drained Sea and the Bottom of the Gates (docs/act6-contract.md) ----------
 // What the world is: drainedMode() ('mere' until the Ketos is down, then 'dry': the Mere drained, the Well open) and
@@ -1630,7 +1647,26 @@ function act6Zone(z) {
   z.voices = (S.voices || []).map((v) => ({ ...v }));
   if (z.id === 'drained' && L.mode === 'mere' && S.mere) z.voices.push({ x: S.mere.x, z: S.mere.z - S.mere.r - 1.5, r: 4, key: 'd.wellShut' });
   if (z.id === 'drained' && L.mode === 'mere' && S.mere) mereFight(z);
+  if (z.id === 'bottom' && L.mode === 'dark' && S.hearth) hearthFight(z);
 }
+// the First's Hearth's fight (combat's, ai.js SHADE_FORM): the four hearthstones (lit by a 1 s touch, true lamps of r 4;
+// a Light-web takes a stone's pool while it holds, it.web), the named lamps of the Lost she freed (flags.lost6: pools of
+// r 3, never snuffed, not interacts), the Shade's spot by the Gate ring. z.act6.shade = { stones, max, hp, form }
+function hearthFight(z) {
+  const H = z.L.spots.hearth, A = z.act6, F = G.hero.flags;
+  const S = A.shade = { stones: [], niches: [], max: null, hp: null, form: 1 };
+  for (const st of A.stones) {
+    const it = { kind: 'hearthStone', i: st.i, x: st.x, z: st.z, r: 2.4, lightR: 4, lightR0: 4, prompt: 'hearthstone.light', mesh: st.mesh, lit: false, web: null };
+    it.use = () => emit('hearthStone', it, z); it.snuff = () => light6(z, it, false); it.relight = () => light6(z, it, true);
+    z.interact.push(it); S.stones.push(it);
+  }
+  for (const n of A.niches) S.niches.push({ kind: 'nameLamp', id: n.id, x: n.x, z: n.z, mesh: n.mesh, lightR: 3, lit: (F.lost6 || []).includes(n.id) });
+  if (!F.shadeDown && MONSTERS.shade1) z.bossSpot = { kind: 'shade1', ...z.map.nearestFloor(H.ring.x, H.ring.z - 1.5, 3) };
+}
+on('hearthStone', (it, z) => {
+  if (it.lit || G.mode !== 'play' || G.zone !== z) return;
+  touch(1, it, it.mesh?.userData.fireY ?? 1.2, () => USE_DONE.hearthStone(z, it));
+});
 // the Black Mere's fight (combat's, ai.js KETOS): the three wreck lanterns (lit by a 1 s touch, true lamps of r 4; the ones
 // she lit are kept in flags.wreck6 and burn again on a reset), the two ship's bells beside two of them (ai.js useBell), the
 // Ketos's spot. z.act6.mere = { lamps, bells, cut, slams, searT, lure, head, stalks, bell }
@@ -1656,16 +1692,14 @@ export function light6(z, it, on) {
   if (!it) return;
   it.lit = !!on; it.mesh?.userData.setLit?.(!!on);
   const tag = 'l6:' + it.kind + ':' + (it.i ?? it.id);
-  if (!on || G.zone !== z) { removeLightPool(tag); return; }
+  // (a Light-web on a hearthstone: its pool to nothing while it holds, and no lamp light either, lampLightAt)
+  if (it.lightR0 != null) it.lightR = it.web ? 0 : it.lightR0;
+  if (!on || G.zone !== z || it.web) { removeLightPool(tag); return; }
   if (it.lightR && !getLightPool(tag)) addLightPool(it.x, it.z, it.lightR, Infinity, tag, { lamp: true, tremble: true, color: 0xffb060, intensity: 20 });
 }
 on('wreckLantern', (it, z) => {
   if (it.lit || G.mode !== 'play' || G.zone !== z) return;
-  touch(1, it, it.mesh?.userData.fireY ?? 1.9, () => {
-    const F = G.hero.flags;
-    light6(z, it, true); if (!(F.wreck6 ||= []).includes(it.i)) F.wreck6.push(it.i);
-    Audio.sfx('lampLight', { x: it.x, z: it.z }); glowBurst(it.x, 1.9, it.z, 0xffd080, 18, 2, 0.25, 0.6); ring(it.x, it.z, it.lightR, 0xffb060, 0.8);
-  }, { at: it.mesh?.userData.flameAt ? { x: it.x, y: it.mesh.userData.fireY, z: it.z } : undefined });
+  touch(1, it, it.mesh?.userData.fireY ?? 1.9, () => USE_DONE.wreckLantern(z, it), { at: it.mesh?.userData.flameAt ? { x: it.x, y: it.mesh.userData.fireY, z: it.z } : undefined });
 });
 // the place to wake in an Act VI zone, kept in the save as Act V's is (flags.cp6[zone]): the camp (the Rope; the Well's
 // Foot), a lit hearth, a lit wreck lantern or lost light, the Heap's north gap while the Ketos is awake (its retry), the
@@ -1702,6 +1736,8 @@ function act6Enter(z) {
   fireEnter(z);
   vaultEnter(z);
   for (const it of z.act6?.mere?.lamps || []) light6(z, it, (F.wreck6 || []).includes(it.i));
+  for (const it of z.act6?.shade?.stones || []) light6(z, it, it.lit);
+  for (const n of z.act6?.shade?.niches || []) if (n.lit) { n.mesh?.userData.setLit?.(true); addLightPool(n.x, n.z, 3, Infinity, 'l6:nameLamp:' + n.id, { lamp: true, light: false, tremble: true }); }
   act6Presence(z);
 }
 // what the story has lit or moved, on every entry and as it moves (story's people6 joins it): in the act's zones; on the
@@ -1726,6 +1762,8 @@ function act6Tick(z, dt) {
   namesTick(z, dt);
   const b = z.boss, H = z.L.spots?.heap, pl = G.player;
   if (b && b.kind === 'ketos' && b.holdWake === true && H && pl && !pl.dead && Math.hypot(pl.x - H.x, pl.z - H.z) < 17) ketosWakes(z, b);
+  const HH = z.L.spots?.hearth;
+  if (b && b.def?.legKey === 'shade' && b.holdWake === true && HH && pl && !pl.dead && Math.hypot(pl.x - HH.x, pl.z - HH.z) < 12) { checkpoint6(z, 'stair'); emit('shadeWake', b); }
 }
 // she is inside the Heap: its gaps shut behind her (openings6), the Heap's north gap her place to wake while it lives,
 // and the story's cine (story.js, 'ketosWake'); ai.js raises it when the cine's 3 s are over

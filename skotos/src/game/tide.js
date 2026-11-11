@@ -509,5 +509,5 @@ if (import.meta.env?.DEV && typeof window !== 'undefined') {
   window.__act5 ||= {};
   window.__act5.tide = { get TIDE() { return TIDE; }, LOG: TIDE_LOG, tideDial, waterAt, wadeAt, resetTide, floodWave, mapTone };
   window.__act6 ||= {};
-  window.__act6.tide = { get TIDE() { return TIDE; }, LOG: TIDE_LOG, tideDial, waterAt, wadeAt, resetTide, slushAt, cells6, cells6Apply, levelAt: (i) => levelAt(G.zone, i) };
+  window.__act6.tide = { get TIDE() { return TIDE; }, LOG: TIDE_LOG, tideDial, waterAt, wadeAt, resetTide, slushAt, cells6, cells6Apply, levelAt: (i) => levelAt(G.zone, i), cycle: () => haz().phases.reduce((s, p) => s + p, 0), groan: () => haz().bell };
 }

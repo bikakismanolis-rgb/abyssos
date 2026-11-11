@@ -485,6 +485,8 @@ on('bossIntro', (a) => {
   emit('toast', (a.name || t('mon.' + a.kind)).toUpperCase().normalize('NFD').replace(/\u0301/g, '').normalize('NFC'), 'big');
 });
 on('bossPhase', (a, ph) => { if (OWN_THEME.has(a?.kind)) Audio.mood({ phase: ph }); });
+// (Act VI: the Shade's next form takes the bar as it is, its form's name the tagline: no toast, no new music)
+on('shadeForm', (a) => { G.bossActor = a; const bb = $('bossbar'); bb.querySelector('.nm').textContent = t('mon.' + a.kind); bb.querySelector('.ti').textContent = t('mon.' + a.kind + '.t'); });
 // (the Skotos's fall is no fanfare: the music stops for the names, one bell each, and the naming's chord; the story then
 // plays the sea lit)
 on('bossDown', (a) => {

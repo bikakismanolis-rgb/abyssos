@@ -1160,6 +1160,16 @@ export const TEXT = {
   // (the bosses, stage C: their titles and taglines from the design; the forms' names as the Shade's taglines)
   'mon.ketos': ['Το Κήτος', 'The Ketos'], 'mon.ketos.t': ['Ποτέ μην τραβάς κουπί προς φως που δεν τρέμει', 'Never row toward a light that doesn\'t flicker'],
   'wreck.light': ['Άναψε το φανάρι', 'Light the lantern'], 'bell.ring': ['Χτύπα την καμπάνα', 'Ring the bell'], 'hud.heard': ['Σε άκουσε', 'Heard'],
+  // (the Shade's six kinds share its title; each form's name is its tagline on the boss bar)
+  'mon.shade1': ['Ο Ίσκιος της Πύλης', 'The Shade of the Gate'], 'mon.shade1.t': ['Ο Βασιλιάς που Ξεχάστηκε', 'The Forgotten King'],
+  'mon.shade2': ['Ο Ίσκιος της Πύλης', 'The Shade of the Gate'], 'mon.shade2.t': ['Η Υφάντρα των Πυλών', 'The Gates\' Weaver'],
+  'mon.shade3': ['Ο Ίσκιος της Πύλης', 'The Shade of the Gate'], 'mon.shade3.t': ['Ο Τρόμος των Βουνών', 'The Mountains\' Dread'],
+  'mon.shade4w': ['Ο Ίσκιος της Πύλης', 'The Shade of the Gate'], 'mon.shade4w.t': ['Ο Ίσκιος σου', 'Your Own Shadow'],
+  'mon.shade4r': ['Ο Ίσκιος της Πύλης', 'The Shade of the Gate'], 'mon.shade4r.t': ['Ο Ίσκιος σου', 'Your Own Shadow'],
+  'mon.shade4m': ['Ο Ίσκιος της Πύλης', 'The Shade of the Gate'], 'mon.shade4m.t': ['Ο Ίσκιος σου', 'Your Own Shadow'],
+  'mon.shade.t': ['Σε περίμενε στο τέλος κάθε πύλης', 'It waited at the end of every gate'],
+  'hearthstone.light': ['Άναψε την πέτρα της εστίας', 'Light the hearthstone'], 'hud.webbed': ['Πιάστηκες στον ιστό', 'Webbed'], 'hud.holds': ['Κρατιέται', 'Holding'],
+  'd.shade.flare': ['Η φωτιά στη μέση φουντώνει, σαν να ανάσανε κάποια.', 'The fire in the middle flares, as if someone breathed.'],
   'boon.bearer': ['Η Φέρουσα', 'The Bearer'], 'boon.bearer.d': ['+12% εμβέλεια, +10% ζημιά', '+12% area, +10% damage'], 'boon.bearer.du': ['+15% εμβέλεια, +12% ζημιά', '+15% area, +12% damage'],
   'boon.bearer.q': ['Ό,τι κουβάλησες ως κάτω, σε κουβαλά τώρα εκείνο.', 'What you carried all the way down now carries you.'],
   'boon.word': ['Ο Λόγος του Γλαύκου', 'Glaukos\'s Word'], 'boon.word.d': ['+12% ζωή, +12 ζωή ανά χτύπημα', '+12% life, +12 life on hit'], 'boon.word.du': ['+15% ζωή, +15 ζωή ανά χτύπημα', '+15% life, +15 life on hit'],

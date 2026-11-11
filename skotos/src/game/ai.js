@@ -2,11 +2,11 @@
 import * as THREE from 'three';
 import { G, later } from './state.js';
 import { MONSTERS, HAZ5, HAZ6 } from './data.js';
-import { FIRE, fireOn, fireDrain, removeLightPool as dropPool6 } from './light.js';
+import { FIRE, fireOn, fireDrain, removeLightPool as dropPool6, ringOf } from './light.js';
 import { rebuildHash, foes, near, spawnMonster, restoreRim, spawnNpc, lieDown } from './actors.js';
 import { damage, kill, tickStatus, moveMul, heroHit, seeHero, clingHero, shakeOff, rootHero, REMAINS, remainsNear, takeRemains, addVuln, clearVuln, vuln, vulnOf } from './combat.js';
 import { LIGHT, lightOn, shroudOn, lightAt, lampAt, lampNear, snuffLamp, isLamp, halveCradle, heroLightR, setHeroLight, setLightDark, addLightPool, getLightPool, shrinkPool, lightPools, addBeam, removeBeam, beams, inBeam, beamHas, lampLightAt, warmAt, cradlePoint } from './light.js';
-import { setFluePumping, startFlues, flues, fluePeriod, setFlueHeat } from './forge.js';
+import { setFluePumping, startFlues, flues, fluePeriod, setFlueHeat, vaultAt } from './forge.js';
 import { refreshStats } from './stats.js';
 import { fire, area } from './projectiles.js';
 import { teleCircle, teleCone, teleLine, killTele, sparks, glowBurst, explosion, ring, bolt, P, puff, decal, flash, splash as splashFx, iceShards, freezeCrystals, breath, fireStream, footprint } from '../gfx/fx.js';
@@ -48,7 +48,7 @@ if (import.meta.env?.DEV && typeof window !== 'undefined') {
   window.__act3 = { AI_LOG, damage, addSapPool, sapPools, spawnNpc, moveMul, heroHit, startDrips, grantBuff };
   window.__act4 = { AI_LOG, LIGHT, lightAt, heroLightR, addLightPool, setHeroLight, getLightPool, lightPools, seeHero, clingHero, shakeOff, REMAINS, startFlues, flues, fluePeriod, setFlueHeat, setFluePumping, spawnNpc, damage, moveMul };
   window.__act5 = Object.assign(window.__act5 || {}, { AI_LOG, LIGHT, lightAt, lampLightAt, warmAt, addBeam, removeBeam, beams, inBeam, addVuln, vuln, vulnOf, COLD, coldAdd, spawnNpc, spawnMonster, damage, moveMul, addSapPool, placeCasks });
-  window.__act6 = Object.assign(window.__act6 || {}, { AI_LOG, addVuln, vuln, spawnMonster, spawnNpc, damage, kill, BLOW6: () => BLOW6 });
+  window.__act6 = Object.assign(window.__act6 || {}, { AI_LOG, addVuln, vuln, spawnMonster, spawnNpc, damage, kill, BLOW6: () => BLOW6, searHead: (it, t) => searHead(G.zone.boss, it, t) });
 }
 
 export function updateActors(dt) {
@@ -332,6 +332,7 @@ function meleeLands(a, pl, reach, arc = 1.8) {
 }
 function hitHero(a, pl, mult = 1, o = {}) {
   const tg = o.target || pl;
+  if (a?.boss) BLOW6.last = { kind: a.kind, mult, t: G.hero?.stats.time, mv: a.move?.id || a.state || null };
   // Act V: a Sunken's blow from the water brings the sea's cold with it (cold.js)
   if (a.def.tideborne && a.inWater && o.cold == null) o = Object.assign({ cold: 4 }, o);
   const n = damage(a, tg, a.dmg * mult, Object.assign({ kx: tg.x - a.x, kz: tg.z - a.z }, o));
@@ -856,6 +857,8 @@ const AI = {
   skotos: (a, dt, pl, d) => { skotosPre(a, dt, pl, d); return boss(a, dt, pl, d, SKOTOS); },
   // Act VI: the Ketos in the Black Mere (the Shade's forms below)
   ketos: (a, dt, pl, d) => { ketosPre(a, dt, pl, d); return boss(a, dt, pl, d, KETOS); },
+  // (a shadow keeps out of lamp light of its own will: forms 1-3 stop at its edge, the Snuff aside; form 4 keeps its rule)
+  shade: (a, dt, pl, d) => { shadePre(a, dt, pl, d); if (a.removed) return 0; return boss(a, dt, pl, d, SHADE_FORM[a.def.form]); },
   pet: null
 };
 
@@ -4358,8 +4361,10 @@ function handsTick(a, dt, pl) {
     a.grip = null;
   }
   // two Hands up or more: the body is warded (-50%)
-  if (up.length >= 2 && !a.under) { a.ward = Math.max(a.ward || 0, 0.3); if (!a.wardLook) { a.wardLook = true; a.avatar?.setRim(0xb090ff, 1.3); } }
-  else if (a.wardLook) { a.wardLook = false; restoreRim(a); }
+  if (a.kind === 'skotos') {
+    if (up.length >= 2 && !a.under) { a.ward = Math.max(a.ward || 0, 0.3); if (!a.wardLook) { a.wardLook = true; a.avatar?.setRim(0xb090ff, 1.3); } }
+    else if (a.wardLook) { a.wardLook = false; restoreRim(a); }
+  }
 }
 // Hand Rise: a ring of cracks at a Hand spot (2.5 m, 1.6 s, the ice groaning), 1.1x to whoever is in it; the Hand bursts up
 // and its hole stays open while it stands. Never in lamp light, never where the last one was cut
@@ -4769,6 +4774,9 @@ const KM = () => G.zone?.act6?.mere || null;
 function edgeOf(p, r = 9.4) { const M = mereOf(), g = angleTo(M.x, M.z, p.x, p.z); return { x: M.x + Math.sin(g) * r, z: M.z + Math.cos(g) * r, g }; }
 // the lit lantern whose pool (x, z) stands in
 function litLantern(x, z) { for (const it of KM()?.lamps || []) if (it.lit && Math.hypot(it.x - x, it.z - z) < it.lightR) return it; return null; }
+// (each phase's least time: measured, a Warden on foot is slower in the first two, the bow and the staff hit this line;
+// the Shade's SHADE_MIN is the same rule)
+const KETOS_MIN = [45, 45, 35];
 const KETOS = {
   name: 'ketos', phases: [0.65, 0.3], wake: 26,
   intro(a) { ketosIntro(a); },
@@ -4799,7 +4807,7 @@ function ketosIntro(a) {
   a.rooted = true; a.resist = KETOS_BODY; a.y = -1.6;
   a.mcd.kets = bcd6(12); a.mcd.lure = bcd6(3); a.mcd.strike = bcd6(5); a.mcd.spray = bcd6(9); a.mcd.sweep = bcd6(4);
   // (a burst may not skip the Lure: its floor holds at 65% until the turn's beat, then at 30%; each hold on a 30 s clock)
-  a.hpFloor = a.hpMax * 0.649; a.floorT = 0;
+  a.thr = a.hpMax * 0.649; a.floorT = 0;
   const K = KM(); if (K) { K.slams = 0; K.searT = 0; }
   lureLight(a, true);
 }
@@ -4827,7 +4835,11 @@ function ketosPre(a, dt, pl, d) {
   if (K.lure) lureTick(a, K.lure, dt);
   if (a.phase === 2 && !away) blindTick(a, dt);
   // (a hold too long: the floor gives way after 30 s at it)
-  if (a.hpFloor > 0 && a.hp <= a.hpFloor + 1) { if ((a.floorT += dt) > 30) { a.hpFloor = 0; tally(a, 'floorClock'); } } else a.floorT = 0;
+  if (a.thr > 0 && a.hp <= a.thr + 1) { if ((a.floorT += dt) > 30) { a.thr = 0; tally(a, 'floorClock'); } } else a.floorT = 0;
+  // (its line: a phase's life falls no faster than from its start to its threshold over KETOS_MIN; the floor the higher)
+  if (a.phase !== a.phL) { a.phL = a.phase; a.phT = 0; }
+  if (!away && !(a.beat > 0)) a.phT = (a.phT || 0) + dt;
+  { const ph = a.phase || 0, top = [1, 0.65, 0.3][ph], bot = [0.65, 0.3, 0][ph], k = Math.min(1, a.phT / KETOS_MIN[ph]), fl = Math.max(a.thr || 0, k < 1 ? a.hpMax * (top - (top - bot) * k) : 0); a.hpFloor = fl > 0 ? Math.min(a.hp, fl) : 0; }
   // its body: under the black water (phase 1), half out on the mud (phase 2), lower again blind, deep on a Dive
   const want = a.diving ? -4.5 : a.phase === 1 ? -0.5 : a.phase === 2 ? -1.0 : -1.6;
   a.y = damp(a.y ?? want, want, 2, dt);
@@ -4944,7 +4956,7 @@ function ketosTurn(a) {
   for (const p of heroes()) if (p === G.player && !p.dead) p.iframes = Math.max(p.iframes || 0, 3);
   Audio.sfx('bossRoar', { vol: 1, pitch: 0.55 }); Audio.sfx('iceCreak', { vol: 1 }); shake(0.6);
   emit('ketosTurn', a); tally(a, 'turn');
-  later(3, inZone(a, () => { mereTo(0.85, 0.05); a.hpFloor = a.hpMax * 0.299; a.floorT = 0; a.mcd.slam = bcd6(3); a.mcd.thrash = bcd6(6); }));
+  later(3, inZone(a, () => { mereTo(0.85, 0.05); a.thr = a.hpMax * 0.299; a.floorT = 0; a.mcd.slam = bcd6(3); a.mcd.thrash = bcd6(6); }));
 }
 function mereTo(h, rate) { const T = G.zone?.tide; if (T) T.mere = { h, rate }; }
 // ---------- the 30% beat: Blind; it hunts by sound now ----------
@@ -4952,7 +4964,7 @@ function ketosBlind(a) {
   a.beat = 2; a.invuln = 2; a.move = null; killTele(a.tele); a.tele = null;
   a.avatar?.setRim(0xffffff, 1.4); a.avatar?.play('rise', 1);
   dropLure(); headDown(a, true); lureLight(a, false);
-  a.hpFloor = 0; a.heard = null; a.blindT = 0;
+  a.thr = 0; a.heard = null; a.blindT = 0;
   const K = KM(); if (K) { K.searT = 0; K.bell = null; }
   for (const it of K?.bells || []) it.prio = 1;
   Audio.sfx('bossRoar', { vol: 1, pitch: 0.5 }); shake(0.5);
@@ -5111,10 +5123,12 @@ function ringBell(it, byGlaukos) {
 export function useBell(it) {
   const pl = G.player; if (!pl || pl.dead || (pl.act && pl.act.name !== 'basic')) return;
   pl.rot = angleTo(pl.x, pl.z, it.x, it.z);
-  pl.act = { name: 'touch', t: 0, dur: 0.5, ev: [], clip: 0.5, move: 0, update() {}, end() { ringBell(it); } };
+  pl.act = { name: 'touch', t: 0, dur: 0.5, ev: [], clip: 0.5, move: 0, update() {}, end() { if (!NET.h.useOp?.(it)) ringBell(it); } };
   pl.avatar.play('interact', 1.6);
 }
 on('shipBell', (it, z) => { if (G.zone === z && G.mode === 'play') useBell(it); });
+// (a guest's ring, done by the host: world.js useDone)
+on('bellRing', (it) => ringBell(it));
 // Dive: it sinks into the core and rises at the last sound (within the Mere's r 10), 1.2 s after the bubbles
 function ketosDive(a) {
   const S = a.heard, M = mereOf(); if (!S) return { t: 0.2, fn() {}, after: 0.2 };
@@ -5158,5 +5172,418 @@ on('kill', (a) => {
   // (the Heap's gaps open again once the flag is written: story.js writes it on this same 'kill')
   later(0.5, () => { if (G.zone?.id === 'drained') storyOpenings(G.zone); });
 });
+
+// =====================================================================================================================
+// ---------- Act VI: the Shade of the Gate (docs/act6-design.md, Bosses; docs/act6-contract.md, The bosses) ----------
+// The shadow of her fire, the Gate Guardian at the bottom: one life (z.act6.shade = { hp, max, form, retry }) carried
+// across six kinds, one body at a time; at 75, 50 and 25% it holds its floor 2.5 s (nothing hurts it, the bar shimmers)
+// and the next form takes its place in the same frame (swapForm: never two boss actors, never none; a swap is never a
+// kill). A shadow is hurt only in light: Shrouded outside it (combat.js), full in a hero's ring, Lit (x1.25) in a lit
+// hearthstone's pool, a named lamp's or the centre fire's. Form 1, the Forgotten King: the Barrow Lord's moves, the
+// Crown of Shadow (Gate-Fallen), the Snuff (a lit stone put out; a 6% blow breaks it, Lit 2 s). Form 2, the Gates'
+// Weaver: the Weaver's moves and its spiderlings, the Light-webs (a stone's pool to nothing while one holds; on her,
+// Webbed). Form 3, the Mountains' Dread: the troll with the thunder affix, Vault Slams under the hanging ice (an icicle
+// on it Stuns it 3 s), the Roar. Form 4, Your Own Shadow: her class's body in black, always across the centre fire from
+// her (but for its two holds: the Shadow Lunge's landing, Lit inside her ring, and the 2 s after each answer), answering
+// her every skill 1.2 s later with its shadow (MIRROR6); two Hands from the north pools; the Flare after 40 s unlit
+const SH6 = () => G.zone?.act6?.shade || null;
+const hearthOf = () => G.zone?.L?.spots?.hearth;
+const SHADE_AT = [0.75, 0.5, 0.25];
+// (each form's least time awake: its life can fall no faster than a line from its start to its threshold over it (the
+// last form's to 0), so a form lasts this long whatever strikes it; measured, the Warden on foot is slower in every form
+// but the last, the bow and the staff hit the line)
+const SHADE_MIN = [70, 45, 70, 75];
+const CLS4 = { warden: 'shade4w', ranger: 'shade4r', mage: 'shade4m' };
+// (the hero it fights: the page's own, or on a co-op host the one its threat holds, ai.js targetOf)
+function shadeTarget(a) { return NET.mode === 'host' ? targetOf(a) : G.player; }
+const targetCls = (h) => (h === G.player ? G.hero.cls : h?.cls || 'warden');
+const SHADE_FORM = {};
+SHADE_FORM[1] = {
+  name: 'lord', phases: [0.75, 0.5, 0.25], wake: 16,
+  intro(a) { shadeIntro(a); },
+  tick(a, dt, pl) { if (a.turning > 0 || a.snuffing) return 0; return null; },
+  moves: [
+    { id: 'crown', when: (a) => alive(a.raised).length < 6 + (H6b().adds >= 1 ? 1 : 0) && roomFor(a), cdOf: cdm6(15), run: (a) => crownOfShadow(a) },
+    { id: 'snuff', when: (a) => !!shadeStone(a, true) && roomFor(a), cdOf: cdm6(12), run: (a) => snuffStart(a) },
+    ...LORD.moves.filter((m) => m.id === 'combo' || m.id === 'wave'),
+    { id: 'blink', when: () => true, cd: 10, run: (a, pl) => LORD.moves.find((m) => m.id === 'blink').run(a, pl) }
+  ]
+};
+SHADE_FORM[2] = {
+  name: 'weaver', phases: [0.75, 0.5, 0.25], wake: 16,
+  intro(a) { shadeIntro(a); },
+  tick(a) { if (a.turning > 0) return 0; return null; },
+  moves: [
+    { id: 'lightWeb', when: (a, d) => d < 16 && roomFor(a), cdOf: cdm6(7), run: (a, pl) => lightWeb(a, pl) },
+    { id: 'brood', when: (a) => alive(a.brood).length < 5, cdOf: cdm6(16), run: (a) => shadeBrood(a) },
+    ...WEAVER.moves.filter((m) => m.id !== 'brood')
+  ]
+};
+SHADE_FORM[3] = {
+  name: 'dread', phases: [0.75, 0.5, 0.25], wake: 16,
+  intro(a) { shadeIntro(a); },
+  tick(a) { if (a.turning > 0) return 0; return null; },
+  moves: [
+    { id: 'vaultSlam', when: (a, d) => d < 7 && roomFor(a), cdOf: cdm6(8), run: (a) => vaultSlam(a) },
+    { id: 'roar', when: (a, d) => d < 7 && roomFor(a), cdOf: cdm6(14), run: (a, pl) => shadeRoar(a, pl) },
+    { id: 'smash', basic: true, when: (a, d) => d < 4.4, cd: 2.0, run: (a, pl) => trollSmash(a, pl) }
+  ]
+};
+SHADE_FORM[4] = {
+  name: 'shadow', phases: [0.75, 0.5, 0.25], wake: 16,
+  intro(a) { shadeIntro(a); },
+  // (it never walks to her: it keeps across the fire from her, shadowTick; its moves are the Lunge and its answers)
+  tick(a) { if (a.turning > 0 || a.lunge || a.holdT > 0 || a.answering) return 0; return null; },
+  moves: [
+    { id: 'lunge', when: (a) => roomFor(a) && !a.mq?.length, cdOf: cdm6(6), run: (a, pl) => shadowLunge(a, pl) }
+  ]
+};
+for (const k of [1, 2, 3, 4]) SHADE_FORM[k].onPhase = () => {};
+
+function shadeIntro(a) {
+  const S = SH6();
+  if (S && S.form === 1 && !S.introDone) { S.introDone = true; emit('bossIntro', a); }
+  else { G.bossActor = a; emit('shadeForm', a, a.def.form); }
+  tally(a, 'intro'); Audio.sfx('wraithWail', { vol: 0.8 }); shake(0.3);
+  a.rooted = a.def.form === 4;
+  if (a.def.form === 1) { a.mcd.crown = bcd6(4); a.mcd.snuff = bcd6(8); }
+}
+// woken as she comes into the Hearth (world.js 'shadeWake'), or struck
+on('shadeWake', (b) => { if (!b || b.dead || b.awake) return; b.holdWake = false; b.awake = true; b.aggro = true; b.mcd = {}; b.phase = b.def.form - 1; b.lockPhase = b.def.form - 1; SHADE_FORM[b.def.form].intro(b); b.cd = 1.5; });
+
+// every frame: the shared life, Lit in lamp light, the turn and the swap, the party gone or down, the form's own clocks
+function shadePre(a, dt, pl, d) {
+  const S = SH6(), H = hearthOf();
+  if (!S || !H) return 0;
+  if (S.max == null) { S.max = a.hpMax; S.hp = a.hp; S.form = a.def.form; }
+  // (each form's floor: a burst never takes it past its threshold, nor past its line (SHADE_MIN) while it is young)
+  shadeFloor(a, S);
+  if (!a.awake) return 0;
+  a.lockPhase = a.def.form - 1;
+  if (a.invuln > 0 && (a.invuln -= dt) <= 0) { a.invuln = 0; restoreRim(a); }
+  S.hp = a.hp;
+  // Lit: in a lit hearthstone's pool, a named lamp's, the centre fire's (lamp light, never a hero's ring)
+  if (lampLightAt(a.x, a.z)) { addVuln(a, 'lit', 0.3, { quiet: true }); S.unlitT = 0; }
+  else S.unlitT = (S.unlitT || 0) + dt;
+  // the party gone from the Hearth (6 m past its rim for 3 s: a blow near the rim never resets it), or every hero down: the
+  // fight again from its start (form 1, or form 3 past 50%)
+  const down = heroes().every((h) => h.dead), gone = down || !partyInArena(a, 6);
+  if (gone && !a.turning) { if ((S.goneT = (S.goneT || 0) + dt) > (down ? 1.5 : 3)) { shadeReset(a); return 0; } } else S.goneT = 0;
+  // the turn: its floor reached, 2.5 s it holds (nothing hurts it), then the next form
+  const fl = a.def.form < 4 ? S.max * (SHADE_AT[a.def.form - 1] - 0.001) : 0;
+  if (a.turning > 0) {
+    a.y = Math.sin(a.turning * 6) * 0.05;
+    if ((a.turning -= dt) <= 0) { swapForm(a, a.def.form + 1); return 0; }
+    return 0;
+  }
+  // (each form's floor holds until its thing to do has been done once: a Snuff broken, a web cut or burnt, an icicle on
+  // the troll; or 30 s at it: integrate.md's rule, every hold has a floor and a clock)
+  if (fl > 0 && a.hp <= fl + 1 && !a.gate && (a.floorT = (a.floorT || 0) + dt) < 30) { if (!a.floorSaid) { a.floorSaid = true; tally(a, 'floor'); } return 0; }
+  if (fl > 0 && a.hp <= fl + 1) {
+    a.turning = 2.5; a.invuln = 2.5; a.move = null; a.dash = null; killTele(a.tele); a.tele = null; a.snuffing = null;
+    a.avatar?.setRim(0xffffff, 1.4); a.avatar?.play('hit', 0.6);
+    for (const h of heroes()) if (h === G.player && !h.dead) h.iframes = Math.max(h.iframes || 0, 2.5);
+    Audio.sfx('wraithWail', { vol: 1, pitch: 0.7 }); shake(0.4);
+    emit('shadeTurn', a, a.def.form); tally(a, 'turn');
+    return 0;
+  }
+  a.formT = (a.formT || 0) + dt;
+  // (struck while it holds to its line: «Κρατιέται» over it, no more than every 2 s)
+  if (a.hp <= a.hpFloor + 1 && a.hpFloor > fl + 1 && a.flash > 0.9 && !((a.holdTxt -= dt) > 0)) { a.holdTxt = 2; number(a.x, 2.7 * (a.scale || 1), a.z, t('hud.holds'), 'text', '#b8b0d8'); }
+  else if (a.holdTxt > 0) a.holdTxt -= dt;
+  if (a.def.form === 1 && a.snuffing) snuffTick(a, dt);
+  if (a.def.form === 2) websTick(a, dt);
+  if (a.def.form === 4) shadowTick(a, dt, pl);
+  return 0;
+}
+function shadeFloor(a, S) {
+  const f = a.def.form, top = SHADE_AT[f - 2] ?? 1, bot = SHADE_AT[f - 1] ?? 0, k = Math.min(1, (a.formT || 0) / SHADE_MIN[f - 1]);
+  const line = top - (top - bot) * k, thr = f < 4 ? bot - 0.001 : 0, fl = S.max * Math.max(thr, k < 1 ? line : 0);
+  a.hpFloor = fl > 0 ? Math.min(a.hp, fl) : 0;
+}
+
+// ---------- the relay ----------
+// the next form in its own body, with the shared life, in the same frame the old one goes (and the boss bar with it)
+function swapForm(a, form, at) {
+  const S = SH6(), z = G.zone; if (!S) return null;
+  const tg = shadeTarget(a), kind = form < 4 ? 'shade' + form : CLS4[targetCls(tg)] || 'shade4w';
+  const p = at || a, f = z.map.nearestFloor(p.x, p.z, 3);
+  const b = spawnMonster(kind, f.x, f.z, { level: a.level });
+  b.hpMax = S.max; b.hp = Math.max(1, Math.min(S.max, S.hp));
+  b.awake = true; b.aggro = true; b.mcd = {}; b.phase = form - 1; b.lockPhase = form - 1; b.cd = 1.2; b.rot = a.rot;
+  if (form === 3) b.affixes = ['thunder'];
+  S.form = form;
+  // (the old one out without a kill: no reward, no 'kill', no first-kill drop)
+  a.swapped = true; killTele(a.tele); a.tele = null;
+  glowBurst(a.x, 1.2, a.z, 0x1a1c24, 40, 3, 0.4, 1); puff(a.x, 1, a.z, 18, 0x0e1016, 1.6, 1.8, 1.4);
+  a.remove();
+  z.actors.push(b); z.boss = b; G.bossActor = b;
+  SHADE_FORM[form].intro(b);
+  if (form === 4) shadowStart(b);
+  return b;
+}
+// a fight left (every hero gone from the Hearth or down): form 1 again at the Gate ring, or form 3 at half its life past
+// 50% (G.shadeRetry, this visit only); the stones as she leaves them; the webs and the shadow's dark gone
+function shadeReset(a) {
+  const S = SH6(), z = G.zone, H = hearthOf(); if (!S || !H) return;
+  const form = S.form >= 3 || G.shadeRetry === 3 ? 3 : 1;
+  if (form === 3) G.shadeRetry = 3;
+  S.form = form; S.hp = S.max * (form === 3 ? 0.5 : 1); S.unlitT = 0; S.flareT = 0;
+  for (const m of [...(a.raised || []), ...(a.brood || []), ...(a.handList || [])]) if (!m.dead && !m.removed) m.remove();
+  clearWebs(); dropPool6('shadeFlare'); shadeDark(false);
+  const f = z.map.nearestFloor(H.ring.x, H.ring.z - 1.5, 3);
+  a.swapped = true; killTele(a.tele); a.tele = null; a.remove();
+  const b = spawnMonster(form === 3 ? 'shade3' : 'shade1', f.x, f.z, { level: a.level });
+  b.hpMax = S.max; b.hp = S.hp; b.holdWake = true; b.rot = angleTo(f.x, f.z, H.x, H.z);
+  if (form === 3) b.affixes = ['thunder'];
+  z.actors.push(b); z.boss = b; z.bossWoke = false; G.bossActor = null;
+  emit('shadeReset', b, form); tally(b, 'reset');
+}
+on('zoneEnter', (id) => { if (id !== 'bottom') G.shadeRetry = null; });
+
+// ---------- form 1: the Crown of Shadow, the Snuff ----------
+function crownOfShadow(a) {
+  const tele = teleCircle(a.x, a.z, 3.2, 1.2, 'dark'); bigTele(a, 1.2);
+  a.avatar?.play('summon', 2); Audio.sfx('summon');
+  later(1.2, inZone(a, () => {
+    killTele(tele); a.raised ||= [];
+    for (let i = 0; i < 3; i++) {
+      if (alive(a.raised).length >= 6 + (H6b().adds >= 1 ? 1 : 0)) break;
+      const g = (i / 3) * 6.28 + rand.range(-0.3, 0.3), f = G.zone.map.nearestFloor(a.x + Math.sin(g) * 3.5, a.z + Math.cos(g) * 3.5, 3);
+      const m = spawnMonster('gateFallen', f.x, f.z, { rising: true, level: Math.max(1, a.level - 3) }); m.aggro = true; G.actors.push(m); a.raised.push(m);
+      glowBurst(f.x, 0.3, f.z, 0x8a70ff, 14, 2, 0.3, 0.6);
+    }
+    tally(a, 'crown');
+  }));
+  return { t: 0.5, fn() {}, after: 0.5 };
+}
+// the hearthstones (world.js hearthFight: { kind 'hearthStone', lit, web }); the nearest lit one, not webbed
+function shadeStone(a, lit) {
+  let best = null, bd = 1e9;
+  for (const it of G.zone?.act6?.shade?.stones || []) { if (!!it.lit !== lit || it.web) continue; const d = Math.hypot(it.x - a.x, it.z - a.z); if (d < bd) { bd = d; best = it; } }
+  return best;
+}
+function snuffStart(a) { const it = shadeStone(a, true); if (!it) return { t: 0.2, fn() {}, after: 0.2 }; a.snuffing = { it, st: 'go', t: 0 }; tally(a, 'snuff'); return { t: 0.1, fn() {}, after: 0.1 }; }
+function snuffTick(a, dt) {
+  const S0 = a.snuffing, it = S0.it;
+  if (!it.lit || it.web) { a.snuffing = null; return; }
+  if (S0.st === 'go') {
+    const dd = Math.hypot(it.x - a.x, it.z - a.z);
+    if (dd > 1.9 && (S0.t += dt) < 6) { const ap = G.zone.map.nearestFloor(it.x + (a.x - it.x) / dd * 1.6, it.z + (a.z - it.z) / dd * 1.6, 2); seek(a, ap.x, ap.z, a.speed * 1.3, dt); return; }
+    S0.st = 'ch'; S0.t = 0; S0.hp0 = a.hp; S0.tele = teleCircle(it.x, it.z, 1.2, 2.0, 'dark');
+    a.rot = angleTo(a.x, a.z, it.x, it.z); a.avatar?.play('summon', 1);
+    Audio.sfx('wraithWail', { x: it.x, z: it.z, vol: 0.6 });
+    return;
+  }
+  // the stone's flame leans toward it; blows worth 1.5% of its life in the channel break it and leave it Lit 2 s (6% was
+  // the design's: at L40 no class strikes that in 2 s, so the Snuff was never broken), or any blow while it holds to its
+  // line or its floor
+  if (Math.random() < 0.5) P({ x: it.x + (a.x - it.x) * Math.random(), y: 1.3, z: it.z + (a.z - it.z) * Math.random(), life: 0.4, size: 0.18, size1: 0.04, color: 0xffb060 });
+  if (S0.hp0 - a.hp >= SH6().max * 0.015 || (a.hpFloor > 0 && a.hp <= a.hpFloor + 1 && S0.hp0 > a.hp)) { killTele(S0.tele); a.snuffing = null; addVuln(a, 'lit', 2); a.cd = 1; a.gate = true; tally(a, 'snuffBroken'); return; }
+  if ((S0.t += dt) >= 2.0) { killTele(S0.tele); snuffLamp(it, a); a.snuffing = null; a.cd = 0.8; tally(a, 'snuffed'); }
+}
+
+// ---------- form 2: the Light-webs and the spiderlings ----------
+function shadeBrood(a) {
+  a.avatar?.play('rear'); Audio.sfx('spiderHiss');
+  return { t: 0.6, fn() {
+    a.brood ||= [];
+    for (let i = 0; i < 3 && alive(a.brood).length < 5; i++) { const g = (i / 3) * 6.28, f = G.zone.map.nearestFloor(a.x + Math.sin(g) * 3, a.z + Math.cos(g) * 3, 2); const m = spawnMonster('spiderling', f.x, f.z, {}); m.aggro = true; G.actors.push(m); a.brood.push(m); }
+    tally(a, 'brood');
+  }, after: 0.8 };
+}
+// a circle of 3 m: on a lit stone (one near her, or the one nearest it), else on her
+function lightWeb(a, pl) {
+  const st = (G.zone.act6.shade?.stones || []).filter((it) => it.lit && !it.web).sort((p, q) => Math.hypot(p.x - pl.x, p.z - pl.z) - Math.hypot(q.x - pl.x, q.z - pl.z))[0];
+  const onStone = st && (Math.hypot(st.x - pl.x, st.z - pl.z) < st.lightR0 + 1 || Math.random() < 0.5), tx = onStone ? st.x : pl.x, tz = onStone ? st.z : pl.z;
+  const tele = teleCircle(tx, tz, 3, 1.0, 'dark'); bigTele(a, 1.0);
+  a.avatar?.play('spit'); Audio.sfx('spiderHiss', { x: a.x, z: a.z });
+  later(1.0, inZone(a, () => {
+    killTele(tele);
+    for (let k = 0; k < 18; k++) P({ add: false, x: tx + rand.range(-3, 3), y: 0.2, z: tz + rand.range(-3, 3), life: 0.8, size: 0.25, size1: 0.6, color: 0xd8dce8, alpha: 0.4, alpha1: 0 });
+    for (const it of G.zone.act6.shade?.stones || []) if (it.lit && !it.web && Math.hypot(it.x - tx, it.z - tz) < 3) webStone(a, it);
+    for (const p of heroes()) if (!p.dead && Math.hypot(p.x - tx, p.z - tz) < 3 + p.radius * 0.5) {
+      if (p === G.player) { p.status.slow = Math.max(p.status.slow, 2); p.status.slowK = Math.max(p.status.slowK, 0.4); fireDrain(1, { src: 'web' }); number(p.x, 2.4, p.z, t('hud.webbed'), 'text', '#d8dce8'); }
+      else hitHero(a, p, 0.01, { target: p, ring: ringOpt(p, 1), slow: { k: 0.4, t: 2 } });
+    }
+    tally(a, 'web');
+  }));
+  return { t: 0.5, fn() {}, after: 0.5 };
+}
+// a web on a stone: its pool to nothing while it holds; three blows cut it, fire burns it (combat.js hits3)
+function webStone(a, it) {
+  const w = spawnMonster('shadeWeb', it.x, it.z, { level: a.level });
+  w.hand = a; w.stone = it; w.awake = true; w.aggro = true; G.actors.push(w);
+  it.web = w; light6(G.zone, it, it.lit);
+  w.mesh = webMesh(it.x, it.z);
+  emit('stoneWebbed', it); tally(a, 'webbed');
+}
+function webMesh(x, z) {
+  const m = new THREE.Mesh(new THREE.CircleGeometry(1.4, 12), new THREE.MeshBasicMaterial({ color: 0xd8dce8, transparent: true, opacity: 0.35, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; m.position.set(x, 1.2, z); R.scene.add(m); return m;
+}
+function websTick() {
+  for (const it of G.zone.act6.shade?.stones || []) { const w = it.web; if (w && (w.dead || w.removed)) { if (w.mesh) { R.scene.remove(w.mesh); w.mesh = null; } it.web = null; light6(G.zone, it, it.lit); emit('stoneFreed', it); } }
+}
+// (a guest: a stone's web as the host has it, net/coop.js lit6; its mesh only, the web's actor is the host's)
+export function web6Guest(it, on) {
+  if (on && !it.webG) { it.webG = webMesh(it.x, it.z); it.web = { guest: true }; light6(G.zone, it, it.lit); }
+  else if (!on && it.webG) { R.scene.remove(it.webG); it.webG = null; it.web = null; light6(G.zone, it, it.lit); }
+}
+// (a guest: the Hearth's dark and the centre fire's Flare as the host has them; the dark eases each frame, shade6GuestTick)
+export function shade6Guest(dark, flare) {
+  const S = SH6(), H = hearthOf(); if (!S || !H) return;
+  if (!!S.dark !== !!dark) shadeDark(!!dark);
+  const has = !!getLightPool('shadeFlare');
+  if (flare && !has) addLightPool(H.fire.x, H.fire.z, 8, 10, 'shadeFlare', { lamp: true, color: 0xffb060, intensity: 26 });
+  else if (!flare && has) dropPool6('shadeFlare');
+}
+export function shade6GuestTick(dt) { if (G.zone?.id === 'bottom') darkTick(dt); }
+function clearWebs() { for (const it of G.zone?.act6?.shade?.stones || []) if (it.web) { const w = it.web; if (w.mesh) R.scene.remove(w.mesh); if (!w.removed) w.remove(); it.web = null; light6(G.zone, it, it.lit); } }
+on('kill', (a) => { if (a?.def?.legKey === 'shade' && !a.echo) { clearWebs(); dropPool6('shadeFlare'); shadeDark(false); } });
+on('kill', (a) => { if (a.kind === 'shadeWeb') { if (a.mesh) { R.scene.remove(a.mesh); a.mesh = null; } glowBurst(a.x, 1.2, a.z, 0xffb060, 16, 2, 0.3, 0.5); if (a.hand && !a.hand.dead) a.hand.gate = true; } });
+
+// ---------- form 3: Vault Slam, the Roar, the troll's blow ----------
+function trollSmash(a, pl) {
+  a.rot = angleTo(a.x, a.z, pl.x, pl.z);
+  const tele = teleCone(a.x, a.z, a.rot, 4.2, 0.95, 0.85); a.avatar?.play('smash', 1.2);
+  return { t: 0.85, fn() { killTele(tele); shake(0.3); Audio.sfx('slam', { x: a.x, z: a.z }); for (const p of heroes()) if (!p.dead && inCone(a.x, a.z, a.rot, 4.2, 0.95, p)) hitHero(a, p, 1.1, { target: p }); }, after: 0.6 };
+}
+// its slam's tell (3 m, 1.2 s), 1.3x; under the hanging ice 3-5 icicles come down round it, and one may land on it
+function vaultSlam(a) {
+  const x = a.x, z = a.z, tele = teleCircle(x, z, 3, 1.2); bigTele(a, 1.2);
+  a.avatar?.play('slam', 1); Audio.sfx('trollRoar', { x, z, vol: 0.7 });
+  later(1.2, inZone(a, () => {
+    killTele(tele); explosion(x, z, 3, 0xb09070, { smoke: 0x2a2620, shake: 0.4 }); Audio.sfx('slam', { x, z });
+    for (const p of heroes()) if (!p.dead && Math.hypot(p.x - x, p.z - z) < 3 + p.radius * 0.5) hitHero(a, p, 1.3, { target: p, push: 6 });
+    let n = 0; const want = rand.int(3, 5);
+    n += vaultAt(a.x, a.z, 1.2, 1, { boss: a });
+    for (let k = 0; k < 6 && n < want; k++) { const g = k * 1.05 + rand.range(0, 0.5); n += vaultAt(x + Math.sin(g) * 2.6, z + Math.cos(g) * 2.6, 1.4, 1); }
+    tally(a, n ? 'vaultSlamIce' : 'vaultSlam');
+  }));
+  return { t: 0.6, fn() {}, after: 0.7 };
+}
+// an icicle on a boss (forge.js drip): the troll form is Stunned 3 s (x1.5); nothing else of a boss's own life
+on('icicleHit', (a) => { if (a?.def?.form === 3 && !a.dead && !(a.turning > 0)) { daze(a, 3); addVuln(a, 'stunned', 3); a.gate = true; tally(a, 'iced'); } });
+function shadeRoar(a, pl) {
+  const rot = angleTo(a.x, a.z, pl.x, pl.z), tele = teleCone(a.x, a.z, rot, 6, 0.7, 0.9, 'dark'); bigTele(a, 0.9);
+  a.rot = rot; a.avatar?.play('taunt', 1.2); Audio.sfx('trollRoar', { x: a.x, z: a.z });
+  later(0.9, inZone(a, () => { killTele(tele); for (const p of heroes()) if (!p.dead && inCone(a.x, a.z, rot, 6, 0.7, p)) ringHit(a, p, 0.8, 1.5); tally(a, 'roar'); }));
+  return { t: 0.5, fn() {}, after: 0.5 };
+}
+
+// ---------- form 4: Your Own Shadow ----------
+function shadowStart(a) {
+  const S = SH6(), z = G.zone, H = hearthOf();
+  // the four stones go out; the Hearth's dark eases in; the Hands' pools are the north rim's
+  for (const it of S.stones || []) if (it.lit) snuffLamp(it, a);
+  S.unlitT = 0; S.flareT = 0; a.mq = []; a.howl = 0;
+  z.L.spots.hands = (H.pools || []).map((p) => ({ x: p.x, z: p.z }));
+  a.hq = [a.t + 6, a.t + 10];
+  shadeDark(true);
+  Audio.sfx('wraithWail', { vol: 1, pitch: 0.5 });
+}
+// the Hearth's dark: ATMOS hearthDark over 2 s (and back)
+function shadeDark(on) {
+  const z = G.zone; if (!z || z.id !== 'bottom') return;
+  const S = SH6(); if (!S) return;
+  S.dark = on; S.darkK = on ? 0 : 1;
+}
+function darkTick(dt) {
+  const S = SH6(); if (!S || S.darkK == null) return;
+  const from = ATMOS.bottom || ATMOS.crypt, to = ATMOS.hearthDark || from;
+  if (S.dark && S.darkK < 1) { S.darkK = Math.min(1, S.darkK + dt / 2); setAtmosphere(S.darkK >= 1 ? to : mixAtmos(from, to, S.darkK)); }
+  else if (!S.dark && S.darkK > 0) { S.darkK = Math.max(0, S.darkK - dt / 2); setAtmosphere(S.darkK <= 0 ? from : mixAtmos(from, to, S.darkK)); if (S.darkK <= 0) S.darkK = null; }
+}
+// across the fire from her: the centre plus the way from her to it, as far as she is from it (4-12 m); glides at 7 m/s,
+// never pushed; held still on the Lunge's landing (3 s, Lit inside her ring) and 2 s after each answer
+function shadowTick(a, dt, pl) {
+  const H = hearthOf(), S = SH6(), tg = shadeTarget(a) || pl;
+  darkTick(dt);
+  a.kx = a.kz = 0;
+  if (!a.lunge && !(a.holdT > 0) && !a.answering) {
+    const C = H.fire, dx = C.x - tg.x, dz = C.z - tg.z, l = Math.hypot(dx, dz) || 1, r = clamp(l, 4, 12);
+    const want = G.zone.map.nearestFloor(C.x + dx / l * r, C.z + dz / l * r, 3), wx = want.x - a.x, wz = want.z - a.z, wl = Math.hypot(wx, wz);
+    if (wl > 0.05) { const st = Math.min(wl, 7 * dt); a.x += wx / wl * st; a.z += wz / wl * st; }
+    face(a, tg, dt, 6);
+  }
+  if (a.holdT > 0) {
+    a.holdT -= dt;
+    // the Lunge's landing: Lit while it stands inside her ring (with her ring Out, only still)
+    if (a.holdLunge && ringOf(tg) > 0 && Math.hypot(tg.x - a.x, tg.z - a.z) < ringOf(tg)) { addVuln(a, 'lit', 0.3, { quiet: true }); S.unlitT = 0; }
+    if (a.holdT <= 0) a.holdLunge = false;
+  }
+  // its answers: each 1.2 s after her cast (0.4 s sooner after a Howl or a Step), while there is room for it
+  if (a.mq?.length && !a.lunge && !a.answering && !(a.turning > 0)) {
+    const q = a.mq[0];
+    if (a.t >= q.at && roomFor(a)) { a.mq.shift(); answer(a, q.id, tg); }
+    else if (a.t > q.at + 3) a.mq.shift();
+  }
+  // a guest its target: one of its class's set every 3.5 s (a guest's casts are not on the host's wire)
+  if (tg !== G.player && tg?.remote && (a.gT = (a.gT ?? 3.5) - dt) <= 0) { a.gT = 3.5; const set = MIRROR6_GUEST[targetCls(tg)] || MIRROR6_GUEST.warden; (a.mq ||= []).push({ id: set[(a.gi = ((a.gi || 0) + 1) % set.length)], at: a.t }); }
+  // the Hands from the north pools (two at most, never in lamp light; cutting them is optional)
+  handsTick(a, dt, tg);
+  a.ward = a.shadowWard > 0 ? 0.6 : 0; if (a.shadowWard > 0) a.shadowWard -= dt;
+  if (a.wardLook && !(a.shadowWard > 0)) { a.wardLook = false; restoreRim(a); }
+  // the Flare: 40 s with no Lit window, the centre fire to r 8 for 10 s
+  if (S.unlitT > 40 && !(S.flareT > 0)) { S.flareT = 10; S.unlitT = 0; addLightPool(H.fire.x, H.fire.z, 8, 10, 'shadeFlare', { lamp: true, color: 0xffb060, intensity: 26 }); emit('shadeFlare', a); emit('toast', t('d.shade.flare'), 'quest'); tally(a, 'flare'); }
+  if (S.flareT > 0) S.flareT -= dt;
+}
+// her skill: the shadow's answer 1.2 s on (the host's own hero; MIRROR6 by the skill's id, every variant its base's)
+on('skillUsed', (i, id) => {
+  const a = G.zone?.boss; if (!a || a.dead || a.def?.form !== 4 || !a.awake || a.turning > 0) return;
+  if (shadeTarget(a) !== G.player) return;
+  const ans = MIRROR6[id]; if (!ans) return;
+  // (one answer at a time: a cast while one waits, while it answers or holds after its answer, is not answered)
+  if (a.mq?.length || a.answering || (a.holdT > 0 && !a.holdLunge)) return;
+  (a.mq ||= []).push({ id: ans, at: a.t + Math.max(0.6, 1.2 - (a.howl || 0)) }); a.howl = 0;
+});
+const MIRROR6 = { whirl: 'spin', leap: 'leap', cry: 'howl', quake: 'line', charge: 'leap', bulwark: 'ward', dawn: 'wave', multi: 'fan', rain: 'fall', wolf: 'howl', pierce: 'line', trap: 'snare', vault: 'step', hawks: 'fan', fireball: 'bolt', nova: 'frost', chain: 'fan', meteor: 'fall', frostorb: 'orb', rift: 'pull', beam: 'ray' };
+const MIRROR6_GUEST = { warden: ['spin', 'leap', 'line'], ranger: ['fan', 'fall', 'line'], mage: ['bolt', 'frost', 'fall'] };
+const DK = 'dark';
+// the shadow's answer from where it stands, in its own grey-violet; then it holds that spot 2 s
+function answer(a, id, tg) {
+  const x = a.x, z = a.z, rot = angleTo(x, z, tg.x, tg.z), hx = tg.x, hz = tg.z;
+  a.answering = true; a.rot = rot; a.avatar?.play('cast', 1);
+  const hold = () => { a.answering = false; a.holdT = Math.max(a.holdT || 0, 2); a.holdLunge = false; };
+  const land = (t, fn) => later(t, inZone(a, () => { fn(); }));
+  const circle = (cx, cz, r, t, mult, o = {}) => { const tl = teleCircle(cx, cz, r, t, o.sea ? SEA : DK); bigTele(a, t); land(t, () => { killTele(tl); ring(cx, cz, r, 0x8a70ff, 0.4); for (const p of heroes()) if (!p.dead && Math.hypot(p.x - cx, p.z - cz) < r + p.radius * 0.5) { hitHero(a, p, mult, Object.assign({ target: p }, o.hit)); o.after?.(p); } }); };
+  const line = (x0, z0, rr, len, w, t, mult, o = {}) => { const tl = teleLine(x0, z0, rr, len, w, t, DK); land(t, () => { killTele(tl); for (const p of heroes()) if (!p.dead && inLine(x0, z0, rr, len, w, p)) { hitHero(a, p, mult, Object.assign({ target: p }, o.hit)); o.after?.(p); } }); };
+  tally(a, 'answer:' + id);
+  switch (id) {
+    case 'spin': circle(x, z, 3, 1.0, 1.0); land(1.0, hold); break;
+    case 'leap': circle(hx, hz, 3.2, 1.2, 1.3); land(1.2, hold); break;
+    case 'howl': a.howl = 0.4; hold(); break;
+    case 'line': line(x, z, rot, 14, 2, 1.1, 1.3); bigTele(a, 1.1); land(1.1, hold); break;
+    case 'ward': a.shadowWard = 3; a.avatar?.setRim(0x9aa0b0, 1.2); a.wardLook = true; ring(x, z, 1.6, 0x9aa0b0, 3); hold(); break;
+    case 'wave': for (const da of [-0.26, 0, 0.26]) line(x, z, rot + da, 12, 2, 1.2, 0.7); bigTele(a, 1.2); land(1.2, hold); break;
+    case 'fan': for (let k = -2; k <= 2; k++) line(x, z, rot + k * 0.22, 12, 1.2, 1.0, 0.6); bigTele(a, 1.0); land(1.0, hold); break;
+    case 'fall': circle(hx, hz, 3.5, 1.4, 1.4); land(1.4, hold); break;
+    case 'snare': circle(hx, hz, 1.6, 1.2, 0.8, { after: (p) => { if (p === G.player) rootHero(0.8); } }); land(1.2, hold); break;
+    case 'step': { const H = hearthOf(), C = H.fire, dx = C.x - tg.x, dz = C.z - tg.z, l = Math.hypot(dx, dz) || 1, r = clamp(l, 4, 12), f = G.zone.map.nearestFloor(C.x + dx / l * r, C.z + dz / l * r, 3); glowBurst(a.x, 1, a.z, 0x1a1c24, 20, 2, 0.3, 0.5); a.x = f.x; a.z = f.z; a.howl = 0.4; hold(); break; }
+    case 'bolt': line(x, z, rot, 14, 1.6, 1.2, 1.2); bigTele(a, 1.2); { const ex = x + Math.sin(rot) * 14, ez = z + Math.cos(rot) * 14; land(1.2, () => { explosion(ex, ez, 2, 0x5a4a8a, { smoke: 0x0e1016, shake: 0.15 }); for (const p of heroes()) if (!p.dead && Math.hypot(p.x - ex, p.z - ez) < 2) hitHero(a, p, 0.6, { target: p }); hold(); }); } break;
+    case 'frost': circle(x, z, 5, 1.2, 0.9, { hit: { slow: { k: 0.3, t: 2 } } }); land(1.2, hold); break;
+    case 'orb': line(x, z, rot, 12, 2, 1.2, 0.5, { hit: { slow: { k: 0.2, t: 1.5 } } }); land(1.2, () => line(x, z, rot, 12, 2, 1.2, 0.5, { hit: { slow: { k: 0.2, t: 1.5 } } })); bigTele(a, 2.4); land(2.4, hold); break;
+    case 'pull': { const H = hearthOf(); circle(hx, hz, 3, 1.3, 0.8, { sea: true, after: (p) => { if (p === G.player) pullHero(H.fire.x, H.fire.z, 2.5, 0.35, 'hud.pulled', 2.2); } }); land(1.3, hold); break; }
+    case 'ray': line(x, z, rot, 16, 1.4, 1.2, 1.3); bigTele(a, 1.2); land(1.2, hold); break;
+    default: hold();
+  }
+}
+// the Shadow Lunge: a 12 m line through her across the fire (1.0 s), then through her: it lands 1.5 m past her and
+// holds still 3 s there
+function shadowLunge(a, pl) {
+  const tg = shadeTarget(a) || pl, rot = angleTo(a.x, a.z, tg.x, tg.z), x0 = a.x, z0 = a.z, dist = Math.hypot(tg.x - x0, tg.z - z0);
+  const len = Math.min(16, dist + 1.5), tl = teleLine(x0, z0, rot, Math.max(12, len), 2, 1.0, DK); bigTele(a, 1.0);
+  a.lunge = true; a.rot = rot; a.avatar?.play('slash1', 1.2);
+  later(1.0, inZone(a, () => {
+    killTele(tl);
+    const ex = x0 + Math.sin(rot) * len, ez = z0 + Math.cos(rot) * len, f = G.zone.map.castT(x0, z0, ex, ez, 0.4), lx = x0 + (ex - x0) * f, lz = z0 + (ez - z0) * f, lf = G.zone.map.nearestFloor(lx, lz, 2);
+    for (let k = 0; k < 10; k++) P({ add: false, x: x0 + (lf.x - x0) * k / 10, y: 1.2, z: z0 + (lf.z - z0) * k / 10, life: 0.4, size: 0.8, size1: 0.2, color: 0x2a2440, alpha: 0.6 });
+    a.x = lf.x; a.z = lf.z; a.lunge = false; a.holdT = 3; a.holdLunge = true;
+    for (const p of heroes()) if (!p.dead && inLine(x0, z0, rot, len, 2, p)) hitHero(a, p, 1.2, { target: p, push: 10 });
+    Audio.sfx('swingHeavy', { x: a.x, z: a.z }); tally(a, 'lunge');
+  }));
+  return { t: 0.3, noFace: true, fn() {}, after: 0.3 };
+}
 
 export { AI };

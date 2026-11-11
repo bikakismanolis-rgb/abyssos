@@ -162,6 +162,8 @@ export function drip(x, z, r, dur, o = {}) {
     if (ice) for (const a of zone.actors) {
       if (a.dead || a.removed || a.team !== 'foe' || a.prop || a.airborne || a.under || Math.hypot(a.x - x, a.z - z) > r + a.radius * 0.5) continue;
       const st = o.stun ?? (a.def.vaultStun || 1.5);
+      // (a boss takes nothing of its own life from one: the Shade's troll form is Stunned by it, ai.js 'icicleHit')
+      if (a.boss) { emit('icicleHit', a, st); continue; }
       damage(null, a, a.hpMax * 0.08, { pure: true, quiet: true, icicle: true });
       if (!a.dead && !a.boss) { a.status.stun = Math.max(a.status.stun || 0, st); addVuln(a, 'stunned', st); }
       if (a.dead && o.shard) a.underShard = true;

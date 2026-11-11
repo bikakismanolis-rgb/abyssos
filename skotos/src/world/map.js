@@ -5,6 +5,8 @@ export class GridMap {
   constructor(w, h, cells, low) {
     this.w = w; this.h = h; this.cells = cells; // 0 solid, 1 floor
     this.low = low || null;                     // 1 where a solid cell is only a hole in the floor
+    this.over = null;                           // 1 where a solid cell is low enough to see and shoot over (Act VI: the
+                                                // Hearth's centre fire); the layout's own low layer never knows of it
     this.flow = new Uint16Array(w * h);
     this.flowT = { x: -1, z: -1, t: 0 };
     this.queue = new Int32Array(w * h);
@@ -20,7 +22,7 @@ export class GridMap {
   blocks(ix, iz) {
     if (ix < 0 || iz < 0 || ix >= this.w || iz >= this.h) return true;
     const i = iz * this.w + ix;
-    return this.cells[i] === 0 && !(this.low && this.low[i]);
+    return this.cells[i] === 0 && !(this.low && this.low[i]) && !(this.over && this.over[i]);
   }
   // one cell (Act V never calls it: open and close batch): a change bumps ver and rebuilds the flow field like a batch
   setSolid(ix, iz, v = true) {

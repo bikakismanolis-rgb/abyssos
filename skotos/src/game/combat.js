@@ -53,6 +53,8 @@ export function damage(src, target, amount, o = {}) {
   // Act VI: a body that is only another's (the Ketos's head on the shore, def.share): every blow on it is that one's, with
   // its guard, its vulnerability and its floor, seen where the proxy stands
   if (target.def?.share && target.shareTo) { const to = target.shareTo; if (to.dead || to.removed) return 0; return damage(src, to, amount, Object.assign({}, o, { at: target })); }
+  // a Light-web on a hearthstone (the Shade's form 2): three blows cut it, fire burns it at once
+  if (target.def?.hits3) { if (!target.dead) { target.hits3 = (target.hits3 || 0) + 1; number(target.x, 1.8, target.z, o.fire || o.burn ? '🔥' : target.hits3 + '/3', 'text', '#d8dce8'); if (o.fire || o.burn || target.hits3 >= 3) kill(target, src, o); } return 1; }
   // stepped into the trees, gone into mist, wheeling high above, or clinging to the hero's back: nothing to hit
   if (target.hidden || target.airborne || target.cling) return 0;
   // a keeper's statue in Karthax's cage: only his own hammer breaks it (ai.js)
@@ -159,6 +161,9 @@ function hurtHero(src, amount, o) {
   if (s.legs.has('stoneborn') && p.hp < p.hpMax * 0.5) amount *= 0.8;
   // Seen by the dead (a Lampless alarm, Ivar's lantern): +15%
   if (p.buffs.seen > 0) amount *= 1.15;
+  // Act VI: no boss blow takes more than 11% of her life at once (the act's rule, no blow over 12% of max life: the
+  // Shade's borrowed 1.5-1.6x blows took 14-15% of a Mage's on her rolled gear)
+  if (src?.boss && G.zone?.act6 && !o.dot) amount = Math.min(amount, p.hpMax * 0.11);
   amount = Math.max(1, Math.round(amount));
   if (p.shield > 0) { const a = Math.min(p.shield, amount); p.shield -= a; amount -= a; if (amount <= 0) { sparks(p.x, 1.2, p.z, 6, 0xffd080, 3); return 0; } }
   p.hp -= amount;
@@ -251,7 +256,8 @@ function actHit(src, a, o, fromHero) {
   // there also leaves it Revealed for 3 s; a wearer of the Shade's Ring takes half, not the act's Shroud)
   const under = lightKind() === 'under';
   if ((def.shroud || a.shrouded || (under && def.unlit)) && !(a.unshroud > 0) && shroudOn()) {
-    if (!(under && def.unlit && FIRE.state === 'out') && lightAt(a.x, a.z, { pad: a.radius * 0.5 })) { a.revealed = 3; if (under && fromHero) addVuln(a, 'revealed', 3, { quiet: true }); }
+    // (the Shade, def.form: full in a hero's ring, no more; its Lit in lamp light is its own, ai.js shadePre)
+    if (!(under && def.unlit && FIRE.state === 'out') && lightAt(a.x, a.z, { pad: a.radius * 0.5 })) { a.revealed = 3; if (under && fromHero && !def.form) addVuln(a, 'revealed', 3, { quiet: true }); }
     else if (!(a.revealed > 0)) {
       k *= under && fromHero && G.stats?.legs?.has('shadeRing') ? 0.5 : shroudK();
       if (!o.dot && !(a.shroudTxt > 0)) { a.shroudTxt = 0.8; number(a.x, 2.7 * (a.scale || 1), a.z, tx('hud.shrouded', 'Σκιασμένος', 'Shrouded'), 'text', '#9aa8c0'); }

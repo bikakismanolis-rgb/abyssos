@@ -240,6 +240,8 @@ function actSpawn(id, def, a, av, o) {
   if (id === 'mourner') veil(av);
   act4Spawn(id, def, a, av, o);
   act5Spawn(id, def, a, av, o, pk);
+  // Act VI: the Shade's forms wear the Skotos's skin over their near-black regrade (each body's own materials)
+  if (def.keepSkin) for (const m of av.model.mats || []) if (!/void/i.test(m.name || '')) skotosSkin(m);
 }
 // a heap over a body lying in wait (ash, or the Sunken's kelp); a crab's 'rock' is its own pose and needs none
 function heapOver(a) {
