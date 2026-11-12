@@ -5217,7 +5217,76 @@ const S = {
     for (const [k, v] of Object.entries(r)) beat(`${k}: a drawn body (${v.model || '?'}${v.standIn ? ', a stand-in' : ''})`, !v.error && v.meshes > 0 && !v.bad && !!v.model, v);
     beat('the Falselight stands in as the spider, the Ketling as the Icemaw or the warg, the Faded as a villager', r.falselight?.model === 'spider' && ['icemaw', 'warg'].includes(r.ketling?.model) && /^villager[012]$/.test(r.faded?.model || ''), { f: r.falselight?.model, k: r.ketling?.model, d: r.faded?.model });
     return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
-  } }
+  } },
+  // Act VI: story
+  // The call below the ice (hook6): (a) a q30 save tells the child his name: Act V's panels, the blessing, then the call in
+  // Whitecliff (call6 saved first, q32), the child and Tamarisk at the staff, her word (tam6, q33), Selna's look down and the
+  // coal from the Farthest Light (coal6, q33b), the rope down to the Drained Sea; (b) the same walk for a hero of the
+  // shipped format at Act V's end (no act6, no fmt): its first town entry is the hook
+  hook6: { q: 'auto=town&sim=4&q=0&norender&lvl=36&cloud=off&cls=' + (process.env.CLS || 'warden'), run: async (pg, shot) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) }), parts = (process.env.PART || 'ab').split('');
+    const ev = (f, a) => pg.evaluate(f, a);
+    await A5.tick(pg); await A4.listen(pg);
+    // (the quest line as questText words it: with &norender the HUD's own line is not kept up)
+    const qt = () => ev(async () => { const S = await import('/src/game/story.js'); window.__qt = () => S.questText(); });
+    await qt();
+    const walk = async (tag) => {
+      await qt();
+      const ok0 = await A5.until(pg, () => { const G = window.__G, n = G.zone?.p5?.tamarisk; return G.hero.flags.call6 && G.hero.quest >= 32 && !!n && !n.scene && !G.cine; }, 240000);
+      const s1 = await ev(() => { const G = window.__G, F = G.hero.flags, z = G.zone, n = z.p5?.tamarisk, st = z.L.spots.npcs.wayfarer; if (!n) return { quest: G.hero.quest, call6: !!F.call6, zone: z.id, mode: G.mode, panel: G.panel, cine: !!G.cine, p5: Object.keys(z.p5 || {}), tam6: !!F.tam6 }; return { quest: G.hero.quest, call6: !!F.call6, tamAt: +Math.hypot(n.a.x - st.x, n.a.z - st.z).toFixed(1), news: !n.it.used, held: [4, 5, 6].map((i) => z.town?.far?.[i]?.spr?.userData.flash ?? null), staffMist: !!(z.emit || []).find((e) => e.key === 'staff6'), text: window.__qt?.() || '' }; });
+      if (!ok0) { beat(tag + ': the call (call6, q32), Tamarisk by the staff', false, s1); return; }
+      beat(tag + ': the call (call6, q32), Tamarisk by the staff with news, the sea-lights held, mist at the staff', ok0 && s1.call6 && s1.quest === 32 && s1.tamAt < 3 && s1.news && s1.held.every((f) => f === 0) && s1.staffMist, s1);
+      await shot();
+      await A5.use(pg, 'z.p5.tamarisk.it');
+      const ok1 = await A5.until(pg, () => window.__G.hero.flags.tam6 && window.__G.hero.quest >= 33, 120000);
+      beat(tag + ': her word: tam6, q33', ok1, await ev(() => ({ quest: window.__G.hero.quest, text: window.__qt?.() || '' })));
+      // the Light's Skerry: Selna's look down, the coal at the door
+      await A5.travel(pg, 'farlight', 'farlight');
+      await A5.until(pg, () => !!window.__G.zone.p5?.selna && !window.__G.cine, 120000);
+      const s2 = await ev(() => { const z = window.__G.zone, P = z.p5 || {}; return { glaukos: !!P.glaukos, alkyone: !!P.alkyone, tern: !!P.tern, rope: !!z.interact.find((i) => i.kind === 'exit' && i.to === 'drained'), coal: !!z.interact.find((i) => i.kind === 'coal6') }; });
+      beat(tag + ': the Skerry: Glaukos, Alkyone and Tern by the rope; the rope hole; no coal yet', s2.glaukos && s2.alkyone && s2.tern && s2.rope && !s2.coal, s2);
+      await A5.use(pg, 'z.p5.selna.it');
+      const ok2 = await A5.until(pg, () => window.__G.hero.flags.selnaF6 && !!window.__G.zone.interact.find((i) => i.kind === 'coal6'), 120000);
+      beat(tag + ': Selna\'s word and her look down; the coal at the tower\'s door', ok2);
+      // the rope shut without fire
+      const shut = await ev(() => { const z = window.__G.zone, e = z.interact.find((i) => i.kind === 'exit' && i.to === 'drained'); return { locked: e?.locked, flag: !!window.__G.hero.flags.coal6 }; });
+      await A5.use(pg, "z.interact.find((i) => i.kind === 'coal6')");
+      const ok3 = await A5.until(pg, () => window.__G.hero.flags.coal6 && !window.__G.zone.interact.find((i) => i.kind === 'coal6'), 60000);
+      const s3 = await ev(() => ({ quest: window.__G.hero.quest, text: window.__qt?.() || '', coal6: !!window.__G.hero.flags.coal6 }));
+      beat(tag + ': the rope shut before the coal; the coal taken (coal6), the quest on the rope', shut.locked === 'coal6' && !shut.flag && ok3 && s3.coal6, { shut, s3 });
+      for (const k of ['glaukos', 'alkyone', 'tern']) { await A5.use(pg, 'z.p5.' + k + '.it'); await A4.dialogs(pg, 6); }
+      await A5.use(pg, "z.interact.find((i) => i.kind === 'exit' && i.to === 'drained')");
+      const down = await pg.waitForFunction(() => window.__G.zone?.id === 'drained' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 300000 }).then(() => true, () => false);
+      beat(tag + ': down the rope into the Drained Sea', down, await ev(() => window.__G.zone?.id));
+      await shot();
+    };
+    if (parts.includes('a')) {
+      // (a) the q30 save: the child told, Act V's panel and its blessing, the call 2 s after
+      await A5.state(pg, 'carved', { quest: 30, act5: -1, boons: ['ember', 'forge', 'amber', 'lantern'], flags: { homeSeen: true }, zone: 'town' });
+      await A5.until(pg, () => !!window.__G.zone.p5?.child, 60000);
+      await A5.use(pg, 'z.p5.child.it');
+      const panel = await A5.until(pg, () => window.__G.panel === 'act', 180000);
+      await pg.click('[data-a="close"]').catch(() => {});
+      await A5.until(pg, () => !!document.querySelector('[data-a="boon:name"]'), 60000);
+      await pg.click('[data-a="boon:name"]').catch(() => {});
+      const act5 = await ev(() => ({ act5: window.__G.hero.act5, quest: window.__G.hero.quest, call6: !!window.__G.hero.flags.call6 }));
+      beat('a: Act V closed (its panel, its blessing), the call not before', panel && act5.act5 >= 0 && act5.quest === 31, act5);
+      await walk('a');
+    }
+    if (parts.includes('b')) {
+      // (b) a hero of the shipped format at Act V's end: no act6, no fmt; loaded from the save as a player would (from a
+      // page with no hero, so nothing writes its own save over this one on the way out)
+      await pg.goto(A5.base + '?q=0&sim=4&norender&cloud=off');
+      await pg.waitForFunction(() => window.__ready && window.__G?.save, null, { timeout: 240000 });
+      const flags5 = Object.fromEntries([...A5.ACT4, ...A5.flagsTo('toldChild'), 'act5'].map((k) => [k, true]));
+      await ev((flags5) => { const now = Date.now(), h = { id: 'hB6', name: 'B6', cls: 'warden', level: 36, xp: 0, gold: 900, diff: 1, quest: 31, act1: 1, act2: 1, act3: 1, act4: 1, act5: 1, flags: { ...flags5, lights5: ['grey', 'wreck', 'fall'], heat: 3, gifts: { throne: 'refused', forge: 'refused', unfading: 'refused' } }, boons: ['ember', 'forge', 'amber', 'lantern', 'name'], skills: { whirl: 5, leap: 5, cry: 5, quake: 5 }, points: 0, inv: new Array(32).fill(null), equip: {}, stash: new Array(48).fill(null), wps: ['town', 'forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'forge', 'coast', 'farlight'], gateBest: 4, stats: { kills: 4000, deaths: 3, time: 90000 }, created: now }; const s = { heroes: [h], settings: { helpSeen: true }, last: h.id }; localStorage.clear(); localStorage.setItem('skotos.save.v1', JSON.stringify(s)); window.__G.save = JSON.parse(JSON.stringify(s)); }, flags5);
+      await A5.reload(pg, { write: false, q: 'q=0&sim=4&norender&cloud=off' });
+      const mig = await ev(() => { const h = window.__G.hero; return { act6: h.act6, fmt: h.fmt, zone: window.__G.zone?.id, lamp: h.mast?.lamp ?? 0 }; });
+      beat('b: the shipped hero loaded: act6 -1, the format stamped, in Whitecliff', mig.act6 === -1 && mig.fmt >= 1 && mig.zone === 'town', mig);
+      await walk('b');
+    }
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
+  } },
 };
 const sc = S[name];
 // (a scenario run in a child process of its own, as the soaks: this runner's browser is never opened beside it)

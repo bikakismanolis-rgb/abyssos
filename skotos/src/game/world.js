@@ -8,6 +8,7 @@ import { genWeep, genHeart } from '../world/gen3.js';
 import { genAshfield, genForge } from '../world/gen4.js';
 import { genCoast, genFarlight } from '../world/gen5.js';
 import { genDrained, genBottom, ropeSpot } from '../world/gen6.js';
+import { town6 } from './story.js';
 import { buildLevel, propMesh, runeDisc, WIND, act3Prop, setAutumn, act4Prop, setHeat, setNight, setFlueGlow } from '../world/build.js';
 import { act5Prop } from '../world/build5.js';
 import { SEA, TICKS, clearFreeze, freezeWave, freezeRing, setShade } from '../world/sea.js';
@@ -1349,6 +1350,8 @@ function want5(z) {
     if (F.alkyone && !F.coal) at('alkyone', 'alkyone', { x: s.x + 1.9, z: s.z - 0.7, r: Math.PI * 0.85 });
     // (the child waits once there is a name to tell him: after the carving, q30; before it he would bark a name not told yet)
     if (F.carved) at('child', 'child', { x: s.x - 1.5, z: s.z + 0.9, r: Math.PI * 0.6 });
+    // (Act VI: Tamarisk by the staff from the call until she goes down ahead, story.js hook6)
+    if (F.call6 && !F.tam6) at('tamarisk', 'tamarisk', { x: s.x + 1.7, z: s.z - 0.9, r: Math.PI * 0.8 });
   } else if (z.id === 'ashfield') {
     const ll = S.lastLamp;
     if (ll && F.coal && !F.coastSeen && hasPerson('alkyone')) at('alkyone', 'alkyone', { ...z.map.nearestFloor(ll.x - 1.6, ll.z + 1.4, 2), r: Math.PI * 0.6 });
@@ -1372,7 +1375,14 @@ function want5(z) {
       if (holes < 3) at('tamarisk', 'tamarisk', N.tamarisk);
       else at('tamarisk', 'tamarisk', { ...K[4], r: Math.PI }, { talk: !fight });
     }
-    at('tern', 'tern', N.tern, { talk: !fight || !!F.seaLit });
+    // (Act VI, from Tamarisk's word to the arrival below: Tern at the winch by the rope hole, Glaukos and Alkyone come out
+    // over the ice beside it, story.js)
+    const rope = F.tam6 && !F.drainedSeen ? ropeSpot(z.L) : null;
+    if (rope) {
+      at('tern', 'tern', { ...z.map.nearestFloor(rope.x + 1.8, rope.z + 0.6, 2), r: -Math.PI / 2 });
+      at('glaukos', 'glaukos', { ...z.map.nearestFloor(rope.x - 1.9, rope.z + 1.2, 2), r: Math.PI * 0.6 });
+      at('alkyone', 'alkyone', { ...z.map.nearestFloor(rope.x - 0.6, rope.z + 2.6, 2), r: Math.PI });
+    } else at('tern', 'tern', N.tern, { talk: !fight || !!F.seaLit });
     // (kneeling on her pad, saying names and losing them; standing once she is remembered)
     if (F.skotosWake && !F.skotosDown) at('selna', 'selna', { ...S.selnaPad, r: 0 }, G.selnaBack ? { talk: false, idle: 'lantern' } : { talk: false, still: true });
     else if (F.skotosDown) at('selna', 'selna', { ...K[3], r: Math.PI }, { idle: 'lantern', talk: !!F.seaLit });
@@ -1751,6 +1761,10 @@ export function act6Presence(z) {
 // arrival from the Drained Sea finds it (enterZone: by the exit back to where she came from). Its props are look's
 function ropeHole(z) {
   const F = G.hero.flags, L = z.L;
+  // (the coal at the tower's door, once Selna has said to take it: story.js 'coal6')
+  const FL = L.spots.farLight, cw = !!F.selnaF6 && !F.coal6, cur = z.interact.find((i) => i.kind === 'coal6');
+  if (cw && !cur && FL) { const p = z.map.nearestFloor(FL.x, FL.z + 3.4, 2); z.interact.push({ kind: 'coal6', x: p.x, z: p.z, r: 2.2, prompt: 'coal6.take', use: () => emit('coal6', z) }); }
+  if (!cw && cur) z.interact.splice(z.interact.indexOf(cur), 1);
   if (!(F.tam6 || F.coal6) || L.exits.some((e) => e.to === 'drained')) return;
   const p = ropeSpot(L); if (!p) return;
   const e = { x: p.x, z: p.z, to: 'drained', label: 'exit.rope', locked: 'coal6', act6: true };
@@ -1900,6 +1914,7 @@ export function townFires(z) {
   for (let i = 4; i <= 6; i++) { const s = z.town.far[i]?.spr; if (s) s.userData.flash = hold ? 0 : 12; }
   townTorches(z, !!F.fireTaken && !F.newFire);
   townPresence(z);
+  town6(z);
 }
 const liveLights = (key) => [...R.sources].filter((s) => s.key === key);
 // one far fire: its light (none on a peak), its glow over the treeline and its flames (kept with the zone and shown on

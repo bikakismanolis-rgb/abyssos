@@ -22,7 +22,8 @@ import { addLightPool, removeLightPool, cradlePoint, setNamesRoll } from './ligh
 import { angleTo } from '../core/util.js';
 import { openDeepGate, FAR_BEACONS, farFire, openRootGate, witherWall, firstAutumn, growProp, zoneEmitters, setFar, setBeacon, townFires, townPresence, walkTo, stopWalk, vanish, release,
   act4Presence, isarnLantern, setLastLamp, openAnvilGate, meltPlug, forgeCold, bellowsDone, echoAt,
-  act5Presence, people5, scene5, npc5, spawnNpc5, light5, iceMemOf, ICE_WHO, LIGHTS5, touch, spawnBoss, checkpoint5 } from './world.js';
+  act5Presence, people5, scene5, npc5, spawnNpc5, light5, iceMemOf, ICE_WHO, LIGHTS5, touch, spawnBoss, checkpoint5,
+  act6Presence } from './world.js';
 
 // Act III's counters: the three verses of the Long Sorrow, the three thorn walls of the Heartwood
 const STORY_TEARS = ['planting', 'sorrow', 'breaking'];
@@ -41,6 +42,11 @@ export function questText() {
   if (q === 26) return memoryOwed() ? t('q.26b') : t('q.26', lightsLit5());
   if (q === 28) return t('q.28', selnaName(), holesSealed());
   if (q === 29) return F.seaLit ? t(F.mem_i4 ? 'q.29c' : 'q.29b') : G.selnaBack || F.selnaBack ? t('q.29a') : t('q.29', selnaName());
+  // Act VI: the rope once the coal is taken; the hearths lit and the black lamps out, counted; her name, «…» until said
+  if (q === 33) return t(F.coal6 ? 'q.33b' : 'q.33');
+  if (q === 34) return t('q.34', hearths6());
+  if (q === 36) return t('q.36', lampsOut6());
+  if (q === 38) return F.herFire ? t('q.38b') : t('q.38', F.nameBack ? t('npc.first.named') : '…');
   return t('q.' + q);
 }
 // Act V: the keeper the world forgot. Her name is «…» wherever the game would print it, from the Freeze until she is
@@ -57,6 +63,7 @@ function setQuest(n, quiet) {
 }
 export function npcHasNews(kind, a) {
   const q = G.hero.quest, F = G.hero.flags, zid = G.zone?.id, a4 = zid === 'ashfield' || zid === 'forge';
+  const n6 = news6(kind, a, zid); if (n6 != null) return n6;
   if (a4) return (kind === 'wayfarer' && zid === 'ashfield' && (a?.key === 'isarnHook' ? !F.isarnHook : !F.isarnField))
     || (kind === 'brokka' && (zid === 'ashfield' ? !F.brokkaField : !F.brokkaForge))
     || (kind === 'elati' && (zid === 'ashfield' ? !F.elatiGraves : !F.elatiForge))
@@ -89,7 +96,8 @@ const heal = () => { G.player.potionCd = 0; G.player.hp = G.player.hpMax; };
 on('talk', (kind, actor) => {
   const q = G.hero.quest, F = G.hero.flags;
   const zid = G.zone?.id;
-  // Act V's people, and what Whitecliff, Deepstone and the wood say once the coast has called
+  // Act VI's, then Act V's people, and what Whitecliff, Deepstone and the wood say once the coast has called
+  if (talk6(kind, actor)) return;
   if (talk5(kind, actor)) return;
   if (kind === 'wayfarer' && (zid === 'ashfield' || zid === 'forge')) {
     // Act IV: at the Dark Beacon's camp; at the empty hook in the Graves; kneeling at the Anvil
@@ -210,6 +218,7 @@ on('zoneEnter', (id, z) => {
     if (F.newFire && (G.hero.act4 ?? -1) < 0) later(2, () => actComplete(4));
   }
   enter5(id, z);
+  enter6(id, z);
 });
 on('voice', (key) => {
   if (key.startsWith('d.skotos')) { skotosSay(key); return; }
@@ -218,7 +227,12 @@ on('voice', (key) => {
   if (key.startsWith('d.voice')) { const c = cradlePoint(); glowBurst(c.x, c.y, c.z, 0xff7a30, 14, 1.2, 0.18, 0.7); }
 });
 // Isarn's staff by the new beacon: its last word, and the way into the Shadow Gates
-on('staff', () => { emit('say', 'd.staff'); later(1.2, () => emit('openPanel', 'gates')); });
+on('staff', () => {
+  // (Act VI: from the call until her fire burns, the cold that comes up from it first)
+  const F = G.hero.flags, cold = F.call6 && !F.herFire;
+  if (cold) emit('say', 'd.staff6');
+  later(cold ? 2.4 : 0, () => { emit('say', 'd.staff'); later(1.2, () => emit('openPanel', 'gates')); });
+});
 on('lightBeacon', () => { if (G.mode === 'play' && G.hero.quest === 22 && !G.hero.flags.newFire) beaconScene(4, 'answer'); });
 // Ivar's fight: he comes up to the gate as the quest
 on('bossIntro', (a) => { if (a.kind === 'ivar' && !a.echo && G.hero.quest < 19) setQuest(19, true); });
@@ -1857,6 +1871,170 @@ function enter5(id, z) {
     // named, but the answer never seen (the game closed on the card): the card and the answer again
     if (F.skotosDown && !F.seaLit) later(2.2, () => nameCard(z));
   }
+}
+
+// ---------- Act VI: Beneath the Ice (docs/act6-contract.md, Story; the lines are the design's, docs/act6-design.md) ----------
+const hearths6 = () => [1, 2, 3].filter((k) => G.hero.flags['hearth6_' + k]).length;
+const lampsOut6 = () => [0, 1, 2].filter((k) => G.hero.flags['blackLamp' + k]).length;
+// the "!" over Act VI's people (null: not theirs, Act V's rules decide)
+function news6(kind, a, zid) {
+  const F = G.hero.flags;
+  if (!F.call6) return null;
+  if (zid === 'town') {
+    if (kind === 'tamarisk' && !F.tam6) return true;
+    if (kind === 'smith' && !F.herFire) return !F.haldaV6 || (!!F.tam6 && !F.haldaCall6);
+    if (kind === 'healer' && !F.herFire) return !F.elianteV6;
+    return null;
+  }
+  if (zid === 'farlight' && F.tam6 && !F.drainedSeen) {
+    if (kind === 'selna') return !F.selnaF6 && !F.coal6;
+    if (kind === 'glaukos') return !F.glaukosF6;
+    if (kind === 'alkyone') return !F.alkV6;
+    if (kind === 'tern') return !F.ternR6;
+  }
+  return null;
+}
+// Act VI's people talking; true when it was theirs to answer
+function talk6(kind, a) {
+  const F = G.hero.flags, z = G.zone, zid = z?.id;
+  if (!F.call6) return false;
+  if (zid === 'town' && !F.herFire) {
+    if (kind === 'tamarisk' && !F.tam6) { tamStaff(z, a); return true; }
+    if (kind === 'smith') {
+      // (the forgetting: something about the stars gone; after Tamarisk's word, the three flashes are for the hero)
+      const key = F.tam6 && F.haldaV6 ? 'd.halda.call' : 'd.halda6.v1';
+      emit('dialog', { who: 'smith', lines: [key], end: () => { F.metSmith = true; F.haldaV6 = true; if (key === 'd.halda.call') F.haldaCall6 = true; emit('openPanel', 'smith'); } });
+      return true;
+    }
+    if (kind === 'healer') {
+      heal();
+      emit('dialog', { who: 'healer', lines: F.elianteV6 ? ['d.elianthe.call'] : ['d.elianthe6.v1', 'd.elianthe.call'], end: () => { F.metHealer = true; F.elianteV6 = true; emit('openPanel', 'vendor'); } });
+      return true;
+    }
+    if (kind === 'child') { emit('dialog', { who: 'child', lines: ['d.child.6'] }); return true; }
+    // (the villager of Act I's third bark: a son gone for wood, whose name is going; Leif's thread)
+    if (kind === 'villager' && (a?.bark || 0) % 4 === 2 && !F.leifName) { emit('dialog', { who: 'villager', lines: ['d.v.son1'] }); return true; }
+  }
+  if (zid === 'farlight' && F.tam6 && !F.drainedSeen) {
+    if (kind === 'selna') {
+      // f1-f2, the look down through the clear ice; then f3, and the coal at the door
+      if (F.selnaF6 || F.coal6) { heal(); emit('dialog', { who: 'selna', lines: ['d.selna.f3'], end: shopOf('selna') }); }
+      else emit('dialog', { who: 'selna', lines: ['d.selna.f1', 'd.selna.f2'], end: () => lookDown(z, () => emit('dialog', { who: 'selna', lines: ['d.selna.f3'], end: () => { F.selnaF6 = true; writeSave(); act6Presence(z); emit('quest'); } })) });
+      return true;
+    }
+    if (kind === 'glaukos') { emit('dialog', { who: 'glaukos', lines: F.coal6 ? ['d.glaukos.f3'] : ['d.glaukos.f1', 'd.glaukos.f2'], end: () => { if (F.coal6) F.glaukosF6 = true; shopOf('glaukos')(); } }); return true; }
+    if (kind === 'alkyone') {
+      // (a hero who never heard what the Saltborn know of the Gates hears it first: Act V's line)
+      const lines = [...(F.alkGates ? [] : ['d.alk.gates']), 'd.alk.v1', 'd.alk.v2'];
+      emit('dialog', { who: 'alkyone', lines, end: () => { F.alkV6 = true; F.alkGates = true; } });
+      return true;
+    }
+    if (kind === 'tern') { emit('dialog', { who: 'tern', lines: ['d.tern.r1'], end: () => { F.ternR6 = true; } }); return true; }
+  }
+  return false;
+}
+// q32: the call. A save at the end of Act V: on its next town entry, or 2 s after Act V's blessing panel closes
+function hook6(z) {
+  const h = G.hero, F = h.flags;
+  if (F.call6 || !F.seaLit || (h.act5 ?? -1) < 0 || h.quest < 31 || z?.id !== 'town' || G.zone !== z) return;
+  if (busy()) { later(2, () => hook6(G.zone)); return; }
+  F.call6 = true; writeSave();
+  loadFolk('frost').then(() => { if (G.zone !== z) { setQuest(32); return; } callScene(z); }, () => setQuest(32));
+}
+on('actClosed', () => later(2, () => hook6(G.zone)));
+on('boonTaken', () => later(2.2, () => hook6(G.zone)));
+function callScene(z) {
+  const b = z.L.beacon, s = z.L.spots.npcs.wayfarer;
+  townFires(z);
+  const far = z.town?.far?.[3]?.spr;
+  // (the Farthest Light dims and pulses three times, slowly, then burns steady)
+  const tri = () => { let t0 = 0; const st = () => { if (G.zone !== z || !far) return; t0 += 0.016; far.userData.k = t0 < 7.5 ? 0.45 + 0.55 * Math.abs(Math.sin((t0 / 7.5) * 3 * Math.PI)) : 1; if (t0 < 7.5) requestAnimationFrame(st); else far.userData.k = 1; }; st(); };
+  emit('cine', {
+    x: b.x, z: b.z - 4, dur: 13, zoom: 1.4, pitch: 0.3,
+    steps: [
+      [0.6, () => emit('say', 'd.hal.1')],
+      [3.4, () => { if (G.cine) Object.assign(G.cine, { x: b.x, z: b.z - 18, pitch: 0.3 }); tri(); }],
+      [4.2, () => emit('say', 'd.call6.1')],
+      [8.0, () => { if (G.cine) Object.assign(G.cine, { x: s.x, z: s.z + 4, pitch: 0.55 }); town6(z, true); Audio.sfx('iceSing', { vol: 0.5, pitch: 0.7 }); }],
+      [8.8, () => emit('say', 'd.call6.2')]
+    ],
+    end: () => {
+      // the child by the staff, then Tamarisk up the beacon path
+      people5(z);
+      const a = scene5(z, 'tamarisk');
+      emit('dialog', { who: 'child', lines: ['d.child.6a'], end: () => {
+        if (!a || G.zone !== z) { setQuest(32); return; }
+        const to = { x: a.x, z: a.z }, from = z.map.nearestFloor(b.x - 13.5, 7.2, 3);
+        a.x = from.x; a.z = from.z;
+        walkPath(a, [{ x: 24, z: 9.8 }, { x: b.x - 3.5, z: 17.5 }, to], 1.6, () => {
+          a.home = a.rot = angleTo(a.x, a.z, s.x, s.z);
+          emit('dialog', { who: 'tamarisk', lines: [['d.tam6.c0', 'tamarisk'], ['d.child.6b', 'child']], end: () => { scene5(z, 'tamarisk', false); setQuest(32); } });
+        });
+      } });
+    }
+  });
+}
+// Tamarisk at the staff: why she came, the fire under the ice, the forgetting, the north's custom (Halda: seven hills, six
+// dark), and the coal to take; then she goes north ahead
+function tamStaff(z, a) {
+  const F = G.hero.flags, r = G.hero.cls === 'ranger';
+  const lines = [...(r ? [['d.tam6.a0.r', 'tamarisk']] : []), ['d.tam6.a1', 'tamarisk'], ['d.tam6.a2', 'tamarisk'], ['d.tam6.a3', 'tamarisk'], ['d.tam6.a4', 'tamarisk'], ['d.halda6.a', 'smith'], ['d.tam6.a5', 'tamarisk']];
+  emit('dialog', { who: 'tamarisk', lines, end: () => {
+    F.tam6 = true; writeSave(); setQuest(33);
+    const n = scene5(z, 'tamarisk'), b = z.L.beacon;
+    if (n && G.zone === z) walkPath(n, [{ x: b.x - 3.5, z: 17.5 }, { x: 24, z: 9.8 }, { x: b.x - 13.5, z: 7.2 }], 1.8, () => vanish(z, n, 1.2, () => people5(z)));
+    else people5(z);
+  } });
+}
+// the town while the cold comes up out of the Gates: the staff rimed, its lantern full of frost, mist at its foot
+export function town6(z, now) {
+  if (z?.id !== 'town' || !z.town) return;
+  const F = G.hero.flags, T = z.town, cold = !!F.call6 && !F.herFire, s = z.L.spots.npcs.wayfarer;
+  if (T.staff) T.staff.userData.setLantern?.(cold ? 'frost' : F.newFire ? 'dark' : 'gold');
+  const em = (z.emit ||= []).find((e) => e.key === 'staff6');
+  // (the sea smoke's emitter rises from its cells, x and z in pairs: a small ring round the staff's foot)
+  if (cold && !em) z.emit.push({ x: s.x, y: 0.2, z: s.z, type: 'seasmoke', s: 0.6, key: 'staff6', cells: [0, 1, 2, 3, 4, 5].flatMap((i) => [s.x + Math.sin(i * 1.05) * 0.7, s.z + Math.cos(i * 1.05) * 0.7]) });
+  if (!cold && em) z.emit.splice(z.emit.indexOf(em), 1);
+  if (G.zone === z) setEmitters(zoneEmitters(z));
+  if (now) { glowBurst(s.x, 1.7, s.z, 0xe8f4ff, 18, 1.6, 0.2, 0.9); puff(s.x, 0.4, s.z, 0xdfeeff, 10); }
+}
+// Selna's look down: straight through the clear ice, a small warm glow very deep, and a shadow the size of a ship over it
+function lookDown(z, done) {
+  const FL = z.L.spots.farLight, gl = SEA.uGlow?.value?.[7], sh = SEA.uShade?.value?.[3];
+  const x = FL.x, zz = FL.z - 6;
+  emit('cine', {
+    x, z: zz, dur: 7, zoom: 0.9, pitch: 0.85,
+    steps: [
+      [0.4, () => { if (gl) { gl.set(x, -12, zz, 0.9); SEA.uGlowOn.value = 1; } }],
+      [2.4, () => { if (!sh) return; let k = 0; const st = () => { if (G.zone !== z) return; k = Math.min(1, k + 0.006); sh.set(x - 10 + 20 * k, zz + 2 - 4 * k, 7, 0.8 * Math.sin(k * Math.PI)); if (k < 1) requestAnimationFrame(st); else sh.set(0, 0, 0, 0); }; st(); Audio.sfx('iceSing', { vol: 0.4, pitch: 0.6 }); }]
+    ],
+    end: () => { if (gl) gl.set(0, 0, 0, 0); done?.(); }
+  });
+}
+// the coal from the Farthest Light into the Cradle, at the tower's door
+on('coal6', (z) => {
+  const F = G.hero.flags, it = z.interact.find((i) => i.kind === 'coal6');
+  if (!it || F.coal6 || G.mode !== 'play') return;
+  touch(1, it, 1.4, () => {
+    F.coal6 = true; writeSave();
+    act6Presence(z); emit('quest');
+    const c = cradlePoint();
+    glowBurst(c.x, c.y, c.z, 0xfff0c8, 24, 2, 0.25, 0.8); Audio.sfx('beaconIgnite', { vol: 0.5, pitch: 1.3 }); Audio.sting('lantern');
+    emit('say', 'd.coal6');
+    emit('toast', t('q.new') + ': ' + questText(), 'quest');
+  }, { take: true });
+});
+// Act VI's catch-ups on entry (a flag saved before its scene, caught up quietly; the scene again where the contract says)
+function enter6(id, z) {
+  const h = G.hero, F = h.flags;
+  if (F.call6 && h.quest < 32) setQuest(32, true);
+  if (F.tam6 && h.quest < 33) setQuest(33, true);
+  if (!z) return;
+  if (id === 'town') {
+    if (!F.call6) later(2, () => hook6(z));
+    town6(z);
+  }
+  if (id === 'farlight') act6Presence(z);
 }
 
 export { setQuest };
