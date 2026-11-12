@@ -1945,7 +1945,9 @@ function talk6(kind, a) {
   }
   // (Leif's father, with the axe: his son's name comes back; leifName, among the Lost)
   if (zid === 'town' && kind === 'villager' && (a?.bark || 0) % 4 === 2 && F.leifAxe && !F.leifName) {
-    emit('dialog', { who: 'villager', lines: ['d.v.son2', 'd.v.son3'], end: () => { F.leifName = true; if (!(F.lost6 ||= []).includes('leif')) F.lost6.push('leif'); writeSave(); town6(z); emit('quest'); lostToast(); } });
+    // (the name saved first: a second word before the dialog closes finds it said)
+    F.leifName = true; if (!(F.lost6 ||= []).includes('leif')) F.lost6.push('leif'); writeSave();
+    emit('dialog', { who: 'villager', lines: ['d.v.son2', 'd.v.son3'], end: () => { town6(z); emit('quest'); lostToast(); } });
     return true;
   }
   if (zid === 'town' && kind === 'leif' && F.leifHome) { emit('dialog', { who: 'leif', lines: ['d.leif.bark'] }); return true; }

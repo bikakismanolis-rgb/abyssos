@@ -5383,6 +5383,101 @@ const S = {
     }
     return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
   } },
+  // the Lost and the small things below (optional): Leif's fire (leifLit, its light kept over a reload), his lines, his axe;
+  // the ember listened to; the garland glade; his father in Whitecliff says his name (leifName, the seventh: lostAll); after
+  // the act Leif at his father's door (leifHome) and his bark; Selna's rite with the new names
+  lost6: { q: 'auto=bottom&sim=4&q=0&norender&cloud=off&lvl=40&cls=' + (process.env.CLS || 'warden') + '&' + A5.url('toldChild') + ',act5,tam6,call6,coal6,drainedSeen,teach6,gates6,ketosWake,ketosDown,keyxLamp,bottomSeen,glaukosB6,lost0,lost1,lost2,lost3,nineLit,sailorRest,asgerRest', run: async (pg, shot) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    const ev = (f, a) => pg.evaluate(f, a);
+    await A5.tick(pg); await A4.listen(pg);
+    // (the bus's listeners are the page's: laid once, and again only after a reload)
+    const listen = () => ev(async () => { window.__immortal = true; if (window.__lis6) return; window.__lis6 = true; const B = await import('/src/ui/bus.js'); window.__toasts = []; B.on('toast', (m) => window.__toasts.push(String(m))); window.__dlg = []; B.on('dialog', (d) => window.__dlg.push(...(d.lines || []).map((l) => (Array.isArray(l) ? l[0] : l)))); });
+    await listen();
+    const calm = () => ev(() => { const G = window.__G; for (const a of G.actors.slice()) if (a.team === 'foe' && !a.dead && !a.boss && !a.prop) window.__D.kill(a); });
+    await ev(() => { window.__G.hero.flags.lost6 = ['galini', 'twins', 'kranea', 'psamathe', 'sailor', 'asger']; });
+    // Leif
+    await calm();
+    const l0 = await ev(() => { const z = window.__G.zone; return { leif: !!z.p5?.leif, talk: z.p5?.leif && !z.p5.leif.it.used, fire: !!z.interact.find((i) => i.kind === 'leifFire') }; });
+    await A5.use(pg, "z.interact.find((i) => i.kind === 'leifFire')");
+    const lit = await A5.until(pg, () => window.__G.hero.flags.leifLit && window.__dlg.includes('d.leif.3') && !document.querySelector('#dialog:not([hidden])'), 60000);
+    const l1 = await ev(() => { const z = window.__G.zone; return { dlg: window.__dlg.filter((k) => /leif\.[123]/.test(k)), axe: !!z.interact.find((i) => i.kind === 'leifAxe'), talk: !z.p5?.leif?.it.used, name: null }; });
+    await A5.use(pg, "z.interact.find((i) => i.kind === 'leifAxe')");
+    const axe = await A5.until(pg, () => window.__G.hero.flags.leifAxe, 10000);
+    const nm = await ev(async () => (await import('/src/game/story.js')).npcName('leif'));
+    beat('Leif by his dead fire (not to be talked to yet); the fire lit (leifLit), his three lines; then talkable, the axe by the fire, taken (leifAxe); his name «…»', l0.leif && !l0.talk && l0.fire && lit && l1.dlg.length === 3 && l1.axe && l1.talk && axe && nm === '…', { l0, l1, nm });
+    // the ember and the glade
+    await calm();
+    await A5.use(pg, "z.interact.find((i) => i.kind === 'ember6')");
+    const ember = await A5.until(pg, () => window.__G.hero.flags.ember6, 30000);
+    await ev(() => { const G = window.__G, z = G.zone, g = z.L.spots.glade, f = z.map.nearestFloor(g.x, g.z, 3); G.player.x = f.x; G.player.z = f.z; });
+    const glade = await A5.until(pg, () => window.__G.hero.flags.garland6, 10000);
+    const e1 = await ev(() => ({ dlg: window.__dlg.filter((k) => /ember\.n/.test(k)), glow: window.__G.zone.act6.ember?.userData.glow, used: window.__G.zone.interact.find((i) => i.kind === 'ember6')?.used, toast: window.__toasts.some((t) => /στεφάνια/.test(t)) }));
+    beat('the ember listened to (n1-n3, ember6, gone out, not again); the garland glade (garland6, its line)', ember && glade && e1.dlg.length === 3 && e1.used && e1.toast, e1);
+    // a reload: Leif's fire burns, its pool kept
+    await A5.reload(pg, { q: 'q=0&sim=4&norender&cloud=off', wake: true }); await listen();
+    await pg.waitForTimeout(3000);
+    const r1 = await ev(async () => { const z = window.__G.zone, L = await import('/src/game/light.js'), it = z.interact.find((i) => i.kind === 'leifFire'); return { zone: z.id, lit: it?.lit, pool: !!L.getLightPool('l6:leifFire:0'), axe: !!z.interact.find((i) => i.kind === 'leifAxe'), ember: z.interact.find((i) => i.kind === 'ember6')?.used }; });
+    beat('a reload: Leif\'s fire burning (its lamp pool), no axe left, the ember spent', r1.zone === 'bottom' && r1.lit && r1.pool && !r1.axe && r1.ember, r1);
+    // his father
+    await A5.travel(pg, 'town', 'waypoint'); await listen();
+    const f0 = await ev(() => { const z = window.__G.zone, it = z.interact.find((i) => i.kind === 'npc' && i.npc === 'villager' && (i.actor?.bark || 0) % 4 === 2); return { prompt: it?.prompt }; });
+    await A5.use(pg, "z.interact.find((i) => i.kind === 'npc' && i.npc === 'villager' && (i.actor?.bark || 0) % 4 === 2)");
+    const named = await A5.until(pg, () => window.__G.hero.flags.leifName && !document.querySelector('#dialog:not([hidden])'), 30000);
+    await pg.waitForTimeout(800);
+    const f1 = await ev(async () => { const F = window.__G.hero.flags; return { dlg: window.__dlg.filter((k) => /v\.son/.test(k)), lost6: F.lost6, all: !!F.lostAll, toast: window.__toasts.filter((t) => /7\/7/.test(t)).length, name: (await import('/src/game/story.js')).npcName('leif') }; });
+    beat('his father: «Give him the axe»; d.v.son2, son3; leifName; the Lost in the order freed with Leif last; all seven (lostAll, 7/7); his name Λέιφ', f0.prompt === 'leif.give' && named && f1.dlg.join() === 'd.v.son2,d.v.son3' && f1.lost6?.join() === 'galini,twins,kranea,psamathe,sailor,asger,leif' && f1.all && f1.toast >= 1 && f1.name === 'Λέιφ', { f0, f1 });
+    // after the act: Leif home
+    await ev(() => { const h = window.__G.hero; h.flags.act6 = true; h.act6 = 1; h.quest = 39; h.flags.nameBack = true; h.flags.herFire = true; });
+    await A5.travel(pg, 'forest', 'town'); await A5.travel(pg, 'town', 'waypoint'); await listen();
+    const home = await A5.until(pg, () => window.__G.hero.flags.leifHome && !!window.__G.zone.p5?.leif && window.__dlg.includes('d.leif.home'), 30000);
+    const h0 = await ev(() => { const G = window.__G, F = G.hero.flags; return { leifHome: !!F.leifHome, p5: !!G.zone.p5?.leif, dlg: window.__dlg.slice(), act6: G.hero.act6, zone: G.zone.id }; });
+    await A5.use(pg, 'z.p5.leif.it'); await pg.waitForTimeout(500);
+    const h1 = await ev(() => ({ bark: window.__dlg.includes('d.leif.bark') }));
+    // Selna's rite, after the act: her name first, the Lost, «Σκότος.», Tern's good night
+    const rite = await ev(async () => { const S = await import('/src/game/story.js'); return S.rollNames6(true); });
+    beat('after the act: Leif at his father\'s door (leifHome, his line), his bark; Selna\'s rite: Φέρουσα first, the seven Lost, «Σκότος.», good night', home && h1.bark && rite[0] === 'name.first6' && ['name.galini', 'name.leif', 'name.asger'].every((k) => rite.includes(k)) && rite[rite.length - 1] === 'name.goodnight', { home, h0, ...h1, rite });
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
+  } },
+  // Act VI's catch-ups (the contract's table, Story): for each row the state just after its flag, written and loaded again
+  // into its zone as a Continue does; then the quest, and the scene or the state the row says. ROWS=1,5,... runs a few
+  catch6: { q: 'auto=town&sim=4&q=0&norender&cloud=off&lvl=40&cls=' + (process.env.CLS || 'warden') + '&' + A5.url('toldChild') + ',act5', run: async (pg) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    const ev = (f, a) => pg.evaluate(f, a), only = process.env.ROWS ? process.env.ROWS.split(',').map(Number) : null;
+    await A5.tick(pg);
+    // (the flags of the act so far, row by row: each row adds its own to all before it)
+    const F6 = [];
+    const row = async (n, zone, add, o, check) => {
+      F6.push(...Object.entries(add));
+      if (only && !only.includes(n)) return;
+      await ev(({ fl, o }) => { const G = window.__G, h = G.hero, F = h.flags; for (const [k, v] of fl) F[k] = v; for (const k of o.drop || []) delete F[k]; if (o.quest != null) h.quest = o.quest; if (o.act6 != null) h.act6 = o.act6; window.__immortal = true; }, { fl: F6, o });
+      if (await ev(() => window.__G.zone.id) !== zone) await A5.travel(pg, zone, zone === 'town' ? 'waypoint' : undefined);
+      await ev(async () => { const G = window.__G; G.hero.visit = { id: G.zone.id, x: G.player.x, z: G.player.z }; (await import('/src/game/save.js')).writeSave(); });
+      await A5.reload(pg, { q: 'q=0&sim=4&norender&cloud=off', wake: true });
+      await ev(async () => { if (window.__lis6) return; window.__lis6 = true; const B = await import('/src/ui/bus.js'); window.__dlg = []; B.on('dialog', (d) => window.__dlg.push(...(d.lines || []).map((l) => (Array.isArray(l) ? l[0] : l)))); window.__S6 = await import('/src/game/story.js'); window.__W6 = await import('/src/game/world.js'); });
+      let r; try { r = await check(); } catch (e) { r = { ok: false, err: e.message }; }
+      beat(n + ' ' + zone + ': ' + r.what, r.ok, r.x);
+    };
+    const q = () => ev(() => ({ q: window.__G.hero.quest, text: window.__S6.questText(), zone: window.__G.zone.id }));
+    await row(1, 'town', { call6: true }, { quest: 31 }, async () => { const ok = await A5.until(pg, () => window.__G.hero.quest === 32 && !!window.__G.zone.p5?.tamarisk, 60000); return { what: 'call6 → q32, Tamarisk by the staff', ok, x: await q() }; });
+    await row(2, 'town', { tam6: true }, { quest: 32 }, async () => { const ok = await A5.until(pg, () => window.__G.hero.quest === 33 && !window.__G.zone.p5?.tamarisk, 60000); return { what: 'tam6 → q33, Tamarisk gone ahead', ok, x: await q() }; });
+    await row(3, 'farlight', { selnaF6: true, coal6: true }, { quest: 33 }, async () => { const x = await ev(() => { const z = window.__G.zone, e = z.interact.find((i) => i.kind === 'exit' && i.to === 'drained'); return { text: window.__S6.questText(), b: window.__D.t('q.33b'), locked: e?.locked, open: !!window.__G.hero.flags[e?.locked], coal: !!z.interact.find((i) => i.kind === 'coal6') }; }); return { what: 'coal6 → q33b, the rope open, no coal left', ok: x.text === x.b && x.open && !x.coal, x }; });
+    await row(4, 'drained', { drainedSeen: true }, { quest: 33 }, async () => { const ok = await A5.until(pg, () => window.__G.hero.flags.teach6 && window.__G.hero.quest === 34, 90000); return { what: 'drainedSeen, no teach → Glaukos teaches again (teach6), q34', ok, x: { ...(await q()), dlg: await ev(() => window.__dlg.filter((k) => /glaukos\.d/.test(k))) } }; });
+    await row(5, 'drained', { teach6: true, hearth6_2: true, hearths6: [2] }, { quest: 34 }, async () => { await pg.waitForTimeout(1500); const x = await ev(() => { const z = window.__G.zone, h = z.interact.find((i) => i.kind === 'hearth6' && i.k === 2), r = z.interact.find((i) => i.kind === 'remember6'); return { lit: h?.lit, mem: r?.mem, near: r && h ? +Math.hypot(r.x - h.x, r.z - h.z).toFixed(1) : null }; }); return { what: 'a hearth lit, its memory unseen → «Θυμήσου» at it (d1)', ok: x.lit && x.mem === 'd1' && x.near < 2, x }; });
+    await row(6, 'drained', { hearth6_1: true, hearth6_3: true, hearths6: [2, 1, 3], mem_d1: true, mem_d2: true, mem_d3: true }, { quest: 34 }, async () => { const ok = await A5.until(pg, () => window.__G.hero.flags.gates6 && window.__G.hero.quest === 35 && !window.__G.cine, 90000); return { what: 'three hearths, three memories, no gates6 → Glaukos d3-d5, gates6, q35', ok, x: await q() }; });
+    await row(7, 'drained', { gates6: true, wreck6: [0] }, { quest: 35 }, async () => { await pg.waitForTimeout(1500); const x = await ev(() => { const z = window.__G.zone, l = z.act6.mere?.lamps.find((q) => q.i === 0), r = z.interact.find((i) => i.kind === 'remember6' && i.mem === 'k1'); return { lit: l?.lit, k1: !!r }; }); return { what: 'Keyx\'s lantern lit, its memory unseen → «Θυμήσου» at it', ok: x.lit && x.k1, x }; });
+    await row(8, 'drained', { mem_k1: true, wreck6: [0, 1, 2], ketosWake: true }, { quest: 35 }, async () => { await pg.waitForTimeout(1500); const x = await ev(() => { const G = window.__G, z = G.zone, m = z.map; return { lit: (z.act6.mere?.lamps || []).filter((l) => l.lit).length, mere: z.tide?.mere?.h, shut: (z.L.gaps || []).every((gp) => gp.cells.every(([x, zz]) => !m.walkable(x + 0.5, zz + 0.5))), cp: G.hero.flags.cp6?.drained, boss: z.boss?.kind || z.bossSpot?.kind }; }); return { what: 'ketosWake, no ketosDown → the fight again: three lanterns lit, the Mere at 1.6, the gaps shut, the Ketos to rise', ok: x.lit === 3 && x.mere === 1.6 && x.shut && x.boss === 'ketos', x }; });
+    await row(9, 'drained', { ketosDown: true, keyxLamp: true }, { quest: 35 }, async () => { await pg.waitForTimeout(1500); const x = await ev(() => { const z = window.__G.zone, e = z.interact.find((i) => i.kind === 'exit' && i.to === 'bottom'); return { q: window.__G.hero.quest, mode: z.L.mode, well: !!e && !!window.__G.hero.flags[e.locked], arch: !!z.act6.neck, cine: !!window.__G.cine }; }); return { what: 'ketosDown with keyxLamp → q36, the dry Mere, the arch, the Well open, no scene', ok: x.q === 36 && x.mode === 'dry' && x.well && x.arch && !x.cine, x }; });
+    await row(10, 'bottom', { bottomSeen: true, glaukosB6: true }, { quest: 35 }, async () => { await pg.waitForTimeout(1500); const x = await q(); return { what: 'bottomSeen, q<36 → q36, no arrival again', ok: x.q === 36 && !(await ev(() => !!window.__G.cine)), x }; });
+    await row(11, 'bottom', { blackLamp0: true, blackLamp1: true, blackLamp2: true, keyxFreed: true }, { quest: 36 }, async () => { await pg.waitForTimeout(1500); const x = await ev(() => { const z = window.__G.zone, m = z.map; return { q: window.__G.hero.quest, walls: z.L.walls.every((wl) => wl.cells.some(([x, zz]) => m.walkable(x + 0.5, zz + 0.5))), seen: (z.act6.walls || []).filter((w) => w.mesh?.visible).length, keyx: !!z.p5?.keyx, lamp: z.act6.lamps.find((l) => l.k === 2)?.mesh?.userData.lit }; }); return { what: 'the three lamps out (Keyx freed) → q37, the walls open and unseen, Keyx gone, his lamp dark', ok: x.q === 37 && x.walls && x.seen === 0 && !x.keyx && x.lamp === false, x }; });
+    await row(12, 'bottom', { leifLit: true }, { quest: 37 }, async () => { await pg.waitForTimeout(1500); const x = await ev(() => { const z = window.__G.zone; return { fire: z.interact.find((i) => i.kind === 'leifFire')?.lit, axe: !!z.interact.find((i) => i.kind === 'leifAxe') }; }); return { what: 'leifLit, no axe taken → his fire burns, the axe offered', ok: x.fire && x.axe, x }; });
+    await row(13, 'bottom', { shadeWake: true }, { quest: 37 }, async () => { await pg.waitForTimeout(1500); const x = await ev(() => { const z = window.__G.zone; return { boss: z.boss?.kind || z.bossSpot?.kind, hold: z.boss ? z.boss.holdWake : true, mode: z.L.mode }; }); return { what: 'shadeWake, no shadeDown → the fight from form 1, waiting at the ring', ok: x.boss === 'shade1' && x.hold === true && x.mode === 'dark', x }; });
+    await row(14, 'bottom', { shadeDown: true }, { quest: 37 }, async () => { await pg.waitForTimeout(1500); const x = await ev(() => ({ q: window.__G.hero.quest, text: window.__S6.questText(), ff: !!window.__G.zone.interact.find((i) => i.kind === 'firstFire'), boss: window.__G.zone.boss?.kind || null })); return { what: 'shadeDown, no herFire → q38, the name «…», her stone offered, no Shade', ok: x.q === 38 && /…/.test(x.text) && x.ff && !x.boss, x }; });
+    await row(15, 'bottom', { herFire: true, nameBack: true }, { quest: 38, drop: ['nameCard6'] }, async () => { const ok = await A5.until(pg, () => window.__G.hero.flags.nameCard6 && !window.__G.cine, 60000); await pg.waitForTimeout(2500); const x = await ev(() => { const z = window.__G.zone; return { mode: z.L.mode, text: window.__S6.questText(), b: window.__D.t('q.38b'), warm: z.act6.ring?.userData.warm, glaukos: !!z.p5?.glaukos }; }); return { what: 'herFire with nameBack, the card unseen → the card again, q38b, the lit Hearth, the ring warm', ok: ok && x.mode === 'lit' && x.text === x.b && x.warm >= 0.99, x }; });
+    await row(16, 'town', { nameCard6: true, homeGate: true }, { quest: 38, act6: -1 }, async () => { const ok = await A5.until(pg, () => window.__G.panel === 'act', 120000); const x = await ev(() => ({ q: window.__G.hero.quest, act6: window.__G.hero.act6 })); await pg.click('[data-a="close"]').catch(() => {}); await A5.until(pg, () => !!document.querySelector('[data-a="boon:word"]'), 30000); await pg.click('[data-a="boon:word"]').catch(() => {}); return { what: 'homeGate, act6 -1 → the home cine, Act VI\'s end (q39, act6)', ok: ok && x.q === 39 && x.act6 >= 0, x }; });
+    await row(17, 'coast', { act6: true }, { quest: 39 }, async () => { const ok = await A5.until(pg, () => window.__G.hero.flags.landing6 && !window.__G.cine, 90000); return { what: 'act6 with keyxLamp, no landing6 → the Landing\'s scene', ok, x: { dlg: await ev(() => window.__dlg.filter((k) => /alk\.l6/.test(k))) } }; });
+    await row(18, 'town', { leifAxe: true, leifName: true }, { quest: 39 }, async () => { const ok = await A5.until(pg, () => window.__G.hero.flags.leifHome && !!window.__G.zone.p5?.leif, 60000); return { what: 'leifName and act6, no leifHome → Leif at his father\'s door', ok, x: await q() }; });
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
+  } },
   // the Drained Sea's story (q33b-q36): the arrival and Glaukos's teach; the three hearths lit out of order (2, 1, 3) and
   // the First's memories in count order; the Gates' word; the four lost lights (the Nine's last), the Sailor (asked, then
   // named by Glaukos), Asger's brazier and his pane melted; Keyx's lantern and its memory; the Ketos woken by the third
