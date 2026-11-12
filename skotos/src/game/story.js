@@ -2648,8 +2648,9 @@ function landing6(z) {
 // host's in co-op; nothing else in the level changes ----------
 function gateFind(z) {
   const h = G.hero, g = G.gate;
-  if (!g || z?.id !== 'gate' || G.zone !== z || !h.flags.act6 || (g.tier | 0) < 10 || z.gateFind !== undefined || NET.mode === 'guest') return;
-  z.gateFind = null;
+  // (once a Gate run: G.gate is new each time one opens, the zone object may not be)
+  if (!g || z?.id !== 'gate' || G.zone !== z || !h.flags.act6 || (g.tier | 0) < 10 || g.findRolled || NET.mode === 'guest') return;
+  g.findRolled = true; z.gateFind = null;
   if (!(Math.random() < 0.12 || window.__gateFind)) return;
   const L = z.L, st = L.start || { x: 0, z: 0 }, far = (x, zz) => Math.hypot(x - st.x, zz - st.z) > 24;
   const rooms = (L.rooms || []).filter((r) => r.w >= 4 && r.h >= 4 && far(r.x + r.w / 2, r.z + r.h / 2));

@@ -5478,6 +5478,41 @@ const S = {
     await row(18, 'town', { leifAxe: true, leifName: true }, { quest: 39 }, async () => { const ok = await A5.until(pg, () => window.__G.hero.flags.leifHome && !!window.__G.zone.p5?.leif, 60000); return { what: 'leifName and act6, no leifHome → Leif at his father\'s door', ok, x: await q() }; });
     return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
   } },
+  // the Gates after the act: the panel's flavour line and the tier's depth (8 + 6 a tier fathoms), the gate's HUD line; the
+  // forgotten one (forced here: window.__gateFind) asleep by a dead lamp from tier 10, freed by the lamp (gateFound +1,
+  // «Κάποιος.» in Selna's rite), none below tier 10; none before the act
+  gate6: { q: 'auto=town&sim=4&q=0&norender&cloud=off&lvl=42&cls=' + (process.env.CLS || 'warden') + '&' + A5.url('toldChild') + ',act5,call6,tam6,coal6,herFire,nameBack,homeGate,act6', run: async (pg) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    const ev = (f, a) => pg.evaluate(f, a);
+    await A5.tick(pg);
+    const setup = () => ev(async () => { const h = window.__G.hero; h.act6 = 1; h.quest = 39; h.gateBest = 14; h.gateFound = h.gateFound | 0; h.boons = ['ember', 'forge', 'amber', 'wayfarer', 'einar', 'bearer']; if (window.__G.panel) window.__D.closePanel(); window.__immortal = true; const B = await import('/src/ui/bus.js'); window.__toasts = []; B.on('toast', (m) => window.__toasts.push(String(m))); });
+    await setup();
+    await ev(() => window.__D.openPanel('gates')); await pg.waitForTimeout(400);
+    const p0 = await ev(() => { const text = document.querySelector('.pn')?.textContent || '', m = /Βαθμίδα (\d+) · (\d+) οργιές/.exec(text); return { text, bottom: window.__D.t('gate.bottom'), tier: m && +m[1], fath: m && +m[2] }; });
+    await ev(() => window.__D.closePanel());
+    beat('the panel: «Their bottom burns» and the tier\'s depth (8 + 6 a tier fathoms)', p0.text.includes(p0.bottom) && p0.tier >= 1 && p0.fath === 8 + 6 * p0.tier, { bottom: p0.text.includes(p0.bottom), tier: p0.tier, fath: p0.fath });
+    // (each Gate opened from Whitecliff on a page of its own: a Gate left by the road is taken up again, game/wake.js)
+    const fresh = async () => { await A5.reload(pg, { q: 'q=0&sim=4&norender&cloud=off' }); await setup(); };
+    const go = async (tier) => { await ev((tier) => { window.__gateFind = true; window.__D.emit('startGate', tier); }, tier); await pg.waitForFunction(() => window.__G.zone?.id === 'gate' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 240000 }); await pg.waitForTimeout(2500); };
+    await go(10);
+    const g10 = await ev(() => { const z = window.__G.zone, it = z.interact.find((i) => i.kind === 'gateLamp'); return { tier: window.__G.gate?.tier, find: !!it, faded: !!z.gateFind?.a, hostile: z.gateFind?.a?.team, far: it ? +Math.hypot(it.x - z.L.start.x, it.z - z.L.start.z).toFixed(1) : null }; });
+    await A5.use(pg, "z.interact.find((i) => i.kind === 'gateLamp')");
+    const freed = await A5.until(pg, () => window.__G.hero.gateFound === 1, 15000);
+    await pg.waitForTimeout(4500);
+    const g11 = await ev(async () => { const z = window.__G.zone, S = await import('/src/game/story.js'); return { toast: window.__toasts.some((t) => /θυμήθηκε/.test(t)), gone: !z.actors.includes(z.gateFind?.a) || !!z.gateFind?.a?.removed, someone: S.rollNames6(true).filter((k) => k === 'name.someone').length, used: z.interact.find((i) => i.kind === 'gateLamp')?.used }; });
+    beat('tier 10: one asleep by a dead lamp, away from the start, not a foe; the lamp lit: freed (gateFound 1, its toast, gone), «Κάποιος.» once in the rite', g10.find && g10.faded && g10.hostile !== 'foe' && g10.far > 24 && freed && g11.toast && g11.gone && g11.someone === 1 && g11.used, { g10, g11 });
+    await ev(async () => { window.__G.gate = null; (await import('/src/game/save.js')).writeSave(); });
+    await fresh(); await go(9);
+    const g9 = await ev(() => ({ tier: window.__G.gate?.tier, find: !!window.__G.zone.interact.find((i) => i.kind === 'gateLamp') }));
+    beat('tier 9: no forgotten one', g9.tier === 9 && !g9.find, g9);
+    await ev(async () => { window.__G.gate = null; (await import('/src/game/save.js')).writeSave(); });
+    await fresh();
+    await ev(() => { const h = window.__G.hero; h.act6 = -1; delete h.flags.act6; });
+    await go(12);
+    const g12 = await ev(() => ({ tier: window.__G.gate?.tier, find: !!window.__G.zone.interact.find((i) => i.kind === 'gateLamp') }));
+    beat('before the act: none at tier 12', g12.tier === 12 && !g12.find, g12);
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
+  } },
   // the Drained Sea's story (q33b-q36): the arrival and Glaukos's teach; the three hearths lit out of order (2, 1, 3) and
   // the First's memories in count order; the Gates' word; the four lost lights (the Nine's last), the Sailor (asked, then
   // named by Glaukos), Asger's brazier and his pane melted; Keyx's lantern and its memory; the Ketos woken by the third
@@ -5628,6 +5663,8 @@ const S = {
     return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
   } },
 };
+// (the contract's name for the checkpoints' scenario: wake6's, stage B)
+S.cp6 = S.wake6;
 const sc = S[name];
 // (a scenario run in a child process of its own, as the soaks: this runner's browser is never opened beside it)
 if (sc.child) { let res; try { res = await sc.child(out); } catch (e) { res = { error: e.message }; } console.log(name, JSON.stringify(res)); process.exit(0); }
