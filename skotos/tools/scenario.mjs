@@ -93,6 +93,12 @@ const A5 = {
   },
   // the hero beside an interactable (found by an expression over the zone z) and it used, as a tap on its prompt
   use: (pg, find) => pg.evaluate((find) => { const G = window.__G, z = G.zone, it = new Function('z', 'G', 'return ' + find)(z, G); if (!it) return null; const f = z.map.nearestFloor(it.x, it.z + 1.2, 3); G.player.x = f.x; G.player.z = f.z; G.player.act = null; G.player.kx = G.player.kz = 0; it.use(); return it.kind + ':' + (it.id ?? it.npc ?? it.i ?? it.to ?? ''); }, find),
+  // a channel at an interactable held to its end: the foes near her put down as they come, and the channel taken up again
+  // when a blow broke it (a tough channel breaks on a tenth of her life; the test is the story, not the fight)
+  async hold(pg, find, done, ms = 60000) {
+    await A5.use(pg, find);
+    return A5.until(pg, ([find, done]) => { const G = window.__G, p = G.player; for (const a of G.actors.slice()) if (a.team === 'foe' && !a.dead && !a.boss && !a.prop && Math.hypot(a.x - p.x, a.z - p.z) < 30) window.__D.kill(a); if (new Function('return ' + done)()) return true; if (!p.act && G.mode === 'play') { const it = new Function('z', 'G', 'return ' + find)(G.zone, G); if (it && !it.used) { const f = G.zone.map.nearestFloor(it.x, it.z + 1.2, 3); p.x = f.x; p.z = f.z; it.use(); } } return false; }, ms, [find, done]);
+  },
   // a boss struck down to frac of its life (null: dead) through any floor, gate or hiding its rules keep
   async hit(pg, frac) {
     for (let i = 0; i < 14; i++) {
@@ -5241,8 +5247,7 @@ const S = {
     for (const k of [0, 1]) {
       await calm();
       const pre = await ev((k) => { const z = window.__G.zone, m = z.map, wl = z.L.walls.find((w) => w.k === k); window.__D && (window.__G.player.hp = window.__G.player.hpMax); return { shut: wl.cells.every(([x, zz]) => !m.walkable(x + 0.5, zz + 0.5)) }; }, k);
-      await A5.use(pg, `z.interact.find((i) => i.kind === 'blackLamp' && i.k === ${k})`);
-      const out = await A5.until(pg, (k) => !!window.__G.hero.flags['blackLamp' + k], 30000, k);
+      const out = await A5.hold(pg, `z.interact.find((i) => i.kind === 'blackLamp' && i.k === ${k})`, `!!window.__G.hero.flags.blackLamp${k}`, 40000);
       await pg.waitForTimeout(3500);
       const s2 = await ev((k) => { const G = window.__G, z = G.zone, m = z.map, wl = z.L.walls.find((w) => w.k === k), A = z.act6.walls.find((w) => w.k === k), it = z.interact.find((i) => i.kind === 'blackLamp' && i.k === k); return { open: wl.cells.some(([x, zz]) => m.walkable(x + 0.5, zz + 0.5)), wall: A?.mesh?.visible, lampLit: it?.lit, used: it?.used, says: window.__says.filter((s) => /skotos6\.l/.test(s)), toast: window.__toasts.filter((t) => /\/3/.test(t)).slice(-1)[0] }; }, k);
       beat(`black lamp ${k}: shut before; out by channel; the wall gone and open; the Skotos answers (l${k + 1})`, pre.shut && out && s2.open && s2.wall === false && s2.lampLit === false && s2.says.includes('d.skotos6.l' + (k + 1)), { pre, ...s2 });
@@ -5252,7 +5257,7 @@ const S = {
     // Keyx: his hail, then his lantern given
     await calm();
     const kx = await ev(() => { const G = window.__G, z = G.zone, S = z.L.spots.keyx, f = z.map.nearestFloor(S.x, S.z + 5, 3); G.player.x = f.x; G.player.z = f.z; return true; });
-    const hail = await A5.until(pg, () => window.__dlg.includes('d.keyx6.0') && !document.querySelector('#dialog:not([hidden])'), 20000);
+    const hail = await A5.until(pg, () => window.__says.includes('d.keyx6.0'), 20000);
     const hp0 = await ev(() => window.__hurt);
     // (the village's guard comes as she nears: put down as it comes, the channel taken up again if a blow broke it)
     await calm();
@@ -5398,7 +5403,7 @@ const S = {
     // Leif
     await calm();
     const l0 = await ev(() => { const z = window.__G.zone; return { leif: !!z.p5?.leif, talk: z.p5?.leif && !z.p5.leif.it.used, fire: !!z.interact.find((i) => i.kind === 'leifFire') }; });
-    await A5.use(pg, "z.interact.find((i) => i.kind === 'leifFire')");
+    await A5.hold(pg, "z.interact.find((i) => i.kind === 'leifFire')", '!!window.__G.hero.flags.leifLit', 40000);
     const lit = await A5.until(pg, () => window.__G.hero.flags.leifLit && window.__dlg.includes('d.leif.3') && !document.querySelector('#dialog:not([hidden])'), 60000);
     const l1 = await ev(() => { const z = window.__G.zone; return { dlg: window.__dlg.filter((k) => /leif\.[123]/.test(k)), axe: !!z.interact.find((i) => i.kind === 'leifAxe'), talk: !z.p5?.leif?.it.used, name: null }; });
     await A5.use(pg, "z.interact.find((i) => i.kind === 'leifAxe')");
@@ -5496,8 +5501,7 @@ const S = {
     const go = async (tier) => { await ev((tier) => { window.__gateFind = true; window.__D.emit('startGate', tier); }, tier); await pg.waitForFunction(() => window.__G.zone?.id === 'gate' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 240000 }); await pg.waitForTimeout(2500); };
     await go(10);
     const g10 = await ev(() => { const z = window.__G.zone, it = z.interact.find((i) => i.kind === 'gateLamp'); return { tier: window.__G.gate?.tier, find: !!it, faded: !!z.gateFind?.a, hostile: z.gateFind?.a?.team, far: it ? +Math.hypot(it.x - z.L.start.x, it.z - z.L.start.z).toFixed(1) : null }; });
-    await A5.use(pg, "z.interact.find((i) => i.kind === 'gateLamp')");
-    const freed = await A5.until(pg, () => window.__G.hero.gateFound === 1, 15000);
+    const freed = await A5.hold(pg, "z.interact.find((i) => i.kind === 'gateLamp')", 'window.__G.hero.gateFound === 1', 30000);
     await pg.waitForTimeout(4500);
     const g11 = await ev(async () => { const z = window.__G.zone, S = await import('/src/game/story.js'); return { toast: window.__toasts.some((t) => /θυμήθηκε/.test(t)), gone: !z.actors.includes(z.gateFind?.a) || !!z.gateFind?.a?.removed, someone: S.rollNames6(true).filter((k) => k === 'name.someone').length, used: z.interact.find((i) => i.kind === 'gateLamp')?.used }; });
     beat('tier 10: one asleep by a dead lamp, away from the start, not a foe; the lamp lit: freed (gateFound 1, its toast, gone), «Κάποιος.» once in the rite', g10.find && g10.faded && g10.hostile !== 'foe' && g10.far > 24 && freed && g11.toast && g11.gone && g11.someone === 1 && g11.used, { g10, g11 });
@@ -5535,8 +5539,8 @@ const S = {
     let n = 0;
     for (const k of [2, 1, 3]) {
       await calm();
-      const used = await A5.use(pg, `z.interact.find((i) => i.kind === 'hearth6' && i.k === ${k})`);
-      const lit = await A5.until(pg, (k) => !!window.__G.hero.flags['hearth6_' + k], 30000, k);
+      const used = 'hearth6:' + k;
+      const lit = await A5.hold(pg, `z.interact.find((i) => i.kind === 'hearth6' && i.k === ${k})`, `!!window.__G.hero.flags.hearth6_${k}`, 40000);
       n++;
       const mem = await A5.until(pg, (n) => { const G = window.__G, Fl = G.hero.flags; return ['d1', 'd2', 'd3'].filter((m) => Fl['mem_' + m]).length >= n && !G.cine && !G.zone.memory; }, 120000, n);
       const s2 = await ev((k) => { const G = window.__G, z = G.zone, Fl = G.hero.flags, it = z.interact.find((i) => i.kind === 'hearth6' && i.k === k); return { lit: it?.lit, cp: Fl.cp6?.drained, mems: ['d1', 'd2', 'd3'].filter((m) => Fl['mem_' + m]), buff: !!G.player.buffs?.memory || !!(G.player.buffs || []).find?.((b) => b.id === 'memory'), cls: document.body.className }; }, k);
@@ -5548,8 +5552,7 @@ const S = {
     // 3. the lost lights
     for (let i = 0; i < 4; i++) {
       await calm();
-      await A5.use(pg, `z.interact.find((it) => it.kind === 'lostLight' && it.i === ${i})`);
-      await A5.until(pg, (i) => !!window.__G.hero.flags['lost' + i], 30000, i);
+      await A5.hold(pg, `z.interact.find((it) => it.kind === 'lostLight' && it.i === ${i})`, `!!window.__G.hero.flags.lost${i}`, 40000);
     }
     await pg.waitForTimeout(3500);
     const s4 = await ev(() => { const Fl = window.__G.hero.flags; return { lost: Fl.lost6, nine: !!Fl.nineLit, says: window.__says.filter((k) => /d\.stone\./.test(k)), toasts: window.__toasts.slice(-4), raw: window.__toasts.filter((m) => /«?name\./.test(m)) }; });
@@ -5566,21 +5569,20 @@ const S = {
     beat('the Sailor: there, asks his name (sailorAsked), Glaukos with news names him (y1), then he rests and is gone', sailor0 && asked && gNews && y1 && rest, { sailor0, asked, gNews, y1, rest });
     // 5. Asger
     await calm();
-    await A5.use(pg, "z.interact.find((i) => i.kind === 'asgerBrazier')");
+    await A5.hold(pg, "z.interact.find((i) => i.kind === 'asgerBrazier')", '!!window.__G.asgerLit || !!window.__G.hero.flags.asgerRest', 30000);
     const asger = await A5.until(pg, () => window.__G.hero.flags.asgerRest && !window.__G.zone.p5?.asger, 40000);
     const s5 = await ev(() => { const z = window.__G.zone; return { zone: z.id, pane: z.act6?.asger?.visible, lost6: window.__G.hero.flags.lost6, dlg: window.__dlg.filter((k) => /asger/.test(k)), toasts: window.__toasts.slice(-2) }; });
     beat('Asger: his brazier lit, the pane melted, his two lines, his rest; six of seven; the Lost in the order freed', asger && s5.pane === false && s5.dlg.length >= 2 && s5.lost6?.join() === 'galini,twins,kranea,psamathe,sailor,asger', s5);
     // 6. Keyx's lantern and its memory; the other two wake the Ketos
     await calm();
-    await A5.use(pg, 'z.act6.mere.lamps.find((q) => q.i === 0)');
-    await A5.until(pg, () => (window.__G.hero.flags.wreck6 || []).includes(0), 30000);
+    await A5.hold(pg, 'z.act6.mere.lamps.find((q) => q.i === 0)', '(window.__G.hero.flags.wreck6 || []).includes(0)', 40000);
     const rem = await A5.until(pg, () => !!window.__G.zone.interact.find((i) => i.kind === 'remember6' && i.mem === 'k1') && !window.__G.cine, 30000);
     const m1 = await ev(() => window.__dlg.includes('d.glaukos.m1'));
     await A5.use(pg, "z.interact.find((i) => i.kind === 'remember6' && i.mem === 'k1')");
     const k1 = await A5.until(pg, () => window.__G.hero.flags.mem_k1 && !window.__G.cine && !window.__G.zone.memory, 120000);
     const s6 = await ev(() => ({ owed: window.__G.zone.interact.filter((i) => i.kind === 'remember6').length, toasts: window.__toasts.slice(-2) }));
     beat('Keyx\'s lantern: Glaukos m1, «Θυμήσου» at it, the memory in black water, Memory of the fisherman', rem && m1 && k1 && s6.owed === 0, { rem, m1, k1, ...s6 });
-    for (const i of [1, 2]) { await calm(); await A5.use(pg, `z.act6.mere.lamps.find((q) => q.i === ${i})`); await A5.until(pg, (i) => (window.__G.hero.flags.wreck6 || []).includes(i), 30000, i); }
+    for (const i of [1, 2]) { await calm(); await A5.hold(pg, `z.act6.mere.lamps.find((q) => q.i === ${i})`, `(window.__G.hero.flags.wreck6 || []).includes(${i})`, 40000); }
     const wake = await A5.until(pg, () => !!window.__G.zone.boss?.awake && !window.__G.cine, 90000);
     const s7 = await ev(() => ({ says: window.__says.filter((k) => /glaukos\.k[01]/.test(k)) }));
     beat('the Ketos woken by the third lantern: its cine, Glaukos k0 and k1', wake && s7.says.length >= 1, s7);
@@ -5680,7 +5682,15 @@ page.on('pageerror', (e) => logs.push('pageerror: ' + e.message + ' ' + (e.stack
 await page.addInitScript(() => { setInterval(() => { const G = window.__G; if (G?.player && !G.player.__hpTrap) { const p = G.player; let v = p.hp; Object.defineProperty(p, 'hp', { get() { return v; }, set(x) { v = window.__immortal && !(x >= 1) ? 1 : x; }, configurable: true, enumerable: true }); p.__hpTrap = true; } if (G?.player && window.__tough && G.player.hpMax < 99999) G.player.hpMax = 99999; if (G?.player && G.player.hpMax >= 99999) G.player.hp = G.player.hpMax; if (G?.player && window.__immortal) { G.player.hp = G.player.hpMax; G.player.dead = false; } }, 50); });
 // (a scenario's own script in every page it loads, before the game's: the cloud scenario's stand-in for claude.ai)
 if (sc.init) await page.addInitScript(sc.init);
-await page.goto((process.env.BASE || 'http://localhost:5199/') + '?' + sc.q);
+// (a test of the systems or the fights that starts below the ice is past the story's arrivals there: those scenes are
+// stage D's own scenarios', and would hold the world under a dialog)
+const STORY6 = new Set(['drained', 'keyx6', 'ending6', 'echo6', 'lost6', 'catch6', 'hook6', 'gate6']);
+let q0 = sc.q;
+if (/auto=(drained|bottom)/.test(q0) && !STORY6.has(name)) {
+  const seen = 'drainedSeen,teach6,names6,bottomSeen,glaukosB6';
+  q0 = /(^|&)flags=/.test(q0) ? q0.replace(/(^|&)flags=/, '$1flags=' + seen + ',') : q0 + '&flags=' + seen;
+}
+await page.goto((process.env.BASE || 'http://localhost:5199/') + '?' + q0);
 page.setDefaultTimeout(120000);
 // auto-start runs after __ready: wait for the hero too
 await page.waitForFunction(() => window.__ready && (!location.search.includes('auto=') || window.__G?.player), null, { timeout: 180000 });

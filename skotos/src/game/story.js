@@ -2367,7 +2367,8 @@ function watch6(z) {
     if (G.zone !== z) { z.watch6 = false; return; }
     const F = G.hero.flags, pl = G.player, S = z.L.spots;
     if (pl && !pl.dead && G.mode === 'play' && !busy() && !G.hero.__real) {
-      if (S.keyx && !F.blackLamp2 && !z.keyxHail && Math.hypot(pl.x - S.keyx.x, pl.z - S.keyx.z) < 7) { z.keyxHail = true; emit('dialog', { who: 'keyx', lines: ['d.keyx6.0'] }); }
+      // (his hail a line in the air, not a dialog: she may be fighting his village's guard as she comes)
+      if (S.keyx && !F.blackLamp2 && !z.keyxHail && Math.hypot(pl.x - S.keyx.x, pl.z - S.keyx.z) < 7) { z.keyxHail = true; say('d.keyx6.0'); }
       if (S.glade && !F.garland6 && Math.hypot(pl.x - S.glade.x, pl.z - S.glade.z) < (S.glade.r || 5)) { F.garland6 = true; writeSave(); emit('toast', t('d.garland.1'), 'quest'); }
     }
     later(0.5, step);

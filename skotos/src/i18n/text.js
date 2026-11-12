@@ -1203,6 +1203,7 @@ export const TEXT = {
   'd.elianthe.call': ['Πάρε κάτι ζεστό μαζί σου. Από εκείνη την πύλη δεν βγήκε ποτέ ζέστη.', 'Take something warm with you. No warmth ever came out of that gate.'],
   'd.v.son1': ['Ο γιος μου πήγε για ξύλα στο δάσος. Δεν γύρισε. ...Πώς τον λέγαμε; Πριν από ένα φεγγάρι το ήξερα.', 'My son went for wood in the forest. He didn\'t come back. ...What was his name? A moon ago I knew it.'],
   'd.child.6': ['Η πύλη μυρίζει θάλασσα.', 'The gate smells of the sea.'],
+  'd.child.6b': ['Αλιγενείς.', 'Saltborn.'],
   'd.staff6': ['Από το ραβδί ανεβαίνει κρύο. Το σβηστό φανάρι είναι γεμάτο πάχνη.', 'Cold rises from the staff. The dark lantern is full of frost.'],
   'q.33': ['Πάρε ένα κάρβουνο από τον φάρο και κατέβα από το σκοινί', 'Take a coal from the light and climb down the rope'],
   'q.33b': ['Κατέβα από το σκοινί κάτω από τον πάγο', 'Climb down the rope beneath the ice'],
