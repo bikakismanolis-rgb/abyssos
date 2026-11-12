@@ -1727,6 +1727,44 @@ function mereFight(z) {
   }
   if (!G.hero.flags.ketosDown && MONSTERS.ketos) z.bossSpot = { kind: 'ketos', x: S.mere.x, z: S.mere.z };
 }
+// the deep's echoes (after Act VI, once a day each; story.js 'echo'): the Ketos at the neck arch in the dry Mere (the Mere
+// filled again, its three lanterns lit, its bells), the Shade at the warm Gate ring (its four stones lit, the named lamps as
+// she earned them). Nothing of the story is touched: echo6Set lays the fight's things for the echo, echo6Clear takes them
+// away when it is down or she leaves the fight (and on her next entry)
+export function echo6Set(z, k) {
+  const A = z?.act6; if (!A) return;
+  if (k === 'ketos') {
+    if (!A.mere) mereFight(z);
+    for (const it of A.mere.lamps) light6(z, it, true);
+    resetTide(z, { mere: 1.6 });
+    A.echo = 'ketos';
+  } else if (k === 'shade1') {
+    if (!A.shade) hearthFight(z);
+    Object.assign(A.shade, { max: null, hp: null, form: 1 });
+    for (const it of A.shade.stones) light6(z, it, true);
+    A.echo = 'shade';
+  }
+}
+export function echo6Clear(z) {
+  const A = z?.act6; if (!A?.echo) return;
+  const drop = (kinds) => { for (let i = z.interact.length - 1; i >= 0; i--) if (kinds.includes(z.interact[i].kind)) z.interact.splice(i, 1); };
+  if (A.echo === 'ketos') {
+    for (const it of A.mere?.lamps || []) light6(z, it, false);
+    drop(['wreckLantern', 'shipBell']); A.mere = null;
+    if (G.zone === z) resetTide(z, {});
+  } else if (A.echo === 'shade') {
+    for (const it of A.shade?.stones || []) { removeLightPool('l6:hearthStone:' + it.i); it.mesh?.userData.setLit?.(true); }
+    drop(['hearthStone']); A.shade = null;
+  }
+  A.echo = null;
+}
+// the echoes' places, after the act (once: the zone is cached)
+function echoes6(z) {
+  const F = G.hero.flags, S = z.L.spots;
+  if (!F.act6 || z.interact.some((it) => it.kind === 'echo')) return;
+  if (z.id === 'drained' && z.L.mode === 'dry' && S.arch) { const p = z.map.nearestFloor(S.arch.x + 2.6, S.arch.z, 3); echoAt(z, 'ketos', p.x, p.z); }
+  if (z.id === 'bottom' && z.L.mode === 'lit' && S.hearth?.ring) { const r = S.hearth.ring, p = z.map.nearestFloor(r.x, r.z - 2.2, 3); echoAt(z, 'shade1', p.x, p.z); }
+}
 // a light of the act lit or dark (a wreck lantern, a hearthstone): its look and its pool, true lamp light that trembles
 // (lampLightAt reads the lit interactable; lightAt the pool). Pools are the zone's while she is in it (act6Enter lays
 // them again)
@@ -1787,6 +1825,8 @@ function act6Enter(z) {
 export function act6Presence(z) {
   if (z?.id === 'farlight') { ropeHole(z); return; }
   if (!z?.act6) return;
+  if (z.act6.echo && !(z.boss && !z.boss.dead && z.boss.echo)) echo6Clear(z);
+  echoes6(z);
   people6(z);
   refreshEmit(z);
 }

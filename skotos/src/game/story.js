@@ -18,13 +18,14 @@ import { SEA, setFreezeAll, freezeWave, setShade } from '../world/sea.js';
 import { tex } from '../gfx/textures.js';
 import { titleCard } from '../ui/overlay.js';
 import { act3Prop, act4Prop } from '../world/build.js';
+import { act6Prop } from '../world/build6.js';
 import { loadFolk } from '../gfx/people.js';
 import { addLightPool, removeLightPool, cradlePoint, setNamesRoll, fireDrain, fireFill, fireRelight, FIRE } from './light.js';
 import { angleTo } from '../core/util.js';
 import { openDeepGate, FAR_BEACONS, farFire, openRootGate, witherWall, firstAutumn, growProp, zoneEmitters, setFar, setBeacon, townFires, townPresence, walkTo, stopWalk, vanish, release,
   act4Presence, isarnLantern, setLastLamp, openAnvilGate, meltPlug, forgeCold, bellowsDone, echoAt,
   act5Presence, people5, scene5, npc5, spawnNpc5, light5, iceMemOf, ICE_WHO, LIGHTS5, touch, spawnBoss, checkpoint5,
-  act6Presence, light6, checkpoint6, openings6 } from './world.js';
+  act6Presence, light6, checkpoint6, openings6, echo6Set, echo6Clear } from './world.js';
 
 // Act III's counters: the three verses of the Long Sorrow, the three thorn walls of the Heartwood
 const STORY_TEARS = ['planting', 'sorrow', 'breaking'];
@@ -254,10 +255,11 @@ on('kill', (a) => {
     // (its tree's echo fought to its end: a wake into this visit finds it spent, game/wake.js)
     if (a.echoOf) a.echoOf.fought = true;
     emit('bossDown', a);
-    const ash = a.kind === 'ivar' || a.kind === 'karthax', ice = a.kind === 'tower' || a.kind === 'skotos', c = ash ? 0xd8d0c0 : ice ? 0xd8ecff : 0xffc060;
+    const ash = a.kind === 'ivar' || a.kind === 'karthax', ice = a.kind === 'tower' || a.kind === 'skotos', deep = a.kind === 'ketos' || a.def?.legKey === 'shade', c = ash ? 0xd8d0c0 : ice ? 0xd8ecff : deep ? 0xd0d8e8 : 0xffc060;
     if (ash) dismiss(G.zone, a);
+    if (deep) { const z = G.zone; dismiss5(z, a); later(2.4, () => { if (G.zone === z) echo6Clear(z); }); }
     later(1.2, () => { if (G.zone?.actors.includes(a)) { glowBurst(a.x, 1.2, a.z, c, 40, 3, 0.3, 1); ring(a.x, a.z, 3, c, 0.7); } });
-    later(2.2, () => emit('toast', t(ash ? 'echo.done4' : ice ? 'echo.done5' : 'echo.done'), 'quest'));
+    later(2.2, () => emit('toast', t(ash ? 'echo.done4' : ice ? 'echo.done5' : deep ? 'echo.done6' : 'echo.done'), 'quest'));
     writeSave();
     return;
   }
@@ -476,22 +478,24 @@ on('echo', (it, z) => {
   // Act III's echoes rise out of amber; Act IV's out of ash (Ivar at the Last Lamp, Karthax at the cold Anvil)
   const k = it.boss, pl = G.player, away = Math.atan2(it.x - pl.x, it.z - pl.z), d = k === 'silverhorn' || k === 'tower' ? 8 : k === 'karthax' ? 6 : 5;
   // Act V's rise out of ice: the Tower at its island, the Skotos at the ice edge, where it stood
-  const ash = k === 'ivar' || k === 'karthax', ice = k === 'tower' || k === 'skotos', c = ash ? 0xd8d0c0 : ice ? 0xd8ecff : 0xffc060;
+  // (Act VI's rise out of the deep: the Ketos in its Mere filled again, the Shade by the Gate ring, echo6Set)
+  const ash = k === 'ivar' || k === 'karthax', ice = k === 'tower' || k === 'skotos', deep = k === 'ketos' || k === 'shade1', c = ash ? 0xd8d0c0 : ice ? 0xd8ecff : deep ? 0xd0d8e8 : 0xffc060;
   const across = (a) => z.map.nearestFloor(it.x + Math.sin(away + a) * d, it.z + Math.cos(away + a) * d, 4);
   // straight across, or a little to the side where something solid stands between (the Last Lamp, the Anvil): it must see her
   const s = [0, 0.7, -0.7, 1.3, -1.3].map(across).find((p) => z.map.los(p.x, p.z, pl.x, pl.z)) || across(0);
   Audio.sting('memory');
   glowBurst(it.x, 1.7, it.z, c, 40, 3, 0.3, 1); ring(it.x, it.z, 3, c, 0.8);
-  emit('toast', t(ash ? 'echo.rise4' : ice ? 'echo.rise5' : 'echo.rise'), 'quest');
+  emit('toast', t(ash ? 'echo.rise4' : ice ? 'echo.rise5' : deep ? 'echo.rise6' : 'echo.rise'), 'quest');
+  if (deep) echo6Set(z, k);
   // Ivar's braziers burn again for his echo (after the Unmaking the plaza is dark)
   if (k === 'ivar') for (const b of z.act4?.braziers || []) if (!b.lit) b.relight();
   later(1.4, () => {
     if (G.zone !== z) { it.used = false; return; }
     glowBurst(s.x, 1.5, s.z, c, 50, 4, 0.35, 1); ring(s.x, s.z, 5, ash ? 0xe8e0d0 : 0xffd080, 1); shake(0.3);
-    const at = k === 'skotos' ? z.L.spots.skotos : s;
+    const at = k === 'skotos' ? z.L.spots.skotos : k === 'ketos' ? z.L.spots.mere : k === 'shade1' ? z.map.nearestFloor(z.L.spots.hearth.ring.x, z.L.spots.hearth.ring.z - 1.5, 3) : s;
     const b = spawnMonster(k, at.x, at.z, { level: Math.max(z.level + (k === 'silverhorn' || k === 'ivar' || k === 'tower' ? 2 : 3), G.hero.level + 1) });
     b.echo = true; b.echoOf = it; b.rot = Math.atan2(G.player.x - b.x, G.player.z - b.z);
-    const T = ash ? [0x9a9690, 1.2, 0xffa040] : k === 'tower' ? [0xbcd8f0, 1.2, 0x9ad8ff] : k === 'skotos' ? [0x1a1424, 2.0, 0xb090ff] : [0xffc870, 0.4, 0xffd070];
+    const T = ash ? [0x9a9690, 1.2, 0xffa040] : k === 'tower' ? [0xbcd8f0, 1.2, 0x9ad8ff] : k === 'skotos' ? [0x1a1424, 2.0, 0xb090ff] : k === 'ketos' ? [0xd0d8e8, 1.2, 0xe0e8ff] : k === 'shade1' ? [0x1a1c24, 2.0, 0xd0d8ff] : [0xffc870, 0.4, 0xffd070];
     b.baseTint = T[0]; b.baseTintAmt = T[1]; b.avatar?.setTint(b.baseTint, b.baseTintAmt); b.avatar?.setRim?.(T[2], 1.4);
     z.actors.push(b); z.boss = b;
   });
@@ -1799,7 +1803,7 @@ function carve(z, it) {
   });
 }
 // after the act, at the Farthest Light: the names said into the dark at nightfall (world.js 'nightRite', every 90 s)
-on('nightRite', (z) => { const list = rollNames(true); list.forEach((k, i) => later(i * 2.2, () => { if (G.zone === z) { emit('say', k); if (i === list.length - 1) Audio.sfx('iceSing', { vol: 0.4, pitch: 0.6 }); } })); });
+on('nightRite', (z) => { const list = G.hero.flags.act6 ? rollNames6(true) : rollNames(true); list.forEach((k, i) => later(i * 2.2, () => { if (G.zone === z) { emit('say', k); if (i === list.length - 1) Audio.sfx('iceSing', { vol: 0.4, pitch: 0.6 }); } })); });
 
 // ---------- q30: home, and the child ----------
 function homeScene(z) {
@@ -2106,6 +2110,7 @@ function enter6(id, z) {
     else if (F.leifName && F.act6 && !F.leifHome) later(2, () => leifHome(z));
   }
   if (id === 'coast' && F.act6 && F.keyxLamp && !F.landing6) later(2, () => landing6(z));
+  if (id === 'gate') later(1, () => gateFind(z));
   if (id === 'farlight') act6Presence(z);
   if (id === 'bottom') {
     if (!F.bottomSeen) later(1.2, () => bottomArrival(z));
@@ -2581,6 +2586,7 @@ function gateWarm(z) {
     } }));
   });
 }
+on('echoLeft', (z) => echo6Clear(z));
 on('gateUp', (z) => { const F = G.hero.flags; if (z?.id === 'bottom' && F.herFire && !F.homeGate) { F.homeGate = true; writeSave(); } });
 // ---------- home: the Gate at Isarn's staff, warm; the six peaks catch one by one; the act's last line ----------
 function homeCine(z) {
@@ -2635,6 +2641,41 @@ function landing6(z) {
   });
 }
 
+// ---------- the forgotten in the Gates (after the act, from tier 10): 12% a level, one asleep by a dead lamp in a side
+// room; the lamp lit (1 s) frees it: it lifts its veiled face and fades, gateFound +1 («Κάποιος.» in Selna's rite). The
+// host's in co-op; nothing else in the level changes ----------
+function gateFind(z) {
+  const h = G.hero, g = G.gate;
+  if (!g || z?.id !== 'gate' || G.zone !== z || !h.flags.act6 || (g.tier | 0) < 10 || z.gateFind !== undefined || NET.mode === 'guest') return;
+  z.gateFind = null;
+  if (!(Math.random() < 0.12 || window.__gateFind)) return;
+  const L = z.L, st = L.start || { x: 0, z: 0 }, far = (x, zz) => Math.hypot(x - st.x, zz - st.z) > 24;
+  const rooms = (L.rooms || []).filter((r) => r.w >= 4 && r.h >= 4 && far(r.x + r.w / 2, r.z + r.h / 2));
+  let p = null;
+  if (rooms.length) { const r = rooms[Math.floor(Math.random() * rooms.length)]; p = z.map.nearestFloor(r.x + r.w / 2, r.z + r.h / 2, 4); }
+  for (let k = 0; !p && k < 60; k++) { const q = z.map.nearestFloor(Math.random() * L.w, Math.random() * L.h, 3); if (q && far(q.x, q.z) && z.map.walkable(q.x, q.z)) p = q; }
+  if (!p) return;
+  let a; try { a = spawnNpc('gateFaded', p.x, p.z, Math.random() * 6.28); } catch (e) { return; }
+  a.still = true; z.actors.push(a); R.scene.add(a.avatar.group);
+  const lamp = act6Prop('brazier6'), lp = z.map.nearestFloor(p.x + 1.3, p.z + 0.4, 2);
+  lamp.position.set(lp.x, 0, lp.z); lamp.scale.setScalar(0.7); lamp.userData.setLit?.(false); z.extra.push(lamp); R.scene.add(lamp);
+  const it = { kind: 'gateLamp', x: lp.x, z: lp.z, r: 2.2, prompt: 'gate.lamp', mesh: lamp };
+  it.use = () => emit('gateLamp', it, z);
+  z.interact.push(it); z.gateFind = { a, it };
+}
+on('gateLamp', (it, z) => {
+  const h = G.hero, f = z.gateFind;
+  if (it.used || !f || G.zone !== z || G.mode !== 'play') return;
+  touch(1, it, 0.7, () => {
+    it.used = true; it.mesh?.userData.setLit?.(true);
+    addLight({ x: it.x, y: 1, z: it.z, color: 0xffb060, intensity: 14, range: 6, life: 9999, flicker: 0.35 });
+    glowBurst(it.x, 0.8, it.z, 0xffb050, 18, 2, 0.3, 0.7);
+    f.a.avatar?.play('Idle_Loop', 1, { loop: true, fade: 0.6 });
+    later(1.4, () => vanish(z, f.a, 2.2));
+    h.gateFound = (h.gateFound | 0) + 1; writeSave();
+    emit('toast', t('q.gateFound'), 'quest'); Audio.sting('memory');
+  });
+});
 // ---------- Act VI's zones: what the story lays on the build's props, and who stands where ----------
 // story6Zone (act6Zone, once per build): the hearths, the lost lights, Asger's brazier; people6 (every entry and as the
 // story moves): their lights from the flags, the memories owed («Θυμήσου»), the people (want5)

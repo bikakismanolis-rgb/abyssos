@@ -235,7 +235,9 @@ const R = {
     const h = G.hero, max = h.gateBest + 1;
     const tiers = Array.from({ length: Math.min(max, 60) }, (_, i) => `<button class="chip ${P.tier === i + 1 ? 'on' : ''}" data-a="tier:${i + 1}">${i + 1}</button>`).join('');
     if (!P.tier) P.tier = max;
-    return `<div class="pn narrow">${head(t('gate.title'), false)}<div class="pn-b"><p>${t('gate.d')}</p><p class="muted">${t('gate.best', h.gateBest)}</p><div class="gate-tiers">${tiers}</div><button class="btn" data-a="gateGo" style="width:100%">${t('gate.open')} · ${t('gate.tier', P.tier)}</button></div></div>`;
+    // (after Act VI: the Gates have a bottom, and it burns; each tier's depth beneath the ice, 8 + 6 a tier fathoms)
+    const deep = (h.act6 ?? -1) >= 0 ? `<p style="font-style:italic;color:var(--ink2)">${t('gate.bottom')}</p><p class="muted">${t('gate.depth', P.tier || max, 8 + 6 * (P.tier || max))}</p>` : '';
+    return `<div class="pn narrow">${head(t('gate.title'), false)}<div class="pn-b"><p>${t('gate.d')}</p>${deep}<p class="muted">${t('gate.best', h.gateBest)}</p><div class="gate-tiers">${tiers}</div><button class="btn" data-a="gateGo" style="width:100%">${t('gate.open')} · ${t('gate.tier', P.tier)}</button></div></div>`;
   },
   pause() {
     const inTown = G.zone?.id === 'town';

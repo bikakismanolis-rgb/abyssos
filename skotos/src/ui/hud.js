@@ -208,7 +208,7 @@ export function updateHud(dt) {
   } else bb.hidden = true;
   // gate progress
   const gb = $('gatebar');
-  if (G.gate && G.zone?.id === 'gate' && !G.bossActor) { gb.hidden = false; gb.querySelector('.nm').textContent = t('gate.progress') + ' · ' + t('gate.tier', G.gate.tier); gb.querySelector('.fill').style.transform = `scaleX(${Math.min(1, G.gate.progress)})`; } else gb.hidden = true;
+  if (G.gate && G.zone?.id === 'gate' && !G.bossActor) { gb.hidden = false; gb.querySelector('.nm').textContent = (G.hero.act6 ?? -1) >= 0 ? t('gate.depth', G.gate.tier, 8 + 6 * G.gate.tier) : t('gate.progress') + ' · ' + t('gate.tier', G.gate.tier); gb.querySelector('.fill').style.transform = `scaleX(${Math.min(1, G.gate.progress)})`; } else gb.hidden = true;
   // quest
   const q = h.quest >= 5 && G.zone?.id === 'gate' ? '' : `<b>${t('q.title')}</b>${questText()}`;
   if (q !== S.q) { $('quest').innerHTML = q; S.q = q; }

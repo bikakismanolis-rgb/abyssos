@@ -5312,6 +5312,8 @@ function swapForm(a, form, at) {
   b.hpMax = S.max; b.hp = Math.max(1, Math.min(S.max, S.hp));
   b.awake = true; b.aggro = true; b.mcd = {}; b.phase = form - 1; b.lockPhase = form - 1; b.cd = 1.2; b.rot = a.rot;
   if (form === 3) b.affixes = ['thunder'];
+  // (an echo's next form is the echo's too: its tint, its place in the day's echoes)
+  if (a.echo) { b.echo = true; b.echoOf = a.echoOf; b.baseTint = a.baseTint; b.baseTintAmt = a.baseTintAmt; b.avatar?.setTint(b.baseTint, b.baseTintAmt); b.avatar?.setRim?.(0xd0d8ff, 1.4); }
   S.form = form;
   // (the old one out without a kill: no reward, no 'kill', no first-kill drop)
   a.swapped = true; killTele(a.tele); a.tele = null;
@@ -5326,6 +5328,14 @@ function swapForm(a, form, at) {
 // 50% (G.shadeRetry, this visit only); the stones as she leaves them; the webs and the shadow's dark gone
 function shadeReset(a) {
   const S = SH6(), z = G.zone, H = hearthOf(); if (!S || !H) return;
+  // (an echo left: it fades, and it can be called again today)
+  if (a.echo) {
+    for (const m of [...(a.raised || []), ...(a.brood || []), ...(a.handList || [])]) if (!m.dead && !m.removed) m.remove();
+    clearWebs(); dropPool6('shadeFlare'); shadeDark(false);
+    a.swapped = true; killTele(a.tele); a.tele = null; a.remove();
+    z.boss = null; G.bossActor = null; if (a.echoOf) a.echoOf.used = false;
+    emit('echoLeft', z); return;
+  }
   const form = S.form >= 3 || G.shadeRetry === 3 ? 3 : 1;
   if (form === 3) G.shadeRetry = 3;
   S.form = form; S.hp = S.max * (form === 3 ? 0.5 : 1); S.unlitT = 0; S.flareT = 0;

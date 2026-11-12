@@ -96,7 +96,7 @@ const A5 = {
   // a boss struck down to frac of its life (null: dead) through any floor, gate or hiding its rules keep
   async hit(pg, frac) {
     for (let i = 0; i < 14; i++) {
-      const ok = await pg.evaluate((frac) => { const b = window.__G.zone.boss; if (!b || b.dead) return true; b.dazed = 0; b.invuln = 0; b.under = false; b.hidden = false; if (frac == null) { b.hpFloor = 0; b.lockPhase = null; } if (frac == null) window.__D.kill(b); else { b.hp = Math.min(b.hp, b.hpMax * frac + 1); } return frac == null ? b.dead : b.hp <= b.hpMax * frac + 1; }, frac);
+      const ok = await pg.evaluate((frac) => { const b = window.__G.zone.boss; if (!b || b.dead) return true; b.dazed = 0; b.invuln = 0; b.under = false; b.hidden = false; if (frac == null) { b.hpFloor = 0; b.lockPhase = null; b.submerged = false; } if (frac == null) window.__D.kill(b); else { b.hp = Math.min(b.hp, b.hpMax * frac + 1); } return frac == null ? b.dead : b.hp <= b.hpMax * frac + 1; }, frac);
       if (ok) return true;
       await pg.waitForTimeout(700);
     }
@@ -5332,6 +5332,55 @@ const S = {
     await A5.use(pg, 'z.p5.alkyone.it'); await pg.waitForTimeout(600);
     const after = await ev(() => window.__dlg.includes('d.alk.after6'));
     beat('the Landing: landing6; Alkyone l6.1, l6.2, the bird (l6.3); her word after (after6)', land && s7.dlg.length === 2 && after, { ...s7, after });
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
+  } },
+  // the deep's echoes (after the act): (a) the Ketos at the neck arch in the dry Mere: the Mere filled, its lanterns lit, an
+  // echo's tint; struck down: «the echo fades», its things gone, the story untouched, spent for today; (b) the Shade at the
+  // warm Gate ring: left mid-fight it fades and can be called again; called again, each form the echo's, struck down
+  echo6: { q: 'auto=drained&sim=4&q=0&norender&cloud=off&lvl=42&cls=' + (process.env.CLS || 'warden') + '&' + A5.url('toldChild') + ',act5,tam6,call6,coal6,drainedSeen,teach6,gates6,ketosWake,ketosDown,keyxLamp,bottomSeen,glaukosB6,blackLamp0,blackLamp1,blackLamp2,keyxFreed,shadeWake,shadeDown,herFire,nameBack,nameCard6,homeGate,act6,landing6', run: async (pg, shot) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) }), parts = (process.env.PART || 'ab').split('');
+    const ev = (f, a) => pg.evaluate(f, a);
+    await A5.tick(pg); await A4.listen(pg);
+    const listen = () => ev(async () => { const B = await import('/src/ui/bus.js'); window.__immortal = true; window.__toasts = []; B.on('toast', (m) => window.__toasts.push(String(m))); window.__cines = 0; B.on('cine', () => { window.__cines++; }); });
+    await listen();
+    await ev(() => { const h = window.__G.hero; h.quest = 39; h.act6 = 1; });
+    if (parts.includes('a')) {
+      const s0 = await ev(() => { const z = window.__G.zone; return { mode: z.L.mode, echo: !!z.interact.find((i) => i.kind === 'echo' && i.boss === 'ketos'), lamps: z.interact.filter((i) => i.kind === 'wreckLantern').length }; });
+      await A5.use(pg, "z.interact.find((i) => i.kind === 'echo' && i.boss === 'ketos')");
+      const up = await A5.until(pg, () => !!window.__G.zone.boss?.echo && window.__G.zone.boss.kind === 'ketos', 30000);
+      await pg.waitForTimeout(1500);
+      const s1 = await ev(() => { const z = window.__G.zone, b = z.boss; return { tint: b?.baseTint, mere: z.tide?.mere?.h ?? null, lit: (z.act6.mere?.lamps || []).filter((l) => l.lit).length, rise: window.__toasts.some((t) => /βυθός θυμάται/.test(t)) }; });
+      beat('a: the dry Mere, the echo at the arch; called: the Ketos risen pale, the Mere to 1.6 m, its three lanterns lit, «the deep remembers»', s0.mode === 'dry' && s0.echo && s0.lamps === 0 && up && s1.tint === 0xd0d8e8 && s1.mere === 1.6 && s1.lit === 3 && s1.rise, { s0, s1 });
+      await shot();
+      const killed = await A5.hit(pg, null);
+      const done = await A5.until(pg, () => window.__toasts.some((t) => /ηχώ σβήνει/.test(t)) && !window.__G.zone.act6.echo, 30000);
+      const s2 = await ev(() => { const G = window.__G, z = G.zone, it = z.interact.find((i) => i.kind === 'echo' && i.boss === 'ketos'); return { q: G.hero.quest, lamps: z.interact.filter((i) => i.kind === 'wreckLantern' || i.kind === 'shipBell').length, mere: z.tide?.mere ?? null, used: it?.used, fought: it?.fought, cines: window.__cines, boss: z.boss && { dead: z.boss.dead, hp: z.boss.hp, under: z.boss.under } }; });
+      beat('a: struck down: «the echo fades», its lanterns and bells gone, the Mere let go, q39, no scene, spent for today', done && s2.q === 39 && s2.lamps === 0 && !s2.mere && s2.used && s2.fought && s2.cines === 0, s2);
+    }
+    if (parts.includes('b')) {
+      await A5.travel(pg, 'bottom', 'drained'); await listen();
+      const s0 = await ev(() => { const z = window.__G.zone; return { mode: z.L.mode, echo: !!z.interact.find((i) => i.kind === 'echo' && i.boss === 'shade1'), first: !!z.p5?.first6, glaukos: !!z.p5?.glaukos }; });
+      await A5.use(pg, "z.interact.find((i) => i.kind === 'echo' && i.boss === 'shade1')");
+      const up = await A5.until(pg, () => !!window.__G.zone.boss?.echo && window.__G.zone.boss.awake, 30000);
+      const s1 = await ev(() => { const z = window.__G.zone; return { kind: z.boss?.kind, lit: (z.act6.shade?.stones || []).filter((s) => s.lit).length }; });
+      // (left: she walks out of the Hearth; it fades and the ring offers it again)
+      await ev(() => { const G = window.__G, z = G.zone, c = z.L.spots.camp, f = z.map.nearestFloor(c.x, c.z + 3, 3); G.player.x = f.x; G.player.z = f.z; });
+      const gone = await A5.until(pg, () => { const z = window.__G.zone, it = z.interact.find((i) => i.kind === 'echo'); return !z.boss && !z.act6.echo && it && !it.used; }, 30000);
+      beat('b: the lit Hearth, the echo at the ring (the First asleep, no Glaukos); called: the Shade awake, its stones lit; left: it fades, offered again', s0.mode === 'lit' && s0.echo && s0.first && !s0.glaukos && up && s1.kind === 'shade1' && s1.lit === 4 && gone, { s0, s1, gone });
+      await A5.use(pg, "z.interact.find((i) => i.kind === 'echo' && i.boss === 'shade1')");
+      await A5.until(pg, () => !!window.__G.zone.boss?.echo && window.__G.zone.boss.awake, 30000);
+      const forms = await ev(async () => {
+        const G = window.__G, z = G.zone, S = z.act6.shade;
+        const wait = (s) => new Promise((ok) => { const t0 = G.hero.stats.time, w0 = performance.now(); const f = () => (G.hero.stats.time - t0 >= s || performance.now() - w0 > s * 1000 + 15000 ? ok() : setTimeout(f, 30)); f(); });
+        const down = async (to) => { const b = z.boss; b.formT = 999; b.gate = true; b.hp = Math.max(1, S.max * to); await wait(0.3); };
+        const r = { echo: [] };
+        for (const to of [0.749, 0.499, 0.249]) { await down(to); await wait(4); r.echo.push([z.boss.kind, !!z.boss.echo]); }
+        const b = z.boss; b.hpFloor = 0; const C = await import('/src/game/combat.js'); C.damage(G.player, b, b.hp + 10, {}); await wait(3.5);
+        return { ...r, dead: b.dead, shade: !!z.act6.shade, q: G.hero.quest };
+      });
+      const s3 = await ev(() => ({ done: window.__toasts.some((t) => /ηχώ σβήνει/.test(t)), cines: window.__cines, says: window.__says.filter((k) => /shade\.die|glaukos\.s/.test(k)) }));
+      beat('b: called again: each form the echo\'s; struck down: «the echo fades», its things gone, q39, no scene, no story lines', forms.echo.every(([, e]) => e) && forms.dead && !forms.shade && forms.q === 39 && s3.done && s3.cines === 0 && s3.says.length === 0, { forms, s3 });
+    }
     return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
   } },
   // the Drained Sea's story (q33b-q36): the arrival and Glaukos's teach; the three hearths lit out of order (2, 1, 3) and
