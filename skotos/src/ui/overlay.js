@@ -171,9 +171,10 @@ export function drawOverlay(dt) {
 export function clearOverlay() { OV.nums.length = 0; }
 // the screen goes black and the game's own title stands in it, white, for dur s (the naming: the name you say to hold the
 // dark); done() as it fades
-export function titleCard(dur = 3, done) {
+export function titleCard(dur = 3, done, text) {
   const d = document.createElement('div');
-  d.id = 'titlecard'; d.innerHTML = `<div class="logo">${t('game.title')}</div>`;
+  // (text: another card in the title's place, Act VI's name said in the light)
+  d.id = 'titlecard'; d.innerHTML = `<div class="logo">${text || t('game.title')}</div>`;
   document.getElementById('app').appendChild(d);
   requestAnimationFrame(() => requestAnimationFrame(() => d.classList.add('on')));
   setTimeout(() => d.classList.add('lit'), 900);

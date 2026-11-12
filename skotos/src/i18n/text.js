@@ -767,7 +767,7 @@ export const TEXT = {
   // the names said into the dark: the rite at the Landing, the naming, Selna's roll and her nightly rite
   'name.first': ['Η Πρώτη.', 'The First.'], 'name.einar': ['Έιναρ.', 'Einar.'], 'name.arna': ['Άρνας.', 'Arna.'], 'name.thaleia': ['Θάλεια.', 'Thaleia.'], 'name.keyx': ['Κήυκας.', 'Keyx.'],
   // (the Lost, as the names from above say them in the order freed: rollNames6)
-  'name.galini': ['Γαλήνη.', 'Galini.'], 'name.twins': ['Γλαύκη και Κυμώ.', 'Glauke and Kymo.'], 'name.kranea': ['Κρανιά.', 'Kranea.'], 'name.psamathe': ['Ψαμάθη.', 'Psamathe.'], 'name.asger': ['Άσγκερ.', 'Asger.'], 'name.leif': ['Λέιφ.', 'Leif.'],
+  'name.galini': ['Γαλήνη.', 'Galini.'], 'name.twins': ['Γλαύκη. Κυμώ.', 'Glauke. Kymo.'], 'name.kranea': ['Κρανιά.', 'Kranea.'], 'name.psamathe': ['Ψαμάθη.', 'Psamathe.'], 'name.asger': ['Άσγκερ.', 'Asger.'], 'name.leif': ['Λέιφ.', 'Leif.'],
   'name.carriers': ['Οι Φορείς.', 'The Carriers.'], 'name.sailor': ['Ναύτης.', 'Sailor.'], 'name.ivar': ['Ίβαρ.', 'Ivar.'], 'name.isarn': ['Ίσαρν.', 'Isarn.'], 'name.skotos': ['Σκότος.', 'Skotos.'],
   // q24: a stranger at the beacon. Whitecliff talks about her first
   'd.halda.v1': ['Ήρθε με τα πόδια απ\' τον βορρά. Μυρίζει θάλασσα. Εδώ κανείς δεν έχει δει θάλασσα.', 'She came on foot from the north. She smells of the sea. No one here has ever seen the sea.'],
@@ -1334,6 +1334,18 @@ export const TEXT = {
   'd.glaukos.k3b': ['Εδώ! Από δω, θεριό! Άκου εμένα!', 'Here! Over here, beast! Listen to me!'],
   'mon.shade': ['Ο Ίσκιος της Πύλης', 'The Shade of the Gate'],
   'boon.h6': ['Η εστία της Πρώτης', 'Pherousa\'s hearth'],
+  'act6.done': ['Πράξη VI — Ολοκληρώθηκε', 'Act VI — Complete'],
+  'echo.ketos': ['Θυμήσου το Κήτος', 'Remember the Ketos'], 'echo.shade': ['Θυμήσου τον Ίσκιο', 'Remember the Shade'],
+  // (Act VI's prompts: the black lamps, Keyx, Leif and his father, the ember, her fire, a forgotten one in the Gates)
+  'blackLamp.out': ['Σβήσε τη μαύρη λάμπα', 'Put out the black lamp'], 'keyx.give': ['Δώσ\' του το φανάρι του', 'Give him his lantern'],
+  'leif.fire': ['Άναψε τη φωτιά του', 'Light his fire'], 'leif.axe': ['Πάρε το τσεκούρι του', 'Take his axe'], 'leif.give': ['Δώσ\' του το τσεκούρι', 'Give him the axe'],
+  'ember.listen': ['Άκου', 'Listen'], 'first.relight': ['Ξανάναψε τη φωτιά της', 'Relight her fire'], 'gate.lamp': ['Άναψε τη λάμπα', 'Light the lamp'],
+  'npc.gateFaded': ['Ξεχασμένος', 'A forgotten one'],
+  'd.first.1.m': ['Και η φλόγα σου έμαθε κάποτε από τη δική μου. Το Τάγμα σου το θυμάται ακόμα;', 'And your flame learnt from mine, once. Does your Order still remember?'],
+  'd.alk.l6.1': ['Τρέμει ακόμα. Εφτά χειμώνες, και τρέμει.', 'It still flickers. Seven winters, and it flickers.'],
+  'd.alk.l6.2': ['Κήυκα. Θα λέω τ\' όνομά σου κάθε βράδυ. Όχι για να σε κρατήσω. Για να σου πω καληνύχτα.', 'Keyx. I\'ll say your name every night. Not to hold you. To say good night.'],
+  'd.tam6.home.r': ['Το βλαστάρι μου είναι πιο ψηλό από μένα πια. Θα μείνω λίγο, αδελφή. Θα γεράσουμε μαζί, εμείς οι τρεις.', 'My sapling\'s taller than me now. I\'ll stay a while, sister. We\'ll grow old together, the three of us.'],
+  'd.elati.v5.r': ['Μια φωτιά από κάτω, κι όχι από πάνω. Οι ρίζες το ήξεραν πάντα, αδελφή.', 'A fire from below, not from above. The roots always knew it, sister.'],
   'echo.rise6': ['Ο βυθός θυμάται τη μάχη...', 'The deep remembers the fight...'],
   'echo.done6': ['Η ηχώ σβήνει. Ο βυθός θα θυμηθεί ξανά αύριο.', 'The echo fades. The deep will remember again tomorrow.'],
   // (the act's end: the Shade's death, the naming, the Gate, home and after; the design's Story, ending)

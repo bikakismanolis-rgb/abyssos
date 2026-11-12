@@ -554,6 +554,7 @@ function takeExit(z, e) {
   // (ui/panels.js waypoints): it only ever led to the Field, where the Anvil's Neck was easy to miss)
   if (z.id === 'town' && e.to === 'ashfield' && G.hero.quest >= 25 && !G.hero.wps.includes('coast')) { emit('openPanel', 'waypoints'); return; }
   // (where she comes out: by the exit back to this zone, or the place the exit names, e.at: the Gate ring's 'staff')
+  if (e.at === 'staff') emit('gateUp', z);
   emit('travel', e.to, { at: e.at || z.id });
 }
 on('propBroken', (a) => {
@@ -671,6 +672,7 @@ export function act3Presence(z) {
     if (!on && inZ) { z.actors.splice(z.actors.indexOf(n.a), 1); z.interact.splice(z.interact.indexOf(n.it), 1); R.scene.remove(n.a.avatar.group); }
   }
   if (z.id === 'weep' && A.sapling) showExtra(z, A.sapling, aut);
+  if (z.id === 'weep') people5(z);
 }
 function showExtra(z, o, on) {
   const i = z.extra.indexOf(o);
@@ -980,6 +982,8 @@ export function touch(dur, it, y, done, o = {}) {
     update(dt, a) {
       // a blow that reaches her life breaks it (combat.js hurtHero counts them); a burn or a poison tick does not
       if (o.tough ? TOUCH.hurt - a.hurt >= 0.1 : (pl.blows || 0) !== a.blows) { a.dur = Infinity; pl.act = null; pl.avatar.anim.stop?.(0.15); return; }
+      // (o.tick: the thing's own clock while she channels at it, a black lamp's Black Flares)
+      o.tick?.(dt, a);
       if ((a.st -= dt) <= 0) { a.st = 0.08; cradlePoint(c); const C = { x: c.x, y: c.y, z: c.z }; if (o.take) fireStream(to, C, 3); else fireStream(C, to, 3); }
     },
     end() { if (!NET.h.useOp?.(it)) done(); } };
@@ -1352,6 +1356,12 @@ function want5(z) {
     if (F.carved) at('child', 'child', { x: s.x - 1.5, z: s.z + 0.9, r: Math.PI * 0.6 });
     // (Act VI: Tamarisk by the staff from the call until she goes down ahead, story.js hook6)
     if (F.call6 && !F.tam6) at('tamarisk', 'tamarisk', { x: s.x + 1.7, z: s.z - 0.9, r: Math.PI * 0.8 });
+    // (Act VI's end: Leif home at his father's door, his axe on his shoulder; the father is Act I's third villager)
+    const dad = (N.villagers || []).find((v, i) => i % 4 === 2);
+    if (F.leifHome && dad) at('leif', 'leif', { ...z.map.nearestFloor(dad.x + 1.4, dad.z + 0.6, 2), r: dad.r ?? 0 });
+  } else if (z.id === 'weep') {
+    // (after Act VI: Tamarisk a season in the Lanternglade beside Elati, by her sapling; the zone loads frost for her)
+    if ((G.hero.act6 ?? -1) >= 0 && N.elati) at('tamarisk', 'tamarisk', { ...z.map.nearestFloor(N.elati.x + 2.2, N.elati.z + 1.2, 2), r: Math.PI * 0.9 });
   } else if (z.id === 'ashfield') {
     const ll = S.lastLamp;
     if (ll && F.coal && !F.coastSeen && hasPerson('alkyone')) at('alkyone', 'alkyone', { ...z.map.nearestFloor(ll.x - 1.6, ll.z + 1.4, 2), r: Math.PI * 0.6 });
@@ -1374,6 +1384,15 @@ function want5(z) {
     else if (c) at('glaukos', 'glaukos', { ...z.map.nearestFloor(c.x - 2, c.z + 1.2, 2), r: Math.PI * 0.8 });
     if (S.sailor && !F.sailorRest) at('sailor', 'sailor', { x: S.sailor.x, z: S.sailor.z, r: S.sailor.rot ?? 0 }, { still: true });
     if (S.asger && !F.asgerRest) at('asger', 'asger', { x: S.asger.x, z: S.asger.z, r: S.asger.rot ?? 0 }, { talk: false, still: true });
+  } else if (z.id === 'bottom') {
+    // Act VI (story.js): Glaukos at the Well's Foot until her fire (he comes down the Stair for the naming, a scene's own
+    // figure); Keyx at the village's well with the black lamp until he has his lantern; Leif by his dead fire in the wood
+    // until he is home; the First curled by her fire, always (asleep there after it)
+    const c = S.camp, H = S.hearth;
+    if (c && !F.herFire) at('glaukos', 'glaukos', { ...z.map.nearestFloor(c.x - 2.2, c.z + 1.4, 2), r: Math.PI * 0.8 });
+    if (S.keyx && !F.blackLamp2) at('keyx', 'keyx', { ...z.map.nearestFloor(S.keyx.x, S.keyx.z + 0.9, 2), r: Math.PI }, { talk: false, still: true });
+    if (S.leif && !(F.leifName && F.act6)) at('leif', 'leif', { ...z.map.nearestFloor(S.leif.fire.x + 1.3, S.leif.fire.z + 0.6, 2), r: -Math.PI / 2 }, { talk: !!F.leifLit, still: true });
+    if (H?.first) at('first6', 'firstDeep', { x: H.first.x, z: H.first.z, r: H.first.rot ?? 0 }, { talk: false, still: true });
   } else if (z.id === 'farlight' && F.frozen) {
     const K = N.keepers || [], open = S.holes.find((ho) => !F['hole' + ho.id]);
     if (!F.carved) {
@@ -1648,7 +1667,7 @@ function act6Layout(id, L) {
 }
 // on every entry, quietly: the walls of the lamps put out opened, the Heap's gaps shut or opened (only where they differ;
 // the shadow-walls' thinning and the plugs' dust are the story's and the fight's, as they happen)
-function openings6(z) {
+export function openings6(z) {
   const F = G.hero.flags, L = z.L, m = z.map; let n = 0;
   if (z.id === 'bottom') for (const wl of L.walls || []) if (F['blackLamp' + wl.k]) n += m.open(wl.cells);
   if (z.id === 'drained') { const shut = !!F.ketosWake && !F.ketosDown; for (const g of L.gaps || []) n += shut ? m.close(g.cells, false) : m.open(g.cells); }

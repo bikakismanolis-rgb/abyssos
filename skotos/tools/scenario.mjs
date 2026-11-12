@@ -5223,6 +5223,117 @@ const S = {
   // Whitecliff (call6 saved first, q32), the child and Tamarisk at the staff, her word (tam6, q33), Selna's look down and the
   // coal from the Farthest Light (coal6, q33b), the rope down to the Drained Sea; (b) the same walk for a hero of the
   // shipped format at Act V's end (no act6, no fmt): its first town entry is the hook
+  // the Bottom's story to the Stair (q36-q37): the arrival and Glaukos at the Well's Foot; the barrow's and the wood's
+  // black lamps put out by channel (a Black Flare in it; the Cradle full after; the wall thinned and its cells open; the
+  // Skotos's answers in count order); Keyx's hail, his lantern given (blackLamp2 with keyxFreed), his walk into the black
+  // water; Glaukos's far word and q37; then a reload: Keyx gone, the lamps dark, the walls open, nothing plays again
+  keyx6: { q: 'auto=bottom&sim=4&q=0&norender&cloud=off&lvl=38&cls=' + (process.env.CLS || 'warden') + '&' + A5.url('toldChild') + ',act5,tam6,call6,coal6,drainedSeen,teach6,gates6,ketosWake,ketosDown,keyxLamp', run: async (pg, shot) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    const ev = (f, a) => pg.evaluate(f, a);
+    await A5.tick(pg); await A4.listen(pg);
+    const listen = () => ev(async () => { const B = await import('/src/ui/bus.js'); window.__immortal = true; window.__toasts = []; B.on('toast', (m) => window.__toasts.push(String(m))); window.__dlg = []; B.on('dialog', (d) => window.__dlg.push(...(d.lines || []).map((l) => (Array.isArray(l) ? l[0] : l)))); window.__hurt = 0; window.__hurtBy = {}; B.on('hurt', (f, src) => { window.__hurt++; const k = (src?.kind || src?.def?.kind || (src ? 'obj' : 'none')); window.__hurtBy[k] = (window.__hurtBy[k] || 0) + 1; }); });
+    await listen();
+    const calm = () => ev(() => { const G = window.__G; for (const a of G.actors.slice()) if (a.team === 'foe' && !a.dead && !a.boss && !a.prop) window.__D.kill(a); });
+    const ok1 = await A5.until(pg, () => { const G = window.__G; return G.hero.flags.glaukosB6 && !G.cine; }, 180000);
+    const s1 = await ev(() => { const G = window.__G, F = G.hero.flags; return { seen: !!F.bottomSeen, q: G.hero.quest, says: window.__says.filter((k) => /bottom/.test(k)), dlg: window.__dlg.filter((k) => /glaukos\.b/.test(k)), keyx: !!G.zone.p5?.keyx, leif: !!G.zone.p5?.leif, first: !!G.zone.p5?.first6, lamps: G.zone.interact.filter((i) => i.kind === 'blackLamp' || i.kind === 'keyxGive').length }; });
+    beat('arrival: its line; Glaukos b1 b2 b3 b5 (glaukosB6), q36; Keyx, Leif and the First there; three lamps to put out', ok1 && s1.seen && s1.q === 36 && s1.says.length === 1 && s1.dlg.length === 4 && s1.keyx && s1.leif && s1.first && s1.lamps === 3, s1);
+    await shot();
+    for (const k of [0, 1]) {
+      await calm();
+      const pre = await ev((k) => { const z = window.__G.zone, m = z.map, wl = z.L.walls.find((w) => w.k === k); window.__D && (window.__G.player.hp = window.__G.player.hpMax); return { shut: wl.cells.every(([x, zz]) => !m.walkable(x + 0.5, zz + 0.5)) }; }, k);
+      await A5.use(pg, `z.interact.find((i) => i.kind === 'blackLamp' && i.k === ${k})`);
+      const out = await A5.until(pg, (k) => !!window.__G.hero.flags['blackLamp' + k], 30000, k);
+      await pg.waitForTimeout(3500);
+      const s2 = await ev((k) => { const G = window.__G, z = G.zone, m = z.map, wl = z.L.walls.find((w) => w.k === k), A = z.act6.walls.find((w) => w.k === k), it = z.interact.find((i) => i.kind === 'blackLamp' && i.k === k); return { open: wl.cells.some(([x, zz]) => m.walkable(x + 0.5, zz + 0.5)), wall: A?.mesh?.visible, lampLit: it?.lit, used: it?.used, says: window.__says.filter((s) => /skotos6\.l/.test(s)), toast: window.__toasts.filter((t) => /\/3/.test(t)).slice(-1)[0] }; }, k);
+      beat(`black lamp ${k}: shut before; out by channel; the wall gone and open; the Skotos answers (l${k + 1})`, pre.shut && out && s2.open && s2.wall === false && s2.lampLit === false && s2.says.includes('d.skotos6.l' + (k + 1)), { pre, ...s2 });
+    }
+    // a Black Flare in a channel: one at the lamp's 0.6 s (a dark circle of r 4); its blow and her ring
+    const fl = await ev(async () => { const G = window.__G, z = G.zone, Li = await import('/src/game/light.js'); const r0 = Li.FIRE.r; const it = z.interact.find((i) => i.kind === 'keyxGive'); const S = await import('/src/game/story.js'); return { r0, keyxAt: !!it }; });
+    // Keyx: his hail, then his lantern given
+    await calm();
+    const kx = await ev(() => { const G = window.__G, z = G.zone, S = z.L.spots.keyx, f = z.map.nearestFloor(S.x, S.z + 5, 3); G.player.x = f.x; G.player.z = f.z; return true; });
+    const hail = await A5.until(pg, () => window.__dlg.includes('d.keyx6.0') && !document.querySelector('#dialog:not([hidden])'), 20000);
+    const hp0 = await ev(() => window.__hurt);
+    // (the village's guard comes as she nears: put down as it comes, the channel taken up again if a blow broke it)
+    await calm();
+    await A5.use(pg, "z.interact.find((i) => i.kind === 'keyxGive')");
+    const given = await A5.until(pg, () => { const G = window.__G, F = G.hero.flags, p = G.player; for (const a of G.actors.slice()) if (a.team === 'foe' && !a.dead && !a.boss && !a.prop && Math.hypot(a.x - p.x, a.z - p.z) < 30) window.__D.kill(a); if (!F.blackLamp2 && !p.act && G.mode === 'play') { const it = G.zone.interact.find((i) => i.kind === 'keyxGive'); it?.use(); } return F.blackLamp2 && F.keyxFreed && !G.cine && !G.zone.p5?.keyx; }, 90000);
+    const s3 = await ev(() => ({ dlg: window.__dlg.filter((k) => /keyx6\.[1-5]/.test(k)), hurt: window.__hurt, by: window.__hurtBy, act: window.__G.player.act?.name, foes: window.__G.actors.filter((a) => a.team === 'foe' && !a.dead && Math.hypot(a.x - window.__G.player.x, a.z - window.__G.player.z) < 12).map((a) => a.kind) }));
+    beat('Keyx: his hail near the well; his lantern given (blackLamp2 with keyxFreed); his five lines; he walks into the black water and is gone', hail && given && s3.dlg.length === 5, { hail, given, ...s3, hp0 });
+    const ok4 = await A5.until(pg, () => window.__G.hero.quest >= 37 && window.__says.includes('d.glaukos.b4'), 30000);
+    const s4 = await ev(() => ({ q: window.__G.hero.quest, says: window.__says.filter((k) => /skotos6\.l|glaukos\.b4/.test(k)) }));
+    beat('the third: the Skotos l3, Glaukos far off (b4), q37', ok4 && s4.says.includes('d.skotos6.l3'), s4);
+    await shot();
+    await A5.reload(pg, { q: 'q=0&sim=4&norender&cloud=off', wake: true }); await listen();
+    await pg.waitForTimeout(4000);
+    const s5 = await ev(() => { const G = window.__G, z = G.zone, m = z.map; return { zone: z.id, q: G.hero.quest, cine: !!G.cine, keyx: !!z.p5?.keyx, lamps: z.interact.filter((i) => (i.kind === 'blackLamp' || i.kind === 'keyxGive') && i.lit).length, walls: z.L.walls.map((wl) => wl.cells.some(([x, zz]) => m.walkable(x + 0.5, zz + 0.5))), seen: (z.act6.walls || []).filter((w) => w.mesh?.visible).length, dlg: window.__dlg.length }; });
+    beat('a reload: the Bottom, q37, no scene; Keyx gone; no lamp burning; the three walls open and unseen', s5.zone === 'bottom' && s5.q === 37 && !s5.cine && !s5.keyx && s5.lamps === 0 && s5.walls.every(Boolean) && s5.seen === 0 && s5.dlg === 0, s5);
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
+  } },
+  // the act's end (q37-q39): the Shade's waking (shadeWake saved first: the Lost's lamps, the call unanswered, the shadow
+  // standing up; Glaukos; the Barrow Lord's line), its forms' lines, its end (die1, die2, the name held «…», q38); the
+  // relight and the naming (herFire with nameBack; her name hidden until it is said; the Skotos asks and sleeps; rest;
+  // Glaukos down the Stair), the card, the ring warm, e3; the Gate up to Isarn's staff (homeGate; within 3 m of it); home:
+  // Halda, the child, «look north», the six peaks, the last line; Act VI's panel and blessing (q39, act6); the Landing
+  ending6: { q: 'auto=bottom&sim=4&q=0&norender&cloud=off&lvl=40&cls=' + (process.env.CLS || 'warden') + '&' + A5.url('toldChild') + ',act5,tam6,call6,coal6,drainedSeen,teach6,gates6,ketosWake,ketosDown,keyxLamp,bottomSeen,glaukosB6,blackLamp0,blackLamp1,blackLamp2,keyxFreed', run: async (pg, shot) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    const ev = (f, a) => pg.evaluate(f, a);
+    await A5.tick(pg); await A4.listen(pg);
+    const listen = () => ev(async () => { const B = await import('/src/ui/bus.js'); window.__immortal = true; window.__toasts = []; B.on('toast', (m) => window.__toasts.push(String(m))); window.__dlg = []; B.on('dialog', (d) => window.__dlg.push(...(d.lines || []).map((l) => (Array.isArray(l) ? l[0] : l)))); });
+    await listen();
+    await ev(() => { const G = window.__G; G.hero.flags.lost6 = ['galini', 'twins']; for (const a of G.actors.slice()) if (a.team === 'foe' && !a.dead && !a.boss && !a.prop) window.__D.kill(a); });
+    // 1. the waking
+    await ev(() => { const G = window.__G, z = G.zone, H = z.L.spots.hearth, f = z.map.nearestFloor(H.x + 6, H.z, 3); G.player.x = f.x; G.player.z = f.z; });
+    const woke = await A5.until(pg, () => window.__G.hero.flags.shadeWake && !window.__G.cine && window.__says.includes('d.lord'), 90000);
+    const s1 = await ev(() => ({ says: window.__says.filter((k) => /shade\.c|shade\.0|glaukos\.s0|d\.lord/.test(k)), awake: !!window.__G.zone.boss?.awake }));
+    beat('the Shade wakes: c2 (two Lost), c1, its rising, Glaukos s0, then the Barrow Lord\'s line; shadeWake', woke && s1.says.join() === 'd.shade.c2,d.shade.c1,d.shade.0,d.glaukos.s0,d.lord' && s1.awake, s1);
+    await shot();
+    // 2. its forms (stepped to each threshold as the Shade test does) and its end
+    const forms = await ev(async () => {
+      const G = window.__G, z = G.zone, S = z.act6.shade;
+      const wait = (s) => new Promise((ok) => { const t0 = G.hero.stats.time, w0 = performance.now(); const f = () => (G.hero.stats.time - t0 >= s || performance.now() - w0 > s * 1000 + 15000 ? ok() : setTimeout(f, 30)); f(); });
+      const down = async (to) => { const b = z.boss; b.formT = 999; b.gate = true; b.hp = Math.max(1, S.max * to); await wait(0.3); };
+      const r = {};
+      await down(0.749); await wait(4); r.f2 = z.boss.kind;
+      await down(0.499); await wait(4); r.f3 = z.boss.kind;
+      await down(0.249); await wait(4); r.f4 = z.boss.kind;
+      const b = z.boss; b.hpFloor = 0; const C = await import('/src/game/combat.js'); C.damage(G.player, b, b.hp + 10, {}); await wait(1);
+      r.dead = b.dead; r.flag = !!G.hero.flags.shadeDown;
+      return r;
+    });
+    const end = await A5.until(pg, () => { const G = window.__G; return G.hero.flags.shadeDown && G.hero.quest >= 38 && !G.cine && !!G.zone.interact.find((i) => i.kind === 'firstFire'); }, 60000);
+    const s2 = await ev(() => ({ says: window.__says.filter((k) => /d\.weaver|glaukos\.s[123]|shade\.die/.test(k)), held: window.__toasts.filter((t) => /…/.test(t)), q: window.__G.hero.quest }));
+    beat('its forms: the Weaver\'s line and s1, s2, s3; its end: die1, die2, the name held «…», q38, her stone offered', end && forms.dead && s2.says.join() === 'd.weaver,d.glaukos.s1,d.glaukos.s2,d.glaukos.s3,d.shade.die1,d.shade.die2' && s2.held.length >= 1 && s2.q === 38, { forms, ...s2 });
+    // 3. the relight and the naming
+    const nm0 = await ev(async () => { const S = await import('/src/game/story.js'); window.__nm = []; const B = await import('/src/ui/bus.js'); B.on('dialog', (d) => window.__nm.push([d.who, S.npcName('first')])); return S.npcName('first'); });
+    await A5.use(pg, "z.interact.find((i) => i.kind === 'firstFire')");
+    const named = await A5.until(pg, () => { const G = window.__G, F = G.hero.flags; return F.herFire && F.nameBack && F.nameCard6 && !G.cine && window.__dlg.includes('d.glaukos.e3') && !document.querySelector('#dialog:not([hidden])'); }, 240000);
+    const s3 = await ev(async () => { const S = await import('/src/game/story.js'); const z = window.__G.zone; return { dlg: window.__dlg.filter((k) => /firstlit|first\.|name6|rest6|glaukos\.e/.test(k)), says: window.__says.filter((k) => /skotos6\.n|sink6|gate6/.test(k)), big: window.__toasts.filter((t) => /καίει ξανά/.test(t)).length, name: S.npcName('first'), hidden: window.__nm.slice(0, 3).map((x) => x[1]), q: S.questText(), warm: +(z.act6.ring?.userData.warm ?? -1).toFixed(2), card: !!document.getElementById('titlecard') || true }; });
+    const want3 = ['d.firstlit', 'd.first.1', 'd.first.2', 'd.name6', 'd.first.3', 'd.first.4', 'd.glaukos.e1', 'd.first.5', 'd.rest6', 'd.first.6', 'd.rest6b', 'd.first.7', 'd.glaukos.e2', 'd.rest6c', 'd.glaukos.e3'];
+    beat('the naming: every line in order; the Skotos n1-n3 and its sleep; «the First» until her name is said, then Φέρουσα; the big toast; q38b; the card; the ring warm; e3', named && want3.every((k, i) => (s3.dlg[i] || '').startsWith(k)) && s3.says.join() === 'd.skotos6.n1,d.skotos6.n2,d.skotos6.n3,d.sink6,d.gate6' && s3.big === 1 && s3.name === 'Φέρουσα' && s3.hidden.every((n) => n !== 'Φέρουσα') && nm0 !== 'Φέρουσα' && s3.warm >= 0.99, { nm0, ...s3 });
+    await shot();
+    // 4. the Gate up; home
+    await A5.use(pg, "z.interact.find((i) => i.kind === 'exit' && i.to === 'town')");
+    const up = await pg.waitForFunction(() => window.__G.zone?.id === 'town' && !document.getElementById('fade').classList.contains('on'), null, { timeout: 240000 }).then(() => true, () => false);
+    const s4 = await ev(() => { const G = window.__G, s = G.zone.L.spots.npcs.wayfarer, p = G.player; return { gate: !!G.hero.flags.homeGate, d: +Math.hypot(p.x - s.x, p.z - s.z).toFixed(2) }; });
+    beat('the Gate up: homeGate; she comes out within 3 m of Isarn\'s staff', up && s4.gate && s4.d <= 3, s4);
+    const panel = await A5.until(pg, () => window.__G.panel === 'act', 240000);
+    const s5 = await ev(() => { const G = window.__G, h = G.hero; return { act6: h.act6, q: h.quest, flag: !!h.flags.act6, dlg: window.__dlg.filter((k) => /halda\.gate|child\.7|halda\.north/.test(k)), says: window.__says.filter((k) => /peaks|answer6/.test(k)), far: [7, 8, 9, 10, 11, 12].map((i) => !!G.zone.town?.far?.[i]), head: document.querySelector('.act-h')?.textContent }; });
+    beat('home: Halda, the child, «look north»; the six peaks one by one; the last line; Act VI\'s panel (act6, q39)', panel && s5.act6 >= 0 && s5.q === 39 && s5.flag && s5.dlg.length === 3 && s5.says.join() === 'd.peaks.1,d.peaks.2,d.answer6.1,d.answer6.2,d.answer6.3' && s5.far.every(Boolean) && /VI/.test(s5.head || ''), s5);
+    await pg.click('[data-a="close"]').catch(() => {});
+    const boon = await A5.until(pg, () => !!document.querySelector('[data-a="boon:bearer"]'), 60000);
+    await pg.click('[data-a="boon:bearer"]').catch(() => {});
+    const s6 = await ev(() => ({ boons: window.__G.hero.boons.slice(), told: window.__toasts.some((t) => /Σκάλα/.test(t)) }));
+    beat('the sixth blessing offered and taken; Keyx\'s lantern told once', boon && s6.boons[5] === 'bearer', s6);
+    // 5. the Landing
+    await A5.travel(pg, 'coast', 'coast');
+    const land = await A5.until(pg, () => window.__G.hero.flags.landing6 && !window.__G.cine && window.__says.includes('d.alk.l6.3'), 120000);
+    const s7 = await ev(() => ({ dlg: window.__dlg.filter((k) => /alk\.l6/.test(k)) }));
+    await A5.use(pg, 'z.p5.alkyone.it'); await pg.waitForTimeout(600);
+    const after = await ev(() => window.__dlg.includes('d.alk.after6'));
+    beat('the Landing: landing6; Alkyone l6.1, l6.2, the bird (l6.3); her word after (after6)', land && s7.dlg.length === 2 && after, { ...s7, after });
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
+  } },
   // the Drained Sea's story (q33b-q36): the arrival and Glaukos's teach; the three hearths lit out of order (2, 1, 3) and
   // the First's memories in count order; the Gates' word; the four lost lights (the Nine's last), the Sailor (asked, then
   // named by Glaukos), Asger's brazier and his pane melted; Keyx's lantern and its memory; the Ketos woken by the third

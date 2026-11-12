@@ -66,7 +66,7 @@ export function titleCamera(dt) {
 
 // ---------- screens ----------
 // once any hero has named the dark (Act V done), the title says so
-const sub5 = () => (G.save?.heroes || []).some((h) => (h.act5 ?? -1) >= 0) ? 'game.sub5' : 'game.sub';
+const sub5 = () => (G.save?.heroes || []).some((h) => (h.act6 ?? -1) >= 0) ? 'game.sub6' : (G.save?.heroes || []).some((h) => (h.act5 ?? -1) >= 0) ? 'game.sub5' : 'game.sub';
 function screen(html, clear) { const s = $('screen'); s.className = clear ? 'clear' : ''; s.innerHTML = html; s.hidden = false; return s; }
 export function hideScreen() { $('screen').hidden = true; $('screen').innerHTML = ''; }
 

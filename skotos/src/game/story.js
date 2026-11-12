@@ -4,26 +4,27 @@ import { G, later } from './state.js';
 import { on, emit } from '../ui/bus.js';
 import { t, has } from '../i18n/i18n.js';
 import { R, addLight, shake, setAtmosphere } from '../gfx/gfx.js';
-import { glowBurst, ring, P, setEmitters, explosion, fireStream, puff, sparks, splash } from '../gfx/fx.js';
+import { glowBurst, ring, P, setEmitters, explosion, fireStream, puff, sparks, splash, teleCircle } from '../gfx/fx.js';
 import { dropShard } from './pickups.js';
 import { writeSave } from './save.js';
 import Audio from '../audio/audio.js';
 import { grantBuff, refreshStats } from './stats.js';
 import { spawnMonster, spawnNpc, ghostly, memoryLook } from './actors.js';
-import { BOONS } from './data.js';
-import { NET } from '../net/state.js';
+import { BOONS, DIFFS, monsterDmg, actHaz } from './data.js';
+import { damage } from './combat.js';
+import { NET, heroes } from '../net/state.js';
 import { ATMOS } from '../world/atmos.js';
 import { SEA, setFreezeAll, freezeWave, setShade } from '../world/sea.js';
 import { tex } from '../gfx/textures.js';
 import { titleCard } from '../ui/overlay.js';
 import { act3Prop, act4Prop } from '../world/build.js';
 import { loadFolk } from '../gfx/people.js';
-import { addLightPool, removeLightPool, cradlePoint, setNamesRoll } from './light.js';
+import { addLightPool, removeLightPool, cradlePoint, setNamesRoll, fireDrain, fireFill, fireRelight, FIRE } from './light.js';
 import { angleTo } from '../core/util.js';
 import { openDeepGate, FAR_BEACONS, farFire, openRootGate, witherWall, firstAutumn, growProp, zoneEmitters, setFar, setBeacon, townFires, townPresence, walkTo, stopWalk, vanish, release,
   act4Presence, isarnLantern, setLastLamp, openAnvilGate, meltPlug, forgeCold, bellowsDone, echoAt,
   act5Presence, people5, scene5, npc5, spawnNpc5, light5, iceMemOf, ICE_WHO, LIGHTS5, touch, spawnBoss, checkpoint5,
-  act6Presence, light6, checkpoint6 } from './world.js';
+  act6Presence, light6, checkpoint6, openings6 } from './world.js';
 
 // Act III's counters: the three verses of the Long Sorrow, the three thorn walls of the Heartwood
 const STORY_TEARS = ['planting', 'sorrow', 'breaking'];
@@ -53,7 +54,16 @@ export function questText() {
 // remembered in the fight (G.selnaBack, runtime) and for good once the dark is named (flags.selnaBack, saved with skotosDown)
 const forgotten = () => { const F = G.hero?.flags || {}; return !!F.frozen && !F.selnaBack && !G.selnaBack; };
 const selnaName = () => (forgotten() ? '…' : t('npc.selna'));
-export const npcName = (k) => (k === 'selna' && forgotten() ? '…' : t('npc.' + k));
+export const npcName = (k) => {
+  const F = G.hero?.flags || {};
+  if (k === 'selna' && forgotten()) return '…';
+  // (Act VI: Leif «…» until his father says his name; Asger a pilgrim until his brazier burns; the First by her name once
+  // it is given back)
+  if (k === 'leif' && !F.leifName) return '…';
+  if (k === 'asger' && !F.asgerRest && !G.asgerLit) return t('npc.pilgrim');
+  if ((k === 'first' || k === 'firstDeep') && F.nameBack && !G.nameHide) return t('npc.first.named');
+  return t('npc.' + (k === 'firstDeep' ? 'first' : k));
+};
 function setQuest(n, quiet) {
   if (G.hero.quest >= n) return;
   G.hero.quest = n;
@@ -352,7 +362,7 @@ on('kill', (a) => {
   if (a.kind === 'skotos' && G.zone.id === 'farlight') skotosDown(G.zone, a);
   // Act VI's bosses (stage C's part; stage D adds their lines, the lantern in the mud, the cines): the flag first, saved
   if (a.kind === 'ketos' && G.zone.id === 'drained') { boss6Down(G.zone, a, 'ketosDown'); if (!a.echo) ketosDown(G.zone, a); }
-  if (a.def?.legKey === 'shade' && G.zone.id === 'bottom') boss6Down(G.zone, a, 'shadeDown');
+  if (a.def?.legKey === 'shade' && G.zone.id === 'bottom') { boss6Down(G.zone, a, 'shadeDown'); if (!a.echo) shadeEnd(G.zone, a); }
   if (G.gate && G.zone.id === 'gate') emit('gateKill', a);
 });
 // Act IV's bosses take what they called up with them: Ivar's Lampless kneel and fade, Karthax's raised host falls back into
@@ -539,7 +549,7 @@ export function offerBoons() {
   h.boons ||= [];
   // never over a cinematic or another panel: try again in a moment
   if (G.mode !== 'play' || G.panel) { later(2, offerBoons); return false; }
-  for (const act of [1, 2, 3, 4, 5]) {
+  for (const act of [1, 2, 3, 4, 5, 6]) {
     const done = act === 1 ? h.act1 >= 0 : (h['act' + act] ?? -1) >= 0;
     if (done && !h.boons[act - 1] && BOONS[act]) { emit('openPanel', 'boon', { act }); return true; }
   }
@@ -570,7 +580,7 @@ function actComplete(act) {
   writeSave();
   // the new fire has its own music: the lantern's motif, slow, with the village's tune as each fire answers
   // and the sea's: the sea-light's motif answered by the lantern's
-  Audio.music(act === 4 ? 'newfire' : act === 5 ? 'sealit' : 'victory');
+  Audio.music(act === 4 ? 'newfire' : act === 5 ? 'sealit' : act === 6 ? 'pherousa' : 'victory');
   emit('openPanel', 'act');
 }
 // ---------- Act IV: the Ashen Forge ----------
@@ -1880,7 +1890,15 @@ const lampsOut6 = () => [0, 1, 2].filter((k) => G.hero.flags['blackLamp' + k]).l
 function news6(kind, a, zid) {
   const F = G.hero.flags;
   if (!F.call6) return null;
+  if (zid === 'bottom') {
+    if (kind === 'glaukos') return !F.glaukosB6;
+    return null;
+  }
+  if (zid === 'coast' && kind === 'alkyone' && F.act6 && F.keyxLamp && !F.landing6) return true;
+  if (zid === 'halls' && kind === 'brokka') return (!F.herFire && !F.brokkaV5) || (!!F.herFire && !F.brokkaV6);
+  if (zid === 'weep' && kind === 'elati' && F.herFire && !F.elatiV5) return true;
   if (zid === 'town') {
+    if (kind === 'villager' && (a?.bark || 0) % 4 === 2 && F.leifAxe && !F.leifName) return true;
     if (kind === 'tamarisk' && !F.tam6) return true;
     if (kind === 'smith' && !F.herFire) return !F.haldaV6 || (!!F.tam6 && !F.haldaCall6);
     if (kind === 'healer' && !F.herFire) return !F.elianteV6;
@@ -1919,8 +1937,33 @@ function talk6(kind, a) {
     }
     if (kind === 'child') { emit('dialog', { who: 'child', lines: ['d.child.6'] }); return true; }
     // (the villager of Act I's third bark: a son gone for wood, whose name is going; Leif's thread)
-    if (kind === 'villager' && (a?.bark || 0) % 4 === 2 && !F.leifName) { emit('dialog', { who: 'villager', lines: ['d.v.son1'] }); return true; }
+    if (kind === 'villager' && (a?.bark || 0) % 4 === 2 && !F.leifName && !F.leifAxe) { emit('dialog', { who: 'villager', lines: ['d.v.son1'] }); return true; }
   }
+  // (Leif's father, with the axe: his son's name comes back; leifName, among the Lost)
+  if (zid === 'town' && kind === 'villager' && (a?.bark || 0) % 4 === 2 && F.leifAxe && !F.leifName) {
+    emit('dialog', { who: 'villager', lines: ['d.v.son2', 'd.v.son3'], end: () => { F.leifName = true; if (!(F.lost6 ||= []).includes('leif')) F.lost6.push('leif'); writeSave(); town6(z); emit('quest'); lostToast(); } });
+    return true;
+  }
+  if (zid === 'town' && kind === 'leif' && F.leifHome) { emit('dialog', { who: 'leif', lines: ['d.leif.bark'] }); return true; }
+  if (zid === 'town' && F.herFire) {
+    // (the forgetting undone: the stars, the gate's warmth; Isarn's staff; the garland glade)
+    if (kind === 'smith' && (!F.haldaV7 || (F.homeGate && !F.haldaV8))) { const key = !F.haldaV7 ? 'd.halda6.v2' : 'd.halda.v6'; emit('dialog', { who: 'smith', lines: [key], end: () => { F[key === 'd.halda6.v2' ? 'haldaV7' : 'haldaV8'] = true; writeSave(); emit('openPanel', 'smith'); } }); return true; }
+    if (kind === 'healer' && (!F.elianteV7 || (F.garland6 && !F.elianteV8))) { heal(); const key = !F.elianteV7 ? 'd.elianthe6.v2' : 'd.elianthe.v6'; emit('dialog', { who: 'healer', lines: [key], end: () => { F[key === 'd.elianthe6.v2' ? 'elianteV7' : 'elianteV8'] = true; writeSave(); emit('openPanel', 'vendor'); } }); return true; }
+    if (kind === 'child' && F.act6) { emit('dialog', { who: 'child', lines: ['d.child.bark6'] }); return true; }
+  }
+  if (zid === 'halls' && kind === 'brokka' && ((!F.herFire && !F.brokkaV5) || (F.herFire && !F.brokkaV6))) { const key = F.herFire ? 'd.brokka.v6' : 'd.brokka.v5'; emit('dialog', { who: 'brokka', lines: [key], end: () => { F[F.herFire ? 'brokkaV6' : 'brokkaV5'] = true; writeSave(); emit('openPanel', 'vendor', { npc: 'brokka' }); } }); return true; }
+  if (zid === 'weep' && kind === 'elati' && F.herFire && !F.elatiV5) { emit('dialog', { who: 'elati', lines: [rl('d.elati.v5')], end: () => { F.elatiV5 = true; writeSave(); emit('openPanel', 'vendor', { npc: 'elati' }); } }); return true; }
+  if (zid === 'weep' && kind === 'tamarisk' && F.act6) { emit('dialog', { who: 'tamarisk', lines: [rl('d.tam6.home')], end: () => { F.tamHome6 = true; writeSave(); } }); return true; }
+  if (zid === 'coast' && kind === 'alkyone' && F.landing6) { emit('dialog', { who: 'alkyone', lines: ['d.alk.after6'] }); return true; }
+  if (zid === 'bottom') {
+    if (kind === 'glaukos') {
+      if (!F.glaukosB6) { glaukosFoot(z); return true; }
+      emit('dialog', { who: 'glaukos', lines: [lampsOut6() >= 3 && !F.shadeDown ? 'd.glaukos.b4' : 'd.glaukos.b3'], end: shopOf('glaukos') });
+      return true;
+    }
+    if (kind === 'leif') { emit('dialog', { who: 'leif', lines: [F.leifAxe ? 'd.leif.2' : 'd.leif.3'] }); return true; }
+  }
+  if (zid === 'drained' && kind === 'glaukos' && F.act6) { emit('dialog', { who: 'glaukos', lines: ['d.glaukos.again6'], end: shopOf('glaukos') }); return true; }
   if (zid === 'drained') {
     if (kind === 'tamarisk') { heal(); emit('dialog', { who: 'tamarisk', lines: [rl(F.tamV6 ? 'd.tam.again6' : 'd.tam.v1')], end: () => { F.tamV6 = true; shopOf('tamarisk')(); } }); return true; }
     if (kind === 'glaukos') {
@@ -2015,6 +2058,9 @@ export function town6(z, now) {
   if (!cold && em) z.emit.splice(z.emit.indexOf(em), 1);
   if (G.zone === z) setEmitters(zoneEmitters(z));
   if (now) { glowBurst(s.x, 1.7, s.z, 0xe8f4ff, 18, 1.6, 0.2, 0.9); puff(s.x, 0.4, s.z, 0xdfeeff, 10); }
+  // (Leif's father: «Δώσ' του το τσεκούρι» while she carries the axe)
+  const dad = z.interact.find((i) => i.kind === 'npc' && i.npc === 'villager' && (i.actor?.bark || 0) % 4 === 2);
+  if (dad) dad.prompt = F.leifAxe && !F.leifName ? 'leif.give' : 'talk';
 }
 // Selna's look down: straight through the clear ice, a small warm glow very deep, and a shadow the size of a ship over it
 function lookDown(z, done) {
@@ -2048,11 +2094,26 @@ function enter6(id, z) {
   if (F.call6 && h.quest < 32) setQuest(32, true);
   if (F.tam6 && h.quest < 33) setQuest(33, true);
   if (!z) return;
+  if (F.ketosDown && h.quest < 36) setQuest(36, true);
+  if (F.bottomSeen && h.quest < 36) setQuest(36, true);
+  if (F.blackLamp0 && F.blackLamp1 && F.blackLamp2 && h.quest < 37) setQuest(37, true);
+  if (F.shadeDown && h.quest < 38) setQuest(38, true);
   if (id === 'town') {
     if (!F.call6) later(2, () => hook6(z));
     town6(z);
+    // home through the Gate (homeGate saved as she took it): the cine and the act's end, again until it closes
+    if (F.homeGate && (h.act6 ?? -1) < 0) later(1, () => homeCine(z));
+    else if (F.leifName && F.act6 && !F.leifHome) later(2, () => leifHome(z));
   }
+  if (id === 'coast' && F.act6 && F.keyxLamp && !F.landing6) later(2, () => landing6(z));
   if (id === 'farlight') act6Presence(z);
+  if (id === 'bottom') {
+    if (!F.bottomSeen) later(1.2, () => bottomArrival(z));
+    else if (!F.glaukosB6) later(2, () => { if (G.zone === z && !busy()) glaukosFoot(z); });
+    // (her fire lit and the card not seen: the card again, then the ring warm)
+    else if (F.herFire && !F.nameCard6) later(1.5, () => { if (G.zone === z && !busy()) nameCard6(z); });
+    watch6(z);
+  }
   if (id === 'drained') {
     if (F.teach6 && h.quest < 34) setQuest(34, true);
     if (F.gates6 && h.quest < 35) setQuest(35, true);
@@ -2275,6 +2336,305 @@ function ketosDown(z, a) {
     } })
   });
 }
+// ---------- Act VI, the Bottom (q36-q38b) ----------
+// the arrival: places you know, black and wet; then Glaukos at the Well's Foot (b1, b2, b3, b5)
+function bottomArrival(z) {
+  const F = G.hero.flags;
+  if (F.bottomSeen || z.arriving || G.zone !== z) return;
+  if (busy()) { later(1.5, () => bottomArrival(z)); return; }
+  z.arriving = true; F.bottomSeen = true; writeSave();
+  const c = z.L.spots.camp;
+  emit('cine', { x: c.x, z: c.z + 7, dur: 9.5, zoom: 0.9, pitch: 0.25, steps: [[0.8, () => emit('say', 'd.bottom.1')]], end: () => { z.arriving = false; glaukosFoot(z); } });
+}
+function glaukosFoot(z) {
+  const F = G.hero.flags;
+  if (F.glaukosB6 || G.zone !== z) return;
+  emit('dialog', { who: 'glaukos', lines: ['d.glaukos.b1', 'd.glaukos.b2', 'd.glaukos.b3', 'd.glaukos.b5'], end: () => { F.glaukosB6 = true; writeSave(); setQuest(36, true); emit('quest'); } });
+}
+// what she comes near: Keyx's hail, the garland glade (a light poll while she is in the zone; nothing on a guest's page)
+function watch6(z) {
+  if (z.watch6 || G.zone !== z) return;
+  z.watch6 = true;
+  const step = () => {
+    if (G.zone !== z) { z.watch6 = false; return; }
+    const F = G.hero.flags, pl = G.player, S = z.L.spots;
+    if (pl && !pl.dead && G.mode === 'play' && !busy() && !G.hero.__real) {
+      if (S.keyx && !F.blackLamp2 && !z.keyxHail && Math.hypot(pl.x - S.keyx.x, pl.z - S.keyx.z) < 7) { z.keyxHail = true; emit('dialog', { who: 'keyx', lines: ['d.keyx6.0'] }); }
+      if (S.glade && !F.garland6 && Math.hypot(pl.x - S.glade.x, pl.z - S.glade.z) < (S.glade.r || 5)) { F.garland6 = true; writeSave(); emit('toast', t('d.garland.1'), 'quest'); }
+    }
+    later(0.5, step);
+  };
+  step();
+}
+// a black lamp put out: a channel of HAZ6.lampT s from the Cradle (blows worth a tenth of her life break it), its Black
+// Flare every 4 s of channelling (a dark circle of r 4: 1.2 s, then 0.8x a blow, Cold +15, her ring -1 m); Keyx's by
+// giving him his lantern
+function lampChannel(z, it) {
+  if (!it.lit || G.mode !== 'play' || G.zone !== z) return;
+  const dur = actHaz(6, G.hero.diff).lampT ?? 2, fa = it.mesh?.userData.flameAt;
+  it.flareT ??= 0.6;
+  touch(dur, it, fa?.y ?? 2.05, () => lampOut(z, it), { tough: true, take: true, tick: (dt) => { if ((it.flareT -= dt) <= 0) { it.flareT = 4; blackFlare(z, it); } } });
+}
+on('blackLamp', (it, z) => lampChannel(z, it));
+on('keyxGive', (it, z) => lampChannel(z, it));
+function blackFlare(z, it) {
+  const x = it.x, zz = it.z, R0 = 4;
+  teleCircle(x, zz, R0, 1.2, 'dark');
+  Audio.sfx('iceSing', { x, z: zz, vol: 0.5, pitch: 0.5 });
+  it.mesh?.userData.flare?.(1);
+  later(1.2, () => {
+    it.mesh?.userData.flare?.(0);
+    if (G.zone !== z) return;
+    const D = DIFFS[G.hero.diff] || DIFFS[1], dmg = monsterDmg(z.level || 37) * (D.dmg ?? 1) * 0.8;
+    for (const h of heroes()) if (!h.dead && Math.hypot(h.x - x, h.z - zz) < R0 + (h.radius || 0.5) * 0.5) damage(null, h, dmg, { cold: 15 });
+    const pl = G.player; if (pl && !pl.dead && Math.hypot(pl.x - x, pl.z - zz) < R0 + 0.25) fireDrain(1, { src: 'flare' });
+    puff(x, 0.4, zz, 0x1a1028, 12, 1.4, 1.2, 1);
+  });
+}
+function lampOut(z, it) {
+  const F = G.hero.flags, k = it.k;
+  if (F['blackLamp' + k]) return;
+  // (Keyx's: blackLamp2 and keyxFreed together, first)
+  F['blackLamp' + k] = true; if (k === 2) F.keyxFreed = true;
+  writeSave();
+  it.lit = false; it.used = true; it.mesh?.userData.setLit?.(false);
+  // the light it drank comes back: the Cradle full in a white burst; the shadow-wall thins away over 2 s and the way opens
+  const pl = G.player;
+  fireRelight(); fireFill(99);
+  if (pl) { glowBurst(pl.x, 1.2, pl.z, 0xffffff, 40, 3.5, 0.3, 0.9); ring(pl.x, pl.z, 3.5, 0xf4f0ff, 0.8); }
+  Audio.sting('lantern'); Audio.sfx('lampLight', { x: it.x, z: it.z, pitch: 0.6 });
+  const wl = (z.act6.walls || []).find((w) => w.k === k);
+  // (the thinning is the prop's tween, drawn only when the frame is; the way opens on the story's clock whatever is drawn)
+  if (wl?.mesh?.visible && wl.mesh.userData.thin) { wl.mesh.userData.thinning = true; wl.mesh.userData.thin(2); }
+  later(2.05, () => { if (wl?.mesh) { wl.mesh.visible = false; wl.mesh.userData.open = true; wl.mesh.userData.thinning = false; } openings6(z); });
+  const n = lampsOut6();
+  emit('toast', t('q.lampOut', n), 'quest'); emit('quest');
+  if (k === 2) keyxScene(z, () => lampAnswer(z, n)); else lampAnswer(z, n);
+}
+// the Skotos answers each, in the order of count; after the third Glaukos, far off at the Well's Foot (q37)
+function lampAnswer(z, n) {
+  later(1.4, () => {
+    if (G.zone !== z) { if (n >= 3) setQuest(37, true); return; }
+    skotosSay('d.skotos6.l' + Math.min(3, n));
+    if (n >= 3) later(3.6, () => { emit('say', 'd.glaukos.b4'); setQuest(37); });
+  });
+}
+// Keyx takes his lantern; the black lamp falls from his hand; he walks into the black water, and it lets him through
+function keyxScene(z, done) {
+  const S = z.L.spots.keyx, a = scene5(z, 'keyx');
+  let fin = false;
+  emit('cine', {
+    x: S.x, z: S.z + 6, dur: 3, zoom: 1.3, pitch: 0.45, until: () => fin,
+    steps: [[0.4, () => emit('dialog', { who: 'keyx', lines: [['d.keyx6.1', 'narrator'], ['d.keyx6.2', 'keyx'], ['d.keyx6.3', 'keyx'], ['d.keyx6.4', 'keyx'], ['d.keyx6.5', 'narrator']], end: () => {
+      const p = S.pool || S;
+      if (a) { a.still = false; walkTo(a, p.x, p.z, 1.0, () => vanish(z, a, 2.2, () => { scene5(z, 'keyx', false); })); }
+      later(2.4, () => { fin = true; });
+    } })]],
+    end: () => done?.()
+  });
+}
+// Leif's dead fire lit from the Cradle (leifLit, saved at once: a true lamp of r 4, every page and after a reload); his
+// three lines; his axe to carry up (leifAxe); his father says his name in Whitecliff (leifName)
+on('leifFire', (it, z) => {
+  const F = G.hero.flags;
+  if (it.lit || F.leifLit || G.mode !== 'play' || G.zone !== z) return;
+  touch(1, it, it.mesh?.userData.fireY ?? 0.5, () => {
+    F.leifLit = true; writeSave();
+    light6(z, it, true); it.used = true;
+    Audio.sfx('lampLight', { x: it.x, z: it.z }); glowBurst(it.x, 0.6, it.z, 0xffb050, 22, 2.2, 0.3, 0.7);
+    people5(z);
+    later(0.8, () => emit('dialog', { who: 'leif', lines: ['d.leif.1', 'd.leif.2', 'd.leif.3'], end: () => people6(z) }));
+  });
+});
+on('leifAxe', (it, z) => {
+  const F = G.hero.flags;
+  if (F.leifAxe || G.zone !== z) return;
+  F.leifAxe = true; writeSave();
+  const i = z.interact.indexOf(it); if (i >= 0) z.interact.splice(i, 1);
+  Audio.sfx('pickup'); glowBurst(it.x, 0.8, it.z, 0xffd8a0, 14, 1.6, 0.2, 0.6);
+  emit('quest');
+});
+// the ember in the ice: listened to, never named; it goes out like red-hot iron in water (ember6)
+on('ember6', (it, z) => {
+  const F = G.hero.flags;
+  if (F.ember6 || F.herFire || it.used || G.zone !== z) return;
+  it.used = true;
+  const pl = G.player; if (pl) { pl.rot = angleTo(pl.x, pl.z, it.x, it.z); pl.avatar?.play('interact', 1); }
+  later(1, () => emit('dialog', { who: 'narrator', lines: [['d.ember.n1', 'narrator'], ['d.ember.n2', 'narrator'], ['d.ember.n3', 'narrator']], end: () => {
+    F.ember6 = true; writeSave();
+    const m = z.act6.ember;
+    if (m?.userData.setGlow) { let k = 1; const st = () => { k = Math.max(0, k - 0.05); m.userData.setGlow(k); if (k > 0 && G.zone === z) later(0.05, st); }; st(); }
+    puff(it.x, 1.2, it.z, 0xdfe6ea, 16, 1.6, 1.2, 1); Audio.sfx('steam', { x: it.x, z: it.z });
+  } }));
+});
+// ---------- the Shade of the Gate ----------
+// its waking (shadeWake saved first): the lamps of the Lost round the rim, the First called and not answering, her shadow
+// standing up as the Barrow Lord; Glaukos from the Stair; then form 1's own line. A retry: the line only
+on('shadeWake', (b) => {
+  const z = G.zone; if (z?.id !== 'bottom' || !b || b.echo) return;
+  const F = G.hero.flags, H = z.L.spots.hearth;
+  if (F.shadeWake) { later(0.4, () => emit('say', 'd.lord')); return; }
+  F.shadeWake = true; writeSave();
+  const lit = (F.lost6 || []).length > 0;
+  emit('cine', {
+    x: H.fire.x, z: H.fire.z + 9, dur: lit ? 16 : 12.5, zoom: 1.15, pitch: 0.35,
+    steps: [
+      ...(lit ? [[0.6, () => emit('say', 'd.shade.c2')]] : []),
+      [lit ? 4.2 : 0.6, () => emit('say', 'd.shade.c1')],
+      [lit ? 7.8 : 4.2, () => { emit('say', 'd.shade.0'); Audio.sfx('wraithWail', { vol: 0.7 }); }],
+      [lit ? 12.2 : 8.6, () => emit('say', 'd.glaukos.s0')]
+    ],
+    end: () => later(0.3, () => emit('say', 'd.lord'))
+  });
+});
+on('shadeForm', (a, form) => {
+  if (!a || a.echo || G.zone?.id !== 'bottom') return;
+  if (form === 2) { emit('say', 'd.weaver'); later(2.6, () => emit('say', 'd.glaukos.s1')); }
+  else if (form === 3) emit('say', 'd.glaukos.s2');
+  else if (form === 4) { emit('say', 'd.glaukos.s3'); hint6('hint.shadow'); }
+});
+// its end (shadeDown saved first, boss6Down): the shadow back at her feet, a name in her ear not said yet; the Lost's
+// lamps flare once round the rim; q38, the relight offered at her stone
+function shadeEnd(z, a) {
+  const F = G.hero.flags, H = z.L.spots.hearth;
+  emit('cine', {
+    x: H.fire.x, z: H.fire.z + 8, dur: 8.6, zoom: 1.2, pitch: 0.35,
+    steps: [
+      [0.6, () => emit('say', 'd.shade.die1')],
+      [4.4, () => { emit('say', 'd.shade.die2'); for (const n of z.act6.shade?.niches || []) if (n.lit) { glowBurst(n.x, 1.3, n.z, 0xffd090, 12, 1.4, 0.2, 0.6); n.mesh?.userData.flash?.(1); } }]
+    ],
+    end: () => { emit('toast', t('q.nameHeld', '…'), 'quest'); setQuest(38); people6(z); }
+  });
+}
+// ---------- her fire and her name (naming6) ----------
+// the relight, 2 s at her stone (herFire and nameBack saved first); her name said in the light; the Skotos asks it, cannot
+// hold it, and sleeps; rest; Glaukos comes down the Stair. Then the card, and the Gate ring warm (q38b)
+on('firstFire', (it, z) => {
+  const F = G.hero.flags;
+  if (F.herFire || !F.shadeDown || G.mode !== 'play' || G.zone !== z) return;
+  touch(2, it, 0.9, () => naming6(z));
+});
+function naming6(z) {
+  const F = G.hero.flags;
+  if (F.herFire || z.naming || G.zone !== z) return;
+  F.herFire = true; F.nameBack = true; writeSave();
+  z.naming = true; G.nameHide = true;
+  const H = z.L.spots.hearth, fx = H.fire.x, fz = H.fire.z, pool = (H.pools || [])[0] || { x: fx - 8, z: fz - 2 }, A = z.act6, first = scene5(z, 'first6');
+  const i = z.interact.findIndex((q) => q.kind === 'firstFire'); if (i >= 0) z.interact.splice(i, 1);
+  let fin = false, gl = null;
+  const say6 = (k) => emit('say', k);
+  const D = (lines, end) => emit('dialog', { who: 'first', lines, end });
+  const flare = (k) => A.centre?.userData.flash?.(k);
+  const skotosUp = () => { glowBurst(pool.x, 0.4, pool.z, 0x1a1030, 40, 4, 0.5, 1.2); ring(pool.x, pool.z, 4, 0x8a70ff, 1); splash(pool.x, pool.z, 3); shake(0.5); Audio.sfx('iceSing', { vol: 0.9, pitch: 0.45 }); if (G.cine) Object.assign(G.cine, { x: (fx + pool.x) / 2, z: (fz + pool.z) / 2 + 7 }); };
+  const skotosDownNow = () => { ring(pool.x, pool.z, 5, 0xfff0c0, 1.2); glowBurst(fx, 1.4, fz, 0xfff0c0, 50, 4, 0.4, 1.3); flare(1.4); Audio.sting('sealight'); if (G.cine) Object.assign(G.cine, { x: fx, z: fz + 7 }); };
+  const part4 = () => {
+    // Glaukos down the Stair, feeling the warmth
+    const ft = z.L.spots.stair?.foot || { x: fx, z: fz - 12 }, s0 = z.map.nearestFloor(ft.x, ft.z, 3), to = z.map.nearestFloor(fx + 2.4, fz - 1.8, 3);
+    try { gl = spawnNpc5('glaukos', s0.x, s0.z, 0); z.actors.push(gl); R.scene.add(gl.avatar.group); } catch (e) { gl = null; }
+    const talk = () => emit('dialog', { who: 'glaukos', lines: [['d.glaukos.e1', 'glaukos'], [rl('d.first.5'), 'first'], ['d.rest6', 'narrator'], ['d.first.6', 'first'], ['d.rest6b', 'narrator'], ['d.first.7', 'first'], ['d.glaukos.e2', 'glaukos'], ['d.rest6c', 'narrator']], end: () => {
+      if (first?.avatar) first.avatar.play('lie', 1, { loop: true, fade: 0.8 });
+      later(1.2, () => { fin = true; });
+    } });
+    if (gl) walkTo(gl, to.x, to.z, 1.2, () => { gl.home = gl.rot = angleTo(gl.x, gl.z, fx, fz); talk(); }); else talk();
+  };
+  emit('cine', {
+    x: fx, z: fz + 7, dur: 4, zoom: 1.25, pitch: 0.3, until: () => fin,
+    steps: [
+      [0.3, () => { flare(0.8); glowBurst(fx, 1.0, fz, 0xffb050, 30, 2.5, 0.3, 0.9); Audio.sfx('lampLight', { x: fx, z: fz }); }],
+      [1.0, () => emit('dialog', { who: 'narrator', lines: [['d.firstlit', 'narrator']], end: () => {
+        // she lifts her head; the black ice falls from her face as the fire grows, and it begins to tremble
+        if (first?.avatar) first.avatar.play('sit', 1, { loop: true, fade: 0.8 });
+        if (first) puff(first.x, 0.8, first.z, 0x9ab8d0, 14, 1.2, 0.8, 1);
+        later(1.2, () => D([rl('d.first.1')], () => { skotosUp(); later(0.8, () => skotosSay('d.skotos6.n1')); later(4.4, () => D(['d.first.2', ['d.name6', 'narrator']], () => {
+          G.nameHide = false; emit('quest');
+          D(['d.first.3'], () => { skotosSay('d.skotos6.n2'); later(3.6, () => skotosSay('d.skotos6.n3')); later(6.6, () => { say6('d.sink6'); skotosDownNow(); }); later(10, () => D(['d.first.4'], part4)); });
+        })); }));
+      } })]
+    ],
+    end: () => {
+      z.naming = false; G.nameHide = false;
+      emit('toast', t('q.herFire'), 'big');
+      emit('quest');
+      nameCard6(z);
+    }
+  });
+}
+// the name card (black, and her name in white where the title stood), once; then the Gate ring wakes warm and Glaukos goes
+// up by the rope (e3)
+function nameCard6(z) {
+  const F = G.hero.flags;
+  if (F.nameCard6) { gateWarm(z); return; }
+  emit('cine', { x: G.player.x, z: G.player.z, dur: 5.2, zoom: 1, steps: [[0.1, () => { Audio.sting('naming'); titleCard(3, null, t('npc.first.named')); }]], end: () => { F.nameCard6 = true; writeSave(); gateWarm(z); } });
+}
+function gateWarm(z) {
+  const H = z.L.spots.hearth, rg = z.act6.ring;
+  if (G.zone !== z) return;
+  if (rg?.userData.setWarm) { let k = rg.userData.warm || 0; const st = () => { k = Math.min(1, k + 0.03); rg.userData.setWarm(k); if (k < 1 && G.zone === z) later(0.05, st); }; st(); }
+  for (let n = 0; n < 30; n++) P({ x: H.ring.x + (Math.random() - 0.5) * 2.4, y: 0.3, z: H.ring.z + (Math.random() - 0.5) * 2.4, vy: 1 + Math.random(), life: 2.4, size: 0.08, size1: 0.02, color: 0xffb060 });
+  later(1.2, () => {
+    if (G.zone !== z) return;
+    emit('say', 'd.gate6');
+    const gl = z.actors.find((a) => a.npc === 'glaukos' && !a.removed);
+    later(4, () => emit('dialog', { who: 'glaukos', lines: ['d.glaukos.e3'], end: () => {
+      const ft = z.L.spots.stair?.foot;
+      if (gl && ft) walkTo(gl, ft.x, ft.z, 1.3, () => vanish(z, gl, 1.6)); else if (gl) vanish(z, gl, 1.6);
+    } }));
+  });
+}
+on('gateUp', (z) => { const F = G.hero.flags; if (z?.id === 'bottom' && F.herFire && !F.homeGate) { F.homeGate = true; writeSave(); } });
+// ---------- home: the Gate at Isarn's staff, warm; the six peaks catch one by one; the act's last line ----------
+function homeCine(z) {
+  const h = G.hero, F = h.flags;
+  if ((h.act6 ?? -1) >= 0 || z.home6 || G.zone !== z) return;
+  if (busy()) { later(1.5, () => homeCine(z)); return; }
+  z.home6 = true;
+  const s = z.L.spots.npcs.wayfarer, b = z.L.beacon, pl = G.player;
+  // (rime falls from her: the portal's motes in reverse; ember motes from the staff's foot)
+  if (pl) glowBurst(pl.x, 1.2, pl.z, 0xdfeaf4, 40, 3, 0.3, 1.0);
+  for (let n = 0; n < 40; n++) P({ x: s.x + (Math.random() - 0.5) * 1.6, y: 0.3, z: s.z + (Math.random() - 0.5) * 1.6, vy: 0.8 + Math.random() * 1.2, life: 2.6, size: 0.07, size1: 0.02, color: 0xffb060 });
+  town6(z, true);
+  const peaks = () => {
+    const steps = [[1.0, () => emit('say', 'd.peaks.1')]];
+    for (let i = 7; i <= 12; i++) steps.push([2.6 + (i - 7) * 1.2, () => { setFar(z, i, true); Audio.sfx('towerBell', { vol: 0.4, pitch: 0.7 + (i - 7) * 0.05 }); }]);
+    steps.push([10.6, () => emit('say', 'd.peaks.2')], [14.6, () => emit('say', 'd.answer6.1')], [18.4, () => emit('say', 'd.answer6.2')], [21.8, () => { emit('say', 'd.answer6.3'); Audio.sting('sealight'); }]);
+    emit('cine', { x: b.x, z: b.z + 6, dur: 26, zoom: 1.5, pitch: 0.3, steps, end: () => {
+      z.home6 = false;
+      actComplete(6);
+      if (F.keyxLamp && !F.landing6 && !F.keyxTold) later(3, () => { F.keyxTold = true; writeSave(); emit('toast', t('q.keyxLamp'), 'quest'); });
+    } });
+  };
+  emit('cine', { x: s.x, z: s.z + 5, dur: 3.2, zoom: 1.2, pitch: 0.3, steps: [], end: () => emit('dialog', { who: 'smith', lines: [['d.halda.gate', 'smith'], ['d.child.7', 'child'], ['d.halda.north', 'smith']], end: peaks }) });
+}
+// Whitecliff after the act: Leif at his father's door, his axe on his shoulder (leifHome, once: his line)
+function leifHome(z) {
+  const F = G.hero.flags;
+  if (F.leifHome || !F.leifName || !F.act6 || G.zone !== z) return;
+  F.leifHome = true; writeSave();
+  people5(z);
+  later(1.4, () => { if (G.zone === z) emit('dialog', { who: 'leif', lines: ['d.leif.home'] }); });
+}
+// ---------- the Landing: Alkyone hangs Keyx's lantern on the tide bell's post (landing6, saved first) ----------
+function landing6(z) {
+  const F = G.hero.flags;
+  if (F.landing6 || !F.act6 || !F.keyxLamp || G.zone !== z || z.landing6) return;
+  if (busy()) { later(1.5, () => landing6(z)); return; }
+  const a = npc5(z, 'alkyone')?.a; if (!a) return;
+  z.landing6 = true; F.landing6 = true; writeSave();
+  const px = a.x + 1.4, pz = a.z - 0.6;
+  emit('cine', {
+    x: a.x, z: a.z + 5, dur: 4, zoom: 1.35, pitch: 0.3, until: () => !z.landing6,
+    steps: [
+      [0.8, () => { addLight({ x: px, y: 2.2, z: pz, color: 0xffd090, intensity: 18, range: 7, life: 9999, flicker: 0.35 }); glowBurst(px, 2.2, pz, 0xffd090, 14, 1.4, 0.2, 0.6); }],
+      [1.6, () => emit('dialog', { who: 'alkyone', lines: ['d.alk.l6.1', 'd.alk.l6.2'], end: () => {
+        emit('say', 'd.alk.l6.3');
+        // a small blue bird, low over the water, and gone
+        for (let n = 0; n < 26; n++) later(n * 0.06, () => P({ x: px + n * 0.5, y: 1.4 + Math.sin(n * 0.7) * 0.2, z: pz - n * 0.3, vx: 6, vy: 0.2, vz: -3, life: 0.5, size: 0.12, size1: 0.04, color: 0x4aa0e0 }));
+        later(3.4, () => { z.landing6 = false; });
+      } })]
+    ]
+  });
+}
+
 // ---------- Act VI's zones: what the story lays on the build's props, and who stands where ----------
 // story6Zone (act6Zone, once per build): the hearths, the lost lights, Asger's brazier; people6 (every entry and as the
 // story moves): their lights from the flags, the memories owed («Θυμήσου»), the people (want5)
@@ -2294,7 +2654,18 @@ export function story6Zone(z) {
     const br = S.asger?.brazier;
     if (br && !F.asgerRest) { const it = { kind: 'asgerBrazier', x: br.x, z: br.z, r: 2.2, prompt: 'asger.light', mesh: A.asgerBrazier, lit: false }; it.use = () => emit('asgerBrazier', it, z); z.interact.push(it); }
   }
+  if (z.id === 'bottom') {
+    const inter = (it) => { it.use = () => emit(it.kind, it, z); z.interact.push(it); return it; };
+    // the black lamps (0 the barrow's, 1 the wood's) and Keyx's (2, by giving him his lantern)
+    for (const l of A.lamps || []) {
+      const at = l.k === 2 && S.keyx ? z.map.nearestFloor(S.keyx.x, S.keyx.z + 0.9, 2) : l;
+      inter({ kind: l.k === 2 ? 'keyxGive' : 'blackLamp', k: l.k, x: at.x, z: at.z, r: 2.6, prompt: l.k === 2 ? 'keyx.give' : 'blackLamp.out', mesh: l.mesh, lit: true });
+    }
+    if (S.leif?.fire) inter({ kind: 'leifFire', i: 0, x: S.leif.fire.x, z: S.leif.fire.z, r: 2.4, lightR: 4, prompt: 'leif.fire', mesh: A.leif, lit: false });
+    if (S.ember?.pane) inter({ kind: 'ember6', x: S.ember.pane.x, z: S.ember.pane.z, r: 2.4, prompt: 'ember.listen' });
+  }
 }
+const S0 = (z) => z.L.spots;
 export function people6(z) {
   if (!z?.act6) return;
   const F = G.hero.flags;
@@ -2307,6 +2678,24 @@ export function people6(z) {
     if (z.act6.asger) z.act6.asger.visible = false;
     z.act6.asgerBrazier?.userData.setLit?.(true);
     const br = z.interact.find((q) => q.kind === 'asgerBrazier'); if (br) { br.lit = true; br.used = true; }
+  }
+  if (z.id === 'bottom') {
+    const H = z.L.spots.hearth;
+    for (const it of z.interact) {
+      if (it.kind === 'blackLamp' || it.kind === 'keyxGive') { const out = !!F['blackLamp' + it.k]; it.lit = !out; it.used = out; it.mesh?.userData.setLit?.(!out); }
+      if (it.kind === 'leifFire') { const on = !!F.leifLit; if (it.lit !== on || on) light6(z, it, on); it.used = on; }
+      if (it.kind === 'ember6') { it.used = !!F.ember6 || !!F.herFire; if (it.used) z.act6.ember?.userData.setGlow?.(0); }
+    }
+    // (the shadow-walls of the lamps put out: gone, as their cells are open)
+    for (const wl of z.act6.walls || []) if (F['blackLamp' + wl.k] && wl.mesh?.visible && !wl.mesh.userData.thinning) { wl.mesh.visible = false; wl.mesh.userData.open = true; }
+    // the axe by Leif's fire once it burns; her stone's relight once the Shade is down
+    const axe = z.interact.find((q) => q.kind === 'leifAxe'), wantAxe = !!F.leifLit && !F.leifAxe && S0(z).leif?.fire;
+    if (wantAxe && !axe) { const f = S0(z).leif.fire, p = z.map.nearestFloor(f.x - 1.2, f.z + 0.4, 2); const it = { kind: 'leifAxe', x: p.x, z: p.z, r: 2.2, prompt: 'leif.axe' }; it.use = () => emit('leifAxe', it, z); z.interact.push(it); }
+    if (!wantAxe && axe) z.interact.splice(z.interact.indexOf(axe), 1);
+    const ff = z.interact.find((q) => q.kind === 'firstFire'), wantFF = !!F.shadeDown && !F.herFire && !!H?.fire && !z.naming;
+    if (wantFF && !ff) { const it = { kind: 'firstFire', x: H.fire.x, z: H.fire.z + 1.4, r: 2.8, prompt: 'first.relight' }; it.use = () => emit('firstFire', it, z); z.interact.push(it); }
+    if (!wantFF && ff) z.interact.splice(z.interact.indexOf(ff), 1);
+    if (F.herFire && !z.naming) z.act6.ring?.userData.setWarm?.(1);
   }
   // the memories owed: a lit hearth whose memory is not seen yet (in count order), Keyx's lantern lit with its unseen
   const owe = [];
