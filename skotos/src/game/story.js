@@ -2115,6 +2115,7 @@ function enter6(id, z) {
   if (id === 'gate') later(1, () => gateFind(z));
   if (id === 'farlight') act6Presence(z);
   if (id === 'bottom') {
+    Audio.mood({ lit: !!F.herFire });
     if (!F.bottomSeen) later(1.2, () => bottomArrival(z));
     else if (!F.glaukosB6) later(2, () => { if (G.zone === z && !busy()) glaukosFoot(z); });
     // (her fire lit and the card not seen: the card again, then the ring warm)
@@ -2220,7 +2221,7 @@ function hearthLit(z, it) {
   F['hearth6_' + k] = true; if (!(F.hearths6 ||= []).includes(k)) F.hearths6.push(k);
   light6(z, it, true); checkpoint6(z, 'hearth' + k);
   writeSave();
-  Audio.sfx('lampLight', { x: it.x, z: it.z }); Audio.sting('lantern'); glowBurst(it.x, 0.9, it.z, 0xffb050, 30, 3, 0.3, 0.8); ring(it.x, it.z, 6, 0xffb060, 0.9);
+  Audio.sfx('trueLamp', { x: it.x, z: it.z }); Audio.sting('lantern'); Audio.mood({ hearth: 1 }); glowBurst(it.x, 0.9, it.z, 0xffb050, 30, 3, 0.3, 0.8); ring(it.x, it.z, 6, 0xffb060, 0.9);
   emit('toast', t('q.hearthLit', hearths6()), 'quest'); emit('quest');
   later(1.2, () => nextDeep(z, it));
 }
@@ -2265,7 +2266,7 @@ on('lostLight', (it, z) => {
     if (i === 3) F.nineLit = true;
     light6(z, it, true); checkpoint6(z, 'lost' + i);
     writeSave();
-    Audio.sfx('lampLight', { x: it.x, z: it.z }); glowBurst(it.x, 1.2, it.z, 0xffd080, 22, 2.2, 0.3, 0.7); ring(it.x, it.z, 4, 0xffb060, 0.8);
+    Audio.sfx('trueLamp', { x: it.x, z: it.z }); glowBurst(it.x, 1.2, it.z, 0xffd080, 22, 2.2, 0.3, 0.7); ring(it.x, it.z, 4, 0xffb060, 0.8);
     say('d.stone.' + id);
     if (i === 3) later(3.2, () => { emit('toast', t('q.nine'), 'quest'); Audio.sting('sealight'); });
     later(i === 3 ? 6 : 3, lostToast);
@@ -2387,7 +2388,7 @@ on('keyxGive', (it, z) => lampChannel(z, it));
 function blackFlare(z, it) {
   const x = it.x, zz = it.z, R0 = 4;
   teleCircle(x, zz, R0, 1.2, 'dark');
-  Audio.sfx('iceSing', { x, z: zz, vol: 0.5, pitch: 0.5 });
+  Audio.sfx('lampFlare', { x, z: zz, vol: 0.8 });
   it.mesh?.userData.flare?.(1);
   later(1.2, () => {
     it.mesh?.userData.flare?.(0);
@@ -2409,7 +2410,7 @@ function lampOut(z, it) {
   const pl = G.player;
   fireRelight(); fireFill(99);
   if (pl) { glowBurst(pl.x, 1.2, pl.z, 0xffffff, 40, 3.5, 0.3, 0.9); ring(pl.x, pl.z, 3.5, 0xf4f0ff, 0.8); }
-  Audio.sting('lantern'); Audio.sfx('lampLight', { x: it.x, z: it.z, pitch: 0.6 });
+  Audio.sting('lantern'); Audio.sfx('blackLampOut', { x: it.x, z: it.z });
   const wl = (z.act6.walls || []).find((w) => w.k === k);
   // (the thinning is the prop's tween, drawn only when the frame is; the way opens on the story's clock whatever is drawn)
   if (wl?.mesh?.visible && wl.mesh.userData.thin) { wl.mesh.userData.thinning = true; wl.mesh.userData.thin(2); }
@@ -2448,7 +2449,7 @@ on('leifFire', (it, z) => {
   touch(1, it, it.mesh?.userData.fireY ?? 0.5, () => {
     F.leifLit = true; writeSave();
     light6(z, it, true); it.used = true;
-    Audio.sfx('lampLight', { x: it.x, z: it.z }); glowBurst(it.x, 0.6, it.z, 0xffb050, 22, 2.2, 0.3, 0.7);
+    Audio.sfx('trueLamp', { x: it.x, z: it.z }); glowBurst(it.x, 0.6, it.z, 0xffb050, 22, 2.2, 0.3, 0.7);
     people5(z);
     later(0.8, () => emit('dialog', { who: 'leif', lines: ['d.leif.1', 'd.leif.2', 'd.leif.3'], end: () => people6(z) }));
   });
@@ -2471,7 +2472,7 @@ on('ember6', (it, z) => {
     F.ember6 = true; writeSave();
     const m = z.act6.ember;
     if (m?.userData.setGlow) { let k = 1; const st = () => { k = Math.max(0, k - 0.05); m.userData.setGlow(k); if (k > 0 && G.zone === z) later(0.05, st); }; st(); }
-    puff(it.x, 1.2, it.z, 0xdfe6ea, 16, 1.6, 1.2, 1); Audio.sfx('steam', { x: it.x, z: it.z });
+    puff(it.x, 1.2, it.z, 0xdfe6ea, 16, 1.6, 1.2, 1); Audio.sfx('fireOut', { x: it.x, z: it.z, vol: 0.6, pitch: 0.7 });
   } }));
 });
 // ---------- the Shade of the Gate ----------
@@ -2533,7 +2534,7 @@ function naming6(z) {
   const D = (lines, end) => emit('dialog', { who: 'first', lines, end });
   const flare = (k) => A.centre?.userData.flash?.(k);
   const skotosUp = () => { glowBurst(pool.x, 0.4, pool.z, 0x1a1030, 40, 4, 0.5, 1.2); ring(pool.x, pool.z, 4, 0x8a70ff, 1); splash(pool.x, pool.z, 3); shake(0.5); Audio.sfx('iceSing', { vol: 0.9, pitch: 0.45 }); if (G.cine) Object.assign(G.cine, { x: (fx + pool.x) / 2, z: (fz + pool.z) / 2 + 7 }); };
-  const skotosDownNow = () => { ring(pool.x, pool.z, 5, 0xfff0c0, 1.2); glowBurst(fx, 1.4, fz, 0xfff0c0, 50, 4, 0.4, 1.3); flare(1.4); Audio.sting('sealight'); if (G.cine) Object.assign(G.cine, { x: fx, z: fz + 7 }); };
+  const skotosDownNow = () => { ring(pool.x, pool.z, 5, 0xfff0c0, 1.2); glowBurst(fx, 1.4, fz, 0xfff0c0, 50, 4, 0.4, 1.3); flare(1.4); Audio.sting('sealight'); Audio.mood({ lit: true, hearth: 1 }); if (G.cine) Object.assign(G.cine, { x: fx, z: fz + 7 }); };
   const part4 = () => {
     // Glaukos down the Stair, feeling the warmth
     const ft = z.L.spots.stair?.foot || { x: fx, z: fz - 12 }, s0 = z.map.nearestFloor(ft.x, ft.z, 3), to = z.map.nearestFloor(fx + 2.4, fz - 1.8, 3);
@@ -2602,9 +2603,9 @@ function homeCine(z) {
   for (let n = 0; n < 40; n++) P({ x: s.x + (Math.random() - 0.5) * 1.6, y: 0.3, z: s.z + (Math.random() - 0.5) * 1.6, vy: 0.8 + Math.random() * 1.2, life: 2.6, size: 0.07, size1: 0.02, color: 0xffb060 });
   town6(z, true);
   const peaks = () => {
-    const steps = [[1.0, () => emit('say', 'd.peaks.1')]];
-    for (let i = 7; i <= 12; i++) steps.push([2.6 + (i - 7) * 1.2, () => { setFar(z, i, true); Audio.sfx('towerBell', { vol: 0.4, pitch: 0.7 + (i - 7) * 0.05 }); }]);
-    steps.push([10.6, () => emit('say', 'd.peaks.2')], [14.6, () => emit('say', 'd.answer6.1')], [18.4, () => emit('say', 'd.answer6.2')], [21.8, () => { emit('say', 'd.answer6.3'); Audio.sting('sealight'); }]);
+    const steps = [[0.2, () => Audio.music('pherousa')], [1.0, () => emit('say', 'd.peaks.1')]];
+    for (let i = 7; i <= 12; i++) steps.push([2.6 + (i - 7) * 1.2, () => { setFar(z, i, true); Audio.sfx('towerBell', { vol: 0.4, pitch: 0.7 + (i - 7) * 0.05 }); Audio.mood({ answer: 1 }); }]);
+    steps.push([10.6, () => emit('say', 'd.peaks.2')], [14.6, () => emit('say', 'd.answer6.1')], [18.4, () => emit('say', 'd.answer6.2')], [21.8, () => { emit('say', 'd.answer6.3'); Audio.mood({ hold: 1 }); }]);
     emit('cine', { x: b.x, z: b.z + 6, dur: 26, zoom: 1.5, pitch: 0.3, steps, end: () => {
       z.home6 = false;
       actComplete(6);

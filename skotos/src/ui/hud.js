@@ -479,14 +479,17 @@ on('bossIntro', (a) => {
   bb.querySelector('.ti').textContent = a.name ? t('gate.guardianName') : t('mon.' + a.kind + '.t');
   // the Lady has a waltz of her own; it gains brass as she loses her roots. Ivar and Karthax have theirs; so do the Walking
   // Tower and the Skotos
-  if (OWN_THEME.has(a.kind)) { Audio.mood({ phase: 0, lit: false, sub: 0, under: 0 }); Audio.music(a.kind); } else Audio.music('boss');
+  // (Act VI: the Ketos's own; the Shade's, whichever form it wakes in, its form in the mood)
+  const own = a.def?.legKey === 'shade' ? 'shade' : a.kind;
+  if (OWN_THEME.has(own)) { Audio.mood({ phase: 0, lit: false, sub: 0, under: 0, blind: 0, form: a.def?.form || 0 }); Audio.music(own); } else Audio.music('boss');
+  if (a.kind === 'ketos') Audio.sfx('ketosCall', { x: a.x, z: a.z });
   Audio.sting('bossIntro');
   // (Greek in capitals takes no accents: ΤΟ ΣΚΟΤΟΣ, not ΤΟ ΣΚΌΤΟΣ)
   emit('toast', (a.name || t('mon.' + a.kind)).toUpperCase().normalize('NFD').replace(/\u0301/g, '').normalize('NFC'), 'big');
 });
-on('bossPhase', (a, ph) => { if (OWN_THEME.has(a?.kind)) Audio.mood({ phase: ph }); });
+on('bossPhase', (a, ph) => { if (OWN_THEME.has(a?.kind)) Audio.mood({ phase: ph, blind: a.kind === 'ketos' && ph >= 2 ? 1 : 0 }); });
 // (Act VI: the Shade's next form takes the bar as it is, its form's name the tagline: no toast, no new music)
-on('shadeForm', (a) => { G.bossActor = a; const bb = $('bossbar'); bb.querySelector('.nm').textContent = t('mon.' + a.kind); bb.querySelector('.ti').textContent = t('mon.' + a.kind + '.t'); });
+on('shadeForm', (a, form) => { Audio.mood({ form: form || a.def?.form || 1 }); Audio.sfx('shadeShift', { x: a.x, z: a.z }); G.bossActor = a; const bb = $('bossbar'); bb.querySelector('.nm').textContent = t('mon.' + a.kind); bb.querySelector('.ti').textContent = t('mon.' + a.kind + '.t'); });
 // (the Skotos's fall is no fanfare: the music stops for the names, one bell each, and the naming's chord; the story then
 // plays the sea lit)
 on('bossDown', (a) => {
@@ -504,7 +507,17 @@ on('beamTurn', (b) => { if (G.zone?.act5 && b) Audio.sfx('beamBell', { x: b.x, z
 on('lampSnuffed', (it) => { if (G.zone?.water && it) Audio.sfx('lampSnuff', { x: it.x, z: it.z }); });
 on('louseCurl', () => hint('louse'));
 // the bosses with a theme of their own (the rest share 'boss')
-const OWN_THEME = new Set(['amaranthe', 'ivar', 'karthax', 'tower', 'skotos']);
+const OWN_THEME = new Set(['amaranthe', 'ivar', 'karthax', 'tower', 'skotos', 'ketos', 'shade']);
+// ---------- Act VI: what the deep says (the vault's groan before the black water moves, the Cradle, the bells, the names) ----------
+on('tideBell', () => { if (G.zone?.act6) Audio.sfx('iceGroan', { vol: 0.9 }); });
+on('tideTurn', (ph) => { if (G.zone?.act6) Audio.mood({ deep: ph === 'high' ? 1 : ph === 'flood' ? 0.6 : ph === 'ebb' ? 0.4 : 0 }); });
+on('fireDim', () => Audio.sfx('fireDim', { vol: 0.8 }));
+on('fireOut', () => Audio.sfx('fireOut'));
+on('fireBack', () => Audio.sfx('fireRekindle'));
+on('bellRing', (it) => Audio.sfx('shipBell', it ? { x: it.x, z: it.z } : {}));
+on('ketosSeared', (a) => Audio.sfx('ketosSlam', a ? { x: a.x, z: a.z, vol: 0.8 } : {}));
+on('namesFall', () => Audio.mood({ names: 1 }));
+on('namesEnd', () => Audio.mood({ names: 0 }));
 let masT = 0;
 export function comboTick(dt) {
   const c = G.combo;

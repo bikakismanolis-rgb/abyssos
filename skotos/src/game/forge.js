@@ -152,10 +152,11 @@ export function slag(x, z, r, dur, mult) {
 export function drip(x, z, r, dur, o = {}) {
   const zone = G.zone, ice = o.color != null, c = o.color ?? 0xffb040;
   teleCircle(x, z, r, dur, ice ? c : 0xffa040); // (amber: not the Hammerfall's red)
+  if (ice) later(Math.max(0, dur - 0.5), () => { if (G.zone === zone) Audio.sfx('icicleFall', { x, z, vol: 0.6 }); });
   for (let k = 0; k < 8; k++) later(dur * (0.5 + k * 0.06), () => { if (G.zone === zone) P({ x, y: 9 - k, z, vy: -14, life: 0.12, size: ice ? 0.32 : 0.5, size1: ice ? 0.16 : 0.3, color: c, color1: ice ? 0x9ad8ff : 0xff3000 }); });
   later(dur, () => {
     if (G.zone !== zone) return;
-    if (ice) { puff(x, 0.4, z, 14, 0xe8f4ff, 1.4, 0.6, 1.0); explosion(x, z, r, 0xcfe8ff, { shake: 0.06 }); Audio.sfx('iceBreak', { x, z, vol: 0.7 }); }
+    if (ice) { puff(x, 0.4, z, 14, 0xe8f4ff, 1.4, 0.6, 1.0); explosion(x, z, r, 0xcfe8ff, { shake: 0.06 }); Audio.sfx('iceBreak', { x, z, vol: 0.5 }); Audio.sfx('icicleShatter', { x, z, vol: 0.7 }); }
     else { explosion(x, z, r, 0xff6a10, { smoke: 0x2a1a10, shake: 0.08 }); Audio.sfx('lavaBurst', { x, z, vol: 0.6 }); }
     const D = DIFFS[G.hero.diff], dmg = monsterDmg(zone.level || 25) * D.dmg * (o.mult ?? 1);
     for (const h of heroes()) if (!h.dead && Math.hypot(h.x - x, h.z - z) < r + (h.radius || 0.5) * 0.5) damage(null, h, dmg, { burn: o.burn ? dmg * o.burn : 0, cold: o.cold || 0, drip: true });

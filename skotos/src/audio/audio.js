@@ -1731,6 +1731,116 @@ const SFX = {
     nb(v, t, { k: 'w', ft: 'bandpass', f: f * 3.2, q: 2, a: 0.001, pk: 0.12, d: 0.06 });
     v.wet(0.75);
   },
+  // ---------- Act VI ----------
+  // the vault groaning before the black water moves: the ice-song an octave and a half down, long, with a rumble under it
+  iceGroan(v, t, p) {
+    tn(v, t, { w: 'triangle', f: 600 * p, fe: 120 * p, sw: 1.6, a: 0.25, pk: 0.16, d: 1.8, lp: 900 });
+    tn(v, t + 0.1, { f: 410 * p, fe: 95 * p, sw: 1.5, a: 0.3, pk: 0.08, d: 1.6 });
+    nb(v, t, { k: 'b', ft: 'lowpass', f: 160, q: 0.7, a: 0.4, pk: 0.35, d: 1.8, am: [rand(5, 8), 0.5] });
+    v.wet(0.8);
+  },
+  // an icicle let go far above: a thin whistle falling; and its shatter on the silt
+  icicleFall(v, t, p) {
+    tn(v, t, { f: 3200 * p, fe: 900 * p, sw: 0.5, a: 0.05, pk: 0.11, d: 0.5 });
+    nb(v, t, { k: 'w', f: 2400 * p, fe: 700 * p, q: 3, a: 0.2, pk: 0.18, d: 0.35 });
+    v.wet(0.6);
+  },
+  icicleShatter(v, t, p) {
+    metal(v, t, 2600 * p, [1, 1.47, 2.31, 3.17, 4.6], 0.5, 0.16);
+    for (let k = 0; k < 6; k++) metal(v, t + 0.03 + k * rand(0.02, 0.05), rand(3000, 5200) * p, [1, 1.6], 0.12, 0.06);
+    nb(v, t, { k: 'w', ft: 'highpass', f: 3000, q: 0.7, a: 0.001, pk: 0.35, d: 0.18 });
+    tn(v, t, { w: 'triangle', f: 160, fe: 60, pk: 0.3, d: 0.15 });
+    v.wet(0.5);
+  },
+  // a Lampbearer drinking her light: a slow inward suck, the ring's hum bending down
+  lampDrink(v, t, p) {
+    const s = v.N('p', t, t + 1.4), bp = v.F('bandpass', 1800 * p, 2), e = v.G(0);
+    bp.frequency.setValueAtTime(2400 * p, t); bp.frequency.exponentialRampToValueAtTime(300 * p, t + 1.2);
+    e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(0.3, t + 0.5); e.gain.linearRampToValueAtTime(0, t + 1.3);
+    s.connect(bp); bp.connect(e); e.connect(v.out);
+    tn(v, t, { f: 660 * p, fe: 220 * p, sw: 1.2, a: 0.3, pk: 0.06, d: 1.1 });
+    v.wet(0.5);
+  },
+  // a black lamp's Black Flare: a dark swell, a violet ring of a chord, no attack to speak of
+  lampFlare(v, t, p) {
+    for (const [m, a] of [[38, 1], [45, 0.7], [49, 0.5]]) tn(v, t, { w: 'sawtooth', f: mf(m) * p, a: 0.5, pk: 0.05 * a, d: 1.1, lp: 520 });
+    nb(v, t, { k: 'b', ft: 'lowpass', f: 220, q: 0.8, a: 0.6, pk: 0.4, d: 0.9 });
+    v.wet(0.7);
+  },
+  // a black lamp out: the dark sucked back into it, then the light it drank coming back in a bright rush
+  blackLampOut(v, t, p) {
+    nb(v, t, { k: 'p', f: 300 * p, fp: 2400 * p, q: 1.5, a: 0.35, pk: 0.35, d: 0.2 });
+    tn(v, t + 0.38, { f: 1046 * p, a: 0.01, pk: 0.12, d: 1.6 });
+    tn(v, t + 0.38, { f: 1568 * p, a: 0.02, pk: 0.07, d: 1.8 });
+    tn(v, t + 0.4, { f: 2093 * p, a: 0.02, pk: 0.04, d: 2 });
+    nb(v, t + 0.36, { k: 'w', ft: 'highpass', f: 2600, q: 0.7, a: 0.05, pk: 0.2, d: 0.8 });
+    v.wet(0.75);
+  },
+  // the Cradle low (a guttering flicker); out (a hiss and a thud); rekindled (a catch and a warm swell)
+  fireDim(v, t, p) {
+    for (let k = 0; k < 4; k++) nb(v, t + k * rand(0.08, 0.14), { k: 'p', f: rand(500, 900) * p, q: 1.2, a: 0.01, pk: 0.2 * (1 - k * 0.2), d: 0.08 });
+    tn(v, t, { f: 330 * p, fe: 300 * p, a: 0.05, pk: 0.07, d: 0.5 });
+    v.wet(0.3);
+  },
+  fireOut(v, t, p) {
+    nb(v, t, { k: 'w', f: 3000 * p, fe: 600 * p, q: 1, a: 0.01, pk: 0.4, d: 0.6 });
+    tn(v, t, { w: 'triangle', f: 140, fe: 50, pk: 0.25, d: 0.25 });
+    v.wet(0.4);
+  },
+  fireRekindle(v, t, p) {
+    nb(v, t, { k: 'w', f: 800 * p, fp: 3000 * p, q: 1.2, a: 0.05, pk: 0.3, d: 0.3 });
+    for (const [m, dt] of [[55, 0], [62, 0.08], [67, 0.16]]) tn(v, t + dt, { f: mf(m) * p, a: 0.08, pk: 0.07, d: 1.2 });
+    v.wet(0.5);
+  },
+  // true light: a fire's crackle with a slight vibrato in its hum; false light: one pure tone, dead still
+  trueLamp(v, t, p) {
+    for (let k = 0; k < 7; k++) nb(v, t + rand(0, 0.6), { k: 'w', f: rand(1500, 4000), q: 2, a: 0.001, pk: rand(0.06, 0.16), d: 0.03 });
+    const o = tn(v, t, { f: 196 * p, a: 0.15, pk: 0.06, d: 1 });
+    const l = v.O('sine', 6, t, t + 1.3), g = v.G(4); l.connect(g); g.connect(o.frequency);
+    v.wet(0.4);
+  },
+  falseTone(v, t, p) {
+    tn(v, t, { f: 1318 * p, a: 0.4, pk: 0.05, d: 1.6 });
+    tn(v, t, { f: 2637 * p, a: 0.4, pk: 0.012, d: 1.6 });
+    v.wet(0.8);
+  },
+  // a Falselight's lure snapping shut: a wet crack and the tail's whip
+  lureSnap(v, t, p) {
+    nb(v, t, { k: 'w', f: 1400 * p, fe: 400 * p, q: 1.4, a: 0.002, pk: 0.5, d: 0.12, drive: 2 });
+    tn(v, t, { w: 'triangle', f: 260 * p, fe: 90 * p, pk: 0.35, d: 0.14 });
+    nb(v, t + 0.05, { k: 'w', f: 3000 * p, fe: 900 * p, q: 3, a: 0.02, pk: 0.18, d: 0.2 });
+    v.wet(0.3);
+  },
+  // the Ketos: a long falling whale-call; and its head slamming the mud
+  ketosCall(v, t, p) {
+    vox(v, t, { f: 260 * p, d: 2.6, c: [[0, 1.4], [0.5, 1.6], [1.6, 0.7], [2.6, 0.45]], vow: 'u', to: 'o', mt: 1.4, growl: [8, 0.35], breath: 0.3, pk: 0.3, fg: 2, fs: 0.7, a: 0.4, hold: 0.7 });
+    tn(v, t, { f: 90 * p, fe: 45 * p, sw: 2.6, a: 0.5, pk: 0.14, d: 2.6 });
+    v.wet(0.85);
+  },
+  ketosSlam(v, t, p) {
+    tn(v, t, { w: 'triangle', f: 90 * p, fe: 32 * p, sw: 0.5, a: 0.002, pk: 0.8, d: 0.6, drive: 1.6 });
+    nb(v, t, { k: 'b', ft: 'lowpass', f: 400, q: 0.8, a: 0.003, pk: 0.8, d: 0.7 });
+    nb(v, t + 0.04, { k: 'w', f: 900 * p, fe: 300 * p, q: 0.8, a: 0.02, pk: 0.4, d: 0.5 });
+    v.wet(0.4);
+  },
+  // a ship's bell rung by hand: brighter and smaller than the Tower's
+  shipBell(v, t, p) {
+    const f = mf(76) * p;
+    for (const [r, a, k] of [[1, 1, 1], [2.02, 0.5, 0.7], [2.76, 0.3, 0.5], [3.98, 0.2, 0.4], [5.4, 0.1, 0.3]]) tn(v, t, { f: f * r, det: rand(-4, 4), a: 0.001, pk: 0.12 * a, d: 2.6 * k });
+    nb(v, t, { k: 'w', ft: 'bandpass', f: f * 4, q: 3, a: 0.001, pk: 0.1, d: 0.04 });
+    v.wet(0.6);
+  },
+  // the Shade taking its next form: a long breath drawn backwards and a low body thud
+  shadeShift(v, t, p) {
+    const s = v.N('p', t, t + 1.3), bp = v.F('bandpass', 400 * p, 1), e = v.G(0);
+    bp.frequency.setValueAtTime(300 * p, t); bp.frequency.exponentialRampToValueAtTime(1600 * p, t + 1.0);
+    e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(0.35, t + 1.0); e.gain.linearRampToValueAtTime(0, t + 1.15);
+    s.connect(bp); bp.connect(e); e.connect(v.out);
+    tn(v, t + 1.0, { w: 'triangle', f: 70, fe: 35, pk: 0.5, d: 0.5 });
+    v.wet(0.6);
+  },
+  // the names' bell from above: the Tower's bell pitched up and far
+  nameBell(v, t, p) { SFX.towerBell(v, t, p, 1.5); v.wet(0.9); },
 };
 
 // name → [max calls, window seconds]; extras inside the window are dropped
@@ -1748,6 +1858,8 @@ const LIMITS = {
   lightCatch: [2, 0.25], lampSnuff: [2, 0.3], freezeWave: [1, 1], gustRise: [1, 2], blizzard: [1, 6], frostRoar: [1, 0.8], singerSong: [2, 1],
   singerWail: [1, 0.6], towerBreach: [1, 1], towerDive: [1, 1], brineSpit: [2, 0.3], skotosRise: [1, 2], skotosInhale: [1, 0.8], skotosBreath: [1, 0.8],
   skotosSweep: [1, 0.4], skotosSlam: [1, 0.4], skotosRoar: [1, 1.2], skotosDrink: [1, 0.8], handRise: [2, 0.3], handLash: [3, 0.15], smother: [2, 0.3], towerBell: [3, 0.3],
+  iceGroan: [1, 2], icicleFall: [3, 0.1], icicleShatter: [3, 0.1], lampDrink: [2, 0.8], lampFlare: [2, 0.6], blackLampOut: [1, 1], fireDim: [1, 2], fireOut: [1, 1], fireRekindle: [1, 1],
+  trueLamp: [2, 0.4], falseTone: [2, 1], lureSnap: [2, 0.3], ketosCall: [1, 2.5], ketosSlam: [1, 0.5], shipBell: [2, 0.4], shadeShift: [1, 1], nameBell: [2, 0.3],
 };
 const DEF_LIMIT = [5, 0.06];
 
@@ -2105,13 +2217,16 @@ function drumStep(S, P) {
 // in a boss fight (the Tower's, the Farthest Light's); the sky (0 green, 1 black, 2 true); a gust blowing (0/1); the
 // Tower under the water (0/1); the Freeze closing over everything (0-1)
 const MOOD = { autumn: false, near: 0, phase: 0, heat: 0, night: 0, seen: false, breath: 0, roar: 0, keeper: 0, answer: 0,
-  tide: 0, ice: 0, forget: 0, skotos: 0, under: 0, lit: false, sky: 0, gust: 0, sub: 0, freeze: 0, bloom: 0, sear: 0, hold: 0 };
+  tide: 0, ice: 0, forget: 0, skotos: 0, under: 0, lit: false, sky: 0, gust: 0, sub: 0, freeze: 0, bloom: 0, sear: 0, hold: 0,
+  deep: 0, names: 0, blind: 0, form: 0, hearth: 0 };
 // what the story may set, and how far (Act IV: the Forge's heat runs from -1, cold, to 3; a keeper 1-3; a far fire 1-4).
 // breath, roar, keeper and answer are moments: the theme playing takes them on its next step and clears them (Act V's:
 // bloom, a sea-light lit; sear, the beam on the Skotos; hold, the held chord when someone answers)
-const MOOD_RANGE = { heat: [-1, 3], keeper: [0, 3], answer: [0, 4], breath: [0, 1], roar: [0, 1], tide: [0, 1], ice: [0, 1], forget: [0, 0.3], skotos: [0, 1], under: [0, 1], gust: [0, 1], sub: [0, 1], freeze: [0, 1], bloom: [0, 1], sear: [0, 1], hold: [0, 1] };
-const MOMENTS = ['breath', 'roar', 'keeper', 'answer', 'bloom', 'sear', 'hold'];
-const SEA_THEMES = new Set(['coast', 'farlight', 'tower', 'skotos', 'sealit']);
+// (Act VI's: deep, the black water's height; names, the names falling; blind, the Ketos's phase 3; form, the Shade's form;
+// hearth, a moment: one of the First's hearths caught)
+const MOOD_RANGE = { heat: [-1, 3], keeper: [0, 3], answer: [0, 4], breath: [0, 1], roar: [0, 1], tide: [0, 1], ice: [0, 1], forget: [0, 0.3], skotos: [0, 1], under: [0, 1], gust: [0, 1], sub: [0, 1], freeze: [0, 1], bloom: [0, 1], sear: [0, 1], hold: [0, 1], deep: [0, 1], names: [0, 1], blind: [0, 1], form: [0, 4], hearth: [0, 1] };
+const MOMENTS = ['breath', 'roar', 'keeper', 'answer', 'bloom', 'sear', 'hold', 'hearth'];
+const SEA_THEMES = new Set(['coast', 'farlight', 'tower', 'skotos', 'sealit', 'drained', 'ketos', 'bottom', 'shade', 'pherousa']);
 // Act IV: the lantern's motif (A C B E, [midi, beats]); it resolves to D at the very end
 const MOTIF = [[69, 1.5], [72, 0.5], [71, 1], [76, 2.5]];
 function motif(th, t, beat, o = {}) {
@@ -2119,6 +2234,16 @@ function motif(th, t, beat, o = {}) {
   const seq = MOTIF.map(([m, b]) => { const n = [m + (o.tr || 0), x, b * beat - 0.02]; x += b * beat; return n; });
   if (o.resolve) seq.push([74 + (o.tr || 0), x, beat * 3]);
   INS.flute(nv(th), seq, { vel: o.vel ?? 0.1, wet: o.wet ?? 0.6 });
+}
+// Act VI: the hearth motif, three low warm notes, a minor triad rising (G Bb D); at the relight its middle note rises to B
+// and it turns major (o.major). On a soft horn (brass, dark) or a flute
+const MOTIF6 = [[55, 1.5], [58, 1.0], [62, 3.0]];
+function hearthMotif(th, t, beat, o = {}) {
+  let x = t;
+  const seq = MOTIF6.map(([m, b], i) => { const n = [m + (o.tr || 0) + (o.major && i === 1 ? 1 : 0), x, b * beat - 0.03]; x += b * beat; return n; });
+  if (o.flute) INS.flute(nv(th), seq.map(([m, s, d]) => [m + 12, s, d]), { vel: o.vel ?? 0.09, wet: 0.6 });
+  else for (const [m, s, d] of seq) INS.brass(nv(th), s, [m], d, { vel: o.vel ?? 0.16, att: 0.25, rel: 0.6, bright: o.bright ?? 700, wet: 0.55 });
+  return x;
 }
 // the motif on a pure sine, alone in the dark
 function sineLine(v, seq, vel) { for (const [m, s, d] of seq) tn(v, s, { f: mf(m), a: 0.12, pk: vel, d: d + 0.8 }); v.wet(0.7); }
@@ -2827,6 +2952,161 @@ const THEMES = {
     step(S) {
       const { th, i } = S, st = th.st;
       if (i === 0) { st.arp = pick(ARP8); st.at = tones(S.ch, 62, 81); }
+      const k = st.arp[i];
+      if (k != null && S.bar % 2 === 1) INS.pluck(nv(th), S.t + rand(0, 0.01), st.at[Math.min(k, st.at.length - 1)], { vel: rand(0.05, 0.08), dec: 2, bright: 4, saw: 0.15, wet: 0.5 });
+    },
+  },
+
+  // ---------- Act VI ----------
+  // the Drained Sea: 50 bpm, no beat, C aeolian. A low bowed drone on C and G, slow drips as soft pings, the vault's
+  // groans (the ice-song an octave and a half down) more often as the black water rises (MOOD.deep); in a fight a low
+  // taiko every second bar under the strings' ostinato on the root; a hearth caught (MOOD.hearth): its motif on a soft horn
+  // and a warm chord; while the names fall (MOOD.names) the drone drops out and a high bell rings each name
+  drained: {
+    bpm: 50, beats: 4, sub: 2, bpc: 2, gain: 1.3, scale: [0, 2, 3, 5, 7, 8, 10],
+    progs: [['Cm', 'Ab', 'Cm', 'G'], ['Cm', 'Fm', 'Ab', 'G'], ['Ab', 'Eb', 'Fm', 'Cm'], ['Cm', 'Bb', 'Ab', 'Cm']],
+    bar(S) {
+      const { th, t, bd, ch } = S, st = th.st, nm = MOOD.names;
+      if (!nm && S.bar % 4 === 0) { INS.drone(nv(th), t, 36, bd * 4 + 2, { vel: 0.1, att: 2, cut: 260 }); INS.drone(nv(th), t + 0.3, 43, bd * 4 + 2, { vel: 0.05, att: 2.4, cut: 300 }); }
+      if (S.nc && !nm) { st.pv = voicing(ch, 48, 63, st.pv, 3); INS.strings(nv(th), t, st.pv, S.cd + 0.6, { vel: 0.09, att: 3, rel: 3.5, cut: 520, wet: 0.55 }); }
+      // drips
+      for (let k = 0; k < 2; k++) if (chance(0.45)) INS.bell(nv(th), t + rand(0, bd), pick([79, 84, 86, 91]), { vel: 0.018, dec: 1.4, wet: 0.95 });
+      // the vault's groan, falling, an octave and a half under the ice-song
+      if (t >= (st.groan ??= t + rand(2, 6))) { INS.iceSong(nv(th), t + rand(0, bd), { f: 600, f1: 120, d: rand(1.2, 1.8), vel: 0.07, wet: 0.9 }); st.groan = t + rand(5, 11) * (1 - 0.5 * MOOD.deep); }
+      if (nm && chance(0.8)) INS.bell(nv(th), t + rand(0, bd * 0.5), pick([84, 88, 91]), { vel: 0.05, dec: 4, wet: 0.9 });
+      if (MOOD.hearth) { MOOD.hearth = 0; hearthMotif(th, t, S.sd * 2, { vel: 0.14 }); INS.strings(nv(th), t + bd, voicing(chordOf('Ab'), 51, 67, null, 4), bd * 1.5, { vel: 0.15, att: 0.8, rel: 2, cut: 1200, wet: 0.45 }); }
+    },
+    step(S) {
+      if (S.lvl > 0.3 && S.i % 4 === 0) INS.ost(nv(S.th), S.t, bassNote(S.ch, 36), S.sd * 3, 0.07 * S.lvl, { br: 4 });
+      if (S.lvl > 0.5 && S.i === 0 && S.bar % 2 === 0) INS.taiko(nv(S.th), S.t, 0.35 * S.lvl, { f: 62, dec: 1.2 });
+    },
+  },
+
+  // the Ketos: 6/8 at 96 bpm, D dorian. A slow rowing figure in the low strings (a pull on beats 1 and 4, the stroke Keyx
+  // sang at the oars) and over it one held high tone, the lure's, pure and never wavering. Phase 2: the rowing breaks into
+  // slams, brass in fourths. Phase 3 (MOOD.blind): the drums stop; the rowing in pizzicato, a bell and a heartbeat, so
+  // every sound she makes is heard
+  ketos: {
+    bpm: 96, beats: 6, sub: 1, gain: 0.95, int: 'always', order: [0], scale: [2, 4, 5, 7, 9, 11, 0],
+    progs: [['Dm', 'C', 'Dm', 'G'], ['Dm', 'Am', 'C', 'Dm'], ['G', 'Dm', 'C', 'Am'], ['Dm', 'G', 'Am', 'Dm']],
+    bar(S) {
+      const { th, t, bd, ch, sd } = S, st = th.st, ph = MOOD.phase, blind = MOOD.blind || ph >= 2, r = bassNote(ch, 38);
+      // the lure's tone: a pure sine, held, never wavering (none once it is blind)
+      if (!blind && S.bar % 4 === 0) tn(nv(th), t, { f: mf(86), a: 1.2, pk: 0.035, d: bd * 4 });
+      if (blind) {
+        for (const k of [0, 3]) INS.pluck(nv(th), t + k * sd, r + (k ? 7 : 0), { vel: 0.12, dec: 0.8, bright: 2, wet: 0.4 });
+        if (S.bar % 2 === 0) INS.bell(nv(th), t + sd * 1.5, 74, { vel: 0.05, dec: 4, wet: 0.85 });
+        thump(nv(th), t, 0.5); thump(nv(th), t + 0.32, 0.35);
+        return;
+      }
+      if (ph === 1) {
+        // slams: the rowing broken, brass in fourths
+        INS.brass(nv(th), t, [r, r + 5, r + 10], sd * 1.2, { vel: 0.28, att: 0.02, rel: 0.3, bright: 1800, drive: 1.5 });
+        INS.brass(nv(th), t + sd * 3, [r + 5, r + 10], sd * 0.9, { vel: 0.22, att: 0.02, rel: 0.3, bright: 1600, drive: 1.4 });
+      } else {
+        // the pull on 1 and 4
+        INS.strings(nv(th), t, [r, r + 7], sd * 2.2, { vel: 0.2, att: 0.15, rel: 0.6, cut: 700 });
+        INS.strings(nv(th), t + sd * 3, [r + 2, r + 9], sd * 2.2, { vel: 0.17, att: 0.15, rel: 0.6, cut: 650 });
+      }
+      st.pv = voicing(ch, 57, 72, st.pv, 3);
+      INS.strings(nv(th), t, st.pv, bd, { vel: 0.08, att: 0.4, rel: 0.8, cut: 1400, wet: 0.4 });
+      if (S.bar % 2 === 0) INS.choir(nv(th), t, voicing(ch, 50, 62, null, 3), bd * 2, { vel: 0.12, att: 0.8, rel: 1.4, vowel: 'u', wet: 0.5 });
+    },
+    step(S) {
+      const blind = MOOD.blind || MOOD.phase >= 2;
+      if (blind) return;
+      if (S.i === 0) INS.taiko(nv(S.th), S.t, 0.45, { f: 64, dec: 1 });
+      if (S.i === 3) INS.taiko(nv(S.th), S.t, 0.3, { f: 74, dec: 0.8 });
+      if (MOOD.phase === 1 && S.i === 5) INS.tom(nv(S.th), S.t, 0.2, { f: 150 });
+    },
+  },
+
+  // the Bottom: 44 bpm, C phrygian. A sub drone and near silence, the Gate theme's figure at three-quarter pace low in the
+  // register and in dark filtered voices as its bed; its lead quotes by turns the heads of the crypt's, the forest's and
+  // the town's tunes, slowed and darkened. After her fire (MOOD.lit): the drone gone, the hearth motif on a flute every
+  // 16 bars, the Gate's figure in C major
+  bottom: {
+    bpm: 44, beats: 4, sub: 2, bpc: 2, gain: 1.35,
+    get scale() { return MOOD.lit ? [0, 2, 4, 5, 7, 9, 11] : [0, 1, 3, 5, 7, 8, 10]; },
+    get progs() { return MOOD.lit ? [['C', 'F', 'C', 'G'], ['Am', 'F', 'C', 'G'], ['F', 'C', 'Dm', 'C']] : [['Cm', 'Db', 'Cm', 'Bb'], ['Cm', 'Ab', 'Fm', 'G'], ['Cm', 'Eb', 'Bb', 'G'], ['Fm', 'Cm', 'Db', 'G']]; },
+    bar(S) {
+      const { th, t, bd, ch, sd } = S, st = th.st, lit = MOOD.lit;
+      if (!lit && S.bar % 4 === 0) INS.drone(nv(th), t, 24, bd * 4 + 2, { vel: 0.16, att: 2.4, cut: 150 });
+      // the Gates' ominous call, slowed and low: root, flat second (a second up, after the fire), root
+      if (S.nc && th.ci === 0) {
+        const r = bassNote(chordOf(th.prog[2]), 33), h = t + bd;
+        INS.brass(nv(th), h, [r], bd * 0.8, { vel: lit ? 0.1 : 0.12, att: 0.4, rel: 0.8, bright: lit ? 900 : 420, wet: 0.6 });
+        INS.brass(nv(th), h + bd * 0.9, [r + (lit ? 2 : 1)], bd * 0.35, { vel: 0.1, att: 0.2, rel: 0.5, bright: lit ? 900 : 420, wet: 0.6 });
+        INS.brass(nv(th), h + bd * 1.35, [r], bd * 1.1, { vel: 0.11, att: 0.3, rel: 1.2, bright: lit ? 900 : 420, wet: 0.6 });
+      }
+      if (S.nc) { st.pv = voicing(ch, lit ? 52 : 45, lit ? 69 : 60, st.pv, 3); INS.strings(nv(th), t, st.pv, S.cd + 0.8, { vel: lit ? 0.12 : 0.07, att: 3, rel: 3.5, cut: lit ? 1300 : 420, wet: 0.55 }); }
+      if (!lit && S.bar % 8 === 4) {
+        // the drowned places, heard: a head of the crypt's, the forest's or the town's tune, slow, low, filtered
+        const k = (st.q = ((st.q ?? -1) + 1) % 3), mel = MAIN[k % MAIN.length].slice(0, 5).map(([m, b]) => [m - 24 + (k === 2 ? 3 : 0), b]);
+        let x = t;
+        for (const [m, b] of mel) { INS.strings(nv(th), x, [m], b * sd * 2.6, { vel: 0.07, att: 0.4, rel: 0.8, cut: 380, wet: 0.7 }); x += b * sd * 2.66; }
+      }
+      if (lit && S.bar % 16 === 8) hearthMotif(th, t, sd * 2, { flute: true, major: true, vel: 0.08 });
+      if (!lit && chance(0.25)) INS.whisper(nv(th), t + rand(0, bd * 0.5), rand(3, 5), { vel: 0.06, wet: 0.7 });
+    },
+    step(S) {
+      if (S.lvl > 0.3 && S.i % 4 === 0) INS.ost(nv(S.th), S.t, bassNote(S.ch, 36), S.sd * 3, 0.06 * S.lvl, { br: 4 });
+      if (S.lvl > 0.5 && S.i === 0 && S.bar % 2 === 0) thump(nv(S.th), S.t, 0.32 * S.lvl);
+    },
+  },
+
+  // the Shade: each borrowed form plays Act I's boss figure a fourth lower in muffled voices, with its own lead (form 1
+  // brass, 2 plucked strings, 3 drums); form 4: silence but a heartbeat and the hearth motif struggling in the bass, a
+  // note at a time
+  shade: {
+    bpm: 108, beats: 4, sub: 4, gain: 1.15, int: 'always', order: [0], scale: [9, 11, 0, 2, 4, 5, 7],
+    get drums() { return MOOD.form === 3 ? 'boss' : null; },
+    progs: [['Am', 'F', 'G', 'E'], ['Am', 'F', 'Dm', 'E'], ['Am', 'Bb', 'Am', 'G'], ['Gm', 'Eb', 'F', 'D']],
+    bar(S) {
+      const { th, t, bd, ch, sd } = S, st = th.st, f = MOOD.form || 1, r = bassNote(ch, 33);
+      if (f >= 4) {
+        thump(nv(th), t, 0.6); thump(nv(th), t + 0.3, 0.42);
+        if (S.bar % 2 === 0) { const [m, b] = MOTIF6[(st.m6 = ((st.m6 ?? -1) + 1) % 3)]; INS.brass(nv(th), t + bd * 0.25, [m - 12], b * sd * 3, { vel: 0.12, att: 0.4, rel: 1, bright: 380, wet: 0.5 }); }
+        return;
+      }
+      INS.brass(nv(th), t, [r, r + 7, r + 12], bd * 0.42, { vel: 0.2, att: 0.05, rel: 0.25, bright: 900, drive: 1.3, wet: 0.35 });
+      st.pv = voicing(ch, 57, 72, st.pv, 3);
+      INS.strings(nv(th), t, st.pv, bd - 0.1, { vel: 0.11, att: 0.3, rel: 0.6, cut: 900, wet: 0.35 });
+      if (f === 2 && S.bar % 2 === 0) INS.choir(nv(th), t, voicing(ch, 52, 64, null, 3), bd * 0.8, { vel: 0.12, att: 0.2, rel: 0.8, vowel: 'u', wet: 0.5 });
+    },
+    step(S) {
+      const { th, i } = S, f = MOOD.form || 1;
+      if (f >= 4) return;
+      if (S.bar % 2 === 1 && (i === 6 || i === 10 || i === 14)) {
+        const r = bassNote(S.ch, 45);
+        if (f === 2) INS.pluck(nv(th), S.t, r + 12, { vel: 0.12, dec: 0.6, bright: 3, wet: 0.3 });
+        else INS.brass(nv(th), S.t, [r, r + 7], i === 14 ? 0.1 : 0.16, { vel: 0.16, att: 0.015, rel: 0.12, bright: 1200, drive: 1.3 });
+      }
+    },
+  },
+
+  // her fire (the act's end, a variant of the sea lit): 60 bpm, C major. The hearth motif harmonised, then the lantern's and
+  // the sea-light's enter and the three resolve together; each peak catching (MOOD.answer) one low bell on the motif's
+  // notes; at the last line (MOOD.hold) a held chord
+  pherousa: {
+    bpm: 60, beats: 4, sub: 2, gain: 1.0, order: [0], scale: [0, 2, 4, 5, 7, 9, 11],
+    progs: [['C', 'F', 'C', 'G'], ['Am', 'F', 'C', 'G'], ['F', 'C', 'Dm', 'G'], ['C', 'G', 'F', 'C']],
+    bar(S) {
+      const { th, t, bd, ch, sd } = S, st = th.st;
+      if (S.bar % 8 === 0) INS.drone(nv(th), t, 36, bd * 8 + 2, { vel: 0.1 });
+      st.pv = voicing(ch, 55, 71, st.pv, 4);
+      INS.strings(nv(th), t, st.pv, bd + 0.3, { vel: 0.15, att: 1, rel: 2, cut: 1500, wet: 0.4 });
+      if (S.bar % 2 === 0) INS.choir(nv(th), t, voicing(ch, 60, 72, null, 3), bd * 2, { vel: 0.11, att: 1.2, rel: 2, vowel: 'a', wet: 0.55 });
+      if (S.bar % 12 === 0) hearthMotif(th, t + bd * 0.25, sd * 2, { major: true, vel: 0.15, bright: 1100 });
+      if (S.bar % 12 === 4) motif(th, t + bd * 0.25, sd * 1.8, { vel: 0.1, wet: 0.6, tr: -9 });
+      if (S.bar % 12 === 8) seaMotif(th, t + bd * 0.25, sd * 2.4, { vel: 0.1, brass: 0.1, bright: 1300, tr: -2, oct: 12 });
+      if (MOOD.answer) { MOOD.answer = 0; const m = MOTIF6[(st.pk = ((st.pk ?? -1) + 1) % 3)][0] - 12; INS.bell(nv(th), t, m + 12, { vel: 0.08, dec: 5, wet: 0.8 }); tn(nv(th), t, { f: mf(m), a: 0.01, pk: 0.1, d: 3 }); }
+      if (MOOD.hold) { MOOD.hold = 0; INS.strings(nv(th), t, [48, 55, 60, 64, 67, 72], bd * 2.5, { vel: 0.22, att: 0.8, rel: 3, cut: 1800, wet: 0.5 }); INS.choir(nv(th), t, [60, 64, 67, 72], bd * 2.5, { vel: 0.16, att: 0.9, rel: 3, vowel: 'a', wet: 0.6 }); }
+      if (chance(0.3)) INS.bell(nv(th), t + rand(0, bd), pick([84, 86, 88, 91]), { vel: 0.025, dec: 5, wet: 0.95 });
+    },
+    step(S) {
+      const { th, i } = S, st = th.st;
+      if (i === 0) { st.arp = pick(ARP8); st.at = tones(S.ch, 60, 79); }
       const k = st.arp[i];
       if (k != null && S.bar % 2 === 1) INS.pluck(nv(th), S.t + rand(0, 0.01), st.at[Math.min(k, st.at.length - 1)], { vel: rand(0.05, 0.08), dec: 2, bright: 4, saw: 0.15, wet: 0.5 });
     },

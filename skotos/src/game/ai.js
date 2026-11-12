@@ -1044,7 +1044,7 @@ function drinkerAI(a, dt, pl, d) {
     face(a, tg, dt, 6); a.atkT += dt;
     const broke = a.hpMark - a.hp >= a.hpMax * 0.06 || a.status.stun > 0 || a.status.freeze > 0 || (tg === G.player && lampLightAt(tg.x, tg.z)) || td > D.t * 0 + 13 || !map.los(a.x, a.z, tg.x, tg.z);
     if (broke) { killTele(a.tele); a.tele = null; a.state = 'chase'; a.cd = 3; a.avatar?.play('idle', 1); tally(a, 'drinkBroken'); if (tg.remote) NET.h.drink?.(tg, a, 0); return 0; }
-    if (a.state === 'drinkTell' && a.atkT >= 0.6) { a.state = 'drink'; a.atkT = 0; tally(a, 'drink'); a.avatar?.play('channel', 1, { loop: true }); if (tg.remote) NET.h.drink?.(tg, a, D.t); }
+    if (a.state === 'drinkTell' && a.atkT >= 0.6) { a.state = 'drink'; a.atkT = 0; tally(a, 'drink'); Audio.sfx('lampDrink', { x: a.x, z: a.z }); a.avatar?.play('channel', 1, { loop: true }); if (tg.remote) NET.h.drink?.(tg, a, D.t); }
     if (a.state === 'drink') {
       const before = tg === G.player ? FIRE.r : 0;
       drainOf(tg, D.rate * dt, 'drink');
@@ -1108,6 +1108,7 @@ function lureAI(a, dt, pl, d) {
       // (the tail strikes from the dark: a roll in the tell slips it)
       if (inPool && !(tg.iframes > 0)) {
         const n = hitHero(a, pl, 1.3, { target: tg, ring: ringOpt(tg, L.drain) });
+        Audio.sfx('lureSnap', { x: a.x, z: a.z });
         if (n > 0) { drainOf(tg, L.drain, 'snap'); if (tg === G.player) pullHero(a.x, a.z, L.pull, 0.25, 'hud.hooked', a.radius + tg.radius + 0.4); tally(a, 'snap'); }
       } else tally(a, 'snapMissed');
       sparks(a.bait.x, 0.4, a.bait.z, 8, 0xd8f0ff, 3);
@@ -1146,7 +1147,7 @@ function lureAI(a, dt, pl, d) {
   if (inPool) {
     a.baitT = (a.baitT || 0) + dt;
     if (a.baitT >= L.bait * (H.bait ?? 0.8) / 0.8) {
-      a.l6 = 'tell'; a.atkT6 = 0; a.baitT = 0;
+      a.l6 = 'tell'; a.atkT6 = 0; a.baitT = 0; Audio.sfx('falseTone', { x: a.bait?.x ?? a.x, z: a.bait?.z ?? a.z, vol: 0.6 });
       if (a.pool) a.pool.mesh?.material?.uniforms?.uColor?.value?.set(SEA6);
       Audio.sfx('spiderHiss', { x: a.x, z: a.z, vol: 0.6 }); tally(a, 'tell');
     }
