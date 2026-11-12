@@ -5223,6 +5223,91 @@ const S = {
   // Whitecliff (call6 saved first, q32), the child and Tamarisk at the staff, her word (tam6, q33), Selna's look down and the
   // coal from the Farthest Light (coal6, q33b), the rope down to the Drained Sea; (b) the same walk for a hero of the
   // shipped format at Act V's end (no act6, no fmt): its first town entry is the hook
+  // the Drained Sea's story (q33b-q36): the arrival and Glaukos's teach; the three hearths lit out of order (2, 1, 3) and
+  // the First's memories in count order; the Gates' word; the four lost lights (the Nine's last), the Sailor (asked, then
+  // named by Glaukos), Asger's brazier and his pane melted; Keyx's lantern and its memory; the Ketos woken by the third
+  // lantern and its end (ketosDown and keyxLamp, the Well open, q36); then a reload: nothing plays again, all stays lit
+  drained: { q: 'auto=drained&sim=4&q=0&norender&cloud=off&lvl=37&cls=' + (process.env.CLS || 'warden') + '&' + A5.url('toldChild') + ',act5,tam6,call6,coal6', run: async (pg, shot) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    const ev = (f, a) => pg.evaluate(f, a);
+    await A5.tick(pg); await A4.listen(pg);
+    const listen = () => ev(async () => { const B = await import('/src/ui/bus.js'); window.__immortal = true; window.__toasts = []; B.on('toast', (m) => window.__toasts.push(String(m))); window.__dlg = []; B.on('dialog', (d) => window.__dlg.push(...(d.lines || []).map((l) => (Array.isArray(l) ? l[0] : l)))); });
+    await listen();
+    // (no wraith or crab breaks a channel while the story is checked: the foes near the hero put down before each use)
+    const calm = () => ev(() => { const G = window.__G; for (const a of G.actors.slice()) if (a.team === 'foe' && !a.dead && !a.boss && !a.prop) window.__D.kill(a); });
+    const F = (k) => ev((k) => window.__G.hero.flags[k], k);
+    // 1. the arrival and the teach
+    const ok1 = await A5.until(pg, () => { const G = window.__G; return G.hero.flags.teach6 && G.hero.quest >= 34 && !G.cine; }, 180000);
+    const s1 = await ev(() => { const G = window.__G, Fl = G.hero.flags; return { seen: !!Fl.drainedSeen, q: G.hero.quest, says: window.__says.filter((k) => /drained|skotos6/.test(k)), dlg: window.__dlg.filter((k) => /glaukos\.d/.test(k)), hints: (Fl.hints || []).filter((k) => /carry/.test(k)) }; });
+    beat('arrival: its two lines and the Skotos; Glaukos d0, d1, d2, d2b; teach6, q34, the Carried Fire hint', ok1 && s1.seen && s1.q === 34 && s1.says.length >= 3 && s1.dlg.length >= 4 && s1.hints.length === 1, s1);
+    await shot();
+    // 2. the hearths out of order; the memories in count order
+    let n = 0;
+    for (const k of [2, 1, 3]) {
+      await calm();
+      const used = await A5.use(pg, `z.interact.find((i) => i.kind === 'hearth6' && i.k === ${k})`);
+      const lit = await A5.until(pg, (k) => !!window.__G.hero.flags['hearth6_' + k], 30000, k);
+      n++;
+      const mem = await A5.until(pg, (n) => { const G = window.__G, Fl = G.hero.flags; return ['d1', 'd2', 'd3'].filter((m) => Fl['mem_' + m]).length >= n && !G.cine && !G.zone.memory; }, 120000, n);
+      const s2 = await ev((k) => { const G = window.__G, z = G.zone, Fl = G.hero.flags, it = z.interact.find((i) => i.kind === 'hearth6' && i.k === k); return { lit: it?.lit, cp: Fl.cp6?.drained, mems: ['d1', 'd2', 'd3'].filter((m) => Fl['mem_' + m]), buff: !!G.player.buffs?.memory || !!(G.player.buffs || []).find?.((b) => b.id === 'memory'), cls: document.body.className }; }, k);
+      beat(`hearth ${k} lit (${used}); a place to wake; memory d${n} after it, its look gone`, lit && mem && s2.lit && s2.cp === 'hearth' + k && s2.mems.includes('d' + n) && !/memory-deep/.test(s2.cls), s2);
+    }
+    const ok3 = await A5.until(pg, () => { const G = window.__G; return G.hero.flags.gates6 && G.hero.quest >= 35 && !G.cine; }, 120000);
+    const s3 = await ev(() => ({ q: window.__G.hero.quest, dlg: window.__dlg.filter((k) => /glaukos\.d[345]/.test(k)) }));
+    beat('the Gates\' word: Glaukos d3-d5 after the third memory; gates6, q35', ok3 && s3.q === 35 && s3.dlg.length === 3, s3);
+    // 3. the lost lights
+    for (let i = 0; i < 4; i++) {
+      await calm();
+      await A5.use(pg, `z.interact.find((it) => it.kind === 'lostLight' && it.i === ${i})`);
+      await A5.until(pg, (i) => !!window.__G.hero.flags['lost' + i], 30000, i);
+    }
+    await pg.waitForTimeout(3500);
+    const s4 = await ev(() => { const Fl = window.__G.hero.flags; return { lost: Fl.lost6, nine: !!Fl.nineLit, says: window.__says.filter((k) => /d\.stone\./.test(k)), toasts: window.__toasts.slice(-4), raw: window.__toasts.filter((m) => /«?name\./.test(m)) }; });
+    beat('the four lost lights: lost6, the Nine\'s last (nineLit), each keeper\'s line, the count', s4.lost?.length === 4 && s4.nine && s4.says.length === 4 && !s4.raw.length, s4);
+    // 4. the Sailor: asked, Glaukos's name for him, then his rest
+    const sailor0 = await ev(() => !!window.__G.zone.p5?.sailor);
+    await A5.use(pg, 'z.p5.sailor.it'); await A4.dialogs(pg, 4);
+    const asked = await F('sailorAsked');
+    const gNews = await ev(() => !window.__G.zone.p5?.glaukos?.it.used);
+    await A5.use(pg, 'z.p5.glaukos.it'); await A4.dialogs(pg, 4);
+    const y1 = await F('glaukosY1');
+    await A5.use(pg, 'z.p5.sailor.it');
+    const rest = await A5.until(pg, () => window.__G.hero.flags.sailorRest && !window.__G.zone.p5?.sailor, 30000);
+    beat('the Sailor: there, asks his name (sailorAsked), Glaukos with news names him (y1), then he rests and is gone', sailor0 && asked && gNews && y1 && rest, { sailor0, asked, gNews, y1, rest });
+    // 5. Asger
+    await calm();
+    await A5.use(pg, "z.interact.find((i) => i.kind === 'asgerBrazier')");
+    const asger = await A5.until(pg, () => window.__G.hero.flags.asgerRest && !window.__G.zone.p5?.asger, 40000);
+    const s5 = await ev(() => { const z = window.__G.zone; return { zone: z.id, pane: z.act6?.asger?.visible, lost6: window.__G.hero.flags.lost6, dlg: window.__dlg.filter((k) => /asger/.test(k)), toasts: window.__toasts.slice(-2) }; });
+    beat('Asger: his brazier lit, the pane melted, his two lines, his rest; six of seven; the Lost in the order freed', asger && s5.pane === false && s5.dlg.length >= 2 && s5.lost6?.join() === 'galini,twins,kranea,psamathe,sailor,asger', s5);
+    // 6. Keyx's lantern and its memory; the other two wake the Ketos
+    await calm();
+    await A5.use(pg, 'z.act6.mere.lamps.find((q) => q.i === 0)');
+    await A5.until(pg, () => (window.__G.hero.flags.wreck6 || []).includes(0), 30000);
+    const rem = await A5.until(pg, () => !!window.__G.zone.interact.find((i) => i.kind === 'remember6' && i.mem === 'k1') && !window.__G.cine, 30000);
+    const m1 = await ev(() => window.__dlg.includes('d.glaukos.m1'));
+    await A5.use(pg, "z.interact.find((i) => i.kind === 'remember6' && i.mem === 'k1')");
+    const k1 = await A5.until(pg, () => window.__G.hero.flags.mem_k1 && !window.__G.cine && !window.__G.zone.memory, 120000);
+    const s6 = await ev(() => ({ owed: window.__G.zone.interact.filter((i) => i.kind === 'remember6').length, toasts: window.__toasts.slice(-2) }));
+    beat('Keyx\'s lantern: Glaukos m1, «Θυμήσου» at it, the memory in black water, Memory of the fisherman', rem && m1 && k1 && s6.owed === 0, { rem, m1, k1, ...s6 });
+    for (const i of [1, 2]) { await calm(); await A5.use(pg, `z.act6.mere.lamps.find((q) => q.i === ${i})`); await A5.until(pg, (i) => (window.__G.hero.flags.wreck6 || []).includes(i), 30000, i); }
+    const wake = await A5.until(pg, () => !!window.__G.zone.boss?.awake && !window.__G.cine, 90000);
+    const s7 = await ev(() => ({ says: window.__says.filter((k) => /glaukos\.k[01]/.test(k)) }));
+    beat('the Ketos woken by the third lantern: its cine, Glaukos k0 and k1', wake && s7.says.length >= 1, s7);
+    await shot();
+    // 7. its end
+    await A5.hit(pg, null);
+    const down = await A5.until(pg, () => { const G = window.__G; return G.hero.flags.ketosDown && G.hero.quest >= 36 && !G.cine; }, 120000);
+    await pg.waitForTimeout(800);
+    const s8 = await ev(() => { const G = window.__G, Fl = G.hero.flags; return { q: G.hero.quest, keyxLamp: !!Fl.keyxLamp, says: window.__says.filter((k) => /ketos\.die|skotos6\.2|keyxlamp/.test(k)), dlg: window.__dlg.filter((k) => /glaukos\.m[23]/.test(k)), toasts: window.__toasts.slice(-3) }; });
+    beat('the Ketos\'s end: its line, the Skotos, the lantern in the mud; Glaukos m2 m3; ketosDown, keyxLamp, q36', down && s8.q === 36 && s8.keyxLamp && s8.says.length === 3 && s8.dlg.length === 2, s8);
+    // 8. a reload: nothing again, all lit
+    await A5.reload(pg, { q: 'q=0&sim=4&norender&cloud=off', wake: true }); await listen();
+    await pg.waitForTimeout(4000);
+    const s9 = await ev(() => { const G = window.__G, z = G.zone; return { zone: z.id, q: G.hero.quest, cine: !!G.cine, hearths: z.interact.filter((i) => i.kind === 'hearth6' && i.lit).length, lost: z.interact.filter((i) => i.kind === 'lostLight' && i.lit).length, pane: z.act6?.asger?.visible, sailor: !!z.p5?.sailor, asger: !!z.p5?.asger, owed: z.interact.filter((i) => i.kind === 'remember6').length, dlg: window.__dlg.length }; });
+    beat('a reload: in the Drained Sea, q36, no scene; 3 hearths and 4 lights lit, no pane, no Sailor or Asger, nothing owed', s9.zone === 'drained' && s9.q === 36 && !s9.cine && s9.hearths === 3 && s9.lost === 4 && s9.pane === false && !s9.sailor && !s9.asger && s9.owed === 0 && s9.dlg === 0, s9);
+    return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
+  } },
   hook6: { q: 'auto=town&sim=4&q=0&norender&lvl=36&cloud=off&cls=' + (process.env.CLS || 'warden'), run: async (pg, shot) => {
     const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) }), parts = (process.env.PART || 'ab').split('');
     const ev = (f, a) => pg.evaluate(f, a);

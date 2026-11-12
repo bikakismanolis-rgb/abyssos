@@ -766,6 +766,8 @@ export const TEXT = {
   'npc.arnaLast': ['Ένας γέρος χωρίς φως', 'An old man without a light'], 'npc.keeperYoung': ['Ένας νέος φαροφύλακας', 'A young lightkeeper'],
   // the names said into the dark: the rite at the Landing, the naming, Selna's roll and her nightly rite
   'name.first': ['Η Πρώτη.', 'The First.'], 'name.einar': ['Έιναρ.', 'Einar.'], 'name.arna': ['Άρνας.', 'Arna.'], 'name.thaleia': ['Θάλεια.', 'Thaleia.'], 'name.keyx': ['Κήυκας.', 'Keyx.'],
+  // (the Lost, as the names from above say them in the order freed: rollNames6)
+  'name.galini': ['Γαλήνη.', 'Galini.'], 'name.twins': ['Γλαύκη και Κυμώ.', 'Glauke and Kymo.'], 'name.kranea': ['Κρανιά.', 'Kranea.'], 'name.psamathe': ['Ψαμάθη.', 'Psamathe.'], 'name.asger': ['Άσγκερ.', 'Asger.'], 'name.leif': ['Λέιφ.', 'Leif.'],
   'name.carriers': ['Οι Φορείς.', 'The Carriers.'], 'name.sailor': ['Ναύτης.', 'Sailor.'], 'name.ivar': ['Ίβαρ.', 'Ivar.'], 'name.isarn': ['Ίσαρν.', 'Isarn.'], 'name.skotos': ['Σκότος.', 'Skotos.'],
   // q24: a stranger at the beacon. Whitecliff talks about her first
   'd.halda.v1': ['Ήρθε με τα πόδια απ\' τον βορρά. Μυρίζει θάλασσα. Εδώ κανείς δεν έχει δει θάλασσα.', 'She came on foot from the north. She smells of the sea. No one here has ever seen the sea.'],
@@ -1378,5 +1380,33 @@ export const TEXT = {
   'd.tam6.home': ['Το βλαστάρι μου είναι πιο ψηλό από μένα πια. Θα μείνω λίγο.', 'My sapling\'s taller than me now. I\'ll stay a while.'],
   'd.child.bark6': ['Φέρουσα. Αυτή που κουβαλά. Κι Αλιγενείς. Δεν τα ξεχνάω πια.', 'Pherousa. She who carries. And Saltborn. I don\'t forget them now.'],
   // (the things to use below the ice and on the way: their prompts)
-  'coal6.take': ['Πάρε ένα κάρβουνο από τον Έσχατο Φάρο', 'Take a coal from the Farthest Light']
+  'coal6.take': ['Πάρε ένα κάρβουνο από τον Έσχατο Φάρο', 'Take a coal from the Farthest Light'],
+  // (the Drained Sea: the memories in black ice and black water, the hearths, the Lost, the forgotten)
+  'd.deep.m1.1': ['Πριν από κάθε μνήμη. Η φωτιά της καίει στον βράχο, κι η θάλασσα από κάτω πήζει σε πάγο.', 'Before all memory. Her fire burns on the rock, and below it the sea sets into ice.'],
+  'd.deep.m1.2': ['Η γυναίκα που την άναψε κοιτάζει τον πάγο. Από κάτω, κάτι κινείται. Περιμένει.', 'The woman who lit it looks at the ice. Beneath it, something moves. It waits.'],
+  'd.deep.m1.3': ['Θα ξεχάσουν. Πάντα ξεχνούν. Κάποιος πρέπει να είναι από κάτω όταν ξεχάσουν.', 'They will forget. They always forget. Someone must be beneath it when they do.'],
+  'd.deep.m1.4': ['Παίρνει μια δαυλό από τη φωτιά και κατεβαίνει από μια ρωγμή στον πάγο.', 'She takes a brand from the fire and goes down through a crack in the ice.'],
+  'd.deep.m2.1': ['Στο χείλος της ρωγμής, οι δικοί της τη φωνάζουν με τ\' όνομά της.', 'At the crack\'s edge her people call her by her name.'],
+  'd.deep.m2.2': ['Μη με λέτε με τ\' όνομά μου. Ό,τι έχει όνομα δεν κρύβεται.', 'Do not call me by my name. What has a name cannot hide.'],
+  'd.deep.m2.3': ['Πείτε μόνο: η Πρώτη. Κι εγώ θα ξέρω πως με θυμάστε.', 'Say only: the First. And I will know you remember me.'],
+  'd.deep.m2.4': ['Ύστερα από τόσους χειμώνες που κανείς δεν τους μέτρησε, λένε ακόμα «η Πρώτη». Το γιατί το πήρε η θάλασσα.', 'After more winters than anyone has counted, they still say '],
+  'd.deep.m3.1': ['Στον πάτο, η γυναίκα ανάβει φωτιά πάνω σε μια πέτρα. Το σκοτάδι γυρίζει γύρω της και δεν τη βρίσκει.', 'At the bottom the woman lights a fire on a stone. The dark circles her and cannot find her.'],
+  'd.deep.m3.2': ['Πάνω της ο πάγος. Πάνω από τον πάγο οι δικοί της, που λένε ονόματα κάθε βράδυ.', 'Above her, the ice. Above the ice, her people, saying names every night.'],
+  'd.deep.m3.3': ['Φως από πάνω. Φως από κάτω. Κι ανάμεσα, το νερό μένει νερό.', 'Light above. Light below. And between them, the water stays water.'],
+  'd.deep.m3.4': ['Η φωτιά της ρίχνει ίσκιους ψηλά, μέσα στο σκοτάδι, σαν σκαλιά που ανεβαίνουν.', 'Her fire throws shadows up into the dark, like stairs climbing.'],
+  'd.ink.k1.1': ['Εφτά χειμώνες πριν. Νύχτα χωρίς φεγγάρι. Ένας ψαράς βλέπει ένα φως στη θάλασσα, ακίνητο.', 'Seven winters ago. A moonless night. A fisherman sees a light on the sea, perfectly still.'],
+  'd.ink.k1.2': ['Κήυκα! Δεν τρέμει! Γύρνα πίσω!', 'Keyx! It doesn\'t flicker! Come back!'],
+  'd.ink.k1.3': ['Ο ψαράς τραβά κουπί. Το φως τον περιμένει.', 'The fisherman rows. The light waits for him.'],
+  'd.ink.k1.4': ['Στη Σκάλα, μια γυναίκα λέει ένα όνομα ως το πρωί. Κι από τότε, κάθε βράδυ.', 'At the Landing, a woman says a name until morning. And every night since.'],
+  'hearth6.light': ['Ξανάναψε την εστία', 'Relight the hearth'],
+  'lamp.buff6': ['Μνήμη της Πρώτης', 'Memory of the First'],
+  'lost.light': ['Άναψε τον χαμένο φάρο', 'Light the lost light'],
+  'd.stone.kranea.r': ['Κρανιά. Ήρθε από το δάσος, παιδί ακόμα. Τ\' όνομά της είναι χαραγμένο και στις πέτρες του δικού σου δάσους.', 'Kranea. She came from the wood, still a child. Her name is cut in the stones of your wood too.'],
+  'q.nine': ['Εννιά φάροι καίνε', 'Nine lights burn'],
+  'npc.pilgrim': ['Προσκυνητής', 'A pilgrim'],
+  'asger.light': ['Άναψε το μαγκάλι του', 'Light his brazier'],
+  'd.asger.2.m': ['Τα χρώματά σου... Μαθητής, έτσι; Πες στους δασκάλους σου: ο δρόμος για τον βορρά υπάρχει ακόμα. Τον ξέχασαν. Δεν χάθηκε.', 'Your colours... a student, then? Tell your masters: the road north is still there. They forgot it. It isn\'t lost.'],
+  'wreck.boat': ['Άναψε το φανάρι του καραβιού', 'Light the boat\'s lantern'],
+  'q.wellOpen': ['Το Πηγάδι άνοιξε', 'The Well lies open'],
+  'lamp.buffInk': ['Μνήμη του ψαρά', 'Memory of the fisherman']
 };

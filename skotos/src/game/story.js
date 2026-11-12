@@ -9,7 +9,7 @@ import { dropShard } from './pickups.js';
 import { writeSave } from './save.js';
 import Audio from '../audio/audio.js';
 import { grantBuff, refreshStats } from './stats.js';
-import { spawnMonster, spawnNpc, ghostly } from './actors.js';
+import { spawnMonster, spawnNpc, ghostly, memoryLook } from './actors.js';
 import { BOONS } from './data.js';
 import { NET } from '../net/state.js';
 import { ATMOS } from '../world/atmos.js';
@@ -23,7 +23,7 @@ import { angleTo } from '../core/util.js';
 import { openDeepGate, FAR_BEACONS, farFire, openRootGate, witherWall, firstAutumn, growProp, zoneEmitters, setFar, setBeacon, townFires, townPresence, walkTo, stopWalk, vanish, release,
   act4Presence, isarnLantern, setLastLamp, openAnvilGate, meltPlug, forgeCold, bellowsDone, echoAt,
   act5Presence, people5, scene5, npc5, spawnNpc5, light5, iceMemOf, ICE_WHO, LIGHTS5, touch, spawnBoss, checkpoint5,
-  act6Presence } from './world.js';
+  act6Presence, light6, checkpoint6 } from './world.js';
 
 // Act III's counters: the three verses of the Long Sorrow, the three thorn walls of the Heartwood
 const STORY_TEARS = ['planting', 'sorrow', 'breaking'];
@@ -351,7 +351,7 @@ on('kill', (a) => {
   if (a.kind === 'tower' && G.zone.id === 'coast') towerDown(G.zone, a);
   if (a.kind === 'skotos' && G.zone.id === 'farlight') skotosDown(G.zone, a);
   // Act VI's bosses (stage C's part; stage D adds their lines, the lantern in the mud, the cines): the flag first, saved
-  if (a.kind === 'ketos' && G.zone.id === 'drained') boss6Down(G.zone, a, 'ketosDown');
+  if (a.kind === 'ketos' && G.zone.id === 'drained') { boss6Down(G.zone, a, 'ketosDown'); if (!a.echo) ketosDown(G.zone, a); }
   if (a.def?.legKey === 'shade' && G.zone.id === 'bottom') boss6Down(G.zone, a, 'shadeDown');
   if (G.gate && G.zone.id === 'gate') emit('gateKill', a);
 });
@@ -1886,6 +1886,12 @@ function news6(kind, a, zid) {
     if (kind === 'healer' && !F.herFire) return !F.elianteV6;
     return null;
   }
+  if (zid === 'drained') {
+    if (kind === 'glaukos') return !F.teach6 || (!!F.sailorAsked && !F.sailorRest && !F.glaukosY1);
+    if (kind === 'tamarisk') return !F.tamV6;
+    if (kind === 'sailor') return !F.sailorRest;
+    return null;
+  }
   if (zid === 'farlight' && F.tam6 && !F.drainedSeen) {
     if (kind === 'selna') return !F.selnaF6 && !F.coal6;
     if (kind === 'glaukos') return !F.glaukosF6;
@@ -1914,6 +1920,18 @@ function talk6(kind, a) {
     if (kind === 'child') { emit('dialog', { who: 'child', lines: ['d.child.6'] }); return true; }
     // (the villager of Act I's third bark: a son gone for wood, whose name is going; Leif's thread)
     if (kind === 'villager' && (a?.bark || 0) % 4 === 2 && !F.leifName) { emit('dialog', { who: 'villager', lines: ['d.v.son1'] }); return true; }
+  }
+  if (zid === 'drained') {
+    if (kind === 'tamarisk') { heal(); emit('dialog', { who: 'tamarisk', lines: [rl(F.tamV6 ? 'd.tam.again6' : 'd.tam.v1')], end: () => { F.tamV6 = true; shopOf('tamarisk')(); } }); return true; }
+    if (kind === 'glaukos') {
+      if (!F.teach6) { glaukosTeach(z); return true; }
+      // (the Sailor asked his name and did not have it: Glaukos knows what the Saltborn called him)
+      if (F.sailorAsked && !F.sailorRest && !F.glaukosY1) { emit('dialog', { who: 'glaukos', lines: ['d.glaukos.y1'], end: () => { F.glaukosY1 = true; writeSave(); emit('quest'); } }); return true; }
+      if (F.gates6 && !F.ketosDown && z.L.mode === 'mere') { emit('dialog', { who: 'glaukos', lines: ['d.glaukos.m0'] }); return true; }
+      emit('dialog', { who: 'glaukos', lines: [F.ketosDown ? 'd.glaukos.m3' : 'd.glaukos.d2b'], end: shopOf('glaukos') });
+      return true;
+    }
+    if (kind === 'sailor') { sailorTalk(z, a); return true; }
   }
   if (zid === 'farlight' && F.tam6 && !F.drainedSeen) {
     if (kind === 'selna') {
@@ -2035,6 +2053,276 @@ function enter6(id, z) {
     town6(z);
   }
   if (id === 'farlight') act6Presence(z);
+  if (id === 'drained') {
+    if (F.teach6 && h.quest < 34) setQuest(34, true);
+    if (F.gates6 && h.quest < 35) setQuest(35, true);
+    if (F.ketosDown && h.quest < 36) setQuest(36, true);
+    if (!F.drainedSeen) later(1.2, () => drainedArrival(z));
+    // the teach owed, the Gates' word owed (three hearths, three memories), the Ketos's end owed (its flags saved, the game
+    // closed in its scene): each again now
+    else if (!F.teach6) later(2, () => { if (G.zone === z && !busy()) glaukosTeach(z); });
+    else if (hearths6() >= 3 && deepSeen() >= 3 && !F.gates6) later(2, () => gatesWord(z));
+  }
+}
+
+// ---------- Act VI, the Drained Sea (q33b-q36) ----------
+const DM = 'deepMemory', IK = 'inkMemory';
+const DEEP = {
+  d1: { key: 'd.deep.m1', who: ['first'], lines: [[1, DM], [2, DM], [3, 'first'], [4, DM]] },
+  d2: { key: 'd.deep.m2', who: ['first'], lines: [[1, DM], [2, 'first'], [3, 'first'], [4, DM]] },
+  d3: { key: 'd.deep.m3', who: ['first'], lines: [[1, DM], [2, DM], [3, 'first'], [4, DM]] },
+  k1: { key: 'd.ink.k1', who: ['keyx', 'alkyone'], ink: true, lines: [[1, IK], [2, 'alkyone'], [3, IK], [4, IK]] }
+};
+const deepSeen = () => ['d1', 'd2', 'd3'].filter((m) => G.hero.flags['mem_' + m]).length;
+const hint6 = (key) => { const F = G.hero.flags; if ((F.hints ||= []).includes(key)) return; F.hints.push(key); emit('toast', t(key)); };
+// a memory in black ice (the First's three, in count order whatever the hearths' order) or black water (Keyx's): Act V's
+// flow, its figures pale and see-through, its narrator; Memory of the First (or of the fisherman) after
+function playDeep(z, mem, at, done) {
+  const F = G.hero.flags, M0 = DEEP[mem];
+  if (!M0 || F['mem_' + mem] || z.memory || G.zone !== z) return;
+  if (busy()) { later(1.5, () => playDeep(z, mem, at, done)); return; }
+  z.memory = true;
+  const lines = rls(M0.lines.map(([n, who]) => [M0.key + '.' + n, who])), figs = [], cls = M0.ink ? 'memory-ink' : 'memory-deep';
+  let fin = false;
+  Audio.sting('memoryIce'); Audio.sfx('iceSing', { vol: 0.6, pitch: M0.ink ? 0.7 : 0.9 });
+  glowBurst(at.x, 0.8, at.z, M0.ink ? 0xb0a0e0 : 0xa8c8f0, 30, 2.5, 0.3, 0.9); ring(at.x, at.z, 2.6, 0xb8d0f0, 0.8);
+  document.body.classList.add(cls);
+  const raise = () => M0.who.forEach((k, i) => {
+    const r = at.r || 0, side = M0.who.length > 1 ? (i ? 1 : -1) * 1.1 : 0, d = 1.9;
+    const f = z.map.nearestFloor(at.x + Math.sin(r) * d + Math.cos(r) * side, at.z + Math.cos(r) * d - Math.sin(r) * side, 2);
+    let a; try { a = k === 'alkyone' ? spawnNpc5(k, f.x, f.z, 0) : spawnNpc(k, f.x, f.z, 0, { memory: true, lamp: k === 'keyx' ? 0xfff0d0 : undefined }); } catch (e) { return; }
+    if (k === 'alkyone') memoryLook(a.avatar);
+    a.still = true; a.home = a.rot = r + Math.PI;
+    z.actors.push(a); R.scene.add(a.avatar.group); figs.push(a);
+    for (let n = 0; n < 24; n++) P({ x: f.x + (Math.random() - 0.5) * 0.8, y: Math.random() * 1.8, z: f.z + (Math.random() - 0.5) * 0.8, vy: 0.5, life: 1.4, size: 0.08, size1: 0.02, color: 0xc8d8f0 });
+  });
+  emit('cine', {
+    x: at.x, z: at.z + 1, dur: 3.2, zoom: 1.1, until: () => fin,
+    steps: [[0.7, raise], [1.0, () => emit('dialog', { who: M0.ink ? IK : DM, lines, end: () => { fin = true; } })]],
+    end: () => {
+      z.memory = false;
+      document.body.classList.remove(cls);
+      for (const a of figs) vanish(z, a, 1.4);
+      F['mem_' + mem] = true;
+      grantBuff('memory');
+      const p = G.player;
+      if (p) { glowBurst(p.x, 1.2, p.z, 0xc8d8f0, 26, 3, 0.25, 0.8); ring(p.x, p.z, 2.6, 0xb8d0f0, 0.6); }
+      emit('toast', t(M0.ink ? 'lamp.buffInk' : 'lamp.buff6'), 'quest');
+      writeSave(); emit('quest'); people6(z);
+      done?.();
+    }
+  });
+}
+// the arrival: under the ice no sea; ships on the bottom; far off over the Mere one still light; the Skotos remembers
+function drainedArrival(z) {
+  const F = G.hero.flags;
+  if (F.drainedSeen || z.arriving || G.zone !== z) return;
+  if (busy()) { later(1.5, () => drainedArrival(z)); return; }
+  z.arriving = true; F.drainedSeen = true; writeSave();
+  const c = z.L.spots.camp, m = z.L.spots.mere;
+  setAtmosphere(ATMOS.drainedCine || ATMOS.drained);
+  emit('cine', {
+    x: c.x, z: c.z - 8, dur: 12, zoom: 0.85, pitch: 0.2,
+    steps: [
+      [0.8, () => emit('say', 'd.drained.1')],
+      [4.4, () => { emit('say', 'd.drained.2'); if (G.cine && m) Object.assign(G.cine, { x: (c.x + m.x) / 2, z: (c.z + m.z) / 2 }); }],
+      [8.4, () => skotosSay('d.skotos6.1')]
+    ],
+    end: () => {
+      z.arriving = false;
+      setAtmosphere(ATMOS.drained);
+      emit('dialog', { who: 'glaukos', lines: ['d.glaukos.d0'], end: () => glaukosTeach(z) });
+    }
+  });
+}
+// Glaukos teaches the Carried Fire and the rule of light (q34)
+function glaukosTeach(z) {
+  const F = G.hero.flags;
+  if (F.teach6 || G.zone !== z) return;
+  emit('dialog', { who: 'glaukos', lines: ['d.glaukos.d1', 'd.glaukos.d2', 'd.glaukos.d2b'], end: () => { F.teach6 = true; writeSave(); setQuest(34); hint6('hint.carry'); later(4, () => hint6('hint.flicker')); } });
+}
+// the First's hearths: a 1.5 s channel from the Cradle (blows worth a tenth of her life break it); a warm pool of r 6, a
+// place to wake; then the next memory in count order
+on('hearth6', (it, z) => {
+  if (it.lit || G.mode !== 'play' || G.zone !== z) return;
+  touch(1.5, it, it.mesh?.userData.fireY ?? 0.6, () => hearthLit(z, it), { tough: true });
+});
+function hearthLit(z, it) {
+  const F = G.hero.flags, k = it.k;
+  F['hearth6_' + k] = true; if (!(F.hearths6 ||= []).includes(k)) F.hearths6.push(k);
+  light6(z, it, true); checkpoint6(z, 'hearth' + k);
+  writeSave();
+  Audio.sfx('lampLight', { x: it.x, z: it.z }); Audio.sting('lantern'); glowBurst(it.x, 0.9, it.z, 0xffb050, 30, 3, 0.3, 0.8); ring(it.x, it.z, 6, 0xffb060, 0.9);
+  emit('toast', t('q.hearthLit', hearths6()), 'quest'); emit('quest');
+  later(1.2, () => nextDeep(z, it));
+}
+function nextDeep(z, it) {
+  const n = deepSeen(), F = G.hero.flags;
+  if (n >= 3 || (F.hearths6 || []).length <= n) return;
+  playDeep(z, 'd' + (n + 1), { x: it.x, z: it.z, r: 0 }, () => { if (deepSeen() >= 3 && hearths6() >= 3) later(1.5, () => gatesWord(z)); });
+}
+// after the third memory: Glaukos walks in from the camp, guided by the warmth: the Gates are her fire's shadow (q35)
+function gatesWord(z) {
+  const F = G.hero.flags;
+  if (F.gates6 || G.zone !== z || z.gatesWord) return;
+  if (busy()) { later(1.5, () => gatesWord(z)); return; }
+  z.gatesWord = true;
+  const a = scene5(z, 'glaukos'), pl = G.player;
+  const say3 = () => emit('dialog', { who: 'glaukos', lines: ['d.glaukos.d3', 'd.glaukos.d4', 'd.glaukos.d5'], end: () => { F.gates6 = true; writeSave(); setQuest(35); z.gatesWord = false; scene5(z, 'glaukos', false); } });
+  if (!a) { say3(); return; }
+  const f = z.map.nearestFloor(pl.x + 2.2, pl.z + 1.4, 3), s0 = z.map.nearestFloor(pl.x + 9, pl.z + 6, 4);
+  a.x = s0.x; a.z = s0.z;
+  walkTo(a, f.x, f.z, 1.6, () => { a.home = a.rot = angleTo(a.x, a.z, pl.x, pl.z); say3(); });
+}
+// the names from above heard the first time below (the first window after the arrival)
+on('namesFall', () => {
+  const F = G.hero.flags, z = G.zone;
+  if (z?.id !== 'drained' || !F.drainedSeen || F.names6) return;
+  F.names6 = true; writeSave();
+  later(1.6, () => { if (G.zone === z) { emit('say', 'd.glaukos.n1'); hint6('hint.names'); } });
+});
+// ---------- the Lost (seven to find, optional): four lights on the Drained Sea's floor, the Sailor, Asger, Leif ----------
+const LOST_IDS = ['galini', 'twins', 'kranea', 'psamathe'];
+const lostCount = () => { const F = G.hero.flags; return [0, 1, 2, 3].filter((i) => F['lost' + i]).length + (F.sailorRest ? 1 : 0) + (F.asgerRest ? 1 : 0) + (F.leifName ? 1 : 0); };
+function lostToast() {
+  const F = G.hero.flags, n = lostCount();
+  emit('toast', t('q.lost', n), 'quest');
+  if (n >= 7 && !F.lostAll) { F.lostAll = true; writeSave(); }
+}
+on('lostLight', (it, z) => {
+  if (it.lit || G.mode !== 'play' || G.zone !== z) return;
+  touch(1, it, it.mesh?.userData.fireY ?? 1, () => {
+    const F = G.hero.flags, i = it.i, id = LOST_IDS[i];
+    F['lost' + i] = true; if (!(F.lost6 ||= []).includes(id)) F.lost6.push(id);
+    if (i === 3) F.nineLit = true;
+    light6(z, it, true); checkpoint6(z, 'lost' + i);
+    writeSave();
+    Audio.sfx('lampLight', { x: it.x, z: it.z }); glowBurst(it.x, 1.2, it.z, 0xffd080, 22, 2.2, 0.3, 0.7); ring(it.x, it.z, 4, 0xffb060, 0.8);
+    say('d.stone.' + id);
+    if (i === 3) later(3.2, () => { emit('toast', t('q.nine'), 'quest'); Audio.sting('sealight'); });
+    later(i === 3 ? 6 : 3, lostToast);
+  });
+});
+// the Sailor: his name, if the hero lit his Name-stone in Act V; else he asks, and Glaukos knows it
+function sailorTalk(z, a) {
+  const F = G.hero.flags, known = (F.names || []).includes('sailor');
+  const rest = () => { F.sailorRest = true; if (!(F.lost6 ||= []).includes('sailor')) F.lost6.push('sailor'); writeSave(); a.avatar?.play('lie', 1, { loop: true, fade: 0.4 }); later(1.4, () => vanish(z, a, 2, () => { people6(z); lostToast(); })); };
+  if (known) emit('dialog', { who: 'sailor', lines: [['d.sailor.2', 'sailor'], ['d.sailor.1', 'sailor']], end: rest });
+  else if (!F.glaukosY1) emit('dialog', { who: 'sailor', lines: ['d.sailor.0'], end: () => { F.sailorAsked = true; writeSave(); emit('quest'); } });
+  else emit('dialog', { who: 'sailor', lines: [['d.sailor.n', 'narrator'], ['d.sailor.1', 'sailor']], end: rest });
+}
+// Asger, frozen in an ice keel beside a cold brazier: lit from the Cradle, the keel melts clear and he steps out
+on('asgerBrazier', (it, z) => {
+  const F = G.hero.flags;
+  if (it.lit || F.asgerRest || G.mode !== 'play' || G.zone !== z) return;
+  touch(1, it, it.mesh?.userData.fireY ?? 0.7, () => {
+    it.lit = true; it.mesh?.userData.setLit?.(true);
+    G.asgerLit = true;
+    Audio.sfx('lampLight', { x: it.x, z: it.z }); glowBurst(it.x, 0.8, it.z, 0xffb050, 24, 2.4, 0.3, 0.7);
+    // (the keel's clear pane melts: it thins out over two seconds, steam off it, and is gone)
+    const n = scene5(z, 'asger'), keel = z.act6.asger;
+    if (keel) {
+      keel.traverse((o) => { if (o.material) { o.material = o.material.clone(); o.material.transparent = true; } });
+      for (let i = 1; i <= 10; i++) later(i * 0.2, () => keel.traverse((o) => { if (o.material) o.material.opacity = Math.max(0, 1 - i / 10) * (o.material.userData?.op0 ?? 1); }));
+      later(2.05, () => { keel.visible = false; });
+      for (let i = 0; i < 30; i++) P({ x: keel.position.x + (Math.random() - 0.5) * 1.6, y: 0.4 + Math.random() * 1.6, z: keel.position.z + (Math.random() - 0.5) * 1.6, vy: 0.7, life: 1.8, size: 0.14, size1: 0.3, color: 0xdfe8f0, alpha: 0.4 });
+    }
+    later(2.2, () => {
+      if (G.zone !== z) return;
+      if (n) { n.still = false; n.avatar?.play('Idle_Loop', 1, { loop: true, fade: 0.3 }); }
+      emit('dialog', { who: 'asger', lines: [['d.asger.1', 'asger'], [rl('d.asger.2'), 'asger']], end: () => {
+        F.asgerRest = true; G.asgerLit = false; if (!(F.lost6 ||= []).includes('asger')) F.lost6.push('asger'); writeSave();
+        const r = z.L.spots.rope || z.L.spots.camp;
+        if (n && r) { const f = z.map.nearestFloor(n.x + (r.x - n.x) * 0.2, n.z + (r.z - n.z) * 0.2, 3); walkTo(n, f.x, f.z, 1.3, () => vanish(z, n, 1.5, () => { people6(z); lostToast(); })); }
+        else { people6(z); lostToast(); }
+      } });
+    });
+  });
+});
+// ---------- the Wreck Heap and the Ketos ----------
+on('wreckLit', (it, z) => {
+  const F = G.hero.flags;
+  // (Keyx's boat: his gunwale, and the memory in its lantern)
+  if (it.i === 0 && !F.mem_k1) later(1.4, () => { if (G.zone === z && !busy()) emit('dialog', { who: 'glaukos', lines: ['d.glaukos.m1'], end: () => people6(z) }); else people6(z); });
+});
+on('ketosWake', (b) => {
+  const z = G.zone; if (z?.id !== 'drained' || b?.echo) return;
+  const m = z.L.spots.mere;
+  emit('cine', { x: m.x, z: m.z + 10, dur: 3.4, zoom: 1.2, pitch: 0.3, steps: [[0.6, () => emit('say', 'd.glaukos.k0')]] });
+  later(4.2, () => { if (G.zone === z) emit('say', 'd.glaukos.k1'); });
+});
+on('bossPhase', (a, ph) => {
+  if (a?.kind !== 'ketos' || a.echo || G.zone?.id !== 'drained') return;
+  if (ph === 1) emit('say', 'd.glaukos.k2'); else if (ph === 2) emit('say', 'd.glaukos.k3');
+});
+// its end: the neck raised to the light above the ice, once; the Mere drains into the Well; a lantern in the mud, still
+// flickering (Keyx's: ketosDown and keyxLamp saved together, first), q36
+function ketosDown(z, a) {
+  const F = G.hero.flags;
+  if (a.echo) return;
+  F.ketosDown = true; F.keyxLamp = true; writeSave();
+  const m = z.L.spots.mere;
+  emit('cine', {
+    x: a.x, z: a.z + 8, dur: 13, zoom: 1.2, pitch: 0.35,
+    steps: [
+      [0.6, () => emit('say', 'd.ketos.die')],
+      [4.4, () => { skotosSay('d.skotos6.2'); if (G.cine && m) Object.assign(G.cine, { x: m.x, z: m.z + 4 }); }],
+      [8.6, () => emit('say', 'd.keyxlamp')]
+    ],
+    end: () => emit('dialog', { who: 'glaukos', lines: ['d.glaukos.m2', 'd.glaukos.m3'], end: () => {
+      emit('toast', t('q.ketosDown'), 'big'); Audio.sting('sealight');
+      later(2.4, () => { emit('toast', t('q.wellOpen'), 'quest'); setQuest(36); });
+    } })
+  });
+}
+// ---------- Act VI's zones: what the story lays on the build's props, and who stands where ----------
+// story6Zone (act6Zone, once per build): the hearths, the lost lights, Asger's brazier; people6 (every entry and as the
+// story moves): their lights from the flags, the memories owed («Θυμήσου»), the people (want5)
+export function story6Zone(z) {
+  const A = z.act6, F = G.hero.flags, S = z.L.spots;
+  if (z.id === 'drained') {
+    for (const h of A.hearths || []) {
+      const it = { kind: 'hearth6', k: h.k, i: h.k, x: h.x, z: h.z, r: 2.6, lightR: 6, prompt: 'hearth6.light', mesh: h.mesh, lit: false };
+      it.use = () => emit('hearth6', it, z); z.interact.push(it);
+    }
+    for (const l of A.lost || []) {
+      const i = LOST_IDS.indexOf(l.id); if (i < 0) continue;
+      const p = S.lost?.find((q) => q.id === l.id)?.lamp || l;
+      const it = { kind: 'lostLight', i, id: l.id, x: p.x, z: p.z, r: 2.4, lightR: 4, prompt: 'lost.light', mesh: l.mesh, lit: false };
+      it.use = () => emit('lostLight', it, z); z.interact.push(it);
+    }
+    const br = S.asger?.brazier;
+    if (br && !F.asgerRest) { const it = { kind: 'asgerBrazier', x: br.x, z: br.z, r: 2.2, prompt: 'asger.light', mesh: A.asgerBrazier, lit: false }; it.use = () => emit('asgerBrazier', it, z); z.interact.push(it); }
+  }
+}
+export function people6(z) {
+  if (!z?.act6) return;
+  const F = G.hero.flags;
+  for (const it of z.interact) {
+    if (it.kind === 'hearth6') { const on = !!F['hearth6_' + it.k]; if (it.lit !== on || on) light6(z, it, on); it.used = on; }
+    if (it.kind === 'lostLight') { const on = !!F['lost' + it.i]; if (it.lit !== on || on) light6(z, it, on); it.used = on; }
+  }
+  // (Asger gone to rest: his pane melted, his brazier burning)
+  if (z.id === 'drained' && F.asgerRest) {
+    if (z.act6.asger) z.act6.asger.visible = false;
+    z.act6.asgerBrazier?.userData.setLit?.(true);
+    const br = z.interact.find((q) => q.kind === 'asgerBrazier'); if (br) { br.lit = true; br.used = true; }
+  }
+  // the memories owed: a lit hearth whose memory is not seen yet (in count order), Keyx's lantern lit with its unseen
+  const owe = [];
+  if (z.id === 'drained') {
+    const n = deepSeen(), hs = (F.hearths6 || []);
+    if (hs.length > n && n < 3) { const it = z.interact.find((q) => q.kind === 'hearth6' && q.k === hs[n]); if (it) owe.push({ at: it, mem: 'd' + (n + 1) }); }
+    const kx = z.act6.mere?.lamps.find((q) => q.i === 0);
+    if (kx && (F.wreck6 || []).includes(0) && !F.mem_k1) owe.push({ at: kx, mem: 'k1' });
+  }
+  for (const it of z.interact.filter((q) => q.kind === 'remember6')) if (!owe.some((o) => o.mem === it.mem)) z.interact.splice(z.interact.indexOf(it), 1);
+  for (const o of owe) if (!z.interact.some((q) => q.kind === 'remember6' && q.mem === o.mem)) {
+    const it = { kind: 'remember6', mem: o.mem, x: o.at.x, z: o.at.z + 1.2, r: 2.4, prompt: 'lamp.remember', prio: 1 };
+    it.use = () => playDeep(z, o.mem, { x: o.at.x, z: o.at.z, r: 0 }, () => { if (o.mem !== 'k1' && deepSeen() >= 3 && hearths6() >= 3) later(1.5, () => gatesWord(z)); });
+    z.interact.push(it);
+  }
+  people5(z);
 }
 
 export { setQuest };

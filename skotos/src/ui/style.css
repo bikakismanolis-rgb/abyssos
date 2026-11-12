@@ -357,6 +357,11 @@ body.memory-ash #stage::after { opacity: 1; background: radial-gradient(ellipse 
 /* Act V: an Ice Memory, held in clear ice: the colour goes cold, white and blue, and the edges frost over */
 body.memory-ice #stage > canvas:first-child { filter: saturate(.35) hue-rotate(-12deg) brightness(1.1) contrast(.95); }
 body.memory-ice #stage::after { opacity: 1; background: radial-gradient(ellipse at center, transparent 38%, rgba(170, 205, 235, .3) 78%, rgba(14, 26, 40, .74) 100%); }
+/* Act VI: a memory in black ice (the First's), black-blue; a memory in black water (Keyx's), ink with a cold violet edge */
+body.memory-deep #stage > canvas:first-child { filter: saturate(.3) hue-rotate(-24deg) brightness(.92) contrast(1.05); }
+body.memory-deep #stage::after { opacity: 1; background: radial-gradient(ellipse at center, transparent 36%, rgba(60, 90, 140, .32) 76%, rgba(4, 8, 20, .82) 100%); }
+body.memory-ink #stage > canvas:first-child { filter: saturate(.25) brightness(.85) contrast(1.1); }
+body.memory-ink #stage::after { opacity: 1; background: radial-gradient(ellipse at center, transparent 34%, rgba(70, 50, 110, .3) 74%, rgba(2, 2, 8, .86) 100%); }
 #dialog[data-who="iceMemory"] .txt { font-style: italic; color: #e4f0fa; }
 #dialog[data-who="iceMemory"] .face { border-color: #bfe0f8; color: #f2f8ff; background: radial-gradient(circle at 50% 35%, #4e6a84, #0a121a); }
 #dialog[data-who="first"] .face, #dialog[data-who="einarBoy"] .face, #dialog[data-who="einar"] .face, #dialog[data-who="arnaLast"] .face, #dialog[data-who="keeperYoung"] .face { border-color: #bcd8f0; color: #eef6ff; background: radial-gradient(circle at 50% 35%, #46586c, #0c1218); }

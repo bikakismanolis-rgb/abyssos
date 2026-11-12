@@ -8,7 +8,7 @@ import { genWeep, genHeart } from '../world/gen3.js';
 import { genAshfield, genForge } from '../world/gen4.js';
 import { genCoast, genFarlight } from '../world/gen5.js';
 import { genDrained, genBottom, ropeSpot } from '../world/gen6.js';
-import { town6 } from './story.js';
+import { town6, story6Zone, people6 } from './story.js';
 import { buildLevel, propMesh, runeDisc, WIND, act3Prop, setAutumn, act4Prop, setHeat, setNight, setFlueGlow } from '../world/build.js';
 import { act5Prop } from '../world/build5.js';
 import { SEA, TICKS, clearFreeze, freezeWave, freezeRing, setShade } from '../world/sea.js';
@@ -1364,6 +1364,16 @@ function want5(z) {
       at('glaukos', 'glaukos', N.glaukos);
       (N.shore || []).forEach((s, i) => at('shore' + i, 'shorefolk', s, { idle: ['hammer', 'Idle_Rail_Call', 'lantern'][i % 3], lamp: i % 3 === 2 ? 0xf4f8ff : null }));
     }
+  } else if (z.id === 'drained') {
+    // Act VI (story.js): Tamarisk and Glaukos at the Rope camp; Glaukos on the Heap's north rim from the Gates' word until
+    // the Ketos is down; the Sailor on his keel-boat's deck until he rests; Asger in his ice keel until his brazier burns
+    const c = S.camp;
+    if (c) at('tamarisk', 'tamarisk', { ...z.map.nearestFloor(c.x + 2.2, c.z + 0.8, 2), r: Math.PI * 1.2 });
+    const rim = S.heap && F.gates6 && !F.ketosDown ? z.map.nearestFloor(S.heap.x, S.heap.z - (S.heap.r || 18) - 1.5, 3) : null;
+    if (rim) at('glaukos', 'glaukos', { ...rim, r: 0 });
+    else if (c) at('glaukos', 'glaukos', { ...z.map.nearestFloor(c.x - 2, c.z + 1.2, 2), r: Math.PI * 0.8 });
+    if (S.sailor && !F.sailorRest) at('sailor', 'sailor', { x: S.sailor.x, z: S.sailor.z, r: S.sailor.rot ?? 0 }, { still: true });
+    if (S.asger && !F.asgerRest) at('asger', 'asger', { x: S.asger.x, z: S.asger.z, r: S.asger.rot ?? 0 }, { talk: false, still: true });
   } else if (z.id === 'farlight' && F.frozen) {
     const K = N.keepers || [], open = S.holes.find((ho) => !F['hole' + ho.id]);
     if (!F.carved) {
@@ -1606,8 +1616,10 @@ const USE_DONE = {
   hearthStone(z, it) { light6(z, it, true); Audio.sfx('lampLight', { x: it.x, z: it.z }); glowBurst(it.x, 1.2, it.z, 0xffb050, 20, 2.2, 0.3, 0.6); ring(it.x, it.z, it.lightR0 || 4, 0xffb060, 0.8); },
   wreckLantern(z, it) {
     const F = G.hero.flags;
-    light6(z, it, true); if (!(F.wreck6 ||= []).includes(it.i)) F.wreck6.push(it.i);
+    const first = !(F.wreck6 ||= []).includes(it.i);
+    light6(z, it, true); if (first) F.wreck6.push(it.i);
     Audio.sfx('lampLight', { x: it.x, z: it.z }); glowBurst(it.x, 1.9, it.z, 0xffd080, 18, 2, 0.25, 0.6); ring(it.x, it.z, it.lightR, 0xffb060, 0.8);
+    if (first) emit('wreckLit', it, z);
   },
   shipBell(z, it) { emit('bellRing', it); }
 };
@@ -1620,7 +1632,7 @@ export function useDone(it) { const f = USE_DONE[it?.kind], z = G.zone; if (!f |
 // z.act6 keeps what the story lights and moves. Its props are the build's: build6.js act6Level (story6) builds each once
 // at gen6's spots, in its first state for the reading, and hands them over in z.lvl.act6; act6Zone takes them as they are
 // (PROPS6: hearths, lost, lures, wrecks, bells, lamps, walls, stones, niches, [{ k | i | id, x, z, mesh }]; ONE6:
-// asgerBrazier, neck, ember, leif, centre (her fire), ring, rope, a mesh each), so the zone never builds a second one and
+// asgerBrazier, asger (his keel's clear pane), neck, ember, leif, centre (her fire), ring, rope, a mesh each), so the zone never builds a second one and
 // lays only their interacts and their flags' states (the lanes', as they land); their light is the build's (L.lights) or
 // light.js's pools. mere, shade and figs are the fights' (combat's) and the people's (story's). The farlight zone's own
 // Act VI dressing is act6Presence's, from act5Presence
@@ -1643,7 +1655,7 @@ function openings6(z) {
   if (n) emit('mapChanged');
   return n;
 }
-const PROPS6 = ['hearths', 'lost', 'lures', 'wrecks', 'bells', 'lamps', 'walls', 'stones', 'niches'], ONE6 = ['asgerBrazier', 'neck', 'ember', 'leif', 'centre', 'ring', 'rope'];
+const PROPS6 = ['hearths', 'lost', 'lures', 'wrecks', 'bells', 'lamps', 'walls', 'stones', 'niches'], ONE6 = ['asgerBrazier', 'asger', 'neck', 'ember', 'leif', 'centre', 'ring', 'rope'];
 function act6Zone(z) {
   const L = z.L, S = L.spots, A = z.lvl.act6 || {};
   // (the zone flags Acts V and VI share: act5Zone's)
@@ -1658,6 +1670,7 @@ function act6Zone(z) {
   if (z.id === 'drained' && L.mode === 'mere' && S.mere) z.voices.push({ x: S.mere.x, z: S.mere.z - S.mere.r - 1.5, r: 4, key: 'd.wellShut' });
   if (z.id === 'drained' && L.mode === 'mere' && S.mere) mereFight(z);
   if (z.id === 'bottom' && L.mode === 'dark' && S.hearth) hearthFight(z);
+  story6Zone(z);
 }
 // the First's Hearth's fight (combat's, ai.js SHADE_FORM): the four hearthstones (lit by a 1 s touch, true lamps of r 4;
 // a Light-web takes a stone's pool while it holds, it.web), the named lamps of the Lost she freed (flags.lost6: pools of
@@ -1755,6 +1768,7 @@ function act6Enter(z) {
 export function act6Presence(z) {
   if (z?.id === 'farlight') { ropeHole(z); return; }
   if (!z?.act6) return;
+  people6(z);
   refreshEmit(z);
 }
 // the exit down: an interact on the rope hole's spot (gen6 ropeSpot), pushed once into the layout's exits too, so an
@@ -1775,7 +1789,8 @@ function ropeHole(z) {
 function act6Tick(z, dt) {
   namesTick(z, dt);
   const b = z.boss, H = z.L.spots?.heap, pl = G.player;
-  if (b && b.kind === 'ketos' && b.holdWake === true && H && pl && !pl.dead && Math.hypot(pl.x - H.x, pl.z - H.z) < 17) ketosWakes(z, b);
+  // (the Ketos wakes when the third of its shore's lanterns burns, the hero inside the Heap: flags.wreck6, story.js)
+  if (b && b.kind === 'ketos' && b.holdWake === true && H && pl && !pl.dead && (G.hero.flags.wreck6 || []).length >= 3 && Math.hypot(pl.x - H.x, pl.z - H.z) < 17) ketosWakes(z, b);
   const HH = z.L.spots?.hearth;
   if (b && b.def?.legKey === 'shade' && b.holdWake === true && HH && pl && !pl.dead && Math.hypot(pl.x - HH.x, pl.z - HH.z) < 12) { checkpoint6(z, 'stair'); emit('shadeWake', b); }
 }

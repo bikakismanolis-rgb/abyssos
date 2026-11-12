@@ -489,6 +489,20 @@ function act5Npc(kind, a, av, o) {
   if (o.frozen) { frozenLook(av); a.still = true; a.animRate = 0; }
 }
 const MEMORY = new Set(['first', 'einarBoy', 'einar', 'arnaLast', 'keeperYoung']);
+// Act VI: story. The act's people (docs/act6-contract.md, NPC kinds): the First at her Hearth in the void-ice tint with an
+// icicle crown; Keyx with the Faded's grey at half and a lamp held up; Leif small and hooded with his axe; the Sailor and the
+// forgotten in the Gates with the Faded's grey; Asger in a russet robe and a hood. o.memory: a figure in a black-ice or
+// black-water memory (pale, see-through); o.lamp a colour as Act V's
+const NPC6 = { firstDeep: 'lie', keyx: 'lantern', leif: 'fold', sailor: 'sit', asger: 'kneel', gateFaded: 'sit' };
+function act6Npc(kind, a, av, o) {
+  if (!NPC6[kind]) return;
+  if (kind === 'firstDeep') { av.setTint(0x9ab8d0, 2.1); av.setRim(0xbfe0ff, 0.8); onHead(av, M.crownParts(), 0.02); av.stoop = 0.32; }
+  else if (kind === 'keyx') { av.setTint(0x8a9ab8, 1.1); av.setRim(0x8a9ab8, 0.3); if (o.lamp !== false) lantern(a, av, typeof o.lamp === 'number' ? o.lamp : 0x5a4a8a, 0.9, 1.4); }
+  else if (kind === 'leif') { av.group.scale.multiplyScalar(0.92); onHead(av, M.hoodParts(0x3a3226, 0.3, 1.6), 0.01); if (o.axe !== false) av.hold('R', 'axe', { wood: 0x4a3524 }); }
+  else if (kind === 'sailor' || kind === 'gateFaded') { av.setTint(0x8a9ab8, kind === 'sailor' ? 0.9 : 2.2); av.setRim(0x8a9ab8, 0.3); }
+  else if (kind === 'asger') { av.setTint(0x8a3a22, 0.55); onHead(av, M.hoodParts(0x5a2618, 0.32, 1.6), 0.01); }
+  if (o.memory) memoryLook(av);
+}
 // a creature file's named socket, an empty node that moves with its bone (the crab's socket_light, where the Walking
 // Tower's ruin stands: extras.socket); null on a stand-in
 export function socketOf(av, name = av?.model?.tpl?.ex?.socket) { return name && av?.model?.kind === 'creature' ? av.model.mesh.getObjectByName(name) || null : null; }
@@ -558,7 +572,9 @@ export function rollAffixes(n) { const pool = AFFIXES.slice(); rand.shuffle(pool
 // o (Act V): { idle, lamp (a colour: a sea-lantern alight in her hand; false: none), lampPool (metres: her lamp is lamp
 // light, the keepers' in the Skotos's last phase), frozen (an ice statue in a window) }
 // Act V's people wear the frost set: the kind is the scene, but for the Whitecliff child and the memories (NPC_MODEL)
-const NPC_MODEL = { child: 'tern', first: 'selna', einarBoy: 'tern', einar: 'villager1', arnaLast: 'glaukos', keeperYoung: 'villager2' };
+const NPC_MODEL = { child: 'tern', first: 'selna', einarBoy: 'tern', einar: 'villager1', arnaLast: 'glaukos', keeperYoung: 'villager2',
+  // (Act VI: story)
+  firstDeep: 'selna', keyx: 'villager1', leif: 'villager2', sailor: 'villager0', asger: 'wayfarer', gateFaded: 'villager1' };
 const NPC5 = { alkyone: 'lantern', selna: 'kneel', tern: 'Idle_Lantern_Loop', tamarisk: 'fold', glaukos: 'talk', child: 'Idle_Loop', first: 'lantern', einarBoy: 'Idle_Loop', einar: 'Idle_Loop', arnaLast: 'lantern', keeperYoung: 'lantern' };
 export function spawnNpc(kind, x, z, rot, o = {}) {
   const vi = Math.floor(x + z) % 3;
@@ -577,6 +593,7 @@ export function spawnNpc(kind, x, z, rot, o = {}) {
     // Act V: the Saltborn at their work (a rope, the bell, a lamp), the others in their own ways (NPC5)
     : kind === 'shorefolk' ? { style: 'none', animSet: 'npc', idle: o.idle || ['hammer', 'Idle_Rail_Call', 'lantern'][vi] }
     : NPC5[kind] ? { style: 'none', animSet: 'npc', idle: o.idle || NPC5[kind] }
+    : NPC6[kind] ? { style: 'none', animSet: 'npc', idle: o.idle || NPC6[kind] }
     : { style: 'none', animSet: 'npc', idle: ['fold', 'talk', 'Idle_Loop'][vi] };
   if (o.idle && !opt.idle) opt.idle = o.idle;
   const av = makeAvatar(model, opt);
@@ -587,6 +604,7 @@ export function spawnNpc(kind, x, z, rot, o = {}) {
   if (kind === 'ivarGhost' || kind === 'wayfarerGhost') ghostly(av);
   else if (av.standIn && kind === 'isarnBoy') av.setTint(0xd8c8b0, 0.2);
   act5Npc(kind, a, av, Object.assign({}, o, { idle: opt.idle }));
+  act6Npc(kind, a, av, Object.assign({}, o, { idle: opt.idle }));
   if (o.lampPool && a.lampC != null) a.lampPool = o.lampPool;
   return a;
 }
