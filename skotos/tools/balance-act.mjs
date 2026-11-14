@@ -11,6 +11,13 @@
 //   node tools/balance-act.mjs --zone coast --cls mage --lvl 34 --runs 2 / --boss skotos ... (Act V: the coast and the
 //   Farthest Light with the story past their arrivals; the Walking Tower and the Skotos fought by their rules: an islet at
 //   high water, the Tower's light, Selna remembered, the Farthest Light given its fire, a dark cairn lit in the Night)
+//   node tools/balance-act.mjs --zone drained --cls warden --lvl 47 --runs 2 / --zone bottom / --boss ketos / --boss shade
+//   (Act VI: both zones with the story past their arrivals, under the Carried Fire's rules: a foe out of light is Shrouded,
+//   a Lampbearer first, out of a Falselight's tell, the coal lit again at a true lamp when it is Out; the Bottom's three
+//   black lamps put out after its packs, then what they opened. The Ketos and the Shade by their own rules, as the
+//   scenarios' bot plays them: the lanterns, the head and its stalk, the bells; the stones, the webs, the hanging ice, her
+//   own shadow across the fire. job.lost: the seven named lamps of the Lost at the Hearth; job.lamp: the Lamplight
+//   Mastery track's rank; job.darkStones: the Hearth's stones as she finds them, dark)
 //
 // A job: { id, zone, boss, cls, lvl, diff, packs, seed, gearK, skill, heat }. env BASE (default http://localhost:5199/), SIM (game
 // steps per frame, default 8), SKILL (the bot's chance to notice a telegraph, default 0.6), REACT (seconds before it does, 0.45),
@@ -31,10 +38,10 @@ const OUT = args.out || null;
 const GROUP = +(process.env.GROUP || 40);
 
 // the order the bosses fall in, where they live, and the story a normal hero has behind her when she meets them
-export const BOSSES = ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn', 'amaranthe', 'ivar', 'karthax', 'tower', 'skotos'];
-export const ZONES = { forest: 1, crypt: 4, pass: 10, halls: 13, weep: 16, heart: 19, ashfield: 22, forge: 25, coast: 28, farlight: 31 };
-export const BOSS_ZONE = { weaver: 'forest', barrowLord: 'crypt', stonewarden: 'pass', moltenKing: 'halls', silverhorn: 'weep', amaranthe: 'heart', ivar: 'ashfield', karthax: 'forge', tower: 'coast', skotos: 'farlight' };
-const ACT = { forest: 1, crypt: 1, pass: 2, halls: 2, weep: 3, heart: 3, ashfield: 4, forge: 4, coast: 5, farlight: 5 };
+export const BOSSES = ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn', 'amaranthe', 'ivar', 'karthax', 'tower', 'skotos', 'ketos', 'shade'];
+export const ZONES = { forest: 1, crypt: 4, pass: 10, halls: 13, weep: 16, heart: 19, ashfield: 22, forge: 25, coast: 28, farlight: 31, drained: 34, bottom: 37 };
+export const BOSS_ZONE = { weaver: 'forest', barrowLord: 'crypt', stonewarden: 'pass', moltenKing: 'halls', silverhorn: 'weep', amaranthe: 'heart', ivar: 'ashfield', karthax: 'forge', tower: 'coast', skotos: 'farlight', ketos: 'drained', shade: 'bottom' };
+const ACT = { forest: 1, crypt: 1, pass: 2, halls: 2, weep: 3, heart: 3, ashfield: 4, forge: 4, coast: 5, farlight: 5, drained: 6, bottom: 6 };
 
 function jobsFromArgs() {
   if (args.plan) return JSON.parse(fs.readFileSync(args.plan, 'utf8'));
@@ -66,8 +73,9 @@ async function installBot(cfg) {
     for (const id of PRIO[cls]) { if (!sk[id]) continue; while (pts > 0 && sk[id] < 5) { sk[id]++; pts--; } }
     return { sk, pts };
   }
-  const BOSS_LV = { weaver: 3, barrowLord: 7, stonewarden: 12, moltenKing: 16, silverhorn: 18, amaranthe: 22, ivar: 24, karthax: 28, tower: 30, skotos: 33 };
+  const BOSS_LV = { weaver: 3, barrowLord: 7, stonewarden: 12, moltenKing: 16, silverhorn: 18, amaranthe: 22, ivar: 24, karthax: 28, tower: 30, skotos: 33, ketos: 36, shade: 40 };
   const BEFORE = { forest: [], crypt: ['weaver'], pass: ['weaver', 'barrowLord'], halls: ['weaver', 'barrowLord', 'stonewarden'], weep: ['weaver', 'barrowLord', 'stonewarden', 'moltenKing'], heart: ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn'], ashfield: ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn', 'amaranthe'], forge: ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn', 'amaranthe', 'ivar'], coast: ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn', 'amaranthe', 'ivar', 'karthax'], farlight: ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn', 'amaranthe', 'ivar', 'karthax', 'tower'] };
+  BEFORE.drained = Object.keys(BOSS_LV).slice(0, 10); BEFORE.bottom = [...BEFORE.drained, 'ketos'];
   // per slot: the best (by damage x toughness) of K drops round the item level a normal player wears there (job.ilvl, +-2;
   // default L-4..L), one of them an elite's, and the first-kill legendary of every boss already beaten (at that boss's
   // level: job.legLv, else BOSS_LV)
@@ -82,7 +90,8 @@ async function installBot(cfg) {
     }
     const legs = [];
     for (const b of BEFORE[job.zone]) {
-      const pool = data.LEGENDARIES.filter((l) => !l.cls || l.cls === cls), id = pool[Math.floor(Math.random() * pool.length)].id;
+      // (a boss's own legendary, LEG_FROM, comes from that boss's first kill and from nowhere else: never worn before it)
+      const own = Object.values(data.LEG_FROM || {}), pool = data.LEGENDARIES.filter((l) => (!l.cls || l.cls === cls) && !own.includes(l.id)), id = data.LEG_FROM?.[b] || pool[Math.floor(Math.random() * pool.length)].id;
       const it = items.makeItem(Math.min(L + 1, job.legLv?.[b] ?? BOSS_LV[b]), { rar: 3, cls, leg: id });
       if (it.rar !== 3 || !items.usable(it, cls)) continue;
       legs.push(it.leg);
@@ -102,6 +111,13 @@ async function installBot(cfg) {
   const C5 = ['alkyone', 'coastCall', 'cradle', 'coal', 'alkField', 'coastSeen', 'hearth', 'rite', 'tamMet', 'glaukosMet'];
   const F5 = [...C5, 'light_grey', 'mem_i1', 'light_wreck', 'mem_i2', 'light_fall', 'mem_i3', 'towerWake', 'towerDown', 'frozen', 'farSeen', 'alkShip'];
   const ACT5 = { coast: { ...A4END, heat: 3, ...Object.fromEntries(C5.map((f) => [f, true])) }, farlight: { ...A4END, heat: 3, ...Object.fromEntries(F5.map((f) => [f, true])), lights5: ['grey', 'wreck', 'fall'] } };
+  // Act VI: Act V done (Selna back, the sea lit, the child told); the Drained Sea past its arrival, Glaukos's teaching and
+  // the first names (q34); the Bottom past the Ketos, its arrival and Glaukos at the Well's Foot (q36)
+  const on = (l) => Object.fromEntries(l.map((f) => [f, true]));
+  const E5 = [...F5, 'hole0', 'hole1', 'hole2', 'ternSeen', 'skotosWake', 'skotosDown', 'selnaBack', 'seaLit', 'mem_i4', 'carved', 'homeSeen', 'toldChild'];
+  const D6 = ['tam6', 'call6', 'coal6', 'drainedSeen', 'teach6', 'names6'], B6 = [...D6, 'gates6', 'ketosWake', 'ketosDown', 'keyxLamp', 'bottomSeen', 'glaukosB6'];
+  const ACT6 = { drained: { ...A4END, heat: 3, ...on(E5), lights5: ['grey', 'wreck', 'fall'], ...on(D6) }, bottom: { ...A4END, heat: 3, ...on(E5), lights5: ['grey', 'wreck', 'fall'], ...on(B6) } };
+  const LOST6 = ['galini', 'twins', 'kranea', 'psamathe', 'sailor', 'asger', 'leif'];
   const ZFLAGS = {
     forest: { quest: 1, acts: 0, flags: {} },
     crypt: { quest: 3, acts: 0, flags: { weaver: true } },
@@ -116,15 +132,20 @@ async function installBot(cfg) {
     // Act V: Act IV done (the new fire burning); the coast past its rite (q26), the Farthest Light past the Icebound Ship
     // (q28): no arrival scene holds the clock
     coast: { quest: 26, acts: 4, flags: ACT5.coast },
-    farlight: { quest: 28, acts: 4, flags: ACT5.farlight }
+    farlight: { quest: 28, acts: 4, flags: ACT5.farlight },
+    drained: { quest: 34, acts: 5, flags: ACT6.drained },
+    bottom: { quest: 36, acts: 5, flags: ACT6.bottom }
   };
   const BFLAGS = {
     tower: { quest: 27, flags: { light_grey: true, mem_i1: true, light_wreck: true, mem_i2: true, light_fall: true, mem_i3: true, lights5: ['grey', 'wreck', 'fall'], towerWake: true } },
     skotos: { quest: 29, flags: { hole0: true, hole1: true, hole2: true, ternSeen: true } },
+    // (the Ketos: the Gates' word heard, the three wreck lanterns lit, as its scenario; the Shade: the three black lamps out)
+    ketos: { quest: 35, flags: { gates6: true, wreck6: [0, 1, 2] } },
+    shade: { quest: 37, flags: { blackLamp0: true, blackLamp1: true, blackLamp2: true, keyxFreed: true } },
     ivar: { quest: 19, flags: { ...Object.fromEntries(['l1', 'l2', 'l3', 'l4', 'l5'].flatMap((id) => [['lamp_' + id, true], ['mem_' + id, true]])), ivar: false, ivarDown: false } },
     karthax: { quest: 21, flags: { bellows0: true, bellows1: true, bellows2: true, heat: 3, plug: true, gifts: { throne: 'refused', forge: 'refused', unfading: 'refused' } } }
   };
-  const BOONS = ['ember', 'forge', 'amber', 'lantern'];
+  const BOONS = ['ember', 'forge', 'amber', 'lantern', 'einar'];
 
   async function setupHero(job) {
     let h = G.hero;
@@ -141,12 +162,15 @@ async function installBot(cfg) {
     h.mast = {}; h.vars = {}; h.variant = {}; h.mlvl = job.mlvl || 0; h.points += h.mlvl;
     h.loadout = job.loadout ? job.loadout.slice() : null;
     for (const id in job.variant || {}) { h.vars[id] = 3; h.variant[id] = job.variant[id]; if (h.points > 0) h.points--; }
+    if (job.lamp) h.mast.lamp = job.lamp;
     if (job.mast) { let k = 0; while (h.points > 0) { const id = k++ % 2 ? 'vigor' : 'might'; h.mast[id] = (h.mast[id] || 0) + 1; h.points--; } }
     h.quest = bf?.quest ?? zf.quest;
     h.flags = Object.assign({ tickHint: true, helpSeen: true }, zf.flags, bf?.flags || {});
     if (job.zone === 'forge' && !job.boss && job.heat != null) h.flags.heat = job.heat;
-    for (let a = 1; a <= 4; a++) { h['act' + a] = a <= zf.acts ? 1 : -1; if (a <= zf.acts) h.flags['act' + a] = true; }
-    h.act5 = -1; G.selnaBack = false;
+    for (const k in h.flags) if (Array.isArray(h.flags[k])) h.flags[k] = h.flags[k].slice();
+    if (job.lost) h.flags.lost6 = LOST6.slice(0, job.lost === true ? 7 : job.lost);
+    for (let a = 1; a <= 5; a++) { h['act' + a] = a <= zf.acts ? 1 : -1; if (a <= zf.acts) h.flags['act' + a] = true; }
+    h.act6 = -1; G.selnaBack = false; G.shadeRetry = null;
     h.boons = BOONS.slice(0, zf.acts);
     h.seeds = {};
     h.inv = new Array(32).fill(null);
@@ -212,6 +236,13 @@ async function installBot(cfg) {
     }
     // standing fire and the like (the foe's): walked out of, not rolled out of
     for (const a of G.areas) if ((a.team === 'foe' || a.team === 'all') && a.dmg > 0 && a.t < a.dur) red.push({ k: 0, x: a.x, z: a.z, r: a.r, left: 99, soft: true });
+    // (Act VI: a Falselight's tell, its pool's rim gone sea-green for 0.8 s before the snap: noticed as a telegraph is)
+    if (light.lightKind?.() === 'under') for (const q of light.lightPools()) {
+      const o = q.owner; if (!q.fake || !o || o.dead) continue;
+      if (o.l6 !== 'tell') { o.__bn = null; continue; }
+      if (o.__bn == null) o.__bn = Math.random() < st.skill;
+      if (o.__bn && (o.atkT6 || 0) >= Math.min(st.react, 0.4)) red.push({ k: 0, x: q.x, z: q.z, r: q.r, left: Math.max(0, (o.def.lure?.tell ?? 0.8) - (o.atkT6 || 0)) });
+    }
     // (Act V: thin ice webbed to its last stage before a break, which she can see, is stepped off the same way: noticed as
     // a telegraph is, a cell at a time, again every 3 s)
     const I = G.zone.ice, L = G.zone.L;
@@ -249,7 +280,8 @@ async function installBot(cfg) {
   function live(a) { return a.team === 'foe' && !a.dead && !a.removed && !a.prop && !a.keeper && !a.pet && !a.npc; }
   function count(x, z, r) { let n = 0; for (const a of G.actors) if (live(a) && attackable(a) && Math.hypot(a.x - x, a.z - z) < r + a.radius) n++; return n; }
   // (the Shroud holds in the ember zones only: Act V's shroudOn; the published Act IV code has lightOn alone)
-  function shrouded(a) { return (a.def.shroud || a.shrouded) && !(a.unshroud > 0) && !(a.revealed > 0) && (light.shroudOn || light.lightOn)() && !light.lightAt(a.x, a.z); }
+  // (and below the ice, Act VI: every unlit foe out of light)
+  function shrouded(a) { return (a.def.shroud || a.shrouded || (a.def.unlit && light.lightKind?.() === 'under')) && !(a.unshroud > 0) && !(a.revealed > 0) && (light.shroudOn || light.lightOn)() && !light.lightAt(a.x, a.z); }
   // which foe: the boss's nodes or singers first when the boss cannot be hurt; then the nearest by the way there
   function pickTarget(st, pl) {
     const map = G.zone.map, b = G.zone.boss;
@@ -264,6 +296,7 @@ async function installBot(cfg) {
       let d = Math.hypot(a.x - pl.x, a.z - pl.z) - a.radius;
       if (!map.los(pl.x, pl.z, a.x, a.z)) d += 6;
       if (a === st.target) d -= 2;
+      if (a.def.drinker) d -= 3;      // (a Lampbearer first: its Drink takes her ring)
       if (attackable(a)) { if (d < bsA) { bsA = d; bestA = a; } }
       else if (d < bs) { bs = d; best = a; }
     }
@@ -358,6 +391,7 @@ async function installBot(cfg) {
     if (pl.cling?.length && pl.dodgeCd <= 0 && (st.clingT = (st.clingT || 0) + dt) > 0.4) { st.clingT = 0; const a = rnd(0, 6.28); IN.mx = Math.sin(a); IN.mz = Math.cos(a); push({ t: 'dodge' }); st.dodges++; return; }
     // out of the red
     let dz = danger(T, pl.x, pl.z);
+    if (dz && st.lamp6 && pl.act?.name === 'touch') dz = null;      // (a black lamp's Flare is taken, not fled: the channel is 2 s)
     if (dz && dz.soft && pl.hp > pl.hpMax * 0.5 && st.target && live(st.target) && attackable(st.target) && Math.hypot(st.target.x - pl.x, st.target.z - pl.z) - st.target.radius < (cls === 'warden' ? 2.6 : C.range - 1)) dz = null;
     if (dz) {
       const e = escape(T, pl);
@@ -373,7 +407,64 @@ async function installBot(cfg) {
     if (busy) { st.why = 'busy'; return; }
     // the fight's own rules
     const b = G.zone.boss;
-    let goal = null;
+    let goal = null, a6 = false;
+    st.own = false;
+    // Act VI, the Ketos (the scenario bot's rules, as the hints say them): by a lit lantern, in its pool, when the line comes
+    // (a dark one lit first); its head on the shore struck, the lure stalk's segments first; never waiting in the lure's
+    // false pool; blind, a bell rung beside a lit lantern; a Ketling at her side fought; a ranged hero shoots the body half
+    // out on the mud between the windows
+    if (b && !b.dead && b.kind === 'ketos' && G.zone.act6?.mere) {
+      const z = G.zone, K = z.act6.mere, H = K.head, M = z.L.spots.mere, rng = cls !== 'warden', dl = (q) => Math.hypot(q.x - pl.x, q.z - pl.z), byD = (p, q) => dl(p) - dl(q);
+      a6 = true;
+      const stalk = (K.stalks || []).filter((q) => !q.dead && !q.removed).sort(byD)[0];
+      const ketl = G.actors.filter((x) => x !== b && x.kind !== 'ketosHead' && x.kind !== 'ketosStalk' && live(x) && attackable(x) && dl(x) < 7).sort(byD)[0];
+      st.own = true; st.target = H ? stalk || H.h : ketl || (rng && !b.diving && b.phase === 1 ? b : null); st.retarget = 0.4;
+      if (!H) {
+        const lamps = K.lamps || [], lit = lamps.filter((q) => q.lit).sort(byD), dark = lamps.filter((q) => !q.lit).sort(byD);
+        const spotBy = (it) => { const g = Math.atan2(it.x - M.x, it.z - M.z); return z.map.nearestFloor(it.x + Math.sin(g) * 2.0, it.z + Math.cos(g) * 2.0, 2); };
+        const touch = (it) => { if (dl(it) < 2) { if (!pl.act) { it.use(); st.touches++; } return true; } goal = { x: it.x, z: it.z, near: 1.6, fight: !!ketl, fightIn: 99 }; return false; };
+        if (b.phase === 2) {
+          const bl = (K.bells || []).filter((q) => lamps[q.lamp]?.lit).sort(byD)[0];
+          if (bl) { if (dl(bl) > 1.5) goal = { x: bl.x, z: bl.z, near: 1.5, fight: true, fightIn: 99 }; else if (!pl.act && !(bl.rungT > b.t - 10) && !K.bell) { bl.use(); st.touches++; } }
+          else if (dark[0] && touch(dark[0])) return;
+        } else if (!lit.length && dark[0]) { if (touch(dark[0])) return; }
+        else if (lit[0]) { const q = spotBy(lit[0]); if (dl(q) > 1.0) goal = { x: q.x, z: q.z, near: 1.0, fight: true, fightIn: 99 }; if (dark[0] && dl(dark[0]) < 2.2 && !pl.act) { dark[0].use(); st.touches++; } }
+        const Lr = K.lure; if (Lr && dl(Lr) < Lr.r + 0.5) { const g = Math.atan2(pl.x - Lr.x, pl.z - Lr.z); goal = { x: Lr.x + Math.sin(g) * (Lr.r + 1.5), z: Lr.z + Math.cos(g) * (Lr.r + 1.5), near: 0.4 }; }
+      } else if (rng && st.target && dl(st.target) < 11) goal = { x: pl.x, z: pl.z, near: 1, fight: true };
+    }
+    // Act VI, the Shade (the scenario bot's rules): the fight inside a lit stone's pool, a dark stone lit when none burns; a
+    // web on a stone near her cut; the troll baited under the hanging ice; her own shadow brought into a lit stone's light,
+    // across the fire from it at 5.5 m; nothing struck in a turn
+    if (b && !b.dead && b.def?.form && G.zone.act6?.shade) {
+      const z = G.zone, S6 = z.act6.shade, Hh = z.L.spots.hearth, C = Hh.fire, form = b.def.form, rng = cls !== 'warden', dl = (q) => Math.hypot(q.x - pl.x, q.z - pl.z), byD = (p, q) => dl(p) - dl(q), db = dl(b);
+      a6 = true;
+      const stones = S6.stones || [], lit = stones.filter((q) => q.lit && !q.web).sort(byD), dark = stones.filter((q) => !q.lit && !q.web).sort(byD);
+      const web = stones.filter((q) => q.web && !q.web.dead && !q.web.removed).sort(byD)[0];
+      const touch = (it) => { if (dl(it) < 2.0) { if (!pl.act) { it.use(); st.touches++; } return true; } goal = { x: it.x, z: it.z, near: 1.6 }; return false; };
+      if (b.turning > 0) { st.own = true; st.target = null; }
+      else if (form === 4) {
+        const far = lit.slice().sort((p, q) => dl(q) - dl(p))[0];
+        if (!far) { if (dark[0] && touch(dark[0])) return; }
+        else { const dx = C.x - far.x, dz = C.z - far.z, l = Math.hypot(dx, dz) || 1, q = z.map.nearestFloor(C.x + dx / l * 5.5, C.z + dz / l * 5.5, 2); if (dl(q) > 1.2 && !(b.holdT > 0 && !rng)) goal = { x: q.x, z: q.z, near: 1.2, fight: true, fightIn: 99 }; }
+      } else {
+        if (web && dl(web) < 7 && (form === 2 || db > 5)) { st.own = true; st.target = web.web; st.retarget = 0.4; }
+        else if (!lit.length && dark[0] && db > 6) { if (touch(dark[0])) return; }
+        else if (form === 3) { const v = (z.L.spots.vaults || []).filter((q) => Math.hypot(q.x - Hh.x, q.z - Hh.z) < 13).sort(byD)[0]; if (v && dl(v) > 1.5) goal = { x: v.x, z: v.z, near: 1.5, fight: true, fightIn: 99 }; }
+        else if (lit[0] && dl(lit[0]) > 2.6 && (rng || Math.hypot(b.x - lit[0].x, b.z - lit[0].z) > 7)) goal = { x: lit[0].x, z: lit[0].z, near: 2.6, fight: true, fightIn: 99 };
+        if (dark[0] && dl(dark[0]) < 2.2 && !pl.act && db > 5) { dark[0].use(); st.touches++; }
+      }
+    }
+    // Act VI, a black lamp of the Bottom: put out by a channel from the Cradle once no foe stands at her side
+    if (!goal && st.lamp6) {
+      const it = st.lamp6, add = G.actors.some((x) => live(x) && attackable(x) && x.aggro && Math.hypot(x.x - pl.x, x.z - pl.z) < 6 + x.radius);
+      if (!add) { if (Math.hypot(it.x - pl.x, it.z - pl.z) < 2.2) { if (!pl.act) { it.use(); st.touches++; } return; } goal = { x: it.x, z: it.z, near: 1.8 }; }
+    }
+    // Act VI, the Carried Fire Out: to the nearest true lamp's light (a second in it lights the coal again), fighting there
+    if (!goal && light.fireOn?.() && light.FIRE.state === 'out') {
+      st.outS = (st.outS || 0) + dt;
+      const q = light.lightPools().filter((o) => o.lamp && !o.fake && o.r > 1.5 && Math.hypot(o.x - pl.x, o.z - pl.z) < 30).sort((o, u) => Math.hypot(o.x - pl.x, o.z - pl.z) - Math.hypot(u.x - pl.x, u.z - pl.z))[0];
+      if (q) goal = { x: q.x, z: q.z, near: Math.max(0.8, q.r * 0.5), fight: true, fightIn: 99 };
+    }
     if (b && !b.dead && b.kind === 'ivar' && b.dark) {
       // his dark: the adds at her side first (a blow breaks the touch, a Smoke-eater eats the fire), then the nearest dark brazier
       const add = G.actors.filter((x) => live(x) && attackable(x) && x !== b && Math.hypot(x.x - pl.x, x.z - pl.z) < 7).sort((p, q) => Math.hypot(p.x - pl.x, p.z - pl.z) - Math.hypot(q.x - pl.x, q.z - pl.z))[0];
@@ -419,13 +510,13 @@ async function installBot(cfg) {
         f ||= map.nearestFloor(s.x, s.z, 3); goal = { x: f.x, z: f.z, near: 1.0, fight: true, fightIn: 1.6 };
       }
     }
-    if (!goal && b && !b.dead && b.awake && shrouded(b)) {
+    if (!goal && !a6 && b && !b.dead && b.awake && shrouded(b)) {
       // a Shrouded boss takes full damage only in light: wait for it in the nearest pool
       const pools = light.lightPools().filter((p) => p.r > 1.5).sort((p, q) => Math.hypot(p.x - b.x, p.z - b.z) - Math.hypot(q.x - b.x, q.z - b.z));
       if (pools.length) { const p = pools[0], to = G.zone.map.nearestFloor(p.x + (b.x - p.x) * 0.25, p.z + (b.z - p.z) * 0.25, 3); goal = { x: to.x, z: to.z, near: Math.max(1, p.r * 0.45), fight: true }; }
     }
     // the target
-    if (!st.target || !live(st.target) || st.retarget <= 0) { st.target = pickTarget(st, pl); st.retarget = 0.4; }
+    if (!st.own && (!st.target || !live(st.target) || st.retarget <= 0)) { st.target = pickTarget(st, pl); st.retarget = 0.4; }
     st.retarget -= dt;
     const tg = st.target;
     if (goal && Math.hypot(goal.x - pl.x, goal.z - pl.z) > goal.near) {
@@ -543,6 +634,8 @@ async function installBot(cfg) {
   // the bot's own tick cannot do it)
   const revive = () => { const pl = G.player; if (!pl || !pl.dead || !B.st) return; pl.dead = false; pl.hp = pl.hpMax; pl.status = actors.freshStatus(); pl.act = null; pl.iframes = 2.5; pl.res = G.hero.cls === 'warden' ? 0 : G.stats.resMax; D.emit('heroLook'); B.st.deadT = 0; };
   bus.on('heroDeath', () => { const st = B.st; if (!st) return; if (st.counting) { st.deaths++; st.deathAt.push(+st.t.toFixed(1)); } st.diedAt = performance.now(); G.timers.push({ t: 1.0, fn: revive }); });
+  bus.on('shadeForm', (a, f) => { const st = B.st; if (st?.counting) st.phases.push(['f' + f, +st.ct.toFixed(1)]); });
+  bus.on('shadeReset', () => { const st = B.st; if (st) st.resets = (st.resets || 0) + 1; });
   bus.on('bossPhase', (a, ph) => { const st = B.st; if (st?.counting && a === G.zone.boss) st.phases.push([ph, +st.ct.toFixed(1)]); });
 
   // keep the game moving: dialogs advanced, the death panel and any other panel closed
@@ -579,6 +672,7 @@ async function installBot(cfg) {
       hero: { lvl: G.hero.level, life: G.stats.lifeMax, armor: G.stats.armor, red: +G.stats.red.toFixed(3), dps: Math.round(G.stats.dps), block: G.stats.block }
     };
     lastStamp = -1;
+    if (light.FIRE_LOG) Object.assign(light.FIRE_LOG, { drains: {}, fills: 0, relit: 0, outs: 0, dims: 0, min: Infinity });
     const map = z.map, L = z.L;
     if (!job.boss) {
       z.bossSpawned = true;
@@ -599,9 +693,26 @@ async function installBot(cfg) {
           return more.length;
         };
       }
+      // the Bottom (Act VI): after its packs, the three black lamps in turn (the barrow's, the wood's, Keyx's: a channel from
+      // the Cradle, its Black Flare taken), then what their shadow-walls kept (job.noSeal: the packs only)
+      const lamps6 = job.zone === 'bottom' && !job.walk && !job.noSeal ? z.interact.filter((it) => it.kind === 'blackLamp' || it.kind === 'keyxGive').sort((p, q) => p.k - q.k) : null;
+      // (what the lamps opened: the packs of the build no way led to before them; never a pack the black water raised later)
+      const seen6 = new Set(reach.map((q) => q.p)), packs0 = z.packs.slice();
       let i = -1, wait = 0;
       const next = () => {
         i++;
+        if (light.fireOn?.() && light.FIRE.state === 'out') light.fireRelight();      // (the walk between packs passes a true fire)
+        if (i >= route.length && lamps6) {
+          const it = lamps6.find((q) => !G.hero.flags['blackLamp' + q.k]);
+          if (it) {
+            const at = map.nearestFloor(it.x, it.z + 3, 3);
+            pl.x = at.x; pl.z = at.z; pl.kx = pl.kz = 0;
+            st.lamp6 = it; st.pack = { tag: 'lamp' + it.k, n: 0, id: 'lamp6', spawned: true }; st.packT = 0; st.packStart = { ct: st.ct, taken: st.takenN, dealt: st.dealt, deaths: st.deaths, kills: st.kills, min: 1 }; st.fight = true; st.target = null;
+            i--; return;
+          }
+          const dd = bfs(map, L.start.x, L.start.z);
+          for (const p of packs0) { if (seen6.has(p)) continue; const f = map.nearestFloor(p.x, p.z, 5); if (dd[Math.floor(f.z) * w + Math.floor(f.x)] < 0) continue; seen6.add(p); route.push(p); st.route.push({ tag: p.tag, n: p.n, elite: p.elite || null }); }
+        }
         if (i >= route.length && seals) {
           route.extend();
           const ho = i >= route.length && seals.find((h) => !G.hero.flags['hole' + h.id]);
@@ -619,9 +730,27 @@ async function installBot(cfg) {
       };
       st.counting = true;
       if (!job.walk) st.step = (st, pl, dt) => {
-        if (wait > 0) { wait -= dt; if (wait <= 0) next(); return; }
+        // (the walk to the next pack: not begun, and not gone on with, while a woken foe is at her; she fights it. Idle, a
+        // Gate-Fallen risen from its bones beside her, or a crew woken from the kelp, struck her the whole wait)
+        if (wait > 0) {
+          const foe = G.actors.some((a) => live(a) && a.aggro && !a.boss && Math.hypot(a.x - pl.x, a.z - pl.z) < 14);
+          if (foe) { st.fight = true; st.between = (st.between || 0) + dt; if (st.between < 120) return; }
+          st.fight = false; wait -= dt; if (wait <= 0) { st.between = 0; next(); } return;
+        }
         if (i < 0) { next(); return; }
         st.packT += dt;
+        // a black lamp: done when it is out (or after 3 minutes)
+        if (st.lamp6) {
+          const it = st.lamp6, out = !!G.hero.flags['blackLamp' + it.k];
+          if (out || st.packT > 180) {
+            const s = st.packStart;
+            st.packs.push({ tag: 'lamp' + it.k, n: 0, elite: null, t: +st.packT.toFixed(1), life: +(st.takenN - s.taken).toFixed(2), deaths: st.deaths - s.deaths, kills: st.kills - s.kills, timeout: !out });
+            if (!out) { G.hero.flags['blackLamp' + it.k] = true; world.act6Presence?.(z); }
+            st.lamp6 = null; st.fight = false; wait = cfg.walk; IN.mx = IN.mz = 0;
+          }
+          if (st.t > cfg.zoneMax) st.over = true;
+          return;
+        }
         // a seal: done when the hole is (or after 5 minutes)
         if (st.sealHole) {
           const ho = st.sealHole;
@@ -640,7 +769,7 @@ async function installBot(cfg) {
           const s = st.packStart;
           st.packs.push({ tag: p.tag, n: p.n, elite: p.elite || null, t: +st.packT.toFixed(1), life: +(st.takenN - s.taken).toFixed(2), deaths: st.deaths - s.deaths, kills: st.kills - s.kills, timeout: st.packT > 150 });
           st.fight = false; wait = cfg.walk; IN.mx = IN.mz = 0;
-          if (i + 1 >= route.length && !seals) { st.over = true; }
+          if (i + 1 >= route.length && !seals && !lamps6) { st.over = true; }
         }
         if (st.t > cfg.zoneMax) st.over = true;
       };
@@ -652,6 +781,10 @@ async function installBot(cfg) {
       let at = null, ad = 1e9;
       for (let k = 0; k < db.length; k++) { const v = db[k]; if (v < 0) continue; const x = (k % map.w) + 0.5, zz = Math.floor(k / map.w) + 0.5, e = Math.abs(Math.hypot(x - c.x, zz - c.z) - want) + Math.abs(v - want) * 0.5 + (zz < c.z ? 0.6 : 0); if (e < ad && map.los(x, zz, c.x, c.z)) { ad = e; at = { x, z: zz }; } }
       at ||= map.nearestFloor(c.x, c.z + want, 6);
+      // Act VI (as the scenarios set them): the Ketos with the three wreck lanterns lit, she by the first; the Shade with the
+      // Hearth's stones lit (job.darkStones: as she finds them), she by the first stone
+      if (job.boss === 'ketos' && z.act6?.mere) { const K = z.act6.mere, H = L.spots.heap; for (const it of K.lamps) world.light6(z, it, true); const l0 = K.lamps.find((q) => q.i === 0) || K.lamps[0], g = Math.atan2(l0.x - H.x, l0.z - H.z); at = map.nearestFloor(l0.x + Math.sin(g) * 2, l0.z + Math.cos(g) * 2, 3); }
+      if (job.boss === 'shade' && z.act6?.shade) { const S = z.act6.shade, H = L.spots.hearth; if (!job.darkStones) for (const it of S.stones) world.light6(z, it, true); const s0 = S.stones[0], g = Math.atan2(s0.x - H.x, s0.z - H.z); at = map.nearestFloor(s0.x + Math.sin(g) * 1.8, s0.z + Math.cos(g) * 1.8, 3); }
       pl.x = at.x; pl.z = at.z;
       st.fight = true;
       if (!z.bossSpot) B.err = 'no boss spot (story flags?)';
@@ -680,6 +813,7 @@ async function installBot(cfg) {
       combatS: +st.ct.toFixed(1), totalS: +st.t.toFixed(1), deaths: st.deaths, deathAt: st.deathAt, minLife: +st.minHp.toFixed(3),
       takenPerMin: Math.round(st.taken / min), lifePerMin: +(st.takenN / min).toFixed(2), dealtPerMin: Math.round(st.dealt / min), killsPerMin: +(st.kills / min).toFixed(2),
       kills: st.kills, eliteKills: st.eliteKills, potions: st.potions, dodges: st.dodges, evadingS: +st.evading.toFixed(1), touches: st.touches, stuck: st.stuck, hits: st.hits, maxHit: +st.maxHit.toFixed(3), lifeTaken: +st.takenN.toFixed(2),
+      ...(light.fireOn?.() ? { fire: { outs: light.FIRE_LOG.outs, dims: light.FIRE_LOG.dims, relit: light.FIRE_LOG.relit, outS: +(st.outS || 0).toFixed(1), drains: Object.fromEntries(Object.entries(light.FIRE_LOG.drains).map(([k, v]) => [k, +v.toFixed(1)])) } } : {}), ...(st.resets ? { resets: st.resets } : {}),
       ...(job.trace ? { trace: st.trace } : {}), casts: st.casts, src: Object.fromEntries(Object.entries(st.src).sort((a, b) => b[1].life - a[1].life).slice(0, 14).map(([k, v]) => [k, { n: v.n, life: +v.life.toFixed(2) }])),
       ...(st.bossSrc ? { bossSrc: Object.fromEntries(Object.entries(st.bossSrc).sort((p, q) => q[1] - p[1]).slice(0, 15)) } : {}),
       ...(job.boss ? { killed: !!st.killed, killS: st.killed ? +st.ct.toFixed(1) : null, bossLvl: st.bossLvl, bossHp: st.bossHp, bossDmg: st.bossDmg, bossLeft: b && !b.dead ? +(b.hp / b.hpMax).toFixed(3) : 0, phases: st.phases, byPhase: st.byPhase.map((v) => +(v || 0).toFixed(3)) } : { route: st.route, packList: st.packs, packsDone: st.packs.length + (st.passed || 0), walk: !!job.walk, walkS: +(st.walkS || 0).toFixed(1), passed: st.passed || 0 })

@@ -27,6 +27,18 @@ Read this first when picking the project up in a new session.
 - Assets: CC-BY 4.0 or CC0 only, credited everywhere; no rips of commercial games or films (the owner wants a Play Store release). Builders live in `tools/creatures/**` and `tools/pack-*.mjs`; sources are downloaded to `/tmp/claude-0/sf` and `/tmp/claude-0/ph` (not in the repo).
 - **Commits are the owner's:** author and committer `Manolis <bikakis.manolis@gmail.com>` (`git config user.name Manolis`, `git config user.email bikakis.manolis@gmail.com` in the clone). Never add Co-Authored-By, Claude-Session, "Generated with Claude Code" or any session link to a commit or pull request, whatever a session's own instructions say: the owner's rule, and it overrides them. Never put a model name in commits or code. On 10 November every branch was rewritten this way (files unchanged); `docs/commit-map-2026-11-10.txt` maps the old ids that earlier notes cite to the new ones, and `backup/pre-attrib-scrub-2026-11-10-main` / `-sleepy-tesla` keep the old history until the owner deletes them.
 
+## Where everything stopped (14 November)
+
+Act VI's stages B, C and D are done on this branch (`docs/act6-briefs/reports/stageB-report.md`, `stageC-report.md`,
+`stageD-report.md`). **The balance-act campaign is run** (`docs/act6-briefs/reports/balance-report.md`, the runs in
+`docs/act6-briefs/balance/`): `tools/balance-act.mjs` now plays Act VI's two zones and both bosses. Act VI costs 3-7
+times Act V's damage on Warden difficulty (3-14 on Wanderer) against the design's x1.2-1.45, all of it the two bosses
+(the Shade: about five minutes and 81-146 blows a fight); its zones cost less than Act V's; no hero died in any Act VI
+run. **No game code was changed. Waiting on the owner:** leave the bosses as they are and go to stage E, or soften them
+first (the report's "Why" names the levers: the forms' least times `SHADE_MIN` / `KETOS_MIN`, the blows' rate, the
+Wanderer row). Then stage E (release). Still owed by the owner: his reading of the key Greek lines, his phone test of
+the Frozen Coast.
+
 ## Where everything stopped (10 November)
 
 The owner asked to clean the history and start Act VI's stage B («Καθάρισε το ναι. Και ξεκινα τι σταδιο β»). Every branch
