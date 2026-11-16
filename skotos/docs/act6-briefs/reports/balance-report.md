@@ -77,6 +77,38 @@ means summed; bosses: the mean of the two; the act: the four.)
 - **Not in the fix's reach:** the Farthest Light's old pack time-outs (39 in its runs: a pack the bot cannot reach is given
   up after 150 s); they are Act V's and make its zones dearer, not cheaper.
 
+## After it: the owner's three changes (16 November 2026)
+
+The owner asked for three things: the bosses a little softer, the Shade gentler on the easy difficulty, and the Lost's
+seven lamps to shorten the Shade for every class. Changed (`src/game/data.js` HAZ6, `actors.js` spawnMonster, `ai.js`):
+
+- **`HAZ6.bossDmg`**, the two bosses' own blows (every form, every echo): x0.85 on every difficulty, x0.6 on Wanderer
+  (a Wanderer blow was 0.83 of Warden's; it is 0.58 of it).
+- **`SHADE_MIN`** 70 / 45 / 70 / 75 s -> 58 / 38 / 58 / 62 s. `KETOS_MIN` as it was (its fight is already at the foot of
+  its 120-200 s band).
+- **`HAZ6.bossMin`**, the least times by difficulty: x0.85 on Wanderer. **Wanderer's `bossCd`** 1 -> 1.25.
+- **Each named lamp of the Lost that burns takes 2% off every form's least time** (all seven: 14%).
+
+Measured again, the same plan's 126 boss runs (`balance/runs-after.jsonl`; lives of damage a fight, before -> after):
+
+| boss, difficulty | warden | ranger | mage | kill s after (warden / ranger / mage) |
+|---|---|---|---|---|
+| the Ketos, Warden | 0.42 -> 0.42 | 1.15 -> 1.19 | 1.56 -> 1.15 | 141-165 / 132-144 / 140-168 |
+| the Ketos, Wanderer | 0.37 -> 0.10 | 1.00 -> 0.47 | 1.27 -> 0.56 | 123-147 / 117-143 / 124-156 |
+| the Shade, Warden | 2.83 -> 1.43 | 4.62 -> 3.39 | 7.34 -> 5.66 | 281-393 / 242-334 / 273-431 |
+| the Shade, Wanderer | 1.90 -> 0.90 | 4.05 -> 1.73 | 6.58 -> 2.99 | 243-340 / 186-321 / 203-273 |
+
+- The Shade on Wanderer now costs 63% / 51% / 53% of what it does on Warden (it was 67% / 88% / 90%), and falls in
+  about 0.8 of the Warden time (the contract's 60% or more holds).
+- The Ketos on Warden difficulty is hardly changed for the Warden and the Ranger: its blows on them are few and the
+  bow's sit at the 11% cap, which the factor does not move.
+- **The Lost's seven lamps** (Warden difficulty, six runs a cell, the median): the Warden 344 -> 296 s (14%), the Ranger
+  272 -> 238 s (13%), the Mage 288 -> 249 s (14%). (By the mean the Mage shows 20%: one 431 s run without the lamps.)
+- One death in the 126 runs: a Mage with the seven lamps, in the Shade's last form on Warden difficulty. The Mage
+  against the Shade is still the hardest cell (5.66 lives a fight, her life as low as 35% without dying in the others).
+- The act against Act V after the change, Warden difficulty: x1.9 / x4.3 / x5.8 (from x3.1 / x5.3 / x7.5); Wanderer:
+  x1.5 / x3.6 / x6.6 (from x3.1 / x7.6 / x14.1). Still over the design's x1.2-1.45: the owner asked for a little.
+
 ## Not done
 
 - **The echoes** (the Ketos at the neck arch, the Shade at the warm Gate ring): the tool does not call an echo. Their

@@ -4840,7 +4840,7 @@ function ketosPre(a, dt, pl, d) {
   // (its line: a phase's life falls no faster than from its start to its threshold over KETOS_MIN; the floor the higher)
   if (a.phase !== a.phL) { a.phL = a.phase; a.phT = 0; }
   if (!away && !(a.beat > 0)) a.phT = (a.phT || 0) + dt;
-  { const ph = a.phase || 0, top = [1, 0.65, 0.3][ph], bot = [0.65, 0.3, 0][ph], k = Math.min(1, a.phT / KETOS_MIN[ph]), fl = Math.max(a.thr || 0, k < 1 ? a.hpMax * (top - (top - bot) * k) : 0); a.hpFloor = fl > 0 ? Math.min(a.hp, fl) : 0; }
+  { const ph = a.phase || 0, top = [1, 0.65, 0.3][ph], bot = [0.65, 0.3, 0][ph], k = Math.min(1, a.phT / (KETOS_MIN[ph] * H6b().bossMin)), fl = Math.max(a.thr || 0, k < 1 ? a.hpMax * (top - (top - bot) * k) : 0); a.hpFloor = fl > 0 ? Math.min(a.hp, fl) : 0; }
   // its body: under the black water (phase 1), half out on the mud (phase 2), lower again blind, deep on a Dive
   const want = a.diving ? -4.5 : a.phase === 1 ? -0.5 : a.phase === 2 ? -1.0 : -1.6;
   a.y = damp(a.y ?? want, want, 2, dt);
@@ -5193,7 +5193,11 @@ const SHADE_AT = [0.75, 0.5, 0.25];
 // (each form's least time awake: its life can fall no faster than a line from its start to its threshold over it (the
 // last form's to 0), so a form lasts this long whatever strikes it; measured, the Warden on foot is slower in every form
 // but the last, the bow and the staff hit the line)
-const SHADE_MIN = [70, 45, 70, 75];
+// (58 / 38 / 58 / 62 s from 70 / 45 / 70 / 75 after the balance campaign: the fight was five to seven minutes at the
+// profile level. By the difficulty's row (HAZ6 bossMin), and 2% less for each named lamp of the Lost that burns in the
+// rim: all seven, 14%. The lamps' light alone saved the Warden 8% and the bow and the staff, already on this line, nothing)
+const SHADE_MIN = [58, 38, 58, 62];
+const shadeMin = (f) => SHADE_MIN[f - 1] * H6b().bossMin * (1 - 0.02 * (SH6()?.niches || []).filter((n) => n.lit).length);
 const CLS4 = { warden: 'shade4w', ranger: 'shade4r', mage: 'shade4m' };
 // (the hero it fights: the page's own, or on a co-op host the one its threat holds, ai.js targetOf)
 function shadeTarget(a) { return NET.mode === 'host' ? targetOf(a) : G.player; }
@@ -5298,7 +5302,7 @@ function shadePre(a, dt, pl, d) {
   return 0;
 }
 function shadeFloor(a, S) {
-  const f = a.def.form, top = SHADE_AT[f - 2] ?? 1, bot = SHADE_AT[f - 1] ?? 0, k = Math.min(1, (a.formT || 0) / SHADE_MIN[f - 1]);
+  const f = a.def.form, top = SHADE_AT[f - 2] ?? 1, bot = SHADE_AT[f - 1] ?? 0, k = Math.min(1, (a.formT || 0) / shadeMin(f));
   const line = top - (top - bot) * k, thr = f < 4 ? bot - 0.001 : 0, fl = S.max * Math.max(thr, k < 1 ? line : 0);
   a.hpFloor = fl > 0 ? Math.min(a.hp, fl) : 0;
 }

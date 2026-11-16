@@ -171,6 +171,8 @@ export function spawnMonster(id, x, z, o = {}) {
   // one before on each)
   const HZ = G.zone?.act6 ? HAZ6 : G.zone?.act5 ? HAZ5 : null;
   if (HZ) dmg *= HZ[G.hero.diff]?.dmg ?? 1;
+  // (Act VI's two bosses, every form and echo of them: their own factor, softened after the balance campaign)
+  if (HZ === HAZ6 && def.boss) dmg *= HZ[G.hero.diff]?.bossDmg ?? 1;
   // co-op: the host's monsters stand up to the party (data.js COOP; net/coop.js rescales them as players come and go)
   const ck = NET.mode === 'host' && NET.n > 1 ? (def.boss ? COOP.boss : COOP.hp)[Math.min(4, NET.n) - 1] : 1, cd = ck !== 1 ? COOP.dmg[Math.min(4, NET.n) - 1] : 1;
   if (ck !== 1) { hp *= ck; dmg *= cd; }
