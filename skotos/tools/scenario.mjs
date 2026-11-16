@@ -1903,7 +1903,8 @@ const S = {
     r.none = await pg.evaluate(async () => ({ state: (await import('/src/game/cloud.js')).CLOUD.state, row: !!document.querySelector('#panel .cl-row'), heroes: window.__G.save.heroes.length }));
     await pg.evaluate(() => { window.__D.closePanel(); for (const k of Object.keys(localStorage)) if (k.startsWith('__fakecloud')) localStorage.removeItem(k); });
     const checks = {
-      up: r.up.untouched && r.up.docs.length === 2,
+      // (the heroes' two documents; the quiet graphics report's own, gfx/report.js 'gpu', is not a save)
+      up: r.up.untouched && r.up.docs.filter((d) => !/\/gpu$/.test(d)).length === 2,
       newDevice: r.newDevice.heroes.join() === 'hA,hB' && r.newDevice.slots === 2 && r.newDevice.cont && r.newDevice.oldField === 1.5,
       newer: r.newer?.pulled?.includes('hA') && r.newerLocal.gold === 999 && r.newerLocal.mem === 999 && r.newerLocal.backups.some((b) => b[0] === 'hA' && b[1] === 100),
       play: r.playGold === 999 && r.pushPlay?.pushed?.includes('hA') && r.pushedGold === 4321,

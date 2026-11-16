@@ -34,7 +34,7 @@ Act VI's stages B, C and D are done on this branch (`docs/act6-briefs/reports/st
 `docs/act6-briefs/balance/`): `tools/balance-act.mjs` now plays Act VI's two zones and both bosses. Act VI costs 3-7
 times Act V's damage on Warden difficulty (3-14 on Wanderer) against the design's x1.2-1.45, all of it the two bosses
 (the Shade: about five minutes and 81-146 blows a fight); its zones cost less than Act V's; no hero died in any Act VI
-run. **16 November, the owner's three changes are in** (the report's last section): the two bosses' blows x0.85 (`HAZ6.bossDmg`), the Shade's forms' least times 58 / 38 / 58 / 62 s, Wanderer gentler at the bosses (`bossDmg` 0.6, `bossMin` 0.85, `bossCd` 1.25), each named lamp of the Lost 2% off the forms' least times (13-14% with all seven, measured). Then stage E (release). Still owed by the owner: his reading of the key Greek lines, his phone test of
+run. **16 November, the owner's three changes are in** (the report's last section): the two bosses' blows x0.85 (`HAZ6.bossDmg`), the Shade's forms' least times 58 / 38 / 58 / 62 s, Wanderer gentler at the bosses (`bossDmg` 0.6, `bossMin` 0.85, `bossCd` 1.25), each named lamp of the Lost 2% off the forms' least times (13-14% with all seven, measured). **Stage E's checks are run** (`docs/act6-briefs/reports/stageE-report.md`): both builds, the strict CSP clean, 134 test runs; what does not pass was failing before the week's changes (out-of-date tests, the tremble a little over its limit, play5) or passed on a second try. **Nothing is published: the owner decides.** Still owed by the owner: his reading of the key Greek lines, his phone test of
 the Frozen Coast.
 
 ## Where everything stopped (10 November)
