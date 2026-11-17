@@ -62,18 +62,18 @@ export const HAZ6 = [
 // the clouds on the map and the sun an Icebound needs to wake (s); a lookout's hold (s) and its packs; the act's
 // creatures' life and ordinary blows (x DIFFS); a heavy blow as a share of her max life before armour (a creature's, a
 // boss's) and the most one blow may take after it (cap, %); cooldowns (regular heavy moves, bosses), the moves a boss
-// phase loses, a boss's chutes a call (phases 1-2, phase 3), from which phase two boss telegraphs may overlap (0: never),
-// a thrown block's stay (s), a falling rock (x the zone's blow), champion odds (x), Revealed. Telegraphs never change.
+// phase loses, a boss's chutes a call (bossChutes: phases 1-2, phase 3), from which phase two boss telegraphs may overlap (0: never),
+// a thrown block's stay (s), a falling rock (vault, x the zone's blow), champion odds (x), Revealed. Telegraphs never change.
 const H7 = (o) => Object.assign({ tide: 120, roar: 6, wash: 6, slide: 14, slideFoe: 35, slideElite: 20, rearm: 45, clouds: 3, sunWake: 2,
-  hold: 75, holdPacks: 2, hp: 1.8, dmg: 1, heavy: 18, bossHeavy: 22, cap: 20, cd: 1, bossCd: 1, less: 0, chutes: [1, 2], overlap: 0,
-  blockT: 30, rock: 0.9, champ: 1.5, reveal: 1.25 }, o);
+  hold: 75, holdPacks: 2, hp: 1.8, dmg: 1, heavy: 18, bossHeavy: 22, cap: 20, cd: 1, bossCd: 1, less: 0, bossChutes: [1, 2], overlap: 0,
+  blockT: 30, vault: 0.9, roarSfx: 'brookRoar', champ: 1.5, reveal: 1.25 }, o);
 export const HAZ7 = [
-  H7({ tide: 150, roar: 8, wash: 3, slide: 8, rearm: 60, clouds: 4, sunWake: 3, hold: 60, holdPacks: 1, hp: 1.5, dmg: 1.5, heavy: 9, bossHeavy: 11, cap: 12, cd: 1.35, bossCd: 1.35, less: 1, chutes: [1, 1], rock: 0.6, champ: 1.2, reveal: 1.35 }),
+  H7({ tide: 150, roar: 8, wash: 3, slide: 8, rearm: 60, clouds: 4, sunWake: 3, hold: 60, holdPacks: 1, hp: 1.5, dmg: 1.5, heavy: 9, bossHeavy: 11, cap: 12, cd: 1.35, bossCd: 1.35, less: 1, bossChutes: [1, 1], vault: 0.6, champ: 1.2, reveal: 1.35 }),
   H7({}),
   H7({ heavy: 22, bossHeavy: 27, cap: 25 }),
-  H7({ wash: 8, slide: 18, heavy: 26, bossHeavy: 32, cap: 30, bossCd: 0.9, chutes: [2, 2], overlap: 3, rock: 1.0 }),
-  H7({ tide: 110, wash: 10, slide: 22, slideFoe: 30, slideElite: 16, rearm: 40, clouds: 2, sunWake: 1.5, holdPacks: 3, heavy: 31, bossHeavy: 38, cap: 36, cd: 0.9, bossCd: 0.85, chutes: [2, 3], overlap: 2, blockT: 25, rock: 1.1, champ: 1.6 }),
-  H7({ tide: 100, wash: 12, slide: 26, slideFoe: 30, slideElite: 16, rearm: 35, clouds: 2, sunWake: 1, holdPacks: 3, heavy: 36, bossHeavy: 44, cap: 42, cd: 0.85, bossCd: 0.8, chutes: [2, 3], overlap: 2, blockT: 20, rock: 1.2, champ: 1.7 })
+  H7({ wash: 8, slide: 18, heavy: 26, bossHeavy: 32, cap: 30, bossCd: 0.9, bossChutes: [2, 2], overlap: 3, vault: 1.0 }),
+  H7({ tide: 110, wash: 10, slide: 22, slideFoe: 30, slideElite: 16, rearm: 40, clouds: 2, sunWake: 1.5, holdPacks: 3, heavy: 31, bossHeavy: 38, cap: 36, cd: 0.9, bossCd: 0.85, bossChutes: [2, 3], overlap: 2, blockT: 25, vault: 1.1, champ: 1.6 }),
+  H7({ tide: 100, wash: 12, slide: 26, slideFoe: 30, slideElite: 16, rearm: 35, clouds: 2, sunWake: 1, holdPacks: 3, heavy: 36, bossHeavy: 44, cap: 42, cd: 0.85, bossCd: 0.8, bossChutes: [2, 3], overlap: 2, blockT: 20, vault: 1.2, champ: 1.7 })
 ];
 // the save format this build reads and writes (save.js heroFits refuses a hero of a higher one as 'newer'; every hero this
 // build makes or takes up is stamped with it, boot.js startHero): 1 for Acts I-VI (a hero without `fmt` is 1; Act VI shipped at 1), 2 with Act

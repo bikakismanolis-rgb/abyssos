@@ -8,15 +8,6 @@ This file is the one reference for every name and number that two files or two b
 
 **Working rules** are Act VI's, unchanged (`act6-contract.md`, "Working rules for every lane"): never commit or push, one headless browser at a time, progress notes and stage reports in `docs/act7-briefs/reports/`, build before every commit. Numbers are Warden difficulty («Φρυκτωρός») unless a row says otherwise.
 
-## The act in short (head, "The act in ten lines")
-
-- Spring, weeks after Act VI. The warm Gates melt the peaks' old snow too fast. No villain. Nobody dies.
-- Two zones in daylight: `thaw` (level 40) and `tarn` (level 43).
-- Two bosses, neither killed: `kallisto` and `kelados`.
-- Three mechanics on shipped systems: the Race (`tide.js`), the Slide (`forge.js`), Sun and Shade (`light.js`).
-- At the cap: the Names (seven, three said at a time) and the Call. After the act: the Seven Fires, two echoes, Rested.
-- No download. No new rendering system. 65-75 focused days; the cut order takes 9.
-
 ## Lead decisions (head, "Rulings of the lead"; decisions.md)
 
 | subject | decision |
@@ -89,13 +80,7 @@ Part 4's rows sum to 61-71. The head adds four days (the `share`/`cap` hurt path
 
 ## New files
 
-| file | holds |
-|---|---|
-| `src/world/gen7.js` | `genThaw`, `genTarn` |
-| `src/world/build7.js` | `act7Prop`, `act7Level`, the cloud disc, Kelados's code parts |
-| `src/game/names7.js` | the Names and the Call; exports prefixed `N7` |
-| `tools/check-act7.mjs` | the layout checks |
-| `tools/fixtures7.mjs` | the three fixtures |
+`src/world/gen7.js` (`genThaw`, `genTarn`); `src/world/build7.js` (`act7Prop`, `act7Level`, the cloud disc, Kelados's code parts); `src/game/names7.js` (the Names and the Call); `tools/check-act7.mjs` (the layout checks); `tools/fixtures7.mjs` (the three fixtures).
 
 ## Shared names
 
@@ -328,35 +313,10 @@ Run after dressing, on both readings, with the clock at h 0 and at its top, and 
 - Two `world.js` branches for Act VII: the fallback for an unknown tag, and the champion's stand-in for a big kind (a champion pack here is never bears or trolls but `hillWolf`).
 - Elites: the generator's 15% champion roll on a pack; the runtime roll 6% × the difficulty's `elite` × `HAZ7.champ`; a certain champion or rare pack at each lookout. A rare Den-bear and a rare Rock-roller come alone; a rare scorpion (the matriarch) comes with three minions.
 
-**Placement** (`n` is the count before difficulty and co-op):
+**Placement** (part 2's pack tables; written `tag n × spots`, `n` before difficulty and co-op; **bold** = on the critical path):
 
-| zone | area | tag | n | spots | on the trail | notes |
-|---|---|---|---|---|---|---|
-| `thaw` | B | `looters` | 5-7 | 2 | 2 | at two huts on the causeway |
-| `thaw` | B | `looters` | 5-6 | 1 | 0 | a camp on brook-side cells (`tide: true`): the brook's rise drives it out onto the causeway. No hut stands there |
-| `thaw` | B | `hillWolves` | 4-5 | 1 | 1 | the east knoll |
-| `thaw` | B | `choughs` | 5-6 | 1 | 0 | over the open meadow |
-| `thaw` | C | `den` | 3 | 1 | 1 | weir 1 |
-| `thaw` | C′ | `looters` | 6-7 | 1 | 1 | weir 2: the camp in the armed lane |
-| `thaw` | C′ | `icebound` | 3 | 1 | 1 | weir 3 |
-| `thaw` | C′ | `den` | 3 | 1 | 0 | the west gully |
-| `thaw` | D | `snowHunt` | 3-4 | 2 | 2 | snow between the lanes |
-| `thaw` | D | `icebound` | 3 | 1 | 1 | under the cliff, at the switchback's second turn |
-| `thaw` | D | `choughs` | 5-6 | 1 | 0 | a dead pine above lookout 2 |
-| `thaw` | E | `slabs` | 3-4 | 2 | 1 | under flat stones |
-| `thaw` | E | `terrace` | 5-6 | 1 | 1 | a marksman on a ledge |
-| `thaw` | E | `den` | 3 | 1 | 0 | the east wall |
-| `tarn` | B | `snowfield` | 5-6 | 2 | 2 | |
-| `tarn` | B | `snowHunt` | 3-4 | 1 | 0 | west of the first crevasse |
-| `tarn` | B | `icebound` | 3 | 1 | 1 | the east ridge's shade, at the second lane |
-| `tarn` | B | `choughs` | 6-7 | 1 | 0 | the rock island south of lookout 4 |
-| `tarn` | C | `worksMixed` | 5-6 | 2 | 2 | on the channel walls |
-| `tarn` | C | `icebound` | 3 | 1 | 1 | among the piers |
-| `tarn` | C | `slabs` | 4 | 1 | 0 | under the wheel-house floor |
-| `tarn` | D | `shoreDen` | 3 | 1 | 1 | a Den-bear awake and fishing |
-| `tarn` | D | `slabs` | 3-4 | 1 | 1 | the shingle |
-| `tarn` | D | `looters` | 5-6 | 1 | 1 | the causeway's head (`tide: true`) |
-| `tarn` | D | `choughs` | 5-6 | 1 | 0 | the jetty's posts |
+- **`thaw`.** B: **`looters` 5-7 × 2** at two huts on the causeway; `looters` 5-6 × 1, a camp on brook-side cells (`tide: true`) that the brook's rise drives out onto the causeway (no hut stands there); **`hillWolves` 4-5 × 1** on the east knoll; `choughs` 5-6 × 1 over the open meadow. C: **`den` 3 × 1** at weir 1. C′: **`looters` 6-7 × 1** in weir 2's armed lane; **`icebound` 3 × 1** at weir 3; `den` 3 × 1 in the west gully. D: **`snowHunt` 3-4 × 2** between the lanes; **`icebound` 3 × 1** at the switchback's second turn; `choughs` 5-6 × 1 on a dead pine above lookout 2. E: `slabs` 3-4 × 2 (**one on the path**); **`terrace` 5-6 × 1** with a marksman on a ledge; `den` 3 × 1 in the east wall.
+- **`tarn`.** B: **`snowfield` 5-6 × 2**; `snowHunt` 3-4 × 1 west of the first crevasse; **`icebound` 3 × 1** in the east ridge's shade at the second lane; `choughs` 6-7 × 1 on the rock island south of lookout 4. C: **`worksMixed` 5-6 × 2** on the channel walls; **`icebound` 3 × 1** among the piers; `slabs` 4 × 1 under the wheel-house floor. D: **`shoreDen` 3 × 1**, a Den-bear awake and fishing; **`slabs` 3-4 × 1** on the shingle; **`looters` 5-6 × 1** at the causeway's head (`tide: true`); `choughs` 5-6 × 1 on the jetty's posts.
 
 `tarn`'s rows give 13 pack spots, 9 on the critical path and 4 off it, as part 2 says. `thaw`'s rows give 17 spots (11 on the path, 6 off) against part 2's "fifteen, eleven on, four off": see "Numbers not yet set". The bot's zone run takes the first eight packs in reach.
 
@@ -537,7 +497,7 @@ A lookout's hold is priced apart: 0.10-0.20 lives on Warden.
 | B7 | One vulnerability at a time, × 1.5 |
 | B8 | One boss actor (`G.bossActor`), never off screen, never untouchable. **Neither is killed** |
 | B9 | Pace by difficulty goes through `bcd7`. `boss()` already runs its third phase a quarter faster: no table adds to that |
-| B10 | Halda calls the phase's one thing from `haldaRim`, once a phase: 8 s into Kallisto's phase 1 and 10 s into Kelados's, and on the entry move of phases 2 and 3. Her one act: she pulls a lever herself 25 s into Kelados's phase 3 if none was pulled in that phase (`d.halda7.s3b`). It shortens nothing by rule |
+| B10 | Halda calls the phase's one thing from `haldaRim`, once a phase: 8 s into Kallisto's phase 1 and 10 s into Kelados's, and on the entry move of phases 2 and 3. Her one act: she pulls a lever herself 25 s into Kelados's phase 3 if no lever has been pulled by then (`d.halda7.s3b`). It shortens nothing by rule |
 
 **`spare`** (the ending of both). At 0 life a def with `spare: true` rests where it would die. The order: the rest flag is saved first; the `kill` event fires as for any boss, so the quest step, the loot and the first-kill legendary follow the shipped route; the body plays its rest clip, becomes an NPC body that nothing can target, and the story's scene takes over. There is never a corpse. The scenarios assert the drop, the flag, the quest step and that the body is still in the scene.
 
@@ -607,3 +567,486 @@ A lookout's hold is priced apart: 0.10-0.20 lives on Warden.
 **Co-op at both** (part 2): life × `COOP.boss` (1.6 at two, 3.0 at four). A charge picks the hero farthest from her last target. With three or four heroes: a Rockfall or Ice Block falls on the farthest and, 1 s later, on the nearest shooter (five blocks may stand); the Roar arms one chute more (three at most). The Sweep turns to the hero with the most threat in reach. A downed hero in a lane is moved to its edge.
 
 **The arena hearth and the Call** (part 3, "The Call", rule 6): each arena's `hearth` is lit from the fight's start, and flares again once: at Kallisto's last phase and the first time Kelados goes to his knees. A horn sounds, a blue circle shows round the hearth, toast `call.again`. At most two Calls a fight.
+
+### The Names («Τα Ονόματα»; `names7.js`; part 3, "The Names")
+
+The hero says up to three Names. Each is a rule that pays only when she fights that way. Exports «pick»: `N7` (the table), `N7learn(h)`, `N7say`, `N7deepen`, `N7openSlot`, `N7call`. Text keys are `name7.<id>.d` (Kept), `.d2` (Deep), `.how` (the deed).
+
+| id | name | unlock | Kept («Φυλαγμένο») | Deep («Βαθύ») | during the Call | ceiling for the blow cap |
+|---|---|---|---|---|---|---|
+| `arna` | «Άρνας» / Arna | given at q40 | first hit on a foe at full life: +40% | if it falls within 4 s, her slowest skill comes back 15% sooner | every foe counts as at full life once each 3 s | × 1.4 |
+| `isarn` | «Ίσαρν» / Isarn | given at q40 | the flask refills in 12 s, not 18 | for 4 s after she drinks, she is hurt 30% less | the flask is ready at once and refills in 6 s | — |
+| `pherousa` | «Φέρουσα» / Pherousa | given at q40 | while she holds 70 or more resource: +18% | and her skills cost 15% less | her resource cannot fall below 70 | × 1.18 |
+| `einar` | «Έιναρ» / Einar | `flags.remembered` | over 9 m: +20% | a critical hit from afar leaves the foe Revealed for 2 s | every foe counts as far | × 1.2 |
+| `keyx` | «Κήυκας» / Keyx | `flags.landing6` | after each dodge, the next hit within 2 s: +60% | a dodge that passes through a blow comes back at once (at most once a dodge) | the dodge's cooldown is halved | × 1.6 |
+| `asger` | «Άσγκερ» / Asger | `flags.asgerRest` | each skill that is not the one before it: +10%, up to three; the stacks fall after 6 s without a skill | at three, the basic attack gives twice the resource | she is at three and nothing ends it | × 1.3 |
+| `ivar` | «Ίβαρ» / Ivar | `flags.ivarEcho7`: his echo beaten once after q40 | each second she does not move (within 1 m; 3 m ends it): +6% damage, −5% hurt, up to four | at four, nothing moves her and no blow breaks what she is doing (the wash-out's lane still does) | she is at four, and moving does not end it | × 1.24 |
+
+| # | rule (each is asserted by `names7`) |
+|---|---|
+| N1 | Slot 1 is free and opens at q40 with Arna said in it. Slot 2 costs **6 points**, slot 3 **12**. A Name made Deep costs **8** each, permanent until a respec. Three Deep Names said: 42 points |
+| N2 | The points come from the shipped pool: `pointsSpent` adds 6, 12 and 8 a Deep |
+| N3 | Changing which Names are said is free and works **in the village only** (`name7.town`). Deepening and opening a slot work anywhere |
+| N4 | A free respec at q40, once a hero (`names.free`, toast `name7.free`). A respec gives back the slots' and depths' points, keeps what is learnt, and shrinks the said list to slot 1. A hero with three Deep Names who respecs has exactly `pointsEarned` points |
+| N5 | `N7learn(h)` runs on every hero taken up and at q40, on **the hero's own record** (a guest's `__real`), before `refreshStats`. A guest never learns a Name from the host's flags |
+| N6 | The panel is a third tab, `prog.tab.names`, hidden before q40, readable at 844 × 390: three slot tiles of 56 px, seven tiles in one row. Three taps from the HUD to a changed build |
+| N7 | The Names add no button, no bar and one chip (the Call's seconds in the buff row) |
+| N8 | No Name is a flat percentage. A Name's effect outside its band has its one number lowered, never a clause added |
+| N9 | Run D: each Name must pass for at least two of the three classes or it is cut before G3. Played its way: kills 6-14% faster Kept and 12-22% Deep (Isarn: lowest life 8-20 points higher, or one death fewer in twelve). Played the wrong way: nothing beyond the runs' spread. No Name ships without its play style in the bot (`job.play`: `open`, `drink`, `hold`, `far`, `dodge`, `weave`, `stand`) |
+| N10 | No word of the church register for the Names or the Call: nothing is invoked, prayed, chanted, vowed or commemorated |
+
+### The Call («Το Φώναγμα»; part 3, "The Call")
+
+| # | rule |
+|---|---|
+| C1 | At a burning lookout hearth or an arena hearth: interact kind `callFire`, prompt `call.prompt`, instant |
+| C2 | For **20 s** (`pl.buffs.call = 20`, chip `hud.call`) every Name she says acts as if its condition were met. A Deep rule applies only if she made it Deep. The 20 s are the same for every class |
+| C3 | A hero who says no Name gets +30% damage for the 20 s (`call.none`) |
+| C4 | Once a hearth a visit (`call.spent`), and never within 90 s of her last Call |
+| C5 | A lookout hearth burns once lit in this visit by a hold, or held before by this hero |
+| C6 | The Call is not loud. It never lengthens a fight: boss life is tuned without it; with both Calls used well the fight is 10-18% shorter |
+| C7 | Each hero's Call is her own, as a shrine is (`GUEST_OK` gains `callFire`) |
+
+### The Seven Fires («Οι Εφτά Φωτιές»; part 3, "The Seven Fires"; part 2, "The six lookouts")
+
+Six lookouts («βίγλες») and Arna's hill. Each lookout's person is `npc.lookout` (people.glb `villager0-2`), dry, well and in no danger. The lookouts are numbered 1-6 west to east, which is the order of the six peak sprites (`FAR_BEACONS` rows 7-12).
+
+| # | zone, place | cut off by | the hold's certain pack | what the terrain does |
+|---|---|---|---|---|
+| 1 | `thaw`, the Meadow's west knoll (a dry rock, r 4) | the brooks at their top | `looters`, champion | the brooks rise once round the knoll |
+| 2 | `thaw`, a shoulder between two flank chutes (the hook's "third peak": a slide's scar, half a woodpile) | snow | `hillWolves`, champion | one chute armed over the approach |
+| 3 | `thaw`, the terraces' lip | nothing | `slabs`, rare (a matriarch at × 1.25) with a flock | open sun: no shade within 8 m |
+| 4 | `tarn`, a rock island in the Snowfield | snow | `snowfield`, champion | two clouds cross in the 75 s |
+| 5 | `tarn`, the wheel-house's corner | masonry | `icebound`, rare (the Rock-roller alone) | its boulders stay as cover |
+| 6 | `tarn`, the skerry | the lake above 0.6 | `shoreDen`, rare | the causeway covers once |
+
+| # | rule (each is asserted by `fires7`) |
+|---|---|
+| F1 | Light the hearth: interact kind `lookHearth`, prompt `look.light`, a 2 s touch that a blow breaks |
+| F2 | Hold for `HAZ7.hold` seconds within 12 m of the hearth (`look.hold`). Out of the ring for 6 s in all, or every hero down: `look.lost`; it can be lit again after 20 s |
+| F3 | Waves: the certain pack at 4 s; a second at 30 s (not on Wanderer; a rare leader from Nightmare up); a third at 55 s on Ash and Skotos. The terrain's one thing happens at 20 s |
+| F4 | Held: toast `look.held`, flag `look1..6` (the host's world), and the rank is written on every hero present |
+| F5 | `hero.fires = [r1..r7]`. A rank is the highest difficulty on which this hero held that lookout (1 Wanderer … 6 Skotos). `fires[6]`, Arna's hill, is the lowest of the other six |
+| F6 | **+0.5% damage and +0.5% life for each rank of each fire**, added to `dmgPct` and `lifePct` in `computeStats`. All seven at Skotos, the hard cap: +21% / +21% |
+| F7 | A rank first reached pays once: one item roll of rare or better at her level, and experience worth a quarter of her current Mastery level's bar |
+| F8 | All six held on any difficulty (every `fires[i] > 0`): the Act VII blessing is worth × 1.25, read from `hero.fires` and not from the flag; flag `firesAll`; toast `fires.all` |
+| F9 | The far fire of each peak takes its lookout's rank: scale 1 + 0.06 × rank; colours by rank 0-6: the shipped orange small, orange, 0xffc050, 0xffd870, 0xffe8a8, 0xfff4d8, white with a slow breath. Arna's hill takes the seventh rank's colour |
+| F10 | The ladder never gates the story |
+
+### Rested («Ξεκούραστος»; part 3, "Rested"; the owner's call)
+
+| # | rule (each is asserted by `rested7` with a faked clock) |
+|---|---|
+| T1 | After `act7`, at level 50: on taking a hero up, the time since `hero.played` is read **before** `hero.played` is stamped |
+| T2 | Away for an hour or more: one kill for every 4 minutes away, to at most **120** kills (`hero.rest`). What was left is kept, to the same cap. 59 minutes gives none; 8 hours gives 120; a week gives 120; a clock set back gives none |
+| T3 | While `hero.rest > 0` a kill's Mastery experience counts double and the count falls by one. Nothing else changes |
+| T4 | On the first village entry with a count: the greeting `d.child7.wake`, then `q.rested`. Chip `hud.rested` (`hud.rested.r` for the Ranger) with the kills left |
+| T5 | No notifications, no streak, no calendar, no timer on screen. A restore or a cloud merge never grants it |
+
+### Blessings and legendaries (part 3, "Blessings", "Legendaries")
+
+`BOONS[7]`, header `boon.h7` «Η φωτιά που ξυπνά» / "The fire that wakes". The `.du` lines show the × 1.25 values (rounded down).
+
+| id | name | stats | × 1.25 | icon |
+|---|---|---|---|---|
+| `thaw` | «Το Λιώσιμο» / "The Thaw" | `atkSpd` 8, `move` 6 | 10 / 7 | `'roll'` |
+| `den` | «Ο Ύπνος της Αρκούδας» / "The Bear's Sleep" | `lifePct` 12, `regen` 15 | 15 / 18 | `'shield'` |
+| `sluice` | «Το Νερόθυρο» / "The Water-gate" | `area` 12, `cdr` 8 | 15 / 10 | `'star'` |
+
+| id | name | base | what it does | plain stat | from |
+|---|---|---|---|---|---|
+| `kallistoClaw` | «Το Νύχι της Καλλιστώς» / "Kallisto's Claw" | gloves, any class | after she has run 8 m without stopping, her next blow lands for +50% and Dazes its target for 1 s (never a boss); once each 6 s | +8% attack speed | `LEG_FROM.kallisto` |
+| `mountainHeart` | «Η Καρδιά του Βουνού» / "The Mountain's Heart" | chest, any class | a slide or a wash-out still moves her and costs no life; each 8 s her loud blow on the ground (a 10 m `LOUD` skill) starts a small slide of her own: a lane of 8 m, 0.6 s of warning, 60% of her weapon's damage, carrying what it hits to the lane's end. It is not loud and hurts no hero | +10% armour | `LEG_FROM.kelados` |
+
+Both are `LEGENDARIES` rows with `drop: false`. `legBack` gains `'kallisto'` and `'kelados'`. Flags `legFrom_kallisto`, `legFrom_kelados`.
+
+### Story (part 1; `story.js`)
+
+**The flag chain, in save order.** Every flag is saved before its scene. This order is `fixtures7.mjs`.
+
+`call7` → `haldaOut` → `thawSeen` → `weir1`, `weir2`, `weir3` → `kallistoRest` → `tarnSeen` → `winch1`, `winch2`, `winch3` → `keladosWake` → `keladosRest` → `lakeLet` → `home7` → `lanternWake` (owner question 3) → `act7`.
+
+- **Optional:** `look1..6` → `firesAll`; `ivarEcho7`.
+- **Story-only, off the chain:** `mem_s1..s6` (memories seen), `haldaCamp7`, `haldaDen7`, `haldaHead7`, `brokkaV7a`, `brokkaV7b`, `elatiV7`, `haldaV8` (first talks).
+- **Other:** `cp7`, `legFrom_kallisto`, `legFrom_kelados`.
+
+**Quests 40-47.** `questText()` clamps 39 → 47; q41 fills `weirs7()`, q44 fills `winches7()`, q46 picks `q.46b` on `lakeLet`.
+
+| q | zone | key and line (English) | flags set in it |
+|---|---|---|---|
+| 40 | town | `q.40` "Speak with Halda by Isarn's staff" | `call7`, `haldaOut` |
+| 41 | pass → `thaw` | `q.41` "Climb to the Meltwaters and open the old weirs ({0}/3)" | `thawSeen`, `weir1..3`, `mem_s1..s3` |
+| 42 | `thaw` | `q.42` "Cross the Race: the Waking Bear guards the Water-stair" | `kallistoRest` |
+| 43 | `thaw` → `tarn` | `q.43` "Climb the Water-stair to the Hanging Lake" | `tarnSeen` |
+| 44 | `tarn` | `q.44` "Thaw the ice off the three winches ({0}/3)" | `winch1..3`, `mem_s4..s6`, `keladosWake` |
+| 45 | `tarn` | `q.45` "Face the Sleeper under the Mountain" | `keladosRest` |
+| 46 | `tarn` → town | `q.46` "Open the lake's great sluices"; after `lakeLet`, `q.46b` "Go home to Whitecliff, and sleep" | `lakeLet`, `home7` |
+| 47 | end state | `q.47` "Spring has come to the North, and the water has found its road. The Shadow Gates await." | `act7` |
+
+**Scene facts two files must agree on:**
+
+| scene | facts |
+|---|---|
+| the hook | seen by a save with `h.act6 >= 0`, quest 39 and `act6`. On the next town entry; for a hero finishing Act VI after the update, 2 s after the Act VI blessing panel closes. `hook7(z)` copies `hook6`'s guards and loads the `frost` set for the child. `call7` saved first. Cine about 16 s at pitch 0.3 in `ATMOS.townMorning`. "!" over Halda while `call7 && !haldaOut` |
+| Halda gives the quest | the smoke cine: 7 s, pitch 0.3; the third day-smoke (`FAR_BEACONS[9]`) stops and one slide sprite strip shows. `haldaOut` saved, then `setQuest(41)`. The three Names and the free respec are given here |
+| while `haldaOut && !lakeLet` | Halda is not in town. Her anvil is an interact (kind `anvil7` «pick», prompt `anvil.use`, line `d.anvil7`) that opens the reforge panel unchanged. She sells and reforges at both camps |
+| arrivals | `thaw`: `thawSeen` first, 9 s, pitch 0.3 looking north, `ATMOS.thawCine`. `tarn`: `tarnSeen` first, 10 s, pitch 0.3, `ATMOS.tarnCine`, then `setQuest(44)` |
+| a weir or a winch | the flag first; the toast (`q.weirOpen`, `q.winchFree`); then the next memory **in count order whichever was taken first**; then the buff toast `lamp.buff7` (+12% damage, +8% speed for 60 s). Third weir: `q.raceLow`, `setQuest(42)`. A winch: interact kind `winch7`, prompt `winch.thaw`, a 2 s channel with the Cradle |
+| memories | six, on the critical path. Act IV's and VI's flow (`endLampMemory`, `playDeep`), body class `memory-stone`, narrator `npc.stoneMemory`. Masons are people.glb `smith` in the memory material; shepherds are `villager0-1`. No set loads. A memory owed plays on the next entry |
+| Kallisto's wake | no flag and no cine: a `say` (`d.kall.0`) over her `rear` clip |
+| Kallisto's rest | `kallistoRest` first; cine 12 s at pitch 0.35; toast `q.stairOpen`; `setQuest(43)` |
+| Kelados's wake | after Memory 6: `keladosWake` first; cine 9 s at pitch 0.3 with a camera shake; `setQuest(45)` |
+| Kelados's rest | `keladosRest` first; cine 16 s at pitch 0.3; toast `q.keladosRest`; `setQuest(46)`. He has no line in the act |
+| the great wheel | interact kind `sluice7` «pick» at spot `wheel`, prompt `sluice.open`, 2 s; `lakeLet` first; cine 14 s at pitch 0.3 in `ATMOS.tarnGold`; toast `q.lakeLet`. Both zones take their after-readings by their own flags |
+| home | on the first town entry after `lakeLet`: `home7` saved on arrival (the town's spring reading). `homeCine7(z)` plays, about 60 s, in `ATMOS.townDusk`, and **replays on any later town entry until `h.act7 >= 0`** (session guard `z.home7`) |
+| the lantern | `lanternWake` saved first; `setLantern('awake')`. If the owner says no: the two lines and the state are dropped, nothing else changes |
+| the sleep | `d.sleep7.1`, `d.sleep7.2`; **four seconds of black** with no text and no music, one soft bell at the third second; morning in `ATMOS.townMorning`; the last line `d.child7.wake`; then `actComplete(7)` (quest 47, `h.act7 = max(h.act7, h.diff)`, `flags.act7`) and `offerBoons()` for `BOONS[7]` |
+| panels | `act7.done`, `act7.sub`, `act7.next`; `act6.next` is replaced; `game.sub7` on the title once any saved hero has `act7 >= 0` |
+
+**Catch-ups on `zoneEnter`** (`catch7` asserts every row: the state just after the flag's save, a reload, the quest and the scene again):
+
+| zone | condition | does |
+|---|---|---|
+| town | `act6` done, quest 39, `!call7` | `hook7` |
+| town | `call7`, quest < 40 | `setQuest(40)` |
+| town | `haldaOut`, quest < 41 | `setQuest(41)`; Halda absent, the anvil interact present |
+| `thaw` | `!thawSeen` | the arrival cine |
+| `thaw` | `weir1 && weir2 && weir3`, quest < 42 | `setQuest(42)` |
+| `thaw` | `kallistoRest`, quest < 43 | `setQuest(43)`; the bear seated, the exit open |
+| `tarn` | `!tarnSeen` | the arrival cine |
+| `tarn` | `tarnSeen`, quest < 44 | `setQuest(44)` |
+| `tarn` | all winches, `!keladosWake` | the wake cine |
+| `tarn` | `keladosWake`, quest < 45 | `setQuest(45)` |
+| `tarn` | `keladosRest`, quest < 46 | `setQuest(46)` |
+| town | `lakeLet`, `!home7` | save `home7`, `homeCine7` |
+| town | `home7`, `h.act7 < 0` | `homeCine7` again |
+
+**`act7Presence(z)`** is re-run on every entry (the zones are cached). Halda: `thaw` camp → `haldaRim` (three weirs) → gone from `thaw` (`tarnSeen`); `tarn` camp → `haldaRim` (`keladosWake`) → the great wheel (`keladosRest`) → Whitecliff (`lakeLet`). **`npcHasNews`:** Halda in town (`call7 && !haldaOut`; after `act7`, `!haldaV8`), at the Goat Track (`!haldaCamp7`), at the Den (three weirs, `!haldaDen7`), at the Stair's Head (`!haldaHead7`); Brokka (`call7 && !brokkaV7a`; `act7 && !brokkaV7b`); Elati after `act7` (`!elatiV7`). No "!" while either boss is up.
+
+### Text keys (part 1, "Every new text key"; part 3, "New text keys")
+
+Greek first, then English, in `src/i18n/text.js`. Class variants use `.r` (Ranger) and `.m` (Mage); there is no `.w`. The full strings are in the two parts; this contract fixes the namespaces and the counts.
+
+**Part 1: 192 keys** (191 new, 1 replaced; 7 class variants: 5 `.r`, 2 `.m`), by group:
+
+- act panel, title, end state (5): `act6.next` (replaced), `act7.done`, `act7.sub`, `act7.next`, `game.sub7`;
+- quest lines (9): `q.40`..`q.47`, `q.46b`;
+- toasts, prompts, names, places (31): `q.weirOpen`, `q.raceLow`, `q.stairOpen`, `q.winchFree`, `q.keladosRest`, `q.lakeLet`, `lamp.buff7`, `weir.turn`, `winch.thaw`, `sluice.open`, `anvil.use`, `npc.stoneMemory`, `npc.lookout`, `mon.kallisto(.t)`, `mon.kelados(.t)`, `zone.thaw(.s)`, `zone.tarn(.s)`, `exit.thaw`, `exit.tarn`, `wp.thaw`, `wp.tarn`, `d.trackShut`, `d.waterStairShut`, `echo.kallisto`, `echo.kelados`, `echo.rise7`, `echo.done7`;
+- the hook (17): `d.spring.1-4`, `d.child7.1-3`, `d.halda7.a1-a8`, `d.smoke.1-2`;
+- barks while the act runs (9): `d.elianthe7.v0`, `d.leif.v7`, `d.v7.1-2`, `d.child7.bark`, `d.anvil7`, `d.brokka7.1-2`, `d.elati.v7a`;
+- the Meltwaters (14): `d.thaw.1-2`, `d.halda7.b1-b6`, `.again(.r)`, `.w1-w3`, `.w3.r`;
+- Kallisto (10): `d.kall.0-3`, `d.kall.2.r`, `d.halda7.k1-k5`;
+- the Hanging Lake (12): `d.tarn.1-2`, `d.halda7.t0-t6`, `.t4.m`, `.tagain(.m)`;
+- Kelados (13): `d.kel.w1-w2`, `d.kel.r1-r5`, `d.halda7.s0`, `.s0b`, `.s1-s3`, `.s3b`;
+- the lake let down (5): `d.lake.1-2`, `d.halda7.e1-e3`;
+- memories (24): `d.mason.m1..m6.1-4`;
+- lookouts (10): `d.vigla.1`, `.1l`, `.2-6`, `.5b`, `.done`, `.home`;
+- home and the ending (15): `d.home7.1-5`, `d.halda7.h1-h3`, `d.child7.4-7`, `d.sleep7.1-2`, `d.child7.wake`;
+- after the act (18): `d.halda7.v8-v9`, `d.child.bark7`, `d.elianthe7.v1-v2`, `d.leif.bark7`, `d.v.son7`, `d.v7.3`, `d.brokka7.3-4`, `d.elati.v7(.r)`, `d.tam7.v1(.r)`, `d.selna.v7`, `d.tern.v7`, `d.alk.v7`, `d.glaukos.v7`.
+
+**Part 3: 83 keys**, by group: mechanics (11): `q.brook`, `hint.race`, `q.raceDown`, `hud.race`, `hint.slide`, `hint.slide2`, `q.slide`, `hud.swept`, `hint.sun`, `hint.shade`, `ice.melt`; the Names (32): `prog.tab.names` and `name7.*` (13 panel keys, 7 `.d`, 7 `.d2`, 4 `.how`); the Call (6): `call.prompt`, `call.on`, `call.none`, `call.spent`, `call.again`, `hud.call`; the Seven Fires (9): `look.light`, `look.hold`, `look.held`, `look.lost`, `look.rank`, `fires.h`, `fires.d`, `fires.arna`, `fires.all`; Rested (4): `q.awake`, `q.rested`, `hud.rested`, `hud.rested.r`; echoes (4): `echo.*`; blessings (13): `boon.h7` and `boon.<id>`, `.d`, `.du`, `.q` for three; legendaries (4): `leg.kallistoClaw(.d)`, `leg.mountainHeart(.d)`.
+
+- **After the rulings:** the four echo keys are part 1's text (part 3's four are the same ids); `q.awake` is not written (`d.child7.wake` is the greeting); `q.raceDown` is not written (Choices). That leaves **269 unique keys**, against the head's budget of about 270 bilingual lines. Two readers on each.
+- **Not yet written** (keys named, text owed by story at stage D; until then `tx(key, el, en)`): `mon.hillWolf`, `mon.goblinMarksman`, `mon.chough`, `mon.denBear`, `mon.snowWorm`, `mon.rockRoller`, `mon.rockScorpion`; the lever's prompt `lever.pull` «pick»; the six phase names; a first-time toast for the Mob.
+- **Must be reworded before stage D closes** (they break a ruling as drafted): `hud.swept` (drafted «Παρασύρθηκε» / "Swept down"); `q.slide` and `leg.mountainHeart.d` (drafted with «κατολίσθηση»); `d.halda7.k2` (drafted "The water's rising!": no water moves in her fight).
+- **To check against shipped vocabulary before stage D:** the word for Revealed in `name7.einar.d2`; «πόρος» in `name7.asger.d2`; the stat names in the blessings' lines; the shipped key for Asger's name.
+
+### Events (bus)
+
+| event | args | emitted by | heard by |
+|---|---|---|---|
+| `loud` | `(x, z, r, src)` | `loud()` under `groundBlow`, six skill sites, `ai.js` slams | `forge.js` (`kickChute`), `ai.js` (a den within 12 m) |
+| `weir7`, `winch7`, `lever7`, `sluice7`, `lookHearth`, `callFire`, `anvil7` | `(it, z)` | `world.js` (`act7Zone`'s interactables) | story; `tide.js` (`raceTo`); `forge.js` (a sluice flue); `names7.js` (the Call) |
+| `tideBell`, `tideTurn` (exist) | as shipped | `tide.js` | `hud.js` by `z.water`, the sound from the zone's `HAZ7.roarSfx` |
+| `skillUsed` (exists) | as shipped | `skills.js` | `names7.js` (Asger's weave) |
+| `bossIntro`, `bossPhase`, `kill` (exist) | as shipped | `ai.js`, `combat.js` | story (Halda's calls, the two rests), audio |
+| `actClosed`, `boonTaken` (exist) | | `panels.js` | story (`hook7`) |
+
+### Co-op, protocol 6 (`coop.js`; part 3, "Co-op"; part 4, "Item 1 in full")
+
+Host-led: the world and the story are the host's; each guest's hero, gear, Names, ranks and rewards are her own. **One bump: `VER` 5 → 6, in stage E's last commit.** A page on 5 and a page on 6 refuse each other. `z.cells` (set by `act6Zone` and `act7Zone`) replaces the `z.act6` gates at `coop.js:571`, `:650`, `:846-849`, `:1110`, `:1148`.
+
+**New and changed fields:**
+
+| where | field | layout |
+|---|---|---|
+| host snapshot `o.w` | `o.w[0]` | the brooks' clock, as shipped |
+| host snapshot `o.w` | `o.w[5..6]` | the Race's or the lake's level and rate, as Act VI's Mere; now sent in any `z.cells` zone |
+| host snapshot `o.w` | `o.w[7]` | the clouds' clock: `z.sunT` in tenths |
+| host snapshot | `o.c7` | two bit masks over the zone's snow flues: armed, falling |
+| host → guest reliable event | a chute begins its 2.8 s | the flue's index and the time left; the event's name is set by the net lane at stage B |
+| host → guest reliable event | a hold ends | `[i, diff]`; each page writes its own hero's rank; the name is set by the net lane at stage C |
+| guest → host, the `'ic'` event | op `'k'` `[x, z, r]` | a guest's loud skill asks for a kick: within 28 m of her stand-in, `r` at most 10, at most 2 a second. The vault's ops `'v'`, `'vl'`, `'vr'` are widened by `z.cells` |
+| guest → host, the `'u'` event | `USE_U` gains `weir7`, `winch7`, `lever7`, `lookHearth` | the thing's `lit` bit is "turned" |
+| the `'i'` topic | `cells6` / `cells6Apply` | rock shards, Kelados's blocks and slush; a shard carries one more bit, `solid` |
+| guest presence look `lk` | `nm` | three bytes: which Names she says and their depths |
+| host → guest blow options | `HURT_KEYS` gains `share` | taken of the guest's own life on the guest's page; the guest clamps it to its row's `bossHeavy` |
+| the world `w` | `act7` | `worldOf`'s `a` array and the `WORLD` set gain `act7`. `fires`, `names` and `rest` are **not** in `WORLD` |
+| `GUEST_OK` | `callFire` | each page's own |
+| presence by act | `act7Presence` | beside acts 3-6 |
+
+**Authority:**
+
+| thing | guest | whose word decides |
+|---|---|---|
+| the brooks' clock; the Race's and lake's level; the clouds | follows | host |
+| a weir, a winch, a sluice lever, a lookout's hearth | may use it | host validates; the hold is the host's |
+| the Call | her own | each page |
+| a chute kicked by a guest's loud skill | asks | host decides (armed, sunlit, in reach) |
+| a chute's armed state and its fall | sees, and takes her own hit | host |
+| what a slide does to monsters; the Icebound waking | sees | host only |
+| shards, blocks, slush | sees and is blocked by them | host |
+| the Seven Fires' rank | takes it on her own record | host announces the hold's end |
+| the story's interacts (the q46 great wheel, the cines' triggers, the lookouts' talk) | no | host |
+| the receding snow (`setThaw(k)`) | sees | the host's flags on the world message |
+| a Name learnt; Ivar's echo | her own record | the kill's reward message credits her |
+
+- **The blow cap.** The host multiplies `blowCap` by the product of the ceilings of the three Names in the guest's `nm`, **from its own table** (the Names' table above), at most × 2.92 (Keyx, Arna, Asger), never by a number the guest sends. The Call adds nothing to the ceiling. `coop.mjs act7` measures a guest's largest honest hit with the Claw and three Names under a Call; if it is refused, the cap's constant gets a × 1.5 allowance and the measurement is written beside it.
+- **Clamps on the host's hand:** a slide's hit on a guest of at most 26% of her life and a push of at most 6 m, at most one a second.
+- **Scaling.** `COOP` unchanged. A slide, a wash-out and a heavy blow are shares of the life of the hero they land on. A hold's packs take `COOP.pack`.
+- **Budget.** Nothing new is sent per frame. A host snapshot grows by about 5 bytes, a guest's presence by 3. `NET=supa ... four` during a slide soak with two chutes falling and a hold running stays under 100 events a second.
+
+### Saves (part 3, "Saves")
+
+**New hero fields:**
+
+| field | default | written by |
+|---|---|---|
+| `act7` | −1 | `newHero`; the story's end |
+| `fires` | `[0, 0, 0, 0, 0, 0, 0]` | a hold's end |
+| `names` | `{ learnt: [], said: [null, null, null], deep: [], slots: 1, free: 0 }` | `names7.js` |
+| `rest` | 0 | `startHero`, `gainXP` |
+| `boons[6]` | none | the act's blessing |
+| flags | the chain above | |
+| waypoints | `thaw`, `tarn` | |
+
+- **The migration,** in `startHero` beside the shipped ones: `hero.act7 ??= -1`; `if (hero.act7 >= 0) hero.flags.act7 = true`; `hero.fires ??= [...]` with each rank clamped to 0-6; `hero.rest ??= 0`. In `migrateHero`: `h.names ||= {...}`, unknown ids dropped, `said` cut to `slots`. Then `N7learn(h)`.
+- **Order matters twice:** Rested is computed before `hero.played` is stamped; the Names are learnt before `refreshStats`.
+- **`heroFits`** needs no new rule. `fires`, `names` and `rest` are cleaned, never a reason to refuse.
+- **`SAVE_FMT` 2 in stage E's last commit, and only there.** Stages A-D build with `SAVE_FMT` 1, so no test build can strand the owner's heroes. The rule beside the constant: no public build may write 2 before a public build refuses it; v22 carries the refusal.
+- **`save16`:** a v22 hero at quest 39 loads, gains `act7: -1`, `fires`, `names` and `rest`, keeps her points to the unit and keeps `fmt` 1 until the switch. With the switch she is written as 2; a build that reads 1 refuses her as `'newer'` and leaves the stored record byte for byte. The `fx7_done` hero's record is under 32 KiB.
+
+### Audio (`audio.js`; part 3, "Music")
+
+| kind | names |
+|---|---|
+| `THEMES` (4) | `thaw` (6/8 at 104 bpm, G Lydian), `kallisto` (4/4 at 132 bpm, E Dorian), `tarn` (60 bpm, no beat, A Lydian), `kelados` (5/4 at 66 bpm, C Mixolydian) |
+| variant (1) | `thawGreen`: the `thaw` theme at 88 bpm; `tarn` after the act plays it a fifth higher |
+| `MOOD` keys (2) | `race` (0-1, from the Race's or the lake's level), `shade` (a low-pass under a cloud) |
+| motifs (no new notes) | the rest motif: Act VI's hearth motif falling (D, B♭, G); rising with the major third (G, B, D) for a lookout lit; the lantern motif once, in major, in `thaw` |
+| sounds (16) | `weirWheel`, `raceStep`, `brookRoar`, `corniceCrack`, `slideRoar`, `snowThump`, `iceBlockSplit`, `iceWake`, `choughCall`, `cubCry`, `tremor`, `sluiceGate`, `winchChain`, `lakeOut`, `hearthCatch`, `callHorn` |
+| reused | `bearRoar`, the hearth crackle, `splash`, `washOut`, `shrine` |
+
+No voices and no chant. The four seconds of black are silence. A missing sound is silent until audio adds it in stage D.
+
+## Plumbing and the trap list (stage A's first work; part 4, "Item 1 in full"; part 3, E1)
+
+| where | fix |
+|---|---|
+| `forge.js:63` | done: flues stop for `crownUnmade` only in the Forge |
+| `forge.js:278` with `map.js:43` | rock and block shards close with `low = false`; icicles keep `true` |
+| `tide.js:51-60` | `haz()` reads the zone's own act through `actHaz`; the warning's sound from the row |
+| `coop.js:571`, `:650`, `:846-849`, `:1110`, `:1148` | one zone flag, `z.cells` |
+| `world.js:1603`, `coop.js:648` | the gust period becomes a field of `z.gust`; Act VII's clouds have their own clock |
+| `world.js:99`, `data.js:60-62` | done: comments rewritten |
+| `env.js:13` | a comment on `silt`; `'melt'` is appended only if the optional pack is built |
+| `actors.js:172` | the creatures' row by `actHaz`: without it no creature reads `HAZ7` |
+| `combat.js:288`; `hud.js:512-513` | `actHaz`; by `z.water` |
+| `combat.js:166` | left as it is |
+| `world.js:101`, `:127`, `:440`, `:155-158` | `zonePacks` for `thaw` and `tarn`; `seedKey` by difficulty; the default pack table; the generator dispatch |
+| `story.js:35`; `state.js:29`; `boot.js:211-212`; `panels.js:217-221`; `screens.js:69`; `wake.js:13`; `viewer.js:168` | the quest clamp; `act7: -1`; the migration; the waypoint lists; `game.sub7`; `WAKE`; the world viewer |
+| `boot.js:289` | read at stage A: whether `tarn` needs the phone's shader warm-up |
+| `unload.js` | nothing: `act < 5` already takes a seventh act |
+
+## Expected assets (part 4, "Assets")
+
+- **No download on the plan of record.** No new people set, and none loaded in either zone: Halda is people.glb's smith; the lookouts are its villagers; the town loads `frost` only (the child).
+- **Group `act7`:** `bear.glb` (7,508 triangles, eleven clips), `golem.glb` (16,061, nine clips), `worm.glb` (1,886), `skua.glb` (2,512). Every new kind's stand-in chain ends in a boot body; `cast7` asserts it cold.
+- **`build7.js` props:** weir wheel and sill × 3; log-jam; horn-stone; cornice in two states (armed, spent) and the snow tongue; ice block in two sizes; slab stone; den mouth × 4; fallen pine; lookout hearth × 6 (each with a hut and a woodpile) and arena hearth × 2; winch × 3; lever × 3 and three stone channels; the pier row; snow bridge × 2; the Dam's ice plug; the ice wall with its seat; Kelados's code parts; a rock and an ice block of 2 × 2 cells, 1.6 m high or more, that read as cover; the rolled boulder; the cub; flower cards; the rainbow arc (one sprite); the bed-roll; day-smoke sprites on `FAR_BEACONS` 0 and 7-12.
+- **Optional `melt` ground pack** (two CC0 layers, 5.6 MB of phone texture, 0.5 d): built only if all four hold: the licence page read on the day; no visible tiling at the play camera at quality 0 and 1; `mem7` still ≤ 75 MB; in hand before stage A closes. It is never waited for.
+- **`perf7`'s five spots** (quality 1, 915 × 412 at pixel ratio 1.5, `isMobile`): 1 the Water-meadow at the brooks' top, 25 actors; 2 the Chutes with two slides running, 20 actors; 3 the Den with two slides and rocks; 4 the Snowfield with four clouds, 20 actors; 5 the Dam in Kelados's third phase with a sluice sheet and both chutes. Bar: `vsField` and `world` ≤ 1.00.
+
+## Tests
+
+### The four test rules (part 4, word for word)
+
+1. **Fixtures, not bare zones.** Every scenario starts from one of three named saves built from flags by one file, `tools/fixtures7.mjs`: `fx7_new` (quest 39, the act not begun), `fx7_mid` (three weirs open, `kallistoRest`), `fx7_done` (`act7`). A scenario never assumes "the zone is empty" or "the door is still shut": it says which fixture it wants.
+2. **A switch for what must be bare.** A stage-A test that needs an unfilled zone asks for it with `?nopacks&nostory`, a switch that stays supported for the act's life, in place of relying on the zone being empty that week. `ground7` and the look shots use it.
+3. **Places by name, never by coordinate or by walking.** Tests go to `spot('weir2')`, not to (54, 92) and not along a path a later stage may gate.
+4. **Every scenario carries `stage` and `until`.** `until: 'E'` is the default and means "true of the finished act". A test that is knowingly temporary says `until: 'B'`, and **the gate of that stage fails while any scenario with an expired `until` still exists**: it is deleted or rewritten in the commit that outdates it. `node tools/scenario.mjs --stale` lists them. The regress sets are built from the tags, not from hand-kept lists.
+
+### Fixtures (`tools/fixtures7.mjs`)
+
+| fixture | definition |
+|---|---|
+| `fx7_new` | **a v22 hero at quest 39.** Every Act I-VI flag in the order the story saves them, with `crownUnmade`, `remembered`, `landing6` and `asgerRest` set; `fmt: 1`; **no `act7` field**, so each run crosses the migration |
+| `fx7_mid` | `fx7_new` taken through the chain to `kallistoRest`: `call7`, `haldaOut`, `thawSeen`, `weir1..3`, `kallistoRest` |
+| `fx7_done` | the whole chain to `act7` |
+
+No scenario and no soak of this act starts from a fresh test hero. A balance zone run's fixture has the three weirs open (`ZFLAGS`).
+
+### Scenarios by stage (part 4, "Scenarios and tools, by stage")
+
+`until` is `E` unless said. `coop.mjs` names are in `tools/coop.mjs`.
+
+| stage | name | fixture | asserts |
+|---|---|---|---|
+| 0 | `day0` (`until: 'B'`) | the world viewer | the five look numbers on `forest`, `pass`, `farlight`, `coast` at quality 0 and 1 (16 shots, phone-emulated): rim contrast 3 : 1 or more; ground luminance ≤ 0.80 on snow and ≤ 0.55 on grass; body against ground ≥ 0.15; clipped area ≤ 2%; the legendary beam's edge found on snow |
+| A | `check-act7` (tool) | none | the reach checks; the L and spot tables; determinism; mean tries |
+| A | `ground7` | `fx7_new`, `?nopacks&nostory` | each ground program compiles at quality 0, 1, 2 and as a phone; each slot's chain ends in a loaded layer; `uThaw` moves and `uAutumn` does not |
+| A | `perf7`, `mem7` | `fx7_new`, `fx7_mid` | the five spots; ≤ 75 MB into each zone, bytes by owner |
+| A | `save16` | `fx7_new` | Saves, above |
+| A | `gate7` | `fx7_done` | a Shadow Gate tier's layout and packs equal the shipped generator's for the same seed |
+| A | `play7` | `fx7_new`, god-mode | a Warden walks the critical path to the end state by named spots; each beat it cannot do yet is a named `todo` row |
+| B | `race`, `slide`, `sun` | `fx7_new`, then flags | rules R1-R12, S1-S15, U1-U12 |
+| B | `daytele` | `fx7_new`, `fx7_mid` | `day0`'s numbers on the real meadow and snow for every tell of the act, the loot beams, and across the co-op mirror |
+| B | `cast7` | `fx7_new`, cold | every new kind's body and its stand-in from each waypoint |
+| B | balance run A | profile heroes | Zone danger |
+| C | `kallisto`, `kelados` | `fx7_new` + flags, `fx7_mid` | each class: the bands; one `G.bossActor`; the rest state and never a corpse; the `kill` event's drop, flag and quest step; a phase skipped by a strong hero still plays its entry; Halda's one call a phase |
+| C | `leg7`, `diff7` | `fx7_mid` | one first-kill drop each; every `HAZ7` row on Wanderer and on Skotos; telegraph lengths unchanged; a heavy blow not multiplied by `DIFFS.dmg` |
+| C | `names7`, `fires7` | `fx7_new`, `fx7_mid` | rules N1-N10, C1-C7; F1-F10 |
+| C | balance runs B, C, D | profile heroes | G3 |
+| C | `coop.mjs bosses7` | | both fights at two and four; one kill paid once |
+| D | `hook7` | `fx7_new` | the hook from a v22 hero; (b) from an Act VI-end save without `act7`; the town's stream state and nothing else changed there |
+| D | `catch7` | flags | every row of the catch-up table |
+| D | `ending7` | `fx7_mid` + flags | the great wheel, the home scene, the sleep, the four seconds of black, the last line, the panels, `game.sub7`; the town's stream state |
+| D | `echo7`, `rested7` | `fx7_done` | both echoes once a day; rules T1-T5 |
+| D | `coop.mjs act7` | | a guest turns a weir, pulls a lever, lights a lookout, kicks a chute through the host; her Call is her own; the level and the clouds on the guest; the rank on both pages' heroes; her blow with three Names passes the cap and the same blow × 3 is refused; a `VER` 5 page and a `VER` 6 page refuse each other |
+
+**Regress sets** are built from the tags: regress-A is every scenario with `stage` ≤ A of any act that touches what stage A touched; each later set adds its stage.
+
+### The balance campaign (part 4, "The balance campaign"; part 2, "The profile")
+
+- **The hero:** gear four levels behind (the best of four drops a slot); one blessing an act (six); each beaten boss's own legendary and never a boss's own before it is beaten; spare points in Might and Vigor in turn (`job.mlvl` 4 / 6 / 8 / 10 at the four cells). **Level 50 on Warden and above; 47 on Wanderer.** No Names in runs A-C.
+- **n per cell:** 6 on Warden and above, 12 on Wanderer; seeds 1000 + r × 7919; eight packs a zone.
+- **New measures** (the bot's own bookkeeping): `under30S`, `worst3`, `heavy` (by move id), `byBand`, `slides`, `terrainKills`.
+- **The bot's lessons,** each checked in a scenario before a campaign trusts it: a white or blue lane is harm (a blue circle stays safe); go behind cover when a lane is warned; kick an armed, sunlit chute with three or more foes in its lane and herself out of it; no loud skill from inside an armed lane unless a dodge is ready; bait Kallisto onto a boulder; fight from shade under a flock; stand on rock over a worm; kill the Icebound's pack-mates first and never strike the block; pull the phase's lever when Kelados stands in its channel; walk to the arena hearth when it arms; fight what comes at her before walking on.
+
+| run | question | cells | runs |
+|---|---|---|---|
+| A (G2) | are the zones worth fighting at the cap? | 2 zones × 3 classes × difficulties 0, 1, 2 | 144 |
+| B (G3) | are the bosses in their bands? | 2 bosses × 3 classes × difficulties 0, 1, 2, 4 | 180 |
+| C (G3) | is anything held by a clock? | B's Warden cells with `job.dmgK: 2` (a new knob; `gearK` is not a damage factor): the time must fall to 50-65% | 36 |
+| D (G3) | does each Name do something? | 3 classes × 7 Names × Kept and Deep × one zone and one boss × 4, plus the baseline | about 370 |
+| E | a three-Name build played its way | the six example builds, both zones and both bosses, 6 runs each: 15-30% faster with lowest life no worse | reported |
+| F | did Acts V and VI move under a three-Name build? | their Warden cells (expected × 1.15-1.3 faster; not re-tuned) | 126, reported |
+| H | co-op | A's and B's Warden cells at `--coop 2` and `4` | 144, reported |
+
+### Old tests retired or repointed in stage 0 (part 4; G0 needs each line)
+
+| test | what is done |
+|---|---|
+| `ground6` | repointed: run with `?nopacks&nostory`; kept, `until: 'E'` |
+| `look6` | retired by name, after each of its assertions has a home in `darktele` or `perf6` |
+| `place6` | retired by name; layout is `check-act6`'s, placement is `drained`, `catch6`, `lost6` |
+| `resume`, part `fall`, check e | the expectation is rewritten to the village; the other eleven parts stay |
+| `tremble6` | fixed (0.25 d): quality 1 comes down to ≤ 0.10, or the limit is changed with the owner's name beside it. Not left failing |
+| `play5` | fixed (up to 0.5 d), because `play7` is built on its walker; otherwise retired by name |
+| `diagcheck` | 0.5 d to find out why; if a lost context cannot be reproduced headless it becomes a manual release check and leaves the gate's set by name |
+
+`play6` and `cp6` were named by Act VI's contract and never written. They are not written now.
+
+## Water with care: a release-blocking checklist (decisions rule 8; part 1, "Water with care"; part 4, risk 8)
+
+G5 does not pass until the lead has ticked every line. `hook7` and `ending7` assert lines 1 and 2.
+
+1. In town the only water on screen is the stream: loud and brown in the hook, clear and low at home. No street, house or field is wet.
+2. Nothing else in Whitecliff changes with the water.
+3. No hut, fold, house or village stands in water in any zone, reading or shot. Huts stand on dry knolls, empty for the season.
+4. Nobody is drowned, swept away or missing, on screen or in text. No person is ever shown in water; the hero wades only pale water.
+5. The hook's slide takes a woodpile, and the next line says the lookout is safe. Every lookout is dry, well and in no danger.
+6. A foe the water reaches is seen to climb out. A wash-out is the hero's stumble, never a body in a current.
+7. No player-facing line in either language uses «πλημμύρα», «πνίγηκε», «παρασύρθηκε», «θύματα» or "flood", "drowned", "swept away", "victims". A search of `text.js` for these words returns nothing from Act VII's keys.
+8. The stake is said, never shown: twice, in the conditional (`d.halda7.a6`, `d.halda7.s0b`).
+9. The ending shows the valley standing (`d.lake.2`) and children at a low clear stream (`d.home7.1`).
+10. No screenshot or store picture shows rising water against a building.
+11. The act is not launched or advertised on days when a flood is in the news.
+12. The owner has read the hook in Greek.
+
+## The cut order (part 4; taken from the top)
+
+| # | cut | saves (days) | lost |
+|---|---|---|---|
+| 1 | Deep Names at launch (Kept only) | 1.5 | the second tier; run D halves |
+| 2 | the lookouts' ranks by difficulty → one rank | 1 | the long ladder; the seven bonuses stay |
+| 3 | crevasses and snow bridges | 1 | a piece of the Snowfield and its reach checks |
+| 4 | the two echoes, shipped in the first patch | 1 | two daily refights at launch |
+| 5 | Rested, shipped in the first patch | 1 | the greeting and its bonus at launch |
+| 6 | moving clouds → a whole-zone cloud every 45 s for 12 s (also the plan if G2 shows nobody uses the shade) | 0.75 | the tactical edge of a cloud |
+| 7 | lookouts 6 → 4 | 0.75 | two holds; the two bosses' first falls give those fires |
+| 8 | the cub's cine and the rainbow → narration | 0.75 | two small pictures |
+| 9 | one theme (`tarn` takes the `thaw` theme's variant) | 0.5 | a tune |
+| 10 | the Rock-roller's boulders left as cover (Kelados's block stays) | 0.5 | one use of cover |
+| 11 | the far fires' colour by rank | 0.25 | the ladder seen from home |
+| | **total** | **9** | brings 65-75 to about 56-66 |
+
+## Open until the owner answers (`docs/act7-briefs/owner-questions-el.md`)
+
+Nothing in stages 0 and A waits for an answer. Each default is built meanwhile.
+
+| # | question | default built meanwhile |
+|---|---|---|
+| 1 | The act's story: "The Seven Peaks" (the thaw), with the Order of the Flame kept for Act VIII | yes: this contract |
+| 2 | Two bosses that are not killed | yes: `spare` on both |
+| 3 | Isarn's lantern relit at the end | yes: `lanternWake`, `setLantern('awake')`, `d.home7.3-4`. A no drops those three things and nothing else |
+| 4 | The last line «Ώστε ξύπνησες.» after four seconds of black | yes: `d.child7.wake` |
+| 5 | A name for the child | no: he stays `npc.child` until Act VIII |
+| 6 | The Names: seven, three slots | yes |
+| 7 | Rested | yes, built in stage C; it is cut 5, and its four keys and `hero.rest` are struck if he says no |
+| 8 | Two Greek words: «Η Χιονοστιβάδα» and «Το Φώναγμα» | both used as written here |
+
+Also asked of him, never waited for: his phone for `tarn`'s spots 4 and 5 at G1 and for `perf7`'s five spots at G5; four of `day0`'s sixteen shots; the key Greek lines at G4.
+
+## Choices made while writing the contract
+
+Each is a place where two parts disagreed and the head did not rule. The owning part's version was taken unless said.
+
+| # | subject | the parts said | this contract |
+|---|---|---|---|
+| 1 | Halda's spot at each arena | part 1: `haldaDen`, `haldaDam`; part 2: `haldaRim` in both zones | `haldaRim` (part 2 owns spots). The story's flags `haldaDen7` and `haldaHead7` keep their names |
+| 2 | the arena hearth's spot | part 2: `hearth`; part 3: `callHearth` | `hearth` |
+| 3 | lookout spots | part 2: `lookouts[3]` a zone; part 3: `lookouts[6]` | three a zone, numbered 1-6 across the act |
+| 4 | the great wheel's spot, and the kinds `sluice7`, `anvil7` | part 1 needs them; no part names them | `wheel`, `sluice7`, `anvil7` «pick» |
+| 5 | unnamed `HAZ7` rows | part 2 gives the numbers without keys | `bossChutes`, `overlap`, `blockT`, `vault` «pick» |
+| 6 | `names7.js`'s export names | the head: prefixed `N7`; part 3: `NAME7`, `learnNames`, `sayName`, … | `N7`, `N7learn`, `N7say`, `N7deepen`, `N7openSlot`, `N7call` «pick» |
+| 7 | `tarn`'s FX ambient | the head rules only `thaw` (`'melt'`); part 3 suggests `'summit'` | `'summit'` |
+| 8 | the gates in `coop.js` | part 3: widen the `z.act6` tests; part 4: one flag `z.cells` | `z.cells` (part 4 owns engine) |
+| 9 | Halda's fail-safes | part 2: one in every phase of both fights (30 / 30 / 25 s at Kallisto, 35 / 40 / 35 s at Kelados); part 1 and the head: one lever at 25 s of Kelados's phase 3 | the head's one. Part 2's other five are not built. Kallisto's echo keeps part 2's rock that falls by itself |
+| 10 | when Halda's calls fire | part 1: on each phase's entry move; part 2: 8 s and 10 s into phase 1 | phase 1 has no entry move, so part 2's seconds there; the entry move in phases 2 and 3 |
+| 11 | what the calls say | part 2 sketches each call; part 1 writes them | part 1's keys and text (`d.halda7.k1-k3`, `.s1-s3`). `d.halda7.k2` must lose "the water's rising" |
+| 12 | when the arena hearth arms | part 2: on the first window of each phase; part 3: lit from the start, flaring once (Kallisto's last phase; Kelados's first kneel) | part 3's (the Call is part 3's; the head says "flaring once") |
+| 13 | boss moves that are loud | part 3's `LOUD` table: Kallisto's Roar and Rear-and-slam, Kelados's "Fist" and "Stomp"; part 2: the Roar and every second Tremor | part 2's (bosses kick chutes by their own count tables). Regular enemies follow part 3's table, plus part 2's `thunder` affix |
+| 14 | the Daze of a `big` foe under a slide | part 2: 2 s; part 3 and the head: 1.5 s | 1.5 s for every regular foe |
+| 15 | `slideFoe` / `slideElite` on Ash and Skotos | the head: 35% / 20%; part 3's row: 30 / 16 on Ash and Skotos | the head's numbers on Wanderer to Nightmare; part 3's on Ash and Skotos |
+| 16 | zone deaths at G2 | part 2: 0-1 in the 36 runs; part 4: 0-3% of runs | both written; they are the same bar |
+| 17 | G3's blows landed | part 4: 4-10; part 2: 4-8 and 6-10 | the head's 4-6 and 5-8 |
+| 18 | the weir's toast | part 1: `q.weirOpen`, then `q.raceLow` on the third; part 3: `q.raceDown` | part 1's. `q.raceDown` is not written |
+| 19 | the hut "standing in water" with a `looters` pack | part 2's pack table; the head: no hut stands in water | the pack stays as a brook-side camp with `tide: true`; no hut |
+| 20 | what each lookout's hold does | part 2 and part 3 give different tables (lookouts 2-5) | part 2's packs and terrain (it fixes "where they stand and what comes"); part 3's timings and waves |
+| 21 | the shade atmosphere's ease | part 3: 0.6 s; part 4: a third of a second | not chosen: it is one number in one file (`light.js` calls `mixAtmos`); set at stage A by the look builder and written in the stage report |
+| 22 | the title's Greek | the head's heading: «Κορφές»; decisions.md and part 1's keys: «Κορυφές» | «Κορυφές» in every text key (part 1 owns text) |
+| 23 | part 3's echo terms ("the bowl's chutes are armed for the echo") | against part 2's ("no snow, so no slides") | part 2's, by the head's ruling |
+| 24 | two checks added to the hard list | the 40% bare-ground share and "no lane touches pocket 2" are requirements in parts 2 and 3 but not in part 2's own reach list | H16 and H8 |
+| 25 | the soft list | part 2 names one soft failure (mean tries) | two more taken from part 3's needs and part 4's risk 7: the 20 s cloud gap at pack spots; about a third of packs in a lane |
+| 26 | `fx7_new`'s flags | part 4: every Act I-VI flag; part 3 adds `remembered`, `landing6`, `asgerRest` by name | all four named |
+| 27 | when `thaw` takes its `green` reading | part 1: at `lakeLet`, with `tarn`'s `let`; part 2: after `act7` | part 2's (`green` on `act7`, `let` on `lakeLet`): part 2 owns the readings |
+
+## Numbers not yet set
+
+| # | number | set at | by |
+|---|---|---|---|
+| 1 | both bosses' final life multipliers (× 340 and × 480 are starts) | stage C, run B | the balance bot, to the band's floor |
+| 2 | every number in the atmosphere table | stage 0 (`day0`), re-checked at stage A | the look builder |
+| 3 | `ATMOS.townMorning` and `ATMOS.townDusk` | stage D | story |
+| 4 | the shade ease time (0.6 s or a third of a second) | stage A | the look builder |
+| 5 | `thaw`'s pack-spot total (the rows give 17; part 2's text says 15) | stage A | the gen7 builder, reported in the stage report |
+| 6 | which stage each of the head's four added days lands in | stage 0 | the lead |
+| 7 | how far a slide pushes the hero outside a boss fight ("about 4 m" is a target) | stage B | the Slide's builder |
+| 8 | the blue lane's colour value | stage A | the look builder |
+| 9 | the two reliable co-op events' names (a chute begins; a hold ends) and `o.c7`'s exact byte layout | stages B and C | the net lane, written into `docs/coop/README.md` |
+| 10 | the blow cap's allowance for the Claw (× 1.5 only if the measurement asks for it) | stage D | `coop.mjs act7` |
+| 11 | how "once a day" is stored for the two echoes | stage C | whatever the shipped echoes do; reported |
+| 12 | the text of the keys listed as "not yet written", and of the four to reword | stage D | story, two readers |
+| 13 | the count of clouds' seeds and lines beyond "3 a zone, 2 over the Dam" | stage A | the gen7 builder |
+| 14 | the full test set's wall time (about 165 runs; one and a half days budgeted) | stage E | the lead, recorded in the stage E report |
+| 15 | whether a kill by a slide with no source pays experience and drops (if not, it credits the hero who kicked it) | stage B | the Slide's builder |
