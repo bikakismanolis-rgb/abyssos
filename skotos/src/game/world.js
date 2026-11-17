@@ -28,7 +28,7 @@ import { PACKS, DIFFS, MONSTERS, PACK_LEAD, packKinds, HAZ5, monsterDmg, COOP } 
 import { NET, heroes } from '../net/state.js';
 import { startDrips, stopDrips } from './sap.js';
 import { addLightPool, removeLightPool, cradlePoint, addBeam, removeBeam, getLightPool, getBeam, snuffLamp, fireEnter, namesTick, lampBonus } from './light.js';
-import { sunEnter, sunTick } from './sun7.js';
+import { sunEnter, sunTick, sunAtmos } from './sun7.js';
 import { resetTide, floodWave } from './tide.js';
 import { resetIce, freezeCells, crackCone } from './ice.js';
 import { startFlues, stopFlues, setFlueHeat, flues, BREATH, vaultEnter } from './forge.js';
@@ -2321,6 +2321,10 @@ function dress7(z) {
   for (const it of A.lookouts) { it.mesh = by(P.lookouts, it.k + off) || by(P.lookouts, it.k); it.mesh?.userData.setRank?.(R7[it.k + off - 1] || 0); }
   for (const c of P.cornices || []) c.mesh?.userData.setArmed?.(true);
 }
+// (the two fights draw the camera back a little, the zone's fight row, and give it back when they rest: the shade's ease
+// goes on from the row in force, sun7.js sunAtmos)
+on('bossIntro', (a) => { const z = G.zone; if (z?.act7 && (a?.kind === 'kallisto' || a?.kind === 'kelados')) sunAtmos(z, z.id + 'Fight'); });
+on('bossRest', () => { if (G.zone?.act7) sunAtmos(G.zone, null); });
 on('weir7', (it) => { it.mesh?.userData.setOpen?.(true, true); });
 on('winch7', (it) => { it.mesh?.userData.setIce?.(0); it.mesh?.userData.setTurn?.(1); });
 on('chuteSpent', (f) => { const c = G.zone?.lvl?.act7?.cornices?.find((q) => q.k === f.i); c?.mesh?.userData.setArmed?.(false); c?.tongue?.userData.setK?.(1); });
