@@ -675,6 +675,23 @@ export const S7 = () => ({
     beat('the Den once she rests: no boss place', b.spot === null, b);
     return out(beats);
   } },
+  // the two echoes after the act: each rises from its place once a visit; Kallisto's arms no chute, Kelados's three levers
+  // are bare from the start; neither touches the story
+  echo7: { stage: 'D', until: 'E', q: Q(FX7.fx7_done('thaw'), '&nopacks&nostory'), run: async (pg) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    await until(pg, () => window.__G.zone?.tide);
+    await pg.evaluate(() => { window.__immortal = true; window.__tough = true; });
+    const e1 = await pg.evaluate(() => { const z = window.__G.zone, it = z.interact.find((i) => i.kind === 'echo' && i.boss === 'kallisto'); if (!it) return null; const p = z.map.nearestFloor(it.x, it.z + 1.5, 2); window.__G.player.x = p.x; window.__G.player.z = p.z; it.use(); return { mode: z.mode }; });
+    const k = e1 && await until(pg, () => window.__G.zone.boss?.kind === 'kallisto' && window.__G.zone.boss.echo, 15000);
+    const r1 = await pg.evaluate(async () => { const z = window.__G.zone, b = z.boss, F = await import('/src/game/forge.js'); const armed = (F.flues() || []).filter((f) => f.kind === 'snow' && f.st !== 'idle').length; window.__D.kill(b); await new Promise((ok) => setTimeout(ok, 1500)); return { echo: !!b?.echo, falling: armed, rest: !!window.__G.hero.flags.kallistoRest, q: window.__G.hero.quest }; });
+    beat('the green bowl: Kallisto\'s echo rises from her place, an echo', !!e1 && k && r1.echo, { e1, r1 });
+    beat('her echo falls and the story is untouched (quest 47)', r1.q === 47, r1);
+    const t = await pg.evaluate(async () => { const W = await import('/src/game/world.js'); await W.zoneReady('tarn'); window.__D.enterZone('tarn'); const z = window.__G.zone, it = z.interact.find((i) => i.kind === 'echo' && i.boss === 'kelados'); if (!it) return { mode: z.mode, none: true }; const p = z.map.nearestFloor(it.x, it.z + 1.5, 2); window.__G.player.x = p.x; window.__G.player.z = p.z; it.use(); return { mode: z.mode }; });
+    const kk = !t.none && await until(pg, () => window.__G.zone.boss?.kind === 'kelados' && window.__G.zone.boss.echo && window.__G.zone.boss.awake, 30000);
+    const r2 = await pg.evaluate(() => { const z = window.__G.zone; return { levers: z.act7.levers.map((l) => !l.used) }; });
+    beat('the lake let down: Kelados\'s echo rises, awake, all three levers bare', kk && r2.levers.length === 3 && r2.levers.every(Boolean), { t, r2 });
+    return out(beats);
+  } },
   // a Shadow Gate's layout is the shipped generator's for the same seed (no older layout changes with the act)
   gate7: { stage: 'A', until: 'E', q: Q(FX7.fx7_done('town')), run: async (pg) => {
     const h = await pg.evaluate(async () => { const g1 = await import('/src/world/gen.js'); const sum = (L) => { let a = 0; for (let i = 0; i < L.cells.length; i++) a = (a * 31 + L.cells[i] + i) >>> 0; return [L.w, L.h, a, L.packs.length, L.props.length].join(':'); }; return { crypt: sum(g1.genCrypt(4242, { rooms: 12, mh: 30 })), forest: sum(g1.genForest(4242, { h: 120 })) }; });

@@ -683,7 +683,7 @@ function act3Zone(z) {
 }
 // a fallen boss's tree keeps the memory of the fight: touched, it lets an amber echo of the boss rise to be fought again
 // (story.js 'echo'); like the small Tears, once a day
-const ECHO_PROMPT = { silverhorn: 'echo.hart', amaranthe: 'echo.lady', ivar: 'echo.ivar', karthax: 'echo.karthax', tower: 'echo.tower', skotos: 'echo.skotos', ketos: 'echo.ketos', shade1: 'echo.shade' };
+const ECHO_PROMPT = { kallisto: 'echo.kallisto', kelados: 'echo.kelados', silverhorn: 'echo.hart', amaranthe: 'echo.lady', ivar: 'echo.ivar', karthax: 'echo.karthax', tower: 'echo.tower', skotos: 'echo.skotos', ketos: 'echo.ketos', shade1: 'echo.shade' };
 export function echoAt(z, boss, x, zz) {
   const it = { kind: 'echo', boss, x, z: zz, r: 2.8, prompt: ECHO_PROMPT[boss] };
   it.use = () => emit('echo', it, z);
@@ -2187,6 +2187,7 @@ function act7Enter(z) {
   // (the place to wake: the camp, until the act's own checkpoints, flags.cp7)
   const c = z.L.spots.camp; if (c) z.checkpoint = z.map.nearestFloor(c.x, c.z, 3);
   dress7(z);
+  echoes7(z);
   firesEnter(z);
   sunEnter(z);   // Sun and Shade: the clouds for this difficulty on the zone's clock, z.sunT (sun7.js)
   act7Presence(z);
@@ -2324,6 +2325,14 @@ on('winch7', (it) => { it.mesh?.userData.setIce?.(0); it.mesh?.userData.setTurn?
 on('chuteSpent', (f) => { const c = G.zone?.lvl?.act7?.cornices?.find((q) => q.k === f.i); c?.mesh?.userData.setArmed?.(false); c?.tongue?.userData.setK?.(1); });
 on('chuteArmed', (f) => { const c = G.zone?.lvl?.act7?.cornices?.find((q) => q.k === f.i); c?.mesh?.userData.setArmed?.(true); c?.tongue?.userData.setK?.(0); });
 on('fireRank', (n, rank, before, it) => { it?.mesh?.userData.setRank?.(rank); });
+// the two echoes after the act (once a day each, story.js 'echo'): Kallisto by her den in the green bowl, Kelados below his
+// seat once the lake is let down. They rest again; nothing of the story is touched
+function echoes7(z) {
+  const F = G.hero.flags, S = z.L.spots;
+  if (!F.act7 || z.interact.some((it) => it.kind === 'echo')) return;
+  if (z.id === 'thaw' && z.mode === 'green') { const e = S.echo || S.den || S.arena; const p = e && z.map.nearestFloor(e.x, e.z, 4); if (p) echoAt(z, 'kallisto', p.x, p.z); }
+  if (z.id === 'tarn' && z.mode === 'let' && S.seat) { const p = z.map.nearestFloor(S.seat.x, S.seat.z + 5, 4); if (p) echoAt(z, 'kelados', p.x, p.z); }
+}
 // an Icebound asleep in its ice: the Cradle held to the block for 1.5 s (less with Lamplight) wakes it (ai.js 'iceMelt').
 // The touch follows the sleepers as they are, checked twice a second
 function iceTouch7(z, dt) {

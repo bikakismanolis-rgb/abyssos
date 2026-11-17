@@ -6080,6 +6080,8 @@ const KALLISTO = {
 };
 // the Den's chutes that can be called: armed and at rest, nearest her first
 function denChutes(a) {
+  // (her echo, in the green bowl after the act: no snow, no slides; what the first fight taught is taken away)
+  if (a.echo) return [];
   const c = arena(a), R0 = arenaR(17);
   return (flues() || []).filter((f) => f.kind === 'snow' && f.armed && f.st === 'idle' && (f.area === 'den' || Math.hypot(f.x - c.x, f.z - c.z) < R0 + 10))
     .map((f) => ({ f, d: Math.hypot(f.x + Math.sin(f.dir) * f.len * 0.5 - a.x, f.z + Math.cos(f.dir) * f.len * 0.5 - a.z) })).sort((p, q) => p.d - q.d).map((p) => p.f);
@@ -6158,7 +6160,7 @@ const KELADOS = {
     emit('bossIntro', a); Audio.sfx('stoneCrack'); Audio.sfx('bossRoar'); shake(0.6); a.avatar?.play('warcry');
     a.rooted = true; a.queue = []; a.blockN = 0; a.tremN = 0; a.chuteN = 0; a.levers = new Set(); a.speed0 = a.speed;
     a.mcd.tremor = bcd7(4); a.mcd.iceBlock = bcd7(2);
-    bareLever(a, 1); emit('keladosPlates', 0, a); emit('boss7Phase', a.kind, 1, a);
+    bareLever(a, 1); if (a.echo) { bareLever(a, 2); bareLever(a, 3); } emit('keladosPlates', 0, a); if (!a.echo) emit('boss7Phase', a.kind, 1, a);
   },
   onPhase(a, ph, was) { for (let p = Math.max(was, 0) + 1; p <= ph; p++) { (a.queue ||= []).push(p === 1 ? 'loosed' : 'awake'); emit('boss7Phase', a.kind, p + 1, a); } },
   moves: [
@@ -6254,7 +6256,8 @@ function kneel7(a) {
 on('lever7', (it, z) => {
   if (!it || z !== G.zone || NET.mode === 'guest') return;
   const a = G.actors.find((b) => b.kind === 'kelados' && b.awake && !b.dead), k = it.k;
-  if (!a || a.levers.has(k) || (k === 2 && a.phase < 1) || (k === 3 && a.phase < 2)) return;
+  // (his echo: all three bare from the start)
+  if (!a || a.levers.has(k) || (!a.echo && ((k === 2 && a.phase < 1) || (k === 3 && a.phase < 2)))) return;
   if (!fireFlue(it.spot?.channel ?? it.channel, G.player)) return;
   a.levers.add(k); it.used = true; bigTele(a, BREATH.inhale + BREATH.fire); tally(a, 'sluice' + k);
 });
