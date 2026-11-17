@@ -76,6 +76,8 @@ export function damage(src, target, amount, o = {}) {
     // Einar's Lantern: the Skotos's creatures it strikes stand in the light for 2 s (Revealed: nothing more on what is worse off)
     if (s.legs.has('einarLantern') && !o.dot && target.def.unlit) addVuln(target, 'revealed', 2, { quiet: true });
     // the Names: all six that change a blow, in one product (the foe is known here, not in heroHit)
+    // Kallisto's Claw: after 8 m run without stopping, this blow +50% and a 1 s Daze (never a boss), once each 6 s
+    if (!o.dot && s.legs.has('kallistoClaw') && (G.player.clawRun || 0) >= 8 && !(G.player.clawCd > 0)) { amount *= 1.5; G.player.clawCd = 6; G.player.clawRun = 0; if (!target.boss) emit('dazeFoe', target, 1); }
     if (!o.dot && n7on()) {
       const p = G.player, m = N7mods(G.hero, N7ctx(n7rt(p), G.time, { foeFull: target.hp >= target.hpMax, dist: Math.hypot(target.x - p.x, target.z - p.z), res: p.res, crit }));
       amount *= m.dmg; if (m.reveal) addVuln(target, 'revealed', m.reveal, { quiet: true }); if (m.parts?.arna) target.n7open = G.time; N7onHit(p.n7, G.time, m);
@@ -159,6 +161,8 @@ function hurtHero(src, amount, o) {
   // Act V: the Cold the blow carries (a wash-out, a plunge, a Skua's bite, a wail...: cold.js)
   if (o.cold) coldAdd(o.cold);
   // the Skerry's Shell: the sea takes no life from her (a plunge, a wash-out)
+  // the Mountain's Heart: snow and water take no life from her (a slide, a wash-out; she is still moved)
+  if ((o.slide || o.wash) && s.legs.has('mountainHeart')) { number(p.x, 2.3, p.z, tx('leg.mountainHeart', 'Η Καρδιά του Βουνού', 'The Mountain\'s Heart'), 'text', '#cfe8ff'); if (o.push) { const l = Math.hypot(o.kx || 0, o.kz || 0) || 1; p.kx += ((o.kx || 0) / l) * o.push; p.kz += ((o.kz || 0) / l) * o.push; } return 0; }
   if ((o.plunge || o.wash) && s.legs.has('skerryShell')) { number(p.x, 2.3, p.z, tx('leg.skerryShell', 'Καβούκι του Σκόπελου', 'Skerry\'s Shell'), 'text', '#9ad8ff'); return 0; }
   // Act VII's heavy blows (docs/act7-contract.md, the boss law): o.share, a blow sized as that share (%) of her max life
   // before block and armour, whatever the monster's own numbers; o.cap, the most it may take after them (%). Not pure:

@@ -145,7 +145,7 @@ function bury(f, front) {
   const reached = (x, z) => (x - f.x) * ux + (z - f.z) * uz <= front;
   if (pl && !pl.dead && !f.hit.has(pl) && pl.iframes <= 0 && reached(pl.x, pl.z) && inFlue(f, pl.x, pl.z, pl.radius * 0.5)) {
     f.hit.add(pl);
-    damage(null, pl, pl.hpMax * (snow ? H.slide : H.wash) / 100, { pure: true, wash: !snow, push: snow ? 9 : 12, kx: ux, kz: uz });
+    damage(null, pl, pl.hpMax * (snow ? H.slide : H.wash) / 100, { pure: true, wash: !snow, slide: snow, push: snow ? 9 : 12, kx: ux, kz: uz });
     emit('flueHit', f);
   }
   if (NET.mode === 'guest') return;

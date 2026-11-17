@@ -212,13 +212,17 @@ export const MONSTERS = {
   skua: { model: 'skua', hp: 0.3, dmg: 0.45, speed: 7.5, radius: 0.4, ai: 'bat', reach: 1.0, atk: 'bite', atkTime: 0.8, flesh: 'flesh', xp: 0.5, float: true, lightShy: true, coldBite: 3, feathers: true },
   // ---- Act VII (docs/act7-contract.md, Enemies): every body a shipped one, nothing of the dark. Each kind has one heavy
   // move that opens the fight (heavy: its id, ai.js; a share of her life from HAZ7, never x DIFFS.dmg); all else is chip ----
-  hillWolf: { model: 'warg', hp: 1.1, dmg: 0.9, speed: 6.6, radius: 0.65, ai: 'pounce', reach: 1.6, atk: 'bite', atkTime: 1.1, flesh: 'flesh', xp: 1.6, sfx: 'wolf', heavy: 'longPounce', look: { scale: 1.15, tint: 0x8a7a66, tintAmt: 0.5 } },
+  hillWolf: { model: 'warg', hp: 1.1, dmg: 0.9, speed: 6.6, radius: 0.65, ai: 'pounce', reach: 1.6, atk: 'bite', atkTime: 1.1, flesh: 'flesh', xp: 1.6, sfx: 'wolf', heavy: 'longPounce', wake: { d: 5, clip: 'hit', sleep: 'die', loud: 12, sfx: 'wolfHowl', t: 0.9, speed: 1 }, look: { scale: 1.15, tint: 0x8a7a66, tintAmt: 0.5 } },
   goblinMarksman: { model: 'goblinArcher', hp: 0.6, dmg: 0.7, speed: 4.0, radius: 0.45, ai: 'ranged', reach: 12, atk: 'shoot', atkTime: 1.6, flesh: 'flesh', xp: 1.5, weapon: 'crossbow', style: 'bow', hunch: 0.2, proj: 'arrow', sfx: 'goblin', heavy: 'aimedBolt', aimEvery: 3 },
   chough: { model: 'skua', hp: 0.3, dmg: 0.45, speed: 7.5, radius: 0.4, ai: 'bat', reach: 1.0, atk: 'bite', atkTime: 0.8, flesh: 'flesh', xp: 0.6, float: true, shadeShy: true, feathers: true, heavy: 'mob', look: { tint: 0x16161c, tintAmt: 0.85 } },
-  denBear: { model: 'rimeBear', hp: 4.2, dmg: 1.5, speed: 5.6, radius: 1.05, ai: 'charger', reach: 2.3, atk: 'smash', atkTime: 1.6, flesh: 'flesh', xp: 6, sfx: 'bear', big: true, heavy: 'charge', look: { scale: 1.25, tint: 0x6a4a30, tintAmt: 0.7 } },
-  snowWorm: { model: 'deepworm', hp: 1.8, dmg: 1.2, speed: 4.4, radius: 0.85, ai: 'burrow', reach: 2.4, atk: 'bite', atkTime: 1.4, flesh: 'chitin', xp: 3, sfx: 'worm', proj: 'acid', snowOnly: true, heavy: 'burst', look: { tint: 0xeef2f6, tintAmt: 0.8 } },
+  denBear: { model: 'rimeBear', hp: 4.2, dmg: 1.5, speed: 5.6, radius: 1.05, ai: 'charger', reach: 2.3, atk: 'smash', atkTime: 1.6, flesh: 'flesh', xp: 6, sfx: 'bear', big: true, heavy: 'charge', wake: { d: 5, clip: 'howl', sleep: 'die', tide: true, loud: 12, sfx: 'bearRoar', t: 1.3, speed: 1 }, look: { scale: 1.25, tint: 0x6a4a30, tintAmt: 0.7 } },
+  snowWorm: { model: 'deepworm', hp: 1.8, dmg: 1.2, speed: 4.4, radius: 0.85, ai: 'burrow', reach: 2.4, atk: 'bite', atkTime: 1.4, flesh: 'chitin', xp: 3, sfx: 'worm', snowOnly: true, heavy: 'burst', look: { tint: 0xeef2f6, tintAmt: 0.8 } },
   rockRoller: { model: 'troll', hp: 7, dmg: 1.4, speed: 3.2, radius: 1.15, ai: 'brute', reach: 2.8, atk: 'smash', atkTime: 2.2, flesh: 'flesh', xp: 10, weapon: 'club', style: 'heavy', hunch: 0.25, sfx: 'troll', big: true, icebound: true, heavy: 'rolledBoulder', look: { scale: 1.2, tint: 0x8c98a6, tintAmt: 0.6 } },
   rockScorpion: { model: 'spider', hp: 1.0, dmg: 0.8, speed: 5.2, radius: 0.6, ai: 'melee', reach: 1.5, atk: 'bite', atkTime: 1.0, flesh: 'chitin', xp: 1.5, sfx: 'spider', poison: true, burst: true, coldBlooded: 0.6, heavy: 'sting', stingEvery: 3, look: { scale: 0.8, tint: 0xb08a4a, tintAmt: 0.6 } },
+  // the two bosses, who are not killed (spare: at 0 life they rest where they would die; ai.js KALLISTO, KELADOS). A slide
+  // on them: slideShare % of their life and slideDaze s (forge.js bury)
+  kallisto: { model: 'kallisto', hp: 340, dmg: 1.6, speed: 5.4, radius: 0.85, ai: 'kallisto', reach: 4.6, atk: 'smash', atkTime: 1.6, flesh: 'flesh', xp: 300, boss: true, big: true, swim: true, spare: true, sfx: 'bear', dieClip: 'daze', slideShare: 5, slideDaze: 3, look: { scale: 2.1, tint: 0x3a2c22, tintAmt: 0.2 } },
+  kelados: { model: 'kelados', hp: 480, dmg: 1.6, speed: 3.2, radius: 1.5, ai: 'kelados', reach: 9, atk: 'smash', atkTime: 1.8, flesh: 'stone', xp: 380, boss: true, big: true, spare: true, sfx: 'golem', dieClip: 'die', slideShare: 4, slideDaze: 2, look: { scale: 2.3, tint: 0x8c9488, tintAmt: 0.5 } },
   // the act's bosses (radius before look.scale: the Tower's 0.7 is 2.8 m at x4, the Skotos's 0.8 is 2.56 m at x3.2).
   // Skerry, the Walking Tower: the crab with the Skerry Light on its back, a wake through its own flood (wakeSpeed); the
   // Skotos: anchored waist-deep at the ice edge (float: nothing pushes it), its shadow under the ice in the Night
@@ -352,7 +356,7 @@ export const PACK_LEAD = { weepDen: ['amberBear'], weepWeepers: ['rootwarden'], 
 // their rules at stage B: until then those packs stand awake; and the Snow-worm spits the Deepworm's acid until its slush)
 // packs whose dead wait in disguise (Hollowed as dead trees and amber cocoons, the Ash-Fallen under the ash, the Sunken under
 // the kelp and as ice at the rails, the Reefbacks as rocks) until the hero is close
-export const PACK_DORMANT = { weepHollow: true, heartSleepers: true, ashLine: true, sunkenCrew: true, tideChoir: true, reefRocks: true, frozenCrew: true, blackCrew: true, gateFallen: true, forgotten: true };
+export const PACK_DORMANT = { weepHollow: true, heartSleepers: true, ashLine: true, sunkenCrew: true, tideChoir: true, reefRocks: true, frozenCrew: true, blackCrew: true, gateFallen: true, forgotten: true, den: true, icebound: true, slabs: true };
 // packs that stand in a line, the shields toward the hero (the Ash-Fallen still holding the battle line where they fell)
 export const PACK_LINE = { ashLine: true };
 // the kinds to spawn for a pack of n: the leads, then weighted picks of the rest (pick = rand.weighted)
@@ -396,6 +400,12 @@ export const BOONS = {
     { id: 'bearer', icon: 'fire', stats: { area: 12, dmgPct: 10 } },
     { id: 'word', icon: 'shield', stats: { lifePct: 12, lifeOnHit: 12 } },
     { id: 'shade', icon: 'star', stats: { cdr: 8, critDmg: 20 } }
+  ],
+  // the fire that wakes: worth a quarter again to a hero who has held all six lookouts on any difficulty (hero.fires, stats.js)
+  7: [
+    { id: 'thaw', icon: 'roll', stats: { atkSpd: 8, move: 6 } },
+    { id: 'den', icon: 'shield', stats: { lifePct: 12, regen: 15 } },
+    { id: 'sluice', icon: 'star', stats: { area: 12, cdr: 8 } }
   ]
 };
 export const UNBOUND = 1.5;
@@ -488,10 +498,15 @@ export const LEGENDARIES = [
   // Act VI: the Lure-bone (kills in her ring give back twice the light; a Drink, a snap or a Gnaw on her takes half) and
   // the Shade's Ring (her Cradle never under 1.5 m; her hits on the Shrouded outside light x0.5): light.js, combat.js
   { id: 'ketosLure', base: 'amulet', cls: null, v: 0.4, drop: false },
-  { id: 'shadeRing', base: 'ring', cls: null, v: 1.5, drop: false }
+  { id: 'shadeRing', base: 'ring', cls: null, v: 1.5, drop: false },
+  // Act VII's two, each from its boss's first fall (neither is killed). Kallisto's Claw: after 8 m run without stopping,
+  // her next blow +50% and a 1 s Daze, once each 6 s; +8% attack speed (stats.js, combat.js, player.js). The Mountain's
+  // Heart: a slide or a wash-out takes no life from her; +10% armour (combat.js, stats.js)
+  { id: 'kallistoClaw', base: 'gloves', cls: null, v: 0.5, drop: false },
+  { id: 'mountainHeart', base: 'chest', cls: null, v: 0.1, drop: false }
 ];
 // a boss's first kill drops its own legendary (combat.js kill: by its def's legKey, else its kind)
-export const LEG_FROM = { tower: 'skerryShell', skotos: 'einarLantern', ketos: 'ketosLure', shade: 'shadeRing' };
+export const LEG_FROM = { tower: 'skerryShell', skotos: 'einarLantern', ketos: 'ketosLure', shade: 'shadeRing', kallisto: 'kallistoClaw', kelados: 'mountainHeart' };
 // the act's hazard row for a rule Acts V, VI and VII share (ZONES is world's: the act number is the caller's)
 export const HAZ_ACT = { 5: HAZ5, 6: HAZ6, 7: HAZ7 };
 export const actHaz = (act, diff) => { const H = HAZ_ACT[act] || HAZ5; return H[diff ?? 1] || H[1]; };

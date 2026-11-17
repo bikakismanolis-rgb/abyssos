@@ -34,6 +34,8 @@ export function updatePlayer(dt) {
   pl.comboT -= dt;
   for (let i = 0; i < pl.cds.length; i++) pl.cds[i] = Math.max(0, pl.cds[i] - dt);
   pl.dodgeCd = Math.max(0, pl.dodgeCd - dt); pl.potionCd = Math.max(0, pl.potionCd - dt);
+  // (Kallisto's Claw: the metres run without stopping, and its 6 s)
+  if (G.stats?.legs?.has('kallistoClaw')) { pl.clawCd = Math.max(0, (pl.clawCd || 0) - dt); const d = Math.hypot(pl.x - (pl.clawX ?? pl.x), pl.z - (pl.clawZ ?? pl.z)); pl.clawRun = d > 0.01 && d < 3 ? (pl.clawRun || 0) + d : d >= 3 ? 0 : Math.max(0, (pl.clawRun || 0) - dt * 16); pl.clawX = pl.x; pl.clawZ = pl.z; }
   // (the Names: how long she has stood her ground, names7.js)
   if (G.hero.names?.said?.some(Boolean)) N7stand((pl.n7 ||= N7rt()), pl.x, pl.z, dt, pl.buffs.call > 0);
   for (const k in pl.buffs) { pl.buffs[k] -= dt; if (pl.buffs[k] <= 0) delete pl.buffs[k]; }

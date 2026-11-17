@@ -260,7 +260,7 @@ async function startHero(hero, isNew, zone = 'town', force = false, home = false
 // at most once (flags.legBack_<boss>: one sold or salvaged comes back no more than that)
 function legBack(hero) {
   const F = hero.flags, all = [...(hero.inv || []), ...(hero.stash || []), ...Object.values(hero.equip || {})];
-  for (const k of ['ketos', 'shade']) {
+  for (const k of ['ketos', 'shade', 'kallisto', 'kelados']) {
     const leg = LEG_FROM[k];
     if (!leg || !F['legFrom_' + k] || F['legBack_' + k] || all.some((it) => it?.leg === leg)) continue;
     const list = hero.stash.includes(null) ? hero.stash : hero.inv, i = list.indexOf(null);

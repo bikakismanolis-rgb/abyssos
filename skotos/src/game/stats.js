@@ -23,10 +23,13 @@ export function computeStats(hero, equip = hero.equip) {
     }
   }
   if (s.legs.has('swiftboots')) s.move += 15;
+  // Act VII's two: Kallisto's Claw, +8% attack speed; the Mountain's Heart, +10% armour
+  if (s.legs.has('kallistoClaw')) s.atkSpd += 8;
+  if (s.legs.has('mountainHeart')) s.armorPct += 10;
   // the beacons' blessings; the fire lit by hand is worth half again to a hero the crown never held (Unbound), the lights of
   // the sea a quarter again to one who lit the four Name-stones (Remembered)
   const F = hero.flags || {};
-  for (const id of Array.isArray(hero.boons) ? hero.boons : []) { const b = typeof id === 'string' && Object.prototype.hasOwnProperty.call(BOON, id) && BOON[id]; if (!b) continue; const m = F.unbound && BOONS[4].includes(b) ? UNBOUND : F.remembered && BOONS[5].includes(b) ? REMEMBERED : F.lostAll && BOONS[6]?.includes(b) ? REMEMBERED : 1; for (const k in b.stats) s[k] += Math.floor(b.stats[k] * m); }
+  for (const id of Array.isArray(hero.boons) ? hero.boons : []) { const b = typeof id === 'string' && Object.prototype.hasOwnProperty.call(BOON, id) && BOON[id]; if (!b) continue; const m = F.unbound && BOONS[4].includes(b) ? UNBOUND : F.remembered && BOONS[5].includes(b) ? REMEMBERED : F.lostAll && BOONS[6]?.includes(b) ? REMEMBERED : BOONS[7]?.includes(b) && Array.isArray((hero.__real || hero).fires) && [0, 1, 2, 3, 4, 5].every((i) => (hero.__real || hero).fires[i] > 0) ? REMEMBERED : 1; for (const k in b.stats) s[k] += Math.floor(b.stats[k] * m); }
   // the Crown's Offers: a gift and its cage, held until Karthax takes them back (never in a Shadow Gate); a co-op guest's
   // own, never the host's world's (net/coop.js: hero.__real is the guest's record)
   const own = hero.__real || hero, OF = own.flags || {};
