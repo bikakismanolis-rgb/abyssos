@@ -6286,7 +6286,7 @@ const KELADOS = {
       a.tele = teleCone(a.x, a.z, rot, 9, 0.87, 1.0); a.avatar?.play('attack', 1, { hitIn: 1.0 });
       return mv7(a, 'sweep', 1.0, () => {
         Audio.sfx('swingHeavy', { x: a.x, z: a.z }); shake(0.3);
-        for (const p of heroes()) if (!p.dead && inCone(a.x, a.z, rot, 9, 0.87, p)) heavy7(a, p, 'sweep', { push: 12 });
+        for (const p of heroes()) if (!p.dead && inCone(a.x, a.z, rot, 9, 0.87, p)) heavy7(a, p, 'sweep', { push: 6 });
       }, 0.5, { noFace: true });
     } }
   ]

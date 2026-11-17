@@ -549,7 +549,7 @@ A lookout's hold is priced apart: 0.10-0.20 lives on Warden.
 
 | move | phases | telegraph | shape | band | what lands | cooldown |
 |---|---|---|---|---|---|---|
-| Sweep | 1-3 | 1.0 s, `attack` | a cone 9 m, 100° | within 9 m | heavy and a push of 12 | 8 s |
+| Sweep | 1-3 | 1.0 s, `attack` | a cone 9 m, 100° | within 9 m | heavy and a push of 6 (12 until the first balance pass: it threw a melee hero out of reach on every Sweep) | 8 s |
 | Tremor | 1-3 | 1.2 s, `slam`; then a white-edged red ring 1.2 m thick runs from r 4 to r 14 at 9 m/s | a ring: rolled or blinked through, or stood out behind a block | any | heavy to whoever it crosses in the open | 11 s |
 | Ice Block | 1-3 | 1.3 s circle (0.5 s to tear it, 0.8 s in the air) | r 2.2 on the farthest hero beyond 8 m (solo: every third one on her wherever she is) | beyond 8 m | heavy; the block stays `HAZ7.blockT` as cover, three standing at most | 10 s |
 | Chute | 1 | the Slide's 2.8 s lane | one lane, on every second Tremor | any | `HAZ7.slide` | with the Tremor |

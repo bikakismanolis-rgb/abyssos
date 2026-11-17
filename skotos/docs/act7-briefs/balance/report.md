@@ -140,3 +140,10 @@ blows, every blow under 20%. Still open, for the full campaign (6 runs a cell): 
 not a number) and **lowest life** (65-88% against 25-55%: no boss brings her low; the owner asked for gentler boss blows
 in Act VI, so their share was not raised here). The zone levers (4-6) are left for the full campaign: the bot does not
 walk between packs, which is where most of the act's lanes, brooks and clouds are met.
+
+**Kelados's warden, one phase rule.** His Sweep's push of 12 threw a melee hero out of reach on every Sweep, and she walked
+back through the Tremor's ring. With a push of 6 (`ai.js`, the contract's Sweep row updated), four warden runs on the same
+seeds: 191, 236, 138, 338 s (median about 213) against 378, 446, 265, 222 s with 12 (`runs-kw-push6.jsonl`,
+`runs-kw-push12.jsonl`; run alone, so with less noise than the batch). The ranged classes, who are rarely swept, are not
+slowed by it. His class spread is now about 2.5× (mage 86 s, ranger 112 s, warden about 213 s): still for the full
+campaign.
