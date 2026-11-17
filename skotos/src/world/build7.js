@@ -254,6 +254,28 @@ const PROP7 = {
     g.userData.setTurn(0);
     return g;
   },
+  // an apple tree by Isarn's staff (Whitecliff): a short crooked trunk and five bare boughs; setBloom(k) 0..1 grows a
+  // crown of white and pale pink blossom over them, a few young leaves in it (the act's last dusk, d.halda7.h1)
+  appleTree() {
+    const g = new THREE.Group();
+    g.add(solid7('appleWood', () => {
+      const rr = RNG(981), parts = [{ geo: jitter(G.cyl(0.13, 0.19, 1.5, 7), 0.03, 982), color: BARK, o: { y: 0.75, rz: 0.08 } }];
+      for (let k = 0; k < 5; k++) {
+        const a = k * 1.2566 + rr.range(-0.3, 0.3), t = rr.range(0.55, 0.85), len = rr.range(1.0, 1.4);
+        parts.push({ geo: G.cyl(0.04, 0.08, len, 5), color: k % 2 ? BARK : WDD, o: { x: Math.sin(a) * len * 0.32 + 0.06, y: 1.42 + len * 0.32, z: Math.cos(a) * len * 0.32, rx: Math.cos(a) * t, rz: -Math.sin(a) * t } });
+      }
+      return parts;
+    }));
+    const crown = solid7('appleBloom', () => {
+      const rr = RNG(991), parts = [], C = [0xf8f0f2, 0xf2d4dc, 0xffffff, 0xe8bfcc];
+      for (let k = 0; k < 15; k++) { const a = rr.range(0, 6.28), d = rr.range(0.2, 1.15), w = rr.range(0.3, 0.48); parts.push({ geo: jitter(G.dodeca(w), w * 0.2, 992 + k), color: k % 5 === 4 ? 0x9ab868 : C[k % 4], soft: 0.6, o: { x: Math.sin(a) * d + 0.06, y: 2.05 + rr.range(-0.2, 0.5) - d * 0.15, z: Math.cos(a) * d } }); }
+      return parts;
+    }, null, false);
+    g.add(crown);
+    g.userData.setBloom = (k = 1) => { k = clamp(k, 0, 1); crown.visible = k > 0.01; crown.scale.setScalar(0.3 + 0.7 * ease(k)); g.userData.bloom = k; };
+    g.userData.setBloom(0);
+    return g;
+  },
   // a log-jam against a weir: a dozen stripped trunks piled across each other, pale and wet (o.n logs, 11)
   logjam(o) {
     const n = o.n ?? 11;
@@ -798,6 +820,9 @@ export function act7Prop(kind, o = {}) {
 }
 
 // ---------- act7Level ----------
+// the sizes of the layout's own props that take one (o.r): a cover boulder on its 2 x 2 cells, a rock 1.8 m high (the
+// contract's cover); the sheepfold's ring round its 4 x 4 blocked cells
+const SIZE7 = { boulder: 0.95, fold: 1.9 };
 // Builds the props of a gen7 layout once, each at its spot (docs/act7-contract.md, L.spots) in the first state of the
 // reading L.mode, adds them to lvl.group (lvl: buildLevel's `out`; a THREE.Group is taken as the group itself) and returns
 // the handles, which world.js keeps as lvl.act7 and lays its interacts and its flags' states on (act7Presence), never
@@ -918,7 +943,9 @@ export function act7Level(L, lvl, o = {}) {
   }
   if (ok(S.wheel)) { A.wheel = put('weir', { great: true, mark: 5 }, S.wheel.x, S.wheel.z, S.wheel.rot ?? Math.PI / 2); A.wheel.userData.setOpen(after); }
   // ---- the layout's own props whose kind is one of this file's (cover rocks and ice, boulders, fallen pines, ...) ----
-  for (const p of L?.props || []) { if (!ok(p) || !PROP7[p.t]) continue; const m = put(p.t, p, p.x, p.z, p.r || 0); if (p.s && p.s !== 1) m.scale.multiplyScalar(p.s); (A.props[p.t] ||= []).push(m); }
+  // (a layout prop's r is its turn, not a size: each kind gets its own size here, SIZE7, or its default. Passed as the
+  // size, the cover boulders stood up to 12 m wide over the Chutes and the sheepfold had no stones at all: perf7)
+  for (const p of L?.props || []) { if (!ok(p) || !PROP7[p.t]) continue; const m = put(p.t, { ...p, r: SIZE7[p.t] }, p.x, p.z, p.r || 0); if (p.s && p.s !== 1) m.scale.multiplyScalar(p.s); (A.props[p.t] ||= []).push(m); }
   // ---- the after readings' flowers: on dry walkable ground that is never snow, off the trodden path ----
   if (after && o.flowers !== false && R.quality >= 1 && L?.cells) {
     const at = [], want = thaw ? 900 : 420, rr = RNG((L.seed || 1) * 31 + 7);

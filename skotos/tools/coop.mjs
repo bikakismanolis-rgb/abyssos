@@ -1722,6 +1722,16 @@ const SC = {
       const rank = await until(g, () => (window.__NET.S.real?.fires?.[0] | 0) === 2, null, 15000, 'rank on guest');
       ok(rank, 'the hold ends: the guest\'s own record has the rank of the host\'s difficulty (\'h7\')', await ev(g, () => window.__NET.S.real?.fires));
     }
+    // a guest downed in a chute's lane lies at its edge (laneEdge7): the one who comes to raise her is out of the next slide
+    const dn = await ev(g, async () => {
+      const F = await import('/src/game/forge.js'), G7 = await import('/src/world/gen7.js'), z = window.__G.zone, pl = window.__G.player;
+      const f = (F.flues() || []).find((q) => q.kind === 'snow'); if (!f) return null;
+      const x = f.x + Math.sin(f.dir) * f.len * 0.5, zz = f.z + Math.cos(f.dir) * f.len * 0.5, p = z.map.nearestFloor(x, zz, 2); if (!p || !G7.inLane(f, p.x, p.z)) return { none: true };
+      pl.x = p.x; pl.z = p.z; window.__NET.NET.h.downed();
+      const out = !G7.inLane(f, pl.x, pl.z, 0.5); window.__NET.S.downed = null;
+      return { out, walk: z.map.walkable(pl.x, pl.z), at: [+pl.x.toFixed(1), +pl.z.toFixed(1)], was: [+p.x.toFixed(1), +p.z.toFixed(1)] };
+    });
+    ok(dn && !dn.none && dn.out && dn.walk, 'a guest downed in a lane is laid at its edge, on floor', dn);
     ok(await ev(host, async () => (await import('/src/net/coop.js')).VER === 5), 'protocol still 5 (the bump is stage E\'s last commit)');
   },
 

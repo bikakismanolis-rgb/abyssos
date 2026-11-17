@@ -192,7 +192,7 @@ export const S7 = () => ({
     if (pick.i < 0) return out(beats);
     // a goblin in the lane, the hero beside the horn-stone and out of the lane; a loud thing at the horn
     const set = await pg.evaluate(({ i }) => { const G = window.__G, D = window.__D, f = window.__Fg.flues()[i], ux = Math.sin(f.dir), uz = Math.cos(f.dir), m = G.zone.map;
-      const gp = m.nearestFloor(f.x + ux * f.len * 0.4, f.z + uz * f.len * 0.4, 2), a = D.spawnMonster('goblin', gp.x, gp.z); G.zone.actors.push(a); if (a.avatar) window.__R.scene.add(a.avatar.group); a.aggro = false; window.__gob = a;
+      const gp = m.nearestFloor(f.x + ux * f.len * 0.4, f.z + uz * f.len * 0.4, 2), a = D.spawnMonster('goblin', gp.x, gp.z); G.zone.actors.push(a); if (a.avatar) window.__R.scene.add(a.avatar.group); a.aggro = false; a.speed = 0; window.__gob = a;
       const hp = m.nearestFloor(f.horn.x - uz * (f.w / 2 + 3), f.horn.z + ux * (f.w / 2 + 3), 4); G.player.x = hp.x; G.player.z = hp.z;
       return { gobIn: true, hp0: a.hp, hpMax: a.hpMax, horn: f.horn, len: f.len }; }, pick);
     const t0 = Date.now();
@@ -208,8 +208,8 @@ export const S7 = () => ({
     // spent: a second loud thing does nothing
     const k2 = await pg.evaluate(({ i }) => { const f = window.__Fg.flues()[i]; return window.__Fg.loud(f.horn.x, f.horn.z, 6, window.__G.player); }, pick);
     beat('spent: it cannot be kicked again', k2 === 0, k2);
-    // the hero in a lane: HAZ7.slide of her life, pure
-    const hero = await pg.evaluate(async ({ i }) => { const G = window.__G, fl = window.__Fg.flues(), D = await import('/src/game/data.js'); const j = fl.findIndex((f, n) => n !== i && f.kind === 'snow' && f.armed && !G.zone.L.shade[Math.floor(f.z) * G.zone.L.w + Math.floor(f.x)]); if (j < 0) return null; const f = fl[j], ux = Math.sin(f.dir), uz = Math.cos(f.dir), p = G.zone.map.nearestFloor(f.x + ux * f.len * 0.6, f.z + uz * f.len * 0.6, 2); G.player.x = p.x; G.player.z = p.z; window.__immortal = true; G.player.hp = G.player.hpMax; G.player.iframes = 0; window.__hp0 = G.player.hp; window.__hpMin = G.player.hp; setInterval(() => { window.__hpMin = Math.min(window.__hpMin, G.player.hp); }, 10); window.__Fg.fireFlue(j, null); return { j, want: D.actHaz(7, G.hero.diff).slide }; }, pick);
+    // the hero in a lane: HAZ7.slide of her life, pure (the goblin gone first: awake after its slide, it came for her)
+    const hero = await pg.evaluate(async ({ i }) => { const G = window.__G, fl = window.__Fg.flues(), D = await import('/src/game/data.js'); const j = fl.findIndex((f, n) => n !== i && f.kind === 'snow' && f.armed && !G.zone.L.shade[Math.floor(f.z) * G.zone.L.w + Math.floor(f.x)]); if (j < 0) return null; const f = fl[j], ux = Math.sin(f.dir), uz = Math.cos(f.dir), p = G.zone.map.nearestFloor(f.x + ux * f.len * 0.6, f.z + uz * f.len * 0.6, 2); for (const a of G.zone.actors) if (a.team === 'foe' && !a.prop) { a.hp = 0; a.dead = true; a.remove?.(); } G.player.x = p.x; G.player.z = p.z; window.__immortal = true; G.player.hp = G.player.hpMax; G.player.iframes = 0; window.__hp0 = G.player.hp; window.__hpMin = G.player.hp; setInterval(() => { window.__hpMin = Math.min(window.__hpMin, G.player.hp); }, 10); window.__Fg.fireFlue(j, null); return { j, want: D.actHaz(7, G.hero.diff).slide }; }, pick);
     if (hero) {
       await until(pg, (j) => { const f = window.__Fg.flues()[j]; return f.st === 'idle' && !f.armed; }, 25000, hero.j);
       const lost = await pg.evaluate(() => (window.__hp0 - window.__hpMin) / window.__G.player.hpMax);
@@ -688,6 +688,20 @@ export const S7 = () => ({
     await pg.evaluate(() => { window.__immortal = true; window.__tough = true; });
     const e1 = await pg.evaluate(() => { const z = window.__G.zone, it = z.interact.find((i) => i.kind === 'echo' && i.boss === 'kallisto'); if (!it) return null; const p = z.map.nearestFloor(it.x, it.z + 1.5, 2); window.__G.player.x = p.x; window.__G.player.z = p.z; it.use(); return { mode: z.mode }; });
     const k = e1 && await until(pg, () => window.__G.zone.boss?.kind === 'kallisto' && window.__G.zone.boss.echo, 15000);
+    // the six boulders: a charge that ends on one breaks it (its cells open, its rock gone); the Daze of that charge stands
+    const bb = k && await pg.evaluate(() => {
+      const z = window.__G.zone, a = z.boss, den = (z.L.spots.boulders || []).filter((b) => b.den), m = z.map;
+      for (const b of den) for (let g = 0; g < 6.28; g += 0.2) {
+        const ux = Math.sin(g), uz = Math.cos(g), A = { x: b.x - ux * 6, z: b.z - uz * 6 }, H = { x: b.x + ux * 3.5, z: b.z + uz * 3.5 };
+        if (!m.walkable(A.x, A.z) || !m.walkable(H.x, H.z) || !m.clear(A.x, A.z, b.x - ux * 1.6, b.z - uz * 1.6)) continue;
+        a.x = A.x; a.z = A.z; window.__G.player.x = H.x; window.__G.player.z = H.z; a.mcd.charge = 0; a.wheeled = true; a.queue = ['charge']; a.cd = 0;
+        return { i: den.indexOf(b), x: b.x, z: b.z, n: den.length };
+      }
+      return null;
+    });
+    const broke = !!bb && await until(pg, (i) => (window.__G.zone.L.spots.boulders || []).filter((b) => b.den)[i]?.broken, 15000, bb.i);
+    const bs = bb && await pg.evaluate((q) => { const z = window.__G.zone, a = z.boss, m = (z.lvl.act7?.props?.boulder || []).find((o) => Math.hypot(o.position.x - q.x, o.position.z - q.z) < 0.8); return { open: z.map.walkable(q.x, q.z), shown: m ? m.visible : null, dazed: (a.dazeT ?? a.daze ?? 0) > 0 || a.st === 'dazed', left: z.L.spots.boulders.filter((b) => b.den && !b.broken).length }; }, bb);
+    beat('her echo: a charge that ends on a Den boulder breaks it (cells open, the rock gone; the other five stand)', broke && bs.open && bs.shown === false && bs.left === bb.n - 1, { bb, bs });
     const r1 = await pg.evaluate(async () => { const z = window.__G.zone, b = z.boss, F = await import('/src/game/forge.js'); const armed = (F.flues() || []).filter((f) => f.kind === 'snow' && f.st !== 'idle').length; window.__D.kill(b); await new Promise((ok) => setTimeout(ok, 1500)); return { echo: !!b?.echo, falling: armed, rest: !!window.__G.hero.flags.kallistoRest, q: window.__G.hero.quest }; });
     beat('the green bowl: Kallisto\'s echo rises from her place, an echo', !!e1 && k && r1.echo, { e1, r1 });
     beat('her echo falls and the story is untouched (quest 47)', r1.q === 47, r1);

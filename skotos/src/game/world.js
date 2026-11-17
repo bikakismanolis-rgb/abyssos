@@ -10,7 +10,7 @@ import { genCoast, genFarlight } from '../world/gen5.js';
 import { genDrained, genBottom, ropeSpot } from '../world/gen6.js';
 import { genThaw, genTarn } from '../world/gen7.js';
 import { firesTick, firesEnter, fires7 } from './fires7.js';
-import { act7Level } from '../world/build7.js';
+import { act7Level, act7Prop } from '../world/build7.js';
 import { town6, story6Zone, people6 } from './story.js';
 import { buildLevel, propMesh, runeDisc, WIND, act3Prop, setAutumn, act4Prop, setHeat, setNight, setFlueGlow, setThaw } from '../world/build.js';
 import { act5Prop } from '../world/build5.js';
@@ -2301,6 +2301,14 @@ function stream7(z) {
   }
   T.stream7.material.color.set(F.lakeLet ? STREAM7.clear : STREAM7.brown);
   T.stream7.material.opacity = F.lakeLet ? 0.72 : 0.84;
+  // the apple tree by Isarn's staff: there from the call on, bare; in blossom once the lake is let down (d.halda7.h1)
+  if (!T.apple7) {
+    const s = L.spots.npcs?.wayfarer; if (!s) return;
+    const at = z.map.nearestFloor(s.x - 1.8, s.z - 1.0, 1.5) || { x: s.x - 1.8, z: s.z - 1.0 };
+    const m = T.apple7 = act7Prop('appleTree'); m.position.set(at.x, 0, at.z); m.rotation.y = 0.7; m.name = 'apple7';
+    z.extra.push(m); if (G.zone === z) R.scene.add(m);
+  }
+  T.apple7.userData.setBloom?.(F.lakeLet ? 1 : 0);
 }
 // the goat track at the Pass's camp: the way up to the Meltwaters, an interact on cells that are already walkable (no
 // older layout changes), pushed once into the layout's exits too so an arrival from above finds it; locked until Halda
@@ -2335,12 +2343,19 @@ on('winch7', (it) => { it.mesh?.userData.setIce?.(0); it.mesh?.userData.setTurn?
 on('chuteSpent', (f) => { const c = G.zone?.lvl?.act7?.cornices?.find((q) => q.k === f.i); c?.mesh?.userData.setArmed?.(false); c?.tongue?.userData.setK?.(1); });
 on('chuteArmed', (f) => { const c = G.zone?.lvl?.act7?.cornices?.find((q) => q.k === f.i); c?.mesh?.userData.setArmed?.(true); c?.tongue?.userData.setK?.(0); });
 on('fireRank', (n, rank, before, it) => { it?.mesh?.userData.setRank?.(rank); });
+// a boulder broken by Kallisto's echo (ai.js breakBoulder7): its mesh goes; echoes7 puts it back for the next day's echo
+const boulderMesh7 = (z, b) => (z?.lvl?.act7?.props?.boulder || []).find((m) => Math.hypot(m.position.x - b.x, m.position.z - b.z) < 0.8) || null;
+on('boulder7Broken', (b) => { const m = boulderMesh7(G.zone, b); if (m) m.visible = false; });
 // the two echoes after the act (once a day each, story.js 'echo'): Kallisto by her den in the green bowl, Kelados below his
 // seat once the lake is let down. They rest again; nothing of the story is touched
 function echoes7(z) {
   const F = G.hero.flags, S = z.L.spots;
   if (!F.act7 || z.interact.some((it) => it.kind === 'echo')) return;
-  if (z.id === 'thaw' && z.mode === 'green') { const e = S.echo || S.den || S.arena; const p = e && z.map.nearestFloor(e.x, e.z, 4); if (p) echoAt(z, 'kallisto', p.x, p.z); }
+  if (z.id === 'thaw' && z.mode === 'green') {
+    // (the boulders an earlier echo broke stand again: six windows each time; the zone is cached between days)
+    for (const b of S.boulders || []) if (b.den && b.broken) { b.broken = false; z.map.close(b.cells || [], false); const m = boulderMesh7(z, b); if (m) m.visible = true; }
+    const e = S.echo || S.den || S.arena; const p = e && z.map.nearestFloor(e.x, e.z, 4); if (p) echoAt(z, 'kallisto', p.x, p.z);
+  }
   if (z.id === 'tarn' && z.mode === 'let' && S.seat) { const p = z.map.nearestFloor(S.seat.x, S.seat.z + 5, 4); if (p) echoAt(z, 'kelados', p.x, p.z); }
 }
 // an Icebound asleep in its ice: the Cradle held to the block for 1.5 s (less with Lamplight) wakes it (ai.js 'iceMelt').

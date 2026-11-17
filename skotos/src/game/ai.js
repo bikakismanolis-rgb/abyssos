@@ -6030,6 +6030,8 @@ function blockFall7(a, tg) {
     rock7(x, z, H7().blockT, { by: a, ice: true });
   });
 }
+// the nearest standing hero within r m of a boss (null if none)
+function reach7(a, r) { let best = null, bd = r; for (const p of heroes()) { if (p.dead) continue; const d = Math.hypot(p.x - a.x, p.z - a.z); if (d < bd) { bd = d; best = p; } } return best; }
 function shooter7(a, not) { let best = null, bd = 1e9; for (const p of heroes()) { if (p.dead || p === not) continue; const d = Math.hypot(p.x - a.x, p.z - a.z); if (d >= 8 && d < bd) { bd = d; best = p; } } return best; }
 const farHero = (a, min) => { let best = null, bd = min; for (const p of heroes()) { if (p.dead) continue; const d = Math.hypot(p.x - a.x, p.z - a.z); if (d > bd) { bd = d; best = p; } } return best; };
 // a move: t seconds behind its telegraph, then fn (id: logged with its measured telegraph, HEAVY7)
@@ -6174,7 +6176,26 @@ function kCharge(a, pl, second) {
 function kChargeEnd(a, D) {
   chargeEnd(a, D);
   tally(a, D.wall ? 'chargeStone' : D.sap ? 'chargeSlush' : 'chargeOpen');
-  if (D.wall) loud(a.x, a.z, LOUD.bearWall, a);
+  if (D.wall) { loud(a.x, a.z, LOUD.bearWall, a); if (a.echo) echoBoulder(a, D.wall); }
+}
+// her echo (the green bowl, no snow): each of the Den's six boulders breaks on the first charge that ends on it, so six
+// windows and then none (docs/act7-contract.md, echo rules). The Daze of that charge stands; the rock is gone after it
+function echoBoulder(a, at) {
+  const S = G.zone?.L?.spots; if (!S?.boulders) return;
+  let best = null, bd = 2.6 ** 2;
+  for (const b of S.boulders) { if (!b.den || b.broken) continue; const d2 = (b.x - at.x) ** 2 + (b.z - at.z) ** 2; if (d2 < bd) { bd = d2; best = b; } }
+  if (best && breakBoulder7(best)) tally(a, 'boulderBroken');
+}
+// a boulder of gen7's S.boulders broken where it stands: its cells open, dust and stone, 'boulder7Broken' (world.js takes
+// its mesh away; co-op's c7 carries it to the guests, who call this too)
+export function breakBoulder7(b) {
+  if (!b || b.broken) return false;
+  b.broken = true; openCells(b.cells || []);
+  explosion(b.x, b.z, 2.2, 0xb0a890, { smoke: 0x6a6258, shake: 0.5 });
+  for (let i = 0; i < 20; i++) P({ add: false, x: b.x, y: rand.range(0.4, 1.8), z: b.z, vx: rand.range(-5, 5), vy: rand.range(2, 6), vz: rand.range(-5, 5), life: 1.1, size: rand.range(0.18, 0.34), size1: 0.2, color: 0x7a7468, alpha: 1, grav: 16 });
+  Audio.sfx('stoneCrack', { x: b.x, z: b.z }); Audio.sfx('slam', { x: b.x, z: b.z });
+  emit('boulder7Broken', b);
+  return true;
 }
 
 // ---------- Kelados, the Sleeper under the Mountain ----------
@@ -6228,7 +6249,9 @@ const KELADOS = {
         rock7(lx, lz, H7().blockT, { by: a, ice: true });
       }); if (heroes().length >= 3) { const t2 = shooter7(a, tg); if (t2) after7(a, 1.0, () => blockFall7(a, t2)); } }, 0.6, { noFace: true });
     } },
-    { id: 'sweep', basic: true, when: (a, d) => d < 9, cdOf: cd7(8), run(a, pl) {
+    // (co-op: the hero its threat holds if within 9 m, else the nearest one who is)
+    { id: 'sweep', basic: true, when: (a, d) => d < 9 || !!reach7(a, 9), cdOf: cd7(8), run(a, pl) {
+      if (Math.hypot(pl.x - a.x, pl.z - a.z) >= 9) pl = reach7(a, 9) || pl;
       const rot = a.rot = angleTo(a.x, a.z, pl.x, pl.z);
       a.tele = teleCone(a.x, a.z, rot, 9, 0.87, 1.0); a.avatar?.play('attack', 1, { hitIn: 1.0 });
       return mv7(a, 'sweep', 1.0, () => {

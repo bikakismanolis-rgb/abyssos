@@ -18,7 +18,7 @@ import { NET, MIRROR, heroes } from './state.js';
 import { pickTransport, bytesOf, MAX_MSG, TERMINAL } from './transport.js';
 import { SUPABASE } from './netcfg.js';
 import { enterZone, zoneReady, disposeZone, act3Presence, act4Presence, act5Presence, act6Presence, townFires, storyOpenings, light5, light6, useDone, ZONES } from '../game/world.js';
-import { skerryClose, unseenTick, web6Guest, shade6Guest, shade6GuestTick } from '../game/ai.js';
+import { skerryClose, unseenTick, web6Guest, shade6Guest, shade6GuestTick, breakBoulder7 } from '../game/ai.js';
 import { spawnMonster, Actor, heroAvatar, freshStatus, frozenLook, restoreRim } from '../game/actors.js';
 import { damage, gainXP, healHero } from '../game/combat.js';
 import { MONSTERS, DIFFS, monsterXP, COOP, BASES, MAX_LEVEL, CLASSES, PACKS, PACK_LEAD } from '../game/data.js';
@@ -40,6 +40,7 @@ import { clamp, rand } from '../core/util.js';
 import { FIRE, fireOn, fireDrain, ringOf, setRemoteLight, lightPools, lightAt, lightKind, NAMES, namesFromHost } from '../game/light.js';
 import { cells6, cells6Apply, slushAt } from '../game/tide.js';
 import { vaultAt, vaultLine, vaultRing, flues, fireFlue, loud } from '../game/forge.js';
+import { inLane } from '../world/gen7.js';
 // Act VII (docs/act7-contract.md, Co-op, protocol 6)
 import { act7Presence, thawK } from '../game/world.js';
 import { setThaw } from '../world/build.js';
@@ -659,7 +660,7 @@ function sendSnap() {
   // (Act VII: the clouds' clock at o.w[7] in tenths; the snow chutes armed and falling, two bit masks)
   if (z.act7) {
     if (o.w) { while (o.w.length < 7) o.w.push(null); o.w[7] = z.sunT != null ? q(z.sunT, 10) : -1; }
-    const fl = flues(); if (fl) { let ar = 0, fa = 0; fl.forEach((f, i) => { if (f.kind !== 'snow' || i > 30) return; if (f.armed) ar |= 1 << i; if (f.st !== 'idle') fa |= 1 << i; }); o.c7 = [ar, fa]; }
+    const fl = flues(); if (fl) { let ar = 0, fa = 0; fl.forEach((f, i) => { if (f.kind !== 'snow' || i > 30) return; if (f.armed) ar |= 1 << i; if (f.st !== 'idle') fa |= 1 << i; }); o.c7 = [ar, fa, bits7(G.zone.L.spots?.boulders)]; }
   }
   // the fires on the ice, lit by a touch or put out by the dark: the cairns, the open holes' lamps (bits)
   if (z.act5 && z.id === 'farlight') o.l = [bits(z.act5.cairns, (it) => it.i), bits(z.act5.lamps, (it) => it.hole * 4 + it.i)];
@@ -1498,7 +1499,17 @@ export function party() {
 
 // ---------- downed and revived ----------
 // called by boot.js on the hero's death in co-op, instead of the death panel
-NET.h.downed = () => { S.downed = { t: DOWNED, at: now() }; emit('netDowned', true); };
+NET.h.downed = () => { S.downed = { t: DOWNED, at: now() }; laneEdge7(); emit('netDowned', true); };
+// (Act VII: a hero downed in a lane, a chute's or a sluice's, lies at its edge, so the one who comes to raise her is not
+// standing in the next slide)
+function laneEdge7() {
+  const z = G.zone, pl = G.player; if (!z?.act7 || !pl) return;
+  for (const f of flues() || []) {
+    if (!inLane(f, pl.x, pl.z, 0.5)) continue;
+    const ux = Math.cos(f.dir), uz = -Math.sin(f.dir), side = (pl.x - f.x) * ux + (pl.z - f.z) * uz, s = side >= 0 ? 1 : -1;
+    for (const k of [s, -s]) { const off = (f.w / 2 + 0.9) * k - side, x = pl.x + ux * off, zz = pl.z + uz * off; if (z.map.walkable(x, zz)) { pl.x = x; pl.z = zz; return; } }
+  }
+}
 export function respawnNow() { if (S.downed) respawnSelf(); }
 function downedTick(dt) {
   const d = S.downed; if (!d) return;
@@ -1751,7 +1762,12 @@ function chutes7(c7) {
     if (f.st === 'idle' && !!(ar & bit) !== !!f.armed) { f.armed = !!(ar & bit); if (f.armed) { f.rearm = 0; f.grow = 1; } emit(f.armed ? 'chuteArmed' : 'chuteSpent', f); }
   });
   S.c7f = fa;
+  // (the Den's boulders Kallisto's echo has broken on the host: broken here too)
+  const bb = c7[2] | 0, den = (G.zone?.L?.spots?.boulders || []).filter((b) => b.den);
+  den.forEach((b, i) => { if ((bb & (1 << i)) && !b.broken) breakBoulder7(b); });
 }
+// the Den's boulders broken, one bit each in their order
+const bits7 = (list) => (list || []).filter((b) => b.den).reduce((m, b, i) => (b.broken ? m | (1 << i) : m), 0);
 // a guest's loud skill: the host is asked to kick (its chutes are the host's)
 on('loud', (x, z, r, by) => { if (NET.mode === 'guest' && by === G.player && G.zone?.act7) NET.h.iceOp?.('k', x, z, r); });
 // a hold ended on the host: every guest writes its own rank

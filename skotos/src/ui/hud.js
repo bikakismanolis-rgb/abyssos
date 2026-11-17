@@ -436,6 +436,7 @@ function goal5(z, q, F, L) {
 // walls that open at runtime (the Root Gate, the thorn walls, a standing stone the Hart breaks) repaint the map
 on('mapChanged', () => { mapDirty++; });
 on('stoneBroken', () => { mapDirty++; });
+on('boulder7Broken', () => { mapDirty++; });
 
 // ---------- messages ----------
 on('toast', (msg, kind) => {
