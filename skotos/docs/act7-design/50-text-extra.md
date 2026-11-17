@@ -9,6 +9,7 @@ The text import (`tools/text7-import.mjs`) reads this file too. The two proofrea
 | key | Greek | English |
 |---|---|---|
 | `mon.looter` | Πλιατσικολόγος | Looter |
+| `npc.cub` | Το αρκουδάκι | The cub |
 | `mon.hillWolf` | Ορεινός Λύκος | Mountain Wolf |
 | `mon.goblinMarksman` | Καλικάντζαρος Σημαδευτής | Goblin Marksman |
 | `mon.chough` | Καλιακούδα | Chough |

@@ -260,6 +260,7 @@ export const TEXT7 = {
   'd.alk.v7': ['Έμαθα πως κοιμήθηκες μια νύχτα ολόκληρη. Καιρός ήταν. Εγώ το έμαθα φέτος.', 'I hear you slept a whole night. About time. I only learnt how this year.'],
   'd.glaukos.v7': ['Λένε πως κοιμήθηκες. Εγώ κοιμάμαι τα μεσημέρια, πενήντα χρόνια. Έτσι αντέχω τις νύχτες.', 'They say you slept. I\'ve slept at noon for fifty years. That\'s how I last the nights.'],
   'mon.looter': ['Πλιατσικολόγος', 'Looter'],
+  'npc.cub': ['Το αρκουδάκι', 'The cub'],
   'mon.hillWolf': ['Ορεινός Λύκος', 'Mountain Wolf'],
   'mon.goblinMarksman': ['Καλικάντζαρος Σημαδευτής', 'Goblin Marksman'],
   'mon.chough': ['Καλιακούδα', 'Chough'],

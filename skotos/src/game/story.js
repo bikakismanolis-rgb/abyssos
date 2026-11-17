@@ -9,7 +9,7 @@ import { dropShard } from './pickups.js';
 import { writeSave } from './save.js';
 import Audio from '../audio/audio.js';
 import { grantBuff, refreshStats } from './stats.js';
-import { spawnMonster, spawnNpc, ghostly, memoryLook } from './actors.js';
+import { spawnMonster, spawnNpc, ghostly, memoryLook, makeAvatar, Actor } from './actors.js';
 import { BOONS, DIFFS, monsterDmg, actHaz } from './data.js';
 import { damage } from './combat.js';
 import { NET, heroes } from '../net/state.js';
@@ -3133,14 +3133,27 @@ function kallistoRest7(z, a) {
   const d = z.L.spots.den || z.L.boss, at = a && Number.isFinite(a.x) ? a : d, den = z.lvl?.act7?.den;
   let fin = false;
   emit('cine', {
-    x: (at.x + d.x) / 2, z: (at.z + d.z) / 2 + 3, dur: 12, zoom: 1.2, pitch: 0.35, until: () => fin,
+    // (framed on the two of them, she and the den's mouth in the upper middle: the camera looks north from the south)
+    x: (at.x + d.x) / 2, z: (at.z + d.z) / 2 + 2, dur: 12, zoom: 1.35, pitch: 0.8, until: () => fin,
     steps: [
       [0.8, () => narr7('d.kall.1')],
-      [4.4, () => { narr7('d.kall.2'); Audio.sfx('cubCry', { x: d.x, z: d.z }); den?.userData.setCub?.(true); puff(d.x, 0.4, d.z, 0xb8a890, 8); }],
+      [4.4, () => { narr7('d.kall.2'); Audio.sfx('cubCry', { x: d.x, z: d.z }); den?.userData.setCub?.(true); puff(d.x, 0.4, d.z, 0xb8a890, 8); cub7(z, d, at); }],
       [8.2, () => emit('dialog', { who: 'smith', lines: [['d.halda7.k4', 'smith'], ['d.kall.3', 'narrator'], ['d.halda7.k5', 'smith']], end: () => { fin = true; } })]
     ],
     end: fin0
   });
+}
+
+// the cub: the bear's body at a third of a bear, out of the den's mouth to her side; it stays by her (nothing targets it)
+function cub7(z, from, to) {
+  if (z.cub7 || G.zone !== z) return;
+  let av; try { av = makeAvatar('rimeBear', { scale: 0.42 }); } catch (e) { return; }
+  av.setTint?.(0x6a4a30, 0.7);
+  const p = z.map.nearestFloor(from.x, from.z, 3) || from;
+  const a = new Actor({ x: p.x, z: p.z, team: 'npc', kind: 'cub', radius: 0.35, speed: 0, hp: 1e9, avatar: av, rot: Math.atan2(to.x - p.x, to.z - p.z) });
+  a.npc = 'cub'; a.still = true; z.cub7 = a; z.actors.push(a); if (a.avatar) R.scene.add(a.avatar.group);
+  const side = z.map.nearestFloor(to.x + 1.6, to.z + 0.8, 2) || to;
+  walkTo(a, side.x, side.z, 1.3, () => { a.home = a.rot = Math.atan2(to.x - a.x, to.z - a.z); a.avatar?.play?.('idle', 1, { loop: true }); });
 }
 
 // ---------- q43-q45: the Hanging Lake ----------
