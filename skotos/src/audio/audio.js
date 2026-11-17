@@ -1841,6 +1841,187 @@ const SFX = {
   },
   // the names' bell from above: the Tower's bell pitched up and far
   nameBell(v, t, p) { SFX.towerBell(v, t, p, 1.5); v.wet(0.9); },
+  // ---------- Act VII ----------
+  // a weir's wooden wheel turned: the pawl clicking faster, the axle creaking, and the water beginning to run under it
+  weirWheel(v, t, p) {
+    let x = t;
+    for (let k = 0; k < 8; k++) { tn(v, x, { w: 'triangle', f: 430 * p * rand(0.94, 1.06), fe: 300 * p, sw: 0.03, a: 0.001, pk: 0.3, d: 0.05 }); nb(v, x, { k: 'w', f: 2300, q: 1.5, a: 0.001, pk: 0.22, d: 0.02 }); x += 0.34 - k * 0.025; }
+    nb(v, t + 0.05, { k: 'p', f: 520 * p, fe: 780 * p, q: 9, a: 0.4, pk: 0.9, d: 1.5, am: [rand(22, 30), 0.8] });
+    tn(v, t, { w: 'sawtooth', f: 84 * p, fe: 70 * p, a: 0.25, pk: 0.14, d: 1.7, lp: 420 });
+    nb(v, t + 0.9, { k: 'p', ft: 'lowpass', f: 500, fe: 1700, q: 0.7, a: 1.1, pk: 0.4, d: 1.2 });
+    v.wet(0.3);
+  },
+  // the river drops a step: the run of it falling in pitch and weight, gurgling as the stones come up through it
+  raceStep(v, t, p) {
+    const d = 2.6, s = v.N('p', t, t + d), lp = v.F('lowpass', 2000, 0.8), e = v.G(0);
+    lp.frequency.setValueAtTime(2200 * p, t); lp.frequency.exponentialRampToValueAtTime(420 * p, t + d);
+    e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(0.5, t + 0.35); e.gain.setTargetAtTime(0, t + 0.9, 0.55);
+    s.connect(lp); lp.connect(e); e.connect(v.out);
+    for (let k = 0; k < 9; k++) { const x = t + 0.5 + k * rand(0.12, 0.22), f = rand(380, 760) * p * (1 - k * 0.04); tn(v, x, { f, fe: f * 1.9, sw: 0.05, a: 0.004, pk: rand(0.07, 0.12), d: 0.07, lp: 2000 }); }
+    tn(v, t + 0.2, { f: 150 * p, fe: 62 * p, sw: 1.8, a: 0.3, pk: 0.22, d: 2 });
+    v.wet(0.4);
+  },
+  // the warning before the brook rises (never a bell, never the vault's groan): the roar of water coming down a gully,
+  // far and then near, stones knocking in it
+  brookRoar(v, t, p) {
+    const d = 3.6, s = v.N('b', t, t + d), lp = v.F('lowpass', 160, 0.8), e = v.G(0);
+    lp.frequency.setValueAtTime(140, t); lp.frequency.exponentialRampToValueAtTime(950 * p, t + d * 0.7); lp.frequency.exponentialRampToValueAtTime(260, t + d);
+    e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(0.9, t + d * 0.68); e.gain.setTargetAtTime(0, t + d * 0.72, 0.3);
+    s.connect(lp); lp.connect(e); e.connect(v.out);
+    nb(v, t + 0.4, { k: 'p', f: 420 * p, fe: 1300 * p, q: 0.7, a: d * 0.6, pk: 0.45, d: 1, am: [rand(7, 10), 0.45] });
+    tn(v, t + 0.3, { f: 48, fe: 62, sw: 2.2, a: 1.8, pk: 0.3, d: 1.3 });
+    for (let k = 0; k < 6; k++) { const x = t + d * rand(0.35, 0.8); tn(v, x, { w: 'triangle', f: rand(150, 260) * p, fe: 90, sw: 0.05, a: 0.001, pk: rand(0.08, 0.16), d: 0.08 }); }
+    v.wet(0.55);
+  },
+  // a cornice lets go above her: a dry snap, a second one answering along the lip, the whump of the slab
+  corniceCrack(v, t, p) {
+    nb(v, t, { k: 'w', ft: 'highpass', f: 1800 * p, q: 0.7, a: 0.001, pk: 0.9, d: 0.06 });
+    tn(v, t, { w: 'triangle', f: 900 * p, fe: 220 * p, sw: 0.04, a: 0.001, pk: 0.5, d: 0.08 });
+    nb(v, t + 0.13, { k: 'w', ft: 'highpass', f: 1400 * p, q: 0.7, a: 0.001, pk: 0.5, d: 0.07 });
+    tn(v, t + 0.16, { f: 130 * p, fe: 46, sw: 0.25, a: 0.01, pk: 0.75, d: 0.6 });
+    const s = v.N('p', t + 0.2, t + 1.1), bp = v.F('bandpass', 900, 0.8), e = v.G(0);
+    spikes(e.gain, t + 0.2, 0.8, 22, 0.3, 0.02, 1.6);
+    s.connect(bp); bp.connect(e); e.connect(v.out);
+    v.wet(0.6);
+  },
+  // the slide running: a rush of snow coming down the lane, hissing at its front, the ground under it
+  slideRoar(v, t, p) {
+    const d = 3, s = v.N('p', t, t + d), lp = v.F('lowpass', 300, 0.7), e = v.G(0);
+    lp.frequency.setValueAtTime(320, t); lp.frequency.exponentialRampToValueAtTime(1700 * p, t + d * 0.4); lp.frequency.exponentialRampToValueAtTime(260, t + d);
+    e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(0.75, t + d * 0.38); e.gain.setTargetAtTime(0, t + d * 0.5, 0.5);
+    s.connect(lp); lp.connect(e); e.connect(v.out);
+    nb(v, t, { k: 'b', ft: 'lowpass', f: 130, q: 0.7, a: d * 0.4, pk: 0.9, d: d * 0.6, am: [rand(8, 12), 0.5] });
+    nb(v, t + 0.2, { k: 'w', ft: 'highpass', f: 3200, q: 0.7, a: d * 0.35, pk: 0.1, d: d * 0.5 });
+    tn(v, t, { f: 58, fe: 40, sw: d, a: d * 0.4, pk: 0.35, d: d * 0.6 });
+    v.wet(0.45);
+  },
+  // the slide's foot coming to rest (and anything heavy into deep snow): a soft, heavy thump and the powder settling
+  snowThump(v, t, p) {
+    tn(v, t, { f: 115 * p, fe: 44, sw: 0.14, a: 0.004, pk: 0.9, d: 0.4 });
+    nb(v, t, { k: 'p', ft: 'lowpass', f: 800 * p, fe: 260, q: 0.7, a: 0.004, pk: 0.6, d: 0.28 });
+    nb(v, t + 0.03, { k: 'w', ft: 'lowpass', f: 2600, fe: 900, q: 0.7, a: 0.05, pk: 0.14, d: 0.45 });
+    v.wet(0.25);
+  },
+  // a block of blue ice split by a blow or the sun: a hard glassy crack running through it, the halves knocking apart
+  iceBlockSplit(v, t, p) {
+    metal(v, t, 1900 * p, [1, 1.47, 2.31, 3.4, 4.7], 0.35, 0.2);
+    nb(v, t, { k: 'w', ft: 'highpass', f: 2600, q: 0.7, a: 0.001, pk: 0.6, d: 0.05 });
+    tn(v, t, { w: 'triangle', f: 240 * p, fe: 90, sw: 0.08, a: 0.001, pk: 0.5, d: 0.2 });
+    for (let k = 0; k < 4; k++) metal(v, t + 0.07 + k * rand(0.04, 0.08), rand(2400, 4200) * p, [1, 1.6], 0.14, 0.07);
+    tn(v, t + 0.22, { w: 'triangle', f: 150 * p, fe: 70, sw: 0.1, a: 0.002, pk: 0.3, d: 0.25 });
+    v.wet(0.4);
+  },
+  // what slept in the ice wakes as it melts: the ice ticking faster and faster, a rising sung note, water running off,
+  // and the weight of it stepping free
+  iceWake(v, t, p) {
+    const d = 1.5, s = v.N('w', t, t + d + 0.1), hp = v.F('highpass', 3200, 0.7), e = v.G(0);
+    spikes(e.gain, t, d, 40, 0.3, 0.008, 0.6);
+    s.connect(hp); hp.connect(e); e.connect(v.out);
+    tn(v, t + 0.2, { f: 420 * p, fe: 1500 * p, sw: 1.2, a: 0.5, pk: 0.1, d: 1 });
+    tn(v, t + 0.25, { f: 630 * p, fe: 2100 * p, sw: 1.1, a: 0.5, pk: 0.04, d: 0.9 });
+    for (let k = 0; k < 6; k++) { const x = t + 0.5 + k * rand(0.1, 0.18), f = rand(900, 2000) * p; tn(v, x, { f, fe: f * 1.6, sw: 0.03, a: 0.002, pk: 0.07, d: 0.05 }); }
+    tn(v, t + d, { w: 'triangle', f: 150 * p, fe: 55, sw: 0.15, a: 0.003, pk: 0.6, d: 0.4 });
+    nb(v, t + d, { k: 'p', ft: 'lowpass', f: 900, q: 0.7, a: 0.003, pk: 0.4, d: 0.2 });
+    v.wet(0.5);
+  },
+  // a chough over the meadow: its bright, falling "chee-ow", often twice
+  choughCall(v, t, p) {
+    const one = (x, k) => {
+      tn(v, x, { w: 'sawtooth', f: 2500 * p, fe: 1500 * p, sw: 0.17, a: 0.012, pk: 0.13 * k, d: 0.2, lp: 4800 });
+      tn(v, x, { f: 3300 * p, fe: 1900 * p, sw: 0.15, a: 0.01, pk: 0.1 * k, d: 0.16 });
+      nb(v, x, { k: 'w', f: 2800 * p, fe: 1700 * p, q: 5, a: 0.01, pk: 0.2 * k, d: 0.15, am: [rand(55, 75), 0.7] });
+    };
+    one(t, 1);
+    if (chance(0.6)) one(t + rand(0.26, 0.34), 0.7);
+    v.wet(0.55);
+  },
+  // the cub crying for its mother: a small, high bawl that breaks upward and falls away (nothing of a growl in it)
+  cubCry(v, t, p) {
+    vox(v, t, { f: 340 * p, d: 0.6, c: [[0, 0.85], [0.16, 1.18], [0.38, 1.05], [0.6, 0.78]], vow: 'a', to: 'e', mt: 0.4, vib: [7.5, 35], breath: 0.06, drive: 1.5, pk: 0.3, a: 0.04, hold: 0.55 });
+    if (chance(0.5)) vox(v, t + 0.7, { f: 360 * p, d: 0.35, c: [[0, 0.9], [0.1, 1.12], [0.35, 0.8]], vow: 'a', to: 'e', mt: 0.25, vib: [8, 30], breath: 0.06, drive: 1.5, pk: 0.2, a: 0.03, hold: 0.5 });
+    v.wet(0.45);
+  },
+  // Kelados's slam: the ground itself moving, loose stone jumping on it
+  tremor(v, t, p) {
+    tn(v, t, { f: 52 * p, fe: 30, sw: 0.6, a: 0.01, pk: 0.9, d: 1.2 });
+    nb(v, t, { k: 'b', ft: 'lowpass', f: 190, q: 0.8, a: 0.03, pk: 1, d: 1.3, am: [rand(10, 13), 0.6] });
+    tn(v, t, { w: 'triangle', f: 170 * p, fe: 80, sw: 0.07, a: 0.001, pk: 0.5, d: 0.18 });
+    const s = v.N('p', t, t + 1.1), bp = v.F('bandpass', 1000, 1.5), e = v.G(0);
+    spikes(e.gain, t + 0.05, 0.9, 16, 0.2, 0.012, 1.8);
+    s.connect(bp); bp.connect(e); e.connect(v.out);
+    v.wet(0.35);
+  },
+  // a sluice's lever pulled: the gate's thunk, the board scraping up in its groove, and the water let down the channel
+  sluiceGate(v, t, p) {
+    tn(v, t, { w: 'triangle', f: 150 * p, fe: 62, sw: 0.1, a: 0.002, pk: 0.7, d: 0.3 });
+    nb(v, t, { k: 'p', ft: 'lowpass', f: 1100, q: 0.7, a: 0.002, pk: 0.5, d: 0.12 });
+    nb(v, t + 0.1, { k: 'p', f: 330 * p, fe: 470 * p, q: 6, a: 0.1, pk: 0.8, d: 0.5, am: [rand(28, 36), 0.8] });
+    const d = 2.4, s = v.N('p', t + 0.5, t + 0.5 + d), bp = v.F('bandpass', 600, 0.6), e = v.G(0);
+    bp.frequency.setValueAtTime(500 * p, t + 0.5); bp.frequency.exponentialRampToValueAtTime(1500 * p, t + 1.1); bp.frequency.exponentialRampToValueAtTime(450 * p, t + 0.5 + d);
+    e.gain.setValueAtTime(0, t + 0.5); e.gain.linearRampToValueAtTime(0.75, t + 0.95); e.gain.setTargetAtTime(0, t + 1.5, 0.45);
+    s.connect(bp); bp.connect(e); e.connect(v.out);
+    const s2 = v.N('w', t + 0.7, t + 0.5 + d), hp = v.F('highpass', 3200, 0.7), e2 = v.G(0);
+    spikes(e2.gain, t + 0.7, d - 0.6, 60, 0.1, 0.015, 1.4);
+    s2.connect(hp); hp.connect(e2); e2.connect(v.out);
+    tn(v, t + 0.6, { f: 70 * p, fe: 44, sw: 1, a: 0.3, pk: 0.3, d: 1.4 });
+    v.wet(0.4);
+  },
+  // a winch freed of its ice and wound: the chain's links coming over the drum one by one, the pawl, the timber taking it
+  winchChain(v, t, p) {
+    let x = t;
+    for (let k = 0; k < 9; k++) {
+      metal(v, x, 1250 * p * rand(0.88, 1.12), [1, 2.4, 3.9, 5.3], 0.16, 0.11);
+      tn(v, x, { w: 'triangle', f: 210 * p, fe: 120, sw: 0.03, a: 0.001, pk: 0.16, d: 0.06 });
+      if (k % 3 === 2) nb(v, x + 0.05, { k: 'w', f: 1900, q: 2, a: 0.001, pk: 0.25, d: 0.03 });
+      x += rand(0.15, 0.2);
+    }
+    nb(v, t, { k: 'p', f: 260 * p, fe: 330 * p, q: 7, a: 0.5, pk: 0.5, d: 1.1, am: [rand(18, 24), 0.8] });
+    v.wet(0.35);
+  },
+  // the lake let down: a great slow outrush leaving by the sluices, its note sinking as the water does, the last of it
+  // gurgling among the stones
+  lakeOut(v, t, p) {
+    const d = 5, s = v.N('b', t, t + d), lp = v.F('lowpass', 200, 0.8), e = v.G(0);
+    lp.frequency.setValueAtTime(180, t); lp.frequency.exponentialRampToValueAtTime(1300 * p, t + 1.4); lp.frequency.exponentialRampToValueAtTime(220, t + d);
+    e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(0.9, t + 1.2); e.gain.setTargetAtTime(0, t + 2.2, 0.9);
+    s.connect(lp); lp.connect(e); e.connect(v.out);
+    nb(v, t + 0.3, { k: 'p', f: 1300 * p, fe: 380 * p, q: 0.6, a: 1, pk: 0.45, d: 3.4 });
+    tn(v, t + 0.2, { f: 92 * p, fe: 42 * p, sw: 4.2, a: 1, pk: 0.3, d: 3.6 });
+    for (let k = 0; k < 12; k++) { const x = t + 2 + k * rand(0.14, 0.26), f = rand(300, 620) * p; tn(v, x, { f, fe: f * 2, sw: 0.06, a: 0.004, pk: rand(0.05, 0.1), d: 0.08, lp: 1800 }); }
+    v.wet(0.55);
+  },
+  // a hearth catching (a lookout's, an arena's): the draught taking the tinder, the first crackle, a warm low note under it
+  hearthCatch(v, t, p) {
+    nb(v, t, { k: 'p', f: 320 * p, fp: 1900 * p, fe: 700 * p, q: 0.9, a: 0.45, pk: 0.5, d: 0.9 });
+    const s = v.N('w', t + 0.2, t + 1.9), bp = v.F('bandpass', 2600, 1.2), e = v.G(0);
+    spikes(e.gain, t + 0.25, 1.5, 34, 0.45, 0.006, 1.3);
+    s.connect(bp); bp.connect(e); e.connect(v.out);
+    for (const [m, dt] of [[43, 0.1], [55, 0.2]]) tn(v, t + dt, { f: mf(m) * p, a: 0.3, pk: 0.14, d: 1.5 });
+    v.wet(0.45);
+  },
+  // the Call: a horn's open fifth from the hearth, answered a second after it ends, far off and quieter; callAnswer is
+  // one more answer (a second and a third Name said)
+  callHorn(v, t, p, pp) {
+    INS.brass(v, t, [50 + 12 * Math.log2(pp), 57 + 12 * Math.log2(pp)], 1.2, { vel: 0.34, att: 0.1, rel: 0.5, bright: 1500 });
+    SFX.callAnswer(v, t + 2.3, p, pp);
+    v.wet(0.5);
+  },
+  callAnswer(v, t, p, pp) {
+    const far = v.G(0.45); far.connect(v.out);
+    if (v.wetTo) { const w = v.G(1); far.connect(w); w.connect(v.wetTo); }
+    INS.brass(v, t, [50 + 12 * Math.log2(pp), 57 + 12 * Math.log2(pp)], 1, { vel: 0.3, att: 0.2, rel: 0.7, bright: 620, to: far });
+  },
+  // one soft bell: a Name learnt; the third second of the black
+  softBell(v, t, p, pp) { INS.bell(v, t, 74 + 12 * Math.log2(pp), { vel: 0.09, dec: 4.5 }); v.wet(0.8); },
+  // one plucked note, the lantern motif's first: «Ώστε ξύπνησες.»
+  lanternNote(v, t, p, pp) { INS.pluck(v, t, 69 + 12 * Math.log2(pp), { vel: 0.22, dec: 3, bright: 4, saw: 0.2 }); INS.bell(v, t, 81 + 12 * Math.log2(pp), { vel: 0.02, dec: 3 }); v.wet(0.6); },
+  // Isarn's lantern waking: a coal's breath taking, a small steady flame, a fifth held very softly over it
+  lanternWake(v, t, p) {
+    nb(v, t, { k: 'p', f: 700 * p, fp: 2300 * p, fe: 1200 * p, q: 1.5, a: 0.3, pk: 0.3, d: 0.6 });
+    for (let k = 0; k < 6; k++) nb(v, t + 0.3 + rand(0, 0.9), { k: 'w', f: rand(1800, 3800), q: 2, a: 0.001, pk: rand(0.08, 0.18), d: 0.03 });
+    for (const [m, dt, a] of [[69, 0.3, 0.08], [76, 0.5, 0.06], [81, 0.7, 0.03]]) tn(v, t + dt, { f: mf(m) * p, a: 0.4, pk: a, d: 1.8 });
+    v.wet(0.6);
+  },
 };
 
 // name → [max calls, window seconds]; extras inside the window are dropped
@@ -1860,6 +2041,9 @@ const LIMITS = {
   skotosSweep: [1, 0.4], skotosSlam: [1, 0.4], skotosRoar: [1, 1.2], skotosDrink: [1, 0.8], handRise: [2, 0.3], handLash: [3, 0.15], smother: [2, 0.3], towerBell: [3, 0.3],
   iceGroan: [1, 2], icicleFall: [3, 0.1], icicleShatter: [3, 0.1], lampDrink: [2, 0.8], lampFlare: [2, 0.6], blackLampOut: [1, 1], fireDim: [1, 2], fireOut: [1, 1], fireRekindle: [1, 1],
   trueLamp: [2, 0.4], falseTone: [2, 1], lureSnap: [2, 0.3], ketosCall: [1, 2.5], ketosSlam: [1, 0.5], shipBell: [2, 0.4], shadeShift: [1, 1], nameBell: [2, 0.3],
+  weirWheel: [1, 1], raceStep: [1, 1.5], brookRoar: [1, 2], corniceCrack: [2, 0.3], slideRoar: [2, 1], snowThump: [3, 0.1], iceBlockSplit: [2, 0.15], iceWake: [2, 0.5],
+  choughCall: [2, 0.4], cubCry: [1, 0.8], tremor: [1, 0.5], sluiceGate: [1, 1], winchChain: [1, 1], lakeOut: [1, 4], hearthCatch: [1, 0.8], callHorn: [1, 2], callAnswer: [2, 0.4],
+  softBell: [2, 0.3], lanternNote: [1, 0.5], lanternWake: [1, 1],
 };
 const DEF_LIMIT = [5, 0.06];
 
@@ -1878,8 +2062,9 @@ const TRIM = {
   louseCurl: 1.4, oilCask: 0.8, beamHum: 1.2, beamBell: 1.5, lightCatch: 1.8, lampSnuff: 1.3, freezeWave: 0.85, gustRise: 1.6, blizzard: 1.6,
   singerSong: 0.6, singerWail: 1.1, towerBreach: 0.85, towerDive: 0.85, brineSpit: 1.3, skotosRise: 0.8, skotosInhale: 1.2, skotosBreath: 0.8,
   skotosSlam: 0.8, skotosRoar: 0.85, skotosDrink: 1.5, handRise: 1.3, handLash: 1.2, towerBell: 1.1,
+  weirWheel: 1.3, choughCall: 2.2, tremor: 0.8, snowThump: 0.8, winchChain: 1.8, hearthCatch: 1.2, callAnswer: 1.3, softBell: 1.2, lanternWake: 1.5,
 };
-const STING_TRIM = { victory: 0.8, death: 0.55, bossIntro: 0.5, quest: 1.3, memory: 0.9, lantern: 1.1, sealight: 1.2, naming: 0.95, relight: 0.9, memoryIce: 0.75 };
+const STING_TRIM = { rest: 1.4, victory: 0.8, death: 0.55, bossIntro: 0.5, quest: 1.3, memory: 0.9, lantern: 1.1, sealight: 1.2, naming: 0.95, relight: 0.9, memoryIce: 0.75 };
 
 // ───────────────────────────── 5. stings ─────────────────────────────
 
@@ -2038,6 +2223,13 @@ const STINGS = {
     nb(v, t, { k: 'w', ft: 'highpass', f: 7000, q: 0.7, a: 1.2, pk: 0.03, d: 2.4 });
     v.wet(0.8);
     return 4.4;
+  },
+  // Act VII: the rest motif (the hearth motif falling: D, B♭, G) on a soft horn, once: a thing lying down. Under the
+  // hero's own sleep, and wherever no Act VII boss theme is playing to carry it
+  rest(v, t) {
+    const x = restMotif(() => v, t, 0.62, { vel: 0.2, wet: 0 });
+    v.wet(0.55);
+    return x - t + 0.8;
   },
 };
 
@@ -2218,14 +2410,19 @@ function drumStep(S, P) {
 // Tower under the water (0/1); the Freeze closing over everything (0-1)
 const MOOD = { autumn: false, near: 0, phase: 0, heat: 0, night: 0, seen: false, breath: 0, roar: 0, keeper: 0, answer: 0,
   tide: 0, ice: 0, forget: 0, skotos: 0, under: 0, lit: false, sky: 0, gust: 0, sub: 0, freeze: 0, bloom: 0, sear: 0, hold: 0,
-  deep: 0, names: 0, blind: 0, form: 0, hearth: 0 };
+  deep: 0, names: 0, blind: 0, form: 0, hearth: 0, race: 0, shade: 0, rest: 0, daze: 0, slide: 0 };
 // what the story may set, and how far (Act IV: the Forge's heat runs from -1, cold, to 3; a keeper 1-3; a far fire 1-4).
 // breath, roar, keeper and answer are moments: the theme playing takes them on its next step and clears them (Act V's:
 // bloom, a sea-light lit; sear, the beam on the Skotos; hold, the held chord when someone answers)
 // (Act VI's: deep, the black water's height; names, the names falling; blind, the Ketos's phase 3; form, the Shade's form;
 // hearth, a moment: one of the First's hearths caught)
-const MOOD_RANGE = { heat: [-1, 3], keeper: [0, 3], answer: [0, 4], breath: [0, 1], roar: [0, 1], tide: [0, 1], ice: [0, 1], forget: [0, 0.3], skotos: [0, 1], under: [0, 1], gust: [0, 1], sub: [0, 1], freeze: [0, 1], bloom: [0, 1], sear: [0, 1], hold: [0, 1], deep: [0, 1], names: [0, 1], blind: [0, 1], form: [0, 4], hearth: [0, 1] };
-const MOMENTS = ['breath', 'roar', 'keeper', 'answer', 'bloom', 'sear', 'hold', 'hearth'];
+// (Act VII's: race, the Race's or the lake's level, 0 at 0.3 m to 1 at 1.2 m: the water figure's speed; shade, a cloud over
+// her: a low-pass on the two zones' themes; rest, a boss sat down or given the word: everything stops but the rest motif;
+// daze, Kallisto dazed: her drums drop out; slide, a moment: a slide's warning, answered by one low drum. hearth, here: a
+// lookout lit, the hearth motif rising in major. sub, in Kelados's fight, a moment: a tremor's rumble. phase as ever)
+const MOOD_RANGE = { heat: [-1, 3], keeper: [0, 3], answer: [0, 4], breath: [0, 1], roar: [0, 1], tide: [0, 1], ice: [0, 1], forget: [0, 0.3], skotos: [0, 1], under: [0, 1], gust: [0, 1], sub: [0, 1], freeze: [0, 1], bloom: [0, 1], sear: [0, 1], hold: [0, 1], deep: [0, 1], names: [0, 1], blind: [0, 1], form: [0, 4], hearth: [0, 1], race: [0, 1], shade: [0, 1], rest: [0, 1], daze: [0, 1], slide: [0, 1] };
+const MOMENTS = ['breath', 'roar', 'keeper', 'answer', 'bloom', 'sear', 'hold', 'hearth', 'slide'];
+const SUN_THEMES = new Set(['thaw', 'thawGreen', 'tarn', 'tarnGreen']);
 const SEA_THEMES = new Set(['coast', 'farlight', 'tower', 'skotos', 'sealit', 'drained', 'ketos', 'bottom', 'shade', 'pherousa']);
 // Act IV: the lantern's motif (A C B E, [midi, beats]); it resolves to D at the very end
 const MOTIF = [[69, 1.5], [72, 0.5], [71, 1], [76, 2.5]];
@@ -2339,6 +2536,130 @@ function crackedBell(v, t, m, vel) { INS.bell(v, t, m, { vel, dec: 5 }); metal(v
 
 // Theme definitions. bar(S) runs on each bar's first step, step(S) on every step.
 // S: { g, th, d, t, i (step in bar), sd (step s), bd (bar s), cd (chord s), bar, ch (chord), nc (new chord), lvl }
+// ---------- Act VII: the first act in daylight ----------
+// the rest motif: Act VI's hearth motif falling (D, B♭, G), a thing lying down, on a soft horn. mk() returns the voice
+const REST = [[62, 1.5], [58, 1.0], [55, 3.0]];
+function restMotif(mk, t, beat, o = {}) {
+  let x = t;
+  for (const [m, b] of REST) { INS.brass(mk(), x, [m + (o.tr || 0)], b * beat - 0.03, { vel: o.vel ?? 0.17, att: 0.25, rel: 0.7, bright: o.bright ?? 650, wet: o.wet ?? 0.55 }); x += b * beat; }
+  return x;
+}
+// the water figure: a running arpeggio in six, three notes up and three down, on plucked strings. Its speed follows the
+// water (MOOD.race): a note every `stride` cells, from every cell in spate to every fourth when the river is low
+const WATER = [0, 1, 2, 3, 2, 1];
+const raceStride = (r) => (r > 0.83 ? 1 : r > 0.5 ? 2 : r > 0.17 ? 3 : 4);
+function water(S, lo, hi, stride, vel, o = {}) {
+  const th = S.th, st = th.st, n = th.step - 1;
+  if (n % stride) return;
+  const k = (n / stride) % 6;
+  if (k === 0 || st.wch !== S.ch) { st.wt = tones(S.ch, lo, hi); st.wch = S.ch; }
+  INS.pluck(nv(th), S.t + rand(0, 0.008), st.wt[Math.min(WATER[k], st.wt.length - 1)], { vel: vel * rand(0.85, 1.1) * (k === 0 ? 1.25 : 1), dec: o.dec ?? 0.9, bright: o.bright ?? 6, saw: o.saw ?? 0.3, wet: o.wet ?? 0.35 });
+}
+// a shepherd's frame drum: the low stroke in its middle, or (hi) the fingers on its edge
+function handDrum(v, t, vel, hi) {
+  if (hi) { tn(v, t, { w: 'triangle', f: jit(310, 0.03), fe: 240, sw: 0.05, a: 0.001, pk: vel, d: 0.09 }); nb(v, t, { k: 'w', f: 1800, q: 1.2, a: 0.001, pk: vel * 0.5, d: 0.04 }); }
+  else { tn(v, t, { f: jit(120, 0.03), fe: 72, sw: 0.12, a: 0.002, pk: vel, d: 0.32 }); nb(v, t, { k: 'p', ft: 'lowpass', f: 700, q: 0.8, a: 0.001, pk: vel * 0.35, d: 0.07 }); }
+}
+// the summit's wind: one long breath of it, rising and falling; the theme overlaps them
+function wind7(v, t, d, vel) {
+  const s = v.N('p', t, t + d + 0.1), bp = v.F('bandpass', 600, 1.2), e = v.G(0);
+  bp.frequency.setValueAtTime(rand(450, 700), t); bp.frequency.linearRampToValueAtTime(rand(800, 1300), t + d * rand(0.4, 0.6)); bp.frequency.linearRampToValueAtTime(rand(450, 700), t + d);
+  e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(vel, t + d * 0.45); e.gain.linearRampToValueAtTime(0, t + d);
+  s.connect(bp); bp.connect(e); e.connect(v.out);
+  v.wet(0.4);
+}
+// one struck note, glassy, with a long tail
+function glass(v, t, m, vel) { INS.bell(v, t, m, { vel, dec: 3.5 }); tn(v, t, { f: mf(m), a: 0.002, pk: vel * 0.8, d: 2.6 }); v.wet(0.9); }
+// a stone struck (Kelados's bar line): the weight of it, the knock, a little ring
+function stoneHit(v, t, vel) {
+  tn(v, t, { f: 82, fe: 40, sw: 0.25, a: 0.003, pk: vel, d: 1.1 });
+  tn(v, t, { w: 'triangle', f: 196, fe: 150, sw: 0.08, a: 0.001, pk: vel * 0.45, d: 0.22 });
+  nb(v, t, { k: 'p', f: 850, q: 1.5, a: 0.001, pk: vel * 0.6, d: 0.07 });
+  metal(v, t, 523, [1, 2.32, 3.9], 0.5, vel * 0.08);
+  v.wet(0.45);
+}
+// a tremor in the music: the sub's rumble
+function rumble7(v, t) {
+  tn(v, t, { f: 46, fe: 30, sw: 1.2, a: 0.05, pk: 0.5, d: 1.7 });
+  nb(v, t, { k: 'b', ft: 'lowpass', f: 120, q: 0.8, a: 0.08, pk: 0.6, d: 1.6, am: [rand(8, 11), 0.6] });
+}
+// the Meltwaters' tune (G Lydian, four bars of six, [midi, eighths]): the flute carries it once the land is green
+const THAW_TUNE = [[74, 2], [79, 1], [81, 2], [83, 1], [85, 1], [83, 1], [81, 1], [83, 3], [86, 2], [83, 1], [81, 2], [78, 1], [79, 6]];
+const THAW_PROGS = [['G', 'A', 'G', 'D'], ['G', 'Bm', 'A', 'G'], ['Em', 'A', 'D', 'G'], ['G', 'D', 'A', 'G']];
+// the lantern motif in major, in G (G B A D)
+const MOTIF7 = [[79, 1.5], [83, 0.5], [81, 1], [86, 2.5]];
+// the Meltwaters: 6/8 at 104 bpm (two beats of six cells), G Lydian. Plucked strings and a hand drum over the water
+// figure; a wooden flute answers every eight bars. In a fight the drum doubles and a low string ostinato enters on the
+// root. When a weir opens (MOOD.race falls) the figure slows by a step and the lantern motif sounds once, in major. A
+// lookout lit (MOOD.hearth): the hearth motif rising with the major third. No drone.
+// green (the variant, after the act): 88 bpm, the water figure at rest, the flute carrying the tune
+function thawDef(green) {
+  return {
+    bpm: green ? 88 : 104, beats: 2, sub: 6, bpc: 2, gain: green ? 1.2 : 1.1, order: [0], scale: [7, 9, 11, 1, 2, 4, 6], progs: THAW_PROGS,
+    bar(S) {
+      const { th, t, bd, ch, sd } = S, st = th.st;
+      if (S.nc) {
+        st.pv = voicing(ch, 55, 72, st.pv, 4);
+        st.pv.forEach((m, k) => INS.pluck(nv(th), t + k * 0.035, m, { vel: 0.13, dec: 2.6, bright: 5, saw: 0.3, wet: 0.35 }));
+      }
+      INS.pluck(nv(th), t, bassNote(ch, 43) + (S.nc ? 0 : 7), { vel: 0.22, dec: 1.8, bright: 3, saw: 0.35 });
+      if (green) {
+        if (S.bar % 8 === 0) phrase(th, t, THAW_TUNE, sd * 2, { vel: 0.11, wet: 0.5 });
+        else if (S.bar % 8 === 4 && th.prog) phrase(th, t, genMelody([2, 2, 3, 3].map((k) => chordOf(th.prog[k])), 3, S.d.scale, 71, 88, 79, 0.1), bd / 3, { vel: 0.1, wet: 0.5 });
+      } else {
+        if (S.bar % 8 === 6) phrase(th, t, genMelody([ch, ch], 3, S.d.scale, 71, 88, 79, 0.1), bd / 3, { vel: 0.1, wet: 0.5 });
+        const race = MOOD.race;
+        if (st.race != null && race < st.race - 0.15) { let x = t + bd * 0.5; INS.flute(nv(th), MOTIF7.map(([m, b]) => { const n = [m, x, b * sd * 3 - 0.02]; x += b * sd * 3; return n; }), { vel: 0.12, wet: 0.6 }); }
+        st.race = race;
+      }
+      if (MOOD.hearth) { MOOD.hearth = 0; hearthMotif(th, t, sd * 3, { major: true, vel: 0.16, bright: 900 }); }
+    },
+    step(S) {
+      const { th, i, lvl, t } = S;
+      water(S, 62, 81, green ? 4 : raceStride(MOOD.race), green ? 0.07 : 0.085);
+      const k = green ? 0.6 : 1;
+      if (i === 0) handDrum(nv(th), t, 0.32 * k); else if (i === 6) handDrum(nv(th), t, 0.24 * k);
+      else if (i === 4 || i === 10) handDrum(nv(th), t, 0.13 * k, true);
+      if (lvl > 0.3) {
+        if (i === 3 || i === 9) handDrum(nv(th), t, 0.24 * lvl);
+        if (i === 2 || i === 8 || i === 11) handDrum(nv(th), t, 0.12 * lvl, true);
+        if (i % 2 === 0) INS.ost(nv(th), t, i === 10 ? 50 : 43, S.sd * 1.6, 0.1 * lvl, { br: 6 });
+      }
+    },
+  };
+}
+// the Hanging Lake: 60 bpm, no beat, A Lydian. High, sparse and glassy: single struck notes with long tails over wind.
+// Under a cloud a low-pass closes on the whole theme (MOOD.shade, applyMood). A slide's warning (MOOD.slide) is answered
+// by one low drum. A lookout lit: the hearth motif rising in major. In a fight a low string on the root and a far drum.
+// green (after the act): the Meltwaters' tune a fifth higher (D Lydian) over the same wind
+function tarnDef(green) {
+  return {
+    bpm: 60, beats: 4, sub: 2, bpc: 2, gain: green ? 1.5 : 2.3, scale: green ? [2, 4, 6, 8, 9, 11, 1] : [9, 11, 1, 3, 4, 6, 8],
+    progs: green ? [['D', 'E', 'D', 'A'], ['D', 'F#m', 'E', 'D'], ['A', 'E', 'D', 'D']] : [['A', 'B', 'A', 'E'], ['A', 'F#m', 'B', 'A'], ['E', 'B', 'A', 'A']],
+    bar(S) {
+      const { th, t, bd, ch, sd } = S, st = th.st;
+      if (t >= (st.wind ??= t)) { const d = rand(7, 10); wind7(nv(th), t, d, green ? 0.75 : 0.65); st.wind = t + d * 0.5; }
+      if (S.nc) { const r = bassNote(ch, 57); INS.bell(nv(th), t, r, { vel: 0.07, dec: 6, wet: 0.8 }); tn(nv(th), t, { f: mf(r - 12), a: 0.02, pk: 0.1, d: 5 }); }
+      if (green && S.bar % 8 === 0) phrase(th, t + bd * 0.5, THAW_TUNE, sd * 0.75, { vel: 0.09, wet: 0.7, tr: -5 });
+      if (MOOD.hearth) { MOOD.hearth = 0; hearthMotif(th, t, sd * 2, { major: true, vel: 0.15, bright: 900, tr: green ? 7 : 2 }); }
+    },
+    step(S) {
+      const { th, t, lvl } = S;
+      if (MOOD.slide) { MOOD.slide = 0; INS.taiko(nv(th), t + 0.6, 0.7, { f: 58, f1: 34, dec: 1.8 }); }
+      if (chance(green ? 0.14 : 0.22)) {
+        const m = pick(chance(0.7) ? tones(S.ch, 76, 95) : scaleTones(S.d.scale, 76, 95));
+        glass(nv(th), t, m, rand(0.05, 0.08));
+        if (chance(0.3)) glass(nv(th), t + S.sd * 3, m, 0.025);
+      }
+      if (lvl > 0.3 && S.i % 4 === 0) INS.ost(nv(th), t, bassNote(S.ch, 45), S.sd * 3, 0.08 * lvl, { br: 5 });
+      if (lvl > 0.5 && S.i === 0 && S.bar % 2 === 0) INS.taiko(nv(th), t, 0.35 * lvl, { f: 66, dec: 1.2 });
+    },
+  };
+}
+// Kallisto's hand drums on a sixteenth grid (velocities): the low stroke and the edge
+const KD_LO = [1, 0, 0, 0.5, 0, 0, 0.8, 0, 0.9, 0, 0, 0.5, 0, 0, 0.7, 0];
+const KD_HI = [0, 0, 0.5, 0, 1, 0, 0, 0.5, 0, 0, 0.6, 0, 1, 0.4, 0, 0.6];
+
 const THEMES = {
   title: {
     bpm: 60, beats: 4, sub: 2, gain: 0.85, order: [0, 1], scale: [2, 4, 5, 7, 9, 10, 0],
@@ -3112,6 +3433,76 @@ const THEMES = {
     },
   },
 
+  // ---------- Act VII ----------
+  thaw: thawDef(false),
+  thawGreen: thawDef(true),
+  tarn: tarnDef(false),
+  tarnGreen: tarnDef(true),
+
+  // Kallisto: 4/4 at 132 bpm, E Dorian. Hand drums and one low horn; no melody but the horn's two notes (E, B). She is no
+  // villain: urgent, never evil. The drums drop out while she is dazed (MOOD.daze), so the opening the player made is
+  // heard. Phase 2 adds the water figure, fast. On her sitting down (MOOD.rest): the drums stop on the beat and the rest
+  // motif plays alone
+  kallisto: {
+    bpm: 132, beats: 4, sub: 4, gain: 1.2, int: 'always', order: [0], scale: [4, 6, 7, 9, 11, 1, 2],
+    progs: [['Em', 'A', 'Em', 'D'], ['Em', 'G', 'A', 'Em'], ['Em', 'D', 'A', 'Em']],
+    bar(S) {
+      const { th, t, bd, ch } = S, st = th.st;
+      if (MOOD.rest) return;
+      if (S.bar % 2 === 0) INS.brass(nv(th), t, [52], bd * 1.15, { vel: 0.26, att: 0.08, rel: 0.5, bright: 1100, wet: 0.4 });
+      else INS.brass(nv(th), t + bd * 0.25, [47], bd * 0.65, { vel: 0.24, att: 0.08, rel: 0.5, bright: 1000, wet: 0.4 });
+      st.pv = voicing(ch, 52, 67, st.pv, 3);
+      st.pv.forEach((m, k) => INS.pluck(nv(th), t + k * 0.02, m, { vel: 0.14, dec: 1.4, bright: 5, saw: 0.4, wet: 0.3 }));
+    },
+    step(S) {
+      const { th, i, t } = S, st = th.st, ph = MOOD.phase;
+      if (MOOD.rest) {
+        if (!st.sat && i % 4 === 0) { st.sat = true; handDrum(nv(th), t, 0.5); restMotif(() => nv(th), t + S.sd * 4, S.sd * 5, { vel: 0.2 }); }
+        return;
+      }
+      st.sat = false;
+      if (ph >= 1) water(S, 64, 83, 1, 0.075, { dec: 0.5 });
+      if (i === 0 || i === 8) INS.pluck(nv(th), t, bassNote(S.ch, 40), { vel: 0.24, dec: 0.7, bright: 3, saw: 0.4 });
+      if (MOOD.daze) return;
+      if (KD_LO[i]) handDrum(nv(th), t + rand(0, 0.005), KD_LO[i] * 0.5);
+      if (KD_HI[i]) handDrum(nv(th), t + rand(0, 0.005), KD_HI[i] * 0.3, true);
+      else if (ph >= 2 && i % 2) handDrum(nv(th), t, 0.1, true);
+    },
+  },
+
+  // Kelados: 5/4 at 66 bpm, C Mixolydian. Slow and heavy: a stone struck on the first beat of each bar, low brass in
+  // fifths, a sub rumble on every tremor (MOOD.sub, taken as a moment). The ice on him is the music's layers: all of it in
+  // phase 0 (the ice ticking, a second stone, the brass doubled); two plates down, the ticking thins; six down (phase 3),
+  // only the stone and the fifths are left and the water figure comes in under them as the lake falls. At «Ξεκουράσου.»
+  // (MOOD.rest) everything stops but the rest motif
+  kelados: {
+    bpm: 66, beats: 5, sub: 2, gain: 1.4, int: 'always', order: [0], scale: [0, 2, 4, 5, 7, 9, 10],
+    progs: [['C', 'Bb', 'C', 'F'], ['C', 'Gm', 'Bb', 'C'], ['C', 'F', 'Bb', 'C']],
+    bar(S) {
+      const { th, t, ch, sd } = S, ph = MOOD.phase, r = bassNote(ch, 36);
+      if (MOOD.rest) return;
+      stoneHit(nv(th), t, 0.6);
+      INS.brass(nv(th), t, [r, r + 7], sd * 5.5, { vel: 0.33, att: 0.12, rel: 0.8, bright: 1000, wet: 0.35 });
+      if (ph < 2) INS.brass(nv(th), t + sd * 6, [r + 12, r + 19], sd * 3, { vel: 0.18, att: 0.15, rel: 0.6, bright: 900, wet: 0.45 });
+    },
+    step(S) {
+      const { th, i, t, sd } = S, st = th.st, ph = MOOD.phase;
+      if (MOOD.rest) {
+        if (!st.sat) { st.sat = true; stoneHit(nv(th), t, 0.4); restMotif(() => nv(th), t + sd * 2, sd * 1.4, { vel: 0.2 }); }
+        return;
+      }
+      st.sat = false;
+      if (MOOD.sub) { MOOD.sub = 0; rumble7(nv(th), t); }
+      if (ph < 2 && i === 6) stoneHit(nv(th), t, 0.32);
+      // the plates still on him, ticking: eight, six, two
+      if (chance(0.5 * (ph >= 2 ? 0.25 : ph >= 1 ? 0.75 : 1))) glass(nv(th), t + rand(0, sd * 0.5), pick(tones(S.ch, 79, 96)), rand(0.03, 0.05));
+      if (ph >= 2) {
+        if (i === 0 || st.wch !== S.ch) { st.wt = tones(S.ch, 55, 74); st.wch = S.ch; }
+        for (let k = 0; k < 3; k++) INS.pluck(nv(th), t + (k * sd) / 3, st.wt[Math.min(WATER[(i * 3 + k) % 6], st.wt.length - 1)], { vel: 0.085 * (k ? 1 : 1.25), dec: 0.7, bright: 6, saw: 0.3, wet: 0.35 });
+      }
+    },
+  },
+
   victory: {
     bpm: 60, beats: 4, sub: 1, gain: 0.8, once: true, fadeIn: 0.03, xfade: 1.2,
     play(S) { fanfare(() => nv(S.th), S.t, true); },
@@ -3182,6 +3573,9 @@ function setTheme(g, name, at) {
   // its filters stays on: a quit in the middle of the Freeze, a gust when she leaves)
   for (const k of MOMENTS) MOOD[k] = 0;
   if (!SEA_THEMES.has(name)) MOOD.freeze = MOOD.skotos = MOOD.sub = MOOD.gust = MOOD.under = 0;
+  // (Act VII: a boss's rest and daze belong to the theme they were set under; a cloud's shade to the two sunlit zones)
+  MOOD.rest = MOOD.daze = 0;
+  if (!SUN_THEMES.has(name)) MOOD.shade = 0;
   if (def) g.themes.push(newTheme(g, name, now + 0.06));
 }
 
@@ -3193,6 +3587,7 @@ function applyMood(g, now) {
   if (MOOD.skotos > 0 && g.cur === 'farlight') f = Math.min(f, 20000 * Math.pow(500 / 20000, MOOD.skotos));
   if (MOOD.sub && g.cur === 'tower') f = Math.min(f, 500);
   if (g.cur === 'skotos' && MOOD.phase === 1) f = Math.min(f, 650);
+  if (MOOD.shade > 0 && SUN_THEMES.has(g.cur)) f = Math.min(f, 20000 * Math.pow(800 / 20000, MOOD.shade));   // Act VII: under a cloud
   const ff = MOOD.freeze > 0 ? 20000 * Math.pow(300 / 20000, MOOD.freeze) : 20000, mv = MOOD.gust ? 0.7 : 1;
   if (Math.abs(f - g.mf) > g.mf * 0.02) { g.mf = f; for (const n of [g.mlp, g.mlpW]) n.frequency.setTargetAtTime(f, now, 0.3); }
   if (Math.abs(ff - g.ff) > g.ff * 0.02) { g.ff = ff; g.flp.frequency.setTargetAtTime(ff, now, 0.25); }
@@ -3370,7 +3765,8 @@ export const Audio = {
    * (the Forge), night: 0 ash | 1 stars | 2 dawn (the Field), seen: bool; and moments: breath, roar (a flue), keeper 1-3 (a
    * statue breaks), answer 1-4 (a far fire); Act V: tide 0..1, ice 0..1, forget 0..0.3, skotos 0..1, under 0/1, lit: bool,
    * sky 0 green | 1 black | 2 true, gust 0/1, sub 0/1, freeze 0..1, and moments bloom (a sea-light lit), sear (the beam on
-   * the Skotos), hold (someone answered) }. */
+   * the Skotos), hold (someone answered); Act VII: race 0..1, shade 0..1, rest 0/1, daze 0/1, and moments slide (a slide's
+   * warning), hearth (a lookout lit), sub (a tremor, in Kelados's fight) }. */
   mood(o) {
     if (o && typeof o === 'object') for (const k in o) if (k in MOOD) { const r = MOOD_RANGE[k] || [0, 2]; MOOD[k] = typeof MOOD[k] === 'boolean' ? !!o[k] : clamp(num(o[k], MOOD[k]), r[0], r[1]); }
   },

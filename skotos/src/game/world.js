@@ -64,9 +64,9 @@ export const ZONES = {
   // Act VII: the Meltwaters above the Giants' Stair, up the goat track from the Pass's camp, and the Hanging Lake above
   // them, up the Water-stair. Daylight: no ring, no Shroud (light 'sun' comes with Sun and Shade, stage B; until then they
   // are zones with no light rule, as the forest is). `day`: drawn at the lower phone resolution or not (gfx.js heavyZone).
-  // (music and ambient: stand-ins until the act's own themes, stage D; the 'melt' ambient is fx.js's)
-  thaw: { level: 40, music: 'forest', ambient: 'forest', atmos: 'thaw', act: 7, pack: 'melt' },
-  tarn: { level: 43, music: 'pass', ambient: 'snow', atmos: 'tarn', act: 7, pack: 'melt', heavy: true },
+  // (ambient: stand-ins until the act's own, the 'melt' ambient of fx.js; after the act each zone's theme is its green one)
+  thaw: { level: 40, music: 'thaw', ambient: 'forest', atmos: 'thaw', act: 7, pack: 'melt' },
+  tarn: { level: 43, music: 'tarn', ambient: 'snow', atmos: 'tarn', act: 7, pack: 'melt', heavy: true },
   gate: { level: 1, music: 'gate', ambient: 'gate', atmos: 'gate' }
 };
 // beacons that have answered Whitecliff's: Arna's hill after Act I, Deepstone after Act II, and after Act III the
@@ -2140,7 +2140,7 @@ export function raceLevel(id, F = G.hero.flags) {
 const THAW_K = [0.65, 0.45, 0.3, 0.15];
 const thawK = (F = G.hero.flags) => (F.act7 ? 0.05 : THAW_K[weirs7(F)]);
 // the water moved to its level now, at 0.3 m/s (a weir turned, the lake let down): tide.js mereTick steps it
-export function raceTo(z, h = raceLevel(z.id)) { if (z?.tide) z.tide.mere = { h, rate: 0.3 }; if (z?.id === 'thaw') setThaw(thawK()); }
+export function raceTo(z, h = raceLevel(z.id)) { if (z?.tide) z.tide.mere = { h, rate: 0.3 }; if (z?.id === 'thaw') setThaw(thawK()); Audio.mood({ race: clamp((h - 0.3) / 0.9, 0, 1) }); }
 // before the build: the melt's water for the sea's material (sea.js: SEA_MELT, safeSeaM on a phone)
 function act7Layout(id, L) { L.melt = true; }
 function act7Zone(z) {
@@ -2164,6 +2164,9 @@ function act7Zone(z) {
 function act7Enter(z) {
   const F = G.hero.flags;
   setThaw(z.id === 'thaw' ? thawK(F) : 0, true);
+  // (the theme after the act, and how high the water runs under it: audio.js mood race, 0-1)
+  if (z.mode === 'green' || z.mode === 'let') Audio.music(z.id + 'Green');
+  Audio.mood({ race: clamp((raceLevel(z.id, F) - 0.3) / 0.9, 0, 1) });
   resetTide(z, { mere: raceLevel(z.id, F) });
   // (the place to wake: the camp, until the act's own checkpoints, flags.cp7)
   const c = z.L.spots.camp; if (c) z.checkpoint = z.map.nearestFloor(c.x, c.z, 3);

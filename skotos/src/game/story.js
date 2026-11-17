@@ -2774,7 +2774,7 @@ export { setQuest };
 on('weir7', (it, z) => {
   const F = G.hero.flags, k = 'weir' + it.k; if (F[k] || G.hero.__real) return;
   F[k] = true; it.used = true; writeSave();
-  raceTo(z); Audio.sfx('tideTurn', { vol: 0.8, pitch: 0.8 });
+  raceTo(z); Audio.sfx('weirWheel', { x: it.x, z: it.z }); later(1.2, () => Audio.sfx('raceStep'));
   const n = weirs7(F);
   emit('toast', t('q.weirOpen', n), 'quest');
   if (!F.thawSeen) F.thawSeen = true;
@@ -2786,7 +2786,7 @@ on('weir7', (it, z) => {
 on('winch7', (it, z) => {
   const F = G.hero.flags, k = 'winch' + it.k; if (F[k] || G.hero.__real) return;
   F[k] = true; it.used = true; writeSave();
-  Audio.sfx('tideTurn', { vol: 0.7, pitch: 1.1 });
+  Audio.sfx('winchChain', { x: it.x, z: it.z });
   const n = winches7(F);
   emit('toast', t('q.winchFree', n), 'quest');
   if (!F.tarnSeen) F.tarnSeen = true;
