@@ -295,7 +295,8 @@ function travel(zone, o = {}) {
     bar.hide();
     try { enterZone(zone, o); } catch (e) { fatal(e.stack || e); }
     clearOverlay();
-    if (R.mobile && ZONES[zone]?.act === 5) await warm();
+    // (and the Hanging Lake, the same picture of snow and water over the whole screen: ZONES.tarn.heavy)
+    if (R.mobile && (ZONES[zone]?.act === 5 || ZONES[zone]?.heavy)) await warm();
     setTimeout(() => { f.classList.remove('on'); travelling = false; }, 120);
     // (there: a visit held in Whitecliff gives way to the zone she went to, whichever it is)
     PAGE.bound = null; if (zone !== 'town') PAGE.held = null;
