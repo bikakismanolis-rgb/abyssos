@@ -1882,6 +1882,8 @@ const headH = (a) => (a.avatar?.model?.tpl?.height || a.avatar?.model?.height ||
 const windMul = (a) => (a.status.slow > 0 ? 1 - a.status.slowK : 1);
 const SHRIEK = new Map();
 
+// (a hazard that Dazes a foe asks by the bus: forge.js's slide, Act VII)
+on('dazeFoe', (a, t) => { if (a && !a.dead && !a.removed) daze(a, t); });
 // knocked senseless by a wall, a standing stone or sap: open to every blow (x1.5) for t seconds
 function daze(a, t) {
   a.dazed = Math.max(a.dazed || 0, t); a.dmgTaken = 1.5;

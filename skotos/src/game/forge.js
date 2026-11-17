@@ -11,7 +11,7 @@
 // the ice, and the shards they leave block their cells for 20 s (SHARDS, for co-op's cells6).
 import * as THREE from 'three';
 import { G, later } from './state.js';
-import { DIFFS, HAZ6, monsterDmg } from './data.js';
+import { DIFFS, HAZ6, monsterDmg, actHaz, LOUD } from './data.js';
 import { damage, addVuln } from './combat.js';
 import { area } from './projectiles.js';
 import { heroes, NET, MIRROR } from '../net/state.js';
@@ -34,6 +34,9 @@ export function startFlues(list) {
   F.zone = G.zone; F.pumping.clear();
   F.heat = G.hero?.flags?.heat || 0;
   F.list = (list || []).map((f, i) => ({ ...f, i, st: 'idle', t: f.phase ?? rand.range(1, 6), tele: null, sheet: null, light: null, hit: new Set(), coverShown: false }));
+  // (Act VII's chutes, kind 'snow': no period; armed on every entry, spent for HAZ7.rearm s once run. Its sluices, kind
+  // 'water', run only when a lever is pulled: fireFlue)
+  for (const f of F.list) if (f.kind) { f.armed = f.kind === 'snow'; f.rearm = 0; f.t = 0; }
   // the cover marks: only spots the fire cannot see (gen4.js lays them by the alcoves, the bays and the pillars' lee)
   for (const f of F.list) f.cover = (f.cover || []).filter((c) => !inFlue(f, c.x, c.z, 0));
   F.dripT = rand.range(4, 7); F.ventT = 6;
@@ -65,7 +68,11 @@ export function tickFlues(dt) {
   for (const f of F.list) {
     if (Math.hypot(f.x - pl.x, f.z - pl.z) > BREATH.reach + f.len * 0.5 && f.st === 'idle') continue;
     f.t -= dt;
-    if (f.st === 'idle') {
+    if (f.st === 'idle' && f.kind) {
+      // a chute waits to be kicked; spent, its cornice grows back (f.grow 0-1, for its prop)
+      if (f.kind === 'snow' && !f.armed) { f.rearm -= dt; f.grow = 1 - Math.max(0, f.rearm) / (f.rearm0 || 1); if (f.rearm <= 0) { f.armed = true; f.grow = 1; emit('chuteArmed', f); } }
+      f.t = 0;
+    } else if (f.st === 'idle') {
       // a pump starting or the heat rising shortens the wait, never the inhale
       f.t = Math.min(f.t, fluePeriod(f) - BREATH.inhale - BREATH.fire);
       if (f.t <= 0) inhale(f);
@@ -73,16 +80,19 @@ export function tickFlues(dt) {
       const k = 1 - f.t / BREATH.inhale, ux = Math.sin(f.dir), uz = Math.cos(f.dir);
       if (f.light) f.light.intensity = 6 + 30 * k;
       // embers and soot drawn up the flue into the grate
-      if (Math.random() < 0.6) { const u = rand.range(1, f.len), v = rand.range(-f.w / 2, f.w / 2), x = f.x + ux * u - uz * v, z = f.z + uz * u + ux * v; P({ x, y: rand.range(0.2, 1.6), z, vx: -ux * 6, vy: 0.2, vz: -uz * 6, life: Math.min(0.9, u / 6), size: 0.12, size1: 0.03, color: 0xffa040, color1: 0xff3000 }); }
+      if (f.kind) { if (Math.random() < 0.5) puff(f.x + rand.range(-f.w / 2, f.w / 2) * uz, 0.6, f.z + rand.range(-f.w / 2, f.w / 2) * ux, 2, f.kind === 'snow' ? 0xf4f8ff : 0x9fd0e8, 0.8, 1.2, 0.8); }
+      else if (Math.random() < 0.6) { const u = rand.range(1, f.len), v = rand.range(-f.w / 2, f.w / 2), x = f.x + ux * u - uz * v, z = f.z + uz * u + ux * v; P({ x, y: rand.range(0.2, 1.6), z, vx: -ux * 6, vy: 0.2, vz: -uz * 6, life: Math.min(0.9, u / 6), size: 0.12, size1: 0.03, color: 0xffa040, color1: 0xff3000 }); }
       if (pl && !pl.dead && inFlue(f, pl.x, pl.z, pl.radius)) emit('flueWarn', k);
       // the first frame she is in this flue's path during the inhale: its cover shows blue until the fire has passed
-      if (!f.coverShown && f.cover.length && pl && !pl.dead && inFlue(f, pl.x, pl.z, 2)) { f.coverShown = true; for (const c of f.cover) teleCircle(c.x, c.z, c.r, f.t + BREATH.fire, 0x60c0ff); }
+      if (!f.coverShown && f.cover.length && pl && !pl.dead && inFlue(f, pl.x, pl.z, 2)) { f.coverShown = true; if (f.kind === 'snow') emit('hint7', 'slide2'); for (const c of f.cover) teleCircle(c.x, c.z, c.r, f.t + BREATH.fire, 0x60c0ff); }
       if (f.t <= 0) roar(f);
     } else if (f.st === 'fire') {
       const u = 1 - f.t / BREATH.fire, front = Math.min(f.len, f.len * (u / 0.33)), ux = Math.sin(f.dir), uz = Math.cos(f.dir);
-      for (let k = 0, n = Math.min(14, Math.max(6, Math.ceil(f.len * f.w / 8))); k < n; k++) { const d = rand.range(0, front), v = rand.range(-f.w / 2, f.w / 2) * 0.8, x = f.x + ux * d - uz * v, z = f.z + uz * d + ux * v; P({ x, y: rand.range(0.2, 2.2), z, vx: ux * 9, vy: rand.range(0.5, 2), vz: uz * 9, life: rand.range(0.25, 0.5), size: rand.range(0.6, 1.1), size1: 0.2, color: 0xffd070, color1: 0xff3000 }); }
+      if (f.kind) { for (let k = 0; k < 5; k++) { const d = Math.max(0, front - rand.range(0, 4)), v = rand.range(-f.w / 2, f.w / 2) * 0.9; puff(f.x + ux * d - uz * v, 0.5, f.z + uz * d + ux * v, 2, f.kind === 'snow' ? 0xf4f8ff : 0x9fd0e8, 1.6, 2.2, 1.0); } }
+      else for (let k = 0, n = Math.min(14, Math.max(6, Math.ceil(f.len * f.w / 8))); k < n; k++) { const d = rand.range(0, front), v = rand.range(-f.w / 2, f.w / 2) * 0.8, x = f.x + ux * d - uz * v, z = f.z + uz * d + ux * v; P({ x, y: rand.range(0.2, 2.2), z, vx: ux * 9, vy: rand.range(0.5, 2), vz: uz * 9, life: rand.range(0.25, 0.5), size: rand.range(0.6, 1.1), size1: 0.2, color: 0xffd070, color1: 0xff3000 }); }
       if (f.light) { f.light.x = f.x + ux * front * 0.7; f.light.z = f.z + uz * front * 0.7; f.light.intensity = 40; }
-      burn(f, front);
+      if (f.kind) bury(f, front); else burn(f, front);
+      if (f.t <= 0 && f.kind === 'snow') { f.armed = false; f.rearm = f.rearm0 = actHaz(7, G.hero.diff).rearm; f.grow = 0; emit('chuteSpent', f); }
       if (f.t <= 0) { f.st = 'idle'; f.t = fluePeriod(f) - BREATH.inhale - BREATH.fire; killTele(f.sheet); f.sheet = null; if (f.light) { removeLight(f.light); f.light = null; } }
     }
   }
@@ -91,7 +101,9 @@ export function tickFlues(dt) {
 }
 function inhale(f) {
   f.st = 'inhale'; f.t = BREATH.inhale; f.hit.clear(); f.coverShown = false;
-  f.tele = teleLine(f.x, f.z, f.dir, f.len, f.w, BREATH.inhale, 0xff6a10);
+  // (the looks by kind: the Forge's fire; Act VII's snow, white, and its sluice water, blue: no light of their own by day)
+  f.tele = teleLine(f.x, f.z, f.dir, f.len, f.w, BREATH.inhale, f.kind === 'snow' ? 0xf4f8ff : f.kind === 'water' ? 0x58b8ff : 0xff6a10);
+  if (f.kind) { Audio.sfx(f.kind === 'snow' ? 'corniceCrack' : 'sluiceGate', { x: f.x, z: f.z }); emit('flueInhale', f); return; }
   f.light = addLight({ x: f.x, y: 1.2, z: f.z, color: 0xff7020, intensity: 6, range: 9, flicker: 0.3 });
   // (the sound is two seconds of drawn air: it starts so as to end on the roar)
   later(BREATH.inhale - 2, () => { if (f.st === 'inhale' && F.list?.includes(f)) Audio.sfx('bellowsInhale', { x: f.x, z: f.z }); });
@@ -100,8 +112,8 @@ function inhale(f) {
 function roar(f) {
   f.st = 'fire'; f.t = BREATH.fire; killTele(f.tele); f.tele = null;
   // the fire's sheet on the floor, running down the flue with the front (a third of the breath) and burning till it ends
-  f.sheet = teleLine(f.x, f.z, f.dir, f.len, f.w, BREATH.fire * 0.33, 0xffa040);
-  Audio.sfx('bellowsRoar', { x: f.x, z: f.z });
+  f.sheet = teleLine(f.x, f.z, f.dir, f.len, f.w, BREATH.fire * 0.33, f.kind === 'snow' ? 0xffffff : f.kind === 'water' ? 0x80c8ff : 0xffa040);
+  Audio.sfx(f.kind === 'snow' ? 'slideRoar' : f.kind === 'water' ? 'lakeOut' : 'bellowsRoar', { x: f.x, z: f.z });
   const pl = G.player;
   if (pl && Math.hypot(pl.x - f.x, pl.z - f.z) < f.len + 6) shake(0.25);
   emit('flueRoar', f);
@@ -123,6 +135,60 @@ function burn(f, front) {
     damage(null, a, (pl ? pl.hpMax : 100) * BREATH.monsterHit * BREATH.monsters, { burn: a.hpMax * 0.03 });
   }
 }
+// ---------- Act VII: the Slide and the sluices (docs/act7-contract.md, the Slide) ----------
+// the front of snow (or of a sluice's water) passes: everything in the lane that nothing solid shields is struck once.
+// The hero: HAZ7.slide of her life, pure, and a push down the lane (a sluice: HAZ7.wash). A foe: a share of its own life
+// (slideFoe; slideElite for a champion, a rare or a big kind), Dazed 1.5 s, and the common ones carried to the lane's foot.
+// Fliers are missed. Never the shipped Breath's rule for monsters (a share of the hero's life)
+function bury(f, front) {
+  const pl = G.player, ux = Math.sin(f.dir), uz = Math.cos(f.dir), H = actHaz(7, G.hero.diff), snow = f.kind === 'snow';
+  const reached = (x, z) => (x - f.x) * ux + (z - f.z) * uz <= front;
+  if (pl && !pl.dead && !f.hit.has(pl) && pl.iframes <= 0 && reached(pl.x, pl.z) && inFlue(f, pl.x, pl.z, pl.radius * 0.5)) {
+    f.hit.add(pl);
+    damage(null, pl, pl.hpMax * (snow ? H.slide : H.wash) / 100, { pure: true, wash: !snow, push: snow ? 9 : 12, kx: ux, kz: uz });
+    emit('flueHit', f);
+  }
+  if (NET.mode === 'guest') return;
+  for (const a of G.actors) {
+    if (a.dead || a.team !== 'foe' || f.hit.has(a) || a.airborne || a.def?.float || a.prop || a.keeper) continue;
+    if (!reached(a.x, a.z) || !inFlue(f, a.x, a.z, a.radius * 0.5)) continue;
+    f.hit.add(a);
+    const heavy = a.elite || a.def.big || a.boss, share = a.boss ? (a.def.slideShare ?? 5) : heavy ? H.slideElite : H.slideFoe;
+    // (the kill is the hero's who kicked it: her experience, her drops; not a blow of hers, so no crit and no Name on it)
+    damage(f.by || pl, a, a.hpMax * share / 100, { crit: false, dot: true, noLoh: true, noRes: true, slide: true });
+    if (a.dead) { TALLY7.kills++; continue; }
+    // (carried down the lane's middle to its foot: the nearest open cell to it, never past it)
+    if (!heavy && !a.anchored) { const m = G.zone.map; let p = null; for (let u = f.len - 1; u > (a.x - f.x) * ux + (a.z - f.z) * uz && !p; u -= 1) { const x = f.x + ux * u, z = f.z + uz * u; if (m.walkable(x, z)) p = { x, z }; } if (p) { a.x = p.x; a.z = p.z; TALLY7.carried++; } }
+    emit('dazeFoe', a, a.boss ? (a.def.slideDaze ?? 2) : 1.5);
+  }
+}
+// the bot's and the scenarios' count (kicked by her, by foes, creaked in shade, slides run, foes killed and carried)
+export const TALLY7 = { kicks: 0, creaks: 0, slides: 0, kills: 0, carried: 0 };
+// is this chute's cornice in shade (its head's cell: under a cliff, a thick pine; a cloud, once they sail: light.js)
+const corniceShade = (f) => { const L = G.zone?.L, i = Math.floor(f.z) * L.w + Math.floor(f.x); return !!(L.shade && L.shade[i]) || !!G.zone?.cloudAt?.(f.x, f.z); };
+// something loud at (x, z) with a reach of r metres: every armed chute whose horn-stone lies within it, or whose lane it
+// happened in, is kicked. Only in sun: a cornice in shade creaks, sheds a puff and stays. A slide is never loud
+export function loud(x, z, r, by) {
+  emit('loud', x, z, r, by);
+  if (!F.list || G.zone !== F.zone || NET.mode === 'guest') return 0;
+  let n = 0;
+  for (const f of F.list) {
+    if (f.kind !== 'snow' || !f.armed || f.st !== 'idle') continue;
+    const h = f.horn; if (!((h && Math.hypot(h.x - x, h.z - z) <= r) || inFlue(f, x, z, 0))) continue;
+    if (corniceShade(f)) { TALLY7.creaks++; puff(f.x, 1.2, f.z, 6, 0xf4f8ff, 1.2, 1.6, 1.0); Audio.sfx('corniceCrack', { x: f.x, z: f.z, vol: 0.4, pitch: 0.7 }); continue; }
+    f.by = by || null; TALLY7.kicks++; TALLY7.slides++; inhale(f); n++;
+  }
+  return n;
+}
+// a sluice or a chute run by the story or a boss (a lever pulled, Kelados's call): armed or not
+export function fireFlue(i, by) { const f = F.list?.[i]; if (!f || f.st !== 'idle') return false; f.by = by || null; if (f.kind === 'snow') { f.armed = true; TALLY7.slides++; } inhale(f); return true; }
+// the heroes' skills that are loud (data.js LOUD; a variant is its base skill): where it lands, or where she stands
+on('skillUsed', (i, id, aim) => {
+  const r = LOUD[id]; if (!r || !F.list || !F.list.some((f) => f.kind === 'snow')) return;
+  const pl = G.player, x = aim?.x ?? pl.x, z = aim?.z ?? pl.z;
+  // (a blow lands a moment after the button: the leap's arc, the meteor's fall)
+  later(id === 'meteor' ? 0.9 : id === 'leap' || id === 'charge' ? 0.45 : 0.2, () => { if (G.zone === F.zone) loud(id === 'cry' || id === 'bulwark' || id === 'dawn' ? pl.x : x, id === 'cry' || id === 'bulwark' || id === 'dawn' ? pl.z : z, r, pl); });
+});
 // slag drips from the dark over the Slag Rivers: near lava, now and then, a drop where the hero stands (never at the Anvil
 // of the Crown, its moat and the Forge Mouth, nor in the Hall of Moulds by its brood pools)
 function drips(dt, pl) {

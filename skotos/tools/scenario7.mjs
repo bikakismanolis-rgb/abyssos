@@ -52,6 +52,46 @@ export const S7 = () => ({
     const den = await reach('arena.mouth'); beat('at 0.3 the Den\'s mouth is in reach', den === true, den);
     return out(beats);
   } },
+  // the Slide: flues run for a hero with crownUnmade; a chute fires only armed, sunlit and kicked; 2.8 s of warning; a
+  // goblin in the lane takes its share, ends at the lane's foot, Dazed; the hero takes HAZ7.slide; spent, then armed again
+  slide: { stage: 'B', until: 'E', q: Q(fx7('thawSeen', 'thaw'), '&nopacks'), run: async (pg) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    await until(pg, () => window.__G.zone?.tide);
+    const s0 = await pg.evaluate(async () => { const Fg = await import('/src/game/forge.js'), G = window.__G; window.__Fg = Fg; window.__immortal = true; const L = Fg.flues() || []; return { crown: !!G.hero.flags.crownUnmade, n: L.length, snow: L.filter((f) => f.kind === 'snow').length, armed: L.filter((f) => f.kind === 'snow' && f.armed).length }; });
+    beat('the hero carries crownUnmade and the chutes are there, all armed', s0.crown && s0.snow >= 5 && s0.armed === s0.snow, s0);
+    // a sunlit chute, by name of its place in the list: the first whose cornice is not in fixed shade
+    const pick = await pg.evaluate(() => { const G = window.__G, L = G.zone.L, fl = window.__Fg.flues(); const i = fl.findIndex((f) => f.kind === 'snow' && !L.shade[Math.floor(f.z) * L.w + Math.floor(f.x)] && f.horn); const sh = fl.findIndex((f) => f.kind === 'snow' && L.shade[Math.floor(f.z) * L.w + Math.floor(f.x)] && f.horn); return { i, sh }; });
+    beat('a chute with its cornice in the sun exists', pick.i >= 0, pick);
+    if (pick.i < 0) return out(beats);
+    // a goblin in the lane, the hero beside the horn-stone and out of the lane; a loud thing at the horn
+    const set = await pg.evaluate(({ i }) => { const G = window.__G, D = window.__D, f = window.__Fg.flues()[i], ux = Math.sin(f.dir), uz = Math.cos(f.dir), m = G.zone.map;
+      const gp = m.nearestFloor(f.x + ux * f.len * 0.4, f.z + uz * f.len * 0.4, 2), a = D.spawnMonster('goblin', gp.x, gp.z); G.zone.actors.push(a); if (a.avatar) window.__R.scene.add(a.avatar.group); a.aggro = false; window.__gob = a;
+      const hp = m.nearestFloor(f.horn.x - uz * (f.w / 2 + 3), f.horn.z + ux * (f.w / 2 + 3), 4); G.player.x = hp.x; G.player.z = hp.z;
+      return { gobIn: true, hp0: a.hp, hpMax: a.hpMax, horn: f.horn, len: f.len }; }, pick);
+    const t0 = Date.now();
+    const k = await pg.evaluate(({ i }) => { const f = window.__Fg.flues()[i]; return { n: window.__Fg.loud(f.horn.x, f.horn.z, 6, window.__G.player), st: f.st }; }, pick);
+    beat('a loud thing at the horn-stone kicks it: the warning begins', k.n >= 1 && k.st === 'inhale', k);
+    await pg.evaluate(() => { const a = window.__gob; window.__gobAt = null; const iv = setInterval(() => { if (a.dazed > 0 || a.state === 'dazed') { window.__gobAt = { x: a.x, z: a.z }; clearInterval(iv); } }, 5); });
+    const fired = await until(pg, (i) => window.__Fg.flues()[i].st === 'fire', 20000, pick.i);
+    const warn = await pg.evaluate(() => window.__G.time); // (game seconds are the measure: sim=4)
+    const done = await until(pg, (i) => { const f = window.__Fg.flues()[i]; return f.st === 'idle' && !f.armed; }, 20000, pick.i);
+    const s1 = await pg.evaluate(({ i }) => { const G = window.__G, f = window.__Fg.flues()[i], a = window.__gob, ux = Math.sin(f.dir), uz = Math.cos(f.dir); const foot = { x: f.x + ux * f.len, z: f.z + uz * f.len }; const at = window.__gobAt || a; return { dead: a.dead, hp: a.hp / a.hpMax, dazed: !!window.__gobAt, toFoot: Math.hypot(at.x - foot.x, at.z - foot.z), armed: f.armed, rearm: f.rearm, tally: { ...window.__Fg.TALLY7 } }; }, pick);
+    beat('it runs, and is spent', fired && done && !s1.armed && s1.rearm > 30, s1);
+    beat('the goblin took its share (35% of its own life), was carried to within 3 m of the lane\'s foot, Dazed', !s1.dead && Math.abs((1 - s1.hp) - 0.35) < 0.06 && s1.toFoot <= 3.2 && s1.dazed, s1);
+    // spent: a second loud thing does nothing
+    const k2 = await pg.evaluate(({ i }) => { const f = window.__Fg.flues()[i]; return window.__Fg.loud(f.horn.x, f.horn.z, 6, window.__G.player); }, pick);
+    beat('spent: it cannot be kicked again', k2 === 0, k2);
+    // the hero in a lane: HAZ7.slide of her life, pure
+    const hero = await pg.evaluate(async ({ i }) => { const G = window.__G, fl = window.__Fg.flues(), D = await import('/src/game/data.js'); const j = fl.findIndex((f, n) => n !== i && f.kind === 'snow' && f.armed && !G.zone.L.shade[Math.floor(f.z) * G.zone.L.w + Math.floor(f.x)]); if (j < 0) return null; const f = fl[j], ux = Math.sin(f.dir), uz = Math.cos(f.dir), p = G.zone.map.nearestFloor(f.x + ux * f.len * 0.6, f.z + uz * f.len * 0.6, 2); G.player.x = p.x; G.player.z = p.z; window.__immortal = true; G.player.hp = G.player.hpMax; G.player.iframes = 0; window.__hp0 = G.player.hp; window.__hpMin = G.player.hp; setInterval(() => { window.__hpMin = Math.min(window.__hpMin, G.player.hp); }, 10); window.__Fg.fireFlue(j, null); return { j, want: D.actHaz(7, G.hero.diff).slide }; }, pick);
+    if (hero) {
+      await until(pg, (j) => { const f = window.__Fg.flues()[j]; return f.st === 'idle' && !f.armed; }, 25000, hero.j);
+      const lost = await pg.evaluate(() => (window.__hp0 - window.__hpMin) / window.__G.player.hpMax);
+      beat('the hero in a lane takes HAZ7.slide of her life', Math.abs(lost * 100 - hero.want) < 1.5, { lost: +(lost * 100).toFixed(1), want: hero.want });
+    } else beat('a second sunlit chute for the hero\'s test', false);
+    // in shade: it creaks and stays
+    if (pick.sh >= 0) { const c = await pg.evaluate(({ sh }) => { const f = window.__Fg.flues()[sh], c0 = window.__Fg.TALLY7.creaks; const n = window.__Fg.loud(f.horn.x, f.horn.z, 6, window.__G.player); return { n, creaks: window.__Fg.TALLY7.creaks - c0, st: f.st, armed: f.armed }; }, pick); beat('a cornice in shade creaks and stays', c.creaks >= 1 && c.st === 'idle' && c.armed, c); }
+    return out(beats);
+  } },
   // a Shadow Gate's layout is the shipped generator's for the same seed (no older layout changes with the act)
   gate7: { stage: 'A', until: 'E', q: Q(FX7.fx7_done('town')), run: async (pg) => {
     const h = await pg.evaluate(async () => { const g1 = await import('/src/world/gen.js'); const sum = (L) => { let a = 0; for (let i = 0; i < L.cells.length; i++) a = (a * 31 + L.cells[i] + i) >>> 0; return [L.w, L.h, a, L.packs.length, L.props.length].join(':'); }; return { crypt: sum(g1.genCrypt(4242, { rooms: 12, mh: 30 })), forest: sum(g1.genForest(4242, { h: 120 })) }; });

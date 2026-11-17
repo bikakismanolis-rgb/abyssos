@@ -40,6 +40,7 @@ import { RNG, rand, angleTo, clamp, angleDiff } from '../core/util.js';
 import { t } from '../i18n/i18n.js';
 import { unloadOld } from './unload.js';
 
+const NOPACKS = typeof location !== 'undefined' && /[?&]nopacks\b/.test(location.search);
 export const ZONES = {
   town: { level: 1, music: 'town', ambient: 'town', atmos: 'town' },
   forest: { level: 1, music: 'forest', ambient: 'forest', atmos: 'forest' },
@@ -224,7 +225,8 @@ function createZone(id, o = {}) {
   // exits
   for (const e of L.exits) z.interact.push({ kind: 'exit', to: e.to, x: e.x, z: e.z, r: 2.4, prompt: e.label, locked: e.locked, use: () => takeExit(z, e) });
   // packs spawn when the hero comes near
-  L.packs.forEach((p, i) => z.packs.push(Object.assign({ id: id + i, spawned: false }, p)));
+  // (?nopacks: a test's bare zone, asked for by name, never assumed: docs/act7-contract.md, the four test rules)
+  if (!NOPACKS) L.packs.forEach((p, i) => z.packs.push(Object.assign({ id: id + i, spawned: false }, p)));
   // bosses
   if (id === 'forest') z.bossSpot = { kind: 'weaver', x: L.boss.x, z: L.boss.z - 2 };
   if (id === 'crypt') z.bossSpot = { kind: 'barrowLord', x: L.boss.x, z: L.boss.z };
@@ -2168,6 +2170,8 @@ function act7Enter(z) {
   if (z.mode === 'green' || z.mode === 'let') Audio.music(z.id + 'Green');
   Audio.mood({ race: clamp((raceLevel(z.id, F) - 0.3) / 0.9, 0, 1) });
   resetTide(z, { mere: raceLevel(z.id, F) });
+  // (the chutes, armed on every entry, and the sluices: forge.js; no shards from an older visit)
+  startFlues(z.L.flues); vaultEnter(z);
   // (the place to wake: the camp, until the act's own checkpoints, flags.cp7)
   const c = z.L.spots.camp; if (c) z.checkpoint = z.map.nearestFloor(c.x, c.z, 3);
   act7Presence(z);

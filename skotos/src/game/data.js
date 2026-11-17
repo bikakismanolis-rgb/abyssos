@@ -75,6 +75,12 @@ export const HAZ7 = [
   H7({ tide: 110, wash: 10, slide: 22, slideFoe: 30, slideElite: 16, rearm: 40, clouds: 2, sunWake: 1.5, holdPacks: 3, heavy: 31, bossHeavy: 38, cap: 36, cd: 0.9, bossCd: 0.85, bossChutes: [2, 3], overlap: 2, blockT: 25, vault: 1.1, champ: 1.6 }),
   H7({ tide: 100, wash: 12, slide: 26, slideFoe: 30, slideElite: 16, rearm: 35, clouds: 2, sunWake: 1, holdPacks: 3, heavy: 36, bossHeavy: 44, cap: 42, cd: 0.85, bossCd: 0.8, bossChutes: [2, 3], overlap: 2, blockT: 20, vault: 1.2, champ: 1.7 })
 ];
+// Act VII: what is loud (docs/act7-contract.md, the Slide): a skill's or an enemy move's reach in metres. A loud thing kicks
+// every armed, sunlit chute whose horn-stone lies within its reach, and wakes a Den-bear within 12 m. A variant takes its
+// base skill's row. Not here: not loud (the basic attacks, Whirlwind, Multishot, Piercing Shot, Vault, Storm of Hawks,
+// Fireball, Chain Lightning, Frost Nova, Frozen Orb, Ray of Dawn; the Call; a slide; a falling rock)
+export const LOUD = { leap: 10, quake: 10, charge: 10, bulwark: 10, dawn: 10, cry: 6, rain: 6, trap: 6, meteor: 10, rift: 10,
+  bearWall: 10, rollerSlam: 10, rolledBoulder: 10, thunder: 10, kallistoRoar: 10, keladosTremor: 10 };
 // the save format this build reads and writes (save.js heroFits refuses a hero of a higher one as 'newer'; every hero this
 // build makes or takes up is stamped with it, boot.js startHero): 1 for Acts I-VI (a hero without `fmt` is 1; Act VI shipped at 1), 2 with Act
 // VII's fields. (No public build may write 2 before a public build refuses it: the bump waits for one that carries
