@@ -32,7 +32,11 @@ const STORY_TEARS = ['planting', 'sorrow', 'breaking'];
 const tearsSeen = () => STORY_TEARS.filter((id) => G.hero.flags['tear_' + id]).length;
 const wallsDown = () => [0, 1, 2].filter((i) => G.hero.flags['thorn' + i]).length;
 export function questText() {
-  const q = Math.min(G.hero.quest, 39), F = G.hero.flags;
+  const q = Math.min(G.hero.quest, 47), F = G.hero.flags;
+  // Act VII: the weirs and the winches counted; the way home once the lake is let down
+  if (q === 41) return t('q.41', [1, 2, 3].filter((i) => F['weir' + i]).length);
+  if (q === 44) return t('q.44', [1, 2, 3].filter((i) => F['winch' + i]).length);
+  if (q === 46) return t(F.lakeLet ? 'q.46b' : 'q.46');
   if (q === 12) return t('q.12', tearsSeen());
   if (q === 14) { const n = wallsDown(); return n >= 3 ? t('q.14b') : t('q.14', n); }
   if (q === 18) return t('q.18', lampsLit());
@@ -579,6 +583,7 @@ function actComplete(act) {
   else if (act === 5) { h.act5 = Math.max(h.act5 ?? -1, h.diff); h.quest = 31; h.flags.act5 = true; }
   // (Act VI: its end state; the act's music, panel and blessing are the story's, docs/act6-contract.md, Story)
   else if (act === 6) { h.act6 = Math.max(h.act6 ?? -1, h.diff); h.quest = 39; h.flags.act6 = true; }
+  else if (act === 7) { h.act7 = Math.max(h.act7 ?? -1, h.diff); h.quest = 47; h.flags.act7 = true; }
   G.flags.actDone = act;
   emit('quest');
   writeSave();

@@ -509,7 +509,7 @@ on('louseCurl', () => hint('louse'));
 // the bosses with a theme of their own (the rest share 'boss')
 const OWN_THEME = new Set(['amaranthe', 'ivar', 'karthax', 'tower', 'skotos', 'ketos', 'shade']);
 // ---------- Act VI: what the deep says (the vault's groan before the black water moves, the Cradle, the bells, the names) ----------
-on('tideBell', () => { if (G.zone?.act6) Audio.sfx('iceGroan', { vol: 0.9 }); });
+on('tideBell', () => { if (G.zone?.act6) Audio.sfx('iceGroan', { vol: 0.9 }); else if (G.zone?.act7) Audio.sfx('iceGroan', { vol: 0.7 }); });   // (Act VII's roar: its own sound at stage D)
 on('tideTurn', (ph) => { if (G.zone?.act6) Audio.mood({ deep: ph === 'high' ? 1 : ph === 'flood' ? 0.6 : ph === 'ebb' ? 0.4 : 0 }); });
 on('fireDim', () => Audio.sfx('fireDim', { vol: 0.8 }));
 on('fireOut', () => Audio.sfx('fireOut'));

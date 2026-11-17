@@ -1,6 +1,6 @@
 // Damage, status effects, deaths, experience and drops.
 import { G, later, vibrate } from './state.js';
-import { DIFFS, monsterXP, xpToNext, mxpToNext, MAX_LEVEL, SKILLS, CLASSES, BUFFS, HAZ5, HAZ6, LEG_FROM, COOP } from './data.js';
+import { DIFFS, monsterXP, xpToNext, mxpToNext, MAX_LEVEL, SKILLS, CLASSES, BUFFS, HAZ5, HAZ6, HAZ_ACT, zoneAct, LEG_FROM, COOP } from './data.js';
 import { makeItem } from './items.js';
 import { refreshStats } from './stats.js';
 import { number } from '../ui/overlay.js';
@@ -285,7 +285,7 @@ export const VULN = {
   stunned: { k: 1.5, key: 'hud.stunned', rim: 0xe0f0ff }
 };
 const VULN_TX = { lit: ['Φωτισμένο!', 'Lit!'], stunned: ['Ζαλισμένο!', 'Stunned!'], revealed: ['Στο φως!', 'In the light!'], exposed: ['Εκτεθειμένο!', 'Exposed!'], beached: ['Στην ξέρα!', 'Beached!'], stranded: ['Εγκλωβισμένο!', 'Stranded!'], seared: ['Πυρωμένο!', 'Seared!'], blinded: ['Τυφλωμένο!', 'Blinded!'], floundering: ['Βουλιάζει!', 'Floundering!'], overturned: ['Αναποδογύρισε!', 'Overturned!'] };
-const vulnK = (kind) => VULN[kind]?.k || ((G.zone?.act6 ? HAZ6 : HAZ5)[G.hero?.diff ?? 1] || HAZ5[1]).reveal;
+const vulnK = (kind) => VULN[kind]?.k || ((HAZ_ACT[zoneAct(G.zone)] || HAZ5)[G.hero?.diff ?? 1] || HAZ5[1]).reveal;
 export function vuln(a) {
   let v = a.dmgTaken > 1 ? a.dmgTaken : 1;
   if (a.vulns) for (const kind in a.vulns) v = Math.max(v, vulnK(kind));

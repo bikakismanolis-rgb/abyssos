@@ -10,7 +10,7 @@ import { dropShard } from './pickups.js';
 
 // the zones she wakes in; any other (Whitecliff, a Shadow Gate, a zone this build does not know) is Whitecliff at its
 // waypoint, as before. (Act VI's two retry at their checkpoints, z.checkpoint from flags.cp6)
-export const WAKE = new Set(['forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'forge', 'coast', 'farlight', 'drained', 'bottom']);
+export const WAKE = new Set(['forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'forge', 'coast', 'farlight', 'drained', 'bottom', 'thaw', 'tarn']);
 // a boss that rises as she comes near is not woken beside: within its reach she wakes at the zone's retry spot. Silverhorn
 // sleeps until quest 13, or until the three verses are known (the zone's entry wakes it just after: story.js), the Tower
 // until it is woken, the Skotos until the Farthest Light is touched. Karthax stirs at 13.5 m and the Tower rises at 24 m,
@@ -114,7 +114,7 @@ export function noteVisit(h) {
 // (the Mere drained or not, the Bottom lit or dark: another ground)
 function layoutOf(z) {
   const L = z.L, S = L.spots, n = [L.w, L.h, L.packs.length, (S.chests || []).length, (S.shrines || []).length];
-  if (z.act6) n.push(String(z.mode));
+  if (z.act6 || z.act7) n.push(String(z.mode));
   return n;
 }
 // enterZone's at for a wake: the visit laid on the zone just built, then the spot (game/boot.js startHero)

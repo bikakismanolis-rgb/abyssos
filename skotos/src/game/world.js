@@ -60,6 +60,12 @@ export const ZONES = {
   // down the Well (light 'under': the Carried Fire's kind, read only as lightKind() === 'under'; ring: its radius, light.js)
   drained: { level: 34, music: 'drained', ambient: 'drained', atmos: 'drained', act: 6, pack: 'silt', light: 'under', ring: 4.5 },
   bottom: { level: 37, music: 'bottom', ambient: 'bottom', atmos: 'bottom', act: 6, pack: 'silt', light: 'under', ring: 4.5 },
+  // Act VII: the Meltwaters above the Giants' Stair, up the goat track from the Pass's camp, and the Hanging Lake above
+  // them, up the Water-stair. Daylight: no ring, no Shroud (light 'sun' comes with Sun and Shade, stage B; until then they
+  // are zones with no light rule, as the forest is). `day`: drawn at the lower phone resolution or not (gfx.js heavyZone).
+  // (music and ambient: stand-ins until the act's own themes, stage D; the 'melt' ambient is fx.js's)
+  thaw: { level: 40, music: 'forest', ambient: 'forest', atmos: 'thaw', act: 7, pack: 'melt' },
+  tarn: { level: 43, music: 'pass', ambient: 'snow', atmos: 'tarn', act: 7, pack: 'melt', heavy: true },
   gate: { level: 1, music: 'gate', ambient: 'gate', atmos: 'gate' }
 };
 // beacons that have answered Whitecliff's: Arna's hill after Act I, Deepstone after Act II, and after Act III the
@@ -97,8 +103,11 @@ export function farFire(p, color = 0xffa040, o = {}) {
 // Farthest Light, from the seals to the lit sea, Brokka (folk) and Elati (grove) who bring their fires to the keepers
 // Act VI's silt with the rime (most of its props and two of its layers) and the Saltborn again (frost); its creatures the
 // group act6 (gfx/creatures.js ACT_FILES; before the group lands a cold session draws its stand-ins, crew below)
-const READY = { deep: { folk: ['folk'], creatures: 'act2' }, wood: { folk: ['grove'], creatures: 'act3' }, cinder: { folk: ['ash', 'folk', 'grove'], creatures: 'act4' }, rime: { folk: ['frost'], creatures: 'act5' }, silt: { folk: ['frost'], creatures: 'act6' } };
-const zonePacks = (id) => { const p = ZONES[id]?.pack; return p ? (id === 'forge' ? [p, 'deep'] : ZONES[id].act === 6 ? ['rime', p] : [p]) : []; };
+const READY = { deep: { folk: ['folk'], creatures: 'act2' }, wood: { folk: ['grove'], creatures: 'act3' }, cinder: { folk: ['ash', 'folk', 'grove'], creatures: 'act4' }, rime: { folk: ['frost'], creatures: 'act5' }, silt: { folk: ['frost'], creatures: 'act6' },
+  // Act VII loads no people set (Halda is the boot smith, the keepers boot villagers) and no pack of its own: `melt` is
+  // a name for this row only (the Hanging Lake draws on the rime, the Meltwaters on the boot layers)
+  melt: { folk: [], creatures: 'act7' } };
+const zonePacks = (id) => { const p = ZONES[id]?.pack; return p ? (id === 'forge' ? [p, 'deep'] : ZONES[id].act === 6 ? ['rime', p] : ZONES[id].act === 7 ? (id === 'tarn' ? ['rime'] : []) : [p]) : []; };
 function zoneFolk(id) {
   const h = G.hero, F = h?.flags || {}, out = [...(READY[ZONES[id]?.pack]?.folk || [])];
   if (id === 'farlight' && h.quest >= 29 && !F.seaLit) out.push('folk', 'grove');
@@ -124,7 +133,7 @@ export const zoneParts = (id) => { const R0 = READY[ZONES[id]?.pack]; return zon
 // a zone's layout seed, the hero's own; Act V's two and Act VI's two are one per difficulty (a fresh coast on each), the
 // story the same (h.wps keeps the bare ids; seedKey: where it is kept in hero.seeds; a wake reads it there without making
 // one, game/wake.js)
-export const seedKey = (id, diff) => (id === 'coast' || id === 'farlight' || ZONES[id]?.act === 6 ? id + '@' + (diff || 0) : id);
+export const seedKey = (id, diff) => (id === 'coast' || id === 'farlight' || ZONES[id]?.act >= 6 ? id + '@' + (diff || 0) : id);
 function seedFor(id) {
   G.hero.seeds ||= {};
   const k = seedKey(id, G.hero.diff);
@@ -295,7 +304,7 @@ export function enterZone(id, o = {}) {
   else if (Z.act === 6) act6Enter(z);
   else if (id === 'town') { townFires(z); if (G.hero.flags.seaLit) { setAtmosphere(ATMOS.townAurora); SEA.sky = true; } }
   // (a phone draws Act V's zones at a lower resolution: gfx.js heavyZone)
-  heavyZone(Z.act === 5);
+  heavyZone(Z.act === 5 || !!Z.heavy);
   // where the hero appears
   // (a function of the zone, called once it is built and its act entered (checkpoints, tide, ice, the story's openings),
   // before she is placed: a wake, game/wake.js)
@@ -437,7 +446,7 @@ function spawnPack(z, p, D) {
   let elite = p.elite;
   if (!elite && Math.random() < 0.06 * D.elite * COOP.elite[ci]) elite = 'champion';
   // (an Act VI pack whose tag combat's PACKS does not hold yet: the Sunken stand in, never Act I's goblins)
-  const weights = PACKS[tag] || (ZONES[z.id]?.act === 6 ? PACKS.sunkenCrew : PACKS.goblins);
+  const weights = PACKS[tag] || (ZONES[z.id]?.act === 6 ? PACKS.sunkenCrew : PACKS.goblins);   // (Act VII's default is the goblins': its looters)
   const pick = () => rand.weighted(weights);
   // Act III packs are built round a lead creature (the den's bear, the grove's Rootwarden, the Mourners): it comes first
   const lead = PACK_LEAD[tag];

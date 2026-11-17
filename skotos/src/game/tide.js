@@ -23,7 +23,7 @@
 // - The bell (HAZ5.bell s before the flood and the ebb): sfx and bus 'tideBell' (the coming phase); bus 'tideTurn' at
 //   each phase. The flood waves' clock (floodWave: world.js updatePacks spawns the pack). The HUD's dial: tideDial().
 import { G } from './state.js';
-import { HAZ5, HAZ6 } from './data.js';
+import { HAZ5, HAZ6, HAZ_ACT, zoneAct } from './data.js';
 import { damage } from './combat.js';
 import { coldAdd } from './cold.js';
 import { sapAt } from './sap.js';
@@ -52,8 +52,9 @@ const haz = () => {
   const L = G.zone?.L, d = G.hero?.diff ?? 1;
   if (L?.tideCfg) {
     if (H6C?.L !== L || H6C.d !== d) {
-      const H = HAZ6[d] || HAZ6[1], k = (H.tide ?? 120) / 120, c = L.tideCfg;
-      H6C = { L, d, row: { phases: c.phases.map((p) => p * k), stepT: c.stepT * k, bell: H.groan ?? 6, wash: H.wash ?? 6, top: Math.round(c.hMax / TIDE_STEP), groan: true } };
+      // (the act's own row: the zone's, Act VI's where a zone has not said; Act VII's lead is its roar)
+      const HA = HAZ_ACT[zoneAct(G.zone)] || HAZ6, H = HA[d] || HA[1], k = (H.tide ?? 120) / 120, c = L.tideCfg;
+      H6C = { L, d, row: { phases: c.phases.map((p) => p * k), stepT: c.stepT * k, bell: H.groan ?? H.roar ?? 6, wash: H.wash ?? 6, top: Math.round(c.hMax / TIDE_STEP), groan: true } };
     }
     return H6C.row;
   }

@@ -43,7 +43,10 @@ const ACT_FILES = {
   // (Act VI's own bodies were never built: the Ketos and its Ketlings stand on the Icemaw, and the Icemaw and the Hull-louse
   // are its packs. Without this row a cold start into the Drained Sea or the Bottom loaded no creature at all (world.js
   // READY.silt names 'act6'), and all four were drawn as their boot stand-ins)
-  act6: ['icemaw', 'louse']
+  act6: ['icemaw', 'louse'],
+  // Act VII's bodies are all shipped ones: Kallisto and the Den-bears on the bear, Kelados and the Rock-rollers on the
+  // golem, the Snow-worm, the Choughs on the skua (the rest stand on boot bodies: wolf, goblin, troll, spider)
+  act7: ['bear', 'golem', 'worm', 'skua']
 };
 const loads = {};
 function loadFile(n) {

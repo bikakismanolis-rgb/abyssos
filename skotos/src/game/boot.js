@@ -140,11 +140,14 @@ export async function boot(q) {
     for (const f of (q.get('flags') || '').split(',').filter(Boolean)) h.flags[f] = true;
     // (an act's flag reads as that act finished, on this difficulty, its first blessing taken: an Act V state is not
     // taken for an Act IV left open, nor stopped by the blessings owed)
-    for (let n = 1; n <= 6; n++) if (h.flags['act' + n]) { h['act' + n] = h.diff; if (BOONS[n]) h.boons[n - 1] ||= BOONS[n][0].id; }
+    for (let n = 1; n <= 7; n++) if (h.flags['act' + n]) { h['act' + n] = h.diff; if (BOONS[n]) h.boons[n - 1] ||= BOONS[n][0].id; }
     if (q.get('auto') === 'farlight') h.flags.frozen = true;
     // &seed=N: the zone's layout seed (Act V's are kept per difficulty)
     if (q.has('seed')) { const z = q.get('auto'); h.seeds = { [z]: +q.get('seed'), [z + '@' + h.diff]: +q.get('seed') }; }
     if (q.has('mlvl')) h.mlvl = +q.get('mlvl');
+    // &v22: the hero as the build before Act VII wrote her (format 1, no `act7` field), so the run crosses the migration
+    // (tools/fixtures7.mjs fx7_new)
+    if (q.has('v22')) { delete h.act7; h.fmt = 1; }
     await startHero(h, false, q.get('auto'));
   } else showTitle();
   requestAnimationFrame(loop);
@@ -210,6 +213,9 @@ async function startHero(hero, isNew, zone = 'town', force = false, home = false
   // every hero taken up is stamped with this build's save format (save.js heroFits refuses a newer one)
   hero.act6 ??= -1;
   if (hero.act6 >= 0) hero.flags.act6 = true;
+  // and from before Act VII: an Act VI hero reads as Act VI's end (quest 39), no Name said, no fire held
+  hero.act7 ??= -1;
+  if (hero.act7 >= 0) hero.flags.act7 = true;
   hero.gateFound ??= 0;
   hero.fmt = SAVE_FMT;
   legBack(hero);
