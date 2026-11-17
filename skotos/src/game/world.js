@@ -8,8 +8,9 @@ import { genWeep, genHeart } from '../world/gen3.js';
 import { genAshfield, genForge } from '../world/gen4.js';
 import { genCoast, genFarlight } from '../world/gen5.js';
 import { genDrained, genBottom, ropeSpot } from '../world/gen6.js';
+import { genThaw, genTarn } from '../world/gen7.js';
 import { town6, story6Zone, people6 } from './story.js';
-import { buildLevel, propMesh, runeDisc, WIND, act3Prop, setAutumn, act4Prop, setHeat, setNight, setFlueGlow } from '../world/build.js';
+import { buildLevel, propMesh, runeDisc, WIND, act3Prop, setAutumn, act4Prop, setHeat, setNight, setFlueGlow, setThaw } from '../world/build.js';
 import { act5Prop } from '../world/build5.js';
 import { SEA, TICKS, clearFreeze, freezeWave, freezeRing, setShade } from '../world/sea.js';
 import { GridMap } from '../world/map.js';
@@ -165,10 +166,13 @@ function createZone(id, o = {}) {
   else if (id === 'farlight') L = genFarlight(seed);
   else if (id === 'drained') L = genDrained(seed, { mode: drainedMode() });
   else if (id === 'bottom') L = genBottom(seed, { mode: bottomMode() });
+  else if (id === 'thaw') L = genThaw(seed, { mode: thawMode() });
+  else if (id === 'tarn') L = genTarn(seed, { mode: tarnMode() });
   else if (id === 'gate') L = (o.tier % 2 ? genCrypt(seed, { rooms: 12, mh: 30 }) : genForest(seed, { h: 120 }));
   // (Act V: what the story has done to the layout is laid on it before it is built: sealed leads, the skerry's state)
   if (ZONES[id]?.act === 5) act5Layout(id, L);
   if (ZONES[id]?.act === 6) act6Layout(id, L);
+  if (ZONES[id]?.act === 7) act7Layout(id, L);
   const map = new GridMap(L.w, L.h, L.cells, L.low);
   // (Act VI: the Hearth's centre fire, its blocked 2 x 2, stops feet but not eyes or arrows: the Shade's last form stands
   // across it from the hero, so a bow or a staff shot at it crosses the fire)
@@ -179,6 +183,7 @@ function createZone(id, o = {}) {
   const z = { id, L, map, lvl, level: o.level ?? ZONES[id].level, actors: [], pickups: [], interact: [], packs: [], seed, ownSeed: o.seed == null, tier: o.tier || 0, extra: [], emit4: [], ep: ++zoneEp };
   if (id === 'coast') z.mode = coastMode(); else if (id === 'farlight') z.mode = skyMode();
   else if (id === 'drained') z.mode = drainedMode(); else if (id === 'bottom') z.mode = bottomMode();
+  else if (id === 'thaw') z.mode = thawMode(); else if (id === 'tarn') z.mode = tarnMode();
   // breakables
   for (const p of lvl.breakables) {
     const mesh = p.t === 'urn' ? propMesh('urn')
@@ -233,6 +238,8 @@ function createZone(id, o = {}) {
   if (ZONES[id].act === 4) act4Zone(z);
   if (ZONES[id].act === 5) act5Zone(z);
   if (ZONES[id].act === 6) act6Zone(z);
+  if (ZONES[id].act === 7) act7Zone(z);
+  if (id === 'pass') goatTrack(z);
   // town people and the stash
   if (id === 'town') {
     const N = L.spots.npcs;
@@ -273,7 +280,8 @@ export function enterZone(id, o = {}) {
   // (Act V: a coast built before the Freeze, or a Farthest Light under another sky, is built again from its seed; Act VI:
   // the Drained Sea once the Ketos is down, the Bottom once her fire burns)
   const stale = z && ((id === 'coast' && z.mode !== coastMode()) || (id === 'farlight' && z.mode !== skyMode())
-    || (id === 'drained' && z.mode !== drainedMode()) || (id === 'bottom' && z.mode !== bottomMode()));
+    || (id === 'drained' && z.mode !== drainedMode()) || (id === 'bottom' && z.mode !== bottomMode())
+    || (id === 'thaw' && z.mode !== thawMode()) || (id === 'tarn' && z.mode !== tarnMode()));
   if (!z || o.fresh || stale) { if (z) disposeZone(z); z = G.zones[id] = createZone(id, o); }
   G.zone = z; G.actors = z.actors; G.pickups = z.pickups;
   R.scene.add(z.lvl.group);
@@ -288,7 +296,7 @@ export function enterZone(id, o = {}) {
   setAmbient(Z.ambient + (act3 ? v : ''));
   // (a zone whose atmosphere is not in yet sets its own stand-in: act6Enter)
   const atm = ATMOS[Z.atmos + (act3 ? v : '')]; if (atm) setAtmosphere(atm);
-  WIND.uSnow.value = id === 'pass' || Z.act === 5 ? 1 : 0;
+  WIND.uSnow.value = id === 'pass' || Z.act === 5 || id === 'tarn' ? 1 : 0;
   SEA.sky = Z.act === 5;
   WIND.uWind.value = act3 && !aut ? 0 : 1;
   setAutumn(aut ? 1 : 0);
@@ -302,6 +310,7 @@ export function enterZone(id, o = {}) {
   if (Z.act === 4) act4Enter(z);
   else if (Z.act === 5) act5Enter(z);
   else if (Z.act === 6) act6Enter(z);
+  else if (Z.act === 7) act7Enter(z);
   else if (id === 'town') { townFires(z); if (G.hero.flags.seaLit) { setAtmosphere(ATMOS.townAurora); SEA.sky = true; } }
   // (a phone draws Act V's zones at a lower resolution: gfx.js heavyZone)
   heavyZone(Z.act === 5 || !!Z.heavy);
@@ -413,7 +422,7 @@ export function updatePacks() {
   }
   // the voices that speak once per place: Act III's Lady in the still trees (until the First Autumn), Act IV's Voice in
   // the Cradle between the lamps (until Ivar is at rest; v.need: only after that lamp burns)
-  const F = G.hero.flags, act = ZONES[z.id]?.act, mute = act === 3 ? F.autumn || F.ladyDown : act === 4 ? F.ivar || F.crownUnmade : act === 5 ? (z.id === 'coast' ? !!F.frozen : !!F.seaLit) : act === 6 ? !!F.herFire : false;
+  const F = G.hero.flags, act = ZONES[z.id]?.act, mute = act === 3 ? F.autumn || F.ladyDown : act === 4 ? F.ivar || F.crownUnmade : act === 5 ? (z.id === 'coast' ? !!F.frozen : !!F.seaLit) : act === 6 ? !!F.herFire : act === 7 ? !!F.act7 : false;
   if (z.voices && !mute) for (const v of z.voices) if (!v.done && (!v.need || F[v.need]) && Math.hypot(v.x - pl.x, v.z - pl.z) < v.r) { v.done = true; emit('voice', v.key, v); }
 }
 // the zone's boss, where it waits (when the hero comes near, or now: a story scene that needs it in the frame)
@@ -555,7 +564,7 @@ function takeExit(z, e) {
   if (e.locked && !G.hero.flags[e.locked]) {
     emit('toast', t('locked')); Audio.sfx('denied');
     // (the north road: only a hero at Act III's end is sent to Isarn about it)
-    const why = { weaver: 'd.weaver', stonewarden: 'd.gateShut', act1: 'd.mountainShut', act2: 'd.woodShut', hart: 'd.rootShut', fireTaken: G.hero.flags.act3 ? 'd.roadShut' : 'd.northShut', ivar: 'd.anvilShut', coal: 'd.coastShut', frozen: 'd.iceShut', coal6: 'd.ropeShut', ketosDown: 'd.wellShut', herFire: 'd.gateDark' }[e.locked];
+    const why = { haldaOut: 'd.trackShut', kallistoRest: 'd.waterStairShut', weaver: 'd.weaver', stonewarden: 'd.gateShut', act1: 'd.mountainShut', act2: 'd.woodShut', hart: 'd.rootShut', fireTaken: G.hero.flags.act3 ? 'd.roadShut' : 'd.northShut', ivar: 'd.anvilShut', coal: 'd.coastShut', frozen: 'd.iceShut', coal6: 'd.ropeShut', ketosDown: 'd.wellShut', herFire: 'd.gateDark' }[e.locked];
     if (why) emit('say', why);
     return;
   }
@@ -1936,6 +1945,7 @@ export function updateAct(dt) {
   const z = G.zone, pl = G.player;
   if (z?.act5 && pl) { act5Tick(z, dt); return; }
   if (z?.act6 && pl) { act6Tick(z, dt); return; }
+  if (z?.act7 && pl) { act7Tick(z, dt); return; }
   if (!z?.act4 || !pl) return;
   const F = G.hero.flags;
   if (z.id === 'ashfield') {
@@ -2109,4 +2119,73 @@ export function updatePortalFx(dt) {
   if (G.zone?.wpDisc) G.zone.wpDisc.rotation.z += dt * 0.3;
   if (G.zone?.wpDisc2) G.zone.wpDisc2.rotation.z += dt * 0.3;
 }
+// ---------- Act VII: the Meltwaters and the Hanging Lake (docs/act7-contract.md) ----------
+// What the world is: thawMode() ('spate' until the act is done, then 'green') and tarnMode() ('full' until the lake is let
+// down, then 'let'), each built again from its seed when it changes (enterZone). The water's own level is never a saved
+// layout: it is read from the flags on every entry (raceLevel) and moved as a weir turns or a winch runs free (raceTo).
+// z.act7 keeps what the story turns and lights: { weirs, winches, levers, lookouts, hearth } (their interacts; their
+// props are build7.js's, as they land).
+export const thawMode = () => (G.hero.flags.act7 ? 'green' : 'spate');
+export const tarnMode = () => (G.hero.flags.lakeLet ? 'let' : 'full');
+export const weirs7 = (F = G.hero.flags) => [1, 2, 3].filter((i) => F['weir' + i]).length;
+export const winches7 = (F = G.hero.flags) => [1, 2, 3].filter((i) => F['winch' + i]).length;
+// the Race's level (m) in the Meltwaters, a step down for each weir; the lake's in the Hanging Lake: full, down to 0.6
+// once Kelados rests, 0.3 once it is let down
+export function raceLevel(id, F = G.hero.flags) {
+  if (id === 'thaw') return F.act7 ? 0.3 : Math.round((1.2 - 0.3 * weirs7(F)) * 100) / 100;
+  if (id === 'tarn') return F.lakeLet ? 0.3 : F.keladosRest ? 0.6 : 1.2;
+  return 0;
+}
+// the snow that is left in the Meltwaters, for the ground's blend (build.js setThaw): it draws back with each weir
+const THAW_K = [0.65, 0.45, 0.3, 0.15];
+const thawK = (F = G.hero.flags) => (F.act7 ? 0.05 : THAW_K[weirs7(F)]);
+// the water moved to its level now, at 0.3 m/s (a weir turned, the lake let down): tide.js mereTick steps it
+export function raceTo(z, h = raceLevel(z.id)) { if (z?.tide) z.tide.mere = { h, rate: 0.3 }; if (z?.id === 'thaw') setThaw(thawK()); }
+// before the build: the melt's water for the sea's material (sea.js: SEA_MELT, safeSeaM on a phone)
+function act7Layout(id, L) { L.melt = true; }
+function act7Zone(z) {
+  const L = z.L, S = L.spots;
+  // (water, and no Cold: the tide dial, the wash-out, swimmers and packs dormant by the water are z.water's)
+  z.water = true; z.cells = true;
+  const A = z.act7 = { weirs: [], winches: [], levers: [], lookouts: [], hearth: null, figs: {} };
+  const turn = (list, flag, kind, prompt, out) => { for (const w of list || []) { const st = w.stand || w; const it = { kind, k: w.k, x: w.x, z: w.z, r: 2.4, prompt, spot: w, used: !!G.hero.flags[flag + w.k], use: () => emit(kind, it, z) }; out.push(it); z.interact.push(it); } };
+  turn(S.weirs, 'weir', 'weir7', 'weir.turn', A.weirs);
+  turn(S.winches, 'winch', 'winch7', 'winch.thaw', A.winches);
+  for (const lv of S.levers || []) { const it = { kind: 'lever7', k: lv.k, x: lv.x, z: lv.z, r: 2.2, prompt: 'lever.pull', spot: lv, used: true, use: () => emit('lever7', it, z) }; A.levers.push(it); z.interact.push(it); }
+  for (const lo of S.lookouts || []) { const h = lo.hearth || lo; const it = { kind: 'lookHearth', k: lo.k, x: h.x, z: h.z, r: 2.4, prompt: 'look.light', spot: lo, used: true, use: () => emit('lookHearth', it, z) }; A.lookouts.push(it); z.interact.push(it); }
+  // Halda at the camp (the boot smith), once she has gone up ahead of the hero
+  const N = S.npcs?.halda;
+  if (N) { const a = spawnNpc('smith', N.x, N.z, N.rot || 0); a.home = N.rot || 0; z.actors.push(a); A.halda = a; z.interact.push({ kind: 'npc', npc: 'smith', actor: a, x: N.x, z: N.z, r: 2.4, prompt: 'talk', use: () => emit('talk', 'smith', a) }); }
+  // the two who are not killed (ai.js, stage C): the Den's and the Dam's spots, until each rests
+  // z.bossSpot = { kind: 'kallisto' | 'kelados', ... } comes with their fights
+}
+// on every entry: the day's sky (ZONES' atmos row, set by enterZone), the snow that is left, the water at its level from
+// the flags, the clock at low water; then what the flags have turned
+function act7Enter(z) {
+  const F = G.hero.flags;
+  setThaw(z.id === 'thaw' ? thawK(F) : 0, true);
+  resetTide(z, { mere: raceLevel(z.id, F) });
+  // (the place to wake: the camp, until the act's own checkpoints, flags.cp7)
+  const c = z.L.spots.camp; if (c) z.checkpoint = z.map.nearestFloor(c.x, c.z, 3);
+  act7Presence(z);
+}
+export function act7Presence(z) {
+  const F = G.hero.flags, A = z?.act7; if (!A) return;
+  for (const it of A.weirs) it.used = !!F['weir' + it.k];
+  for (const it of A.winches) it.used = !!F['winch' + it.k];
+  refreshEmit(z);
+}
+// the goat track at the Pass's camp: the way up to the Meltwaters, an interact on cells that are already walkable (no
+// older layout changes), pushed once into the layout's exits too so an arrival from above finds it; locked until Halda
+// has gone up (haldaOut)
+function goatTrack(z) {
+  const L = z.L; if (L.exits.some((e) => e.to === 'thaw')) return;
+  if (!((G.hero.act6 ?? -1) >= 0 || G.hero.flags.call7)) return;
+  const w = L.spots.waypoint || L.start, p = z.map.nearestFloor(w.x + 4, w.z + 1, 4); if (!p) return;
+  const e = { x: p.x, z: p.z, to: 'thaw', label: 'exit.thaw', locked: 'haldaOut', act7: true };
+  L.exits.push(e);
+  z.interact.push({ kind: 'exit', to: e.to, x: e.x, z: e.z, r: 2.4, prompt: e.label, locked: e.locked, use: () => takeExit(z, e) });
+}
+// per frame in an Act VII zone (the clouds, the chutes, the holds: systems', as they land)
+function act7Tick(z, dt) {}
 export { WIND };

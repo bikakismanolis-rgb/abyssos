@@ -25,7 +25,7 @@ import { angleTo } from '../core/util.js';
 import { openDeepGate, FAR_BEACONS, farFire, openRootGate, witherWall, firstAutumn, growProp, zoneEmitters, setFar, setBeacon, townFires, townPresence, walkTo, stopWalk, vanish, release,
   act4Presence, isarnLantern, setLastLamp, openAnvilGate, meltPlug, forgeCold, bellowsDone, echoAt,
   act5Presence, people5, scene5, npc5, spawnNpc5, light5, iceMemOf, ICE_WHO, LIGHTS5, touch, spawnBoss, checkpoint5,
-  act6Presence, light6, checkpoint6, openings6, echo6Set, echo6Clear } from './world.js';
+  act6Presence, light6, checkpoint6, openings6, echo6Set, echo6Clear, act7Presence, raceTo, weirs7, winches7 } from './world.js';
 
 // Act III's counters: the three verses of the Long Sorrow, the three thorn walls of the Heartwood
 const STORY_TEARS = ['planting', 'sorrow', 'breaking'];
@@ -2766,3 +2766,31 @@ export function people6(z) {
 }
 
 export { setQuest };
+
+// ---------- Act VII: the Seven Peaks (docs/act7-contract.md, Story) ----------
+// (stage A: the deeds that move the world, each flag saved before its scene; the scenes, the memories in stone, Halda's
+// lines and the two who are not killed are stage D's and stage C's, laid over these)
+// a weir turned: the flag, the Race a step down along its whole length, the snow drawn back; the third opens the Narrows
+on('weir7', (it, z) => {
+  const F = G.hero.flags, k = 'weir' + it.k; if (F[k] || G.hero.__real) return;
+  F[k] = true; it.used = true; writeSave();
+  raceTo(z); Audio.sfx('tideTurn', { vol: 0.8, pitch: 0.8 });
+  const n = weirs7(F);
+  emit('toast', t('q.weirOpen', n), 'quest');
+  if (!F.thawSeen) F.thawSeen = true;
+  if (G.hero.quest < 41) setQuest(41, true);
+  if (n >= 3) { emit('toast', t('q.raceLow'), 'big'); setQuest(42); } else emit('quest');
+  act7Presence(z);
+});
+// a winch freed of its ice: the flag; the third wakes the Sleeper (his fight is stage C's: until then, the quest goes on)
+on('winch7', (it, z) => {
+  const F = G.hero.flags, k = 'winch' + it.k; if (F[k] || G.hero.__real) return;
+  F[k] = true; it.used = true; writeSave();
+  Audio.sfx('tideTurn', { vol: 0.7, pitch: 1.1 });
+  const n = winches7(F);
+  emit('toast', t('q.winchFree', n), 'quest');
+  if (!F.tarnSeen) F.tarnSeen = true;
+  if (G.hero.quest < 44) setQuest(44, true);
+  if (n >= 3) setQuest(45); else emit('quest');
+  act7Presence(z);
+});

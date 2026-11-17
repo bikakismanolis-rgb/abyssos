@@ -17,3 +17,9 @@ The text import (`tools/text7-import.mjs`) reads this file too. The two proofrea
 | `mon.rockScorpion` | Πετροσκορπιός | Rock-scorpion |
 | `mon.kallisto` | Καλλιστώ, η Αρκούδα που Ξύπνησε | Kallisto, the Waking Bear |
 | `mon.kelados` | Κέλαδος, ο Κοιμισμένος του Βουνού | Kelados, the Sleeper under the Mountain |
+
+**Prompts and toasts the build needed before the story's scenes** (drafted by the lead, for the proofreaders)
+
+| key | Greek | English |
+|---|---|---|
+| `lever.pull` | Τράβα τον μοχλό | Pull the lever |

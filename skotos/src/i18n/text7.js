@@ -10,6 +10,7 @@ export const TEXT7 = {
   'mon.rockScorpion': ['Πετροσκορπιός', 'Rock-scorpion'],
   'mon.kallisto': ['Καλλιστώ, η Αρκούδα που Ξύπνησε', 'Kallisto, the Waking Bear'],
   'mon.kelados': ['Κέλαδος, ο Κοιμισμένος του Βουνού', 'Kelados, the Sleeper under the Mountain'],
+  'lever.pull': ['Τράβα τον μοχλό', 'Pull the lever'],
   'prog.tab.names': ['Ονόματα', 'Names'],
   'name7.h': ['Τρία ονόματα τη φορά', 'Three names at a time'],
   'name7.sub': ['Κάθε όνομα που λες είναι ένας τρόπος να πολεμάς.', 'Each name you say is a way of fighting.'],
