@@ -6057,6 +6057,16 @@ function throwAim(a, key, cd) {
 }
 const rockT7 = () => ((G.hero?.diff ?? 1) >= 5 ? 10 : 20);
 
+// the fight's camera at both (fightCam, as the Tower's): a little lower and higher, aimed between her and the boss while
+// it is near, so the whole body stays on a phone's short screen. Kelados stands 7.5 m: at the play camera only his legs
+// showed with her 5 m off (the frame's top cut his chest); Kallisto less so
+function frame7(a, dt) {
+  const me = G.player;
+  if (!me || me.dead || !heroNear(a, 26)) { fightCam(dt, null); return; }
+  const big = a.kind === 'kelados', D = Math.hypot(a.x - me.x, a.z - me.z), k = clamp((18 - D) / 10, 0, 1), g = angleTo(me.x, me.z, a.x, a.z), ah = Math.min(big ? 4.5 : 3, D * 0.45) * k;
+  fightCam(dt, { p: 0.86 - (big ? 0.14 : 0.06) * k, y: 1.2 + (big ? 2.6 : 1.0) * k, z: (big ? 1.25 : 1.2) + 0.08 * k, ax: Math.sin(g) * ah, az: Math.cos(g) * ah });
+}
+
 // ---------- Kallisto, the Waking Bear ----------
 const KALLISTO = {
   name: 'kallisto', phases: [0.66, 0.33], wake: 16,
@@ -6070,6 +6080,7 @@ const KALLISTO = {
   },
   // wheeling away to open the distance for a charge (the Hart's)
   tick(a, dt) {
+    frame7(a, dt);
     if (!(a.wheel > 0)) return null;
     a.wheel -= dt;
     const T = a.wheelTo, dx = T.x - a.x, dz = T.z - a.z, d = Math.hypot(dx, dz), v = a.speed * 1.6;
@@ -6221,6 +6232,7 @@ const KELADOS = {
     a.mcd.tremor = bcd7(4); a.mcd.iceBlock = bcd7(2);
     bareLever(a, 1); if (a.echo) { bareLever(a, 2); bareLever(a, 3); } emit('keladosPlates', 0, a); if (!a.echo) emit('boss7Phase', a.kind, 1, a);
   },
+  tick(a, dt) { frame7(a, dt); return null; },
   onPhase(a, ph, was) {
     for (let p = Math.max(was, 0) + 1; p <= ph; p++) { (a.queue ||= []).push(p === 1 ? 'loosed' : 'awake'); emit('boss7Phase', a.kind, p + 1, a); }
     // (his echo has no Halda: 25 s into his third phase with no lever pulled, the nearest bare one pulls itself)

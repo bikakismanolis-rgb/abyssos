@@ -584,6 +584,9 @@ export const S7 = () => ({
       B.near(k, 7); await window.__wait(() => k.awake, 20000);
       out.one = { awake: k.awake, bosses: G.zone.actors.filter((a) => a.boss && !a.dead && !a.removed).length, bar: G.bossActor === k };
       for (const [ph, frac] of [[0, 1], [1, 0.6], [2, 0.3]]) { if (frac < 1) B.setLife(k, frac); await window.__wait(() => k.phase === ph, 3000); out['phase' + ph] = k.phase; for (let i = 0; i < 6; i++) { B.near(k, i % 2 ? 4 : 10); await window.__gwait(6); } }
+      // (her choice is hers: a move the natural stretch never drew is asked for once, the hero where it can come)
+      out.forced = [];
+      for (const mv of ['maul', 'charge', 'slam', 'rockfall']) if (!A7.HEAVY7.some((h) => h.kind === 'kallisto' && h.move === mv)) { out.forced.push(mv); await B.force(k, mv); B.near(k, mv === 'rockfall' || mv === 'charge' ? 10 : 3); await window.__wait(() => A7.HEAVY7.some((h) => h.kind === 'kallisto' && h.move === mv), 8000); }
       out.H = window.__H7.filter((h) => ['maul', 'charge', 'charge2', 'slam', 'rockfall'].includes(h.move));
       // a forced Maul on Skotos difficulty with no armour: the cap
       G.hero.diff = 5; const arm = G.stats.armor; G.stats.armor = 0; const hm = window.__H7.length;
@@ -596,7 +599,7 @@ export const S7 = () => ({
     beat('the phases turn at 66% and 33% of her life', r.phase1 === 1 && r.phase2 === 2, { p1: r.phase1, p2: r.phase2 });
     const seen = [...new Set(r.log.map((h) => h.move))];
     beat('every move she played had its table\'s telegraph or more', r.log.length >= 6 && r.log.every((h) => TELE[h.move] != null && h.tele >= TELE[h.move] - 0.001), { seen, short: r.log.filter((h) => !(h.tele >= (TELE[h.move] ?? 99) - 0.001)) });
-    beat('she played the Maul, the Charge, the Slam and a Rockfall', ['maul', 'charge', 'slam', 'rockfall'].every((m) => seen.includes(m)), seen);
+    beat('she played the Maul, the Charge, the Slam and a Rockfall', ['maul', 'charge', 'slam', 'rockfall'].every((m) => seen.includes(m)), { seen, forced: r.forced });
     beat('a heavy blow is bossHeavy x armour, never over the cap (Warden)', r.H.length >= 2 && r.H.every((h) => Math.abs(h.f - r.want) * 100 <= 1.5 && h.f <= r.cap / 100 + 0.005), { want: +(r.want * 100).toFixed(2), got: r.H.map((h) => h.move + ' ' + (h.f * 100).toFixed(2)) });
     beat('on Skotos with no armour the Maul is held to the cap (42%)', r.capHit && Math.abs(r.capHit.f - 0.42) < 0.006, r.capHit);
     // a charge ended on a boulder: Dazed 3.5 s; a slide on her: 5% and Buried 3 s
