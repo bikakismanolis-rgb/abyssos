@@ -1917,7 +1917,7 @@ const SHRIEK = new Map();
 on('dazeFoe', (a, t) => { if (a && !a.dead && !a.removed) { if (a.def?.snowOnly && a.under) wormUp(a, false); daze(a, t); } });
 // knocked senseless by a wall, a standing stone or sap: open to every blow (x1.5) for t seconds
 function daze(a, t) {
-  a.dazed = Math.max(a.dazed || 0, t); a.dmgTaken = 1.5;
+  a.dazed = Math.max(a.dazed || 0, t); a.dmgTaken = 1.5; a.dazeLast = t;
   a.dash = null; a.move = null; a.state = 'dazed'; killTele(a.tele); a.tele = null;
   const av = a.avatar;
   if (av) av.play(a.dazeClip || (av.anim.clipFor?.('daze') ? 'daze' : 'hit'), 1, { loop: true });

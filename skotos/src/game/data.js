@@ -213,12 +213,14 @@ export const MONSTERS = {
   // ---- Act VII (docs/act7-contract.md, Enemies): every body a shipped one, nothing of the dark. Each kind has one heavy
   // move that opens the fight (heavy: its id, ai.js; a share of her life from HAZ7, never x DIFFS.dmg); all else is chip ----
   hillWolf: { model: 'warg', hp: 1.1, dmg: 0.9, speed: 6.6, radius: 0.65, ai: 'pounce', reach: 1.6, atk: 'bite', atkTime: 1.1, flesh: 'flesh', xp: 1.6, sfx: 'wolf', heavy: 'longPounce', wake: { d: 5, clip: 'hit', sleep: 'die', loud: 12, sfx: 'wolfHowl', t: 0.9, speed: 1 }, look: { scale: 1.15, tint: 0x8a7a66, tintAmt: 0.5 } },
-  goblinMarksman: { model: 'goblinArcher', hp: 0.6, dmg: 0.7, speed: 4.0, radius: 0.45, ai: 'ranged', reach: 12, atk: 'shoot', atkTime: 1.6, flesh: 'flesh', xp: 1.5, weapon: 'crossbow', style: 'bow', hunch: 0.2, proj: 'arrow', sfx: 'goblin', heavy: 'aimedBolt', aimEvery: 3 },
+  // (the Act VII goblins: the shared goblin in a dark coat with a pale edge, so it reads on mid-tone ground in daylight)
+  looter: { model: 'goblin', hp: 0.55, dmg: 0.7, speed: 4.6, radius: 0.45, ai: 'melee', reach: 1.4, atk: 'stab', atkTime: 0.9, flesh: 'flesh', xp: 1, weapon: 'dagger', style: 'sword', hunch: 0.25, sfx: 'goblin', look: { tint: 0x1c2214, tintAmt: 0.8, rim: 0xd8e0c0, rimI: 0.3 } },
+  goblinMarksman: { model: 'goblinArcher', hp: 0.6, dmg: 0.7, speed: 4.0, radius: 0.45, ai: 'ranged', reach: 12, atk: 'shoot', atkTime: 1.6, flesh: 'flesh', xp: 1.5, weapon: 'crossbow', style: 'bow', hunch: 0.2, proj: 'arrow', sfx: 'goblin', heavy: 'aimedBolt', aimEvery: 3, look: { tint: 0x1c2214, tintAmt: 0.8, rim: 0xd8e0c0, rimI: 0.3 } },
   chough: { model: 'skua', hp: 0.3, dmg: 0.45, speed: 7.5, radius: 0.4, ai: 'bat', reach: 1.0, atk: 'bite', atkTime: 0.8, flesh: 'flesh', xp: 0.6, float: true, shadeShy: true, feathers: true, heavy: 'mob', look: { tint: 0x16161c, tintAmt: 0.85 } },
   denBear: { model: 'rimeBear', hp: 4.2, dmg: 1.5, speed: 5.6, radius: 1.05, ai: 'charger', reach: 2.3, atk: 'smash', atkTime: 1.6, flesh: 'flesh', xp: 6, sfx: 'bear', big: true, heavy: 'charge', wake: { d: 5, clip: 'howl', sleep: 'die', tide: true, loud: 12, sfx: 'bearRoar', t: 1.3, speed: 1 }, look: { scale: 1.25, tint: 0x6a4a30, tintAmt: 0.7 } },
   snowWorm: { model: 'deepworm', hp: 1.8, dmg: 1.2, speed: 4.4, radius: 0.85, ai: 'burrow', reach: 2.4, atk: 'bite', atkTime: 1.4, flesh: 'chitin', xp: 3, sfx: 'worm', snowOnly: true, heavy: 'burst', look: { tint: 0xeef2f6, tintAmt: 0.8 } },
-  rockRoller: { model: 'troll', hp: 7, dmg: 1.4, speed: 3.2, radius: 1.15, ai: 'brute', reach: 2.8, atk: 'smash', atkTime: 2.2, flesh: 'flesh', xp: 10, weapon: 'club', style: 'heavy', hunch: 0.25, sfx: 'troll', big: true, icebound: true, heavy: 'rolledBoulder', look: { scale: 1.2, tint: 0x8c98a6, tintAmt: 0.6 } },
-  rockScorpion: { model: 'spider', hp: 1.0, dmg: 0.8, speed: 5.2, radius: 0.6, ai: 'melee', reach: 1.5, atk: 'bite', atkTime: 1.0, flesh: 'chitin', xp: 1.5, sfx: 'spider', poison: true, burst: true, coldBlooded: 0.6, heavy: 'sting', stingEvery: 3, look: { scale: 0.8, tint: 0xb08a4a, tintAmt: 0.6 } },
+  rockRoller: { model: 'troll', hp: 7, dmg: 1.4, speed: 3.2, radius: 1.15, ai: 'brute', reach: 2.8, atk: 'smash', atkTime: 2.2, flesh: 'flesh', xp: 10, weapon: 'club', style: 'heavy', hunch: 0.25, sfx: 'troll', big: true, icebound: true, heavy: 'rolledBoulder', look: { scale: 1.2, tint: 0x4e5660, tintAmt: 0.7 } },
+  rockScorpion: { model: 'spider', hp: 1.0, dmg: 0.8, speed: 5.2, radius: 0.6, ai: 'melee', reach: 1.5, atk: 'bite', atkTime: 1.0, flesh: 'chitin', xp: 1.5, sfx: 'spider', poison: true, burst: true, coldBlooded: 0.6, heavy: 'sting', stingEvery: 3, look: { scale: 0.8, tint: 0x5a3c22, tintAmt: 0.6 } },
   // the two bosses, who are not killed (spare: at 0 life they rest where they would die; ai.js KALLISTO, KELADOS). A slide
   // on them: slideShare % of their life and slideDaze s (forge.js bury)
   kallisto: { model: 'kallisto', hp: 340, dmg: 1.6, speed: 5.4, radius: 0.85, ai: 'kallisto', reach: 4.6, atk: 'smash', atkTime: 1.6, flesh: 'flesh', xp: 300, boss: true, big: true, swim: true, spare: true, sfx: 'bear', dieClip: 'daze', slideShare: 5, slideDaze: 3, look: { scale: 2.1, tint: 0x3a2c22, tintAmt: 0.2 } },
@@ -334,17 +336,17 @@ export const PACKS = {
   forgotten: [['faded', 4], ['lampbearer', 1]],
   stairCrew: [['sunken', 3], ['lampbearer', 1]],
   // Act VII (the design's packs: where they stand is gen7's)
-  looters: [['goblin', 5], ['goblinMarksman', 1.2], ['goblinShaman', 0.8]],
+  looters: [['looter', 5], ['goblinMarksman', 1.2], ['goblinShaman', 0.8]],
   hillWolves: [['hillWolf', 1]],
   choughs: [['chough', 1]],
   den: [['denBear', 1], ['hillWolf', 2]],
   shoreDen: [['denBear', 1], ['hillWolf', 2]],
   snowHunt: [['snowWorm', 2], ['hillWolf', 1.5]],
-  icebound: [['rockRoller', 1], ['goblin', 2]],
+  icebound: [['rockRoller', 1], ['looter', 2]],
   slabs: [['rockScorpion', 1]],
-  terrace: [['goblin', 3], ['goblinMarksman', 2], ['rockScorpion', 2]],
+  terrace: [['looter', 3], ['goblinMarksman', 2], ['rockScorpion', 2]],
   snowfield: [['hillWolf', 3], ['snowWorm', 1.5], ['chough', 2]],
-  worksMixed: [['goblin', 3], ['goblinMarksman', 2], ['rockScorpion', 2], ['chough', 1]]
+  worksMixed: [['looter', 3], ['goblinMarksman', 2], ['rockScorpion', 2], ['chough', 1]]
 };
 // packs built around one creature: it comes first, exactly once (or the count given), and the rest are drawn without it
 export const PACK_LEAD = { weepDen: ['amberBear'], weepWeepers: ['rootwarden'], weepMourners: ['mourner'], heartWarden: ['rootwarden'], heartChoir: ['mourner', 'mourner'],

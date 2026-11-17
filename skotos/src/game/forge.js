@@ -155,7 +155,8 @@ function bury(f, front) {
     f.hit.add(a);
     const heavy = a.elite || a.def.big || a.boss, share = a.boss ? (a.def.slideShare ?? 5) : heavy ? H.slideElite : H.slideFoe;
     // (the kill is the hero's who kicked it: her experience, her drops; not a blow of hers, so no crit and no Name on it)
-    damage(f.by || pl, a, a.hpMax * share / 100, { crit: false, dot: true, noLoh: true, noRes: true, slide: true });
+    // (a boss's or an elite's share is exact: no bonus of the kicker's against elites; a common foe's kill is hers)
+    damage(heavy ? null : f.by || pl, a, a.hpMax * share / 100, { crit: false, dot: true, noLoh: true, noRes: true, slide: true });
     if (a.dead) { TALLY7.kills++; continue; }
     // (carried down the lane's middle to its foot: the nearest open cell to it, never past it)
     if (!heavy && !a.anchored) { const m = G.zone.map; let p = null; for (let u = f.len - 1; u > (a.x - f.x) * ux + (a.z - f.z) * uz && !p; u -= 1) { const x = f.x + ux * u, z = f.z + uz * u; if (m.walkable(x, z)) p = { x, z }; } if (p) { a.x = p.x; a.z = p.z; TALLY7.carried++; } }

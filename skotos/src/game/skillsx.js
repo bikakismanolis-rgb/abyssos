@@ -482,6 +482,8 @@ function wolfCore(sk, rank, count, o) {
         glowBurst(x, 0.8, z, o.rim || 0x80d0ff, 30, 4, 0.3, 0.8); ring(x, z, 2 * o.scale, o.rim || 0x80d0ff, 0.5);
       }
       Audio.sfx('summon'); Audio.sfx('wolfHowl', { vol: 0.6, pitch: o.scale > 1 ? 0.75 : 1.15 });
+      // (Act VII: the howl wakes a den at 12 m, and kicks nothing: ai.js)
+      emit('denWake', pl.x, pl.z);
     }]]
   });
   return out;

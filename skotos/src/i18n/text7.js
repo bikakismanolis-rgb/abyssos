@@ -259,6 +259,7 @@ export const TEXT7 = {
   'd.tern.v7': ['Ο ήλιος γύρισε κι εδώ. Η γιαγιά λέει πως κοίμισες ένα βουνό. Εγώ κρατάω ακόμα το σκοινί, αν θες να ξανακατέβεις.', 'The sun\'s come back here too. Grandmother says you put a mountain to sleep. I\'m still holding the rope, if you want to go down again.'],
   'd.alk.v7': ['Έμαθα πως κοιμήθηκες μια νύχτα ολόκληρη. Καιρός ήταν. Εγώ το έμαθα φέτος.', 'I hear you slept a whole night. About time. I only learnt how this year.'],
   'd.glaukos.v7': ['Λένε πως κοιμήθηκες. Εγώ κοιμάμαι τα μεσημέρια, πενήντα χρόνια. Έτσι αντέχω τις νύχτες.', 'They say you slept. I\'ve slept at noon for fifty years. That\'s how I last the nights.'],
+  'mon.looter': ['Πλιατσικολόγος', 'Looter'],
   'mon.hillWolf': ['Ορεινός Λύκος', 'Mountain Wolf'],
   'mon.goblinMarksman': ['Καλικάντζαρος Σημαδευτής', 'Goblin Marksman'],
   'mon.chough': ['Καλιακούδα', 'Chough'],

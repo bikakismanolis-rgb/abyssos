@@ -62,6 +62,9 @@ too. A `frozen` champion's orb leaves slush 4 s in an Act VII zone.
   shade with her 1 m off, awake 2.0 s after sun on Warden; scorpions under at 9 m, out at 5.5 m, out when one is struck).
 - `chough7`: **pass**, 5 beats (nothing in shade for 12 s; a stoop in sun; broken off 0.13 s after she stepped into shade;
   the Mob in sun lands after 1.1 s; the Mob called and she in shade inside its circle: nothing lands).
+  Passed three runs in a row once the test held the hero on her spot during the Mob (a stooping bird's body shoulders her
+  aside, as the shipped Skuas' do, and the Den's head-stream can wash her; both moved her out of the circle) and its spots
+  were picked 4 m clear of the brooks.
 - Regressions re-run after the changes: `slide` pass, `race` pass, `save16` pass, `combat` pass, `hook6` pass.
 
 ## Hooks needed in files I do not own

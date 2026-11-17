@@ -91,9 +91,11 @@ const setup7 = (pg) => pg.evaluate(async () => {
   // a fixed-shade cell with floor round it; a sun cell 1.5-2.5 m from a shade cell (both of fixed kinds: shade the layout's,
   // sun under the no-cloud rule)
   let sh = null, pair = null;
+  // (well clear of the brooks: a rising one washes a hero off her spot)
+  const dry = (x, z, r) => { if (!L.pocket) return true; for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) { const ix = Math.floor(x) + dx, iz = Math.floor(z) + dz; if (ix >= 0 && iz >= 0 && ix < L.w && iz < L.h && L.pocket[iz * L.w + ix]) return false; } return true; };
   for (let i = 0; i < L.shade.length && !(sh && pair); i++) { if (!L.shade[i] || !L.cells[i]) continue; const x = i % L.w + 0.5, z = Math.floor(i / L.w) + 0.5; if (!m.walkable(x, z)) continue;
     let ok = true; for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) ok = ok && m.walkable(x + dx, z + dz) && A7.shade7(x + dx * 0.5, z + dz * 0.5); if (ok && !sh) sh = { x, z };
-    if (!pair && L.noCloud?.[i]) for (const [dx, dz] of [[2, 0], [-2, 0], [0, 2], [0, -2], [1.5, 1.5], [-1.5, 1.5], [1.5, -1.5], [-1.5, -1.5]]) if (sunOK(x + dx, z + dz) && m.clear(x, z, x + dx, z + dz)) { pair = { shade: { x, z }, sun: { x: x + dx, z: z + dz } }; break; } }
+    if (!pair && L.noCloud?.[i] && dry(x, z, 4)) for (const [dx, dz] of [[2, 0], [-2, 0], [0, 2], [0, -2], [1.5, 1.5], [-1.5, 1.5], [1.5, -1.5], [-1.5, -1.5]]) if (sunOK(x + dx, z + dz) && dry(x + dx, z + dz, 4) && m.clear(x, z, x + dx, z + dz)) { pair = { shade: { x, z }, sun: { x: x + dx, z: z + dz } }; break; } }
   window.__shadeSpot = sh; window.__pair7 = pair;
   // one heavy move, measured: the kind put where its move comes (or, stun: broken in its wind-up)
   const MOVE = { hillWolf: ['longPounce', 0.9, 'longPounceTele', 'longPounceBroken', 8], goblinMarksman: ['aimedBolt', 0.9, 'aimedBoltTele', 'aimedBoltBroken', 8], chough: ['mob', 1.1, 'mobTele', 'mobBroken', 6],
@@ -129,6 +131,9 @@ const setup7 = (pg) => pg.evaluate(async () => {
 // force (every move but one on cooldown, so that one comes next)
 const setupBoss7 = (pg) => pg.evaluate(() => {
   const G = window.__G, A7 = window.__act7, m = G.zone.map;
+  // (the world spawns each boss itself as the hero nears its spot, world.js z.bossSpot: a test that spawns its own holds the
+  // world's back)
+  G.zone.bossSpawned = true;
   window.__B7 = {
     spawn(kind, spot) { const S = G.zone.L.spots[spot], p = m.nearestFloor(S.x, S.z, 4); const k = window.__sp(kind, p.x, p.z, { level: Math.max((kind === 'kallisto' ? 40 + 2 : 43 + 3), G.hero.level + 1) }); k.rot = Math.PI; return k; },
     near(k, r) { const pl = G.player; for (let o = 0; o < 6.3; o += 0.25) for (const sg of [1, -1]) { const g = Math.atan2(pl.x - k.x, pl.z - k.z) + o * sg, p = m.nearestFloor(k.x + Math.sin(g) * r, k.z + Math.cos(g) * r, 1); if (p && m.los(k.x, k.z, p.x, p.z) && Math.abs(Math.hypot(p.x - k.x, p.z - k.z) - r) < 1.2) { pl.x = p.x; pl.z = p.z; return p; } } return null; },
@@ -452,14 +457,19 @@ export const S7 = () => ({
       if (dv) { pl.x = P.shade.x; pl.z = P.shade.z; const t0 = A7.now(); await window.__wait(() => dv.fly !== 'dive', 8000); out.breakOff = { s: +(A7.now() - t0).toFixed(2), fly: dv.fly, broken: n('diveBroken') - b1, hit: dv.atkHit }; }
       // the Mob in sun: it lands
       window.__clear(); pl.x = P.sun.x; pl.z = P.sun.z; pl.sun7 = 0; const mt = n('mobTele'), mh = n('mobHit'), h1 = window.__H7.length; flock(P.sun, 'ch3');
-      await window.__wait(() => n('mobTele') > mt, 40000); const tSun = A7.now(); await window.__wait(() => n('mobHit') + n('mobMiss') + n('mobShade') + n('mobBroken') > mh + (out.mob0 = 0), 8000);
+      // (held on her spot: a stooping bird's body shoulders her aside, as the Skuas' do)
+      const pin0 = setInterval(() => { pl.x = P.sun.x; pl.z = P.sun.z; pl.kx = pl.kz = 0; }, 5);
+      const ends = () => n('mobHit') + n('mobMiss') + n('mobShade') + n('mobBroken'), e0 = ends();
+      await window.__wait(() => n('mobTele') > mt, 40000); await window.__wait(() => ends() > e0, 8000); clearInterval(pin0);
       out.mobSun = { tele: n('mobTele') - mt, hit: n('mobHit') - mh, heavy: window.__H7.slice(h1).filter((h) => h.move === 'mob').length, sun7: +(pl.sun7 || 0).toFixed(1), log: A7.HEAVY7.filter((h) => h.kind === 'chough').slice(-1)[0] };
       // the Mob called in sun, she steps into the shade inside its circle before it lands: nothing lands
       window.__clear(); pl.x = P.sun.x; pl.z = P.sun.z; pl.sun7 = 0; const mt2 = n('mobTele'), ms2 = n('mobShade'), h2 = window.__H7.length; flock(P.sun, 'ch4');
+      // (she is held on her spot: the Den's head-stream can wash her off it on the brooks' clock)
+      let at = P.sun; const pin = setInterval(() => { pl.x = at.x; pl.z = at.z; pl.kx = pl.kz = 0; }, 5);
       const called = await window.__wait(() => n('mobTele') > mt2, 40000);
-      if (called) { pl.x = P.shade.x; pl.z = P.shade.z; }
-      await window.__gwait(2);
-      out.mobShade = { called: !!called, shade: n('mobShade') - ms2, heavy: window.__H7.slice(h2).filter((h) => h.move === 'mob').length, d: +Math.hypot(P.sun.x - P.shade.x, P.sun.z - P.shade.z).toFixed(2) };
+      if (called) { const b = G.zone.actors.find((q) => q.mob); window.__lastMob = b && { x: +b.mob.x.toFixed(2), z: +b.mob.z.toFixed(2), t: +b.mob.t.toFixed(2) }; at = P.shade; }
+      await window.__gwait(2); clearInterval(pin);
+      out.mobShade = { called: !!called, shade: n('mobShade') - ms2, heavy: window.__H7.slice(h2).filter((h) => h.move === 'mob').length, d: +Math.hypot(P.sun.x - P.shade.x, P.sun.z - P.shade.z).toFixed(2), miss: n('mobMiss'), broken: n('mobBroken'), at: { x: +pl.x.toFixed(2), z: +pl.z.toFixed(2) }, shade7: A7.shade7(pl.x, pl.z), M: window.__lastMob };
       window.__clear(); return out; });
     if (r.err) { beat(r.err, false); return out(beats); }
     beat('a hero in shade: no stoop, no Mob, no heavy blow in 12 game-seconds', r.shade.inShade && r.shade.dives === 0 && r.shade.mobs === 0 && r.shade.heavy === 0, r.shade);
@@ -528,25 +538,25 @@ export const S7 = () => ({
       const c0 = G.zone.L.spots.arena, bo = G.zone.L.spots.boulders.filter((b) => b.den).map((b) => { const l = Math.hypot(c0.x - b.x, c0.z - b.z), u = { x: (c0.x - b.x) / l, z: (c0.z - b.z) / l }; const h = { x: b.x + u.x * 2.6, z: b.z + u.z * 2.6 }, s = { x: b.x + u.x * 12, z: b.z + u.z * 12 }; return { b, h, s, ok: m.walkable(h.x, h.z) && m.walkable(s.x, s.z) && m.clear(s.x, s.z, b.x + u.x * 1.6, b.z + u.z * 1.6) }; }).find((q) => q.ok);
       if (!bo) return { err: 'no boulder with an open run' };
       k.x = bo.s.x; k.z = bo.s.z; pl.x = bo.h.x; pl.z = bo.h.z; const s0 = LOG['kallisto:chargeStone'] || 0;
-      let d0 = 0; const iv0 = setInterval(() => { if (k.dazed > d0) d0 = k.dazed; }, 2);
-      await B.force(k, 'charge'); await window.__wait(() => k.dazed > 0, 15000); const t0 = A7.now(); await window.__wait(() => !(k.dazed > 0), 15000); clearInterval(iv0);
+      k.dazeLast = 0; await B.force(k, 'charge'); await window.__wait(() => k.dazed > 0, 15000); const t0 = A7.now(), d0 = k.dazeLast; await window.__wait(() => !(k.dazed > 0), 15000);
       out.charge = { stone: (LOG['kallisto:chargeStone'] || 0) - s0, dazedAt: +d0.toFixed(2), lasted: +(A7.now() - t0).toFixed(2), toBoulder: +Math.hypot(k.x - bo.b.x, k.z - bo.b.z).toFixed(2) };
       // the slide: a Den chute run with her standing in its lane, her test-hero 3 m to the side
       const fl = window.__Fg.flues().filter((f) => f.kind === 'snow' && f.st === 'idle' && (f.area === 'den'));
-      let lane = null; for (const f of fl) { const ux = Math.sin(f.dir), uz = Math.cos(f.dir); for (const u of [0.55, 0.65, 0.45, 0.75]) { const x = f.x + ux * f.len * u, z = f.z + uz * f.len * u; if (m.walkable(x, z) && window.__Fg.inFlue(f, x, z, 0) && m.walkable(x - uz * 3, z + ux * 3)) { lane = { f, x, z, hx: x - uz * 3, hz: z + ux * 3 }; break; } } if (lane) break; }
+      let lane = null; for (const f of fl) { const ux = Math.sin(f.dir), uz = Math.cos(f.dir); for (let u = 0.3; u <= 0.9 && !lane; u += 0.05) for (const sd of [1, -1]) { const x = f.x + ux * f.len * u, z = f.z + uz * f.len * u, hx = x - uz * 3 * sd, hz = z + ux * 3 * sd; if (m.walkable(x, z) && window.__Fg.inFlue(f, x, z, 0) && m.walkable(hx, hz) && !window.__Fg.inFlue(f, hx, hz, 0.3)) { lane = { f, x, z, hx, hz }; break; } } if (lane) break; }
+      out.lanes = fl.length;
       if (!lane) return { ...out, err: 'no den lane' };
       k.move = null; k.dash = null; k.dazed = 0; k.state = 'chase'; k.x = lane.x; k.z = lane.z; pl.x = lane.hx; pl.z = lane.hz; k.cd = 99;
       const hp0 = k.hp, dz0 = LOG['kallisto:dazed'] || 0; let maxD = 0; const iv = setInterval(() => { if (k.dazed > maxD) maxD = k.dazed; }, 5);
       window.__Fg.fireFlue(lane.f.i, k); await window.__wait(() => lane.f.st === 'idle', 15000); await window.__gwait(0.2); clearInterval(iv);
-      out.slide = { took: +((hp0 - k.hp) / k.hpMax * 100).toFixed(2), dazed: (LOG['kallisto:dazed'] || 0) - dz0, buried: +maxD.toFixed(2), inLane: window.__Fg.inFlue(lane.f, k.x, k.z, 0) };
-      // (the same lane kicked by the hero: forge.js passes her as the blow's source, so her elite-damage bonus grows it)
+      out.slide = { lanes: fl.length, took: +((hp0 - k.hp) / k.hpMax * 100).toFixed(2), dazed: (LOG['kallisto:dazed'] || 0) - dz0, buried: +maxD.toFixed(2), inLane: window.__Fg.inFlue(lane.f, k.x, k.z, 0) };
+      // (the same lane kicked by the hero: a boss's share is exact, forge.js bury)
       await window.__wait(() => !(k.dazed > 0), 8000); k.x = lane.x; k.z = lane.z; k.cd = 99; lane.f.armed = true; const hp1 = k.hp; window.__Fg.fireFlue(lane.f.i, pl); await window.__wait(() => lane.f.st === 'idle', 15000); await window.__gwait(0.2);
       out.slideHero = { took: +((hp1 - k.hp) / k.hpMax * 100).toFixed(2), eliteDmg: G.stats.eliteDmg };
       window.__clear(); return out; });
     if (c.err) beat(c.err, false);
     beat('a charge ended on a boulder Dazes her 3.5 s', c.charge && c.charge.stone >= 1 && Math.abs(c.charge.dazedAt - 3.5) < 0.1 && Math.abs(c.charge.lasted - 3.5) < 0.25, c.charge);
     beat('a slide on her (as her Roar calls it) takes 5% of her life and Buries her 3 s', c.slide && Math.abs(c.slide.took - 5) < 0.3 && c.slide.dazed >= 1 && Math.abs(c.slide.buried - 3) < 0.1, c.slide);
-    beat('(known, forge.js) a slide the hero kicked: 5% x her elite-damage bonus', c.slideHero && Math.abs(c.slideHero.took - 5 * (1 + (c.slideHero.eliteDmg || 0) / 100)) < 0.4, c.slideHero);
+    beat('a slide the hero kicked takes the same exact 5% (no elite-damage bonus on a boss\'s share)', c.slideHero && Math.abs(c.slideHero.took - 5) < 0.3, c.slideHero);
     // struck through two thresholds at once: both entries, in order, while she is struck; then the rest
     const e = await pg.evaluate(async () => { const G = window.__G, A7 = window.__act7, LOG = A7.AI_LOG, pl = G.player, B = window.__B7, out = {}, B2 = await import('/src/ui/bus.js');
       const k = B.spawn('kallisto', 'arena'); B.near(k, 8); await window.__wait(() => k.awake, 20000);
@@ -648,6 +658,21 @@ export const S7 = () => ({
       return { s: +(A7.now() - t0).toFixed(1), dead: k.dead, got: got.map((v) => v > 0), entries: A7.HEAVY7.slice(k0, k1).filter((h) => h.kind === 'kelados').map((h) => h.move), both: A7.HEAVY7.slice(k1).filter((h) => h.kind === 'kelados' && (h.move === 'loosed' || h.move === 'awake')).map((h) => h.move), ph2: k2.phase }; });
     beat('no time lock: rested in under 20 game-seconds of huge blows, both entries played, every blow landed', tl.dead && tl.s < 20 && tl.got.every(Boolean) && tl.entries.includes('loosed') && tl.entries.includes('awake'), tl);
     beat('struck through both thresholds at once: both entries in order', tl.ph2 === 2 && tl.both[0] === 'loosed' && tl.both[1] === 'awake', tl.both);
+    return out(beats);
+  } },
+  // the world spawns each boss itself as the hero nears its spot, and never again once it rests
+  bossSpot7: { stage: 'C', until: 'E', q: Q(fx7('weir3', 'thaw'), '&nopacks&nostory'), run: async (pg) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    await until(pg, () => window.__G.zone?.tide);
+    await pg.evaluate(() => { window.__immortal = true; });
+    await goTo(pg, 'arena', 6);
+    const k = await until(pg, () => window.__G.zone.boss?.kind === 'kallisto', 20000);
+    const r = await pg.evaluate(() => { const z = window.__G.zone; return { kind: z.boss?.kind, n: z.actors.filter((a) => a.boss && !a.dead).length, first: z.boss?.level }; });
+    beat('the Den: Kallisto rises as the hero comes near, one of her', k && r.n === 1, r);
+    const t = await pg.evaluate(async () => { const W = await import('/src/game/world.js'), G = window.__G; G.hero.flags.kallistoRest = true; G.hero.flags.tarnSeen = true; G.hero.flags.winch1 = G.hero.flags.winch2 = G.hero.flags.winch3 = G.hero.flags.keladosWake = true; await W.zoneReady('tarn'); window.__D.enterZone('tarn'); return { spot: G.zone.bossSpot?.kind }; });
+    beat('the Dam: Kelados\'s place is set from the flags', t.spot === 'kelados', t);
+    const b = await pg.evaluate(async () => { const W = await import('/src/game/world.js'), G = window.__G; await W.zoneReady('thaw'); window.__D.enterZone('thaw', { fresh: true }); return { spot: G.zone.bossSpot?.kind || null }; });
+    beat('the Den once she rests: no boss place', b.spot === null, b);
     return out(beats);
   } },
   // a Shadow Gate's layout is the shipped generator's for the same seed (no older layout changes with the act)

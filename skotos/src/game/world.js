@@ -27,7 +27,7 @@ import { Actor, spawnMonster, spawnNpc, createPlayer, rollAffixes, monsterLevel,
 import { PACKS, DIFFS, MONSTERS, PACK_LEAD, packKinds, HAZ5, monsterDmg, COOP } from './data.js';
 import { NET, heroes } from '../net/state.js';
 import { startDrips, stopDrips } from './sap.js';
-import { addLightPool, removeLightPool, cradlePoint, addBeam, removeBeam, getLightPool, getBeam, snuffLamp, fireEnter, namesTick } from './light.js';
+import { addLightPool, removeLightPool, cradlePoint, addBeam, removeBeam, getLightPool, getBeam, snuffLamp, fireEnter, namesTick, lampBonus } from './light.js';
 import { sunEnter, sunTick } from './sun7.js';
 import { resetTide, floodWave } from './tide.js';
 import { resetIce, freezeCells, crackCone } from './ice.js';
@@ -437,7 +437,7 @@ export function spawnBoss(z) {
   if (!z?.bossSpot || z.bossSpawned) return z?.boss || null;
   z.bossSpawned = true;
   const pl = G.player, F = G.hero.flags;
-  const first = z.bossSpot.kind === 'weaver' || z.bossSpot.kind === 'stonewarden' || z.bossSpot.kind === 'silverhorn' || z.bossSpot.kind === 'ivar' || z.bossSpot.kind === 'tower' || z.bossSpot.kind === 'ketos';
+  const first = z.bossSpot.kind === 'kallisto' || z.bossSpot.kind === 'weaver' || z.bossSpot.kind === 'stonewarden' || z.bossSpot.kind === 'silverhorn' || z.bossSpot.kind === 'ivar' || z.bossSpot.kind === 'tower' || z.bossSpot.kind === 'ketos';
   const b = spawnMonster(z.bossSpot.kind, z.bossSpot.x, z.bossSpot.z, { level: Math.max(z.level + (first ? 2 : 3), G.hero.level + 1) });
   b.rot = Math.PI * 0.0 + angleTo(b.x, b.z, pl.x, pl.z);
   // Karthax waits under the slag until the story has brought the shards to him (story.js 'karthaxArrive')
@@ -461,10 +461,12 @@ function spawnPack(z, p, D) {
   // co-op: bigger packs and more champions for a party (data.js COOP)
   const ci = NET.mode === 'host' ? Math.min(4, NET.n) - 1 : 0;
   let n = Math.round(p.n * (0.85 + D.elite * 0.15) * COOP.pack[ci]);
+  // (a flock of choughs is never more than seven: Act VII, the Mob)
+  if (tag === 'choughs') n = Math.min(n, 7);
   let elite = p.elite;
   if (!elite && Math.random() < 0.06 * D.elite * COOP.elite[ci]) elite = 'champion';
   // (an Act VI pack whose tag combat's PACKS does not hold yet: the Sunken stand in, never Act I's goblins)
-  const weights = PACKS[tag] || (ZONES[z.id]?.act === 6 ? PACKS.sunkenCrew : PACKS.goblins);   // (Act VII's default is the goblins': its looters)
+  const weights = PACKS[tag] || (ZONES[z.id]?.act === 6 ? PACKS.sunkenCrew : ZONES[z.id]?.act === 7 ? PACKS.hillWolves : PACKS.goblins);
   const pick = () => rand.weighted(weights);
   // Act III packs are built round a lead creature (the den's bear, the grove's Rootwarden, the Mourners): it comes first
   const lead = PACK_LEAD[tag];
@@ -476,7 +478,7 @@ function spawnPack(z, p, D) {
   const nAff = G.hero.diff >= 3 ? 3 : G.hero.diff >= 2 ? 2 : 1;
   if (elite === 'champion') {
     let kind = pick() === 'spiderling' ? 'spider' : pick();
-    if (MONSTERS[kind].big) kind = z.id === 'pass' || z.id === 'halls' ? 'stoneborn' : z.id === 'weep' || z.id === 'heart' ? 'rootsworn' : z.id === 'ashfield' || z.id === 'forge' ? 'ashSpear' : z.id === 'coast' || z.id === 'farlight' || ZONES[z.id]?.act === 6 ? 'sunken' : 'ash';
+    if (MONSTERS[kind].big) kind = z.id === 'pass' || z.id === 'halls' ? 'stoneborn' : z.id === 'weep' || z.id === 'heart' ? 'rootsworn' : z.id === 'ashfield' || z.id === 'forge' ? 'ashSpear' : z.id === 'coast' || z.id === 'farlight' || ZONES[z.id]?.act === 6 ? 'sunken' : ZONES[z.id]?.act === 7 ? 'hillWolf' : 'ash';
     const aff = rollAffixes(nAff + 1);
     const cnt = aff.includes('horde') ? 5 : 3;
     for (let i = 0; i < cnt; i++) { const s = place(); z.actors.push(spawnMonster(kind, s.x, s.z, Object.assign({ elite: 'champion', affixes: aff }, opts))); }
@@ -2166,8 +2168,10 @@ function act7Zone(z) {
   // Halda at the camp (the boot smith), once she has gone up ahead of the hero
   const N = S.npcs?.halda;
   if (N) { const a = spawnNpc('smith', N.x, N.z, N.rot || 0); a.home = N.rot || 0; z.actors.push(a); A.halda = a; z.interact.push({ kind: 'npc', npc: 'smith', actor: a, x: N.x, z: N.z, r: 2.4, prompt: 'talk', use: () => emit('talk', 'smith', a) }); }
-  // the two who are not killed (ai.js, stage C): the Den's and the Dam's spots, until each rests
-  // z.bossSpot = { kind: 'kallisto' | 'kelados', ... } comes with their fights
+  // the two who are not killed (ai.js KALLISTO, KELADOS): the Den's bowl and the Dam's seat, until each rests
+  const F7 = G.hero.flags;
+  if (z.id === 'thaw' && S.arena && !F7.kallistoRest) z.bossSpot = { kind: 'kallisto', ...(z.map.nearestFloor(S.arena.x, S.arena.z, 4) || S.arena) };
+  if (z.id === 'tarn' && S.seat && !F7.keladosRest) z.bossSpot = { kind: 'kelados', ...(z.map.nearestFloor(S.seat.x, S.seat.z, 4) || S.seat) };
 }
 // on every entry: the day's sky (ZONES' atmos row, set by enterZone), the snow that is left, the water at its level from
 // the flags, the clock at low water; then what the flags have turned
@@ -2320,8 +2324,20 @@ on('winch7', (it) => { it.mesh?.userData.setIce?.(0); it.mesh?.userData.setTurn?
 on('chuteSpent', (f) => { const c = G.zone?.lvl?.act7?.cornices?.find((q) => q.k === f.i); c?.mesh?.userData.setArmed?.(false); c?.tongue?.userData.setK?.(1); });
 on('chuteArmed', (f) => { const c = G.zone?.lvl?.act7?.cornices?.find((q) => q.k === f.i); c?.mesh?.userData.setArmed?.(true); c?.tongue?.userData.setK?.(0); });
 on('fireRank', (n, rank, before, it) => { it?.mesh?.userData.setRank?.(rank); });
+// an Icebound asleep in its ice: the Cradle held to the block for 1.5 s (less with Lamplight) wakes it (ai.js 'iceMelt').
+// The touch follows the sleepers as they are, checked twice a second
+function iceTouch7(z, dt) {
+  if ((z.iceT = (z.iceT || 0) - dt) > 0) return; z.iceT = 0.5;
+  const want = G.actors.filter((a) => a.icebound && a.dormant && !a.dead);
+  for (let i = z.interact.length - 1; i >= 0; i--) { const it = z.interact[i]; if (it.kind === 'iceMelt7' && !want.includes(it.a)) z.interact.splice(i, 1); }
+  for (const a of want) if (!z.interact.some((it) => it.kind === 'iceMelt7' && it.a === a)) {
+    const it = { kind: 'iceMelt7', a, x: a.x, z: a.z, r: 2.6, prompt: 'ice.melt', use: () => touch(1.5 / (1 + lampBonus() / 100), it, 1.0, () => { it.used = true; emit('iceMelt', it); }) };
+    z.interact.push(it);
+  }
+}
 // per frame in an Act VII zone (the clouds, the chutes, the holds: systems', as they land)
 function act7Tick(z, dt) {
+  iceTouch7(z, dt);
   sunTick(z, dt);   // Sun and Shade: the clouds sail (sun7.js)
   firesTick(z, dt);}
 export { WIND };
