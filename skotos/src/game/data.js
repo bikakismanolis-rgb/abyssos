@@ -57,8 +57,8 @@ export const HAZ6 = [
   H6({ tide: 100, wash: 12, coal: 1.45, refill: 1.2, icicle: 1.2, lampT: 2.4, bait: 0.6, namesEvery: 120, namesBase: 4, cold: 1.45, frost: 8, bossCd: 0.8, adds: 2 })
 ];
 // the save format this build reads and writes (save.js heroFits refuses a hero of a higher one as 'newer'; every hero this
-// build makes or takes up is stamped with it, boot.js startHero): 1 for Acts I-V (a hero without `fmt` is 1), 2 once Act
-// VI's fields ship. (No public build may write 2 before a public build refuses it: the bump waits for one that carries
+// build makes or takes up is stamped with it, boot.js startHero): 1 for Acts I-VI (a hero without `fmt` is 1; Act VI shipped at 1), 2 with Act
+// VII's fields. (No public build may write 2 before a public build refuses it: the bump waits for one that carries
 // this check, docs/act6-contract.md, Saves. Here, not in save.js: data.js imports nothing, so state.js reads it too)
 export const SAVE_FMT = 1;
 

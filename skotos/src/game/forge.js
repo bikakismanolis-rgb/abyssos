@@ -60,7 +60,8 @@ export function inFlue(f, x, z, pad = 0) {
 export function tickFlues(dt) {
   tickDrips(dt);
   if (!F.list || G.zone !== F.zone) { if (F.list && G.zone !== F.zone) stopFlues(); return; }
-  const pl = G.player; if (!pl || G.hero.flags.crownUnmade) return;
+  // (the Forge's own flues die with the Crown; a later act's flues, in any other zone, do not: every hero there has unmade it)
+  const pl = G.player; if (!pl || (G.zone.id === 'forge' && G.hero.flags.crownUnmade)) return;
   for (const f of F.list) {
     if (Math.hypot(f.x - pl.x, f.z - pl.z) > BREATH.reach + f.len * 0.5 && f.st === 'idle') continue;
     f.t -= dt;

@@ -96,7 +96,7 @@ export function farFire(p, color = 0xffa040, o = {}) {
 // Whitecliff from the hook on (Alkyone, then the child) and in the Field while Alkyone waits at the Anvil Gate; and on the
 // Farthest Light, from the seals to the lit sea, Brokka (folk) and Elati (grove) who bring their fires to the keepers
 // Act VI's silt with the rime (most of its props and two of its layers) and the Saltborn again (frost); its creatures the
-// group act6 (a group the build does not list yet loads nothing: its stand-ins, crew below)
+// group act6 (gfx/creatures.js ACT_FILES; before the group lands a cold session draws its stand-ins, crew below)
 const READY = { deep: { folk: ['folk'], creatures: 'act2' }, wood: { folk: ['grove'], creatures: 'act3' }, cinder: { folk: ['ash', 'folk', 'grove'], creatures: 'act4' }, rime: { folk: ['frost'], creatures: 'act5' }, silt: { folk: ['frost'], creatures: 'act6' } };
 const zonePacks = (id) => { const p = ZONES[id]?.pack; return p ? (id === 'forge' ? [p, 'deep'] : ZONES[id].act === 6 ? ['rime', p] : [p]) : []; };
 function zoneFolk(id) {
