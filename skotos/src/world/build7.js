@@ -823,6 +823,8 @@ export function act7Prop(kind, o = {}) {
 // the sizes of the layout's own props that take one (o.r): a cover boulder on its 2 x 2 cells, a rock 1.8 m high (the
 // contract's cover); the sheepfold's ring round its 4 x 4 blocked cells
 const SIZE7 = { boulder: 0.95, fold: 1.9 };
+// the layout's props whose kind is drawn from a named spot of its own (S.huts, S.slabs): drawn there once, never again from L.props
+const NAMED7 = new Set(['hut', 'fold', 'slab']);
 // Builds the props of a gen7 layout once, each at its spot (docs/act7-contract.md, L.spots) in the first state of the
 // reading L.mode, adds them to lvl.group (lvl: buildLevel's `out`; a THREE.Group is taken as the group itself) and returns
 // the handles, which world.js keeps as lvl.act7 and lays its interacts and its flags' states on (act7Presence), never
@@ -908,7 +910,9 @@ export function act7Level(L, lvl, o = {}) {
   // the shepherds' huts and the fold: only on a dry cell (a spot the layout has left in water is skipped and named)
   list(S.huts).forEach((p, k) => {
     if (wet(p.x, p.z)) { A.skipped.push('hut' + k + '.wet'); return; }
-    A.huts.push({ x: p.x, z: p.z, fold: !!p.fold, mesh: put(p.fold ? 'fold' : 'hut', p.fold ? { r: p.r } : {}, p.x, p.z, p.rot ?? hash2(p.x, p.z) * 6.28) });
+    // (gen7 names the kind, p.kind 'fold' | 'hut', and puts the door on +z: each is turned 0, its door where the layout has it)
+    const fold = p.fold || p.kind === 'fold';
+    A.huts.push({ x: p.x, z: p.z, fold, mesh: put(fold ? 'fold' : 'hut', fold ? { r: SIZE7.fold } : {}, p.x, p.z, p.rot ?? 0) });
   });
   if (thaw && ok(S.camp)) { const c = S.camp, a = hash2(c.x, c.z) * 6.28; A.anvil = put('fieldAnvil', {}, c.x + Math.sin(a) * 2.4, c.z + Math.cos(a) * 2.4, a + 2.2); }
   // ---- tarn ----
@@ -945,7 +949,8 @@ export function act7Level(L, lvl, o = {}) {
   // ---- the layout's own props whose kind is one of this file's (cover rocks and ice, boulders, fallen pines, ...) ----
   // (a layout prop's r is its turn, not a size: each kind gets its own size here, SIZE7, or its default. Passed as the
   // size, the cover boulders stood up to 12 m wide over the Chutes and the sheepfold had no stones at all: perf7)
-  for (const p of L?.props || []) { if (!ok(p) || !PROP7[p.t]) continue; const m = put(p.t, { ...p, r: SIZE7[p.t] }, p.x, p.z, p.r || 0); if (p.s && p.s !== 1) m.scale.multiplyScalar(p.s); (A.props[p.t] ||= []).push(m); }
+  // (the kinds drawn above from their named spots, S.huts and S.slabs, are not drawn a second time here: NAMED7)
+  for (const p of L?.props || []) { if (!ok(p) || !PROP7[p.t] || NAMED7.has(p.t)) continue; const m = put(p.t, { ...p, r: SIZE7[p.t] }, p.x, p.z, p.r || 0); if (p.s && p.s !== 1) m.scale.multiplyScalar(p.s); (A.props[p.t] ||= []).push(m); }
   // ---- the after readings' flowers: on dry walkable ground that is never snow, off the trodden path ----
   if (after && o.flowers !== false && R.quality >= 1 && L?.cells) {
     const at = [], want = thaw ? 900 : 420, rr = RNG((L.seed || 1) * 31 + 7);

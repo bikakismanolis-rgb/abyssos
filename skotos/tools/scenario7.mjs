@@ -461,7 +461,9 @@ export const S7 = () => ({
     await until(pg, () => window.__G.zone?.tide && window.__act7);
     await setup7(pg);
     const bear = await pg.evaluate(async () => { const G = window.__G, p = window.__den, m = G.zone.map, out = {};
-      const spawnAt = (r) => { for (const q of window.__dirs7(p, r)) return window.__sp('denBear', q.x, q.z, { dormant: true }); return null; };
+      // (never on a brook's bed: the water rising on its clock wakes a sleeper there, as it should; sleepers7b tests that)
+      const L0 = G.zone.L, bed = (q) => { let n = 0; for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) n += L0.pocket?.[(Math.floor(q.z) + dz) * L0.w + Math.floor(q.x) + dx] ? 1 : 0; return n > 0; };
+      const spawnAt = (r) => { for (const q of window.__dirs7(p, r)) { if (bed(q)) continue; return window.__sp('denBear', q.x, q.z, { dormant: true }); } return null; };
       window.__clear(); G.player.x = p.x; G.player.z = p.z;
       let b = spawnAt(6); out.slept = !!b?.dormant; await window.__gwait(6); out.walk = { dormant: b.dormant, d: +Math.hypot(b.x - p.x, b.z - p.z).toFixed(2) };
       window.__D.kill ? window.__act7.damage(G.player, b, 1, { crit: false }) : 0; await window.__gwait(0.5); out.blow = { dormant: b.dormant, aggro: b.aggro };
