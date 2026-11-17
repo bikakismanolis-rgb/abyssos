@@ -1,8 +1,10 @@
 // Act VII's text, from the design's key tables to src/i18n/text7.js (run again whenever a table changes; the two
 // proofreaders edit the tables, never the generated file). node tools/text7-import.mjs
 import { readFileSync, writeFileSync } from 'node:fs';
-// (the story part is read last: where both give a key, the story's wording stands)
-const parts = [['docs/act7-design/50-text-extra.md', '## Extra text keys'], ['docs/act7-design/60-text-names.md', '## Names text keys'], ['docs/act7-design/30-mechanics-progression.md', '## New text keys'], ['docs/act7-design/10-story.md', '## Every new text key']];
+// (the story part is read after the mechanics': where both give a key, the story's wording stands)
+const parts = [['docs/act7-design/60-text-names.md', '## Names text keys'], ['docs/act7-design/30-mechanics-progression.md', '## New text keys'], ['docs/act7-design/10-story.md', '## Every new text key'],
+  // (the lead's table is read last: a key reworded there after a ruling stands over the parts' drafts)
+  ['docs/act7-design/50-text-extra.md', '## Extra text keys']];
 const out = new Map(), dup = [];
 const strip = (s) => { s = s.trim(); if (/^«.*»$/.test(s) && !s.slice(1, -1).includes('«')) s = s.slice(1, -1); if (/^".*"$/.test(s) && !s.slice(1, -1).includes('"')) s = s.slice(1, -1); return s.replace(/\\\|/g, '|').replace(/<br\s*\/?>/g, '\n'); };
 for (const [f, head] of parts) {

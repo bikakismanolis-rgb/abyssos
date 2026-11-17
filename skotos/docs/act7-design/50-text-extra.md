@@ -23,3 +23,5 @@ The text import (`tools/text7-import.mjs`) reads this file too. The two proofrea
 | key | Greek | English |
 |---|---|---|
 | `lever.pull` | Τράβα τον μοχλό | Pull the lever |
+| `q.slide` | Χιονοστιβάδα! | Slide! |
+| `hud.swept` | Το πήρε το χιόνι | Taken by the snow |

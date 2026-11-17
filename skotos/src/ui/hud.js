@@ -164,7 +164,7 @@ export function updateHud(dt) {
   // buffs
   const bf = [];
   // (Act V: Warmed, a beam's warmth, is a flame)
-  for (const k in pl.buffs) if (pl.buffs[k] > 0 && k !== 'evergreen') bf.push(`<div class="bf${k === 'memory' ? ' mem' : k === 'seen' ? ' seen' : k === 'warmed' ? ' warm' : ''}"${k === 'seen' || k === 'warmed' ? ` title="${t('hud.' + k)}"` : ''}>${k === 'memory' ? TEAR : k === 'seen' ? EYE : ICON[{ cry: 'horn', shrineFury: 'flame', shrineSpeed: 'roll', shrineFortune: 'coin', shrineShield: 'shield', warmed: 'flame', challenge: 'horn', bulwark: 'bulwark', alpha: 'wolf' }[k] || 'star']}<b>${Math.ceil(pl.buffs[k])}</b></div>`);
+  for (const k in pl.buffs) if (pl.buffs[k] > 0 && k !== 'evergreen') bf.push(`<div class="bf${k === 'memory' ? ' mem' : k === 'seen' ? ' seen' : k === 'warmed' ? ' warm' : ''}"${k === 'seen' || k === 'warmed' ? ` title="${t('hud.' + k)}"` : ''}>${k === 'memory' ? TEAR : k === 'seen' ? EYE : ICON[{ cry: 'horn', shrineFury: 'flame', shrineSpeed: 'roll', shrineFortune: 'coin', shrineShield: 'shield', warmed: 'flame', challenge: 'horn', bulwark: 'bulwark', alpha: 'wolf', call: 'horn' }[k] || 'star']}<b>${Math.ceil(pl.buffs[k])}</b></div>`);
   const bh = bf.join('');
   if (bh !== S.bh) { $('buffs').innerHTML = bh; S.bh = bh; }
   // amber sap: the build-up toward an amber-lock, then the lock itself (a dodge breaks it)
@@ -210,7 +210,8 @@ export function updateHud(dt) {
   const gb = $('gatebar');
   if (G.gate && G.zone?.id === 'gate' && !G.bossActor) { gb.hidden = false; gb.querySelector('.nm').textContent = (G.hero.act6 ?? -1) >= 0 ? t('gate.depth', G.gate.tier, 8 + 6 * G.gate.tier) : t('gate.progress') + ' · ' + t('gate.tier', G.gate.tier); gb.querySelector('.fill').style.transform = `scaleX(${Math.min(1, G.gate.progress)})`; } else gb.hidden = true;
   // quest
-  const q = h.quest >= 5 && G.zone?.id === 'gate' ? '' : `<b>${t('q.title')}</b>${questText()}`;
+  // (a lookout's hold counts down on the quest line: Act VII, game/fires7.js)
+  const q = h.quest >= 5 && G.zone?.id === 'gate' ? '' : G.zone?.hold && S.holdN != null ? `<b>${t('fires.h')}</b>${t('look.hold', S.holdN)}` : `<b>${t('q.title')}</b>${questText()}`;
   if (q !== S.q) { $('quest').innerHTML = q; S.q = q; }
   for (const a of G.actors) if (a.npc) a.quest = npcHasNews(a.npc, a);
   goalArrow(pl);
@@ -471,7 +472,12 @@ on('masteryUp', (m) => {
   lu.onanimationend = () => lu.classList.remove('on', 'mast');
 });
 on('hurt', (f) => { S.hurt = Math.min(0.7, (S.hurt || 0) + f * 3); });
-on('flueWarn', (k) => { S.flue = Math.max(S.flue, 0.25 + 0.55 * k); });
+on('flueWarn', (k) => { S.flue = Math.max(S.flue, 0.25 + 0.55 * k); if (G.zone?.act7 && !S.slideT) { S.slideT = 1; emit('toast', t('q.slide'), 'quest'); setTimeout(() => { S.slideT = 0; }, 4000); } });
+// Act VII: the first-time hints its systems ask for by the bus (the Race, the Slide, Sun and Shade); the vignette of a
+// warned lane is white by day (style.css body.day #flue)
+on('hint7', (k) => hint(k));
+on('holdTick', (n) => { S.holdN = n; });
+on('holdHeld', () => { S.holdN = null; }); on('holdLost', () => { S.holdN = null; });
 on('bossIntro', (a) => {
   G.bossActor = a;
   const bb = $('bossbar');

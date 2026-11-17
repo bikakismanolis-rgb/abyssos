@@ -673,3 +673,8 @@ body:not(.desk) .sk .key { display: none; }
 .cl-bk { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(214, 178, 94, .12); }
 .cl-bk .muted { grid-column: 1; font-size: 12px; }
 .cl-bk .btn { grid-column: 2; grid-row: 1 / span 2; }
+
+/* Act VII: daylight (gfx.js toggles body.day in a zone under the sun). Names, numbers and bars keep a dark edge on bright
+   ground; a warned lane's vignette is white (snow) */
+body.day .dmg, body.day .num, body.day .nm, body.day #quest, body.day .zone-title, body.day .prompt { text-shadow: 0 1px 2px rgba(0, 0, 0, .85), 0 0 3px rgba(0, 0, 0, .6); }
+body.day #flue { background: radial-gradient(ellipse at center, transparent 50%, rgba(255, 255, 255, .28) 82%, rgba(235, 244, 255, .6) 100%); }
