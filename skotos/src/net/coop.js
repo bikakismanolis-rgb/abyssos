@@ -39,7 +39,14 @@ import { t, has } from '../i18n/i18n.js';
 import { clamp, rand } from '../core/util.js';
 import { FIRE, fireOn, fireDrain, ringOf, setRemoteLight, lightPools, lightAt, lightKind, NAMES, namesFromHost } from '../game/light.js';
 import { cells6, cells6Apply, slushAt } from '../game/tide.js';
-import { vaultAt, vaultLine, vaultRing } from '../game/forge.js';
+import { vaultAt, vaultLine, vaultRing, flues, fireFlue, loud } from '../game/forge.js';
+// Act VII (docs/act7-contract.md, Co-op, protocol 6)
+import { act7Presence, thawK } from '../game/world.js';
+import { setThaw } from '../world/build.js';
+import { setSunT } from '../game/sun7.js';
+import { firesSync } from '../game/fires7.js';
+import { N7nm, N7blowCap } from '../game/names7.js';
+import { actHaz } from '../game/data.js';
 
 // (the game's version: pages of another do not list or join each other's games. 4: the Supabase wire of the economy
 // (docs/coop/diet.md), which a page of 3 cannot read nor be read by)
@@ -505,7 +512,7 @@ const EVB = new WeakMap();
 function guestPresence(force) {
   if (!S.ch || !G.hero || (!force && !S.ch.presenceDue())) return;
   const h = S.real || G.hero, pl = G.player, s = G.stats;
-  const p = { h: null, c2: null, nd: null, ev: null, r: 'g', c: S.code, v: VER, hb: Math.floor(now() / 1000) & 1023, lk: { c: h.cls, l: h.level, ml: h.mlvl || 0, w: h.equip.weapon ? [h.equip.weapon.base, h.equip.weapon.rar | 0, h.equip.weapon.leg || 0] : 0, o: h.equip.offhand ? [h.equip.offhand.rar | 0, h.equip.offhand.leg || 0] : 0 }, zk: S.zoneKey, ak: S.relDone, mf: Math.round(s?.mf || 0), gf: Math.round(s?.gold || 0), dm: Math.round((s?.wmax || 1) * (s?.dmgMult || 1)), cd: Math.round(s?.critD ?? 50) };
+  const p = { h: null, c2: null, nd: null, ev: null, r: 'g', c: S.code, v: VER, hb: Math.floor(now() / 1000) & 1023, lk: { c: h.cls, l: h.level, ml: h.mlvl || 0, nm: N7nm(h), w: h.equip.weapon ? [h.equip.weapon.base, h.equip.weapon.rar | 0, h.equip.weapon.leg || 0] : 0, o: h.equip.offhand ? [h.equip.offhand.rar | 0, h.equip.offhand.leg || 0] : 0 }, zk: S.zoneKey, ak: S.relDone, mf: Math.round(s?.mf || 0), gf: Math.round(s?.gold || 0), dm: Math.round((s?.wmax || 1) * (s?.dmgMult || 1)), cd: Math.round(s?.critD ?? 50) };
   if (pl && S.zoneKey && S.zoneKey === myKey()) { p.h = heroState(); if (fireOn()) { p.h[8] = ringByte(); const lp = myPools(); if (lp) p.lp = lp; } const av = pl.avatar; if (av?.netSeq) p.c2 = [av.netClip, Math.round((av.netSpd || 1) * 100) / 100, av.netSeq]; }
   if (!S.world) p.nd = 'w';
   // the events the host has not acked, oldest first, as many as fit
@@ -595,7 +602,7 @@ function hostTick(dt) {
 }
 function worldOf() {
   const h = G.hero;
-  return { flags: h.flags, quest: h.quest, diff: h.diff, wps: h.wps, a: [h.act1, h.act2, h.act3, h.act4, h.act5, h.act6 ?? -1], gb: h.gateBest | 0, gate: G.gate ? { tier: G.gate.tier } : null, clips: [...S.clips] };
+  return { flags: h.flags, quest: h.quest, diff: h.diff, wps: h.wps, a: [h.act1, h.act2, h.act3, h.act4, h.act5, h.act6 ?? -1, h.act7 ?? -1], gb: h.gateBest | 0, gate: G.gate ? { tier: G.gate.tier } : null, clips: [...S.clips] };
 }
 function worldKey() { const h = G.hero, f = JSON.stringify(h.flags); return f.length + ':' + h.quest + ':' + h.diff + ':' + hashStr(f); }
 function hashStr(s) { let x = 0; for (let i = 0; i < s.length; i++) x = (x * 31 + s.charCodeAt(i)) | 0; return x; }
@@ -649,6 +656,11 @@ function sendSnap() {
   // (Act VI: the Mere's own level and its rate at o.w[5..6], the gusts' clock at [4] null below the ice; the names' window)
   if (z.cells && T) { o.w[4] = z.gust ? o.w[4] : null; o.w[5] = T.mere ? q(T.mere.h, 100) : -1; o.w[6] = T.mere ? q(T.mere.rate, 1000) : 0; }
   if (z.act6 && NAMES.on) o.n = [Math.round(NAMES.left * 10), NAMES.falls];
+  // (Act VII: the clouds' clock at o.w[7] in tenths; the snow chutes armed and falling, two bit masks)
+  if (z.act7) {
+    if (o.w) { while (o.w.length < 7) o.w.push(null); o.w[7] = z.sunT != null ? q(z.sunT, 10) : -1; }
+    const fl = flues(); if (fl) { let ar = 0, fa = 0; fl.forEach((f, i) => { if (f.kind !== 'snow' || i > 30) return; if (f.armed) ar |= 1 << i; if (f.st !== 'idle') fa |= 1 << i; }); o.c7 = [ar, fa]; }
+  }
   // the fires on the ice, lit by a touch or put out by the dark: the cairns, the open holes' lamps (bits)
   if (z.act5 && z.id === 'farlight') o.l = [bits(z.act5.cairns, (it) => it.i), bits(z.act5.lamps, (it) => it.hole * 4 + it.i)];
   // (Act VI: the Hearth's stones lit and webbed, its dark and the Flare; the Mere's wreck lanterns lit)
@@ -777,7 +789,8 @@ function blowCap(P) {
   const lvl = clamp(P.lk?.l | 0, 1, MAX_LEVEL), ml = clamp(P.lk?.ml | 0, 0, 1e4), pts = lvl - 1 + ml;
   const dmCeil = (12 + lvl * 9) * 12 * (1 + masteryValue(MASTERY_BY.might, pts, lvl) / 100);
   const cdCeil = 50 + 6 * lvl + masteryValue(MASTERY_BY.fury, pts, lvl);
-  return Math.max(60, Math.min(P.dmax || 0, dmCeil) * 56 * Math.max(1, (1 + Math.min(P.cdmg ?? 50, cdCeil) / 100) / 1.5));
+  // (Act VII: times the ceilings of the three Names the guest says, from this page's own table, at most x 2.912)
+  return Math.max(60, Math.min(P.dmax || 0, dmCeil) * 56 * Math.max(1, (1 + Math.min(P.cdmg ?? 50, cdCeil) / 100) / 1.5)) * N7blowCap(Array.isArray(P.lk?.nm) ? P.lk.nm : []);
 }
 // a live monster of the host's within reach of the guest's stand-in, or null (refused as too far)
 function foeNear(id, me) {
@@ -834,7 +847,7 @@ function guestEvent(P, e) {
   } else if (type === 'ic') {
     // the ice: a guest's crack or refreeze done on the host's (the only ice that cracks), near it and no wider than a skill's
     const op = e[2], a = e.slice(3, 9);
-    if (!nums(a, op === 'f' || op === 'vr' ? 3 : op === 'l' ? 6 : op === 'r' || op === 'vl' ? 5 : 4)) return reject('bad');
+    if (!nums(a, op === 'f' || op === 'vr' || op === 'k' ? 3 : op === 'l' ? 6 : op === 'r' || op === 'vl' ? 5 : 4)) return reject('bad');
     if (over(P, 'ic', 14)) return reject('rate');
     const near = (x, z) => Math.hypot(x - me.x, z - me.z) < 28, st = clamp(a[op === 'l' ? 5 : op === 'r' ? 4 : 3] | 0, 1, 2);
     if (op === 'c') { if (!near(a[0], a[1]) || a[2] > 4) return reject('ice'); crackAt(a[0], a[1], a[2], st, { src: 'guest' }); }
@@ -847,6 +860,8 @@ function guestEvent(P, e) {
     else if (op === 'v') { if (!G.zone?.cells || !near(a[0], a[1]) || !(a[2] >= 0 && a[2] <= 4)) return reject('ice'); vaultAt(a[0], a[1], a[2], clamp(a[3] | 0, 1, 3)); }
     else if (op === 'vl') { if (!G.zone?.cells || !near(a[0], a[1]) || !near(a[2], a[3]) || Math.hypot(a[2] - a[0], a[3] - a[1]) > 14 || !(a[4] > 0 && a[4] <= 2.5)) return reject('ice'); vaultLine(a[0], a[1], a[2], a[3], a[4]); }
     else if (op === 'vr') { if (!G.zone?.cells || !near(a[0], a[1]) || !(a[2] > 0 && a[2] <= 8)) return reject('ice'); vaultRing(a[0], a[1], a[2]); }
+    // (Act VII: a guest's loud skill asks for a kick; the host decides: armed, sunlit, in reach; two a second at most)
+    else if (op === 'k') { if (!G.zone?.act7 || !near(a[0], a[1]) || !(a[2] > 0 && a[2] <= 10)) return reject('ice'); if (over(P, 'k', 2)) return reject('rate'); loud(a[0], a[1], a[2], me); }
     else return reject('bad');
   } else if (type === 'u') {
     // a guest's touch on a fight's lamp or bell, done here: its stand-in within 3 m of it, the thing as the guest saw it,
@@ -859,7 +874,7 @@ function guestEvent(P, e) {
     if (Math.hypot(me.x - it.x, me.z - it.z) > Math.max(3, (it.r || 2) + 0.6)) return reject('far');
     if ((it.lit ? 1 : 0) !== seen) return reject('state');
     P.useT = now();
-    if (!useDone(it)) return reject('use');
+    if (!useDone(it)) { if (!USE7.has(kind) || typeof it.use !== 'function') return reject('use'); it.use(); }
     S.stats.uses = (S.stats.uses || 0) + 1;
   } else if (type === 'rv') {
     // a revive: the reviver (this guest) has stood by another hero, down a moment, as long as a raise takes (the host's
@@ -886,7 +901,7 @@ function standByTick(dt) {
   }
 }
 // a host's monster strikes a guest's stand-in: the blow goes to the guest (its armour, block and dodge take it there)
-const HURT_KEYS = ['dot', 'pure', 'freeze', 'poison', 'burn', 'root', 'push', 'kx', 'kz', 'cold', 'seen', 'interrupt', 'plunge', 'wash', 'stun', 'ring'];
+const HURT_KEYS = ['dot', 'pure', 'freeze', 'poison', 'burn', 'root', 'push', 'kx', 'kz', 'cold', 'seen', 'interrupt', 'plunge', 'wash', 'stun', 'ring', 'share', 'cap', 'slide'];
 NET.h.hurtRemote = (src, tg, amount, o = {}) => {
   if (!tg.peer || tg.dead || !(amount > 0)) return 0;
   const P = S.peers.get(tg.peer); if (!P) return 0;
@@ -953,7 +968,7 @@ function guestTick(dt) {
   guestPresence();
 }
 // the host's world on this page: G.hero becomes a view of the guest's own record with the host's story laid over it
-const WORLD = new Set(['flags', 'quest', 'diff', 'wps', 'act1', 'act2', 'act3', 'act4', 'act5', 'act6', 'gateBest', 'seeds']);
+const WORLD = new Set(['flags', 'quest', 'diff', 'wps', 'act1', 'act2', 'act3', 'act4', 'act5', 'act6', 'act7', 'gateBest', 'seeds']);
 // (the flags that are the hero's own, not the story's: a later skill seen in the panel, the hint given once; read and
 // written in the guest's own record)
 const OWN_FLAG = /^(seen_|tickHint$)/;
@@ -982,7 +997,7 @@ function onWorld(w) {
   // (the blessings' multipliers stay the guest's own: Unbound, Remembered)
   const flags = Object.assign({}, w.flags, { unbound: own.unbound, remembered: own.remembered, lostAll: own.lostAll });
   const act = (v) => num(v, -1, DIFFS.length - 1, -1) | 0;
-  const W = { flags, quest: num(w.quest, 0, 99), diff: clamp(w.diff | 0, 0, DIFFS.length - 1), wps: Array.isArray(w.wps) ? w.wps.filter((z) => typeof z === 'string' && z.length < 24).slice(0, 40) : ['town'], act1: act(a[0]), act2: act(a[1]), act3: act(a[2]), act4: act(a[3]), act5: act(a[4]), act6: act(a[5]), gateBest: num(w.gb, 0, 999) | 0, seeds: {} };
+  const W = { flags, quest: num(w.quest, 0, 99), diff: clamp(w.diff | 0, 0, DIFFS.length - 1), wps: Array.isArray(w.wps) ? w.wps.filter((z) => typeof z === 'string' && z.length < 24).slice(0, 40) : ['town'], act1: act(a[0]), act2: act(a[1]), act3: act(a[2]), act4: act(a[3]), act5: act(a[4]), act6: act(a[5]), act7: act(a[6]), gateBest: num(w.gb, 0, 999) | 0, seeds: {} };
   const key = JSON.stringify(W);
   if (key === S.wkey) return;
   const first = !S.world;
@@ -1003,7 +1018,7 @@ function presenceAgain(z) {
     const sk = z.id === 'coast' && G.hero.flags.towerDown && z.L.spots.skerry;
     if (sk && sk.cells.some(([x, zz]) => z.map.walkable(x + 0.5, zz + 0.5))) skerryClose(z, sk);
     const act = ZONES[z.id]?.act;
-    if (act === 6) act6Presence(z); else if (act === 5) act5Presence(z); else if (act === 4) act4Presence(z); else if (act === 3) act3Presence(z); else if (z.id === 'town') townFires(z);
+    if (act === 7) { act7Presence(z); firesSync(z); if (z.id === 'thaw') setThaw(thawK()); } else if (act === 6) act6Presence(z); else if (act === 5) act5Presence(z); else if (act === 4) act4Presence(z); else if (act === 3) act3Presence(z); else if (z.id === 'town') townFires(z);
   } catch (e) { console.error(e); }
 }
 async function guestEnter(Z) {
@@ -1101,6 +1116,7 @@ function onSnap(o) {
   if (Array.isArray(o.w)) worldState(o.w);
   if (Array.isArray(o.l)) lit5(o.l);
   if (Array.isArray(o.l6)) lit6(o.l6);
+  if (Array.isArray(o.c7) && G.zone?.act7) chutes7(o.c7);
   if (Array.isArray(o.n) && G.zone?.act6) namesFromHost(num(o.n[0], 0, 600) / 10, o.n[1] | 0);
   // the monsters
   if (Array.isArray(o.a)) for (const e of o.a) if (Array.isArray(e)) puppetEntry(e);
@@ -1147,6 +1163,8 @@ function worldState(w) {
     // (Act VI: the Mere as the host has it; this page's tide.js steps its cells toward it)
     if (z.cells && w.length >= 7) { const mh = w[5]; T.mere = fin(mh) && mh >= 0 ? { h: Math.min(mh, 300) / 100, rate: num(w[6], 1, 1e5, 300) / 1000 } : null; }
   }
+  // (Act VII: the clouds' clock put right when it has drifted half a second, on its 600 s round)
+  if (z?.act7 && fin(w[7]) && w[7] >= 0) { const ht = num(w[7], 0, 6000) / 10, d = ((((z.sunT || 0) - ht) % 600) + 900) % 600 - 300; if (Math.abs(d) > 0.5) setSunT(z, ht); }
   // (the gusts: this page's clock put right to the host's, both running the same 40 s, so its warning, its snow and its
   // Cold come with the host's and nothing else writes them; only a host that sends no clock has its 'on' laid over)
   const g = z?.gust;
@@ -1172,11 +1190,13 @@ function lit6(l) {
 }
 // what the host may lay on this guest's hero, at most (the game's own sizes): hurtHero halves a freeze, roots stop at
 // 1.2 s; a stun does nothing to a hero, so it is not taken
-const HURT_MAX = { freeze: 4, seen: 6, root: 1.2, push: 40, cold: 100, poison: 1e8, burn: 1e8, ring: 1.5 };
+const HURT_MAX = { freeze: 4, seen: 6, root: 1.2, push: 40, cold: 100, poison: 1e8, burn: 1e8, ring: 1.5, share: 44, cap: 42 };
 function hurtOpts(oo) {
   const o = {}; if (!oo || typeof oo !== 'object') return o;
   // (the rest are marks: a burn's tick, a blow armour does not take, a shriek, the sea's)
   for (const k of HURT_KEYS) { const v = oo[k]; if (k === 'stun' || k === 'kx' || k === 'kz' || !fin(v) || v <= 0) continue; o[k] = own(HURT_MAX, k) ? Math.min(v, HURT_MAX[k]) : true; }
+  // (Act VII: a heavy blow's share is of this guest's own life, never past its own row's boss share)
+  if (o.share) o.share = Math.min(o.share, actHaz(7, G.hero?.diff ?? 1).bossHeavy);
   if (oo.slow && fin(oo.slow.k) && fin(oo.slow.t)) o.slow = { k: clamp(oo.slow.k, 0, 0.9), t: clamp(oo.slow.t, 0, 6) };
   // (a push's way, as a direction)
   if (fin(oo.kx) && fin(oo.kz)) { const l = Math.hypot(oo.kx, oo.kz); if (l > 1e-6) { o.kx = oo.kx / l; o.kz = oo.kz / l; } }
@@ -1233,6 +1253,8 @@ function killOk() { const B = S.killB, t = now(); B.tok = Math.min(40, B.tok + (
 function relEvent(e) {
   const type = e[0], pl = G.player;
   if (type === 'cd') { if (typeof e[2] === 'string' && (S.hclips.size < 1024 || S.hclips.has(e[1] | 0))) S.hclips.set(e[1] | 0, e[2].slice(0, 47)); return; }
+  // (Act VII: a lookout held on the host; this guest writes its own rank, the difficulty's, on its own record)
+  if (type === 'h7') { hold7Rank(e[1], e[2]); return; }
   if (type === 'h') {
     // a blow from one of the host's monsters
     if (!pl || pl.dead) return;
@@ -1520,9 +1542,11 @@ function reviveTick(dt) {
   }
 }
 // a guest's interactables: its own chests, shrines and stash; the shops; nothing that moves the host's story
-const GUEST_OK = new Set(['chest', 'shrine', 'stash']);
+const GUEST_OK = new Set(['chest', 'shrine', 'stash', 'callFire']);
 // (the fights' lamps and bells, and Act V's cairns and hole lamps: the guest's own touch, done on the host's world, 'u')
-const USE_U = new Set(['hearthStone', 'wreckLantern', 'shipBell', 'cairn', 'holeLamp']);
+const USE_U = new Set(['hearthStone', 'wreckLantern', 'shipBell', 'cairn', 'holeLamp', 'weir7', 'winch7', 'lever7', 'lookHearth']);
+// (Act VII's: the guest's touch done here by the thing's own use, which raises the story's event on the host)
+const USE7 = new Set(['weir7', 'winch7', 'lever7', 'lookHearth']);
 NET.h.canUse = (it) => {
   if (NET.mode !== 'guest') return true;
   if (GUEST_OK.has(it.kind) || USE_U.has(it.kind)) return true;
@@ -1712,4 +1736,31 @@ function replayOne(name, a, from) {
     return;
   }
   fn(...args);
+}
+
+// ---------- Act VII (docs/act7-contract.md, Co-op, protocol 6) ----------
+// the host's chutes on this page: armed as the host has them while they rest; one the host has set falling runs here too
+// (its warning, its front, and this page's own hero's hit; what it does to monsters is the host's alone)
+function chutes7(c7) {
+  const fl = flues(); if (!fl) return;
+  const ar = c7[0] | 0, fa = c7[1] | 0, was = S.c7f | 0;
+  fl.forEach((f, i) => {
+    if (f.kind !== 'snow' || i > 30) return;
+    const bit = 1 << i;
+    if ((fa & bit) && !(was & bit) && f.st === 'idle') { fireFlue(i, null); return; }
+    if (f.st === 'idle' && !!(ar & bit) !== !!f.armed) { f.armed = !!(ar & bit); if (f.armed) { f.rearm = 0; f.grow = 1; } emit(f.armed ? 'chuteArmed' : 'chuteSpent', f); }
+  });
+  S.c7f = fa;
+}
+// a guest's loud skill: the host is asked to kick (its chutes are the host's)
+on('loud', (x, z, r, by) => { if (NET.mode === 'guest' && by === G.player && G.zone?.act7) NET.h.iceOp?.('k', x, z, r); });
+// a hold ended on the host: every guest writes its own rank
+on('hold7Done', (n, d) => { if (NET.mode === 'host') relTo('', ['h7', n | 0, d | 0]); });
+function hold7Rank(n, d) {
+  const own = S.real; if (!own) return;
+  const i = clamp(n | 0, 1, 6) - 1, r = clamp((d | 0) + 1, 1, DIFFS.length);
+  const f = (own.fires ||= [0, 0, 0, 0, 0, 0]);
+  if (r > (f[i] | 0)) { f[i] = r; emit('toast', t('look.rank', f.filter((x) => x > 0).length, r), 'quest'); }
+  if (f.slice(0, 6).every((x) => x > 0)) own.flags.firesAll = true;
+  refreshStats(); writeSave();
 }

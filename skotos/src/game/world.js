@@ -2019,6 +2019,7 @@ export function townFires(z) {
   townTorches(z, !!F.fireTaken && !F.newFire);
   townPresence(z);
   town6(z);
+  town7(z);
 }
 const liveLights = (key) => [...R.sources].filter((s) => s.key === key);
 // one far fire: its light (none on a peak), its glow over the treeline and its flames (kept with the zone and shown on
@@ -2147,7 +2148,7 @@ export function raceLevel(id, F = G.hero.flags) {
 }
 // the snow that is left in the Meltwaters, for the ground's blend (build.js setThaw): it draws back with each weir
 const THAW_K = [0.65, 0.45, 0.3, 0.15];
-const thawK = (F = G.hero.flags) => (F.act7 ? 0.05 : THAW_K[weirs7(F)]);
+export const thawK = (F = G.hero.flags) => (F.act7 ? 0.05 : THAW_K[weirs7(F)]);
 // the water moved to its level now, at 0.3 m/s (a weir turned, the lake let down): tide.js mereTick steps it
 export function raceTo(z, h = raceLevel(z.id)) { if (z?.tide) z.tide.mere = { h, rate: 0.3 }; if (z?.id === 'thaw') setThaw(thawK()); Audio.mood({ race: clamp((h - 0.3) / 0.9, 0, 1) }); }
 // before the build: the melt's water for the sea's material (sea.js: SEA_MELT, safeSeaM on a phone)
@@ -2157,7 +2158,7 @@ function act7Zone(z) {
   // (water, and no Cold: the tide dial, the wash-out, swimmers and packs dormant by the water are z.water's)
   z.water = true; z.cells = true;
   const A = z.act7 = { weirs: [], winches: [], levers: [], lookouts: [], hearth: null, figs: {} };
-  const turn = (list, flag, kind, prompt, out) => { for (const w of list || []) { const st = w.stand || w; const it = { kind, k: w.k, x: w.x, z: w.z, r: 2.4, prompt, spot: w, used: !!G.hero.flags[flag + w.k], use: () => emit(kind, it, z) }; out.push(it); z.interact.push(it); } };
+  const turn = (list, flag, kind, prompt, out) => { for (const w of list || []) { const st = w.stand || w; const it = { kind, k: w.k, x: w.x, z: w.z, r: 2.4, prompt, spot: w, used: !!G.hero.flags[flag + w.k], use: () => { if (!NET.h.useOp?.(it)) emit(kind, it, z); } }; out.push(it); z.interact.push(it); } };
   turn(S.weirs, 'weir', 'weir7', 'weir.turn', A.weirs);
   turn(S.winches, 'winch', 'winch7', 'winch.thaw', A.winches);
   for (const lv of S.levers || []) { const it = { kind: 'lever7', k: lv.k, x: lv.x, z: lv.z, r: 2.2, prompt: 'lever.pull', spot: lv, used: true, use: () => emit('lever7', it, z) }; A.levers.push(it); z.interact.push(it); }
@@ -2190,7 +2191,81 @@ export function act7Presence(z) {
   const F = G.hero.flags, A = z?.act7; if (!A) return;
   for (const it of A.weirs) it.used = !!F['weir' + it.k];
   for (const it of A.winches) it.used = !!F['winch' + it.k];
+  people7(z);
   refreshEmit(z);
+}
+// where Halda stands in an Act VII zone, by the flags (null: not here). The Meltwaters: her camp, the Den's rim once the
+// three weirs are open, gone up ahead once the lake is seen. The Hanging Lake: her camp, the Dam's rim once the Sleeper
+// wakes, the great wheel once he rests, home once the lake is let down (docs/act7-contract.md, act7Presence)
+export function haldaSpot7(z, F = G.hero.flags) {
+  const S = z.L.spots, N = S.npcs?.halda, at = (p, rot) => { const f = z.map.nearestFloor(p.x, p.z, 3) || p; return { x: f.x, z: f.z, rot: rot ?? p.rot ?? 0 }; };
+  if (z.id === 'thaw') return F.tarnSeen || F.lakeLet ? null : weirs7(F) >= 3 && S.haldaRim ? at(S.haldaRim) : N ? at(N) : null;
+  if (z.id === 'tarn') return F.lakeLet ? null : F.keladosRest && S.wheel ? at({ x: S.wheel.x + 2.4, z: S.wheel.z + 1.8 }, Math.PI * 1.25) : F.keladosWake && S.haldaRim ? at(S.haldaRim) : N ? at(N) : null;
+  return null;
+}
+// who is where in an Act VII zone, on every entry and as the story moves (story.js): Halda by the flags (never moved
+// under a scene that walks her: A.haldaScene), the great wheel offered once the Sleeper rests, a lookout at each hut
+// until the six have come down (firesAll)
+export function people7(z) {
+  const F = G.hero.flags, A = z?.act7; if (!A) return;
+  const here = G.zone === z, a = A.halda;
+  if (a && !a.walking && !A.haldaScene) {
+    const w = haldaSpot7(z, F), it = (A.haldaIt ||= z.interact.find((i) => i.actor === a)), inA = z.actors.includes(a);
+    if (w) {
+      if (!inA) { z.actors.push(a); if (it && !z.interact.includes(it)) z.interact.push(it); if (here && a.avatar) R.scene.add(a.avatar.group); }
+      if (Math.hypot(a.x - w.x, a.z - w.z) > 0.6) { a.x = w.x; a.z = w.z; a.home = a.rot = w.rot; }
+      if (it) { it.x = a.x; it.z = a.z; }
+    } else if (inA) {
+      z.actors.splice(z.actors.indexOf(a), 1); const i = z.interact.indexOf(it); if (i >= 0) z.interact.splice(i, 1);
+      if (a.avatar) R.scene.remove(a.avatar.group);
+    }
+  }
+  const wh = z.L.spots.wheel, cur = z.interact.find((i) => i.kind === 'sluice7'), want = z.id === 'tarn' && !!wh && !!F.keladosRest && !F.lakeLet;
+  if (want && !cur) { const it = { kind: 'sluice7', x: wh.x, z: wh.z, r: 2.8, prompt: 'sluice.open', spot: wh, mesh: z.lvl?.act7?.wheel || null, use: () => emit('sluice7', it, z) }; z.interact.push(it); }
+  if (!want && cur) z.interact.splice(z.interact.indexOf(cur), 1);
+  const K = (A.keepers ||= {});
+  for (const lo of z.L.spots.lookouts || []) {
+    const kp = lo.keeper, n = K[lo.k]; if (!kp) continue;
+    if (F.firesAll) { if (n && z.actors.includes(n.a)) { z.actors.splice(z.actors.indexOf(n.a), 1); const i = z.interact.indexOf(n.it); if (i >= 0) z.interact.splice(i, 1); if (n.a.avatar) R.scene.remove(n.a.avatar.group); } continue; }
+    if (n) { if (!z.actors.includes(n.a)) { z.actors.push(n.a); z.interact.push(n.it); if (here && n.a.avatar) R.scene.add(n.a.avatar.group); } continue; }
+    const f = z.map.nearestFloor(kp.x, kp.z, 2) || kp, h = lo.hearth || lo, rot = Math.atan2(h.x - f.x, h.z - f.z);
+    let b; try { b = spawnNpc('villager', f.x, f.z, rot); } catch (e) { continue; }
+    b.home = rot; b.bark = lo.k; b.look7 = lo.k; b.still = true;
+    const it = { kind: 'npc', npc: 'lookout', actor: b, x: f.x, z: f.z, r: 2.2, prompt: 'talk', use: () => emit('talk', 'lookout', b) };
+    b.it = it; z.actors.push(b); z.interact.push(it); if (!here && b.avatar) R.scene.remove(b.avatar.group);
+    K[lo.k] = { a: b, it };
+  }
+}
+// Whitecliff in Act VII (story.js): Halda at Isarn's staff from the call until she has given her word; up the mountain
+// from then until the lake is let down, her anvil an interact meanwhile (anvil7); the staff's lantern awake once it is
+// woken (lanternWake); the six lookouts come down in their turn (firesAll). Never a street, a house or a field wet: the
+// town's only water is the sound of its stream (docs/act7-design.md, water with care)
+export function town7(z) {
+  if (z?.id !== 'town' || !z.townNpc) return;
+  const F = G.hero.flags, N = z.L.spots.npcs, w = z.townNpc.smith, here = G.zone === z, s = N.wayfarer, b = z.L.beacon;
+  if (w && !w.a.walking && !w.scene7) {
+    const away = !!F.haldaOut && !F.lakeLet, inA = z.actors.includes(w.a);
+    if (!away && !inA) { z.actors.push(w.a); z.interact.push(w.it); if (here && w.a.avatar) R.scene.add(w.a.avatar.group); }
+    if (away && inA) { z.actors.splice(z.actors.indexOf(w.a), 1); const i = z.interact.indexOf(w.it); if (i >= 0) z.interact.splice(i, 1); if (w.a.avatar) R.scene.remove(w.a.avatar.group); }
+    const at = F.call7 && !F.haldaOut ? { ...(z.map.nearestFloor(s.x + 1.8, s.z - 0.8, 2) || s), r: Math.PI * 0.85 } : { x: N.smith.x, z: N.smith.z, r: N.smith.r };
+    if (!away && Math.hypot(w.a.x - at.x, w.a.z - at.z) > 0.4) { w.a.x = at.x; w.a.z = at.z; w.a.home = w.a.rot = at.r; w.it.x = at.x; w.it.z = at.z; }
+  }
+  const an = z.interact.find((i) => i.kind === 'anvil7'), wantAn = !!F.haldaOut && !F.lakeLet;
+  if (wantAn && !an) { const it = { kind: 'anvil7', x: N.smith.x, z: N.smith.z, r: 2.4, prompt: 'anvil.use', use: () => emit('anvil7', it, z) }; z.interact.push(it); }
+  if (!wantAn && an) z.interact.splice(z.interact.indexOf(an), 1);
+  if (F.lanternWake && z.town?.staff) z.town.staff.userData.setLantern?.('awake');
+  const T = (z.town ||= { far: [] });
+  if (F.firesAll && !T.keepers7) {
+    T.keepers7 = [];
+    for (let i = 0; i < 6; i++) {
+      const f = z.map.nearestFloor(b.x - 5 + i * 2, b.z + 7.5 + (i % 2) * 1.2, 2); if (!f) continue;
+      let a; try { a = spawnNpc('villager', f.x, f.z, Math.PI); } catch (e) { continue; }
+      a.home = Math.PI; a.bark = i; a.look7 = i + 1;
+      const it = { kind: 'npc', npc: 'lookout', actor: a, x: f.x, z: f.z, r: 2, prompt: 'talk', use: () => emit('talk', 'lookout', a) };
+      z.actors.push(a); z.interact.push(it); if (!here && a.avatar) R.scene.remove(a.avatar.group);
+      T.keepers7.push({ a, it });
+    }
+  }
 }
 // the goat track at the Pass's camp: the way up to the Meltwaters, an interact on cells that are already walkable (no
 // older layout changes), pushed once into the layout's exits too so an arrival from above finds it; locked until Halda

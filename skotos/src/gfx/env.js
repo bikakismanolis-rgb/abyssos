@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { gltfLoader, shrink, release } from './gltf.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { makeCodeLayer, CODE_LAYERS } from './codetex.js';
 // ENV.layers[id] = { d: diffuse texture (sRGB), n: OpenGL normal map }; ENV.props[name] = [{ geo, mat }] (one part per material)
 export const ENV = { layers: {}, props: {}, pivots: {}, sizes: {}, extras: {}, packs: {}, ready: false, quality: 1 };
 
@@ -27,6 +28,24 @@ function putLayer(pack, id, layer) {
 export const packProp = (pack, name) => ENV.props[pack + '/' + name] || null;
 export const packLayer = (pack, id) => ENV.layers[pack + '/' + id] || null;
 
+// Act VII: the layers made in code (codetex.js: 'meadow', 'gravel', 'crag'), the 'melt' pack that is no download. Made
+// the first time the ground asks for one, kept as ENV.layers['melt/<id>'] (never under a bare name: no older zone's
+// chain can find one), 512 on a phone and 1024 otherwise, their normals on quality 1 and up as the packs'.
+// freeCodeLayers() lets their GPU copies go (build.js calls it when a level that is not Act VII's is built); the pixels
+// stay with the textures, so a later Act VII level draws them again without making them again
+export function codeLayer(id, o = {}) {
+  const key = 'melt/' + id;
+  if (ENV.layers[key]) return key;
+  if (!CODE_LAYERS.includes(id)) return null;
+  const L = makeCodeLayer(id, o.mobile ? 512 : 1024, ENV.quality >= 1, [1, 2, 4][ENV.quality] ?? 2);
+  ENV.layers[key] = L;
+  return key;
+}
+export function freeCodeLayers() {
+  let n = 0;
+  for (const id of CODE_LAYERS) { const L = ENV.layers['melt/' + id]; if (L) for (const t of [L.d, L.n]) if (t) { t.dispose(); n++; } }
+  return n;
+}
 async function bytes(url) {
   // inlined builds carry assets as data URIs: decode them instead of fetching
   if (url.startsWith('data:')) {

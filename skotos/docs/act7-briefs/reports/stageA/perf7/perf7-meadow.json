@@ -1,0 +1,100 @@
+{
+ "ashfield@q1": {
+  "ms": 738.5,
+  "draw": 736.8,
+  "logic": 1.7,
+  "calls": 139,
+  "tris": 598233,
+  "wet": 0,
+  "actors": 0,
+  "pools": 0,
+  "lights": 3,
+  "at": [
+   61.1,
+   161
+  ],
+  "pr": 1.5,
+  "wouldScale": "down (to 0.55 at worst)"
+ },
+ "meadow@q1": {
+  "ms": 902.3,
+  "draw": 895.1,
+  "logic": 7.2,
+  "calls": 157,
+  "tris": 220051,
+  "wet": 0.593,
+  "actors": 25,
+  "pools": 0,
+  "lights": 0,
+  "at": [
+   81.5,
+   122.5
+  ],
+  "pr": 1.5,
+  "wouldScale": "down (to 0.55 at worst)",
+  "field": 1762.7,
+  "ratios": [
+   0.512
+  ],
+  "vsField": 0.512,
+  "bare": 585,
+  "fieldBare": 652.6,
+  "worldOf": 4,
+  "world": 0.896,
+  "vsBare": 1.222,
+  "crowd": {
+   "n": 25,
+   "padded": false,
+   "spot": 367.1,
+   "field": 397.8,
+   "ratios": [
+    0.923
+   ],
+   "term": 0.923,
+   "pooled": [
+    0.923,
+    -1.726,
+    2.055
+   ],
+   "dearer": false
+  },
+  "pass": true
+ },
+ "staged": {
+  "meadow": {
+   "shot": [
+    {
+     "q": 1,
+     "f": "docs/act7-briefs/reports/stageA/perf7/perf7-meadow-q1.jpg",
+     "kb": 72
+    }
+   ],
+   "zone": "thaw",
+   "level": {
+    "brooks": 0.6,
+    "own": 1.2
+   },
+   "slides": null,
+   "slides3": null,
+   "kinds": {
+    "goblin": 10,
+    "goblinMarksman": 4,
+    "goblinShaman": 2,
+    "hillWolf": 5,
+    "chough": 4
+   },
+   "wet": 0.592,
+   "pines": 0,
+   "clouds": {
+    "sail": 4,
+    "inView": 1,
+    "over": false,
+    "t": 0
+   },
+   "heavy": false
+  }
+ },
+ "minutes": 5.9,
+ "over": [],
+ "pass": true
+}

@@ -638,7 +638,7 @@ const S = {
   // (default all). OWNER=<file>: the hero to play the owner's part with, read at run time and never copied; else one built
   // like it (a mage of 29 on difficulty 2, quest 12, two verses and both small Tears read, the owner's wood). Each part
   // plants its hero in a page that writes no more, and goes through the title and Continue as a player does
-  resume: { q: 'q=0&sim=4&norender', run: async (pg, shot) => {
+  resume: { stage: '0', until: 'E', q: 'q=0&sim=4&norender', run: async (pg, shot) => {
     const PARTS = (process.env.PARTS || 'owner,verse,fall,lock,death,forest,crypt,pass,act4,act5,tower,act6').split(',');
     const fs = await import('node:fs');
     const R = {}, OK = {}, base = A5.base, ev = (fn, arg) => pg.evaluate(fn, arg), wait = (ms) => pg.waitForTimeout(ms);
@@ -911,9 +911,12 @@ const S = {
       await wait(3500);
       r.e = await ev(() => ({ note: !!document.getElementById('gl-lost'), same: window.__mark === 1 }));
       r.e.visit = (await stored()).visit ?? null;
+      r.e.crash = await ev(async () => { const W = await import('/src/game/wake.js'), d = JSON.parse(localStorage.getItem('skotos.save.v1')), h = d.heroes.find((x) => x.id === d.last), c = W.crashFor(h); return c && { zone: c.zone, kind: c.kind }; }).catch(() => null);
       await load(); await menu(); r.e.c = await cont();
-      // (the visit kept: the lost screen lets the player choose, Continue or Back to the village)
-      k.e = r.e.note && r.e.same && r.e.visit?.id === 'weep' && r.e.c.zone === 'weep';
+      // (the visit kept, but the zone it went down in is recorded (boot.js gfxO.lost: noteCrash 'lost'), and a page loaded
+      // again without the lost screen's Continue starts in the village, at its waypoint (wake.js crashOf, wakeOf null; main's
+      // "Start in the village", 8c34ada, on purpose). Act VII stage 0: rewritten from Continue in the Weeping Woods)
+      k.e = r.e.note && r.e.same && r.e.visit?.id === 'weep' && town(r.e.c);
       await A5.travel(pg, 'weep', 'town'); await calm();
       await quit(); await menu(); r.e.c1 = await cont();
       const nav = pg.waitForNavigation({ timeout: 240000 });
@@ -3521,7 +3524,7 @@ const S = {
   // the dry reading down the Well; the Bottom's barrow door, the ember's pane, the three black lamps, Leif's fire and the
   // glade, the Stair's head (its foot out of reach behind the walls), and once her fire burns the Stair's foot, the Hearth's
   // stones and the Gate ring home; a pack of a tag combat's PACKS does not hold yet spawning the Sunken, never goblins
-  ground6: { q: 'auto=drained&q=0&sim=2&norender&lvl=36&cloud=off', run: async (pg) => {
+  ground6: { stage: '0', until: 'E', q: 'auto=drained&q=0&sim=2&norender&lvl=36&cloud=off&nopacks&nostory', run: async (pg) => {
     const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
     const ev = (f, a) => pg.evaluate(f, a);
     const ready = (id) => pg.waitForFunction((id) => window.__ready && window.__G?.player && window.__G.mode === 'play' && window.__G.zone?.id === id && !document.getElementById('fade').classList.contains('on'), id, { timeout: 240000 });
@@ -3539,23 +3542,31 @@ const S = {
         for (const a of z.actors) if (a.team === 'foe' && !a.prop && !a.dead) { a.hp = 0; a.dead = true; a.remove?.(); }
         const t0 = m.nearestFloor(tx, tz, 3), goal = Math.floor(t0.z) * w + Math.floor(t0.x), pl0 = G.player;
         const from = Math.floor(pl0.z) * w + Math.floor(pl0.x), par = new Int32Array(w * m.h).fill(-1), q = [from]; par[from] = from;
-        for (let hd = 0; hd < q.length && par[goal] < 0; hd++) { const i = q[hd], x = i % w, zz = (i - x) / w; for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const X = x + dx, Z = zz + dz, n = Z * w + X; if (X >= 0 && Z >= 0 && X < w && Z < m.h && m.cells[n] && par[n] < 0) { par[n] = i; q.push(n); } } }
+        for (let hd = 0; hd < q.length && par[goal] < 0; hd++) { const i = q[hd], x = i % w, zz = (i - x) / w; for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const X = x + dx, Z = zz + dz, n = Z * w + X; if (X >= 0 && Z >= 0 && X < w && Z < m.h && m.cells[n] && par[n] < 0 && (n === goal || m.walkable(X + 0.5, Z + 0.5))) { par[n] = i; q.push(n); } } }
         if (par[goal] < 0) return { ok: false, why: 'noWay' };
         const path = []; for (let i = goal; i !== from; i = par[i]) path.push({ x: i % w + 0.5, z: Math.floor(i / w) + 0.5 }); path.reverse();
         const dist = path.length;
         return await new Promise((res) => {
-          let k = 0, gt = 0, best = -1, still = 0, last = performance.now();
+          let k = 0, gt = 0, best = -1, still = 0, last = performance.now(), said = 0, shoved = 0;
+          const tgt0 = () => path[Math.min(path.length - 1, k)];
           const keys = (x, zz) => { for (const c of ['w', 'a', 's', 'd']) IN.keys.delete(c); if (zz < -0.3) IN.keys.add('w'); if (zz > 0.3) IN.keys.add('s'); if (x < -0.3) IN.keys.add('a'); if (x > 0.3) IN.keys.add('d'); };
           const step = () => {
             // (the player as it is now: the zone's arrival may make her again)
             const pl = window.__G.player, now = performance.now(); gt += (now - last) / 1000 * 2; last = now;
+            // (a line said on the way (a scene of the story's, ?nostory being Act VII's only) is read to its end, as a player would)
+            if (document.querySelector('#dialog:not([hidden])') || window.__G.cine) { keys(0, 0); still = 0; if (now - said > 300) { said = now; window.__D.emit('key', 'enter'); } requestAnimationFrame(step); return; }
             // (cell by cell, the nearest of the next few once she is within 0.45 m of it: round corners, never into them)
             let j = k; for (let q = k; q < Math.min(path.length, k + 8); q++) if (Math.hypot(path[q].x - pl.x, path[q].z - pl.z) < Math.hypot(path[j].x - pl.x, path[j].z - pl.z)) j = q;
             k = Math.hypot(path[j].x - pl.x, path[j].z - pl.z) < 0.45 ? Math.min(path.length - 1, j + 1) : j;
             const tgt = path[k], dx = tgt.x - pl.x, dz = tgt.z - pl.z, l = Math.hypot(dx, dz) || 1;
             const left = Math.hypot(t0.x - pl.x, t0.z - pl.z);
             if (k > best) { best = k; still = 0; } else still += 1;
-            if (left < 1.2 || still > 300 || gt > maxT) { keys(0, 0); res({ ok: left < 1.2, left: +left.toFixed(2), cells: dist, k, stuck: still > 300, at: { x: +pl.x.toFixed(1), z: +pl.z.toFixed(1) } }); return; }
+            // (the way ahead under the black water's clock for now: she waits on the bank for it to go down, within maxT)
+            if (still > 100 && gt <= maxT && !window.__G.zone.map.walkable(tgt.x, tgt.z)) { still = 100; keys(0, 0); requestAnimationFrame(step); return; }
+            // (a body that stands in a 3-cell way and does not move (the dark village's people, ?nopacks keeps no foe) is stepped
+            // aside, at most four times a walk: the ground is the test, not the crowd; counted in the result)
+            if (still === 120 && shoved < 4) { const b = window.__G.zone.actors.find((a) => !a.dead && !a.removed && a !== pl && Math.hypot(a.x - pl.x, a.z - pl.z) < 1.6); if (b) { const q = window.__G.zone.map.nearestFloor(b.x + (b.x - pl.x) * 2 + (tgt0().z - pl.z) * 2, b.z + (b.z - pl.z) * 2 - (tgt0().x - pl.x) * 2, 3); if (q) { b.x = q.x; b.z = q.z; shoved++; still = 0; } } }
+            if (left < 1.2 || still > 300 || gt > maxT) { keys(0, 0); const G = window.__G, blk = left < 1.2 ? undefined : { mode: G.mode, cine: !!G.cine, dialog: !!document.querySelector('#dialog:not([hidden])'), act: G.player.act?.kind || G.player.act?.id || (G.player.act ? 'busy' : null), near: G.zone.actors.filter((a) => !a.dead && !a.removed && Math.hypot(a.x - pl.x, a.z - pl.z) < 1.6).map((a) => a.npc || a.kind), walk: G.zone.map.walkable(path[Math.min(path.length - 1, k + 1)].x, path[Math.min(path.length - 1, k + 1)].z) }; res({ ok: left < 1.2, left: +left.toFixed(2), cells: dist, k, stuck: still > 300, at: { x: +pl.x.toFixed(1), z: +pl.z.toFixed(1) }, blk, ...(shoved ? { shoved } : {}) }); return; }
             keys(dx / l, dz / l); requestAnimationFrame(step);
           };
           requestAnimationFrame(step);
@@ -3574,16 +3585,20 @@ const S = {
     await go('the Heap\'s north gap', S.gap);
     for (const l of S.lamps5) await go('wreck lantern ' + l.i, l);
     await go('Glaukos\'s place by the Mere', S.mere);
-    // ---- the stand-in packs: an Act VI tag combat has not written yet spawns the Sunken ----
+    // ---- the packs: bare with ?nopacks (none made with the zone); one of the layout's, put in by the test, spawns its own
+    // tag's kinds (data.js PACKS), never goblins (Act VII stage 0: was "an unwritten tag spawns the Sunken", stage A's) ----
     const pk = await ev(async () => {
-      const G = window.__G, z = G.zone, p = z.packs.find((q) => q.tag === 'heapLice' || q.tag === 'shoreFaded'); if (!p) return null;
-      p.spawned = false; const n0 = z.actors.length; G.player.x = p.x; G.player.z = p.z + 1;
+      const G = window.__G, z = G.zone, D = await import('/src/game/data.js'), bare = z.packs.length, l = z.L.packs.find((q) => q.tag === 'shoreFaded' || q.tag === 'heapLice'); if (!l) return { bare };
+      const p = Object.assign({ id: z.id + 'T', spawned: false }, l); z.packs.push(p);
+      const n0 = z.actors.length; G.player.x = p.x; G.player.z = p.z + 1;
       await new Promise((r) => setTimeout(r, 1200));
       const got = z.actors.slice(n0).filter((a) => a.team === 'foe' && !a.prop).map((a) => a.kind);
       for (const a of z.actors.slice(n0)) if (!a.prop) { a.hp = 0; a.dead = true; a.remove?.(); }
-      return { tag: p.tag, got };
+      z.packs.splice(z.packs.indexOf(p), 1);
+      return { bare, tag: p.tag, want: (D.PACKS[p.tag] || []).map((k) => k[0]), got };
     });
-    beat('an unwritten Act VI pack spawns the Sunken, not goblins', pk && pk.got.length > 0 && pk.got.every((k) => k === 'sunken' || k === 'harpooner'), pk);
+    beat('?nopacks: the zone made with no pack', pk?.bare === 0, pk?.bare);
+    beat('a pack of the layout spawns its own tag\'s kinds, never goblins', pk?.got?.length > 0 && pk.got.every((k) => pk.want.includes(k) || k === 'sunken' || k === 'harpooner') && !pk.got.some((k) => /^goblin/.test(k)), pk);
     // ---- the Drained Sea dry: down the Well ----
     await ev(() => { window.__G.hero.flags.ketosDown = true; window.__D.emit('travel', 'drained', { at: 'waypoint' }); });
     await pg.waitForTimeout(600); await ready('drained');
@@ -4270,7 +4285,9 @@ const S = {
     out.pass = spots.every((z) => out[z + '@q1']?.pass) && zones.every((z) => out[z + '@q0']?.floor !== false);
     return out;
   } },
-  // Act VI: look
+  // Act VI: look (look6 retired by name at Act VII stage 0: its assertions have no home in darktele or perf6, which draw
+  // the real zones and the tells, never the bench, its X6 defines, the vault's low camera or the props' switches; so they
+  // are kept here, as look6 had them, under this name; docs/act7-briefs/reports/stageA-tests.md)
   // the look lane's stage A (docs/act6-contract.md, Visuals): on quality 0 and 1, the bench (src/debug/look6.js: a test
   // layout of each zone with the black water's pockets and the Mere, built through buildLevel) in the world viewer's page:
   // the ground is ground6 with the X6 set (G_WET on quality 1 only; no G_AUR, G_GLINT, G_WIN, G_EDGE), the water SEA_BLACK
@@ -4278,7 +4295,7 @@ const S = {
   // crust from its texture, the vault drawn only while the camera looks low, every act6Prop kind built with its switches;
   // then both zones in the game (?auto=drained, ?auto=bottom) build with ground6 and act6Level, no ice mesh. Pictures of
   // the water at both levels, the slush, the Mere, the vault and every prop, on both qualities, into the out dir
-  look6: { q: 'world=crypt&q=1&nohouses', run: async (pg) => {
+  bench6: { stage: '0', until: 'E', q: 'world=crypt&q=1&nohouses', run: async (pg) => {
     const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
     const ev = (f, a) => pg.evaluate(f, a), dir = process.argv[3] || '/tmp';
     const snap = (n) => pg.screenshot({ path: `${dir}/look6-${n}.png` });
@@ -4293,10 +4310,12 @@ const S = {
       // (the First's marks: one instanced draw along the trail, shown only inside the hero's ring, FIRE_U; the vault's drips)
       const mk = await ev(() => {
         const L = window.__look6, m = L.lvl.act6.marks, tr = L.L.spots.trail, R = window.__R, gl = R.renderer.getContext(), pr = R.renderer.getPixelRatio(), px = new Uint8Array(4), V = new R.camera.position.constructor();
-        // (a point off the screen reads nothing: a NaN, which fails the beat)
-        const read = (p) => { V.set(p.x, 0.03, p.z).project(R.camera); const x = Math.round((V.x * 0.5 + 0.5) * R.w * pr), y = Math.round((V.y * 0.5 + 0.5) * R.h * pr); if (x < 0 || y < 0 || x >= R.w * pr || y >= R.h * pr) return [NaN, NaN, NaN]; px.fill(0); gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); return [px[0], px[1], px[2]]; };
+        // (a 7 x 7 patch round each mark's point, the largest change in it: a mark's sprite is a print with gaps, and one pixel
+        // at its point read the far mark's gap under the wider ring (look6's single pixel, 3.7-4.2 of 255, 17 November);
+        // a point off the screen reads nothing: a NaN, which fails the beat)
+        const read = (p) => { V.set(p.x, 0.03, p.z).project(R.camera); const x = Math.round((V.x * 0.5 + 0.5) * R.w * pr), y = Math.round((V.y * 0.5 + 0.5) * R.h * pr); if (x < 3 || y < 3 || x >= R.w * pr - 3 || y >= R.h * pr - 3) return null; const b = new Uint8Array(7 * 7 * 4); gl.readPixels(x - 3, y - 3, 7, 7, gl.RGBA, gl.UNSIGNED_BYTE, b); return b; };
         // (the camera on the twelfth mark: the eleventh 1.6 m behind it, the eighth 6.4 m up the screen, past the ring)
-        const diff = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]), at = tr[12], near = tr[11], far = tr[8], o = { dist: 11, pitch: 0.9, density: 0.03, lookY: 0.9 };
+        const diff = (a, b) => { if (!a || !b) return NaN; let m = 0; for (let i = 0; i < a.length; i += 4) m = Math.max(m, Math.hypot(a[i] - b[i], a[i + 1] - b[i + 1], a[i + 2] - b[i + 2])); return m; }, at = tr[12], near = tr[11], far = tr[8], o = { dist: 11, pitch: 0.9, density: 0.03, lookY: 0.9 };
         window.__L6.view(at.x, at.z, o); const n1 = read(near), f1 = read(far); m.visible = false; window.__L6.view(at.x, at.z, o); const n0 = read(near), f0 = read(far); m.visible = true;
         window.__L6.view(at.x, at.z, { ...o, fireR: 10 }); const fw = read(far); window.__L6.view(at.x, at.z, o);
         return { near: +diff(n1, n0).toFixed(1), far: +diff(f1, f0).toFixed(1), farWide: +diff(fw, f0).toFixed(1), dNear: +Math.hypot(near.x - at.x, near.z - at.z).toFixed(1), dFar: +Math.hypot(far.x - at.x, far.z - at.z).toFixed(1) };
@@ -4560,7 +4579,11 @@ const S = {
     }
     return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
   } },
-  // place6: the looks in the real zones (build6.js act6Level on gen6's layouts), on quality 0 and 1, in all four readings
+  // place6 retired by name at Act VII stage 0 (docs/act7-briefs/reports/stageA-tests.md): its build-level assertions have
+  // no home in check-act6 (layouts only), drained, catch6 or lost6 (the story through the props, never their spots, the
+  // reading's atmosphere, shoreJit or the drape), so they are kept here as place6 had them; one expectation brought to the
+  // shipped dress: in the lit reading the three black lamps stand out (its flags blackLamp0-2 put them out).
+  // props6: the looks in the real zones (build6.js act6Level on gen6's layouts), on quality 0 and 1, in all four readings
   // (drained mere and dry, bottom dark and lit): every story prop stands at its gen6 spot and is handed to the zone in
   // z.lvl.act6 (hearths, lost lights with their fire at the lantern end's interact, lure posts, wreck lanterns, bells,
   // Asger's brazier; the black lamps, the shadow-walls over the shut bands, the ember's pane, Leif's dead fire, the
@@ -4569,7 +4592,7 @@ const S = {
   // act6Zone builds none of its own: no kind twice at a spot); the Mere's lure-rock blocked in both readings; the
   // atmosphere and ambient of the reading; the shore off the grid (sea.js shoreJit on gen6's layouts); no ring or pool
   // drawn up the vault's walls (build.js drape); a frame drawn at a spot of each (shots)
-  place6: { q: 'auto=drained&q=1&lvl=36&cloud=off&seed=4242', run: async (pg) => {
+  props6: { stage: '0', until: 'E', q: 'auto=drained&q=1&lvl=36&cloud=off&seed=4242', run: async (pg) => {
     const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
     const ev = (f, a) => pg.evaluate(f, a), dir = process.argv[3] || '/tmp';
     const base = process.env.BASE || 'http://localhost:5199/';
@@ -4615,7 +4638,7 @@ const S = {
           centre: A.centre ? !!A.centre.userData.lit : null, ring: A.ring ? A.ring.userData.warm : null, ember: A.ember ? A.ember.userData.glow ?? 1 : null
         };
         const off = (l) => l.every((v) => !v), on = (l) => l.every(Boolean);
-        const okState = off(st.hearths) && off(st.lost) && off(st.wrecks) && on(st.lamps) && off(st.niches) && (lit ? off(st.walls) && on(st.stones) && st.ring === 1 : z.id !== 'bottom' || (on(st.walls) && off(st.stones) && st.ring === 0)) && (z.id !== 'bottom' || st.centre === true);
+        const okState = off(st.hearths) && off(st.lost) && off(st.wrecks) && (lit ? off(st.lamps) : on(st.lamps)) && off(st.niches) && (lit ? off(st.walls) && on(st.stones) && st.ring === 1 : z.id !== 'bottom' || (on(st.walls) && off(st.stones) && st.ring === 0)) && (z.id !== 'bottom' || st.centre === true);
         // the reading's atmosphere and ambient (gfx.js keeps the scene's fog colour)
         const want = ATMOS[lit ? 'bottomLit' : z.id], fog = window.__R.scene.fog.color.getHex();
         const atm = { fog: fog.toString(16), want: want.fog.toString(16), amb: FX.ambient, wantAmb: lit ? 'thaw' : z.id };
@@ -4644,7 +4667,7 @@ const S = {
       // a frame at the reading's place: the camera on its spot, drawn, shot
       await ev(async () => { const G = window.__G, z = G.zone, S = z.L.spots, p = z.L.mode === 'lit' ? { x: S.hearth.x, z: S.hearth.z - 4 } : z.L.mode === 'dry' ? { x: S.well.x, z: S.well.z - 5 } : z.id === 'bottom' ? S.keyx : S.hearths.find((h) => h.k === 2); const f = z.map.nearestFloor(p.x, p.z, 6); G.player.x = f.x; G.player.z = f.z; for (const a of z.actors) if (a.team === 'foe') { a.hp = 0; a.dead = true; a.remove?.(); } (await import('/src/gfx/gfx.js')).updateCamera(0, f.x, f.z, true); });
       await ev(() => new Promise((ok) => { let k = 0; const f = () => (++k >= 8 ? ok() : requestAnimationFrame(f)); requestAnimationFrame(f); }));
-      await pg.screenshot({ path: `${dir}/place6-q${q}-${zone}-${r.mode}.png` });
+      await pg.screenshot({ path: `${dir}/props6-q${q}-${zone}-${r.mode}.png` });
     }
     return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
   } }
@@ -5682,7 +5705,7 @@ const S = {
 //    centre stands 0.10 of white or more off the snow (its WCAG contrast is reported beside it; 3 : 1 is out of a 35%
 //    core's reach on any ground)
 // (farlight: on the Ice Road north of the camp, the phone's plain ice and snow at noon, the worst case)
-// Env: PART ('all' | 'viewer' | 'real': the real zones, below), RZONES ('thaw,tarn'), REALDIR,
+// Env: PART ('all' | 'viewer' | 'real': the real zones, below), RZONES ('thaw,tarn'), REALDIR, TINT7, CLOUDS,
 // ZONES ('forest,pass,farlight,coast'), QS ('1,0'), AT_<zone> (the viewer's own x=..&z=.. or at=..). stage '0', until 'B': daytele replaces it at G2
 S.day0 = { stage: '0', until: 'B', q: 'world=town&q=0&noenv', run: async (pg) => {
   const fs = await import('node:fs');
@@ -5834,7 +5857,9 @@ S.day0 = { stage: '0', until: 'B', q: 'world=town&q=0&noenv', run: async (pg) =>
     const KINDS = ['hillWolf', 'goblin', 'rockRoller', 'rockScorpion', 'chough', 'denBear'];
     const SPOTS = { thaw: [['meadow', 44, 152, 'grass'], ['raceBank', 25.5, 122, 'grass'], ['chutes', 50, 63, 'snow']], tarn: [['snowfield', 50, 128, 'snow'], ['shore', 71, 57.5, 'snow']] };
     const rz = (process.env.RZONES || 'thaw,tarn').split(',');
-    const rjpeg = async (p, file) => { let buf; for (const q of [80, 68, 56, 44, 32]) { buf = await p.screenshot({ type: 'jpeg', quality: q, timeout: 240000 }); if (buf.length <= 150000) break; } fs.writeFileSync(`${rdir}/${file}`, buf); shots.push({ file: 'stageA/day/' + file, kb: Math.round(buf.length / 1024) }); };
+    const redraw = (p) => p.evaluate(async () => { const R = window.__R, Gf = await import('/src/gfx/gfx.js'); for (let i = 0; i < 2; i++) await new Promise((ok) => requestAnimationFrame(() => { R.lost = false; Gf.render(); R.lost = true; ok(); })); }).catch(() => {});
+    // (a shot under 50 KB is the black canvas: drawn and taken again, up to three times)
+    const rjpeg = async (p, file) => { let buf; for (let t = 0; t < 4; t++) { await redraw(p); if (t) await p.waitForTimeout(300); for (const q of [80, 68, 56, 44, 32]) { buf = await p.screenshot({ type: 'jpeg', quality: q, timeout: 240000 }); if (buf.length <= 150000) break; } if (buf.length > 50000) break; } fs.writeFileSync(`${rdir}/${file}`, buf); shots.push({ file: 'stageA/day/' + file, kb: Math.round(buf.length / 1024) }); };
     for (const Q of QS) for (const zone of rz) {
       const ctx = await browser.newContext({ viewport: { width: 915, height: 412 }, deviceScaleFactor: 1.5, isMobile: true, hasTouch: true });
       const p = await ctx.newPage();
@@ -5847,11 +5872,13 @@ S.day0 = { stage: '0', until: 'B', q: 'world=town&q=0&noenv', run: async (pg) =>
       await A4.dialogs(p, 6).catch(() => {});
       await p.evaluate(() => { window.__immortal = true; const G = window.__G; G.player.hp = G.player.hpMax || 1e6; });
       const tests = [];
-      for (const [spot, tx, tz, ground] of SPOTS[zone]) { tests.push({ spot, tx, tz, ground, on: 'as it lies', five: true }); if (spot === 'meadow') tests.push({ spot, tx, tz, ground: 'grass', on: 'grass', thaw: 0 }, { spot, tx, tz, ground: 'snow', on: 'snow', thaw: 1 }, { spot, tx, tz, ground: 'trail', on: 'trail', thaw: 0, trail: true }); }
+      for (const [spot, tx, tz, ground] of SPOTS[zone]) { tests.push({ spot, tx, tz, ground, on: 'as it lies', five: true }); if (spot === 'meadow') tests.push({ spot, tx, tz, ground: 'grass', on: 'grass', thaw: 0 }, { spot, tx, tz, ground: 'snow', on: 'snow', thaw: 1 }, { spot, tx, tz, ground: 'trail', on: 'trail', thaw: 0, trail: true }, { spot, tx, tz, ground: 'trail', on: 'trail (2)', thaw: 0, trail: true, rev: true }); }
       for (const T of tests) {
-        const r = await p.evaluate(async ({ T, KINDS, zone }) => {
+        const r = await p.evaluate(async ({ T, KINDS, zone, TINT7, KEEP }) => {
           const G = window.__G, R = window.__R, Gf = await import('/src/gfx/gfx.js'), FXm = await import('/src/gfx/fx.js'), B = await import('/src/world/build.js'), PK = await import('/src/game/pickups.js'), { ATMOS } = await import('/src/world/atmos.js');
           const L = G.zone.L, w = L.w, pl = G.player, out = {};
+          // (TINT7: a look tried on a kind before data.js takes it, 'kind:rrggbb:amount,...')
+          const TINT = Object.fromEntries((TINT7 || '').split(',').filter(Boolean).map((t) => { const [k, c, a] = t.split(':'); return [k, [parseInt(c, 16), +a]]; }));
           const f2 = (v) => +v.toFixed(3);
           try {
             // the test's own things from the spot before, and every foe, gone; the packs kept from spawning
@@ -5872,25 +5899,30 @@ S.day0 = { stage: '0', until: 'B', q: 'world=town&q=0&noenv', run: async (pg) =>
             }
             if (!best) return { error: 'no floor near the spot' };
             const x = best.x, z = best.z; pl.x = x; pl.z = z; out.at = [x, z];
-            if (T.thaw != null) B.setThaw(T.thaw, true);
+            if (window.__thaw0 == null) window.__thaw0 = B.thawNow();
+            B.setThaw(T.thaw != null ? T.thaw : window.__thaw0, true);
             out.thawK = f2(B.thawNow()); out.uSnow = f2(B.WIND.uSnow.value);
             Gf.setAtmosphere(ATMOS[zone]);
             // the six kinds, each on a cell of the ground under test
             const cand = [];
-            for (let cz = Math.floor(z) - 6; cz <= z + 2; cz++) for (let cx = Math.floor(x) - 8; cx <= x + 8; cx++) {
+            for (let cz = Math.floor(z) - 7; cz <= z + (T.trail ? 3 : 0.2); cz++) for (let cx = Math.floor(x) - 9; cx <= x + 9; cx++) {
               const d = Math.hypot(cx + 0.5 - x, cz + 0.5 - z);
-              if (d < 2.2 || d > 8 || !floor(cx, cz) || (T.trail ? !trail(cx, cz) : T.on !== 'as it lies' && trail(cx, cz))) continue;
+              if (d < 2.2 || d > 9.5 || !floor(cx, cz) || (T.trail ? !trail(cx, cz) : T.on !== 'as it lies' && trail(cx, cz))) continue;
               cand.push({ x: cx + 0.5, z: cz + 0.5, s: Math.abs(d - 3.8) });
             }
             cand.sort((a, b) => a.s - b.s);
             const put = [];
-            for (const c of cand) { if (put.length >= KINDS.length) break; if (put.every((q) => Math.hypot(q.x - c.x, q.z - c.z) >= 2.4)) put.push(c); }
+            for (const c of cand) { if (put.length >= KINDS.length) break; if (put.every((q) => Math.hypot(q.x - c.x, q.z - c.z) >= (T.trail ? 1.9 : 2.4))) put.push(c); }
             put.sort((a, b) => a.x - b.x);
             const mons = {};
-            KINDS.forEach((k, i) => { const c = put[i]; if (!c) { out['err_' + k] = 'no cell'; return; } try { const a = window.__D.spawnMonster(k, c.x, c.z); if (a) { G.actors.push(a); mons[k] = { a, x: c.x, z: c.z }; } } catch (e) { out['err_' + k] = e.message.slice(0, 80); } });
+            // (the trail is three cells wide and holds four or five of them: its second test takes the kinds from the other end)
+            (T.rev ? KINDS.slice().reverse() : KINDS).forEach((k, i) => { const c = put[i]; if (!c) { (out.notPlaced ||= []).push(k); return; } try { const a = window.__D.spawnMonster(k, c.x, c.z); if (a) { G.actors.push(a); mons[k] = { a, x: c.x, z: c.z }; const tn = TINT[k]; if (tn) { a.avatar.setTint(tn[0], tn[1]); a.baseTint = tn[0]; a.baseTintAmt = tn[1]; } } } catch (e) { out['err_' + k] = e.message.slice(0, 80); } });
             for (let i = 0; i < 5; i++) await new Promise((ok) => requestAnimationFrame(() => { pl.x = x; pl.z = z; for (const k in mons) { const m = mons[k]; m.a.x = m.x; m.a.z = m.z; } Gf.updateCamera(0, x, z, true); ok(); }));
             window.__mode7 = G.mode; G.mode = 'hold'; R.lost = true;
             Gf.setAtmosphere(ATMOS[zone]); Gf.updateCamera(0, x, z, true);
+            // (in sun: the clouds' shade discs off the ground for the read and the shot, so two runs read the same ground;
+            // CLOUDS=1 leaves them, the spot as the clock has it)
+            out.clouds = 0; if (!KEEP) R.scene.traverse((o) => { if (o.userData?.kind === 'cloudDisc' && o.visible) { o.visible = false; out.clouds++; } });
             const gl = R.renderer.getContext(), W = gl.drawingBufferWidth, H = gl.drawingBufferHeight, V = new R.camera.position.constructor();
             const grab = () => { R.lost = false; Gf.frame(0); Gf.render(); R.lost = true; const px = new Uint8Array(W * H * 4); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px); return px; };
             const scr = (wx, wy, wz) => { V.set(wx, wy, wz).project(R.camera); return [Math.round((V.x * 0.5 + 0.5) * (W - 1)), Math.round((V.y * 0.5 + 0.5) * (H - 1))]; };
@@ -5911,27 +5943,27 @@ S.day0 = { stage: '0', until: 'B', q: 'world=town&q=0&noenv', run: async (pg) =>
             out.ground = { luma: f2(avg(T.trail ? ts : gs)), n: gs.length, trail: ts.length ? f2(avg(ts)) : null, max: T.ground === 'snow' ? 0.8 : 0.55 };
             // 3 the bodies: each kind's own box on the screen (its drawn bounds, drawn in a little), the pixels it changes
             const FA = grab(); out.body = {};
-            const Box = new (Object.getPrototypeOf(R.camera.position).constructor)(), THREEb = await import('/src/gfx/rig.js').catch(() => null);
-            void Box; void THREEb;
             for (const k in mons) {
               const g = mons[k].a.avatar?.group; if (!g) { out.body[k] = { diff: 0, cover: 0 }; continue; }
-              let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
-              g.updateWorldMatrix(true, true);
-              g.traverse((o) => { if (!o.isMesh || !o.geometry) return; if (!o.geometry.boundingBox) o.geometry.computeBoundingBox(); const b = o.geometry.boundingBox;
-                for (let c = 0; c < 8; c++) { V.set(c & 1 ? b.max.x : b.min.x, c & 2 ? b.max.y : b.min.y, c & 4 ? b.max.z : b.min.z).applyMatrix4(o.matrixWorld); lo = [Math.min(lo[0], V.x), Math.min(lo[1], V.y), Math.min(lo[2], V.z)]; hi = [Math.max(hi[0], V.x), Math.max(hi[1], V.y), Math.max(hi[2], V.z)]; } });
-              // (held to what a creature can be: a skinned mesh's rest bounds can lie far from where its bones draw it)
-              const cx = g.position.x, cz = g.position.z; lo = [Math.max(lo[0], cx - 1.6), Math.max(lo[1], 0), Math.max(lo[2], cz - 1.6)]; hi = [Math.min(hi[0], cx + 1.6), Math.min(hi[1], 3.2), Math.min(hi[2], cz + 1.6)];
+              // (a box that surely holds it, from where it stands and its radius; inside it only the creature's own
+              // pixels count: the frame without it keeps its cast shadow, its meshes drawn with no colour and no depth)
+              // (a flier stands where it flies: its box from its own height; one the AI had hidden is shown for the read, and said)
+              if (!g.visible) { g.visible = true; (out.shown ||= []).push(k); }
+              const a = mons[k].a, rr = (a.radius || 0.6) * 1.4 + 0.5, cx = g.position.x, cz = g.position.z, gy = Math.max(0, g.position.y), lo = [cx - rr, Math.max(0, gy - 0.6), cz - rr], hi = [cx + rr, gy + Math.min(4.5, rr * 2.2 + 1.2), cz + rr];
+              let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
               for (let c = 0; c < 8; c++) { const s = scr(c & 1 ? hi[0] : lo[0], c & 2 ? hi[1] : lo[1], c & 4 ? hi[2] : lo[2]); x0 = Math.min(x0, s[0]); x1 = Math.max(x1, s[0]); y0 = Math.min(y0, s[1]); y1 = Math.max(y1, s[1]); }
               x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(W - 1, x1); y1 = Math.min(H - 1, y1);
-              // (the creature alone hidden: what its pixels show without it)
-              const FM = hide([g], grab);
+              const swap = new Map();
+              g.traverse((o) => { if (!o.material || !(o.isMesh || o.isSprite || o.isPoints)) return; for (const m of Array.isArray(o.material) ? o.material : [o.material]) if (!swap.has(m)) { swap.set(m, [m.colorWrite, m.depthWrite]); m.colorWrite = false; m.depthWrite = false; } });
+              const FM = grab();
+              for (const [m, [cw, dw]] of swap) { m.colorWrite = cw; m.depthWrite = dw; }
               let on = 0, off = 0, n = 0, tot = 0, abs = 0;
               for (let sy = y0; sy <= y1; sy++) for (let sx = x0; sx <= x1; sx++) {
                 tot++; const c1 = at(FA, [sx, sy]), c0 = at(FM, [sx, sy]);
                 if (Math.max(Math.abs(c1[0] - c0[0]), Math.abs(c1[1] - c0[1]), Math.abs(c1[2] - c0[2])) <= 10) continue;
                 on += luma(c1); off += luma(c0); abs += Math.abs(luma(c1) - luma(c0)); n++;
               }
-              out.body[k] = n > 20 ? { diff: f2(Math.abs(on - off) / n), body: f2(on / n), behind: f2(off / n), meanAbs: f2(abs / n), px: n } : { diff: 0, px: n };
+              out.body[k] = n > 12 ? { diff: f2(Math.abs(on - off) / n), body: f2(on / n), behind: f2(off / n), meanAbs: f2(abs / n), px: n } : { diff: 0, px: n };
             }
             if (T.five) {
               // 1, 4, 5: the tells, on the frame with everything in it
@@ -5959,12 +5991,12 @@ S.day0 = { stage: '0', until: 'B', q: 'world=town&q=0&noenv', run: async (pg) =>
             R.lost = false; Gf.frame(0); Gf.render(); R.lost = true;
           } catch (e) { out.error = e.message + ' | ' + (e.stack || '').split('\n').slice(1, 3).join(' | '); }
           return out;
-        }, { T, KINDS, zone }).catch((e) => ({ error: e.message.slice(0, 300) }));
-        await rjpeg(p, `day-q${Q}-${zone}-${T.spot}${T.five ? '' : '-on-' + T.on}.jpg`);
+        }, { T, KINDS, zone, TINT7: process.env.TINT7 || '', KEEP: process.env.CLOUDS === '1' }).catch((e) => ({ error: e.message.slice(0, 300) }));
+        await rjpeg(p, `day-q${Q}-${zone}-${T.spot}${T.five ? '' : '-on-' + T.on.replace(/\W+/g, '')}.jpg`);
         const row = { zone, q: Q, spot: T.spot, on: T.on, groundKind: T.ground, ...r };
         if (!r.error) {
-          const bodies = KINDS.map((k) => r.body?.[k]?.diff ?? 0);
-          row.fails = KINDS.filter((k) => !((r.body?.[k]?.diff ?? 0) >= 0.15)).map((k) => `${k} ${r.body?.[k]?.diff ?? 0}`);
+          const bodies = KINDS.filter((k) => r.body?.[k]).map((k) => r.body[k].diff);
+          row.fails = KINDS.filter((k) => r.body?.[k] && !(r.body[k].diff >= 0.15)).map((k) => `${k} ${r.body[k].diff}`);
           row.ok = { body: !row.fails.length, ground: T.trail ? null : r.ground.luma <= r.ground.max };
           if (T.five) Object.assign(row.ok, { tele: r.teleDay.cr >= 3, clip: r.clip <= 2, beam: T.ground === 'snow' ? (r.beam?.step ?? 0) >= 0.1 : null });
           row.n = { tele: r.teleDay?.cr, teleAdd: r.teleAdd?.cr, ground: r.ground.luma, body: Math.min(...bodies), clip: r.clip, beam: r.beam?.step };
@@ -5988,6 +6020,9 @@ S.cp6 = S.wake6;
 // (docs/act7-contract.md, the four test rules). --stale lists every scenario whose `until` stage has passed.
 import { S7, STAGE_NOW, STAGES } from './scenario7.mjs';
 Object.assign(S, S7({ A4, A5 }));
+// (Act VII's gate scenarios: mem7, perf7, cast7, play7)
+import { S7b } from './scenario7b.mjs';
+Object.assign(S, S7b({ A4, A5, S, logs }));
 if (name === '--stale') {
   const stale = Object.entries(S).filter(([, v]) => v.until && STAGES.indexOf(v.until) < STAGES.indexOf(STAGE_NOW)).map(([k, v]) => `${k} (stage ${v.stage}, until ${v.until})`);
   console.log(stale.length ? 'STALE at stage ' + STAGE_NOW + ':\n' + stale.join('\n') : 'no stale scenario at stage ' + STAGE_NOW);

@@ -25,7 +25,10 @@ import { angleTo } from '../core/util.js';
 import { openDeepGate, FAR_BEACONS, farFire, openRootGate, witherWall, firstAutumn, growProp, zoneEmitters, setFar, setBeacon, townFires, townPresence, walkTo, stopWalk, vanish, release,
   act4Presence, isarnLantern, setLastLamp, openAnvilGate, meltPlug, forgeCold, bellowsDone, echoAt,
   act5Presence, people5, scene5, npc5, spawnNpc5, light5, iceMemOf, ICE_WHO, LIGHTS5, touch, spawnBoss, checkpoint5,
-  act6Presence, light6, checkpoint6, openings6, echo6Set, echo6Clear, act7Presence, raceTo, weirs7, winches7 } from './world.js';
+  act6Presence, light6, checkpoint6, openings6, echo6Set, echo6Clear, act7Presence, raceTo, weirs7, winches7, town7 } from './world.js';
+import { act7Prop } from '../world/build7.js';
+import { N7learn, N7_BY } from './names7.js';
+import { fires7 } from './fires7.js';
 
 // Act III's counters: the three verses of the Long Sorrow, the three thorn walls of the Heartwood
 const STORY_TEARS = ['planting', 'sorrow', 'breaking'];
@@ -78,6 +81,7 @@ function setQuest(n, quiet) {
 }
 export function npcHasNews(kind, a) {
   const q = G.hero.quest, F = G.hero.flags, zid = G.zone?.id, a4 = zid === 'ashfield' || zid === 'forge';
+  const n7 = news7(kind, a, zid); if (n7 != null) return n7;
   const n6 = news6(kind, a, zid); if (n6 != null) return n6;
   if (a4) return (kind === 'wayfarer' && zid === 'ashfield' && (a?.key === 'isarnHook' ? !F.isarnHook : !F.isarnField))
     || (kind === 'brokka' && (zid === 'ashfield' ? !F.brokkaField : !F.brokkaForge))
@@ -111,7 +115,8 @@ const heal = () => { G.player.potionCd = 0; G.player.hp = G.player.hpMax; };
 on('talk', (kind, actor) => {
   const q = G.hero.quest, F = G.hero.flags;
   const zid = G.zone?.id;
-  // Act VI's, then Act V's people, and what Whitecliff, Deepstone and the wood say once the coast has called
+  // Act VII's, Act VI's, then Act V's people, and what Whitecliff, Deepstone and the wood say once the coast has called
+  if (talk7(kind, actor)) return;
   if (talk6(kind, actor)) return;
   if (talk5(kind, actor)) return;
   if (kind === 'wayfarer' && (zid === 'ashfield' || zid === 'forge')) {
@@ -234,6 +239,7 @@ on('zoneEnter', (id, z) => {
   }
   enter5(id, z);
   enter6(id, z);
+  enter7(id, z);
 });
 on('voice', (key) => {
   if (key.startsWith('d.skotos')) { skotosSay(key); return; }
@@ -264,6 +270,8 @@ on('kill', (a) => {
     if (deep) { const z = G.zone; dismiss5(z, a); later(2.4, () => { if (G.zone === z) echo6Clear(z); }); }
     later(1.2, () => { if (G.zone?.actors.includes(a)) { glowBurst(a.x, 1.2, a.z, c, 40, 3, 0.3, 1); ring(a.x, a.z, 3, c, 0.7); } });
     later(2.2, () => emit('toast', t(ash ? 'echo.done4' : ice ? 'echo.done5' : deep ? 'echo.done6' : 'echo.done'), 'quest'));
+    // (Act VII: Ivar's echo fought to its end with the Names open gives his: ivarEcho7, names7.js)
+    { const own = G.hero.__real || G.hero; if (a.kind === 'ivar' && own.quest >= 40 && !own.flags.ivarEcho7) { own.flags.ivarEcho7 = true; learn7(); } }
     writeSave();
     return;
   }
@@ -557,7 +565,7 @@ export function offerBoons() {
   h.boons ||= [];
   // never over a cinematic or another panel: try again in a moment
   if (G.mode !== 'play' || G.panel) { later(2, offerBoons); return false; }
-  for (const act of [1, 2, 3, 4, 5, 6]) {
+  for (const act of [1, 2, 3, 4, 5, 6, 7]) {
     const done = act === 1 ? h.act1 >= 0 : (h['act' + act] ?? -1) >= 0;
     if (done && !h.boons[act - 1] && BOONS[act]) { emit('openPanel', 'boon', { act }); return true; }
   }
@@ -589,7 +597,8 @@ function actComplete(act) {
   writeSave();
   // the new fire has its own music: the lantern's motif, slow, with the village's tune as each fire answers
   // and the sea's: the sea-light's motif answered by the lantern's
-  Audio.music(act === 4 ? 'newfire' : act === 5 ? 'sealit' : act === 6 ? 'pherousa' : 'victory');
+  // (Act VII closes on a quiet morning: no fanfare, the village's own tune already playing)
+  if (act !== 7) Audio.music(act === 4 ? 'newfire' : act === 5 ? 'sealit' : act === 6 ? 'pherousa' : 'victory');
   emit('openPanel', 'act');
 }
 // ---------- Act IV: the Ashen Forge ----------
@@ -2767,13 +2776,307 @@ export function people6(z) {
 
 export { setQuest };
 
-// ---------- Act VII: the Seven Peaks (docs/act7-contract.md, Story) ----------
-// (stage A: the deeds that move the world, each flag saved before its scene; the scenes, the memories in stone, Halda's
-// lines and the two who are not killed are stage D's and stage C's, laid over these)
-// a weir turned: the flag, the Race a step down along its whole length, the snow drawn back; the third opens the Narrows
+// ---------- Act VII: the Seven Peaks (docs/act7-contract.md, Story; the lines are docs/act7-design/10-story.md's) ----------
+// The chain, each flag saved before its scene: call7 → haldaOut → thawSeen → weir1..3 → kallistoRest → tarnSeen →
+// winch1..3 → keladosWake → keladosRest → lakeLet → home7 → lanternWake → act7. Off the chain: mem_s1..s6 (the memories
+// in stone, in count order whichever wheel was turned first: weirs7 / winches7 keep the order), haldaCamp7, haldaDen7,
+// haldaHead7, brokkaV7a, brokkaV7b, elatiV7, haldaV9 (first talks; the design's `haldaV8` is Act VI's flag already).
+// The two who are not killed are ai.js's: the story hears bus 'bossRest' (kind) for the two rests and 'boss7Phase'
+// (kind, phase) for Halda's calls. Water with care: nobody is in the water in any scene here, and the town is shown
+// nothing but its stream's sound.
+// (?nostory: a test of the systems or the fights is past the story's scenes: flags and quests move, nothing plays)
+const NOSTORY = typeof location !== 'undefined' && /[?&]nostory\b/.test(location.search);
+// (the owner's question 3, open: Isarn's lantern woken at the end. A no: false here drops the two lines, the flag and
+// the lantern's state, and nothing else)
+const LANTERN_WAKE = true;
+const SM = 'stoneMemory';
+const narr7 = (k) => emit('toast', t(rl(k)), 'quest wind');
+// who the figures are (people.glb: the masons the smith's body, the shepherds villagers), who says the key line
+const STONE = {
+  s1: { key: 'd.mason.m1', who: ['smith', 'smith', 'smith'], lines: [[1, SM], [2, SM], [3, 'mason'], [4, SM]] },
+  s2: { key: 'd.mason.m2', who: ['smith', 'smith'], lines: [[1, SM], [2, SM], [3, 'mason'], [4, SM]] },
+  s3: { key: 'd.mason.m3', who: ['villager', 'villager', 'smith'], lines: [[1, SM], [2, SM], [3, 'shepherd'], [4, SM]] },
+  s4: { key: 'd.mason.m4', who: ['smith', 'smith'], lines: [[1, SM], [2, SM], [3, 'mason2'], [4, SM]] },
+  s5: { key: 'd.mason.m5', who: ['smith', 'smith', 'smith'], lines: [[1, SM], [2, SM], [3, 'mason'], [4, SM]] },
+  s6: { key: 'd.mason.m6', who: ['smith'], lines: [[1, SM], [2, SM], [3, 'masonOld'], [4, SM]] }
+};
+// the wheels turned (the Meltwaters) or the winches freed (the Hanging Lake), in the order she took them
+const deeds7 = (zid, F = G.hero.flags) => { const p = zid === 'thaw' ? 'weir' : 'winch', ord = (F[p + 's7'] || []).filter((k) => F[p + k]); for (const k of [1, 2, 3]) if (F[p + k] && !ord.includes(k)) ord.push(k); return ord; };
+// the next memory owed here (a wheel turned or a winch freed whose memory was not seen to its end), and its mark
+function stoneOwed(z) {
+  if (z?.id !== 'thaw' && z?.id !== 'tarn') return null;
+  const F = G.hero.flags, off = z.id === 'tarn' ? 3 : 0, ord = deeds7(z.id, F), list = z.id === 'thaw' ? z.L.spots.weirs : z.L.spots.winches;
+  for (let i = 0; i < ord.length; i++) if (!F['mem_s' + (off + i + 1)]) return { n: off + i + 1, sp: (list || []).find((w) => w.k === ord[i]) || null, k: ord[i] };
+  return null;
+}
+// the Sleeper's fight is on (Halda calls, nobody has news): his or the bear's, awake and not yet at rest
+const boss7Up = (z) => { const b = z?.boss, F = G.hero.flags; return !!b && !b.dead && !b.holdWake && !b.echo && ((b.kind === 'kallisto' && !F.kallistoRest) || (b.kind === 'kelados' && !F.keladosRest)); };
+// the "!" over Act VII's people (null: not theirs)
+function news7(kind, a, zid) {
+  const F = G.hero.flags;
+  if (!F.call7) return null;
+  if (zid === 'thaw' || zid === 'tarn') {
+    if (kind !== 'smith' || boss7Up(G.zone)) return false;
+    return zid === 'thaw' ? (weirs7(F) >= 3 ? !F.haldaDen7 && !F.kallistoRest : !F.haldaCamp7) : !F.keladosWake && !F.haldaHead7;
+  }
+  if (zid === 'town' && kind === 'smith') return !F.haldaOut || (!!F.act7 && !F.haldaV9);
+  if (zid === 'halls' && kind === 'brokka') return F.act7 ? !F.brokkaV7b : !F.brokkaV7a;
+  if (zid === 'weep' && kind === 'elati' && F.act7) return !F.elatiV7;
+  return null;
+}
+// Act VII's people talking; true when it was theirs to answer. A line of the act is said the first time each visit
+// (a.said7), the older ones after it
+function talk7(kind, a) {
+  const F = G.hero.flags, z = G.zone, zid = z?.id;
+  if (!F.call7) return false;
+  const first = () => !!a && !a.said7, said = () => { if (a) a.said7 = true; };
+  if (zid === 'thaw' || zid === 'tarn') {
+    if (kind === 'smith') { haldaTalk7(z); return true; }
+    if (kind === 'lookout') { lookoutTalk7(z, a); return true; }
+    return false;
+  }
+  if (zid === 'town') {
+    // (live: from the call until she is home again; done: the act closed)
+    const live = !F.home7, done = !!F.act7;
+    if (kind === 'lookout') { emit('dialog', { who: 'lookout', lines: ['d.vigla.home'] }); return true; }
+    if (kind === 'smith') {
+      if (!F.haldaOut) { haldaStaff(z); return true; }
+      if (!done) return false;
+      emit('dialog', { who: 'smith', lines: [F.haldaV9 ? 'd.halda7.v9' : 'd.halda7.v8'], end: () => { F.metSmith = true; F.haldaV9 = true; writeSave(); emit('openPanel', 'smith'); } });
+      return true;
+    }
+    if (!live && !done) return false;
+    if (kind === 'healer' && first()) {
+      said(); heal();
+      const key = live ? 'd.elianthe7.v0' : F.elianteV9 ? 'd.elianthe7.v2' : 'd.elianthe7.v1';
+      emit('dialog', { who: 'healer', lines: [key], end: () => { F.metHealer = true; if (done) { F.elianteV9 = true; writeSave(); } emit('openPanel', 'vendor'); } });
+      return true;
+    }
+    if (kind === 'child') { emit('dialog', { who: 'child', lines: [live ? 'd.child7.bark' : 'd.child.bark7'] }); return true; }
+    if (kind === 'leif' && F.leifHome && first()) { said(); emit('dialog', { who: 'leif', lines: [live ? 'd.leif.v7' : 'd.leif.bark7'] }); return true; }
+    if (kind === 'villager' && first()) {
+      // (Leif's father is Act I's third villager: his own thread until his son's name is back)
+      const i = (a?.bark || 0) % 4, dad = i === 2;
+      const key = dad ? (done && F.leifName ? 'd.v.son7' : null) : done ? 'd.v7.3' : i === 1 && F.haldaOut ? 'd.v7.2' : 'd.v7.1';
+      if (key) { said(); emit('dialog', { who: 'villager', lines: [key] }); return true; }
+    }
+    return false;
+  }
+  if (zid === 'halls' && kind === 'brokka') {
+    const flag = F.act7 ? 'brokkaV7b' : 'brokkaV7a', shop = () => emit('openPanel', 'vendor', { npc: 'brokka' });
+    if (!F[flag]) { heal(); emit('dialog', { who: 'brokka', lines: F.act7 ? ['d.brokka7.3', 'd.brokka7.4'] : ['d.brokka7.1', 'd.brokka7.2'], end: () => { F[flag] = true; writeSave(); emit('quest'); shop(); } }); return true; }
+    if (F.act7 && first()) { said(); heal(); emit('dialog', { who: 'brokka', lines: ['d.brokka7.4'], end: shop }); return true; }
+    return false;
+  }
+  if (zid === 'weep') {
+    const shop = () => emit('openPanel', 'vendor', { npc: 'elati' });
+    if (kind === 'elati' && F.act7 && !F.elatiV7) { heal(); emit('dialog', { who: 'elati', lines: [rl('d.elati.v7')], end: () => { F.elatiV7 = true; writeSave(); emit('quest'); shop(); } }); return true; }
+    if (kind === 'elati' && first()) { said(); heal(); emit('dialog', { who: 'elati', lines: [F.act7 ? rl('d.elati.v7') : 'd.elati.v7a'], end: shop }); return true; }
+    if (kind === 'tamarisk' && F.act7 && first()) { said(); emit('dialog', { who: 'tamarisk', lines: [rl('d.tam7.v1')] }); return true; }
+    return false;
+  }
+  // after the act, one new line each for the far north, the Landing and the Rope camp
+  if (!F.act7 || !first()) return false;
+  const line = (who, key, end) => { said(); emit('dialog', { who, lines: [key], end }); return true; };
+  if (zid === 'farlight' && kind === 'selna') { heal(); return line('selna', 'd.selna.v7', shopOf('selna')); }
+  if (zid === 'farlight' && kind === 'tern') return line('tern', 'd.tern.v7');
+  if (zid === 'coast' && kind === 'alkyone') return line('alkyone', 'd.alk.v7');
+  if ((zid === 'drained' || zid === 'coast') && kind === 'glaukos') return line('glaukos', 'd.glaukos.v7', shopOf('glaukos'));
+  return false;
+}
+// Halda on the mountain: at her camp (the Race taught; the Sleeper told of, low), on the gravel bar before the Den; her
+// stores and her small anvil after every word
+function haldaTalk7(z) {
+  const F = G.hero.flags;
+  const D = (lines, flag) => emit('dialog', { who: 'smith', lines: rls(lines), end: () => { if (flag && !F[flag]) { F[flag] = true; writeSave(); emit('quest'); } emit('openPanel', 'smith'); } });
+  if (z.id === 'thaw') {
+    if (weirs7(F) >= 3 && !F.kallistoRest && !F.haldaDen7) D(['d.halda7.w1', 'd.halda7.w2', 'd.halda7.w3'], 'haldaDen7');
+    else if (weirs7(F) < 3 && !F.haldaCamp7) D(['d.halda7.b1', 'd.halda7.b2', 'd.halda7.b3', 'd.halda7.b4', 'd.halda7.b5', 'd.halda7.b6'], 'haldaCamp7');
+    else D(['d.halda7.again']);
+  } else if (!F.keladosWake && !F.haldaHead7) D(['d.halda7.t1', 'd.halda7.t2', 'd.halda7.t3', 'd.halda7.t4', 'd.halda7.t5', 'd.halda7.t6'], 'haldaHead7');
+  else D(['d.halda7.tagain']);
+}
+// a lookout at his hut: dry, well, and in no danger; one line before his fire is held, the shared line after it
+function lookoutTalk7(z, a) {
+  const F = G.hero.flags, n = a?.look7 || 1, held = !!F['look' + n] || (fires7()[n - 1] | 0) > 0, leif = n === 1 && !!F.leifName;
+  const key = held ? 'd.vigla.done' : n === 5 && F.keladosWake && a?.said7 ? 'd.vigla.5b' : leif ? 'd.vigla.1l' : 'd.vigla.' + n;
+  if (a) a.said7 = true;
+  emit('dialog', { who: leif ? 'leif' : 'lookout', lines: [key] });
+}
+on('holdHeld', () => later(2.4, () => say('d.vigla.done')));
+// Halda's anvil while she is on the mountain: her chalk, then the reforge panel as ever
+on('anvil7', () => { if (G.mode !== 'play') return; narr7('d.anvil7'); later(1.6, () => { if (G.mode === 'play' && !G.panel) emit('openPanel', 'smith'); }); });
+// the Names given (names7.js, hook 4): the three she has always known and Halda's one free unlearning, told once; any
+// other Name newly learnt, by its own name
+function learn7(tell) {
+  const h = G.hero.__real || G.hero, F = h.flags, r = N7learn(h) || {};
+  let d = 0;
+  if (r.given || (tell && !F.names7Told)) { F.names7Told = true; later(1.2, () => emit('toast', t('name7.given'), 'quest')); later(4.6, () => emit('toast', t('name7.free'), 'quest')); d = 8; }
+  for (const id of r.fresh || []) if (!N7_BY[id]?.unlock?.quest) { const k = N7_BY[id].nameKey; later((d += 1.2), () => { emit('toast', t('name7.learnt', t(k)), 'quest'); Audio.sfx('softBell'); }); }
+  refreshStats();
+}
+
+// ---------- q40: the hook at Whitecliff ----------
+// a save at the end of Act VI: on its next town entry, or 2 s after Act VI's blessing panel closes
+function hook7(z) {
+  const h = G.hero, F = h.flags;
+  if (F.call7 || !F.act6 || (h.act6 ?? -1) < 0 || h.quest < 39 || h.__real || z?.id !== 'town' || G.zone !== z) return;
+  if (busy()) { later(2, () => hook7(G.zone)); return; }
+  F.call7 = true; writeSave();
+  if (NOSTORY) { town7(z); setQuest(40); return; }
+  loadFolk('frost').then(() => { if (G.zone !== z) { setQuest(40); return; } springScene(z); }, () => { town7(z); setQuest(40); });
+}
+on('actClosed', () => later(2.1, () => hook7(G.zone)));
+on('boonTaken', () => later(2.3, () => hook7(G.zone)));
+// the seven day-smokes on the skyline (Arna's hill and the six peaks) in the town's daylight scenes: each fire's sprite
+// gives place to a thin smoke, and is given back by townFires
+const SMOKE7 = [0, 7, 8, 9, 10, 11, 12];
+function smokes7(z, on) {
+  const T = (z.town ||= { far: [] }), b = z.L.beacon, S = (T.smokes7 ||= {});
+  for (const i of SMOKE7) {
+    const F0 = FAR_BEACONS[i]; if (!F0) continue;
+    if (on) setFar(z, i, false);
+    if (on && !S[i]) {
+      let m = null; try { m = act7Prop('daySmoke', { w: 3.2, h: 11 }); } catch (e) { m = null; }
+      if (m) { m.position.set(b.x + F0.dx, F0.y - 1, b.z + F0.dz); z.extra.push(m); if (G.zone === z) R.scene.add(m); S[i] = m; }
+    }
+    if (!on && S[i]) { const m = S[i], k = z.extra.indexOf(m); if (k >= 0) z.extra.splice(k, 1); R.scene.remove(m); delete S[i]; }
+  }
+}
+// the morning: dark before dawn on the beacon, the third night without sleep; day breaks warm and the stream below the
+// village is heard, loud; the child; Halda at Isarn's staff with her palm over the gate
+function springScene(z) {
+  const b = z.L.beacon, s = z.L.spots.npcs.wayfarer;
+  people5(z);
+  emit('cine', {
+    x: b.x, z: b.z + 5, dur: 16, zoom: 1.4, pitch: 0.3,
+    steps: [
+      [0.6, () => narr7('d.spring.1')],
+      [4.4, () => narr7('d.spring.2')],
+      [8.2, () => { setAtmosphere(ATMOS.townMorning); z.morning7 = true; smokes7(z, true); if (G.cine) Object.assign(G.cine, { x: b.x, z: z.L.h - 12, pitch: 0.3 }); Audio.sfx('brookRoar', { vol: 0.7 }); }],
+      [9.0, () => narr7('d.spring.3')],
+      [13.2, () => { if (G.cine) Object.assign(G.cine, { x: s.x, z: s.z + 4, pitch: 0.5 }); }]
+    ],
+    end: () => {
+      if (G.zone !== z) { setQuest(40); return; }
+      emit('dialog', { who: 'child', lines: ['d.child7.1', 'd.child7.2', 'd.child7.3'], end: () => {
+        town7(z);
+        emit('cine', { x: s.x, z: s.z + 3, dur: 4.6, zoom: 1.25, pitch: 0.45, steps: [[0.5, () => narr7('d.spring.4')]], end: () => setQuest(40) });
+      } });
+    }
+  });
+}
+// Halda at the staff: the gates opened in the mountains too; a lake hangs over all of them; on the third peak the smoke
+// stops and the snow comes down (the lookout got clear, and the line says so at once); she goes up ahead (haldaOut,
+// saved before she walks; the three Names and her one free unlearning are given here)
+function haldaStaff(z) {
+  const F = G.hero.flags, b = z.L.beacon;
+  if (F.haldaOut || z.halda7 || G.zone !== z) return;
+  z.halda7 = true;
+  const w = z.townNpc?.smith;
+  const leave = () => {
+    if (w) w.scene7 = true;
+    F.haldaOut = true; writeSave();
+    learn7(true);
+    setQuest(41);
+    smokes7(z, false); townFires(z);
+    z.halda7 = false;
+    // she shoulders her pack and walks out by the mountain road
+    const a = w?.a, ex = z.L.exits.find((e) => e.to === 'pass');
+    if (!a || !ex || G.zone !== z || !z.actors.includes(a)) { if (w) w.scene7 = false; town7(z); return; }
+    const pts = [{ x: b.x + 7, z: b.z + 7 }, { x: (b.x + ex.x) / 2 + 4, z: ex.z + 3 }, { x: ex.x - 1, z: ex.z + 1 }].map((p) => z.map.nearestFloor(p.x, p.z, 3) || p);
+    walkPath(a, pts, 1.7, () => { w.scene7 = false; town7(z); });
+  };
+  const word = () => emit('dialog', { who: 'smith', lines: ['d.halda7.a7', 'd.halda7.a8'], end: leave });
+  emit('dialog', { who: 'smith', lines: ['d.halda7.a1', 'd.halda7.a2', 'd.halda7.a3', 'd.halda7.a4', 'd.halda7.a5', 'd.halda7.a6'], end: () => {
+    if (NOSTORY || G.zone !== z) { word(); return; }
+    const F9 = FAR_BEACONS[9], far = { x: b.x + F9.dx, y: F9.y, z: b.z + F9.dz };
+    if (!z.morning7) { setAtmosphere(ATMOS.townMorning); z.morning7 = true; }
+    smokes7(z, true);
+    emit('cine', {
+      x: b.x, z: b.z - 18, dur: 7.6, zoom: 1.5, pitch: 0.3,
+      steps: [
+        [0.8, () => { z.town?.smokes7?.[9]?.userData.setK?.(0); narr7('d.smoke.1'); }],
+        // (the white tongue down that flank: snow, far off, and nobody under it)
+        [1.6, () => { for (let n = 0; n < 40; n++) P({ x: far.x + (Math.random() - 0.5) * 2, y: far.y - 1 - Math.random() * 2, z: far.z, vx: (Math.random() - 0.5) * 0.6, vy: -1.2 - Math.random() * 1.4, life: 2.6, size: 0.5, size1: 0.9, color: 0xf4f8ff, drag: 0.2 }); }],
+        [4.2, () => { narr7('d.smoke.2'); glowBurst(far.x + 3, far.y - 2, far.z, 0xffb060, 6, 0.6, 0.5, 1.6); }]
+      ],
+      end: word
+    });
+  } });
+}
+
+// ---------- q41-q42: the Meltwaters ----------
+// the arrival: the green valley full of voices, three of the seven peaks round it (thawSeen saved first)
+function thawArrival(z) {
+  const F = G.hero.flags;
+  if (F.thawSeen || z.arriving || G.zone !== z) return;
+  if (NOSTORY) { F.thawSeen = true; writeSave(); return; }
+  if (busy()) { later(1.5, () => thawArrival(z)); return; }
+  z.arriving = true; F.thawSeen = true; writeSave();
+  const c = z.L.spots.camp;
+  if (ATMOS.thawCine) setAtmosphere(ATMOS.thawCine);
+  emit('cine', {
+    x: c.x, z: c.z - 26, dur: 9, zoom: 0.85, pitch: 0.3,
+    steps: [[0.8, () => narr7('d.thaw.1')], [4.8, () => { narr7('d.thaw.2'); if (G.cine) Object.assign(G.cine, { z: c.z - 44 }); }]],
+    end: () => { z.arriving = false; if (ATMOS.thaw && G.zone === z) setAtmosphere(ATMOS.thaw); if (G.hero.quest < 41) setQuest(41, true); emit('quest'); }
+  });
+}
+// the mason's mark of a wheel or a winch (build7.js: the weir carries its own on its sill, a winch a mark stone beside it)
+const mark7 = (z, k) => { const P7 = z.lvl?.act7; return z.id === 'thaw' ? P7?.weirs?.find((w) => w.i === k)?.mesh : P7?.winches?.find((w) => w.i === k)?.mark; };
+// a memory in stone: Act IV's and VI's flow (a narrator, pale figures standing by), the masons and the shepherds of
+// the works; Memory of the Stoneborn after it. Six, on the path, in count order
+function playStone(z, n, sp, k, done) {
+  const F = G.hero.flags, mem = 's' + n, M0 = STONE[mem];
+  if (!M0 || F['mem_' + mem] || z.memory || G.zone !== z) return;
+  if (NOSTORY) { F['mem_' + mem] = true; writeSave(); done?.(); return; }
+  if (busy()) { later(1.5, () => playStone(z, n, sp, k, done)); return; }
+  z.memory = true;
+  const at = sp?.mark || sp || G.player, lines = rls(M0.lines.map(([i, who]) => [M0.key + '.' + i, who])), figs = [], spots = sp?.figures || [];
+  let fin = false;
+  Audio.sting('memoryIce'); Audio.sfx('softBell', { vol: 0.8 });
+  glowBurst(at.x, 0.8, at.z, 0xd8e4c8, 30, 2.5, 0.3, 0.9); ring(at.x, at.z, 2.6, 0xc8d8b8, 0.8);
+  mark7(z, k)?.userData.setGlow?.(1);
+  document.body.classList.add('memory-stone');
+  const raise = () => M0.who.forEach((kind, i) => {
+    const p = spots[i] || { x: at.x + 1.6 + i * 1.1, z: at.z + 1.8 }, f = z.map.nearestFloor(p.x, p.z, 2) || p, rot = angleTo(f.x, f.z, at.x, at.z);
+    let a; try { a = spawnNpc(kind, f.x, f.z, rot); } catch (e) { return; }
+    if (a.avatar) memoryLook(a.avatar);
+    a.still = true; a.home = a.rot = rot;
+    z.actors.push(a); if (a.avatar) R.scene.add(a.avatar.group); figs.push(a);
+    for (let q = 0; q < 20; q++) P({ x: f.x + (Math.random() - 0.5) * 0.8, y: Math.random() * 1.8, z: f.z + (Math.random() - 0.5) * 0.8, vy: 0.5, life: 1.4, size: 0.08, size1: 0.02, color: 0xd8e4c8 });
+  });
+  emit('cine', {
+    x: at.x, z: at.z + 1, dur: 3.2, zoom: 1.1, until: () => fin,
+    steps: [[0.7, raise], [1.0, () => emit('dialog', { who: SM, lines, end: () => { fin = true; } })]],
+    end: () => {
+      z.memory = false;
+      document.body.classList.remove('memory-stone');
+      for (const a of figs) vanish(z, a, 1.4);
+      mark7(z, k)?.userData.setGlow?.(0);
+      F['mem_' + mem] = true;
+      grantBuff('memory');
+      const p = G.player;
+      if (p) { glowBurst(p.x, 1.2, p.z, 0xd8e4c8, 26, 3, 0.25, 0.8); ring(p.x, p.z, 2.6, 0xc8d8b8, 0.6); }
+      emit('toast', t('lamp.buff7'), 'quest');
+      writeSave(); emit('quest');
+      done?.();
+    }
+  });
+}
+// the memory owed here, then the next; with the six seen and the three chains lifted, the mountain takes a breath
+function nextStone(z) {
+  if (G.zone !== z || z.memory) return;
+  const o = stoneOwed(z), F = G.hero.flags;
+  if (o) { playStone(z, o.n, o.sp, o.k, () => later(1.4, () => nextStone(z))); return; }
+  if (z.id === 'tarn' && winches7(F) >= 3 && !F.keladosWake) wake7(z);
+}
+// a weir turned: the flag, the Race a step down along its whole length, the snow drawn back; then its memory in stone;
+// the third opens the Narrows
 on('weir7', (it, z) => {
   const F = G.hero.flags, k = 'weir' + it.k; if (F[k] || G.hero.__real) return;
-  F[k] = true; it.used = true; writeSave();
+  F[k] = true; if (!(F.weirs7 ||= []).includes(it.k)) F.weirs7.push(it.k);
+  it.used = true; writeSave();
   raceTo(z); Audio.sfx('weirWheel', { x: it.x, z: it.z }); later(1.2, () => Audio.sfx('raceStep'));
   const n = weirs7(F);
   emit('toast', t('q.weirOpen', n), 'quest');
@@ -2781,16 +3084,308 @@ on('weir7', (it, z) => {
   if (G.hero.quest < 41) setQuest(41, true);
   if (n >= 3) { emit('toast', t('q.raceLow'), 'big'); setQuest(42); } else emit('quest');
   act7Presence(z);
+  later(1.6, () => nextStone(z));
 });
-// a winch freed of its ice: the flag; the third wakes the Sleeper (his fight is stage C's: until then, the quest goes on)
+// Kallisto wakes: no flag and no scene, a line over her rearing so the fight begins at once
+on('bossIntro', (a) => { if (a?.kind === 'kallisto' && !a.echo) narr7('d.kall.0'); });
+// Halda's calls, one a phase, each once a fight: what a player who read nothing can act on. Her one act: 25 s into the
+// Sleeper's third phase with no lever pulled, she pulls one herself (bus 'haldaLever': the fight's to open)
+on('boss7Phase', (kind, ph, a) => {
+  const z = G.zone, F = G.hero.flags, b = a?.kind ? a : z?.boss;
+  if (!z?.act7 || b?.echo || (kind !== 'kallisto' && kind !== 'kelados') || !(ph >= 1 && ph <= 3)) return;
+  if (kind === 'kallisto' ? F.kallistoRest : F.keladosRest) return;
+  const C = (b || z).calls7 ||= {}, key = (kind === 'kallisto' ? 'k' : 's') + ph;
+  if (C[key]) return;
+  C[key] = true;
+  const up = () => G.zone === z && !(b && b.dead) && !G.hero.flags[kind + 'Rest'];
+  if (ph === 1) later(kind === 'kallisto' ? 8 : 10, () => { if (up()) say('d.halda7.' + key); });
+  else say('d.halda7.' + key);
+  if (kind !== 'kelados' || ph !== 3) return;
+  z.lever7 = false;
+  later(25, () => {
+    if (G.zone !== z || z.lever7 || C.s3b || G.hero.flags.keladosRest || (b && b.dead)) return;
+    C.s3b = true;
+    const h = z.L.spots.haldaRim || z.L.spots.haldaDam || G.player, d = (p) => Math.hypot(p.x - h.x, p.z - h.z) + (p.used ? 1e3 : 0);
+    const it = (z.act7.levers || []).slice().sort((p, q) => d(p) - d(q))[0] || null;
+    say('d.halda7.s3b');
+    emit('haldaLever', it, z);
+    if (it) emit('lever7', it, z);
+  });
+});
+on('lever7', (it, z) => { if (z) z.lever7 = true; });
+// the two who are not killed, at rest (ai.js saves the flag first and says so here)
+on('bossRest', (kind, a, z0) => {
+  const z = z0?.act7 ? z0 : G.zone; if (!z?.act7 || G.hero.__real || a?.echo) return;
+  if (kind === 'kallisto' && z.id === 'thaw') kallistoRest7(z, a || z.boss);
+  if (kind === 'kelados' && z.id === 'tarn') keladosRest7(z, a || z.boss);
+});
+// she does not fall: she sits down; the cub comes out of the den; the river the hero lowered feeds them (q43)
+function kallistoRest7(z, a) {
+  const F = G.hero.flags;
+  if (z.rest7 || G.zone !== z) return;
+  if (!F.kallistoRest) { F.kallistoRest = true; writeSave(); }
+  const fin0 = () => { z.rest7 = false; emit('toast', t('q.stairOpen'), 'big'); setQuest(43); Audio.music(z.mode === 'green' ? 'thawGreen' : 'thaw'); act7Presence(z); emit('quest'); };
+  if (NOSTORY) { fin0(); return; }
+  if (busy()) { later(1, () => kallistoRest7(z, a)); return; }
+  z.rest7 = true;
+  Audio.mood({ rest: 1 });
+  const d = z.L.spots.den || z.L.boss, at = a && Number.isFinite(a.x) ? a : d, den = z.lvl?.act7?.den;
+  let fin = false;
+  emit('cine', {
+    x: (at.x + d.x) / 2, z: (at.z + d.z) / 2 + 3, dur: 12, zoom: 1.2, pitch: 0.35, until: () => fin,
+    steps: [
+      [0.8, () => narr7('d.kall.1')],
+      [4.4, () => { narr7('d.kall.2'); Audio.sfx('cubCry', { x: d.x, z: d.z }); den?.userData.setCub?.(true); puff(d.x, 0.4, d.z, 0xb8a890, 8); }],
+      [8.2, () => emit('dialog', { who: 'smith', lines: [['d.halda7.k4', 'smith'], ['d.kall.3', 'narrator'], ['d.halda7.k5', 'smith']], end: () => { fin = true; } })]
+    ],
+    end: fin0
+  });
+}
+
+// ---------- q43-q45: the Hanging Lake ----------
+// the arrival: snow in the noon sun, a lake the colour of a bird's egg, a seated shape in the wall of old ice (tarnSeen
+// saved first; q44)
+function tarnArrival(z) {
+  const F = G.hero.flags;
+  if (F.tarnSeen || z.arriving || G.zone !== z) return;
+  if (NOSTORY) { F.tarnSeen = true; writeSave(); setQuest(44, true); act7Presence(z); return; }
+  if (busy()) { later(1.5, () => tarnArrival(z)); return; }
+  z.arriving = true; F.tarnSeen = true; writeSave();
+  const c = z.L.spots.camp, st = z.L.spots.seat || z.L.boss;
+  if (ATMOS.tarnCine) setAtmosphere(ATMOS.tarnCine);
+  emit('cine', {
+    x: c.x, z: c.z - 24, dur: 10, zoom: 0.8, pitch: 0.3,
+    steps: [
+      [0.8, () => narr7('d.tarn.1')],
+      [4.6, () => { narr7('d.tarn.2'); if (G.cine && st) Object.assign(G.cine, { x: (c.x + st.x) / 2, z: (c.z + st.z) / 2 }); }],
+      [8.2, () => say('d.halda7.t0')]
+    ],
+    end: () => { z.arriving = false; if (ATMOS.tarn && G.zone === z) setAtmosphere(ATMOS.tarn); setQuest(44); }
+  });
+}
+// a winch freed of its ice: the flag, the chain running; then its memory in stone; after the third's (Memory 6, the
+// reason the works froze) the Sleeper wakes
 on('winch7', (it, z) => {
   const F = G.hero.flags, k = 'winch' + it.k; if (F[k] || G.hero.__real) return;
-  F[k] = true; it.used = true; writeSave();
+  F[k] = true; if (!(F.winchs7 ||= []).includes(it.k)) F.winchs7.push(it.k);
+  it.used = true; writeSave();
   Audio.sfx('winchChain', { x: it.x, z: it.z });
   const n = winches7(F);
   emit('toast', t('q.winchFree', n), 'quest');
   if (!F.tarnSeen) F.tarnSeen = true;
   if (G.hero.quest < 44) setQuest(44, true);
-  if (n >= 3) setQuest(45); else emit('quest');
+  emit('quest');
   act7Presence(z);
+  later(1.6, () => nextStone(z));
 });
+// the wake: the third chain lifts, the mountain takes a breath, the ice of the dam cracks from top to bottom; Halda
+// runs up to the rim (keladosWake saved first; q45; bus 'keladosWake' for the fight that was held until now)
+function wake7(z) {
+  const F = G.hero.flags;
+  if (F.keladosWake || z.waking || G.zone !== z) return;
+  const fin0 = () => { z.waking = false; act7Presence(z); setQuest(45); emit('keladosWake', z); };
+  if (NOSTORY) { F.keladosWake = true; writeSave(); fin0(); return; }
+  if (busy()) { later(1.5, () => wake7(z)); return; }
+  z.waking = true; F.keladosWake = true; writeSave();
+  const st = z.L.spots.seat || z.L.boss, ar = z.L.spots.arena || st, A = z.act7, a = A?.halda, rim = z.L.spots.haldaRim;
+  // (she runs the last of the way up to the rim, from below it)
+  if (a && rim && z.actors.includes(a)) {
+    A.haldaScene = true;
+    const to = z.map.nearestFloor(rim.x, rim.z, 3) || rim, from = z.map.nearestFloor(rim.x + 2, rim.z + 9, 4) || to;
+    a.x = from.x; a.z = from.z;
+    later(3.2, () => walkTo(a, to.x, to.z, 3.6, () => { A.haldaScene = false; a.home = a.rot = rim.rot ?? angleTo(a.x, a.z, st.x, st.z); act7Presence(z); }));
+  }
+  emit('cine', {
+    x: ar.x, z: ar.z + 10, dur: 9.6, zoom: 0.85, pitch: 0.3,
+    steps: [
+      [0.6, () => { narr7('d.kel.w1'); shake(0.5); Audio.sfx('tremor', { x: st.x, z: st.z }); Audio.mood({ sub: 1 }); }],
+      [3.8, () => { narr7('d.kel.w2'); shake(0.9); Audio.sfx('tremor', { x: st.x, z: st.z, pitch: 0.8 }); for (let n = 0; n < 36; n++) P({ x: st.x + (Math.random() - 0.5) * 8, y: 5 + Math.random() * 4, z: st.z + 1 + Math.random() * 2, vy: -2 - Math.random() * 2, life: 1.8, size: 0.4, size1: 0.7, color: 0xf4f8ff, drag: 0.1 }); }],
+      [6.8, () => say('d.halda7.s0')]
+    ],
+    end: () => { if (A) A.haldaScene = false; later(1.2, () => say('d.halda7.s0b')); fin0(); }
+  });
+}
+// he kneels; the hero gives him the word Isarn left her; by evening he will be mountain again (q46). He has no line
+function keladosRest7(z, a) {
+  const F = G.hero.flags;
+  if (z.rest7 || G.zone !== z) return;
+  if (!F.keladosRest) { F.keladosRest = true; writeSave(); }
+  // (the lake a step down: the great wheel's lip stands clear)
+  raceTo(z);
+  const fin0 = () => { z.rest7 = false; emit('toast', t('q.keladosRest'), 'big'); setQuest(46); Audio.music('tarn'); act7Presence(z); emit('quest'); };
+  if (NOSTORY) { fin0(); return; }
+  if (busy()) { later(1, () => keladosRest7(z, a)); return; }
+  z.rest7 = true;
+  Audio.mood({ rest: 1 });
+  const st = z.L.spots.seat || z.L.boss, at = a && Number.isFinite(a.x) ? a : st;
+  emit('cine', {
+    x: at.x, z: at.z + 6, dur: 17.6, zoom: 1.0, pitch: 0.3,
+    steps: [
+      [0.8, () => narr7('d.kel.r1')],
+      [4.0, () => narr7('d.kel.r2')],
+      [7.4, () => { emit('toast', t('d.kel.r3'), 'quest pale'); Audio.sting('rest'); const p = G.player; if (p) glowBurst(p.x, 1.4, p.z, 0xffe0a0, 20, 2, 0.3, 1); }],
+      [10.8, () => { narr7('d.kel.r4'); if (G.cine) Object.assign(G.cine, { x: st.x, z: st.z + 5 }); }],
+      [14.0, () => narr7('d.kel.r5')]
+    ],
+    end: fin0
+  });
+}
+
+// ---------- q46: the lake let down ----------
+// the rainbow in the spray and the white thread on the Water-stair (build7.js's props, laid once on this build of the
+// zone; a later visit finds them standing)
+function lakeDress7(z, k = 1) {
+  const S = z.L.spots, sp = S.spillway, lip = S.lake?.lip || S.wheel; if (!sp || z.lake7) return z.lake7 || null;
+  const D = (z.lake7 = { rainbow: null, thread: null });
+  const add = (m, x, y, zz, ry = 0) => { m.position.set(x, y, zz); m.rotation.y = ry; z.extra.push(m); if (G.zone === z) R.scene.add(m); return m; };
+  try { D.rainbow = add(act7Prop('rainbow', { w: 26 }), sp.x - 4, 0.5, sp.z + 2, Math.PI / 2); D.rainbow.userData.setK?.(k); } catch (e) { D.rainbow = null; }
+  try {
+    // (from the lip over the spillway and down the stair's steps to the west, step by step)
+    const x0 = lip?.x ?? sp.x + 12, z0 = lip?.z ?? sp.z - 6, pts = [];
+    for (let i = 0; i <= 10; i++) { const u = i / 10; pts.push({ x: x0 + (sp.x - 14 - x0) * u, y: 1.2 - 7 * u * u - (i % 2) * 0.25, z: z0 + (sp.z + 4 - z0) * Math.min(1, u * 1.6) }); }
+    D.thread = add(act7Prop('lakeThread', { pts, w: 1.4, k }), 0, 0, 0);
+  } catch (e) { D.thread = null; }
+  return D;
+}
+// the great wheel at the Dam's west lip (lakeLet saved first): the lake goes over the lip and down its stair like a white
+// thread; the valley is still there, all of it; Halda takes the short way down, and the hero goes home to sleep
+on('sluice7', (it, z) => {
+  const F = G.hero.flags;
+  if (F.lakeLet || !F.keladosRest || G.hero.__real || z.letting || G.zone !== z || (G.mode !== 'play' && !NOSTORY)) return;
+  F.lakeLet = true; writeSave();
+  z.letting = true;
+  raceTo(z); Audio.sfx('sluiceGate', { x: it.x, z: it.z }); later(1.4, () => Audio.sfx('lakeOut'));
+  (it.mesh || z.lvl?.act7?.wheel)?.userData.setOpen?.(true, true);
+  const A = z.act7, a = A?.halda, S = z.L.spots, sp = S.spillway || it;
+  const fin0 = () => {
+    z.letting = false;
+    emit('toast', t('q.lakeLet'), 'big'); emit('quest');
+    emit('toast', t('q.new') + ': ' + questText(), 'quest');
+    Audio.music('tarnGreen');
+    // she takes the short way down: from now on she is in Whitecliff
+    if (a && z.actors.includes(a) && G.zone === z && !NOSTORY) {
+      A.haldaScene = true;
+      const to = z.map.nearestFloor(a.x - 5, a.z + 5, 4) || a;
+      walkTo(a, to.x, to.z, 1.7, () => { A.haldaScene = false; act7Presence(z); });
+    } else act7Presence(z);
+  };
+  if (NOSTORY) { fin0(); return; }
+  const D = lakeDress7(z, 0);
+  if (ATMOS.tarnGold) setAtmosphere(ATMOS.tarnGold);
+  let fin = false;
+  emit('cine', {
+    x: sp.x + 4, z: sp.z + 6, dur: 14, zoom: 0.85, pitch: 0.3, until: () => fin,
+    steps: [
+      [0.8, () => { narr7('d.lake.1'); ease(z, 5, (k) => D?.thread?.userData.setK?.(k)); }],
+      [5.4, () => { narr7('d.lake.2'); ease(z, 3, (k) => D?.rainbow?.userData.setK?.(k)); }],
+      [9.6, () => emit('dialog', { who: 'smith', lines: ['d.halda7.e1', 'd.halda7.e2', 'd.halda7.e3'], end: () => { fin = true; } })]
+    ],
+    end: fin0
+  });
+});
+
+// ---------- q46b-q47: home, the sleep, and the first line of the game ----------
+// Dusk at Isarn's staff: the stream clear and low, the apple tree, the child's good night, the word said to her at last;
+// the lantern woken; the seven smokes turn to fires; she sleeps while someone else keeps the light; four seconds of
+// black; morning, and «Ώστε ξύπνησες.» Played again on every town entry until the act is closed (z.home7)
+function homeCine7(z) {
+  const h = G.hero, F = h.flags;
+  if ((h.act7 ?? -1) >= 0 || z.home7 || h.__real || G.zone !== z) return;
+  if (NOSTORY) { if (LANTERN_WAKE) F.lanternWake = true; town7(z); actComplete(7); return; }
+  if (busy()) { later(1.5, () => homeCine7(z)); return; }
+  z.home7 = true;
+  const go = () => {
+    if (G.zone !== z) { z.home7 = false; return; }
+    const s = z.L.spots.npcs.wayfarer, b = z.L.beacon, w = z.townNpc?.smith, pl = G.player;
+    setAtmosphere(ATMOS.townDusk); z.morning7 = true;
+    smokes7(z, true);
+    people5(z);
+    // Halda and the child at the staff
+    if (w) {
+      w.scene7 = true; stopWalk(w.a);
+      if (!z.actors.includes(w.a)) { z.actors.push(w.a); z.interact.push(w.it); if (w.a.avatar) R.scene.add(w.a.avatar.group); }
+      const f = z.map.nearestFloor(s.x + 1.8, s.z - 0.8, 2) || s; w.a.x = f.x; w.a.z = f.z; w.a.home = w.a.rot = Math.PI * 0.85; w.it.x = f.x; w.it.z = f.z;
+    }
+    const child = scene5(z, 'child');
+    const bed = z.map.nearestFloor(b.x + 2.2, b.z + 4.2, 3) || { x: b.x + 2.2, z: b.z + 4.2 };
+    const close = () => {
+      z.home7 = false;
+      if (w) w.scene7 = false;
+      scene5(z, 'child', false);
+      townFires(z);
+      actComplete(7);
+    };
+    // the black, four seconds of it: no text, no music; one soft bell at the third second; then the morning
+    const wake = () => {
+      titleCard(3.1, () => {
+        Audio.sfx('lanternNote');
+        emit('dialog', { who: 'child', lines: ['d.child7.wake'], end: () => { Audio.music('town'); later(0.4, close); } });
+      }, '&nbsp;');
+      later(3, () => Audio.sfx('softBell'));
+      later(3.6, () => {
+        if (G.zone !== z) return;
+        setAtmosphere(ATMOS.townMorning);
+        if (!z.town.bed7) { try { const m = act7Prop('bedRoll'); m.position.set(bed.x, 0, bed.z); m.rotation.y = 0.5; z.extra.push(m); R.scene.add(m); z.town.bed7 = m; } catch (e) { z.town.bed7 = null; } }
+        if (pl) { const f = z.map.nearestFloor(bed.x + 0.9, bed.z + 0.4, 2) || bed; pl.x = f.x; pl.z = f.z; }
+        if (child) { const f = z.map.nearestFloor(bed.x - 0.6, bed.z + 1.5, 2) || bed; child.x = f.x; child.z = f.z; child.home = child.rot = angleTo(f.x, f.z, pl?.x ?? bed.x, pl?.z ?? bed.z); if (child.it) { child.it.x = f.x; child.it.z = f.z; } }
+      });
+      emit('cine', { x: bed.x, z: bed.z + 2, dur: 6.4, zoom: 1.15, pitch: 0.4, steps: [], end: () => {} });
+    };
+    // the camera lifts north over the beacon: the seven smokes turn to fires, one after another
+    const peaks = () => {
+      const steps = [[1.0, () => { narr7('d.home7.5'); if (pl) { const f = z.map.nearestFloor(bed.x + 0.9, bed.z + 0.4, 2) || bed; pl.x = f.x; pl.z = f.z; } }]];
+      SMOKE7.forEach((i, n) => steps.push([3.0 + n, () => { const m = z.town?.smokes7?.[i]; if (m) { const k = z.extra.indexOf(m); if (k >= 0) z.extra.splice(k, 1); R.scene.remove(m); delete z.town.smokes7[i]; } setFar(z, i, true); Audio.sfx('softBell', { vol: 0.9, pitch: 0.7 + n * 0.05 }); Audio.mood({ answer: 1 }); }]));
+      steps.push([11.2, () => narr7('d.sleep7.1')], [16.1, () => Audio.music(null)], [15.0, () => narr7('d.sleep7.2')]);
+      emit('cine', { x: b.x, z: b.z - 16, dur: 18.6, zoom: 1.5, pitch: 0.3, steps, end: wake });
+    };
+    const night = () => { Audio.sting('rest'); emit('dialog', { who: 'child', lines: ['d.child7.7'], end: peaks }); };
+    // Isarn's lantern (lanternWake saved first): a coal from the beacon into the dark lantern on the staff
+    const lantern = () => {
+      if (!LANTERN_WAKE) { night(); return; }
+      F.lanternWake = true; writeSave();
+      z.town?.staff?.userData.setLantern?.('awake');
+      Audio.sfx('lanternWake', { x: s.x, z: s.z });
+      glowBurst(s.x + 0.24, 1.8, s.z, 0xffd890, 16, 1.2, 0.2, 1.2);
+      emit('dialog', { who: 'narrator', lines: ['d.home7.3', 'd.home7.4'], end: night });
+    };
+    emit('cine', { x: s.x, z: s.z + 5, dur: 5.2, zoom: 1.2, pitch: 0.3, steps: [[0.8, () => { narr7('d.home7.1'); Audio.sfx('brookRoar', { vol: 0.22, pitch: 1.25 }); }]], end: () => {
+      emit('dialog', { who: 'smith', lines: [['d.halda7.h1', 'smith'], ['d.child7.4', 'child'], ['d.child7.5', 'child'], ['d.home7.2', 'narrator'], ['d.child7.6', 'child'], ['d.halda7.h2', 'smith'], ['d.halda7.h3', 'smith']], end: lantern });
+    } });
+  };
+  loadFolk('frost').then(go, go);
+}
+
+// ---------- on every entry: the act's scenes still owed, and the quest caught up with the flags ----------
+function enter7(id, z) {
+  const h = G.hero, F = h.flags;
+  if ((h.act6 ?? -1) < 0 && !F.call7) return;
+  if (F.call7 && h.quest < 40) setQuest(40, true);
+  if (F.haldaOut && h.quest < 41) setQuest(41, true);
+  if (!z) return;
+  if (id === 'town') {
+    town7(z);
+    if (!F.call7) later(2.1, () => hook7(z));
+    // (the morning of the call lasts until she has given her word; a hero who heard the call and came back)
+    else if (!F.haldaOut && !NOSTORY) { setAtmosphere(ATMOS.townMorning); z.morning7 = true; smokes7(z, true); }
+    // home after the lake is let down (home7 saved on arrival): the scene and the act's end, again until it closes
+    if (F.lakeLet && !F.home7) { F.home7 = true; writeSave(); }
+    if (F.home7 && (h.act7 ?? -1) < 0) later(1, () => homeCine7(z));
+  }
+  if (id === 'thaw') {
+    if (weirs7(F) >= 3 && h.quest < 42) setQuest(42, true);
+    if (F.kallistoRest && h.quest < 43) setQuest(43, true);
+    act7Presence(z);
+    if (!F.thawSeen) later(1.2, () => thawArrival(z));
+    else later(2, () => nextStone(z));
+  }
+  if (id === 'tarn') {
+    if (F.tarnSeen && h.quest < 44) setQuest(44, true);
+    if (F.keladosWake && h.quest < 45) setQuest(45, true);
+    if (F.keladosRest && h.quest < 46) setQuest(46, true);
+    act7Presence(z);
+    if (F.lakeLet) lakeDress7(z, 1);
+    if (!F.tarnSeen) later(1.2, () => tarnArrival(z));
+    // (a memory owed, then the wake owed: three winches free and the Sleeper not yet woken)
+    else later(2, () => nextStone(z));
+  }
+}

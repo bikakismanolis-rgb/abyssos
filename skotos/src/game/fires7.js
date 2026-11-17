@@ -37,10 +37,13 @@ function setHearth(z, it, st) {
   it.kind = st === 'lit' ? 'callFire' : 'lookHearth';
   it.prompt = st === 'lit' ? 'call.prompt' : 'look.light';
   it.used = st === 'hold' || (st === 'wait');
-  it.use = () => emit(it.kind, it, z);
+  // (a guest's touch on a cold hearth goes to the host, net/coop.js; the Call is each page's own)
+  it.use = () => { if (it.kind === 'callFire' || !NET.h.useOp?.(it)) emit(it.kind, it, z); };
   it.mesh?.userData.setLit?.(st !== 'cold' && st !== 'wait');
   emit('hearth7', it, st);
 }
+// on a guest's page as the host's flags come (net/coop.js presenceAgain): a lookout held on the host burns here too
+export function firesSync(z) { const A = z?.act7; if (!A) return; for (const it of A.lookouts) if (held(z, it) && it.st !== 'lit') setHearth(z, it, 'lit'); }
 // lit: the hold begins (the host's; a guest's touch goes through the host)
 on('lookHearth', (it, z) => {
   if (!z?.act7 || z.hold || it.st !== 'cold' || G.hero.__real) return;
@@ -85,7 +88,7 @@ function holdDone(z, Hd) {
   emit('toast', t('look.rank', fires7(own).filter((r) => r > 0).length, f[n - 1]), 'quest');
   if (rank > before) emit('fireRank', n, rank, before, it, z);
   if (!all0 && firesAll(own)) { h.flags.firesAll = true; emit('toast', t('fires.all'), 'big'); }
-  refreshStats(); emit('quest'); writeSave(); emit('holdHeld', it, z, n, rank);
+  refreshStats(); emit('quest'); writeSave(); emit('holdHeld', it, z, n, rank); emit('hold7Done', n, h.diff | 0);
 }
 // the Call at a burning hearth: each hero's own, as a shrine is
 on('callFire', (it, z) => {

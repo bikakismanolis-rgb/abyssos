@@ -362,6 +362,11 @@ body.memory-deep #stage > canvas:first-child { filter: saturate(.3) hue-rotate(-
 body.memory-deep #stage::after { opacity: 1; background: radial-gradient(ellipse at center, transparent 36%, rgba(60, 90, 140, .32) 76%, rgba(4, 8, 20, .82) 100%); }
 body.memory-ink #stage > canvas:first-child { filter: saturate(.25) brightness(.85) contrast(1.1); }
 body.memory-ink #stage::after { opacity: 1; background: radial-gradient(ellipse at center, transparent 34%, rgba(70, 50, 110, .3) 74%, rgba(2, 2, 8, .86) 100%); }
+/* Act VII: a memory in stone (the masons'), grey-green */
+body.memory-stone #stage > canvas:first-child { filter: saturate(.35) hue-rotate(18deg) brightness(.94) contrast(1.05); }
+body.memory-stone #stage::after { opacity: 1; background: radial-gradient(ellipse at center, transparent 38%, rgba(96, 112, 92, .3) 76%, rgba(10, 14, 10, .8) 100%); }
+#dialog[data-who="stoneMemory"] .txt { font-style: italic; color: #e6ecdf; }
+#dialog[data-who="stoneMemory"] .face { border-color: #b8c4ae; color: #f0f4ea; background: radial-gradient(circle at 50% 35%, #5c6a58, #10140f); }
 #dialog[data-who="iceMemory"] .txt { font-style: italic; color: #e4f0fa; }
 #dialog[data-who="iceMemory"] .face { border-color: #bfe0f8; color: #f2f8ff; background: radial-gradient(circle at 50% 35%, #4e6a84, #0a121a); }
 #dialog[data-who="first"] .face, #dialog[data-who="einarBoy"] .face, #dialog[data-who="einar"] .face, #dialog[data-who="arnaLast"] .face, #dialog[data-who="keeperYoung"] .face { border-color: #bcd8f0; color: #eef6ff; background: radial-gradient(circle at 50% 35%, #46586c, #0c1218); }

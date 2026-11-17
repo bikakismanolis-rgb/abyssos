@@ -1,12 +1,13 @@
 // Monster, pet and boss behaviour.
 import * as THREE from 'three';
 import { G, later } from './state.js';
-import { MONSTERS, HAZ5, HAZ6 } from './data.js';
+import { MONSTERS, HAZ5, HAZ6, LOUD, actHaz } from './data.js';
 import { FIRE, fireOn, fireDrain, removeLightPool as dropPool6, ringOf } from './light.js';
 import { rebuildHash, foes, near, spawnMonster, restoreRim, spawnNpc, lieDown } from './actors.js';
 import { damage, kill, tickStatus, moveMul, heroHit, seeHero, clingHero, shakeOff, rootHero, REMAINS, remainsNear, takeRemains, addVuln, clearVuln, vuln, vulnOf } from './combat.js';
 import { LIGHT, lightOn, shroudOn, lightAt, lampAt, lampNear, snuffLamp, isLamp, halveCradle, heroLightR, setHeroLight, setLightDark, addLightPool, getLightPool, shrinkPool, lightPools, addBeam, removeBeam, beams, inBeam, beamHas, lampLightAt, warmAt, cradlePoint } from './light.js';
-import { setFluePumping, startFlues, flues, fluePeriod, setFlueHeat, vaultAt } from './forge.js';
+import { setFluePumping, startFlues, flues, fluePeriod, setFlueHeat, vaultAt, loud, fireFlue, inFlue, BREATH } from './forge.js';
+import { writeSave } from './save.js';
 import { refreshStats } from './stats.js';
 import { fire, area } from './projectiles.js';
 import { teleCircle, teleCone, teleLine, killTele, sparks, glowBurst, explosion, ring, bolt, P, puff, decal, flash, splash as splashFx, iceShards, freezeCrystals, breath, fireStream, footprint } from '../gfx/fx.js';
@@ -55,6 +56,7 @@ export function updateActors(dt) {
   const pl0 = G.player, map = G.zone.map;
   clock += dt;
   rebuildHash();
+  if (G.zone.act7 || ROCKS7.length || ROLL7.length || RING7.length || PEND7.length) act7Tick(dt);
   flow.t -= dt;
   if (flow.t <= 0 && pl0) { map.updateFlow(pl0.x, pl0.z, 45); flow.t = 0.2; }
   for (let i = G.actors.length - 1; i >= 0; i--) {
@@ -99,6 +101,7 @@ export function updateActors(dt) {
     }
     tickStatus(a, dt);
     if (a.dead) continue;
+    if (a.icebound && a.status.freeze > 0 && refreeze7(a)) continue;
     if (a.rope) ropeTick(a, dt);
     // Act IV: revealed by light, the shroud broken, a shield dropped, an immune line not repeated too often
     if (a.revealed > 0) a.revealed -= dt;
@@ -130,7 +133,9 @@ export function updateActors(dt) {
     else if (a.status.freeze > 0 || a.status.stun > 0) { if (a.state === 'song') songBreak(a); a.state = HELD.has(a.state) ? 'chase' : a.state; if (a.lurk && (a.state === 'surface' || a.state === 'lunge')) { a.state = 'up'; a.lurk.upT = 3; killTele(a.lurk.arrow); } a.interrupted = true; if (a.tele) { killTele(a.tele); a.tele = null; } }
     else if (a.pet) speed = petAI(a, dt);
     // (the Skuas scatter their own way: up and away, skua)
-    else if (a.status.fear > 0 && !a.def.lightShy) speed = flee(a, dt, pl);
+    else if (a.status.fear > 0 && !a.def.lightShy && !a.def.shadeShy) { if (a.def.heavy) a.interrupted = true; speed = flee(a, dt, pl); }
+    // Act VII: Dazed by a slide (forge.js bury): open to every blow until it shakes it off (the bears' and the bosses' own)
+    else if (a.dazed > 0 && G.zone.act7 && !a.boss && a.def.ai !== 'charger') speed = dazedTick(a, dt);
     // the Sunken the flood woke, back to their kelp at the ebb if she never came
     else if (a.tideRisen && !a.aggro && ebbing()) speed = goRest(a, dt);
     // Act VI: the names falling, a listening Faded stands face up (listens)
@@ -221,6 +226,8 @@ function dying(a, dt) {
   if (a.boss) fightCam(dt, null);
   if (a.kind === 'tower' && towerHome(a, dt)) return;
   if (a.kind === 'skotos') { skotosDying(a, dt); return; }
+  // Act VII: Kallisto and Kelados are not killed: the body stays, at rest (restBody)
+  if (a.def.spare && !a.echo) { restBody(a, dt); return; }
   const av = a.avatar; if (!av) { a.cone?.userData.dispose?.(); a.remove(); return; }
   // gone under the water: it sinks out of sight, no corpse left to burn away
   if (a.drowned) {
@@ -355,6 +362,8 @@ const AI = {
     if (a.def.curl && (a.under || a.curled > 0 || a.bowling || a.bowl)) return louse(a, dt, pl, d);
     // Act VI: a Ketling makes for a lit lamp and gnaws it out (never while a hero stands in its light)
     if (a.def.gnaw) { const s = gnawTick(a, dt, pl); if (s != null) return s; }
+    // Act VII: a Rock-scorpion under its slab, cold-blooded in shade, its Sting's wind-up (scorpion)
+    if (a.def.stingEvery) { const s = scorpion(a, dt, pl, d); if (s != null) return s; }
     if (!aggroCheck(a, pl, d)) return idle(a, dt);
     const tg = victim(a, pl), td = Math.hypot(tg.x - a.x, tg.z - a.z);
     if (a.state === 'attack') {
@@ -379,7 +388,9 @@ const AI = {
         a.hook = !a.spin && !a.bash && !!a.def.hookEvery && a.swings % a.def.hookEvery === 0;
         // the Faded's Forgetting Touch every third blow: a dark cone, and her ring a little shorter
         a.touch = !a.spin && !a.bash && !a.hook && !!a.def.touchEvery && a.swings % a.def.touchEvery === 0;
-        if (a.spin) { a.tele = teleCircle(a.x, a.z, 2.5, 0.55, 0xff9030); startAttack(a, 'spinOnce'); }
+        // (the Rock-scorpion's Sting every third blow: its heavy move, one a pack each 3 s, never from a shaded cell)
+        if (a.def.stingEvery && stingOK(a)) sting7(a, tg);
+        else if (a.spin) { a.tele = teleCircle(a.x, a.z, 2.5, 0.55, 0xff9030); startAttack(a, 'spinOnce'); }
         else if (a.bash) { a.tele = teleCone(a.x, a.z, a.rot, 2.6, 0.95, 0.6, 0xffa040); startAttack(a, 'Shield_Dash', { hit: 0.6, dur: 1.0, speed: 1.3 }); tally(a, 'bash'); }
         else if (a.hook) { a.tele = teleCone(a.x, a.z, a.rot, 2.4, 0.62, 0.6, SEA); startAttack(a, 'Melee_Hook', { hit: 0.6, dur: 1.1, speed: 0.48 }); tally(a, 'hook'); }
         else if (a.touch) { a.tele = teleCone(a.x, a.z, a.rot, 2.0, 0.7, 0.7, 'dark'); startAttack(a, a.def.atk, { hit: 0.7, dur: 1.1 }); tally(a, 'touch'); }
@@ -393,6 +404,7 @@ const AI = {
     if (a.def.harpoonEvery) return harpooner(a, dt, pl, d);
     if (!aggroCheck(a, pl, d)) return idle(a, dt);
     const tg = victim(a, pl), td = Math.hypot(tg.x - a.x, tg.z - a.z);
+    if (a.state === 'wind7') return wind7Tick(a, dt);
     if (a.state === 'aim') {
       face(a, tg, dt, 10); a.atkT += dt;
       if (a.atkT > 0.55) { a.state = 'attack'; a.atkT = 0; a.atkHit = false; a.atkHitT = 0.12; a.atkDur = 0.6; a.avatar?.play('shoot', 0.9); }
@@ -406,7 +418,9 @@ const AI = {
     if (td < 4.5 && los) { const ang = angleTo(tg.x, tg.z, a.x, a.z); const nx = a.x + Math.sin(ang) * 3, nz = a.z + Math.cos(ang) * 3; if (G.zone.map.walkable(nx, nz)) return seek(a, nx, nz, a.speed * 0.85, dt); }
     if (td < a.def.reach && los) {
       face(a, tg, dt);
-      if (a.cd <= 0) { a.state = 'aim'; a.atkT = 0; a.avatar?.play('aim', 1); a.cd = a.def.atkTime * rand.range(0.9, 1.3); }
+      // (the Goblin Marksman: every third shot is the Aimed Bolt, its heavy move)
+      if (a.cd <= 0 && a.def.aimEvery && (a.shots = (a.shots || 0) + 1) % a.def.aimEvery === 0) aimedBolt(a, tg);
+      else if (a.cd <= 0) { a.state = 'aim'; a.atkT = 0; a.avatar?.play('aim', 1); a.cd = a.def.atkTime * rand.range(0.9, 1.3); }
       return 0;
     }
     return seek(a, tg.x, tg.z, a.speed, dt);
@@ -434,6 +448,7 @@ const AI = {
   pounce(a, dt, pl, d) {
     if (!aggroCheck(a, pl, d)) return idle(a, dt);
     const tg = victim(a, pl), td = Math.hypot(tg.x - a.x, tg.z - a.z);
+    if (a.def.heavy === 'longPounce') { const s = longPounce(a, dt, pl, tg, td); if (s != null) return s; }
     if (a.state === 'leap') {
       a.atkT += dt; const u = Math.min(1, a.atkT / 0.45);
       a.x = a.lx + (a.tx - a.lx) * u; a.z = a.lz + (a.tz - a.lz) * u; a.y = Math.sin(u * Math.PI) * 1.2;
@@ -453,6 +468,8 @@ const AI = {
     if (a.def.chain) return hammerhorn(a, dt, pl, d);
     if (a.def.guard) return reef(a, dt, pl, d);
     if (!aggroCheck(a, pl, d)) return idle(a, dt);
+    // Act VII: the Rock-roller's Rolled Boulder (its heavy move; the smash and the slam are chip, and the slam is loud)
+    if (a.def.heavy === 'rolledBoulder') { const s = roller(a, dt, pl, d); if (s != null) return s; }
     if (a.state === 'wind') {
       a.atkT += dt;
       if (a.atkT >= a.windT) {
@@ -465,7 +482,7 @@ const AI = {
       if (attackTick(a, dt)) {
         killTele(a.tele); a.tele = null;
         shake(0.35); Audio.sfx('slam', { x: a.x, z: a.z });
-        if (a.slam) { explosion(a.x, a.z, 4, 0xb09070, { smoke: 0x4a4038, shake: 0.4 }); if (Math.hypot(pl.x - a.x, pl.z - a.z) < 4.2) hitHero(a, pl, 1.6, { stun: 0.5 }); crackAt(a.x, a.z, a.kind === 'reefback' ? 2.4 : 2.5, a.kind === 'reefback' ? 2 : 1, { src: 'slam' }); }
+        if (a.slam) { explosion(a.x, a.z, 4, 0xb09070, { smoke: 0x4a4038, shake: 0.4 }); if (Math.hypot(pl.x - a.x, pl.z - a.z) < 4.2) hitHero(a, pl, a.def.heavy ? Math.min(1.6, 1.9 / a.def.dmg) : 1.6, { stun: 0.5 }); if (a.def.heavy === 'rolledBoulder') loud(a.x, a.z, LOUD.rollerSlam, a); crackAt(a.x, a.z, a.kind === 'reefback' ? 2.4 : 2.5, a.kind === 'reefback' ? 2 : 1, { src: 'slam' }); }
         else { const fx = a.x + Math.sin(a.rot) * 2, fz = a.z + Math.cos(a.rot) * 2; puff(fx, 0.3, fz, 6, 0x4a4038, 1, 1); if (meleeLands(a, pl, a.def.reach + 0.6, 0.95)) hitHero(a, pl, 1.3); }
       }
       return 0;
@@ -496,7 +513,7 @@ const AI = {
     return AI.melee(a, dt, pl, d);
   },
   bat(a, dt, pl, d) {
-    if (a.def.lightShy) return skua(a, dt, pl, d);
+    if (a.def.lightShy || a.def.shadeShy) return skua(a, dt, pl, d);
     // flits at head height: circles its prey, swoops in to bite, wheels away
     const bob = Math.sin(a.t * 7 + a.id) * 0.2;
     if (!aggroCheck(a, pl, d)) {
@@ -525,6 +542,8 @@ const AI = {
     // below: a ridge of churned earth that hunts the hero; above: bites what is close, spits at what is not, then dives again
     if (a.under == null) { a.under = true; a.y = -3; }
     if (a.under) {
+      // Act VII: the Snow-worm tunnels only where the snow still lies, and its burst is its heavy move (snowUnder)
+      if (a.def.snowOnly) return snowUnder(a, dt, pl, d);
       if (a.avatar) a.avatar.group.visible = false;
       if (!aggroCheck(a, pl, d)) return 0;
       if (Math.random() < 0.5) puff(a.x + rand.range(-0.4, 0.4), 0.1, a.z + rand.range(-0.4, 0.4), 1, 0x6a5a48, 0.5, 0.3, 0.8);
@@ -551,13 +570,14 @@ const AI = {
     a.upT -= dt;
     if (a.state === 'dive') {
       a.atkT += dt; a.y = -a.atkT * 4;
-      if (a.atkT > 0.7) { a.under = true; a.state = 'chase'; a.y = -3; a.surfaceT = rand.range(1.5, 3); }
+      if (a.atkT > 0.7) { a.under = true; a.state = 'chase'; a.y = -3; a.surfaceT = rand.range(1.5, 3); if (a.def.snowOnly) a.surfaceT = Math.max(a.surfaceT, (a.burstNext || 0) - clock); }
       return 0;
     }
     if (a.state === 'attack') {
       face(a, pl, dt, 6);
       if (attackTick(a, dt)) {
-        if (a.spit) { fire('acid', a, a.x, a.z, angleTo(a.x, a.z, pl.x, pl.z), { y: 1.6, dmg: a.dmg * 0.9, onEnd: (x, z) => area('poison', x, z, 1.6, 4, { team: 'foe', src: a, dmg: a.dmg * 0.25, tick: 0.5 }) }); Audio.sfx('spiderHiss', { x: a.x, z: a.z }); }
+        if (a.spit && a.def.snowOnly) slushSpit(a, pl);
+        else if (a.spit) { fire('acid', a, a.x, a.z, angleTo(a.x, a.z, pl.x, pl.z), { y: 1.6, dmg: a.dmg * 0.9, onEnd: (x, z) => area('poison', x, z, 1.6, 4, { team: 'foe', src: a, dmg: a.dmg * 0.25, tick: 0.5 }) }); Audio.sfx('spiderHiss', { x: a.x, z: a.z }); }
         else if (meleeLands(a, pl, a.def.reach, 1.2)) hitHero(a, pl, 1, { poison: a.dmg * 0.5 });
       }
       return 0;
@@ -643,7 +663,8 @@ const AI = {
     if (a.flounder > 0) return 0;
     if (a.dazed > 0) return dazedTick(a, dt);
     if (a.dash) return dashStep(a, dt, pl);
-    if (!aggroCheck(a, pl, d)) return idle(a, dt);
+    // (a Den-bear the brook woke walks calm to dry ground)
+    if (!aggroCheck(a, pl, d)) return a.tideRisen && a.def.heavy ? dryWalk(a, dt) : idle(a, dt);
     a.chargeCd = (a.chargeCd ?? rand.range(0.5, 2)) - dt;
     // the Rime Bear's Frost Roar, when she is close in front of it
     if (a.state === 'roar') return roar(a, dt, pl);
@@ -654,10 +675,12 @@ const AI = {
       return 0;
     }
     if (a.state === 'rear') {
+      // (Act VII: the Den-bear's charge is its heavy move; a stun, a freeze or a fear breaks its rear)
+      if (a.def.heavy && interrupted(a)) { a.state = 'chase'; killTele(a.tele); a.tele = null; a.chargeCd = 2; tally(a, 'chargeBroken'); return 0; }
       a.atkT += dt * windMul(a);
       if (a.atkT >= 0.9) {
-        a.state = 'chase'; killTele(a.tele); a.tele = null; a.chargeCd = rand.range(5, 7);
-        startDash(a, a.chargeDir, 18, a.chargeLen, { daze: 2, sapDaze: 1, dmg: 1.4, hitO: { push: 20 }, dust: a.def.iceCharge ? 0xd8e0e8 : 0x5a4a38, ice: !!a.def.iceCharge });
+        a.state = 'chase'; killTele(a.tele); a.tele = null; a.chargeCd = rand.range(5, 7) * (a.def.heavy ? H7().cd : 1);
+        startDash(a, a.chargeDir, 18, a.chargeLen, a.def.heavy ? bearDash7(a) : { daze: 2, sapDaze: 1, dmg: 1.4, hitO: { push: 20 }, dust: a.def.iceCharge ? 0xd8e0e8 : 0x5a4a38, ice: !!a.def.iceCharge });
         a.avatar?.play('charge', 1.5, { loop: true }); Audio.sfx('bearCharge', { x: a.x, z: a.z }); tally(a, 'charge');
       }
       return 0;
@@ -667,7 +690,7 @@ const AI = {
       return 0;
     }
     if (d > 5 && d < 14 && a.chargeCd <= 0 && G.zone.map.clear(a.x, a.z, pl.x, pl.z)) {
-      a.state = 'rear'; a.atkT = 0; a.rot = a.chargeDir = angleTo(a.x, a.z, pl.x, pl.z); a.chargeLen = Math.min(18, d + 4);
+      a.state = 'rear'; a.atkT = 0; a.interrupted = false; a.windAt = clock; a.rot = a.chargeDir = angleTo(a.x, a.z, pl.x, pl.z); a.chargeLen = Math.min(18, d + 4);
       a.tele = teleLine(a.x, a.z, a.rot, a.chargeLen, Math.max(2.4, 2 * (a.radius + 1.05)), 0.9, 0xff9020);
       a.avatar?.play('rear', 1, { hitIn: 0.9 }); Audio.sfx('bearRoar', { x: a.x, z: a.z }); tally(a, 'rear');
       return 0;
@@ -859,6 +882,9 @@ const AI = {
   ketos: (a, dt, pl, d) => { ketosPre(a, dt, pl, d); return boss(a, dt, pl, d, KETOS); },
   // (a shadow keeps out of lamp light of its own will: forms 1-3 stop at its edge, the Snuff aside; form 4 keeps its rule)
   shade: (a, dt, pl, d) => { shadePre(a, dt, pl, d); if (a.removed) return 0; return boss(a, dt, pl, d, SHADE_FORM[a.def.form]); },
+  // Act VII: the two who are not killed
+  kallisto: (a, dt, pl, d) => boss(a, dt, pl, d, KALLISTO),
+  kelados: (a, dt, pl, d) => { keladosPre(a); return boss(a, dt, pl, d, KELADOS); },
   pet: null
 };
 
@@ -954,15 +980,17 @@ function goRest(a, dt) {
 function statueTick(a, dt, d, pl) {
   const av = a.avatar;
   if (av) { av.group.position.set(a.x, 0, a.z); av.group.rotation.y = a.rot; av.update(0, { speed: 0 }); }
-  let wake = (a.wakeIn != null && (a.wakeIn -= dt) <= 0) || d < 4 || a.hp < a.hpMax;
-  if (!wake && (a.iceT = (a.iceT ?? rand.range(0, 0.25)) - dt) <= 0) { a.iceT = 0.25; for (let k = 0; k < 9 && !wake; k++) wake = stageAt(a.x + (k % 3) - 1, a.z + Math.floor(k / 3) - 1) >= 1; }
+  // (Act VII's Icebound: by unbroken sun, a blow, fire or the Cradle; never by her walking near, sunWakes)
+  let wake = (a.wakeIn != null && (a.wakeIn -= dt) <= 0) || (!a.icebound && d < 4) || a.hp < a.hpMax;
+  if (a.icebound) wake = wake || sunWakes(a, dt);
+  else if (!wake && (a.iceT = (a.iceT ?? rand.range(0, 0.25)) - dt) <= 0) { a.iceT = 0.25; for (let k = 0; k < 9 && !wake; k++) wake = stageAt(a.x + (k % 3) - 1, a.z + Math.floor(k / 3) - 1) >= 1; }
   if (!wake) return;
   breakStatue(a, pl);
   for (const b of G.actors) if (b !== a && b.statue && b.dormant && a.packId != null && b.packId === a.packId && b.wakeIn == null) b.wakeIn = rand.range(0.1, 0.7);
 }
 function breakStatue(a, pl) {
   const av = a.avatar;
-  a.dormant = false; a.disguised = false; a.awake = true; a.aggro = true; a.rising = 0.7; a.wakeIn = null;
+  a.dormant = false; a.disguised = false; a.awake = true; a.aggro = true; a.rising = 0.7; a.wakeIn = null; a.wokeAt = clock; a.sunT = 0;
   a.rot = angleTo(a.x, a.z, pl.x, pl.z);
   if (av) { av.setTint(...(a.wakeTint || [0xffffff, 0])); restoreRim(a); av.anim.stop?.(0.15); av.play('hit', 1.2); }
   for (let i = 0; i < 18; i++) P({ x: a.x + rand.range(-0.3, 0.3), y: rand.range(0.3, 1.8), z: a.z + rand.range(-0.3, 0.3), vx: rand.range(-3, 3), vy: rand.range(1, 4), vz: rand.range(-3, 3), life: rand.range(0.6, 1.1), size: rand.range(0.08, 0.16), size1: 0.05, color: 0xe8f6ff, color1: 0x7ab4e0, grav: 9.8 });
@@ -1765,6 +1793,8 @@ function skua(a, dt, pl, d) {
     a.fly = a.perch ? 'roost' : 'sky'; a.hy = rand.range(4.2, 5.4); a.orbR = rand.range(5.5, 7.5); a.orbDir = rand.sign();
     a.y = a.perch ? perchY(a.perch) : a.hy; a.airborne = !a.perch;
   }
+  // Act VII: the Choughs' Mob, the flock bunched at head height round its circle (mobTick)
+  if (a.fly === 'mob') { const s = mobTick(a, dt, pl); if (s != null) return s; }
   // scattered: a beam over it, burning oil near (up and away from the light, crying)
   if ((a.oilT = (a.oilT ?? 0) - dt) <= 0) { a.oilT = 0.5; if (G.areas.some((f) => f.kind === 'fire' && f.floats && f.t < f.dur && Math.hypot(f.x - a.x, f.z - a.z) < 6)) a.status.fear = Math.max(a.status.fear, 3); }
   if (a.status.fear > 0 && a.fly !== 'roost') {
@@ -1796,7 +1826,7 @@ function skua(a, dt, pl, d) {
   if (a.fly === 'dive') {
     // down in a stoop, through her, and up again; out of the stoop if she gets into light
     a.atkT += dt;
-    const lit = lightAt(pl.x, pl.z, { ring: false }), td = Math.hypot(pl.x - a.x, pl.z - a.z);
+    const lit = safe7(a, pl), td = Math.hypot(pl.x - a.x, pl.z - a.z);
     if (lit && !a.atkHit) { a.fly = 'climb'; tally(a, 'diveBroken'); return 0; }
     a.y = Math.max(0.9, damp(a.y, td < 3 ? 0.9 : 1.6, 5, dt)); a.airborne = a.y > 2.2;
     if (!a.atkHit && td < a.def.reach + pl.radius + 0.2 && a.y < 1.6) {
@@ -1821,13 +1851,14 @@ function skua(a, dt, pl, d) {
   }
   // circling her high, out of reach, crying; wider while she stands in light
   a.airborne = a.y > 2.2;
-  const lit = lightAt(pl.x, pl.z, { ring: false });
+  const lit = safe7(a, pl);
   a.y = damp(a.y, a.hy + Math.sin(a.t * 1.7 + a.id) * 0.3, 2, dt);
   a.orb = (a.orb ?? angleTo(pl.x, pl.z, a.x, a.z)) + dt * (a.speed / (lit ? 10 : a.orbR)) * a.orbDir;
   const r = lit ? 9.5 : a.orbR;
   if (Math.random() < dt * 0.25) Audio.sfx('skuaCry', { x: a.x, z: a.z, vol: 0.45 });
   // a flock with no hero near goes home to its roost
   if (a.perch && d > 26 && Math.hypot(pl.x - a.home.x, pl.z - a.home.z) > 26) { a.fly = 'home'; return 0; }
+  if (a.def.shadeShy && !lit && mobStart(a, pl, d)) return 0;
   if (!lit && a.cd <= 0 && d < 12 && !pl.dead && diveToken(a)) {
     a.fly = 'dive'; a.atkT = 0; a.atkHit = false; a.rot = angleTo(a.x, a.z, pl.x, pl.z);
     a.avatar?.play('dive', 1, { loop: true }); Audio.sfx('skuaCry', { x: a.x, z: a.z, vol: 0.8 }); tally(a, 'dive');
@@ -1883,7 +1914,7 @@ const windMul = (a) => (a.status.slow > 0 ? 1 - a.status.slowK : 1);
 const SHRIEK = new Map();
 
 // (a hazard that Dazes a foe asks by the bus: forge.js's slide, Act VII)
-on('dazeFoe', (a, t) => { if (a && !a.dead && !a.removed) daze(a, t); });
+on('dazeFoe', (a, t) => { if (a && !a.dead && !a.removed) { if (a.def?.snowOnly && a.under) wormUp(a, false); daze(a, t); } });
 // knocked senseless by a wall, a standing stone or sap: open to every blow (x1.5) for t seconds
 function daze(a, t) {
   a.dazed = Math.max(a.dazed || 0, t); a.dmgTaken = 1.5;
@@ -1939,7 +1970,7 @@ function startDash(a, dir, sp, len, o = {}) {
 function stops(x, z, ignore) {
   const s = sapAt(x, z, ignore);
   if (s === 'amber' || s === 'slush') return s;
-  return iceAt(x, z) === 'slush' ? 'slush' : null;
+  return iceAt(x, z) === 'slush' || (G.zone?.act7 && wadeAt(x, z) === 'slush') ? 'slush' : null;
 }
 // a charge on thin ice: each thin cell it runs onto takes a stage; one at 2 or more breaks at once under it, and the charge
 // ends there (it flounders when the break's batch closes the cell, ice.js)
@@ -2003,7 +2034,7 @@ function unmask(a) {
   a.disguised = false;
   if (a.pose) { a.pose = null; if (a.mesh) { R.scene.remove(a.mesh); a.mesh = null; } puff(a.x, 0.4, a.z, 12, 0x6a6660, 1.2, 1.2, 1.4); }
   a.avatar?.setTint(a.baseTint ?? 0xffffff, a.baseTintAmt ?? 0);
-  for (let i = 0; i < 14; i++) P({ add: false, x: a.x + rand.range(-0.3, 0.3), y: rand.range(0.4, 1.8), z: a.z + rand.range(-0.3, 0.3), vx: rand.range(-2, 2), vy: rand.range(1, 3), vz: rand.range(-2, 2), life: 0.9, size: 0.12, size1: 0.08, color: 0x3a2a1a, alpha: 1, grav: 14 });
+  if (!a.def.heavy) for (let i = 0; i < 14; i++) P({ add: false, x: a.x + rand.range(-0.3, 0.3), y: rand.range(0.4, 1.8), z: a.z + rand.range(-0.3, 0.3), vx: rand.range(-2, 2), vy: rand.range(1, 3), vz: rand.range(-2, 2), life: 0.9, size: 0.12, size1: 0.08, color: 0x3a2a1a, alpha: 1, grav: 14 });
   tally(a, 'unmask');
   for (const b of G.actors) if (b !== a && b.disguised && b.dormant && a.packId != null && b.packId === a.packId && b.wakeIn == null) b.wakeIn = rand.range(0.2, 0.9);
 }
@@ -2100,12 +2131,14 @@ function elite(a, dt, pl, d) {
     const x = pl.x + rand.range(-1.5, 1.5), z = pl.z + rand.range(-1.5, 1.5);
     teleCircle(x, z, 2.2, 1.6, 0x80c8ff);
     area('frostOrb', x, z, 2.2, 1.6, { team: 'foe', src: a, dmg: a.dmg * 1.4 });
+    // (Act VII: it leaves slush for 4 s)
+    if (G.zone.act7) { const zn = G.zone; later(1.6, () => { if (G.zone === zn) addSapPool(x, z, 2.2, 4, null, 'slush'); }); }
   }
   if (a.affixes.includes('thunder') && T.thunder <= 0 && d < 14) {
     T.thunder = 3.2;
     const x = pl.x, z = pl.z;
     teleCircle(x, z, 1.6, 1.0, 0xffe080);
-    later(1.0, () => { bolt(x, 14, z, x, 0, z, 0xe0e8ff, 2); explosion(x, z, 1.4, 0xd0e0ff, { smoke: 0x6a6a7a, shake: 0.2 }); Audio.sfx('lightning', { x, z }); for (const p of heroes()) if (Math.hypot(p.x - x, p.z - z) < 1.8) damage(a, p, a.dmg * 1.6, { stun: 0.3 }); });
+    later(1.0, () => { bolt(x, 14, z, x, 0, z, 0xe0e8ff, 2); explosion(x, z, 1.4, 0xd0e0ff, { smoke: 0x6a6a7a, shake: 0.2 }); Audio.sfx('lightning', { x, z }); if (G.zone?.act7) loud(x, z, LOUD.thunder, a); for (const p of heroes()) if (Math.hypot(p.x - x, p.z - z) < 1.8) damage(a, p, a.dmg * 1.6, { stun: 0.3 }); });
   }
   if (a.affixes.includes('molten') && T.molten <= 0) { T.molten = 0.8; area('fire', a.x, a.z, 0.9, 3.5, { team: 'foe', src: a, dmg: a.dmg * 0.35, tick: 0.5 }); }
 }
@@ -5602,5 +5635,650 @@ function shadowLunge(a, pl) {
   }));
   return { t: 0.3, noFace: true, fn() {}, after: 0.3 };
 }
+
+// =====================================================================================================================
+// ---------- Act VII: the Meltwaters and the Hanging Lake (docs/act7-contract.md: Enemies, The bosses) ----------
+// Each of the act's seven creatures has one heavy move: a red telegraph of 0.9 s or more that no difficulty and no `fast`
+// affix shortens (its own clock: wind7), one blow of HAZ7.heavy of her life before armour, capped at HAZ7.cap after it
+// (heavy7), never x DIFFS.dmg, an elite's factor or COOP.dmg. A stun, a freeze or a fear breaks the wind-up. All else is chip.
+const H7 = () => actHaz(7, G.hero?.diff ?? 1);
+// shade: the layout's fixed shade or a cloud (light.js shadeAt, once the clouds sail; until then L.shade and z.cloudAt)
+export function shade7(x, z) {
+  const zn = G.zone; if (!zn) return false;
+  if (zn.shadeAt) return !!zn.shadeAt(x, z);
+  const L = zn.L, ix = Math.floor(x), iz = Math.floor(z);
+  if (!L || ix < 0 || iz < 0 || ix >= L.w || iz >= L.h) return false;
+  return !!(L.shade && L.shade[iz * L.w + ix]) || !!zn.cloudAt?.(x, z);
+}
+// what the heavy moves did, for the scenarios and the bot: { kind, move, tele (game seconds from the telegraph to the blow) }
+export const HEAVY7 = [];
+const log7 = (a, move, at) => { HEAVY7.push({ kind: a.kind, move, tele: +(clock - at).toFixed(3) }); if (HEAVY7.length > 400) HEAVY7.shift(); };
+// one clock a pack for a heavy move (the Rootlings' shriek pattern): s seconds x HAZ7.cd
+const PACK7 = new Map();
+const pkey = (a, what) => what + ':' + (a.packId ?? 'solo' + a.id);
+const packReady = (a, what, s) => clock - (PACK7.get(pkey(a, what)) ?? -99) >= s * H7().cd;
+const packMark = (a, what) => PACK7.set(pkey(a, what), clock);
+function heavy7(a, tg, move, o = {}) {
+  const H = H7();
+  return hitHero(a, tg, 1, Object.assign({ target: tg, share: a.boss ? H.bossHeavy : H.heavy, cap: H.cap, move }, o));
+}
+// a heavy move's wind-up: dur seconds behind its telegraph, then fire()
+function wind7(a, move, dur, tele, fire) {
+  a.state = 'wind7'; a.interrupted = false; a.tele = tele; a.h7 = { move, t: 0, dur, fire, at: clock };
+  tally(a, move + 'Tele');
+}
+function wind7Tick(a, dt) {
+  const W = a.h7; if (!W) { a.state = 'chase'; return 0; }
+  if (interrupted(a)) { cut7(a); return 0; }
+  W.t += dt * windMul(a);
+  if (W.t >= W.dur) { killTele(a.tele); a.tele = null; a.h7 = null; a.state = 'chase'; log7(a, W.move, W.at); W.fire(); }
+  return 0;
+}
+function cut7(a) {
+  if (a.h7) tally(a, a.h7.move + 'Broken');
+  a.h7 = null; killTele(a.tele); a.tele = null; if (a.state === 'wind7') a.state = 'chase'; a.cd = Math.max(a.cd, 0.6);
+}
+
+// ---------- the Mountain Wolf's Long Pounce: at 6-10 m with a clear line, a crouch of 0.9 s behind a line 10 x 1.8 m, one
+// a pack each 6 s; a leap that ends at a blocked cell or in slush leaves it Dazed 1 s. The shipped pounce stays as chip ----------
+function longPounce(a, dt, pl, tg, td) {
+  if (a.state === 'wind7') return wind7Tick(a, dt);
+  if (a.state === 'leap7') {
+    const J = a.j7, st = Math.min(dt, J.t), nx = a.x + J.ux * J.sp * st, nz = a.z + J.uz * J.sp * st;
+    J.t -= dt;
+    if (G.zone.map.walkable(nx, nz)) { a.x = nx; a.z = nz; } else { J.t = 0; J.wall = true; }
+    a.y = Math.sin((1 - Math.max(0, J.t) / J.t0) * Math.PI) * 1.4;
+    if (!J.hit) for (const p of heroes()) if (!p.dead && Math.hypot(p.x - a.x, p.z - a.z) < 0.9 + (p.radius || 0.5)) { J.hit = true; heavy7(a, p, 'longPounce', { push: 6 }); break; }
+    if (J.t <= 0) {
+      a.y = 0; a.state = 'chase'; a.j7 = null; a.cd = 0.9; puff(a.x, 0.2, a.z, 4, 0x4a4038, 0.7);
+      if (J.wall || stops(a.x, a.z)) { daze(a, 1); tally(a, 'pounceDazed'); }
+    }
+    return J.sp;
+  }
+  if (a.state === 'attack' || a.state === 'leap' || td < 6 || td > 10 || !packReady(a, 'longPounce', 6) || !G.zone.map.clear(a.x, a.z, tg.x, tg.z)) return null;
+  packMark(a, 'longPounce');
+  const rot = a.rot = angleTo(a.x, a.z, tg.x, tg.z);
+  a.avatar?.anim.stop?.(0.1); Audio.sfx('wolfHowl', { x: a.x, z: a.z, vol: 0.5 });
+  wind7(a, 'longPounce', 0.9, teleLine(a.x, a.z, rot, 10, 1.8, 0.9), () => {
+    a.state = 'leap7'; a.j7 = { ux: Math.sin(rot), uz: Math.cos(rot), sp: 22, t: 10 / 22, t0: 10 / 22, hit: false };
+    a.avatar?.play('pounce'); Audio.sfx('wolfAttack', { x: a.x, z: a.z });
+  });
+  return 0;
+}
+
+// ---------- the Goblin Marksman's Aimed Bolt: it plants its feet 0.9 s behind a thin line 14 m long; a real shot, stopped by
+// anything solid ----------
+function aimedBolt(a, tg) {
+  const rot = a.rot = angleTo(a.x, a.z, tg.x, tg.z);
+  a.avatar?.play('aim', 1); a.cd = 0.9 + a.def.atkTime * rand.range(0.9, 1.3) * H7().cd;
+  wind7(a, 'aimedBolt', 0.9, teleLine(a.x, a.z, rot, 14, 1.2, 0.9), () => {
+    const ux = Math.sin(rot), uz = Math.cos(rot), map = G.zone.map; let len = 14;
+    for (let u = 0.5; u <= 14; u += 0.25) if (map.blocks(Math.floor(a.x + ux * u), Math.floor(a.z + uz * u))) { len = u; break; }
+    a.avatar?.play('shoot', 0.9); Audio.sfx('arrowShoot', { x: a.x, z: a.z, vol: 0.8 });
+    bolt(a.x + ux * 0.5, 1.2, a.z + uz * 0.5, a.x + ux * len, 1.2, a.z + uz * len, 0xffe0c0, 1);
+    for (const p of heroes()) if (!p.dead && inLine(a.x, a.z, rot, len, 1.2, p)) { heavy7(a, p, 'aimedBolt'); break; }
+  });
+}
+
+// ---------- the Choughs: the Skua's flock that reads the sun the other way round (they stoop only at a hero in open sun and
+// break off in shade). The Mob: four or more circling a hero who has stood 5 s in open sun cry, bunch at head height round a
+// circle of r 3 where she stands, and 1.1 s later come through it together: one heavy blow to whoever is still in it and
+// still in sun; in shade nothing lands. One a flock each 14 s ----------
+const safe7 = (a, pl) => (a.def.shadeShy ? shade7(pl.x, pl.z) : lightAt(pl.x, pl.z, { ring: false }));
+const held7 = (b) => b.dead || b.removed || b.status.stun > 0 || b.status.freeze > 0 || b.status.fear > 0;
+function mobStart(a, pl, d) {
+  if (d > 12 || pl.dead || !((pl.sun7 || 0) >= 5) || !packReady(a, 'mob', 14)) return false;
+  const flock = G.actors.filter((b) => b.def?.shadeShy && (b.fly === 'sky' || b.fly === 'climb' || b.fly === 'dive') && !held7(b) && (b === a || (a.packId != null && b.packId === a.packId)) && Math.hypot(b.x - pl.x, b.z - pl.z) < 16).slice(0, 7);
+  if (flock.length < 4) return false;
+  packMark(a, 'mob');
+  const M = { x: pl.x, z: pl.z, t: 0, at: clock, owner: a, birds: flock, done: false, tele: teleCircle(pl.x, pl.z, 3, 1.1) };
+  flock.forEach((b, i) => { b.fly = 'mob'; b.mob = M; b.mobAng = (i / flock.length) * 6.283; releaseDive(b); b.avatar?.play('dive', 1, { loop: true }); Audio.sfx('skuaCry', { x: b.x, z: b.z, vol: 0.7 }); });
+  tally(a, 'mobTele'); emit('hint7', 'mob');
+  return true;
+}
+function mobTick(a, dt, pl) {
+  const M = a.mob;
+  if (M && !M.done && (held7(M.owner) || clock - M.at > 1.7)) mobEnd(M, true);
+  if (!M || M.done) { a.mob = null; if (a.fly === 'mob') { a.fly = 'climb'; a.climbDir = a.rot; } return null; }
+  if (a === M.owner && (M.t += dt) >= 1.1) { mobEnd(M, false); return 0; }
+  a.y = damp(a.y, 1.9, 4, dt); a.airborne = a.y > 2.2;
+  return fly(a, M.x + Math.sin(a.mobAng) * 3.4, M.z + Math.cos(a.mobAng) * 3.4, a.speed * 1.2, dt);
+}
+function mobEnd(M, broken) {
+  if (M.done) return;
+  M.done = true; killTele(M.tele);
+  const o = M.owner;
+  if (broken) tally(o, 'mobBroken');
+  else {
+    log7(o, 'mob', M.at); let n = 0;
+    for (const p of heroes()) if (!p.dead && Math.hypot(p.x - M.x, p.z - M.z) < 3 + (p.radius || 0.5) * 0.5) { if (shade7(p.x, p.z)) tally(o, 'mobShade'); else { heavy7(o, p, 'mob'); n++; } }
+    tally(o, n ? 'mobHit' : 'mobMiss');
+  }
+  for (const b of M.birds) if (!b.dead && b.fly === 'mob') { b.fly = 'climb'; b.climbDir = broken ? b.rot : angleTo(b.x, b.z, M.x, M.z); b.atkHit = true; b.mob = null; b.cd = rand.range(2, 4); }
+}
+
+// ---------- the Den-bear: the charge is the heavy blow, and its end against something solid is loud; woken by the brook it
+// walks calm to dry ground ----------
+function bearDash7(a) {
+  const H = H7();
+  log7(a, 'charge', a.windAt ?? clock);
+  return { daze: 2, sapDaze: 1, dmg: 1, hitO: { push: 20, share: H.heavy, cap: H.cap, move: 'charge' }, dust: 0x5a4a38,
+    end(b, D) { chargeEnd(b, D); if (D.wall) loud(b.x, b.z, LOUD.bearWall, b); } };
+}
+function dryWalk(a, dt) {
+  if (!a.dryTo) {
+    if (waterAt(a.x, a.z) === 'dry') return idle(a, dt);
+    const map = G.zone.map;
+    for (let r = 1; r <= 14 && !a.dryTo; r++) for (let k = 0; k < 16; k++) { const g = (k / 16) * 6.283, x = a.x + Math.sin(g) * r, z = a.z + Math.cos(g) * r; if (map.walkable(x, z) && waterAt(x, z) === 'dry') { a.dryTo = { x, z }; break; } }
+    if (!a.dryTo) return 0;
+    a.home = { x: a.dryTo.x, z: a.dryTo.z }; tally(a, 'dryWalk');
+  }
+  if (Math.hypot(a.dryTo.x - a.x, a.dryTo.z - a.z) < 0.8) { a.dryTo = null; return 0; }
+  return seek(a, a.dryTo.x, a.dryTo.z, a.speed * 0.4, dt);
+}
+// something loud within a sleeper's hearing (def.wake.loud metres) wakes it: it comes at the noise
+function loudWakes(x, z) {
+  if (!G.zone?.act7 || NET.mode === 'guest') return;
+  for (const a of G.actors) { const W = a.def?.wake; if (!a.dormant || a.dead || !W?.loud || a.wakeIn != null || Math.hypot(a.x - x, a.z - z) > W.loud) continue; a.wakeIn = rand.range(0.05, 0.3); tally(a, 'loudWake'); }
+}
+on('loud', (x, z) => loudWakes(x, z));
+// (the Spirit Wolf's howl wakes a den at 12 m and kicks nothing: skillsx.js emits 'denWake')
+on('denWake', (x, z) => loudWakes(x, z));
+
+// ---------- the Snow-worm: it tunnels only through cells where the snow still lies for the weirs opened; the burst from
+// under her (r 2.4, 0.9 s) is the heavy blow, each 6-9 s; a hero off the snow cannot be burst: it comes up at the snow's
+// edge and spits slush (no damage: a wading pool of r 1.6 for 4 s, sap.js) ----------
+export function snow7(x, z) {
+  const L = G.zone?.L, s = L?.snow; if (!s) return true;
+  const ix = Math.floor(x), iz = Math.floor(z); if (ix < 0 || iz < 0 || ix >= L.w || iz >= L.h) return false;
+  const v = s[iz * L.w + ix], F = G.hero.flags;
+  if (!v) return false;
+  if (v === 5) return true;
+  if (F.act7) return false;
+  return v === 4 || (F.weir1 ? 1 : 0) + (F.weir2 ? 1 : 0) + (F.weir3 ? 1 : 0) < v;
+}
+function snowUnder(a, dt, pl, d) {
+  if (a.avatar) a.avatar.group.visible = false;
+  if (!aggroCheck(a, pl, d)) return 0;
+  if (Math.random() < 0.5) puff(a.x + rand.range(-0.4, 0.4), 0.1, a.z + rand.range(-0.4, 0.4), 1, 0xe8eef4, 0.5, 0.3, 0.8);
+  a.rumbleT = (a.rumbleT ?? 0) - dt;
+  if (a.rumbleT <= 0) { a.rumbleT = 1.3; Audio.sfx('wormRumble', { x: a.x, z: a.z, vol: 0.45 }); }
+  if (a.state === 'emerge') {
+    if (interrupted(a)) { a.state = 'chase'; killTele(a.tele); a.tele = null; a.surfaceT = 1.5; tally(a, 'burstBroken'); return 0; }
+    a.atkT += dt;
+    if (a.atkT >= 0.9) wormUp(a, true);
+    return 0;
+  }
+  a.surfaceT = (a.surfaceT ?? rand.range(0.8, 2)) - dt;
+  const on = snow7(pl.x, pl.z);
+  if (a.surfaceT <= 0 && on && d < 3.2) {
+    a.state = 'emerge'; a.atkT = 0; a.interrupted = false; a.surfaceT = null; a.windAt = clock;
+    a.tele = teleCircle(a.x, a.z, 2.4, 0.9); tally(a, 'burstTele');
+    return 0;
+  }
+  // she stands off the snow: up at the snow's edge to spit, no burst
+  if (a.surfaceT <= 0 && !on && d < 10 && (a.edgeT || 0) > 0.5) { wormUp(a, false); return 0; }
+  const ox = a.x, oz = a.z, free = !snow7(ox, oz), v = seek(a, pl.x, pl.z, a.speed * 1.35, dt);
+  if (!free && !snow7(a.x, a.z)) {
+    if (snow7(a.x, oz)) a.z = oz; else if (snow7(ox, a.z)) a.x = ox; else { a.x = ox; a.z = oz; }
+    a.edgeT = (a.edgeT || 0) + dt;
+  } else if (v > 0) a.edgeT = Math.max(0, (a.edgeT || 0) - dt);
+  return v;
+}
+function wormUp(a, burst) {
+  a.under = false; a.state = 'up'; a.upT = rand.range(5, 8); a.y = -2.6; a.cd = 0.6; a.edgeT = 0; a.surfaceT = null;
+  if (a.avatar) { a.avatar.group.visible = true; a.avatar.play('attack', 1.2); }
+  killTele(a.tele); a.tele = null;
+  explosion(a.x, a.z, burst ? 2.4 : 1.2, 0xe8eef4, { smoke: 0xc8d4dc, shake: burst ? 0.25 : 0.1 });
+  for (let i = 0; i < 16; i++) P({ add: false, x: a.x, y: 0.4, z: a.z, vx: rand.range(-4, 4), vy: rand.range(3, 7), vz: rand.range(-4, 4), life: 1, size: 0.18, size1: 0.12, color: 0xf4f8ff, alpha: 1, grav: 16 });
+  Audio.sfx('slam', { x: a.x, z: a.z });
+  if (burst) {
+    a.burstNext = clock + rand.range(6, 9) * H7().cd; log7(a, 'burst', a.windAt ?? clock);
+    for (const p of heroes()) if (!p.dead && Math.hypot(p.x - a.x, p.z - a.z) < 2.4 + (p.radius || 0.5) * 0.5 && snow7(p.x, p.z)) heavy7(a, p, 'burst');
+  }
+  tally(a, burst ? 'burst' : 'edgeUp');
+}
+function slushSpit(a, pl) {
+  Audio.sfx('spiderHiss', { x: a.x, z: a.z }); tally(a, 'slush');
+  lob(a.x, a.z, pl.x, pl.z, 0.6, 2.5, 0xdfe8ee, (x, z) => addSapPool(x, z, 1.6, 4, null, 'slush'));
+}
+
+// ---------- rocks, rolling boulders, a Tremor's ring (cover: a rock or a block left on the ground closes a 2 x 2
+// footprint with low = false: sight, shots, a Tremor's ring and a slide's front stop at it) ----------
+const ROCKS7 = [], ROLL7 = [], RING7 = [], PEND7 = [];
+// a boss's blow s seconds on, on the AI's own clock (a telegraph is never a frame short of its table's length): dropped if
+// the zone is left or the boss is down
+function after7(a, s, fn) { PEND7.push({ a, at: clock + s, fn, zone: G.zone }); }
+let rockGeo = null, ringGeo = null;
+const ROCKM = {};
+function rockMesh(ice) {
+  rockGeo ||= new THREE.IcosahedronGeometry(1, 1);
+  const m = new THREE.Mesh(rockGeo, ROCKM[ice ? 'ice' : 'rock'] ||= new THREE.MeshStandardMaterial(ice ? { color: 0xbfe0f4, roughness: 0.3, emissive: 0x24384a, flatShading: true } : { color: 0x6e6a64, roughness: 0.95, flatShading: true }));
+  m.rotation.set(Math.random() * 6.28, Math.random() * 6.28, 0); m.castShadow = true;
+  return m;
+}
+// a rock (o.ice: a block of ice) left at (x, z) for t seconds; never a cell a hero stands on. Bus 'rock7' (the record: x, z,
+// t, cells, ice) and 'rock7Gone', for the props and co-op's cells
+export function rock7(x, z, t, o = {}) {
+  const zn = G.zone, map = zn.map, ix = Math.round(x) - 1, iz = Math.round(z) - 1, cells = [];
+  for (const [cx, cz] of [[ix, iz], [ix + 1, iz], [ix, iz + 1], [ix + 1, iz + 1]]) {
+    if (map.solid(cx, cz) || heroes().some((p) => Math.floor(p.x) === cx && Math.floor(p.z) === cz)) continue;
+    cells.push([cx, cz]);
+  }
+  if (cells.length) map.close(cells, false);
+  const mesh = rockMesh(o.ice); mesh.position.set(ix + 1, 0.6, iz + 1); mesh.scale.set(1.15, 1.0, 1.15); R.scene.add(mesh);
+  const r = { x: ix + 1, z: iz + 1, t, cells, mesh, by: o.by || null, ice: !!o.ice, zone: zn };
+  ROCKS7.push(r); emit('rock7', r);
+  return r;
+}
+function dropRock(i, quiet) {
+  const r = ROCKS7[i]; ROCKS7.splice(i, 1);
+  R.scene.remove(r.mesh);
+  if (r.cells.length) r.zone.map?.open?.(r.cells);
+  if (!quiet && r.zone === G.zone) { puff(r.x, 0.6, r.z, 8, r.ice ? 0xe8f4ff : 0x8a8680, 1.2, 1.2, 1); Audio.sfx(r.ice ? 'iceBreak' : 'stoneCrack', { x: r.x, z: r.z, vol: 0.5 }); }
+  emit('rock7Gone', r);
+}
+// a boulder rolled down a line at sp m/s: it strikes the first hero on it for the heavy share and stops at the line's end
+// or the first solid cell, where it stays `stay` seconds as a rock (o.max: so many of its owner's rocks at most; o.loud)
+function rollBoulder(a, rot, len, w, sp, move, stay, o = {}) {
+  const ux = Math.sin(rot), uz = Math.cos(rot), mesh = rockMesh(o.ice);
+  mesh.scale.setScalar(w * 0.42); R.scene.add(mesh);
+  ROLL7.push({ src: a, x: a.x + ux * 1.2, z: a.z + uz * 1.2, ux, uz, run: 1.2, len, w, sp, move, stay, hit: false, mesh, zone: G.zone, o });
+  Audio.sfx('golemStep', { x: a.x, z: a.z });
+}
+function ring7(a) {
+  ringGeo ||= new THREE.RingGeometry(0.9, 1, 64).rotateX(-Math.PI / 2);
+  const mesh = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xff3020, transparent: true, opacity: 0.85, depthWrite: false }));
+  mesh.position.set(a.x, 0.08, a.z); mesh.scale.setScalar(4); mesh.renderOrder = 3; R.scene.add(mesh);
+  RING7.push({ src: a, x: a.x, z: a.z, r: 4, hit: new Set(), mesh, zone: G.zone });
+}
+function act7Tick(dt) {
+  const zn = G.zone, map = zn.map;
+  // who stands in open sun, and for how long (the Mob)
+  if (zn.act7) for (const p of heroes()) p.sun7 = shade7(p.x, p.z) ? 0 : (p.sun7 || 0) + dt;
+  for (let i = PEND7.length - 1; i >= 0; i--) { const q = PEND7[i]; if (q.zone !== zn || q.a.dead) { PEND7.splice(i, 1); continue; } if (clock >= q.at - 1e-6) { PEND7.splice(i, 1); q.fn(); } }
+  for (let i = ROCKS7.length - 1; i >= 0; i--) { const r = ROCKS7[i]; if (r.zone !== zn) dropRock(i, true); else if ((r.t -= dt) <= 0) dropRock(i); }
+  for (let i = ROLL7.length - 1; i >= 0; i--) {
+    const b = ROLL7[i];
+    if (b.zone !== zn) { R.scene.remove(b.mesh); ROLL7.splice(i, 1); continue; }
+    const st = b.sp * dt, nx = b.x + b.ux * st, nz = b.z + b.uz * st;
+    let end = false;
+    if (map.blocks(Math.floor(nx + b.ux * 0.7), Math.floor(nz + b.uz * 0.7))) end = true;
+    else { b.x = nx; b.z = nz; b.run += st; if (b.run >= b.len) end = true; }
+    b.mesh.position.set(b.x, b.w * 0.42, b.z); b.mesh.rotation.x += dt * 7;
+    if (Math.random() < 0.7) puff(b.x, 0.3, b.z, 2, 0x8a8680, 0.8, 0.8, 0.8);
+    if (!b.hit && !b.src.dead) for (const p of heroes()) if (!p.dead && Math.hypot(p.x - b.x, p.z - b.z) < b.w / 2 + (p.radius || 0.5) * 0.5) { b.hit = true; heavy7(b.src, p, b.move); break; }
+    if (!end) continue;
+    ROLL7.splice(i, 1); R.scene.remove(b.mesh);
+    explosion(b.x, b.z, 1.8, 0x9a9080, { smoke: 0x6a6258, shake: 0.3 }); Audio.sfx('slam', { x: b.x, z: b.z });
+    if (b.o.loud) loud(b.x, b.z, b.o.loud, b.src);
+    if (!(b.o.max > 0) || ROCKS7.filter((r) => r.by === b.src && !r.ice).length < b.o.max) rock7(b.x, b.z, b.stay, { by: b.src, ice: b.o.ice });
+  }
+  // a Tremor's ring: from r 4 to r 14 at 9 m/s, 1.2 m thick; whoever it crosses in the open (nothing solid between)
+  for (let i = RING7.length - 1; i >= 0; i--) {
+    const g = RING7[i], r0 = g.r;
+    if (g.zone !== zn || g.r >= 14) { R.scene.remove(g.mesh); g.mesh.material.dispose(); RING7.splice(i, 1); continue; }
+    g.r = Math.min(14, g.r + 9 * dt); g.mesh.scale.setScalar(g.r + 0.6); g.mesh.material.opacity = 0.85 * (1 - (g.r - 4) / 14);
+    for (const p of heroes()) {
+      const d = Math.hypot(p.x - g.x, p.z - g.z);
+      if (p.dead || g.hit.has(p) || d < r0 - 0.6 || d > g.r + 0.6) continue;
+      g.hit.add(p);
+      if (g.src.dead) continue;
+      if (map.los(g.x, g.z, p.x, p.z)) heavy7(g.src, p, 'tremor'); else tally(g.src, 'tremorCover');
+    }
+  }
+}
+
+// ---------- the Rock-roller: at 4-14 m with a clear line it heaves a boulder down a line 14 x 2.6 m (1.2 s) at 12 m/s; the
+// boulder stays 20 s as a rock, three of its rocks at most; each 8 s. Icebound: see statueTick ----------
+function roller(a, dt, pl, d) {
+  if (a.state === 'wind7') return wind7Tick(a, dt);
+  a.rollCd = (a.rollCd ?? 0) - dt;
+  if (a.rollCd > 0 || a.state === 'wind' || a.state === 'attack' || d < 4 || d > 14 || !G.zone.map.clear(a.x, a.z, pl.x, pl.z)) return null;
+  a.rollCd = 8 * H7().cd;
+  const rot = a.rot = angleTo(a.x, a.z, pl.x, pl.z);
+  a.avatar?.play('taunt', 1.2); Audio.sfx('trollRoar', { x: a.x, z: a.z, vol: 0.7 });
+  wind7(a, 'rolledBoulder', 1.2, teleLine(a.x, a.z, rot, 14, 2.6, 1.2), () => {
+    a.avatar?.play('smash', 1.4);
+    rollBoulder(a, rot, 14, 2.6, 12, 'rolledBoulder', 20, { max: 3, loud: LOUD.rolledBoulder });
+  });
+  return 0;
+}
+// the Icebound sleeps in shade for ever and wakes after HAZ7.sunWake s of unbroken sun on its cell; fire on its block (a
+// hero's burning ground, a molten champion's patch within 3 m) counts as sun in shade and halves the wait (U4, U6)
+function sunWakes(a, dt) {
+  const fire = G.areas.some((f) => f.kind === 'fire' && f.t < f.dur && (f.team === 'foe' ? !!f.src?.affixes?.includes('molten') && Math.hypot(f.x - a.x, f.z - a.z) < 3 : Math.hypot(f.x - a.x, f.z - a.z) < f.r + a.radius));
+  if (shade7(a.x, a.z) && !fire) { a.sunT = 0; return false; }
+  a.sunT = (a.sunT || 0) + dt * (fire ? 2 : 1);
+  return a.sunT >= H7().sunWake;
+}
+// the Cradle held at an ice block melts it (U5; the world's interact says so on the bus): the Icebound within 3 m wake
+on('iceMelt', (it) => { if (!it) return; for (const a of G.actors) if (a.icebound && a.dormant && !a.dead && Math.hypot(a.x - it.x, a.z - it.z) < 3 && a.wakeIn == null) { a.wakeIn = 0; tally(a, 'melted'); } });
+// frost on an Icebound woken less than 3 s ago puts it back to sleep for 4 s (U7: once for each of the Mage's two frosts;
+// the blow does not say which it was, so twice at most)
+function refreeze7(a) {
+  if (a.dormant || !(clock - (a.wokeAt ?? -99) < 3) || (a.refroze || 0) >= 2) return false;
+  a.refroze = (a.refroze || 0) + 1;
+  a.dormant = true; a.disguised = true; a.awake = false; a.aggro = false; a.wakeIn = 4; a.status.freeze = 0; a.rising = 0;
+  a.h7 = null; a.state = 'chase'; killTele(a.tele); a.tele = null; a.avatar?.setTint(0x9ac8e8, 1.75);
+  tally(a, 'refrozen');
+  return true;
+}
+
+// ---------- the Rock-scorpion: under its flat stone until she is 6 m off or one of the pack is struck (water over the
+// slabs brings them out early and calm); cold-blooded (x 0.6 on a shaded cell, and no Sting there). The Sting: every third
+// blow, the tail up 0.9 s over a cone of 2.6 m and 60 degrees, one a pack each 3 s ----------
+function scorpion(a, dt, pl, d) {
+  if (a.under) {
+    if (a.avatar) a.avatar.group.visible = false;
+    if (a.emergeIn == null) {
+      if (d < 6 || a.hp < a.hpMax) burstPack(a);
+      else if (G.zone.water && tideWakes(a, dt)) { for (const b of G.actors) if (b.under && b.def.stingEvery && (b === a || (a.packId != null && b.packId === a.packId))) b.calm7 = true; burstPack(a); }
+    }
+    if (a.emergeIn != null && (a.emergeIn -= dt) <= 0) { emerge(a); if (a.calm7) { a.aggro = false; tally(a, 'calmOut'); } }
+    return 0;
+  }
+  a.speed0 ??= a.speed; a.speed = a.speed0 * (shade7(a.x, a.z) ? a.def.coldBlooded || 0.6 : 1);
+  if (a.state === 'wind7') return wind7Tick(a, dt);
+  return null;
+}
+const stingOK = (a) => a.swings % a.def.stingEvery === 0 && !shade7(a.x, a.z) && packReady(a, 'sting', 3);
+function sting7(a, tg) {
+  packMark(a, 'sting');
+  const rot = a.rot = angleTo(a.x, a.z, tg.x, tg.z);
+  a.cd = 0.9 + a.def.atkTime; a.avatar?.play('rear', 1);
+  wind7(a, 'sting', 0.9, teleCone(a.x, a.z, rot, 2.6, 0.52, 0.9), () => {
+    a.avatar?.play('bite', 1); Audio.sfx('spiderHiss', { x: a.x, z: a.z, vol: 0.7 });
+    for (const p of heroes()) if (!p.dead && inCone(a.x, a.z, rot, 2.6, 0.52, p)) heavy7(a, p, 'sting');
+  });
+}
+
+// =====================================================================================================================
+// ---------- Act VII's two bosses, who are not killed (docs/act7-contract.md, The bosses: the boss law B1-B10) ----------
+// Phases turn on life alone (0.66, 0.33): no least time, no floor, no lock, nothing invulnerable. An entry move is queued
+// (a.queue) and played while the boss stays open to every blow; struck through two thresholds at once, both play in order.
+// Every damaging move is one heavy blow (HAZ7.bossHeavy before armour, HAZ7.cap after). Pace by difficulty: bcd7.
+const bcd7 = (s) => s * H7().bossCd;
+// (under a cloud Kelados's cooldowns are x 1.4: a.cloud7)
+const cd7 = (base) => (a, ph) => bcd7(Array.isArray(base) ? base[ph] : base) * (a.cloud7 ? 1.4 : 1);
+// Wanderer plays one move fewer a phase; two of the boss's own telegraphs may overlap from a phase on by difficulty
+const less7 = () => H7().less > 0;
+const over7 = (a) => { const o = H7().overlap; return o > 0 && a.phase + 1 >= o; };
+// (a telegraph of its own still up after its move has ended: a rock's circle, a block's, a Tremor's ring; another of its own
+// big moves waits for it unless the difficulty lets two overlap)
+const free7 = (a) => !(a.ownT > a.t) || over7(a);
+const own7 = (a, s) => { a.ownT = Math.max(a.ownT || 0, a.t + s); };
+const solo7 = () => heroes().length < 2;
+const farHero = (a, min) => { let best = null, bd = min; for (const p of heroes()) { if (p.dead) continue; const d = Math.hypot(p.x - a.x, p.z - a.z); if (d > bd) { bd = d; best = p; } } return best; };
+// a move: t seconds behind its telegraph, then fn (id: logged with its measured telegraph, HEAVY7)
+function mv7(a, id, t, fn, after = 0.5, o = {}) {
+  const at = clock;
+  return Object.assign({ t, fn() { if (id) log7(a, id, at); fn(); }, after }, o);
+}
+// a rock or a block thrown on the farthest hero beyond 8 m; alone, every third one falls on her wherever she is (the two
+// between are let go when she stands inside 8 m)
+function throwAim(a, key, cd) {
+  if (farHero(a, 8)) return true;
+  if (!solo7()) return false;
+  if (((a[key] || 0) + 1) % 3 === 0) return true;
+  a[key] = (a[key] || 0) + 1; a.mcd[key === 'rockN' ? 'rockfall' : 'iceBlock'] = cd;
+  return false;
+}
+const rockT7 = () => ((G.hero?.diff ?? 1) >= 5 ? 10 : 20);
+
+// ---------- Kallisto, the Waking Bear ----------
+const KALLISTO = {
+  name: 'kallisto', phases: [0.66, 0.33], wake: 16,
+  intro(a) {
+    emit('bossIntro', a); Audio.sfx('bearRoar'); Audio.sfx('bossRoar', { vol: 0.6 }); shake(0.5);
+    a.avatar?.play('howl'); a.queue = []; a.rockN = 0; a.mcd.roar = bcd7(6); a.mcd.charge = 1.5;
+    emit('boss7Phase', a.kind, 1, a);
+  },
+  onPhase(a, ph, was) {
+    for (let p = Math.max(was, 0) + 1; p <= ph; p++) { (a.queue ||= []).push(p === 1 ? 'rocks2' : 'roar3'); emit('boss7Phase', a.kind, p + 1, a); if (p === 2) emit('boss7Window', a.kind, a); }
+  },
+  // wheeling away to open the distance for a charge (the Hart's)
+  tick(a, dt) {
+    if (!(a.wheel > 0)) return null;
+    a.wheel -= dt;
+    const T = a.wheelTo, dx = T.x - a.x, dz = T.z - a.z, d = Math.hypot(dx, dz), v = a.speed * 1.6;
+    if (d > 0.8 && a.wheel > 0) { const st = Math.min(v * dt, d); a.x += (dx / d) * st; a.z += (dz / d) * st; a.rot = dampAngle(a.rot, Math.atan2(dx, dz), 9, dt); return v; }
+    a.wheel = 0; a.move = null; a.cd = 0.1; (a.queue ||= []).unshift('charge');
+    return 0;
+  },
+  moves: [
+    // the entries (queued, never picked)
+    { id: 'rocks2', when: () => false, cd: 0, run: (a) => kRocks(a) },
+    { id: 'roar3', when: () => false, cd: 0, run: (a) => kRoar(a, 'roar3') },
+    { id: 'roar', when: (a) => bigs(a) < 1 && free7(a) && denChutes(a).length > 0, cdOf: cd7([16, 14, 12]), run: (a) => kRoar(a, 'roar') },
+    { id: 'charge', when: (a) => bigs(a) < 2 && free7(a), cdOf: cd7([9, 8, 7]), run(a, pl) {
+      if (Math.hypot(pl.x - a.x, pl.z - a.z) < 5 && !a.wheeled) return kWheel(a, pl);
+      a.wheeled = false;
+      return kCharge(a, pl, false);
+    } },
+    { id: 'slam', when: (a, d) => a.phase >= 1 && d < 7 && bigs(a) < 2 && free7(a), cdOf: cd7(10), run(a) {
+      a.tele = teleCircle(a.x, a.z, 5.5, 1.1); bigTele(a, 1.1); a.avatar?.play('attack', 1, { hitIn: 1.1 });
+      return mv7(a, 'slam', 1.1, () => {
+        explosion(a.x, a.z, 5.5, 0xb0a080, { smoke: 0x6a6258, shake: 0.6 }); Audio.sfx('slam', { x: a.x, z: a.z });
+        for (const p of heroes()) if (!p.dead && Math.hypot(p.x - a.x, p.z - a.z) < 5.5 + (p.radius || 0.5) * 0.5) heavy7(a, p, 'slam');
+      }, 0.7, { noFace: true });
+    } },
+    { id: 'rockfall', when: (a) => a.phase >= (less7() ? 2 : 1) && bigs(a) < 2 && free7(a) && throwAim(a, 'rockN', bcd7(9)), cdOf: cd7(9), run(a, pl) {
+      a.rockN++; a.avatar?.play('howl', 1.3);
+      rockfall7(a, farHero(a, 8) || pl);
+      return { t: 0.5, fn() {}, after: 0.4 };
+    } },
+    { id: 'maul', basic: true, when: (a, d) => d < 6 && !(less7() && a.phase === 0), cdOf: cd7(6), run(a, pl) {
+      const rot = a.rot = angleTo(a.x, a.z, pl.x, pl.z);
+      a.tele = teleCone(a.x, a.z, rot, 4.6, 0.96, 0.9); a.avatar?.play('attack2', 1, { hitIn: 0.9 });
+      return mv7(a, 'maul', 0.9, () => {
+        Audio.sfx('swingHeavy', { x: a.x, z: a.z });
+        for (const p of heroes()) if (!p.dead && inCone(a.x, a.z, rot, 4.6, 0.96, p)) heavy7(a, p, 'maul');
+      }, 0.5, { noFace: true });
+    } }
+  ]
+};
+// the Den's chutes that can be called: armed and at rest, nearest her first
+function denChutes(a) {
+  const c = arena(a), R0 = arenaR(17);
+  return (flues() || []).filter((f) => f.kind === 'snow' && f.armed && f.st === 'idle' && (f.area === 'den' || Math.hypot(f.x - c.x, f.z - c.z) < R0 + 10))
+    .map((f) => ({ f, d: Math.hypot(f.x + Math.sin(f.dir) * f.len * 0.5 - a.x, f.z + Math.cos(f.dir) * f.len * 0.5 - a.z) })).sort((p, q) => p.d - q.d).map((p) => p.f);
+}
+// the Roar: 1.2 s, no blow; then HAZ7.bossChutes of the nearest armed chutes run their own 2.8 s lane (three or four
+// heroes: one more, three at most). Loud for the dens; the chutes it names are the only ones it brings down
+function kRoar(a, id) {
+  a.avatar?.play('howl', 1); Audio.sfx('bearRoar', { x: a.x, z: a.z }); ring(a.x, a.z, 9, 0xffe0c0, 0.8);
+  return mv7(a, id, 1.2, () => {
+    shake(0.5); Audio.sfx('bossRoar', { vol: 0.7 }); emit('loud', a.x, a.z, LOUD.kallistoRoar, a);
+    const n = Math.min(3, H7().bossChutes[id === 'roar3' || a.phase >= 2 ? 1 : 0] + (heroes().length >= 3 ? 1 : 0));
+    let k = 0;
+    for (const f of denChutes(a)) { if (k >= n) break; if (fireFlue(f.i, a)) { k++; bigTele(a, BREATH.inhale + BREATH.fire); } }
+    tally(a, 'chutes' + k);
+  }, 0.6);
+}
+// the second phase's entry: she rears and brings two rocks into the bowl's middle, 6 m or more from every hero; no blow
+function kRocks(a) {
+  a.avatar?.play('rear', 1); Audio.sfx('bearRoar', { x: a.x, z: a.z });
+  return mv7(a, 'rocks2', 1.2, () => {
+    const c = arena(a), map = G.zone.map, got = [];
+    for (let k = 0; k < 60 && got.length < 2; k++) {
+      const g = rand.range(0, 6.283), r = rand.range(0, k < 30 ? 5 : 8), x = c.x + Math.sin(g) * r, z = c.z + Math.cos(g) * r;
+      if (!map.walkable(x, z) || heroes().some((p) => Math.hypot(p.x - x, p.z - z) < 6) || Math.hypot(a.x - x, a.z - z) < 3 || got.some((q) => Math.hypot(q.x - x, q.z - z) < 4)) continue;
+      got.push({ x, z });
+    }
+    for (const q of got) { fall(q.x, q.z, 0x4a4844); later(0.35, inZone(a, () => { explosion(q.x, q.z, 1.8, 0x9a9080, { smoke: 0x6a6258, shake: 0.3 }); Audio.sfx('slam', { x: q.x, z: q.z }); rock7(q.x, q.z, rockT7(), { by: a }); })); }
+    tally(a, 'rocks' + got.length);
+  }, 0.6);
+}
+// a rock out of the sky: a white-edged red circle of r 2.2 for 1.2 s, the heavy blow, and the rock stays as cover
+function rockfall7(a, tg) {
+  const x = tg.x, z = tg.z, at = clock;
+  teleCircle(x, z, 2.35, 1.2, 0xf4f8ff); teleCircle(x, z, 2.2, 1.2); bigTele(a, 1.2); own7(a, 1.2);
+  after7(a, 0.85, () => fall(x, z, 0x4a4844));
+  after7(a, 1.2, () => {
+    log7(a, 'rockfall', at);
+    explosion(x, z, 2.2, 0x9a9080, { smoke: 0x6a6258, shake: 0.3 }); Audio.sfx('slam', { x, z });
+    for (const p of heroes()) if (!p.dead && Math.hypot(p.x - x, p.z - z) < 2.2 + (p.radius || 0.5) * 0.5) heavy7(a, p, 'rockfall');
+    rock7(x, z, rockT7(), { by: a });
+  });
+}
+function kWheel(a, pl) {
+  const c = arena(a), R0 = arenaR(17), map = G.zone.map, away = angleTo(pl.x, pl.z, a.x, a.z);
+  let T = { x: a.x + Math.sin(away) * 9, z: a.z + Math.cos(away) * 9 };
+  if (Math.hypot(T.x - c.x, T.z - c.z) > R0 - 3 || !map.clear(a.x, a.z, T.x, T.z)) { const k = Math.min(8, R0 - 4), back = angleTo(pl.x, pl.z, c.x, c.z); T = map.nearestFloor(c.x + Math.sin(back) * k, c.z + Math.cos(back) * k, 4) || T; }
+  a.wheelTo = T; a.wheel = 1.4; a.wheeled = true; tally(a, 'wheel');
+  return { t: 99, noFace: true, fn() {}, after: 0 };
+}
+// the Charge: 1.0 s rear behind a line min(22, d + 4) x 5 m, run at 20 m/s: the heavy blow and a push. It ends Dazed 3.5 s
+// on a boulder, a pine, a rock or the cliff (and that end is loud), 2 s in slush, nothing on open ground. In her last phase
+// a second follows from where the first ended (never after a Daze)
+function kCharge(a, pl, second) {
+  const d = Math.hypot(pl.x - a.x, pl.z - a.z), dir = angleTo(a.x, a.z, pl.x, pl.z), len = Math.min(22, d + 4), H = H7(), id = second ? 'charge2' : 'charge';
+  a.rot = dir; a.tele = teleLine(a.x, a.z, dir, len, 5, 1.0); bigTele(a, 1.0 + len / 20);
+  a.avatar?.play('rear', 1, { hitIn: 1.0 }); Audio.sfx('bearRoar', { x: a.x, z: a.z });
+  // (Ash, Skotos: in her last phase a Rockfall may be thrown during the Charge's wind-up)
+  if (!second && a.phase >= 2 && over7(a) && (a.mcd.rockfall ?? 0) <= 0 && farHero(a, 8)) { a.mcd.rockfall = bcd7(9); a.rockN++; rockfall7(a, farHero(a, 8)); tally(a, 'rockfall'); }
+  const m = mv7(a, id, 1.0, () => {
+    startDash(a, dir, 20, len, { daze: 3.5, sapDaze: 2, w: 5, dmg: 1, hitO: { push: 20, share: H.bossHeavy, cap: H.cap, move: id }, dust: 0x5a4a38, end: kChargeEnd });
+    a.avatar?.play('charge', 1.5, { loop: true }); Audio.sfx('bearCharge', { x: a.x, z: a.z });
+  }, 0.3, { noFace: true, stall: true });
+  if (!second && a.phase >= 2 && !less7()) { m.chain = true; m.chainFn = (b, p) => { tally(b, 'charge2'); return kCharge(b, p, true); }; }
+  return m;
+}
+function kChargeEnd(a, D) {
+  chargeEnd(a, D);
+  tally(a, D.wall ? 'chargeStone' : D.sap ? 'chargeSlush' : 'chargeOpen');
+  if (D.wall) loud(a.x, a.z, LOUD.bearWall, a);
+}
+
+// ---------- Kelados, the Sleeper under the Mountain ----------
+const KELADOS = {
+  name: 'kelados', phases: [0.66, 0.33], wake: 22,
+  intro(a) {
+    emit('bossIntro', a); Audio.sfx('stoneCrack'); Audio.sfx('bossRoar'); shake(0.6); a.avatar?.play('warcry');
+    a.rooted = true; a.queue = []; a.blockN = 0; a.tremN = 0; a.chuteN = 0; a.levers = new Set(); a.speed0 = a.speed;
+    a.mcd.tremor = bcd7(4); a.mcd.iceBlock = bcd7(2);
+    bareLever(a, 1); emit('keladosPlates', 0, a); emit('boss7Phase', a.kind, 1, a);
+  },
+  onPhase(a, ph, was) { for (let p = Math.max(was, 0) + 1; p <= ph; p++) { (a.queue ||= []).push(p === 1 ? 'loosed' : 'awake'); emit('boss7Phase', a.kind, p + 1, a); } },
+  moves: [
+    // the entries: the ice falls from him (the life bar's picture), the lake drops, the next lever's ice falls; no blow
+    { id: 'loosed', when: () => false, cd: 0, run: (a) => kEntry(a, 'loosed', 2, 0.9, 2) },
+    { id: 'awake', when: () => false, cd: 0, run: (a) => kEntry(a, 'awake', 6, 0.6, 3) },
+    { id: 'tremor', when: (a) => bigs(a) < 2 && free7(a), cdOf: cd7(11), run(a) {
+      a.tele = teleCircle(a.x, a.z, 4, 1.2); bigTele(a, 1.2 + 10 / 9); own7(a, 1.2 + 10 / 9); a.avatar?.play('slam', 1, { hitIn: 1.2 });
+      return mv7(a, 'tremor', 1.2, () => {
+        shake(0.6); Audio.sfx('slam', { x: a.x, z: a.z }); Audio.sfx('golemStep'); ring7(a); a.tremN++;
+        // every second Tremor is loud and shakes the Dam's snow loose: one lane in his first phase, the X after (Wanderer:
+        // none in the first phase, one lane after; Skotos: every Tremor of the last phase); never under a cloud
+        const H = H7(), ph = a.phase, every = (G.hero?.diff ?? 1) >= 5 && ph >= 2 ? 1 : 2;
+        if (a.tremN % every) return;
+        emit('loud', a.x, a.z, LOUD.keladosTremor, a);
+        if (a.cloud7 || (H.less && ph === 0)) { tally(a, 'chutes0'); return; }
+        const dam = (flues() || []).filter((f) => f.kind === 'snow' && f.area === 'dam' && f.st === 'idle' && !shade7(f.x, f.z)), n = ph === 0 || H.less ? 1 : 2;
+        let k = 0;
+        for (let j = 0; j < dam.length && k < n; j++) { const f = dam[(a.chuteN + j) % dam.length]; if (fireFlue(f.i, a)) { k++; bigTele(a, BREATH.inhale + BREATH.fire); } }
+        a.chuteN++; tally(a, 'chutes' + k);
+      }, 0.7, { noFace: true });
+    } },
+    { id: 'boulderRoll', when: (a) => a.phase >= 1 && !less7() && bigs(a) < 2 && free7(a), cdOf: cd7(12), run(a, pl) {
+      const rot = a.rot = angleTo(a.x, a.z, pl.x, pl.z);
+      a.tele = teleLine(a.x, a.z, rot, 20, 3, 1.0); bigTele(a, 1.0 + 20 / 14); a.avatar?.play('attack2', 1, { hitIn: 1.0 });
+      return mv7(a, 'boulderRoll', 1.0, () => rollBoulder(a, rot, 20, 3, 14, 'boulderRoll', H7().blockT, {}), 0.6, { noFace: true });
+    } },
+    // (Nightmare and up: a block may be thrown during the X, from the phase the difficulty names)
+    { id: 'iceBlock', when: (a) => ((bigs(a) < 2 && free7(a)) || over7(a)) && throwAim(a, 'blockN', bcd7(10)), cdOf: cd7(10), run(a, pl) {
+      const tg = farHero(a, 8) || pl, x = tg.x, z = tg.z, at = clock;
+      a.blockN++; a.rot = angleTo(a.x, a.z, x, z); a.avatar?.play('attack2', 1);
+      teleCircle(x, z, 2.35, 1.3, 0xf4f8ff); teleCircle(x, z, 2.2, 1.3); bigTele(a, 1.3); own7(a, 1.3);
+      return mv7(a, null, 0.5, () => { lob(a.x + Math.sin(a.rot) * 1.5, a.z + Math.cos(a.rot) * 1.5, x, z, 0.8, 5, 0xbfe0f4, () => {}); after7(a, 0.8, () => {
+        const lx = x, lz = z;
+        log7(a, 'iceBlock', at);
+        explosion(lx, lz, 2.2, 0xcfe8ff, { smoke: 0xa8c0d0, shake: 0.3 }); Audio.sfx('iceBreak', { x: lx, z: lz });
+        for (const p of heroes()) if (!p.dead && Math.hypot(p.x - lx, p.z - lz) < 2.2 + (p.radius || 0.5) * 0.5) heavy7(a, p, 'iceBlock');
+        // three of his blocks stand at most (five with three or four heroes): the oldest breaks for the new one
+        const cap = heroes().length >= 3 ? 5 : 3, mine = ROCKS7.filter((r) => r.ice && r.by === a);
+        if (mine.length >= cap) dropRock(ROCKS7.indexOf(mine[0]));
+        rock7(lx, lz, H7().blockT, { by: a, ice: true });
+      }); }, 0.6, { noFace: true });
+    } },
+    { id: 'sweep', basic: true, when: (a, d) => d < 9, cdOf: cd7(8), run(a, pl) {
+      const rot = a.rot = angleTo(a.x, a.z, pl.x, pl.z);
+      a.tele = teleCone(a.x, a.z, rot, 9, 0.87, 1.0); a.avatar?.play('attack', 1, { hitIn: 1.0 });
+      return mv7(a, 'sweep', 1.0, () => {
+        Audio.sfx('swingHeavy', { x: a.x, z: a.z }); shake(0.3);
+        for (const p of heroes()) if (!p.dead && inCone(a.x, a.z, rot, 9, 0.87, p)) heavy7(a, p, 'sweep', { push: 12 });
+      }, 0.5, { noFace: true });
+    } }
+  ]
+};
+function kEntry(a, id, plates, lake, lever) {
+  a.avatar?.play('warcry', 1); Audio.sfx('stoneCrack', { x: a.x, z: a.z });
+  return mv7(a, id, 1.5, () => {
+    a.rooted = false; shake(0.5); Audio.sfx('iceBreak', { x: a.x, z: a.z });
+    emit('keladosPlates', plates, a); mereTo(lake, 0.1); bareLever(a, lever);
+  }, 0.4);
+}
+// a lever's ice falls: it can be pulled (the world draws it and may keep the interact's `used` itself: bus 'lever7Bare')
+function bareLever(a, k) {
+  const it = G.zone.act7?.levers?.find((l) => l.k === k);
+  if (it && !a.levers.has(k)) it.used = false;
+  emit('lever7Bare', k, G.zone);
+}
+// held asleep by the story until keladosWake; under a cloud he is slow (walk x 0.7; cooldowns x 1.4, cd7); the sluices
+function keladosPre(a) {
+  a.holdWake = !a.echo && !G.hero.flags.keladosWake;
+  if (!a.awake || a.dead) return;
+  a.cloud7 = shade7(a.x, a.z);
+  if (a.speed0) a.speed = a.speed0 * (a.cloud7 ? 0.7 : 1);
+  // a sluice's water takes none of his life (he is passed over by the lane's own rule, forge.js bury): in the channel when
+  // the water's front reaches him he goes to his knees, 5 s Stunned
+  for (const f of flues() || []) {
+    if (f.kind !== 'water' || f.st === 'idle') continue;
+    f.hit.add(a);
+    if (f.st === 'inhale') { f.knelt7 = false; continue; }
+    if (f.knelt7) continue;
+    const ux = Math.sin(f.dir), uz = Math.cos(f.dir), u = (a.x - f.x) * ux + (a.z - f.z) * uz, front = Math.min(f.len, f.len * ((1 - f.t / BREATH.fire) / 0.33));
+    if (u <= front + a.radius && u >= -a.radius && Math.abs(-(a.x - f.x) * uz + (a.z - f.z) * ux) <= f.w / 2 + a.radius * 0.5) { f.knelt7 = true; kneel7(a); }
+  }
+}
+function kneel7(a) {
+  a.move = null; a.dash = null; killTele(a.tele); a.tele = null;
+  a.status.stun = Math.max(a.status.stun || 0, 5); addVuln(a, 'stunned', 5);
+  a.avatar?.play('die', 0.12); splashFx(a.x, a.z, 2.4); shake(0.5); Audio.sfx('splash', { x: a.x, z: a.z, vol: 1 });
+  tally(a, 'kneel');
+  if (!a.knelt) { a.knelt = true; emit('boss7Window', a.kind, a); }
+}
+// a lever pulled (the world's interact, or Halda's one act): its channel runs, once a fight; levers 2 and 3 only once
+// their ice has fallen (66%, 33% of his life)
+on('lever7', (it, z) => {
+  if (!it || z !== G.zone || NET.mode === 'guest') return;
+  const a = G.actors.find((b) => b.kind === 'kelados' && b.awake && !b.dead), k = it.k;
+  if (!a || a.levers.has(k) || (k === 2 && a.phase < 1) || (k === 3 && a.phase < 2)) return;
+  if (!fireFlue(it.spot?.channel ?? it.channel, G.player)) return;
+  a.levers.add(k); it.used = true; bigTele(a, BREATH.inhale + BREATH.fire); tally(a, 'sluice' + k);
+});
+
+// ---------- `spare`: at 0 life they rest where they would die. The rest flag is saved, then the story hears of it
+// (bus 'bossRest', kind, actor); the kill's own route (the quest step, the loot, the first-kill legendary) is combat.js's
+// as for any boss. The body plays its rest clip and stays in the scene, a body nothing can target: never a corpse ----------
+on('kill', (a) => {
+  if (!a?.def?.spare) return;
+  killTele(a.tele); a.tele = null; a.move = null; a.queue = []; a.spared = true;
+  if (a.kind === 'kelados') emit('keladosPlates', 8, a);
+  if (a.echo) return;
+  G.hero.flags[a.kind + 'Rest'] = true; writeSave();
+  if (G.bossActor === a) G.bossActor = null;
+  emit('bossDown', a); emit('bossRest', a.kind, a);
+});
+function restBody(a, dt) {
+  const av = a.avatar; if (!av) return;
+  if (a.y > 0) a.y = Math.max(0, a.y - dt * 7);
+  av.group.visible = true; av.group.position.set(a.x, a.y || 0, a.z); av.group.rotation.y = a.rot;
+  av.update(a.deadT < 2.4 ? dt : 0, { speed: 0, float: false }); av.setFlash(0);
+}
+// every rock, rolling boulder and ring gone (a test's clean slate; a zone left drops its own in act7Tick)
+function clear7() { PEND7.length = 0; while (ROCKS7.length) dropRock(ROCKS7.length - 1, true); for (const b of ROLL7.splice(0)) R.scene.remove(b.mesh); for (const g of RING7.splice(0)) R.scene.remove(g.mesh); }
+if (import.meta.env?.DEV && typeof window !== 'undefined') window.__act7 = Object.assign(window.__act7 || {}, { now: () => clock, clear7, AI_LOG, HEAVY7, shade7, snow7, rock7, ROCKS7, damage, kill, spawnMonster, addVuln, H7, flues, fireFlue, loud, bigs });
 
 export { AI };

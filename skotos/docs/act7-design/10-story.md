@@ -163,7 +163,7 @@ Name and tagline: `mon.kallisto` «Καλλιστώ, η Αρκούδα που Ξ
 
 **Halda's fail-safe calls** (decisions rule 6). She stands at `haldaDen`, on the rim. One `say` per phase, fired once, on the phase's entry move; each names the phase's one thing in words a player who read nothing can act on:
 - Phase 1 (the charge breaks on rock): `d.halda7.k1` «Ορμάει ίσια! Βάλε έναν βράχο ανάμεσά σας κι άσ' τη να σπάσει πάνω του!» / "She charges straight! Put a boulder between you and let her break on it!" (it answers Elati's shipped `d.elati.stones` «Το Λευκό Ελάφι ορμάει σαν τις αρκούδες… Βάλε μια πέτρα ανάμεσά σας»: now it is a bear)
-- Phase 2 (the head-stream rises; rear and slam): `d.halda7.k2` «Το νερό ανεβαίνει! Στα χαλίκια! Κι όταν σηκωθεί στα πίσω πόδια, μακριά της!» / "The water's rising! Onto the gravel! And when she rears, get clear of her!"
+- Phase 2 (Cornered; rear and slam; no water moves in her fight, the lead's ruling): `d.halda7.k2` «Τη στρίμωξες, και τώρα είναι χειρότερη! Όταν σηκωθεί στα πίσω πόδια, μακριά της!» / "You've cornered her, and she's worse for it! When she rears, get clear of her!"
 - Phase 3 (the roar's slides): `d.halda7.k3` «Ακούει το μικρό της και δεν σταματά! Όταν μουγκρίζει στον γκρεμό, έξω απ' τις άσπρες λουρίδες!» / "She hears her cub and won't stop! When she roars at the cliff, get out of the white lanes!" (it does not count the charges, because Wanderer has no second one)
 
 **The end: she is not killed** (flag `kallistoRest` saved first; cine at pitch 0.35, 12 s; the `kill` event fires as for any boss, so loot and the legendary follow the shipped route):
@@ -587,7 +587,7 @@ Halda's place is a function of flags, re-run on every entry because the zones ar
 |---|---|---|
 | `d.kall.0` | Στη ρίζα της Νεροσκάλας κάτι σηκώνεται από τη λάσπη. Είναι μουσκεμένη, αδύνατη απ' τον χειμώνα, και πολύ μεγάλη. | At the foot of the Water-stair something gets up out of the mud. She is soaked, winter-thin, and very large. |
 | `d.halda7.k1` | Ορμάει ίσια! Βάλε έναν βράχο ανάμεσά σας κι άσ' τη να σπάσει πάνω του! | She charges straight! Put a boulder between you and let her break on it! |
-| `d.halda7.k2` | Το νερό ανεβαίνει! Στα χαλίκια! Κι όταν σηκωθεί στα πίσω πόδια, μακριά της! | The water's rising! Onto the gravel! And when she rears, get clear of her! |
+| `d.halda7.k2` | Τη στρίμωξες, και τώρα είναι χειρότερη! Όταν σηκωθεί στα πίσω πόδια, μακριά της! | You've cornered her, and she's worse for it! When she rears, get clear of her! |
 | `d.halda7.k3` | Ακούει το μικρό της και δεν σταματά! Όταν μουγκρίζει στον γκρεμό, έξω απ' τις άσπρες λουρίδες! | She hears her cub and won't stop! When she roars at the cliff, get out of the white lanes! |
 | `d.kall.1` | Δεν πέφτει. Κάθεται, σαν κάτι πολύ κουρασμένο, και σε κοιτάζει. | She does not fall. She sits down, like something very tired, and looks at you. |
 | `d.kall.2` | Από τη φωλιά βγαίνει ένα αρκουδάκι και τρίβεται πάνω της. | Out of the den comes a cub, and rubs against her. |

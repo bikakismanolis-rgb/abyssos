@@ -8,6 +8,10 @@
 // 'fire'), pools (addLightPool) and beams (addBeam). Lamp light (lampLightAt) is the steadier kind: lamps and lamp pools,
 // never fire, never a beam, never a Breathing-hole's rim lamp. Nothing here runs where a zone has no light (LIGHT.force
 // turns it on anywhere, for tests: true or 'ember' for Act IV's rules, 'sea' for Act V's).
+// Act VII's kind is 'sun' (the Meltwaters, the Hanging Lake; docs/act7-contract.md, Sun and Shade, U1-U12): daylight, the
+// same question asked the other way. Everything is lit but what stands in shade (shadeAt: the layout's fixed shade, L.shade,
+// or a pool with p.shade, a cloud's: sun7.js moves those). Nothing of the dark is drawn or ticked there: no ring, no
+// Cradle, no Shroud, and the hero's light is left as the atmosphere set it (U11: the four 'sun' branches below).
 import * as THREE from 'three';
 import { G } from './state.js';
 import { R, addLight, removeLight, trembler, trembleStep, trembleAmp } from '../gfx/gfx.js';
@@ -43,6 +47,17 @@ export function lightKind() {
   return ZONES[G.zone?.id]?.light || null;
 }
 export const lightOn = () => !!lightKind();
+const sun = () => lightKind() === 'sun';
+// Act VII (U1): is (x, z) in shade? A cell the layout marks (L.shade: under cliffs, in gullies, under thick pines) or
+// inside a shade pool (addLightPool's o.shade: a cloud's shadow). Everything else is in sun. Asked of any zone: where
+// there is neither, nothing is in shade
+export function shadeAt(x, z) {
+  const L = G.zone?.L, sh = L?.shade;
+  if (sh) { const cx = Math.floor(x), cz = Math.floor(z); if (cx >= 0 && cz >= 0 && cx < L.w && cz < L.h && sh[cz * L.w + cx]) return true; }
+  for (const p of S.pools) if (p.shade && p.r > 0 && (p.x - x) ** 2 + (p.z - z) ** 2 < p.r * p.r) return true;
+  return false;
+}
+export const sunAt = (x, z) => !shadeAt(x, z);
 // the Shroud belongs to the ember zones and to the act below the ice ('under'); the Cradle's drinking and its swell to the
 // ember zones only
 export const shroudOn = () => { const k = lightKind(); return k === 'ember' || k === 'under'; };
@@ -56,6 +71,7 @@ const h6 = () => HAZ6[G.hero?.diff ?? 1] || HAZ6[1];
 // Skuas mob a hero who lingers in the dark with only the Cradle's light round her). o.pad: a body's half-width (a light that
 // reaches the body lights it: combat.js, the Shroud's look); 0 for a point (the hero in the Dark). Beams stay a point test
 export function lightAt(x, z, o = {}) {
+  if (sun()) return !shadeAt(x, z);
   if (!lightOn()) return true;
   const pad = o.pad || 0;
   for (const p of S.pools) if (p.r > 0 && !p.beam && !p.fake && (p.x - x) ** 2 + (p.z - z) ** 2 < (p.r + pad) ** 2) return true;
@@ -107,6 +123,7 @@ export function warmAt(x, z) {
 // the Cradle's ring: ZONES[id].ring metres (6 in Act IV, 4 in Act V), 9 m while swollen (Act IV), halved for a while when a
 // Smoke-eater gets a claw in it; a boss may set it
 export function heroLightR() {
+  if (sun()) return 0;
   if (S.over != null) return S.over;
   // (below the ice the ring is the Carried Fire's: FIRE.r, a War Cry's flare, the lantern chain; never S.over there)
   if (fireOn()) return ringOf(G.player);
@@ -327,6 +344,9 @@ export function addLightPool(x, z, r, dur = Infinity, tag = null, o = {}) {
   const p = { x, z, r, r0: r, t: 0, dur, tag, owner: o.owner || null, shrinkT: 0, color: o.color ?? (o.core === 'dark' ? 0x8a70ff : fake ? 0xd8e0ff : o.sky ? 0xa8e8cc : 0xffc070), lamp: !!o.lamp, a0: snow ? 0.13 : 0.3, k: 1, ki: 1, sc: 1 };
   if (fake) p.fake = true;
   if (o.sky) p.sky = true;
+  // (Act VII: a pool of shade, a cloud's. It is asked for with fx: false or light: false and decal: false: no light and
+  // no warm disc of its own; shadeAt reads it and lightAt, in a 'sun' zone, answers before the pools are looked at)
+  if (o.shade) p.shade = true;
   if (trem) { p.seed = o.seed ?? Math.floor(Math.random() * 2147483647); p.trem = trembler(p.seed); p.sc = TREM_MAX; }
   if (o.fx !== false) {
     const I = o.intensity ?? 12 + r * 2;
@@ -555,7 +575,9 @@ export function tickLight(dt) {
   // a new zone (leaveZone has already cleared the last one's pools and darkness): the atmosphere's reach for the hero's light
   // (and the Cradle's ring for its kind of light: 6 m in Act IV, 4 m in Act V)
   if (z !== S.zone) { S.zone = z; S.range0 = R.heroLight.distance; LIGHT.base = baseRing(); S.ringR = LIGHT.base; if (S.ring && S.footK) { S.footK = 0; S.footBad = false; S.ring.userData.setColor?.(RING_C) ?? S.ring.material?.uniforms?.uColor.value.copy(RING_C); } }
-  const on = lightOn() && pl;
+  // (Act VII, 'sun': the pools below are still kept, a cloud's shade is one; the ring and the Cradle are hidden and the
+  // hero's light is not touched: scaled by a ring of 0 it would shrink to nothing)
+  const on = lightOn() && pl && !sun();
   if (S.owner && (S.owner.dead || S.owner.removed)) { S.over = null; S.owner = null; }
   if (S.dark && S.dark !== true && (S.dark.dead || S.dark.removed)) S.dark = null;
   for (let i = S.pools.length - 1; i >= 0; i--) {
@@ -621,6 +643,7 @@ export function tickLight(dt) {
 // the Cradle's base ring for the zone: below the ice FIRE.max; elsewhere ZONES[id].ring with the Lamplight bonus, held
 // half a metre under Act IV's swell (6 -> 7.9 m at rank 40 never reaches its 9 m)
 function baseRing() {
+  if (sun()) return 0;
   if (fireOn()) return fireMax();
   const r = (ZONES[G.zone?.id]?.ring ?? 6) * (1 + lampBonus() / 100);
   return ember() ? Math.min(r, Math.max(ZONES[G.zone?.id]?.ring ?? 6, LIGHT.swell - 0.5)) : r;
@@ -638,5 +661,7 @@ export function clearLight() {
 
 if (import.meta.env?.DEV && typeof window !== 'undefined') {
   window.__act6 ||= {};
+  // (Act VII's scenario `sun` asks whether anything of the dark is drawn: the ring, the Cradle)
+  window.__light7 = { LIGHT, lightKind, lightAt, heroLightR, shadeAt, sunAt, lightPools, ringShown: () => !!(S.ring?.visible && S.ring.parent), cradleShown: () => !!(S.cradle?.visible && S.cradle.parent), ringMade: () => !!S.ring };
   Object.assign(window.__act6, { FIRE, NAMES, lightAt, ringOf, addLightPool, fire: { FIRE, LOG: FIRE_LOG, fireDrain, fireFill, fireRelight, fireEnter, flareRing, ringOf, setRemoteLight, fireMax, skyAt, heroLightR, namesTick } });
 }

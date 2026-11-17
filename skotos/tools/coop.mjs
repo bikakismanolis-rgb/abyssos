@@ -1653,6 +1653,68 @@ const SC = {
     }
   },
 
+  // Act VII, protocol 6 (docs/act7-contract.md, Co-op): the Race's level, a guest's weir and lookout touched through the
+  // host, the clouds' clock, the host's chutes falling on the guest, a guest's loud skill asking for a kick, the hold's
+  // rank on the guest's own record, the guest's Names in its look
+  async act7() {
+    const { fx7 } = await import('./fixtures7.mjs');
+    const hq = '&' + fx7('thawSeen', 'thaw').replace(/^auto=[^&]*&/, '').replace(/&lvl=\d+/, '');
+    const { host, guests: [g] } = await party('thaw', 1, { lvl: 50, glvl: 50, hq });
+    await ev(host, () => { const z = window.__G.zone; for (const p of z.packs) p.spawned = true; for (const a of z.actors) if (a.team === 'foe' && !a.prop) { a.hp = 0; a.dead = true; a.remove?.(); } window.__immortal = true; });
+    await ev(g, () => { window.__immortal = true; });
+    ok(await until(g, () => { const T = window.__G.zone.tide; return T?.mere && Math.abs(T.mere.h - 1.2) < 0.02; }, null, 20000, 'race on guest'), 'the guest\'s Race at the host\'s 1.2 (o.w[5..6])', await ev(g, () => window.__G.zone.tide?.mere));
+    // the guest's Names in its look, read on the host
+    const nm = await until(host, () => { const S = window.__NET.S; for (const P of S.peers.values()) if (Array.isArray(P.lk?.nm)) return true; return false; }, null, 15000, 'nm');
+    ok(nm, 'the guest\'s look carries its Names (lk.nm)');
+    // a guest's touch on weir 1, done on the host
+    const w1 = await ev(host, () => { const it = window.__G.zone.interact.find((i) => i.kind === 'weir7' && i.k === 1); return it && { x: it.x, z: it.z }; });
+    await place(g, w1.x + 1, w1.z); await sleep(1500);
+    await until(host, async (w) => { const N = await import('/src/net/state.js'), a = N.NET.remotes[0]; return a && Math.hypot(a.x - w.x, a.z - w.z) < 3; }, w1, 25000, 'stand-in by weir');
+    const u = await ev(g, () => { const it = window.__G.zone.interact.find((i) => i.kind === 'weir7' && i.k === 1); if (!it) return 'none'; it.use(); return window.__NET.S.ev.slice(-1)[0]?.[1]; });
+    const turned = await until(host, () => !!window.__G.hero.flags.weir1, null, 15000, 'weir1 on host');
+    ok(u === 'u' && turned, 'the guest\'s touch on a weir is sent (\'u\') and turns it on the host', { u, why: await ev(host, () => window.__NET.S.stats.why) });
+    const down = await until(g, () => { const T = window.__G.zone.tide; return T?.mere && Math.abs(T.mere.h - 0.9) < 0.02 && window.__G.hero.flags.weir1; }, null, 20000, 'race down on guest');
+    ok(down, 'the Race goes down a step on the guest, and the flag comes on the world message', await ev(g, () => ({ mere: window.__G.zone.tide?.mere, weir1: !!window.__G.hero.flags.weir1 })));
+    // the clouds' clock
+    const hasSun = await ev(host, () => window.__G.zone.sunT != null);
+    if (hasSun) {
+      await ev(host, async () => (await import('/src/game/sun7.js')).setSunT(window.__G.zone, 321.5));
+      const sun = await until(g, () => Math.abs(((((window.__G.zone.sunT || 0) - 321.5) % 600) + 900) % 600 - 300) < 1.5, null, 10000, 'sunT');
+      ok(sun, 'the clouds\' clock (o.w[7]) follows the host\'s', await ev(g, () => window.__G.zone.sunT));
+    } else ok(true, 'the clouds\' clock: no clouds in this build yet (skipped)');
+    // a host chute falls on the guest's page too
+    const fi = await ev(host, async () => { const F = await import('/src/game/forge.js'), fl = F.flues(); const i = fl.findIndex((f) => f.kind === 'snow' && f.armed && f.st === 'idle'); if (i < 0) return -1; F.fireFlue(i, null); return i; });
+    const gf = fi >= 0 && await until(g, async (i) => { const fl = (await import('/src/game/forge.js')).flues(); return fl && fl[i] && fl[i].st !== 'idle'; }, fi, 10000, 'chute on guest');
+    ok(gf, 'a chute the host sets falling runs on the guest (o.c7)', { fi });
+    const spent = fi >= 0 && await until(g, async (i) => { const fl = (await import('/src/game/forge.js')).flues(); return fl[i].st === 'idle' && !fl[i].armed; }, fi, 15000, 'spent on guest');
+    ok(spent, 'and is spent there as on the host');
+    // a guest's loud skill at an armed chute's horn: the host kicks it
+    const tgt = await ev(host, async () => { const F = await import('/src/game/forge.js'), fl = F.flues(), L = window.__G.zone.L; const i = fl.findIndex((f) => f.kind === 'snow' && f.armed && f.st === 'idle' && f.horn && !L.shade[Math.floor(f.z) * L.w + Math.floor(f.x)] && !window.__G.zone.cloudAt?.(f.x, f.z)); return i < 0 ? null : { i, x: fl[i].horn.x, z: fl[i].horn.z }; });
+    if (tgt) {
+      await place(g, tgt.x + 2, tgt.z); await sleep(1500);
+      await until(host, async (w) => { const N = await import('/src/net/state.js'), a = N.NET.remotes[0]; return a && Math.hypot(a.x - w.x, a.z - w.z) < 4; }, tgt, 20000, 'stand-in by the horn');
+      const t0 = await ev(host, async () => { const T = (await import('/src/game/forge.js')).TALLY7; return T.kicks + T.creaks; });
+      await ev(g, async (t) => { (await import('/src/game/forge.js')).loud(t.x, t.z, 6, window.__G.player); }, tgt);
+      // (kicked, or, if a cloud has come over its cornice meanwhile, creaked: either way the host took the guest's ask)
+      const kicked = await until(host, async (t0) => { const T = (await import('/src/game/forge.js')).TALLY7; return T.kicks + T.creaks > t0; }, t0, 10000, 'kick on host');
+      ok(kicked, 'a guest\'s loud skill asks for a kick (\'ic\' \'k\') and the host decides it', { why: await ev(host, () => window.__NET.S.stats.why), tally: await ev(host, async () => ({ ...(await import('/src/game/forge.js')).TALLY7 })) });
+    } else ok(false, 'an armed sunlit chute for the kick test');
+    // a guest's touch lights lookout 1 on the host; the hold ends; the guest writes its own rank
+    const lo = await ev(host, () => { const it = window.__G.zone.interact.find((i) => i.kind === 'lookHearth' && i.k === 1); return it && { x: it.x, z: it.z }; });
+    await place(g, lo.x + 1, lo.z); await sleep(1500);
+    await until(host, async (w) => { const N = await import('/src/net/state.js'), a = N.NET.remotes[0]; return a && Math.hypot(a.x - w.x, a.z - w.z) < 2.6; }, lo, 20000, 'stand-in by the hearth');
+    await ev(g, () => { const it = window.__G.zone.interact.find((i) => i.kind === 'lookHearth' && i.k === 1); it?.use(); });
+    const hold = await until(host, () => !!window.__G.zone.hold, null, 15000, 'hold on host');
+    ok(hold, 'the guest lights a lookout: the hold is the host\'s');
+    if (hold) {
+      await place(host, lo.x, lo.z + 1);
+      await ev(host, () => { const Hd = window.__G.zone.hold; Hd.wave = 9; Hd.t = Hd.need - 0.2; });
+      const rank = await until(g, () => (window.__NET.S.real?.fires?.[0] | 0) === 2, null, 15000, 'rank on guest');
+      ok(rank, 'the hold ends: the guest\'s own record has the rank of the host\'s difficulty (\'h7\')', await ev(g, () => window.__NET.S.real?.fires));
+    }
+    ok(await ev(host, async () => (await import('/src/net/coop.js')).VER === 5), 'protocol still 5 (the bump is stage E\'s last commit)');
+  },
+
   // Act VI's Budget (act6-contract, Net): a party of four in the Keels (hearth 3) under the vault, a Mage host and a Mage
   // guest casting Frost Novas (their icicles and shards, the slush on 'i'), the others striking the host's monsters, for
   // SEC seconds (20). Counted on every page: what it says by topic (bytes, messages a second) and its presence; on the

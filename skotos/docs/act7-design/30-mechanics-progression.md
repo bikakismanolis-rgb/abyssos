@@ -901,8 +901,8 @@ zones', the monsters' and the quest lines belong to the other parts.
 | 4 | `hud.race` | «Ρέμα» | "Race" |
 | 5 | `hint.slide` | «Άσπρη λουρίδα με χιόνι που κρέμεται: μη στέκεσαι μέσα. Ό,τι βροντά, το ρίχνει.» | "A white lane with snow hanging over it: don't stand in it. Anything loud brings it down." |
 | 6 | `hint.slide2` | «Πίσω από βράχο ή χοντρό κορμό, το χιόνι σε προσπερνά.» | "Behind a rock or a thick trunk, the snow goes round you." |
-| 7 | `q.slide` | «Κατολίσθηση!» | "Slide!" |
-| 8 | `hud.swept` | «Παρασύρθηκε» | "Swept down" |
+| 7 | `q.slide` | «Χιονοστιβάδα!» | "Slide!" |
+| 8 | `hud.swept` | «Το πήρε το χιόνι» | "Carried down" |
 | 9 | `hint.sun` | «Ο πάγος κοιμάται στον ίσκιο και ξυπνά στον ήλιο.» | "Ice sleeps in shade and wakes in sun." |
 | 10 | `hint.shade` | «Κάτω από σύννεφο ή δέντρο, οι καλιακούδες σ' αφήνουν.» | "Under a cloud or a tree, the choughs leave you be." |
 | 11 | `ice.melt` | «Λιώσε τον πάγο» | "Melt the ice" |

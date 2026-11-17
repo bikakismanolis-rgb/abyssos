@@ -11,7 +11,7 @@ import { tex } from '../gfx/textures.js';
 import { G } from '../gfx/rig.js';
 import { RNG, fbm, clamp, smooth, angleDiff } from '../core/util.js';
 import { KIT, KITMAT, KIT_SCALE } from '../gfx/kits.js';
-import { ENV } from '../gfx/env.js';
+import { ENV, codeLayer, freeCodeLayers } from '../gfx/env.js';
 import { BED_DRY } from './genlib.js';
 import { SEA, SEA_U, SEA_LIT, SEA_GLSL, buildSea, buildIce, seaBeyond, noiseTex, shoreJit, bayCorners, iceFlatBed } from './sea.js';
 import { act5Level, instDef5 } from './build5.js';
@@ -1176,7 +1176,8 @@ function ground6(type) {
 // Act VII (docs/act7-design/40-production.md, Ground layers): the two daylight zones, each slot a chain down to a layer
 // that is always there (the boot set's).
 // 'thaw', the Melts: open meadow and scree. A: the melt pack's meadow if it exists, or the boot leaf litter tinted to wet
-// spring grass (hueA); B: mud; P: the trail; W: the boot wall scan on the steep faces. Its thaw slot: the old snow, a
+// spring grass (hueA); B: the code-made gravel, or mud; P: the trail, lightened (hueP); W: the code-made crag, or the
+// boot wall scan, on the steep faces. Its thaw slot: the old snow, a
 // white fake of A (cA's own relief whitened, as ground5's fake), lying in patches that go as WIND.uThaw falls.
 // 'tarn', the Hanging Lake: the rime pack's snow, ice (the shore's stone on a layout of mode 'shore'), trodden snow and
 // sea-cliff, down to the deep's snow and the boot set. Its thaw slot: grass (the melt meadow, or the leaf litter tinted
@@ -1191,15 +1192,24 @@ function ground7(type, mode) {
     const A = lay4('rime/snow', 'snow', 'leaves'), own = A === 'rime/snow', snowy = own || A === 'snow';
     const B = mode === 'shore' ? lay4('rime/shore', 'gravel', 'mud') : lay4('rime/ice', 'rime/shore', 'snow', 'mud');
     const trod = lay4('rime/snowTrod', 'snow', 'trail'), W = lay4('rime/seaCliff', 'cliff', 'wall');
-    const grass = lay4('melt/meadow', 'leaves');
+    const grass = codeLayer('meadow', { mobile: R.mobile }) || lay4('leaves');
     return { A, B, P: trod, W: W || undefined, s: [3.2, B === 'rime/ice' ? 7.5 : 5.0, trod === 'rime/snowTrod' ? 2.6 : 4.6], r: [0.6, 0.8, 0.85], ns: 1.6, tint: own ? 0xd4dae4 : 0xbcc4d0, dual: [1, 0], ws: 5.6, sat: own ? 0.9 : snowy ? 0.75 : 0.35,
       hueB: B === 'rime/ice' || B === 'rime/shore' ? null : B === 'gravel' ? [0.86, 0.9, 0.96] : [0.62, 0.66, 0.74],
+      // (the sea-cliff scan is a night rock, near black under the noon sun: the rock that frames the lake read as a hole at
+      // the screen's corners. Greyed half and lifted to a sunlit granite, hueW)
+      hueW: W === 'rime/seaCliff' ? [2.05, 2.1, 2.2] : W === 'cliff' ? [1.5, 1.52, 1.58] : null,
       fake: !snowy, glint: true, wet: true, rims: true,
       dry: true, dryLayer: grass, dryTint: grass === 'melt/meadow' ? 0xffffff : 0x9ed070, dryU: 'uThaw' };
   }
-  const A = lay4('melt/meadow', 'leaves'), own = A === 'melt/meadow';
-  return { A, B: lay4('mud', 'leaves'), P: lay4('trail', 'mud', 'leaves'), W: lay4('wall') || undefined, s: [3.4, 2.1, 2.6], r: [0.95, 0.82, 0.9], ns: 1.0, tint: own ? 0xb8b8b0 : 0xaeb0a4, dual: [1, 1], ws: 4.4,
-    hueA: own ? null : [0.62, 1.0, 0.5], wet: true, rims: true,
+  // (the Melts: the code-made layers, gfx/codetex.js, which are always there: light spring grass, wet gravel in the
+  // brook beds, on the banks and up the slopes, pale crag on the steep faces; the boot set's below them only if one
+  // could not be made. The boot leaf litter tinted green stayed dark under the sun, 0.17-0.22 of white, and the act's
+  // creatures vanished on it: stage A)
+  const co = { mobile: R.mobile };
+  const A = codeLayer('meadow', co) || lay4('leaves'), own = A === 'melt/meadow';
+  const B = codeLayer('gravel', co) || lay4('mud', 'leaves'), W = codeLayer('crag', co) || lay4('wall');
+  return { A, B, P: lay4('trail', 'mud', 'leaves'), W: W || undefined, s: [3.1, 2.3, 2.6], r: [0.95, 0.8, 0.9], ns: 1.0, tint: own ? 0xc6c6be : 0xaeb0a4, dual: [1, 0], ws: 5.2,
+    hueA: own ? null : [0.62, 1.0, 0.5], hueP: [2.3, 2.2, 2.0], wet: true, rims: true,
     dry: true, dryLayer: 'A', dryFake: true, dryU: 'uThaw' };
 }
 // The thaw, k from 0 (none of the thaw slot's layer) to 1 (all of it, off the trodden paths): 'thaw' sets 0.65 on first
@@ -1312,6 +1322,9 @@ function buildGround(L, group) {
       tB[kk] = s / sw;
     }
   }
+  const day7 = ACT7.has(L.type);
+  // (a level that is not Act VII's: the code-made layers' GPU copies go, gfx/env.js)
+  if (!day7) freeCodeLayers();
   for (let i = 0; i < n; i++) {
     const vx = Math.round(pos.getX(i)), vz = Math.round(pos.getZ(i));
     let pv = 0, fl = 0, dd = 0, cnt = 0, rm = 0, hole = 0, cave = 0, ave = 0, dk = 0, sp = 0, iron = 0;
@@ -1403,8 +1416,14 @@ function buildGround(L, group) {
         k = fl > 0 || hole ? (0.96 + nz * 0.12) * (1 - Math.min(walls, 8) * 0.04) : 0.7 + nz * 0.24 - clamp(y / 16, 0, 0.22);
         wb = clamp(iron / 4 * 1.3 + (nz - 0.5) * 0.5 - (fl > 0 ? 0 : 0.2), 0, 1);
       } else {
-        k = fl > 0 || hole ? 0.9 + nz * 0.22 : Math.max(0.36, 0.86 - Math.min(y, 12) * 0.05) + (nz - 0.5) * 0.15;
-        wb = clamp((fl > 0 ? -0.18 + walls * 0.03 : 0.3 + dd * 0.08) + (nz - 0.5) * 1.8 + (big - 0.5) * 1.5, 0, 1);
+        // (Act VII, a daylight zone: the rock round the walked ground stands in the sun as the ground does. The night
+        // zones darken it with height, to 0.36, and under a pale sky and no fog that drew the level's frame as a black
+        // hole at every corner of the screen: here it keeps 0.8 and more of its tone, a little less in its hollows)
+        k = fl > 0 || hole ? 0.9 + nz * 0.22 : day7 ? Math.max(0.8, 0.98 - Math.min(y, 12) * 0.013) + (nz - 0.5) * 0.14 : Math.max(0.36, 0.86 - Math.min(y, 12) * 0.05) + (nz - 0.5) * 0.15;
+        // (Act VII's open floor is grass: the gravel only where the two noises both run high, not in fields)
+        wb = clamp((fl > 0 ? (day7 ? -0.5 : -0.18) + walls * 0.03 : 0.3 + dd * 0.08) + (nz - 0.5) * 1.8 + (big - 0.5) * 1.5, 0, 1);
+        // (and gravel in the water's beds and a cell up its banks, the brooks', the Race's, the fords': slot B)
+        if (day7 && L.pocket) { let wt = 0; for (let dz = -2; dz <= 1; dz++) for (let dx = -2; dx <= 1; dx++) { const c = cellAt(vx + dx, vz + dz); if (c >= 0 && L.pocket[c]) wt++; } if (wt) wb = Math.max(wb, clamp(wt / 16 * 3.2 + (nz - 0.5) * 0.9, 0, 1)); }
       }
       if (hole) k *= 0.42;
     } else if (halls) {
@@ -1659,7 +1678,7 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
     // open, instead of thinning everywhere at once)
     float hD = gH(cD);` + (cfg.dryFake ? `
     // (the old snow, a white fake of the layer under it, its relief kept: ground5's fake)
-    cD = mix(cD, vec3(0.7, 0.74, 0.8) * (0.8 + 0.34 * hD), 0.85);` : '') + `
+    cD = mix(cD, vec3(0.92, 0.95, 1.0) * (0.82 + 0.3 * hD), 0.94);` : '') + `
     // (the field stretched about its middle, where a slow noise keeps most of its values; past 0.85 the cut drops away, so
     // 1 covers all but the trodden paths)
     float tD = 1.0 - uAut - smoothstep(0.85, 1.0, uAut) * 0.9;

@@ -1,0 +1,1588 @@
+{
+ "rows": [
+  {
+   "zone": "thaw",
+   "q": 1,
+   "spot": "meadow",
+   "on": "as it lies",
+   "groundKind": "grass",
+   "at": [
+    40.5,
+    154.5
+   ],
+   "thawK": 0.65,
+   "uSnow": 0,
+   "clouds": 2,
+   "ground": {
+    "luma": 0.491,
+    "n": 551,
+    "trail": null,
+    "max": 0.55
+   },
+   "body": {
+    "hillWolf": {
+     "diff": 0.211,
+     "body": 0.215,
+     "behind": 0.426,
+     "meanAbs": 0.218,
+     "px": 1862
+    },
+    "goblin": {
+     "diff": 0.127,
+     "body": 0.327,
+     "behind": 0.454,
+     "meanAbs": 0.14,
+     "px": 657
+    },
+    "rockRoller": {
+     "diff": 0.181,
+     "body": 0.239,
+     "behind": 0.419,
+     "meanAbs": 0.182,
+     "px": 9544
+    },
+    "rockScorpion": {
+     "diff": 0.197,
+     "body": 0.239,
+     "behind": 0.437,
+     "meanAbs": 0.198,
+     "px": 674
+    },
+    "chough": {
+     "diff": 0,
+     "px": 0
+    },
+    "denBear": {
+     "diff": 0.186,
+     "body": 0.196,
+     "behind": 0.382,
+     "meanAbs": 0.196,
+     "px": 3380
+    }
+   },
+   "blend": {
+    "day": 205,
+    "add": 2
+   },
+   "beamCore": true,
+   "teleDay": {
+    "cr": 4.195,
+    "rim": 1.103,
+    "edge": 4.195
+   },
+   "teleAdd": {
+    "cr": 1.601
+   },
+   "clip": 0.1,
+   "beam": {
+    "y": 1,
+    "dark": 0.091,
+    "bright": 0.716,
+    "cr": 11.416,
+    "step": 0.716
+   },
+   "fails": [
+    "goblin 0.127",
+    "chough 0"
+   ],
+   "ok": {
+    "body": false,
+    "ground": true,
+    "tele": true,
+    "clip": true,
+    "beam": null
+   },
+   "n": {
+    "tele": 4.195,
+    "teleAdd": 1.601,
+    "ground": 0.491,
+    "body": 0,
+    "clip": 0.1,
+    "beam": 0.716
+   },
+   "pass": false
+  },
+  {
+   "zone": "thaw",
+   "q": 1,
+   "spot": "meadow",
+   "on": "grass",
+   "groundKind": "grass",
+   "at": [
+    40.5,
+    154.5
+   ],
+   "thawK": 0,
+   "uSnow": 0,
+   "clouds": 2,
+   "ground": {
+    "luma": 0.481,
+    "n": 551,
+    "trail": null,
+    "max": 0.55
+   },
+   "body": {
+    "hillWolf": {
+     "diff": 0.195,
+     "body": 0.218,
+     "behind": 0.412,
+     "meanAbs": 0.204,
+     "px": 1746
+    },
+    "goblin": {
+     "diff": 0.104,
+     "body": 0.314,
+     "behind": 0.418,
+     "meanAbs": 0.126,
+     "px": 469
+    },
+    "rockRoller": {
+     "diff": 0.18,
+     "body": 0.237,
+     "behind": 0.416,
+     "meanAbs": 0.18,
+     "px": 9497
+    },
+    "rockScorpion": {
+     "diff": 0.195,
+     "body": 0.238,
+     "behind": 0.433,
+     "meanAbs": 0.196,
+     "px": 682
+    },
+    "chough": {
+     "diff": 0,
+     "px": 0
+    },
+    "denBear": {
+     "diff": 0.222,
+     "body": 0.186,
+     "behind": 0.408,
+     "meanAbs": 0.234,
+     "px": 3283
+    }
+   },
+   "fails": [
+    "goblin 0.104",
+    "chough 0"
+   ],
+   "ok": {
+    "body": false,
+    "ground": true
+   },
+   "n": {
+    "ground": 0.481,
+    "body": 0
+   },
+   "pass": false
+  },
+  {
+   "zone": "thaw",
+   "q": 1,
+   "spot": "meadow",
+   "on": "snow",
+   "groundKind": "snow",
+   "at": [
+    40.5,
+    154.5
+   ],
+   "thawK": 1,
+   "uSnow": 0,
+   "clouds": 2,
+   "ground": {
+    "luma": 0.714,
+    "n": 551,
+    "trail": null,
+    "max": 0.8
+   },
+   "body": {
+    "hillWolf": {
+     "diff": 0.476,
+     "body": 0.247,
+     "behind": 0.724,
+     "meanAbs": 0.476,
+     "px": 1730
+    },
+    "goblin": {
+     "diff": 0.301,
+     "body": 0.351,
+     "behind": 0.653,
+     "meanAbs": 0.301,
+     "px": 457
+    },
+    "rockRoller": {
+     "diff": 0.404,
+     "body": 0.243,
+     "behind": 0.647,
+     "meanAbs": 0.405,
+     "px": 6913
+    },
+    "rockScorpion": {
+     "diff": 0.366,
+     "body": 0.319,
+     "behind": 0.685,
+     "meanAbs": 0.366,
+     "px": 538
+    },
+    "chough": {
+     "diff": 0,
+     "px": 0
+    },
+    "denBear": {
+     "diff": 0.411,
+     "body": 0.193,
+     "behind": 0.604,
+     "meanAbs": 0.414,
+     "px": 2298
+    }
+   },
+   "fails": [
+    "chough 0"
+   ],
+   "ok": {
+    "body": false,
+    "ground": true
+   },
+   "n": {
+    "ground": 0.714,
+    "body": 0
+   },
+   "pass": false
+  },
+  {
+   "zone": "thaw",
+   "q": 1,
+   "spot": "meadow",
+   "on": "trail",
+   "groundKind": "trail",
+   "at": [
+    54.5,
+    152.5
+   ],
+   "thawK": 0,
+   "uSnow": 0,
+   "notPlaced": [
+    "chough",
+    "denBear"
+   ],
+   "clouds": 3,
+   "ground": {
+    "luma": 0.533,
+    "n": 501,
+    "trail": 0.533,
+    "max": 0.55
+   },
+   "body": {
+    "hillWolf": {
+     "diff": 0.426,
+     "body": 0.245,
+     "behind": 0.671,
+     "meanAbs": 0.426,
+     "px": 786
+    },
+    "goblin": {
+     "diff": 0.048,
+     "body": 0.312,
+     "behind": 0.264,
+     "meanAbs": 0.127,
+     "px": 485
+    },
+    "rockRoller": {
+     "diff": 0.11,
+     "body": 0.25,
+     "behind": 0.359,
+     "meanAbs": 0.123,
+     "px": 7351
+    },
+    "rockScorpion": {
+     "diff": 0.204,
+     "body": 0.288,
+     "behind": 0.491,
+     "meanAbs": 0.204,
+     "px": 114
+    }
+   },
+   "fails": [
+    "goblin 0.048",
+    "rockRoller 0.11"
+   ],
+   "ok": {
+    "body": false,
+    "ground": null
+   },
+   "n": {
+    "ground": 0.533,
+    "body": 0.048
+   },
+   "pass": false
+  },
+  {
+   "zone": "thaw",
+   "q": 1,
+   "spot": "meadow",
+   "on": "trail (2)",
+   "groundKind": "trail",
+   "at": [
+    54.5,
+    152.5
+   ],
+   "thawK": 0,
+   "uSnow": 0,
+   "notPlaced": [
+    "goblin",
+    "hillWolf"
+   ],
+   "clouds": 3,
+   "ground": {
+    "luma": 0.547,
+    "n": 501,
+    "trail": 0.547,
+    "max": 0.55
+   },
+   "body": {
+    "denBear": {
+     "diff": 0.393,
+     "body": 0.225,
+     "behind": 0.618,
+     "meanAbs": 0.394,
+     "px": 1173
+    },
+    "chough": {
+     "diff": 0.317,
+     "body": 0.155,
+     "behind": 0.472,
+     "meanAbs": 0.317,
+     "px": 284
+    },
+    "rockScorpion": {
+     "diff": 0.145,
+     "body": 0.242,
+     "behind": 0.387,
+     "meanAbs": 0.145,
+     "px": 492
+    },
+    "rockRoller": {
+     "diff": 0.149,
+     "body": 0.254,
+     "behind": 0.403,
+     "meanAbs": 0.154,
+     "px": 5518
+    }
+   },
+   "fails": [
+    "rockRoller 0.149",
+    "rockScorpion 0.145"
+   ],
+   "ok": {
+    "body": false,
+    "ground": null
+   },
+   "n": {
+    "ground": 0.547,
+    "body": 0.145
+   },
+   "pass": false
+  },
+  {
+   "zone": "thaw",
+   "q": 1,
+   "spot": "raceBank",
+   "on": "as it lies",
+   "groundKind": "grass",
+   "at": [
+    25.5,
+    126.5
+   ],
+   "thawK": 0.65,
+   "uSnow": 0,
+   "clouds": 2,
+   "ground": {
+    "luma": 0.481,
+    "n": 401,
+    "trail": 0.529,
+    "max": 0.55
+   },
+   "body": {
+    "hillWolf": {
+     "diff": 0.252,
+     "body": 0.236,
+     "behind": 0.488,
+     "meanAbs": 0.252,
+     "px": 1263
+    },
+    "goblin": {
+     "diff": 0.024,
+     "body": 0.308,
+     "behind": 0.332,
+     "meanAbs": 0.054,
+     "px": 280
+    },
+    "rockRoller": {
+     "diff": 0.211,
+     "body": 0.236,
+     "behind": 0.447,
+     "meanAbs": 0.212,
+     "px": 5220
+    },
+    "rockScorpion": {
+     "diff": 0.188,
+     "body": 0.258,
+     "behind": 0.445,
+     "meanAbs": 0.188,
+     "px": 346
+    },
+    "chough": {
+     "diff": 0,
+     "px": 0
+    },
+    "denBear": {
+     "diff": 0.187,
+     "body": 0.207,
+     "behind": 0.395,
+     "meanAbs": 0.189,
+     "px": 2110
+    }
+   },
+   "blend": {
+    "day": 205,
+    "add": 2
+   },
+   "beamCore": true,
+   "teleDay": {
+    "cr": 4.056,
+    "rim": 1.086,
+    "edge": 4.056
+   },
+   "teleAdd": {
+    "cr": 1.709
+   },
+   "clip": 0.19,
+   "beam": {
+    "y": 1,
+    "dark": 0.076,
+    "bright": 0.493,
+    "cr": 4.087,
+    "step": 0.493
+   },
+   "fails": [
+    "goblin 0.024",
+    "chough 0"
+   ],
+   "ok": {
+    "body": false,
+    "ground": true,
+    "tele": true,
+    "clip": true,
+    "beam": null
+   },
+   "n": {
+    "tele": 4.056,
+    "teleAdd": 1.709,
+    "ground": 0.481,
+    "body": 0,
+    "clip": 0.19,
+    "beam": 0.493
+   },
+   "pass": false
+  },
+  {
+   "zone": "thaw",
+   "q": 1,
+   "spot": "chutes",
+   "on": "as it lies",
+   "groundKind": "snow",
+   "at": [
+    49.5,
+    62.5
+   ],
+   "thawK": 0.65,
+   "uSnow": 0,
+   "clouds": 3,
+   "ground": {
+    "luma": 0.572,
+    "n": 296,
+    "trail": 0.501,
+    "max": 0.8
+   },
+   "body": {
+    "hillWolf": {
+     "diff": 0.192,
+     "body": 0.23,
+     "behind": 0.422,
+     "meanAbs": 0.21,
+     "px": 1304
+    },
+    "goblin": {
+     "diff": 0.041,
+     "body": 0.303,
+     "behind": 0.343,
+     "meanAbs": 0.122,
+     "px": 314
+    },
+    "rockRoller": {
+     "diff": 0.233,
+     "body": 0.243,
+     "behind": 0.476,
+     "meanAbs": 0.234,
+     "px": 4377
+    },
+    "rockScorpion": {
+     "diff": 0.187,
+     "body": 0.241,
+     "behind": 0.429,
+     "meanAbs": 0.192,
+     "px": 244
+    },
+    "chough": {
+     "diff": 0.471,
+     "body": 0.211,
+     "behind": 0.683,
+     "meanAbs": 0.471,
+     "px": 109
+    },
+    "denBear": {
+     "diff": 0.386,
+     "body": 0.178,
+     "behind": 0.564,
+     "meanAbs": 0.386,
+     "px": 1860
+    }
+   },
+   "blend": {
+    "day": 205,
+    "add": 2
+   },
+   "beamCore": true,
+   "teleDay": {
+    "cr": 3.308,
+    "rim": 1.1,
+    "edge": 3.308
+   },
+   "teleAdd": {
+    "cr": 1.551
+   },
+   "clip": 0.17,
+   "beam": {
+    "y": 2.2,
+    "dark": 0.031,
+    "bright": 0.715,
+    "cr": 10.663,
+    "step": 0.715
+   },
+   "fails": [
+    "goblin 0.041"
+   ],
+   "ok": {
+    "body": false,
+    "ground": true,
+    "tele": true,
+    "clip": true,
+    "beam": true
+   },
+   "n": {
+    "tele": 3.308,
+    "teleAdd": 1.551,
+    "ground": 0.572,
+    "body": 0.041,
+    "clip": 0.17,
+    "beam": 0.715
+   },
+   "pass": false
+  },
+  {
+   "zone": "thaw",
+   "q": 1,
+   "spot": "meadow",
+   "on": "snow - grass",
+   "n": {
+    "grass": 0.481,
+    "snow": 0.714,
+    "diff": 0.233
+   },
+   "ok": {
+    "snowOverGrass": true
+   },
+   "pass": true
+  },
+  {
+   "zone": "tarn",
+   "q": 1,
+   "spot": "snowfield",
+   "on": "as it lies",
+   "groundKind": "snow",
+   "at": [
+    53.5,
+    124.5
+   ],
+   "thawK": 0,
+   "uSnow": 1,
+   "clouds": 3,
+   "ground": {
+    "luma": 0.616,
+    "n": 565,
+    "trail": 0.482,
+    "max": 0.8
+   },
+   "body": {
+    "hillWolf": {
+     "diff": 0.304,
+     "body": 0.228,
+     "behind": 0.532,
+     "meanAbs": 0.304,
+     "px": 859
+    },
+    "goblin": {
+     "diff": 0.194,
+     "body": 0.335,
+     "behind": 0.53,
+     "meanAbs": 0.196,
+     "px": 362
+    },
+    "rockRoller": {
+     "diff": 0.384,
+     "body": 0.233,
+     "behind": 0.617,
+     "meanAbs": 0.384,
+     "px": 5176
+    },
+    "rockScorpion": {
+     "diff": 0.253,
+     "body": 0.288,
+     "behind": 0.542,
+     "meanAbs": 0.253,
+     "px": 378
+    },
+    "chough": {
+     "diff": 0,
+     "px": 0
+    },
+    "denBear": {
+     "diff": 0.4,
+     "body": 0.187,
+     "behind": 0.587,
+     "meanAbs": 0.4,
+     "px": 2390
+    }
+   },
+   "blend": {
+    "day": 205,
+    "add": 2
+   },
+   "beamCore": true,
+   "teleDay": {
+    "cr": 5.416,
+    "rim": 2.114,
+    "edge": 5.416
+   },
+   "teleAdd": {
+    "cr": 1.593
+   },
+   "clip": 0.25,
+   "beam": {
+    "y": 1,
+    "dark": 0.107,
+    "bright": 0.306,
+    "cr": 2.189,
+    "step": 0.306
+   },
+   "fails": [
+    "chough 0"
+   ],
+   "ok": {
+    "body": false,
+    "ground": true,
+    "tele": true,
+    "clip": true,
+    "beam": true
+   },
+   "n": {
+    "tele": 5.416,
+    "teleAdd": 1.593,
+    "ground": 0.616,
+    "body": 0,
+    "clip": 0.25,
+    "beam": 0.306
+   },
+   "pass": false
+  },
+  {
+   "zone": "tarn",
+   "q": 1,
+   "spot": "shore",
+   "on": "as it lies",
+   "groundKind": "snow",
+   "at": [
+    68.5,
+    57.5
+   ],
+   "thawK": 0,
+   "uSnow": 1,
+   "notPlaced": [
+    "rockScorpion",
+    "chough",
+    "denBear"
+   ],
+   "clouds": 4,
+   "ground": {
+    "luma": 0.528,
+    "n": 58,
+    "trail": 0.509,
+    "max": 0.8
+   },
+   "body": {
+    "hillWolf": {
+     "diff": 0.341,
+     "body": 0.313,
+     "behind": 0.655,
+     "meanAbs": 0.342,
+     "px": 1028
+    },
+    "goblin": {
+     "diff": 0.019,
+     "body": 0.313,
+     "behind": 0.333,
+     "meanAbs": 0.07,
+     "px": 255
+    },
+    "rockRoller": {
+     "diff": 0.189,
+     "body": 0.236,
+     "behind": 0.425,
+     "meanAbs": 0.193,
+     "px": 5547
+    }
+   },
+   "blend": {
+    "day": 205,
+    "add": 2
+   },
+   "beamCore": true,
+   "teleDay": {
+    "cr": 4.323,
+    "rim": 1.462,
+    "edge": 4.323
+   },
+   "teleAdd": {
+    "cr": 2.018
+   },
+   "clip": 0.77,
+   "beam": {
+    "y": 1,
+    "dark": 0.004,
+    "bright": 0.441,
+    "cr": 3.125,
+    "step": 0.441
+   },
+   "fails": [
+    "goblin 0.019"
+   ],
+   "ok": {
+    "body": false,
+    "ground": true,
+    "tele": true,
+    "clip": true,
+    "beam": true
+   },
+   "n": {
+    "tele": 4.323,
+    "teleAdd": 2.018,
+    "ground": 0.528,
+    "body": 0.019,
+    "clip": 0.77,
+    "beam": 0.441
+   },
+   "pass": false
+  },
+  {
+   "zone": "thaw",
+   "q": 0,
+   "spot": "meadow",
+   "on": "as it lies",
+   "groundKind": "grass",
+   "at": [
+    40.5,
+    154.5
+   ],
+   "thawK": 0.65,
+   "uSnow": 0,
+   "clouds": 2,
+   "ground": {
+    "luma": 0.421,
+    "n": 551,
+    "trail": null,
+    "max": 0.55
+   },
+   "body": {
+    "hillWolf": {
+     "diff": 0.177,
+     "body": 0.215,
+     "behind": 0.392,
+     "meanAbs": 0.189,
+     "px": 921
+    },
+    "goblin": {
+     "diff": 0.116,
+     "body": 0.307,
+     "behind": 0.423,
+     "meanAbs": 0.14,
+     "px": 330
+    },
+    "rockRoller": {
+     "diff": 0.199,
+     "body": 0.227,
+     "behind": 0.426,
+     "meanAbs": 0.2,
+     "px": 5809
+    },
+    "rockScorpion": {
+     "diff": 0.258,
+     "body": 0.182,
+     "behind": 0.441,
+     "meanAbs": 0.259,
+     "px": 349
+    },
+    "chough": {
+     "diff": 0,
+     "px": 0
+    },
+    "denBear": {
+     "diff": 0.308,
+     "body": 0.172,
+     "behind": 0.48,
+     "meanAbs": 0.317,
+     "px": 855
+    }
+   },
+   "blend": {
+    "day": 205,
+    "add": 2
+   },
+   "beamCore": true,
+   "teleDay": {
+    "cr": 4.212,
+    "rim": 1.1,
+    "edge": 4.212
+   },
+   "teleAdd": {
+    "cr": 1.595
+   },
+   "clip": 0.11,
+   "beam": {
+    "y": 2.2,
+    "dark": 0.076,
+    "bright": 0.48,
+    "cr": 3.953,
+    "step": 0.48
+   },
+   "fails": [
+    "goblin 0.116",
+    "chough 0"
+   ],
+   "ok": {
+    "body": false,
+    "ground": true,
+    "tele": true,
+    "clip": true,
+    "beam": null
+   },
+   "n": {
+    "tele": 4.212,
+    "teleAdd": 1.595,
+    "ground": 0.421,
+    "body": 0,
+    "clip": 0.11,
+    "beam": 0.48
+   },
+   "pass": false
+  },
+  {
+   "zone": "thaw",
+   "q": 0,
+   "spot": "meadow",
+   "on": "grass",
+   "groundKind": "grass",
+   "at": [
+    40.5,
+    154.5
+   ],
+   "thawK": 0,
+   "uSnow": 0,
+   "clouds": 2,
+   "ground": {
+    "luma": 0.406,
+    "n": 551,
+    "trail": null,
+    "max": 0.55
+   },
+   "body": {
+    "hillWolf": {
+     "diff": 0.191,
+     "body": 0.211,
+     "behind": 0.403,
+     "meanAbs": 0.2,
+     "px": 921
+    },
+    "goblin": {
+     "diff": 0.121,
+     "body": 0.31,
+     "behind": 0.431,
+     "meanAbs": 0.139,
+     "px": 300
+    },
+    "rockRoller": {
+     "diff": 0.19,
+     "body": 0.231,
+     "behind": 0.421,
+     "meanAbs": 0.191,
+     "px": 5323
+    },
+    "rockScorpion": {
+     "diff": 0.249,
+     "body": 0.184,
+     "behind": 0.433,
+     "meanAbs": 0.249,
+     "px": 337
+    },
+    "chough": {
+     "diff": 0,
+     "px": 0
+    },
+    "denBear": {
+     "diff": 0.29,
+     "body": 0.148,
+     "behind": 0.437,
+     "meanAbs": 0.292,
+     "px": 601
+    }
+   },
+   "fails": [
+    "goblin 0.121",
+    "chough 0"
+   ],
+   "ok": {
+    "body": false,
+    "ground": true
+   },
+   "n": {
+    "ground": 0.406,
+    "body": 0
+   },
+   "pass": false
+  },
+  {
+   "zone": "thaw",
+   "q": 0,
+   "spot": "meadow",
+   "on": "snow",
+   "groundKind": "snow",
+   "at": [
+    40.5,
+    154.5
+   ],
+   "thawK": 1,
+   "uSnow": 0,
+   "clouds": 2,
+   "ground": {
+    "luma": 0.612,
+    "n": 551,
+    "trail": null,
+    "max": 0.8
+   },
+   "body": {
+    "hillWolf": {
+     "diff": 0.417,
+     "body": 0.217,
+     "behind": 0.634,
+     "meanAbs": 0.417,
+     "px": 701
+    },
+    "goblin": {
+     "diff": 0.336,
+     "body": 0.301,
+     "behind": 0.637,
+     "meanAbs": 0.336,
+     "px": 205
+    },
+    "rockRoller": {
+     "diff": 0.426,
+     "body": 0.243,
+     "behind": 0.669,
+     "meanAbs": 0.426,
+     "px": 4012
+    },
+    "rockScorpion": {
+     "diff": 0.484,
+     "body": 0.187,
+     "behind": 0.671,
+     "meanAbs": 0.484,
+     "px": 245
+    },
+    "chough": {
+     "diff": 0,
+     "px": 0
+    },
+    "denBear": {
+     "diff": 0.591,
+     "body": 0.142,
+     "behind": 0.733,
+     "meanAbs": 0.592,
+     "px": 477
+    }
+   },
+   "fails": [
+    "chough 0"
+   ],
+   "ok": {
+    "body": false,
+    "ground": true
+   },
+   "n": {
+    "ground": 0.612,
+    "body": 0
+   },
+   "pass": false
+  },
+  {
+   "zone": "thaw",
+   "q": 0,
+   "spot": "meadow",
+   "on": "trail",
+   "groundKind": "trail",
+   "at": [
+    54.5,
+    152.5
+   ],
+   "thawK": 0,
+   "uSnow": 0,
+   "notPlaced": [
+    "chough",
+    "denBear"
+   ],
+   "clouds": 2,
+   "ground": {
+    "luma": 0.529,
+    "n": 501,
+    "trail": 0.529,
+    "max": 0.55
+   },
+   "body": {
+    "hillWolf": {
+     "diff": 0.452,
+     "body": 0.226,
+     "behind": 0.679,
+     "meanAbs": 0.453,
+     "px": 469
+    },
+    "goblin": {
+     "diff": 0.033,
+     "body": 0.311,
+     "behind": 0.279,
+     "meanAbs": 0.136,
+     "px": 302
+    },
+    "rockRoller": {
+     "diff": 0.116,
+     "body": 0.249,
+     "behind": 0.365,
+     "meanAbs": 0.132,
+     "px": 4654
+    },
+    "rockScorpion": {
+     "diff": 0.337,
+     "body": 0.178,
+     "behind": 0.516,
+     "meanAbs": 0.337,
+     "px": 22
+    }
+   },
+   "fails": [
+    "goblin 0.033",
+    "rockRoller 0.116"
+   ],
+   "ok": {
+    "body": false,
+    "ground": null
+   },
+   "n": {
+    "ground": 0.529,
+    "body": 0.033
+   },
+   "pass": false
+  },
+  {
+   "zone": "thaw",
+   "q": 0,
+   "spot": "meadow",
+   "on": "trail (2)",
+   "groundKind": "trail",
+   "at": [
+    54.5,
+    152.5
+   ],
+   "thawK": 0,
+   "uSnow": 0,
+   "notPlaced": [
+    "goblin",
+    "hillWolf"
+   ],
+   "clouds": 2,
+   "ground": {
+    "luma": 0.552,
+    "n": 501,
+    "trail": 0.552,
+    "max": 0.55
+   },
+   "body": {
+    "denBear": {
+     "diff": 0.414,
+     "body": 0.204,
+     "behind": 0.618,
+     "meanAbs": 0.414,
+     "px": 657
+    },
+    "chough": {
+     "diff": 0.489,
+     "body": 0.113,
+     "behind": 0.602,
+     "meanAbs": 0.489,
+     "px": 288
+    },
+    "rockScorpion": {
+     "diff": 0.196,
+     "body": 0.188,
+     "behind": 0.384,
+     "meanAbs": 0.196,
+     "px": 247
+    },
+    "rockRoller": {
+     "diff": 0.161,
+     "body": 0.249,
+     "behind": 0.41,
+     "meanAbs": 0.164,
+     "px": 3269
+    }
+   },
+   "fails": [],
+   "ok": {
+    "body": true,
+    "ground": null
+   },
+   "n": {
+    "ground": 0.552,
+    "body": 0.161
+   },
+   "pass": true
+  },
+  {
+   "zone": "thaw",
+   "q": 0,
+   "spot": "raceBank",
+   "on": "as it lies",
+   "groundKind": "grass",
+   "at": [
+    25.5,
+    126.5
+   ],
+   "thawK": 0.65,
+   "uSnow": 0,
+   "clouds": 2,
+   "ground": {
+    "luma": 0.485,
+    "n": 401,
+    "trail": 0.536,
+    "max": 0.55
+   },
+   "body": {
+    "hillWolf": {
+     "diff": 0.226,
+     "body": 0.22,
+     "behind": 0.446,
+     "meanAbs": 0.23,
+     "px": 616
+    },
+    "goblin": {
+     "diff": 0.131,
+     "body": 0.311,
+     "behind": 0.442,
+     "meanAbs": 0.141,
+     "px": 150
+    },
+    "rockRoller": {
+     "diff": 0.211,
+     "body": 0.248,
+     "behind": 0.459,
+     "meanAbs": 0.212,
+     "px": 2822
+    },
+    "rockScorpion": {
+     "diff": 0.261,
+     "body": 0.179,
+     "behind": 0.441,
+     "meanAbs": 0.262,
+     "px": 160
+    },
+    "chough": {
+     "diff": 0,
+     "px": 7
+    },
+    "denBear": {
+     "diff": 0.239,
+     "body": 0.182,
+     "behind": 0.421,
+     "meanAbs": 0.241,
+     "px": 1175
+    }
+   },
+   "blend": {
+    "day": 205,
+    "add": 2
+   },
+   "beamCore": true,
+   "teleDay": {
+    "cr": 3.79,
+    "rim": 1.096,
+    "edge": 3.79
+   },
+   "teleAdd": {
+    "cr": 1.652
+   },
+   "clip": 0.18,
+   "beam": {
+    "y": 1,
+    "dark": 0.088,
+    "bright": 0.434,
+    "cr": 3.306,
+    "step": 0.434
+   },
+   "fails": [
+    "goblin 0.131",
+    "chough 0"
+   ],
+   "ok": {
+    "body": false,
+    "ground": true,
+    "tele": true,
+    "clip": true,
+    "beam": null
+   },
+   "n": {
+    "tele": 3.79,
+    "teleAdd": 1.652,
+    "ground": 0.485,
+    "body": 0,
+    "clip": 0.18,
+    "beam": 0.434
+   },
+   "pass": false
+  },
+  {
+   "zone": "thaw",
+   "q": 0,
+   "spot": "chutes",
+   "on": "as it lies",
+   "groundKind": "snow",
+   "at": [
+    49.5,
+    62.5
+   ],
+   "thawK": 0.65,
+   "uSnow": 0,
+   "clouds": 2,
+   "ground": {
+    "luma": 0.499,
+    "n": 296,
+    "trail": 0.511,
+    "max": 0.8
+   },
+   "body": {
+    "hillWolf": {
+     "diff": 0.218,
+     "body": 0.211,
+     "behind": 0.429,
+     "meanAbs": 0.234,
+     "px": 574
+    },
+    "goblin": {
+     "diff": 0,
+     "body": 0.322,
+     "behind": 0.322,
+     "meanAbs": 0.114,
+     "px": 114
+    },
+    "rockRoller": {
+     "diff": 0.241,
+     "body": 0.23,
+     "behind": 0.471,
+     "meanAbs": 0.243,
+     "px": 1964
+    },
+    "rockScorpion": {
+     "diff": 0.241,
+     "body": 0.181,
+     "behind": 0.422,
+     "meanAbs": 0.255,
+     "px": 86
+    },
+    "chough": {
+     "diff": 0.596,
+     "body": 0.153,
+     "behind": 0.749,
+     "meanAbs": 0.596,
+     "px": 57
+    },
+    "denBear": {
+     "diff": 0.257,
+     "body": 0.181,
+     "behind": 0.438,
+     "meanAbs": 0.414,
+     "px": 602
+    }
+   },
+   "blend": {
+    "day": 205,
+    "add": 2
+   },
+   "beamCore": true,
+   "teleDay": {
+    "cr": 2.9,
+    "rim": 1.102,
+    "edge": 2.9
+   },
+   "teleAdd": {
+    "cr": 1.388
+   },
+   "clip": 0.16,
+   "beam": {
+    "y": 2.2,
+    "dark": 0.053,
+    "bright": 0.729,
+    "cr": 11.851,
+    "step": 0.729
+   },
+   "fails": [
+    "goblin 0"
+   ],
+   "ok": {
+    "body": false,
+    "ground": true,
+    "tele": false,
+    "clip": true,
+    "beam": true
+   },
+   "n": {
+    "tele": 2.9,
+    "teleAdd": 1.388,
+    "ground": 0.499,
+    "body": 0,
+    "clip": 0.16,
+    "beam": 0.729
+   },
+   "pass": false
+  },
+  {
+   "zone": "thaw",
+   "q": 0,
+   "spot": "meadow",
+   "on": "snow - grass",
+   "n": {
+    "grass": 0.406,
+    "snow": 0.612,
+    "diff": 0.206
+   },
+   "ok": {
+    "snowOverGrass": true
+   },
+   "pass": true
+  },
+  {
+   "zone": "tarn",
+   "q": 0,
+   "spot": "snowfield",
+   "on": "as it lies",
+   "groundKind": "snow",
+   "at": [
+    53.5,
+    124.5
+   ],
+   "thawK": 0,
+   "uSnow": 1,
+   "clouds": 2,
+   "ground": {
+    "luma": 0.641,
+    "n": 565,
+    "trail": 0.549,
+    "max": 0.8
+   },
+   "body": {
+    "hillWolf": {
+     "diff": 0.377,
+     "body": 0.211,
+     "behind": 0.588,
+     "meanAbs": 0.377,
+     "px": 412
+    },
+    "goblin": {
+     "diff": 0.324,
+     "body": 0.302,
+     "behind": 0.626,
+     "meanAbs": 0.324,
+     "px": 112
+    },
+    "rockRoller": {
+     "diff": 0.413,
+     "body": 0.219,
+     "behind": 0.632,
+     "meanAbs": 0.414,
+     "px": 2177
+    },
+    "rockScorpion": {
+     "diff": 0.458,
+     "body": 0.171,
+     "behind": 0.629,
+     "meanAbs": 0.458,
+     "px": 110
+    },
+    "chough": {
+     "diff": 0,
+     "px": 10
+    },
+    "denBear": {
+     "diff": 0.406,
+     "body": 0.165,
+     "behind": 0.571,
+     "meanAbs": 0.406,
+     "px": 954
+    }
+   },
+   "blend": {
+    "day": 205,
+    "add": 2
+   },
+   "beamCore": true,
+   "teleDay": {
+    "cr": 5.259,
+    "rim": 2.213,
+    "edge": 5.259
+   },
+   "teleAdd": {
+    "cr": 1.535
+   },
+   "clip": 0.26,
+   "beam": {
+    "y": 1,
+    "dark": 0.114,
+    "bright": 0.28,
+    "cr": 2.035,
+    "step": 0.28
+   },
+   "fails": [
+    "chough 0"
+   ],
+   "ok": {
+    "body": false,
+    "ground": true,
+    "tele": true,
+    "clip": true,
+    "beam": true
+   },
+   "n": {
+    "tele": 5.259,
+    "teleAdd": 1.535,
+    "ground": 0.641,
+    "body": 0,
+    "clip": 0.26,
+    "beam": 0.28
+   },
+   "pass": false
+  },
+  {
+   "zone": "tarn",
+   "q": 0,
+   "spot": "shore",
+   "on": "as it lies",
+   "groundKind": "snow",
+   "at": [
+    68.5,
+    57.5
+   ],
+   "thawK": 0,
+   "uSnow": 1,
+   "notPlaced": [
+    "rockScorpion",
+    "chough",
+    "denBear"
+   ],
+   "clouds": 2,
+   "ground": {
+    "luma": 0.521,
+    "n": 58,
+    "trail": 0.534,
+    "max": 0.8
+   },
+   "body": {
+    "hillWolf": {
+     "diff": 0.385,
+     "body": 0.295,
+     "behind": 0.68,
+     "meanAbs": 0.385,
+     "px": 434
+    },
+    "goblin": {
+     "diff": 0.037,
+     "body": 0.301,
+     "behind": 0.338,
+     "meanAbs": 0.073,
+     "px": 96
+    },
+    "rockRoller": {
+     "diff": 0.212,
+     "body": 0.229,
+     "behind": 0.441,
+     "meanAbs": 0.215,
+     "px": 2379
+    }
+   },
+   "blend": {
+    "day": 205,
+    "add": 2
+   },
+   "beamCore": true,
+   "teleDay": {
+    "cr": 3.805,
+    "rim": 1.633,
+    "edge": 2.939
+   },
+   "teleAdd": {
+    "cr": 2.028
+   },
+   "clip": 0.82,
+   "beam": {
+    "y": 1,
+    "dark": 0.014,
+    "bright": 0.44,
+    "cr": 3.103,
+    "step": 0.44
+   },
+   "fails": [
+    "goblin 0.037"
+   ],
+   "ok": {
+    "body": false,
+    "ground": true,
+    "tele": true,
+    "clip": true,
+    "beam": true
+   },
+   "n": {
+    "tele": 3.805,
+    "teleAdd": 2.028,
+    "ground": 0.521,
+    "body": 0.037,
+    "clip": 0.82,
+    "beam": 0.44
+   },
+   "pass": false
+  }
+ ],
+ "note": "thaw rows from the official runs; tarn rows re-run after the cliff tone (hueW)"
+}

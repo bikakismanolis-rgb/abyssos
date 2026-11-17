@@ -140,3 +140,131 @@ form, an impact ring round the hero, a light pool below her, a legendary beam (l
 - Not shot: a floating damage number (the viewer has no overlay); a goblin / wolf / troll are the procedural rigs
   (`buildWarg` stands in for the wolf).
 - Not tested: a real phone screen in sunlight.
+
+---
+
+# Real zones (stage A): the code-made meadow, the frame by day, creatures on the real ground
+
+Date: 2026-11-17. `thaw` and `tarn` entered through the game's own test hook (`tools/fixtures7.mjs`: `fx7('thawSeen',
+'thaw')`, `fx7('tarnSeen', 'tarn')`, seed 3), phone-emulated (915 × 412, ratio 1.5, isMobile), quality 0 and 1, own
+server on 5321 (stopped).
+
+    PART=real BASE=http://localhost:5321/ node tools/scenario.mjs day0      # real zones only (PART=viewer: the stage-0 part)
+
+## What changed
+
+- **`src/gfx/codetex.js` (new):** three tileable layers made in code from fixed seeds, no download: `meadow` (short
+  blades laid as strokes, light yellow-green, a little straw, pale flower specks), `gravel` (two sizes of pebble over
+  sand, Worley cells) and `crag` (pale bedded limestone with joints). Albedo plus a normal map (quality ≥ 1), 512 on a
+  phone and 1024 otherwise. Nothing in a tile is broader than about a sixth of it, so no repeat shows at the play camera.
+- **`src/gfx/env.js`:** `codeLayer(id, { mobile })` makes a layer on first ask and keeps it as `ENV.layers['melt/<id>']`
+  (never under a bare name, so no older zone's chain can pick it up); `freeCodeLayers()` lets their GPU copies go.
+- **`src/world/build.js`:**
+  - `ground7('thaw')`: slot A `melt/meadow`, B `melt/gravel`, W `melt/crag`, P the boot trail lightened (`hueP`).
+    The fake snow in the thaw slot is now whiter, so snow stays at least 0.2 lighter than grass.
+  - The ground builder, Act VII only (`day7`):
+    - the open floor is mostly grass, with gravel only where both noises run high;
+    - gravel lies in the water's beds and a cell up their banks (the brooks, the Race, the fords);
+    - **the frame:** rock outside the walked ground keeps 0.8 and more of its tone. The night rule darkens it with height
+      to 0.36, and that rule drew the black corners.
+  - `ground7('tarn')` gets `hueW` (the sea-cliff scan greyed and lifted to a sunlit granite).
+  - A level that is not Act VII's calls `freeCodeLayers()`.
+  - Night zones take none of these branches.
+- **`tools/scenario.mjs` `day0`:** a `PART` switch and the real-zone part:
+  - five spots: thaw meadow, thaw Race bank, thaw under the Chutes, tarn snowfield, tarn shore; the five numbers at each;
+  - the body test on the act's six kinds, spawned with the game's own `spawnMonster` (so with their `look`);
+  - on the meadow, the kinds on grass (`setThaw(0)`), on snow (`setThaw(1)`) and on the trail (two tests: the trail
+    holds four kinds at a time);
+  - the snow against the grass;
+  - cloud discs hidden for the read (`CLOUDS=1` keeps them);
+  - `TINT7='kind:rrggbb:amount,...'` tries a look before `data.js` takes it.
+  - The body test now masks the creature by drawing it with colour writes off, so its own cast shadow stays in the
+    "without" frame.
+- `src/ui/style.css` has `body.day` rules, but **I did not write them** (someone else did; I have not touched that file).
+
+## The numbers (shipped looks)
+
+Body = |creature − what is behind it| in luma, bar 0.15. Order: hillWolf / goblin / rockRoller / rockScorpion /
+chough / denBear. "off" means the chough's AI had flown it out of the read box; where it was in frame it read
+0.32-0.60. Raw numbers in `stageA/day/day0-real.json`.
+
+| spot | on | q | 1 tele (additive) | 2 ground | 3 body | 4 clip % | 5 beam |
+|---|---|---|---|---|---|---|---|
+| thaw meadow | as it lies | 1 | 4.20 (1.60) | 0.491 | 0.21 / **0.13** / 0.18 / 0.20 / off / 0.19 | 0.10 | 0.72 |
+| thaw meadow | grass | 1 | | 0.481 | 0.20 / **0.10** / 0.18 / 0.20 / off / 0.22 | | |
+| thaw meadow | snow | 1 | | 0.714 | 0.48 / 0.30 / 0.40 / 0.37 / off / 0.41 | | |
+| thaw meadow | trail | 1 | | 0.533 | 0.43 / **0.05** / **0.11** / 0.20 / – / – | | |
+| thaw meadow | trail (2) | 1 | | 0.547 | – / – / **0.149** / **0.145** / 0.32 / 0.39 | | |
+| thaw Race bank | as it lies | 1 | 4.06 (1.71) | 0.481 | 0.25 / **0.02** / 0.21 / 0.19 / off / 0.19 | 0.19 | 0.49 |
+| thaw Chutes | as it lies | 1 | 3.31 (1.55) | 0.572 | 0.19 / **0.04** / 0.23 / 0.19 / 0.47 / 0.39 | 0.17 | 0.72 |
+| tarn snowfield | as it lies | 1 | 5.42 (1.59) | 0.616 | 0.30 / 0.19 / 0.38 / 0.25 / off / 0.40 | 0.25 | 0.31 |
+| tarn shore | as it lies | 1 | 4.32 (2.02) | 0.528 | 0.34 / **0.02** / 0.19 / – / – / – | 0.77 | 0.44 |
+| thaw meadow | as it lies | 0 | 4.21 (1.60) | 0.421 | 0.18 / **0.12** / 0.20 / 0.26 / off / 0.31 | 0.11 | 0.48 |
+| thaw meadow | grass | 0 | | 0.406 | 0.19 / **0.12** / 0.19 / 0.25 / off / 0.29 | | |
+| thaw meadow | snow | 0 | | 0.612 | 0.42 / 0.34 / 0.43 / 0.48 / off / 0.59 | | |
+| thaw meadow | trail | 0 | | 0.529 | 0.45 / **0.03** / **0.12** / 0.34 / – / – | | |
+| thaw meadow | trail (2) | 0 | | 0.552 | – / – / 0.16 / 0.20 / 0.49 / 0.41 | | |
+| thaw Race bank | as it lies | 0 | 3.79 (1.65) | 0.485 | 0.23 / **0.13** / 0.21 / 0.26 / off / 0.24 | 0.18 | 0.43 |
+| thaw Chutes | as it lies | 0 | **2.90** (1.39) | 0.499 | 0.22 / **0.00** / 0.24 / 0.24 / 0.60 / 0.26 | 0.16 | 0.73 |
+| tarn snowfield | as it lies | 0 | 5.26 (1.54) | 0.641 | 0.38 / 0.32 / 0.41 / 0.46 / off / 0.41 | 0.26 | 0.28 |
+| tarn shore | as it lies | 0 | 3.81 (2.03) | 0.521 | 0.39 / **0.04** / 0.21 / – / – / – | 0.82 | 0.44 |
+
+- **Ground:** the meadow reads 0.41-0.49 (target 0.40-0.50, cap 0.55): PASS at every spot.
+- **Snow against grass:** 0.233 at q1, 0.206 at q0 (bar 0.2): PASS, the q0 one narrowly.
+- **The frame** (camp, q1, the four corner boxes, mean luma / share near black):
+  - thaw: 0.34-0.51, 0 % near black;
+  - tarn after `hueW`: 0.30-0.36, ≤ 1 % (before: 0.17-0.21 and 6-12 %).
+  - Shots: `day-q1-thaw-camp.jpg`, `day-q1-tarn-camp.jpg`.
+- **Telegraph** (≥ 3 : 1): passes everywhere but thaw Chutes at q0, 2.90 : 1 (FAIL by 0.1). That rim is the red on
+  grass; on that spot the dark under-edge gives nothing.
+- Clip ≤ 2 % and beam found: PASS everywhere.
+- **Body: the goblin fails on every non-snow ground. hillWolf, denBear and the chough pass everywhere. rockRoller and
+  rockScorpion fail only on the trail** (0.11-0.149).
+
+## Suggested looks for `data.js` MONSTERS (tested with `TINT7`, q1, thaw and tarn; not applied)
+
+| kind | shipped look | suggested | measured with it |
+|---|---|---|---|
+| rockRoller | tint 0x8c98a6 @ 0.6 | **tint 0x4e5660 @ 0.7** | 0.18-0.45 on every ground (trail 0.18 / 0.20): PASS |
+| rockScorpion | tint 0xb08a4a @ 0.6 | **tint 0x5a3c22 @ 0.6** | 0.16-0.39 (trail 0.17 / 0.20): PASS |
+| goblin | none (shared kind) | tint 0x1c2214 @ 0.8 | grass 0.25-0.27, snow 0.43, tarn snowfield 0.28; **trail 0.11, Race bank 0.14, Chutes 0.14, tarn shore 0.14: still fails** |
+
+- **Goblin cannot be cured by a tint alone.** In the sun its darkest tinted body still reads about 0.18 of white, and the
+  trail, gravel and shore behind it are 0.29-0.33. It misses by 0.01-0.04, and by 0.07 on the trail.
+- Lightening the gravel (tried: behind it 0.33, and the meadow's mean rose so snow − grass fell to 0.197) does not
+  help, so that change was reverted.
+- Options, for the lead:
+  - a pale rim on the Act VII goblin (`look.rim`, about 0xd8e0c0 at 0.8), so it reads by its edge;
+  - accept 0.14 on mid-tone ground.
+- **`goblin` is shared with Acts I-IV**: a `look` on `MONSTERS.goblin` would change every act's goblins. It needs an Act
+  VII row (for example a `goblin7` that the act's packs name) or a per-act look.
+
+## Shots (`docs/act7-briefs/reports/stageA/day/`, JPEG, 37-148 KB)
+
+- Five spots × q0/q1:
+  - `day-q{0,1}-thaw-meadow.jpg`
+  - `-thaw-raceBank.jpg`
+  - `-thaw-chutes.jpg`
+  - `-tarn-snowfield.jpg`
+  - `-tarn-shore.jpg`
+- The kinds' matrix on the meadow:
+  - `day-q{0,1}-thaw-meadow-on-grass.jpg`
+  - `-on-snow.jpg`
+  - `-on-trail.jpg`
+  - `-on-trail2.jpg`
+- The frame: `day-q1-{thaw,tarn}-camp.jpg`.
+- Raw numbers: `day0-real.json` (the thaw rows from the full runs; the tarn rows re-run after the cliff change).
+
+## Regression
+
+`shallowtele` passes twice (cradle 7.6 and 8.9: the ring's own flicker range, written down in the scenario). Every
+ground change is behind `ACT7.has(L.type)` or an Act VII config key.
+
+## Not done, or to check
+
+- **Goblin readability** (above): it needs the lead's choice.
+- The Chutes telegraph at q0 is 2.90 : 1.
+- The **`day0` viewer part was not re-run** after these changes. The changes are Act VII-only, so its stage-0 table
+  above still stands.
+- `townMorning` and `townDusk` do not get the lit frame: it is keyed on the zone type, not on `DAY.on`.
+- The meadow on a real phone screen has not been looked at, and neither has its tiling at the Wanderer's zoom.

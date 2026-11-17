@@ -61,7 +61,9 @@ const STAND_IN = {
   skua: ['caveBat', 'spiderling'], rimeBear: ['amberBear', 'troll'],
   // Act VI: the creatures (tools/creatures/act6, or these until they are built)
   falselight: ['spider'], ketling: ['icemaw', 'warg'], ketos: ['icemaw', 'warg'],
-  sunken: 'villager0', icesinger: 'healer', alkyone: 'healer', selna: 'smith', tern: 'villager0', tamarisk: 'ranger', glaukos: 'wayfarer'
+  sunken: 'villager0', icesinger: 'healer', alkyone: 'healer', selna: 'smith', tern: 'villager0', tamarisk: 'ranger', glaukos: 'wayfarer',
+  // Act VII's two bosses
+  kallisto: ['amberBear', 'troll'], kelados: ['stonewarden', 'troll']
 };
 // a stand-in drawn at another size than the model it stands for (model>stand-in)
 const STAND_SCALE = { 'ashwing>caveBat': 2.6, 'smokeEater>spider': 0.75, 'isarnBoy>wayfarer': 0.62,
@@ -237,6 +239,8 @@ function actSpawn(id, def, a, av, o) {
   if (def.wake && dorm && tag !== 'frozenCrew') {
     a.dormant = true; a.disguised = true;
     if (def.wake.pose) { a.pose = def.wake.pose; av.play(a.pose, 1); heapOver(a); }
+    // (Act VII's sleepers lie as they would lie dead, in their own colours: a Den-bear and its wolves in the den)
+    else if (def.wake.sleep) { av.play(def.wake.sleep, 1); for (let k = 0; k < 8; k++) av.update(0.4, { speed: 0 }); }
     else av.setTint(0x2a2016, 0.85);
   }
   if (tag && PACK_LINE[tag]) battleLine(a, o.packId);
@@ -244,6 +248,7 @@ function actSpawn(id, def, a, av, o) {
   if (id === 'mourner') veil(av);
   act4Spawn(id, def, a, av, o);
   act5Spawn(id, def, a, av, o, pk);
+  act7Spawn(id, def, a, av, o, pk, dorm);
   // Act VI: the Shade's forms wear the Skotos's skin over their near-black regrade (each body's own materials)
   if (def.keepSkin) for (const m of av.model.mats || []) if (!/void/i.test(m.name || '')) skotosSkin(m);
 }
@@ -372,6 +377,14 @@ function battleLine(a, packId) {
   a.rot = lead.rot;
   if (G.zone?.map?.walkable(x, z)) { a.x = x; a.z = z; a.home = { x, z }; if (a.mesh) a.mesh.position.set(x, 0, z); }
 }
+// ---------- Act VII: how its sleepers wait (docs/act7-contract.md, Enemies; ai.js statueTick, scorpion) ----------
+function act7Spawn(id, def, a, av, o, pk, dorm) {
+  // the Icebound: a Rock-roller and its pack as statues in blue ice (o.icebound: a test's, or a boss's call). They wake by
+  // sun, a blow, fire or the Cradle, never by her walking near (a.icebound)
+  if (o.icebound ?? (!!dorm && (pk?.tag === 'icebound' || !!pk?.ice))) { statue(a, av, id); a.icebound = true; }
+  // the Rock-scorpions of a pack that lies in wait: under their flat stones until she is 6 m off or one is struck
+  if (def.burst && def.stingEvery && !o.rising && (o.under ?? !!dorm)) { a.under = true; a.y = -1; av.group.visible = false; }
+}
 // ---------- Act V: what the Sunken, the Ice Singers and the Saltborn wear (code parts on the frost set) ----------
 function act5Spawn(id, def, a, av, o, pk) {
   const tag = pk?.tag;
@@ -433,7 +446,7 @@ function statue(a, av, id) {
   a.dormant = true; a.disguised = true; a.statue = true; a.pose = null;
   a.wakeTint = [a.baseTint ?? 0xffffff, a.baseTintAmt ?? 0];
   frozenLook(av);
-  const pose = id === 'harpooner' ? ['throw', 0.42] : id === 'iceSinger' ? ['song', 0.3] : ['chop', 0.55];
+  const pose = id === 'harpooner' ? ['throw', 0.42] : id === 'iceSinger' ? ['song', 0.3] : id === 'rockRoller' ? ['taunt', 0.5] : ['chop', 0.55];
   av.play(pose[0], 1); for (let k = 0; k < 4; k++) av.update(pose[1] / 4, { speed: 0 });
 }
 // out to the deep water beyond where it was put, away from the hero: the wave comes in out of the sea

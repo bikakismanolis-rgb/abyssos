@@ -502,6 +502,8 @@ on('shadeForm', (a, form) => { Audio.mood({ form: form || a.def?.form || 1 }); A
 // plays the sea lit)
 on('bossDown', (a) => {
   if (a?.kind === 'skotos' && !a.echo) { Audio.music(null); return; }
+  // (Act VII's two are not killed: they rest, and the story's scene keeps the boss theme under its rest mood)
+  if (a?.def?.spare && !a.echo) return;
   Audio.music(G.zone.id === 'gate' ? 'gate' : ZONES[G.zone.id]?.music || G.zone.id); Audio.sting('victory');
 });
 // ---------- Act V: what the sea and the ice say (sounds that carry timing, first-time hints) ----------
