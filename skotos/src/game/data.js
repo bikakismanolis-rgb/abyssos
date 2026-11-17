@@ -223,8 +223,8 @@ export const MONSTERS = {
   rockScorpion: { model: 'spider', hp: 1.0, dmg: 0.8, speed: 5.2, radius: 0.6, ai: 'melee', reach: 1.5, atk: 'bite', atkTime: 1.0, flesh: 'chitin', xp: 1.5, sfx: 'spider', poison: true, burst: true, coldBlooded: 0.6, heavy: 'sting', stingEvery: 3, look: { scale: 0.8, tint: 0x5a3c22, tintAmt: 0.6 } },
   // the two bosses, who are not killed (spare: at 0 life they rest where they would die; ai.js KALLISTO, KELADOS). A slide
   // on them: slideShare % of their life and slideDaze s (forge.js bury)
-  kallisto: { model: 'kallisto', hp: 340, dmg: 1.6, speed: 5.4, radius: 0.85, ai: 'kallisto', reach: 4.6, atk: 'smash', atkTime: 1.6, flesh: 'flesh', xp: 300, boss: true, big: true, swim: true, spare: true, sfx: 'bear', dieClip: 'daze', slideShare: 5, slideDaze: 3, look: { scale: 2.1, tint: 0x3a2c22, tintAmt: 0.2 } },
-  kelados: { model: 'kelados', hp: 480, dmg: 1.6, speed: 3.2, radius: 1.5, ai: 'kelados', reach: 9, atk: 'smash', atkTime: 1.8, flesh: 'stone', xp: 380, boss: true, big: true, spare: true, sfx: 'golem', dieClip: 'die', slideShare: 4, slideDaze: 2, look: { scale: 2.3, tint: 0x8c9488, tintAmt: 0.5 } },
+  kallisto: { model: 'kallisto', hp: 1830, dmg: 1.6, speed: 5.4, radius: 0.85, ai: 'kallisto', reach: 4.6, atk: 'smash', atkTime: 1.6, flesh: 'flesh', xp: 300, boss: true, big: true, swim: true, spare: true, sfx: 'bear', dieClip: 'daze', slideShare: 5, slideDaze: 3, look: { scale: 2.1, tint: 0x3a2c22, tintAmt: 0.2 } },
+  kelados: { model: 'kelados', hp: 1800, dmg: 1.6, speed: 3.2, radius: 1.5, ai: 'kelados', reach: 9, atk: 'smash', atkTime: 1.8, flesh: 'stone', xp: 380, boss: true, big: true, spare: true, sfx: 'golem', dieClip: 'die', slideShare: 4, slideDaze: 2, look: { scale: 2.3, tint: 0x8c9488, tintAmt: 0.5 } },
   // the act's bosses (radius before look.scale: the Tower's 0.7 is 2.8 m at x4, the Skotos's 0.8 is 2.56 m at x3.2).
   // Skerry, the Walking Tower: the crab with the Skerry Light on its back, a wake through its own flood (wakeSpeed); the
   // Skotos: anchored waist-deep at the ice edge (float: nothing pushes it), its shadow under the ice in the Night
