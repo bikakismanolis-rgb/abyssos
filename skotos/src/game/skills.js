@@ -18,6 +18,9 @@ import { crackAt, crackLine, refreezeAt, iceAt } from './ice.js';
 import { vaultOn, vaultAt, vaultLine } from './forge.js';
 import { coldMul } from './cold.js';
 import { slotSkill, variantOf } from './progression.js';
+import { N7mods, N7ctx, N7onSkill, N7onDodge, N7onDrink, N7rt } from './names7.js';
+const n7on = () => !!G.hero?.names?.said?.some(Boolean);
+const n7rt = (pl) => (pl.n7 ||= N7rt());
 import { VARIANT_FN, NEW_FN } from './skillsx.js';
 
 const V = new THREE.Vector3(), V2 = new THREE.Vector3();
@@ -179,7 +182,9 @@ export function useSkill(i, ev) {
     return false;
   }
   if (pl.act && (pl.act.name === 'whirl' || pl.act.name === 'beam')) pl.act = null;
-  pl.res -= sk.cost || 0;
+  // (the Names: a cost made lighter, a floor under her resource; the weave of skills counted)
+  if (n7on()) { const m = N7mods(G.hero, N7ctx(n7rt(pl), G.time, { res: pl.res })); pl.res -= (sk.cost || 0) * m.costK; pl.res = Math.max(pl.res, m.resFloor || 0); if (!sk.basic) N7onSkill(pl.n7, sk.id, G.time); }
+  else pl.res -= sk.cost || 0;
   const ci = cdIndex(sk);
   if (sk.cd) pl.cds[ci] = sk.cd * (1 - G.stats.cdr / 100);
   const rank = Math.max(1, skillRank(sk.id)), mult = skillMult(sk), v = variantOf(sk.id);
@@ -460,6 +465,7 @@ export function dodge(ev) {
   shakeOff();
   pl.dodgeStamp = (pl.dodgeStamp || 0) + 1;
   pl.dodgeCd = D.cd * (G.stats.legs.has('swiftboots') ? 0.5 : 1);
+  if (n7on()) { pl.dodgeCd *= N7mods(G.hero, N7ctx(n7rt(pl), G.time)).dodgeCdK; N7onDodge(pl.n7, G.time); }
   const mv = Math.hypot(G.input.mx, G.input.mz) > 0.2 ? Math.atan2(G.input.mx, G.input.mz) : (ev?.aim?.dir ? Math.atan2(ev.aim.dir.x, ev.aim.dir.z) : pl.rot);
   const map = G.zone.map;
   if (D.kind === 'blink') {
@@ -490,6 +496,7 @@ export function drinkPotion() {
   const pl = p();
   if (pl.potionCd > 0 || pl.dead) { Audio.sfx('denied', { vol: 0.4 }); return; }
   pl.potionCd = POTION.cd;
+  if (n7on()) { pl.potionCd = N7mods(G.hero, N7ctx(n7rt(pl), G.time)).flaskCd ?? POTION.cd; N7onDrink(pl.n7, G.time); }
   healHero(pl.hpMax * POTION.heal);
   glowBurst(pl.x, 1.2, pl.z, 0xff4040, 24, 2.5, 0.3, 0.7);
   for (let i = 0; i < 20; i++) P({ x: pl.x + rand.range(-0.5, 0.5), y: rand.range(0, 0.5), z: pl.z + rand.range(-0.5, 0.5), vy: rand.range(1, 3), life: 0.8, size: 0.15, size1: 0.02, color: 0xff6050, color1: 0xff2010 });

@@ -22,6 +22,10 @@ import { staticGeo, makeCharMat } from '../gfx/rig.js';
 import { slagParts } from '../gfx/models.js';
 import { R as RR } from '../gfx/gfx.js';
 import { NET, MIRROR } from '../net/state.js';
+import { N7mods, N7ctx, N7onHit, N7dodged, N7rt } from './names7.js';
+// Act VII: the Names she says (names7.js). Nothing is read for a hero who says none
+const n7on = () => !!G.hero?.names?.said?.some(Boolean);
+const n7rt = (p) => (p.n7 ||= N7rt());
 
 const HIT_SFX = { flesh: 'hitFlesh', bone: 'hitBone', spirit: 'hitSpirit', chitin: 'hitChitin', ash: 'hitFlesh', stone: 'hitBone', magma: 'hitFlesh', wood: 'woodHit', drowned: 'hitFlesh', skotos: 'hitSpirit' };
 const DIE_SFX = { goblin: 'goblinDie', wolf: 'wolfDie', spider: 'spiderDie', orc: 'orcDie', troll: 'trollRoar', skeleton: 'skeletonDie', wraith: 'wraithDie', hound: 'wolfDie', bat: 'batDie', worm: 'wormDie', dwarf: 'dwarfDie', golem: 'golemDie', moth: 'mothDie', bear: 'bearRoar', hart: 'hartBellow' };
@@ -71,6 +75,11 @@ export function damage(src, target, amount, o = {}) {
     if (target.elite || target.boss) { amount *= 1 + s.eliteDmg / 100; if (s.legs.has('kingslayer')) amount *= 1.3; }
     // Einar's Lantern: the Skotos's creatures it strikes stand in the light for 2 s (Revealed: nothing more on what is worse off)
     if (s.legs.has('einarLantern') && !o.dot && target.def.unlit) addVuln(target, 'revealed', 2, { quiet: true });
+    // the Names: all six that change a blow, in one product (the foe is known here, not in heroHit)
+    if (!o.dot && n7on()) {
+      const p = G.player, m = N7mods(G.hero, N7ctx(n7rt(p), G.time, { foeFull: target.hp >= target.hpMax, dist: Math.hypot(target.x - p.x, target.z - p.z), res: p.res, crit }));
+      amount *= m.dmg; if (m.reveal) addVuln(target, 'revealed', m.reveal, { quiet: true }); if (m.parts?.arna) target.n7open = G.time; N7onHit(p.n7, G.time, m);
+    }
   }
   // invulnerable, or held by a Mourner's lament-bond
   const at = o.at || target;
@@ -145,7 +154,7 @@ export function healHero(v, quiet) {
 function hurtHero(src, amount, o) {
   const p = G.player;
   if (p.dead || G.mode !== 'play') return 0;
-  if (p.iframes > 0) return 0;
+  if (p.iframes > 0) { if (n7on() && N7mods(G.hero, {}).dodgeBack && N7dodged(n7rt(p))) p.dodgeCd = 0; return 0; }
   const s = G.stats;
   // Act V: the Cold the blow carries (a wash-out, a plunge, a Skua's bite, a wail...: cold.js)
   if (o.cold) coldAdd(o.cold);
@@ -160,6 +169,7 @@ function hurtHero(src, amount, o) {
   const L = src?.level || p.level || G.hero.level;
   const red = s.armor / (s.armor + 45 * L + 60);
   if (!o.pure) amount *= 1 - red;
+  if (n7on()) amount *= N7mods(G.hero, N7ctx(n7rt(p), G.time)).hurt;
   if (p.buffs.cry > 0) amount *= 0.77;
   if (p.buffs.shrineShield > 0) amount *= 0.6;
   // a Challenge (skillsx.js): a third less, and what is turned aside goes back at the one who struck

@@ -2,6 +2,7 @@
 // points pays for all of it: one a level, then one a Mastery level after the last level (combat.js gainXP).
 import { G } from './state.js';
 import { SKILLS, SKILL_MAX_RANK, VARIANTS, VARIANT_RANK, LOADOUT, MAX_LEVEL } from './data.js';
+import { N7spent, migrate7, N7useFree, N7respec } from './names7.js';
 
 // ---------- Mastery ----------
 // a track's bonus after r ranks: max * (1 - e^(-r/k)); the first ranks are small, the tail endless but bounded.
@@ -44,6 +45,8 @@ export function pointsSpent(h) {
   for (const id in h.skills || {}) n += Math.max(0, Math.min(SKILL_MAX_RANK, h.skills[id] || 0) - 1);
   for (const id in h.vars || {}) n += bits(h.vars[id]);
   for (const id in h.mast || {}) n += h.mast[id] || 0;
+  // Act VII: the Names' slots and their Deep rules (names7.js)
+  n += N7spent(h);
   return n;
 }
 const bits = (x) => (x & 1) + ((x >> 1) & 1);
@@ -97,11 +100,12 @@ export function masterUp(h, id, n = 1) {
   return k;
 }
 // every point back, for gold: ranks to 1, variants unlearnt, Mastery cleared (the loadout stays)
-export function respec(h) {
-  const cost = respecCost(h);
-  if (h.gold < cost) return false;
-  h.gold -= cost;
+// (free: Halda's one free respec when the Names are given, Act VII; names7.js)
+export function respec(h, free) {
+  if (free) { if (!N7useFree(h).ok) return false; }
+  else { const cost = respecCost(h); if (h.gold < cost) return false; h.gold -= cost; }
   h.skills = {}; h.vars = {}; h.variant = {}; h.mast = {};
+  N7respec(h);
   h.points = pointsEarned(h);
   return true;
 }
@@ -120,6 +124,8 @@ export function migrateHero(h) {
   for (const id in h.variant) if (h.variant[id] && !hasVariant(h, id, h.variant[id])) h.variant[id] = 0;
   h.mlvl ||= 0; h.mxp ||= 0;
   if (h.level >= MAX_LEVEL) h.xp = 0;
+  // Act VII: the Names (an old hero has none said; what her deeds have earned is learnt here)
+  migrate7(h);
   const free = pointsEarned(h) - pointsSpent(h);
   if (!(h.points >= 0) || h.points !== free) h.points = Math.max(0, free);
   return h;

@@ -10,6 +10,7 @@ import { tickLight } from './light.js';
 import { tickCold, coldNoRegen } from './cold.js';
 import { wadeAt } from './tide.js';
 import { foes } from './actors.js';
+import { N7stand, N7rt } from './names7.js';
 import { Trail, P } from '../gfx/fx.js';
 import { R } from '../gfx/gfx.js';
 import { emit } from '../ui/bus.js';
@@ -33,6 +34,8 @@ export function updatePlayer(dt) {
   pl.comboT -= dt;
   for (let i = 0; i < pl.cds.length; i++) pl.cds[i] = Math.max(0, pl.cds[i] - dt);
   pl.dodgeCd = Math.max(0, pl.dodgeCd - dt); pl.potionCd = Math.max(0, pl.potionCd - dt);
+  // (the Names: how long she has stood her ground, names7.js)
+  if (G.hero.names?.said?.some(Boolean)) N7stand((pl.n7 ||= N7rt()), pl.x, pl.z, dt, pl.buffs.call > 0);
   for (const k in pl.buffs) { pl.buffs[k] -= dt; if (pl.buffs[k] <= 0) delete pl.buffs[k]; }
   // the Alpha's +15% lasts only while an Alpha runs with her (killed, run out, left behind at a waypoint: skillsx.js)
   if (pl.buffs.alpha && !G.actors.some((a) => a.alpha && a.pet && !a.dead)) delete pl.buffs.alpha;
