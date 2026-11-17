@@ -6009,6 +6009,28 @@ const over7 = (a) => { const o = H7().overlap; return o > 0 && a.phase + 1 >= o;
 const free7 = (a) => !(a.ownT > a.t) || over7(a);
 const own7 = (a, s) => { a.ownT = Math.max(a.ownT || 0, a.t + s); };
 const solo7 = () => heroes().length < 2;
+// (a party at the two: a charge goes for the hero farthest from her last target; with three or four, a thrown rock or block
+// falls on the farthest and, 1 s later, on the nearest one standing off at range, docs/act7-contract.md, Co-op at both)
+function partyTarget7(a, pl) {
+  const hs = heroes().filter((p) => !p.dead); if (hs.length < 2 || !a.lastTgt) return pl;
+  const L0 = a.lastTgt; let best = pl, bd = -1;
+  for (const p of hs) { const d = Math.hypot(p.x - L0.x, p.z - L0.z); if (d > bd) { bd = d; best = p; } }
+  return best;
+}
+// (a party of three or four: the second block, on the nearest hero standing off at range, 1 s after the first)
+function blockFall7(a, tg) {
+  const x = tg.x, z = tg.z, at = clock;
+  teleCircle(x, z, 2.35, 1.3, 0xf4f8ff); teleCircle(x, z, 2.2, 1.3); bigTele(a, 1.3);
+  after7(a, 0.5, () => lob(a.x, a.z, x, z, 0.8, 5, 0xbfe0f4, () => {}));
+  after7(a, 1.3, () => {
+    log7(a, 'iceBlock', at);
+    explosion(x, z, 2.2, 0xcfe8ff, { smoke: 0xa8c0d0, shake: 0.3 }); Audio.sfx('iceBreak', { x, z });
+    for (const p of heroes()) if (!p.dead && Math.hypot(p.x - x, p.z - z) < 2.2 + (p.radius || 0.5) * 0.5) heavy7(a, p, 'iceBlock');
+    const mine = ROCKS7.filter((r) => r.ice && r.by === a); if (mine.length >= 5) dropRock(ROCKS7.indexOf(mine[0]));
+    rock7(x, z, H7().blockT, { by: a, ice: true });
+  });
+}
+function shooter7(a, not) { let best = null, bd = 1e9; for (const p of heroes()) { if (p.dead || p === not) continue; const d = Math.hypot(p.x - a.x, p.z - a.z); if (d >= 8 && d < bd) { bd = d; best = p; } } return best; }
 const farHero = (a, min) => { let best = null, bd = min; for (const p of heroes()) { if (p.dead) continue; const d = Math.hypot(p.x - a.x, p.z - a.z); if (d > bd) { bd = d; best = p; } } return best; };
 // a move: t seconds behind its telegraph, then fn (id: logged with its measured telegraph, HEAVY7)
 function mv7(a, id, t, fn, after = 0.5, o = {}) {
@@ -6052,6 +6074,7 @@ const KALLISTO = {
     { id: 'roar3', when: () => false, cd: 0, run: (a) => kRoar(a, 'roar3') },
     { id: 'roar', when: (a) => bigs(a) < 1 && free7(a) && denChutes(a).length > 0, cdOf: cd7([16, 14, 12]), run: (a) => kRoar(a, 'roar') },
     { id: 'charge', when: (a) => bigs(a) < 2 && free7(a), cdOf: cd7([9, 8, 7]), run(a, pl) {
+      pl = partyTarget7(a, pl); a.lastTgt = { x: pl.x, z: pl.z };
       if (Math.hypot(pl.x - a.x, pl.z - a.z) < 5 && !a.wheeled) return kWheel(a, pl);
       a.wheeled = false;
       return kCharge(a, pl, false);
@@ -6065,7 +6088,8 @@ const KALLISTO = {
     } },
     { id: 'rockfall', when: (a) => a.phase >= (less7() ? 2 : 1) && bigs(a) < 2 && free7(a) && throwAim(a, 'rockN', bcd7(9)), cdOf: cd7(9), run(a, pl) {
       a.rockN++; a.avatar?.play('howl', 1.3);
-      rockfall7(a, farHero(a, 8) || pl);
+      const t1 = farHero(a, 8) || pl; rockfall7(a, t1);
+      if (heroes().length >= 3) { const t2 = shooter7(a, t1); if (t2) after7(a, 1.0, () => rockfall7(a, t2)); }
       return { t: 0.5, fn() {}, after: 0.4 };
     } },
     { id: 'maul', basic: true, when: (a, d) => d < 6 && !(less7() && a.phase === 0), cdOf: cd7(6), run(a, pl) {
@@ -6202,7 +6226,7 @@ const KELADOS = {
         const cap = heroes().length >= 3 ? 5 : 3, mine = ROCKS7.filter((r) => r.ice && r.by === a);
         if (mine.length >= cap) dropRock(ROCKS7.indexOf(mine[0]));
         rock7(lx, lz, H7().blockT, { by: a, ice: true });
-      }); }, 0.6, { noFace: true });
+      }); if (heroes().length >= 3) { const t2 = shooter7(a, tg); if (t2) after7(a, 1.0, () => blockFall7(a, t2)); } }, 0.6, { noFace: true });
     } },
     { id: 'sweep', basic: true, when: (a, d) => d < 9, cdOf: cd7(8), run(a, pl) {
       const rot = a.rot = angleTo(a.x, a.z, pl.x, pl.z);
