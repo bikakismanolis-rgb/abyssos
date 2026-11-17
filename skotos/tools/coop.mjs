@@ -1460,7 +1460,9 @@ const SC = {
   // a boss of each act, the party moving from zone to zone with the host (the guest follows every change)
   async bosses() {
     // (ACTS=1,..,6 picks the acts, 6 both of Act VI's bosses; GUESTS=1 or 3 a party of two or four)
-    const only = process.env.ACTS ? process.env.ACTS.split(',').map(Number) : [1, 2, 3, 4, 5, 6];
+    const only = process.env.ACTS ? process.env.ACTS.split(',').map(Number) : [1, 2, 3, 4, 5, 6, 7];
+    // (Act VII: the flags in save order from the fixtures, the act's own up to each boss)
+    const F7 = await import('./fixtures7.mjs'), A7F = (up) => [...F7.ACT4, ...F7.ACT5, ...F7.ACT6, ...F7.flagsTo7(up)].join(',');
     const { host, guests } = await party('town', +(process.env.GUESTS || 1), { lvl: 30, glvl: 28 }), g = guests[0];
     const allG = async (fn, arg, ms, what) => (await Promise.all(guests.map((q) => until(q, fn, arg, ms, what)))).every(Boolean);
     const ACT5 = 'act1,act2,act3,act4,after3,hart,autumn,weaver,lord,fireTaken,ivar,plug,karthax,crownUnmade,giftsTaken,unbound,newFire,alkyone,coastCall,cradle,coal,alkField,coastSeen,hearth,rite,tamMet,glaukosMet,light_grey,mem_i1,light_wreck,mem_i2,light_fall,mem_i3,towerWake';
@@ -1472,7 +1474,9 @@ const SC = {
       { n: 4, z: 'ashfield', kind: 'ivar', quest: 19, flags: 'act1,act2,act3,fireTaken,lamp_l1,lamp_l2,lamp_l3,lamp_l4,lamp_l5,mem_l1,mem_l2,mem_l3,mem_l4,mem_l5' },
       { n: 5, z: 'coast', kind: 'tower', quest: 27, flags: ACT5 },
       { n: 6, z: 'drained', kind: 'ketos', quest: 31, flags: ACT6 },
-      { n: 6, z: 'bottom', kind: 'shade1', quest: 37, flags: ACT6 + ',ketosWake,ketosDown,blackLamp0,blackLamp1,blackLamp2' }
+      { n: 6, z: 'bottom', kind: 'shade1', quest: 37, flags: ACT6 + ',ketosWake,ketosDown,blackLamp0,blackLamp1,blackLamp2' },
+      { n: 7, z: 'thaw', kind: 'kallisto', quest: 42, flags: A7F('weir3') },
+      { n: 7, z: 'tarn', kind: 'kelados', quest: 45, flags: A7F('keladosWake') }
     ].filter((a) => only.includes(a.n));
     for (const A of ACTS) {
       const t0 = Date.now();
@@ -1481,6 +1485,7 @@ const SC = {
         h.quest = A.quest; for (const f of A.flags.split(',')) h.flags[f] = true;
         if (A.n >= 5) { h.act1 = h.act2 = h.act3 = h.act4 = 1; h.flags.lights5 = ['grey', 'wreck', 'fall']; }
         if (A.n >= 6) h.act5 = 1;
+        if (A.n >= 7) { h.act6 = 1; h.level = Math.max(h.level, 50); }
         const W = await import('/src/game/world.js'); await W.zoneReady(A.z);
         window.__D.enterZone(A.z, { fresh: true });
         const z = G.zone, b = z.L.boss; for (const p of z.packs) p.spawned = true;
@@ -1537,6 +1542,7 @@ const SC = {
         got.push((await ev(q, () => window.__G.pickups.filter((p) => p.kind === 'item').length + window.__G.hero.inv.filter(Boolean).length)) - items0[i]);
       }
       ok(got.every((n) => n >= 4), `act ${A.n}: ${guests.length > 1 ? 'each guest\'s' : 'the guest\'s'} own boss loot dropped on its page`, got);
+      if (process.env.DBG && !got.every((n) => n >= 4)) console.log('     dbg', JSON.stringify(await ev(g, (k) => { const S = window.__NET.S; const I = [...S.pupInfo.values()].find((i) => i.kind === k); return { why: S.stats.why, owed: S.owed, I: I && { boss: I.boss, deadT: !!I.deadT, age: I.deadT ? performance.now() - I.deadT : null }, paid: S.bossPaid ? [...S.bossPaid] : null }; }, dk)));
       await shot(g, `boss${A.n}-guest.png`).catch(() => {});
       // the guest's pickups were never the host's
       await ev(g, () => { for (const p of window.__G.pickups.slice()) if (p.kind === 'item') { /* leave them */ } });
