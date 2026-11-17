@@ -1,0 +1,383 @@
+{
+ "weir": {
+  "tris": 520,
+  "setters": [
+   "setTurn",
+   "setOpen",
+   "setGlow"
+  ]
+ },
+ "logjam": {
+  "tris": 264,
+  "setters": []
+ },
+ "hornStone": {
+  "tris": 306,
+  "setters": []
+ },
+ "cornice": {
+  "tris": 272,
+  "setters": [
+   "setArmed",
+   "setK"
+  ]
+ },
+ "snowTongue": {
+  "tris": 100,
+  "setters": [
+   "setK"
+  ]
+ },
+ "iceBlock": {
+  "tris": 60,
+  "setters": [
+   "setMelt",
+   "shatter",
+   "reset"
+  ]
+ },
+ "slab": {
+  "tris": 204,
+  "setters": [
+   "setOpen"
+  ]
+ },
+ "denMouth": {
+  "tris": 180,
+  "setters": []
+ },
+ "fallenPine": {
+  "tris": 300,
+  "setters": []
+ },
+ "lookHearth": {
+  "tris": 672,
+  "setters": [
+   "setLit",
+   "setRank",
+   "flash"
+  ]
+ },
+ "arenaHearth": {
+  "tris": 684,
+  "setters": [
+   "setLit",
+   "setArmed",
+   "flare"
+  ]
+ },
+ "hut": {
+  "tris": 248,
+  "setters": []
+ },
+ "fold": {
+  "tris": 468,
+  "setters": []
+ },
+ "woodpile": {
+  "tris": 400,
+  "setters": [
+   "setHalf"
+  ]
+ },
+ "winch": {
+  "tris": 660,
+  "setters": [
+   "setIce",
+   "setTurn",
+   "setOpen"
+  ]
+ },
+ "lever": {
+  "tris": 224,
+  "setters": [
+   "setIce",
+   "setPulled"
+  ]
+ },
+ "channel": {
+  "tris": 384,
+  "setters": []
+ },
+ "piers": {
+  "tris": 392,
+  "setters": []
+ },
+ "snowBridge": {
+  "tris": 48,
+  "setters": []
+ },
+ "icePlug": {
+  "tris": 120,
+  "setters": [
+   "setOpen"
+  ]
+ },
+ "iceWall": {
+  "tris": 464,
+  "setters": []
+ },
+ "coverRock": {
+  "tris": 152,
+  "setters": []
+ },
+ "coverIce": {
+  "tris": 48,
+  "setters": []
+ },
+ "boulder": {
+  "tris": 80,
+  "setters": [
+   "setRoll"
+  ]
+ },
+ "haldaLedge": {
+  "tris": 152,
+  "setters": []
+ },
+ "haldaStump": {
+  "tris": 60,
+  "setters": []
+ },
+ "fieldAnvil": {
+  "tris": 164,
+  "setters": []
+ },
+ "bedRoll": {
+  "tris": 188,
+  "setters": []
+ },
+ "markStone": {
+  "tris": 28,
+  "setters": [
+   "setGlow"
+  ]
+ },
+ "flowers": {
+  "tris": 132,
+  "setters": []
+ },
+ "rainbow": {
+  "tris": 2,
+  "setters": [
+   "setK"
+  ]
+ },
+ "lakeThread": {
+  "tris": 32,
+  "setters": [
+   "setK",
+   "dispose"
+  ]
+ },
+ "daySmoke": {
+  "tris": 0,
+  "setters": [
+   "setK"
+  ]
+ },
+ "cloudDisc": {
+  "tris": 512,
+  "setters": [
+   "setR",
+   "setA",
+   "setShimmer",
+   "drape"
+  ]
+ },
+ "keladosParts": {
+  "tris": 691,
+  "setters": [
+   "drop",
+   "dropPhase",
+   "setMoss",
+   "reset"
+  ]
+ },
+ "zone:thaw": {
+  "spate": {
+   "tris": 22174,
+   "props": 85,
+   "kept": true,
+   "counts": {
+    "weirs": 3,
+    "lookouts": 3,
+    "horns": 11,
+    "cornices": 11,
+    "channels": 0,
+    "dens": 3,
+    "slabs": 8,
+    "iceblocks": 3,
+    "huts": 6,
+    "winches": 0,
+    "bridges": 0,
+    "levers": 0,
+    "clouds": 3,
+    "skipped": 1,
+    "all": 85
+   },
+   "singles": {
+    "hearth": true,
+    "halda": true,
+    "den": true,
+    "anvil": true,
+    "piers": false,
+    "wall": false,
+    "plug": false,
+    "wheel": false,
+    "flowers": false
+   },
+   "flowers": 0,
+   "skipped": [
+    "lookout1.hut"
+   ],
+   "state": {
+    "weirOpen": false,
+    "armed": true,
+    "tongue": false,
+    "half": true,
+    "lit": false
+   },
+   "disposed": true
+  },
+  "green": {
+   "tris": 23250,
+   "props": 83,
+   "kept": true,
+   "counts": {
+    "weirs": 3,
+    "lookouts": 3,
+    "horns": 11,
+    "cornices": 11,
+    "channels": 0,
+    "dens": 3,
+    "slabs": 8,
+    "iceblocks": 3,
+    "huts": 6,
+    "winches": 0,
+    "bridges": 0,
+    "levers": 0,
+    "clouds": 3,
+    "skipped": 1,
+    "all": 83
+   },
+   "singles": {
+    "hearth": true,
+    "halda": true,
+    "den": true,
+    "anvil": true,
+    "piers": false,
+    "wall": false,
+    "plug": false,
+    "wheel": false,
+    "flowers": true
+   },
+   "flowers": 467,
+   "skipped": [
+    "lookout1.hut"
+   ],
+   "state": {
+    "weirOpen": true,
+    "armed": true,
+    "tongue": false,
+    "half": true,
+    "lit": false
+   },
+   "disposed": true
+  },
+  "empty": true
+ },
+ "zone:tarn": {
+  "full": {
+   "tris": 20454,
+   "props": 77,
+   "kept": true,
+   "counts": {
+    "weirs": 0,
+    "lookouts": 3,
+    "horns": 9,
+    "cornices": 9,
+    "channels": 3,
+    "dens": 0,
+    "slabs": 8,
+    "iceblocks": 2,
+    "huts": 0,
+    "winches": 3,
+    "bridges": 2,
+    "levers": 3,
+    "clouds": 3,
+    "skipped": 1,
+    "all": 77
+   },
+   "singles": {
+    "hearth": true,
+    "halda": true,
+    "den": false,
+    "anvil": false,
+    "piers": true,
+    "wall": true,
+    "plug": true,
+    "wheel": true,
+    "flowers": false
+   },
+   "flowers": 0,
+   "skipped": [
+    "lookout4.hut"
+   ],
+   "state": {
+    "ice": 1,
+    "lever1": 0,
+    "lever2": 1,
+    "plug": false,
+    "pulled": false
+   },
+   "disposed": true
+  },
+  "let": {
+   "tris": 21298,
+   "props": 78,
+   "kept": true,
+   "counts": {
+    "weirs": 0,
+    "lookouts": 3,
+    "horns": 9,
+    "cornices": 9,
+    "channels": 3,
+    "dens": 0,
+    "slabs": 8,
+    "iceblocks": 2,
+    "huts": 0,
+    "winches": 3,
+    "bridges": 2,
+    "levers": 3,
+    "clouds": 3,
+    "skipped": 1,
+    "all": 78
+   },
+   "singles": {
+    "hearth": true,
+    "halda": true,
+    "den": false,
+    "anvil": false,
+    "piers": true,
+    "wall": true,
+    "plug": true,
+    "wheel": true,
+    "flowers": true
+   },
+   "flowers": 211,
+   "skipped": [
+    "lookout4.hut"
+   ],
+   "state": {
+    "ice": 0,
+    "lever1": 0,
+    "lever2": 0,
+    "plug": true,
+    "pulled": true
+   },
+   "disposed": true
+  },
+  "empty": true
+ }
+}

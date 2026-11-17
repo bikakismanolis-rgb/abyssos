@@ -24,7 +24,7 @@ import { R as RR } from '../gfx/gfx.js';
 import { NET, MIRROR } from '../net/state.js';
 import { N7mods, N7ctx, N7onHit, N7dodged, N7rt } from './names7.js';
 // Act VII: the Names she says (names7.js). Nothing is read for a hero who says none
-const n7on = () => !!G.hero?.names?.said?.some(Boolean);
+const n7on = () => !!G.hero?.names?.said?.some(Boolean) || G.player?.buffs?.call > 0;
 const n7rt = (p) => (p.n7 ||= N7rt());
 
 const HIT_SFX = { flesh: 'hitFlesh', bone: 'hitBone', spirit: 'hitSpirit', chitin: 'hitChitin', ash: 'hitFlesh', stone: 'hitBone', magma: 'hitFlesh', wood: 'woodHit', drowned: 'hitFlesh', skotos: 'hitSpirit' };

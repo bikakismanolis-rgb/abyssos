@@ -33,6 +33,9 @@ export function computeStats(hero, equip = hero.equip) {
   if (OF.gifts && !(OF.giftsTaken || OF.crownUnmade || own.quest >= 22) && G.zone?.id !== 'gate') for (const id in GIFTS) if (OF.gifts[id] === 'taken') for (const k in GIFTS[id]) s[k] += GIFTS[id][k];
   // Mastery (progression.js)
   masteryStats(hero, s);
+  // Act VII, the Seven Fires (fires7.js): half a point of damage and of life for each rank of each fire, 21 at most; her
+  // own record's (a guest's ranks are her own); Arna's hill, the seventh, burns as the lowest of the six
+  { const f = Array.isArray(own.fires) ? own.fires : null; if (f) { const six = [0, 1, 2, 3, 4, 5].map((i) => f[i] | 0), k = Math.min(21, (six.reduce((a, b) => a + b, 0) + Math.min(...six)) * 0.5); s.dmgPct += k; s.lifePct += k; } }
   const lifeMax = Math.round((40 + L * 12 + s.vit * 5 + s.life) * C.life * (1 + s.lifePct / 100));
   const armor = Math.round((s.armor * C.armor + L * 3) * (1 + s.armorPct / 100));
   const dmgMult = (1 + s.main / 100) * (1 + s.dmgPct / 100);

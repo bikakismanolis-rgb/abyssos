@@ -19,7 +19,7 @@ import { vaultOn, vaultAt, vaultLine } from './forge.js';
 import { coldMul } from './cold.js';
 import { slotSkill, variantOf } from './progression.js';
 import { N7mods, N7ctx, N7onSkill, N7onDodge, N7onDrink, N7rt } from './names7.js';
-const n7on = () => !!G.hero?.names?.said?.some(Boolean);
+const n7on = () => !!G.hero?.names?.said?.some(Boolean) || G.player?.buffs?.call > 0;
 const n7rt = (pl) => (pl.n7 ||= N7rt());
 import { VARIANT_FN, NEW_FN } from './skillsx.js';
 

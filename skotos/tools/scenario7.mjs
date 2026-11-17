@@ -92,6 +92,35 @@ export const S7 = () => ({
     if (pick.sh >= 0) { const c = await pg.evaluate(({ sh }) => { const f = window.__Fg.flues()[sh], c0 = window.__Fg.TALLY7.creaks; const n = window.__Fg.loud(f.horn.x, f.horn.z, 6, window.__G.player); return { n, creaks: window.__Fg.TALLY7.creaks - c0, st: f.st, armed: f.armed }; }, pick); beat('a cornice in shade creaks and stays', c.creaks >= 1 && c.st === 'idle' && c.armed, c); }
     return out(beats);
   } },
+  // the Seven Fires: a lookout lit, held for HAZ7.hold seconds while its pack comes, the rank written, the bonus in the
+  // stats, the hearth burning for the Call; out of the ring for 6 s loses it
+  fires7: { stage: 'C', until: 'E', q: Q(fx7('thawSeen', 'thaw'), '&nopacks'), run: async (pg) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    await until(pg, () => window.__G.zone?.tide);
+    await pg.evaluate(() => { window.__immortal = true; window.__tough = true; });
+    const dmg0 = await pg.evaluate(() => window.__G.stats.dmgMult ?? window.__G.stats.dmg);
+    await goTo(pg, 'lookouts.0.hearth', 1.5);
+    const u = await use(pg, 'lookHearth', 1);
+    const s1 = await pg.evaluate(() => { const z = window.__G.zone; return { hold: !!z.hold, need: z.hold?.need }; });
+    beat('the hearth lit: the hold begins, HAZ7.hold seconds', u === 'ok' && s1.hold && s1.need === 75, { u, ...s1 });
+    const wave = await until(pg, () => window.__G.zone.actors.some((a) => a.team === 'foe' && !a.prop && !a.dead), 30000);
+    beat('its pack comes', wave);
+    // (the test hero is not the test: the pack is cleared as it comes)
+    await pg.evaluate(() => { window.__iv = setInterval(() => { const G = window.__G; for (const a of G.zone.actors) if (a.team === 'foe' && !a.prop && !a.dead) window.__D.kill(a); }, 400); });
+    const done = await until(pg, () => !window.__G.zone.hold && window.__G.hero.flags.look1, 120000);
+    const s2 = await pg.evaluate(() => { const G = window.__G, it = G.zone.act7.lookouts[0]; clearInterval(window.__iv); return { flag: !!G.hero.flags.look1, fires: G.hero.fires, kind: it.kind, st: it.st, dmg: G.stats.dmgMult ?? G.stats.dmg }; });
+    beat('held: the flag, the rank of this difficulty (Warden: 2), the hearth burning for the Call', done && s2.flag && s2.fires?.[0] === 2 && s2.kind === 'callFire', s2);
+    beat('the ladder\'s bonus is in her stats (+1% for a rank-2 fire)', dmg0 > 0 && Math.abs(s2.dmg / dmg0 - 1.01) < 0.004, { ratio: +(s2.dmg / dmg0).toFixed(4) });
+    const c = await pg.evaluate(() => { const G = window.__G, it = G.zone.act7.lookouts[0]; it.use(); const a = G.player.buffs.call; it.use(); return { call: a, again: G.player.buffs.call }; });
+    beat('the Call at it: 20 s, once a hearth a visit', c.call === 20 && c.again <= 20, c);
+    // a second lookout, left: out of the ring for 6 s loses it
+    await goTo(pg, 'lookouts.1.hearth', 1.5); const u2 = await use(pg, 'lookHearth', 2);
+    await goTo(pg, 'camp');
+    const lost = await until(pg, () => !window.__G.zone.hold, 40000);
+    const s3 = await pg.evaluate(() => { const G = window.__G, it = G.zone.act7.lookouts[1]; return { flag: !!G.hero.flags.look2, st: it.st }; });
+    beat('left for 6 s: the fire is out, no flag, it waits before it can be lit again', u2 === 'ok' && lost && !s3.flag && s3.st === 'wait', s3);
+    return out(beats);
+  } },
   // a Shadow Gate's layout is the shipped generator's for the same seed (no older layout changes with the act)
   gate7: { stage: 'A', until: 'E', q: Q(FX7.fx7_done('town')), run: async (pg) => {
     const h = await pg.evaluate(async () => { const g1 = await import('/src/world/gen.js'); const sum = (L) => { let a = 0; for (let i = 0; i < L.cells.length; i++) a = (a * 31 + L.cells[i] + i) >>> 0; return [L.w, L.h, a, L.packs.length, L.props.length].join(':'); }; return { crypt: sum(g1.genCrypt(4242, { rooms: 12, mh: 30 })), forest: sum(g1.genForest(4242, { h: 120 })) }; });

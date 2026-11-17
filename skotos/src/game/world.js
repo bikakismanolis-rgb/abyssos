@@ -9,6 +9,7 @@ import { genAshfield, genForge } from '../world/gen4.js';
 import { genCoast, genFarlight } from '../world/gen5.js';
 import { genDrained, genBottom, ropeSpot } from '../world/gen6.js';
 import { genThaw, genTarn } from '../world/gen7.js';
+import { firesTick, firesEnter } from './fires7.js';
 import { town6, story6Zone, people6 } from './story.js';
 import { buildLevel, propMesh, runeDisc, WIND, act3Prop, setAutumn, act4Prop, setHeat, setNight, setFlueGlow, setThaw } from '../world/build.js';
 import { act5Prop } from '../world/build5.js';
@@ -449,6 +450,8 @@ export function spawnBoss(z) {
   if (G.zone === z && b.avatar) R.scene.add(b.avatar.group);
   return b;
 }
+// (a pack brought by a lookout's hold: game/fires7.js)
+export const spawnPack7 = (z, p) => { const q = Object.assign({ id: z.id + 'h' + (z.packs.length + 1), spawned: true }, p); z.packs.push(q); return spawnPack(z, q, DIFFS[G.hero.diff]); };
 function spawnPack(z, p, D) {
   const tag = z.id === 'gate' ? 'gate' : p.tag;
   // co-op: bigger packs and more champions for a party (data.js COOP)
@@ -2174,6 +2177,7 @@ function act7Enter(z) {
   startFlues(z.L.flues); vaultEnter(z);
   // (the place to wake: the camp, until the act's own checkpoints, flags.cp7)
   const c = z.L.spots.camp; if (c) z.checkpoint = z.map.nearestFloor(c.x, c.z, 3);
+  firesEnter(z);
   act7Presence(z);
 }
 export function act7Presence(z) {
@@ -2194,5 +2198,6 @@ function goatTrack(z) {
   z.interact.push({ kind: 'exit', to: e.to, x: e.x, z: e.z, r: 2.4, prompt: e.label, locked: e.locked, use: () => takeExit(z, e) });
 }
 // per frame in an Act VII zone (the clouds, the chutes, the holds: systems', as they land)
-function act7Tick(z, dt) {}
+function act7Tick(z, dt) {
+  firesTick(z, dt);}
 export { WIND };
