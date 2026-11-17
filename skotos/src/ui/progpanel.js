@@ -4,6 +4,7 @@ import { G } from '../game/state.js';
 import { CLASSES, SKILLS, SKILL_MAX_RANK, VARIANTS, VARIANT_RANK, DODGE, MAX_LEVEL, mxpToNext } from '../game/data.js';
 import { refreshStats } from '../game/stats.js';
 import { MASTERY, MASTERY_BY, masteryValue, fmtMastery, rankOf, canRank, rankUp, canUnlock, unlockVariant, setVariant, hasVariant, setSlot, masterUp, respec, respecCost, pointsEarned } from '../game/progression.js';
+import { N7, N7_BY, N7open, N7knows, N7isDeep, N7slots, N7said, N7slotCost, N7_DEEP_COST, N7say, N7unsay, N7deepen, N7openSlot, N7WHY, N7freeReady } from '../game/names7.js';
 import { emit } from './bus.js';
 import { ICON } from './icons.js';
 import { t } from '../i18n/i18n.js';
@@ -16,11 +17,11 @@ const pips = (r, max = SKILL_MAX_RANK) => `<span class="pp">${Array.from({ lengt
 
 export function renderSkills(P, head) {
   const h = G.hero;
-  const tabs = `<div class="tabs pg-tabs"><button class="tab ${P.tab ? '' : 'on'}" data-a="ptab:0">${ICON.book}${t('prog.tab.skills')}</button><button class="tab ${P.tab ? 'on' : ''}" data-a="ptab:1">${ICON.mastery}${t('prog.tab.mastery')}${h.level >= MAX_LEVEL ? ` <b class="ml">${+h.mlvl || 0}</b>` : ''}</button></div>`;
+  const tabs = `<div class="tabs pg-tabs"><button class="tab ${P.tab ? '' : 'on'}" data-a="ptab:0">${ICON.book}${t('prog.tab.skills')}</button><button class="tab ${P.tab === 1 ? 'on' : ''}" data-a="ptab:1">${ICON.mastery}${t('prog.tab.mastery')}${h.level >= MAX_LEVEL ? ` <b class="ml">${+h.mlvl || 0}</b>` : ''}</button>${N7open(h) ? `<button class="tab ${P.tab === 2 ? 'on' : ''}" data-a="ptab:2">${ICON.star}${t('prog.tab.names')}</button>` : ''}</div>`;
   const pts = `<div class="pg-pts ${h.points > 0 ? 'has' : ''}">${ICON.star}<b>${t('prog.points', h.points)}</b></div>`;
   const top = `<div class="pn-h pg-h">${tabs}${pts}<button class="x" data-a="close" aria-label="${t('panel.close')}">${ICON.close}</button></div>`;
   void head;
-  return `<div class="pn pg">${top}<div class="pn-b pg-b">${P.tab ? mastery(P) : skills(P)}</div></div>`;
+  return `<div class="pn pg">${top}<div class="pn-b pg-b">${P.tab === 2 && N7open(h) ? names(P) : P.tab ? mastery(P) : skills(P)}</div></div>`;
 }
 
 // ---------- skills ----------
@@ -97,12 +98,40 @@ function mastery(P) {
   return `${top}<div class="pg-mg">${tiles}</div>`;
 }
 
+// ---------- the Names (Act VII, game/names7.js): seven, three said at a time ----------
+function names(P) {
+  const h = G.hero, said = N7said(h), n = N7slots(h), cost = N7slotCost(h);
+  const slots = [0, 1, 2].map((i) => {
+    const s = said.find((x) => x.slot === i);
+    if (i >= n) return `<button class="pg-slot lock" data-a="nslot" ${cost != null && i === n && h.points >= cost ? '' : 'disabled'}><span class="n">${i + 1}</span>${i === n && cost != null ? `<small>${cost}</small>` : ICON.lock || ''}</button>`;
+    return `<button class="pg-slot ${s ? 'sel' : ''}" data-a="${s ? 'nsel:' + s.id : 'nsel:'}"><span class="n">${i + 1}</span>${s ? `<small>${t(N7_BY[s.id].nameKey)}</small>` : ''}</button>`;
+  }).join('');
+  if (!P.nsel || !N7_BY[P.nsel]) P.nsel = said[0]?.id || N7[0].id;
+  const tiles = N7.map((d) => {
+    const know = N7knows(h, d.id), on = said.some((x) => x.id === d.id), deep = N7isDeep(h, d.id);
+    return `<button class="pg-tile ${P.nsel === d.id ? 'sel' : ''} ${know ? '' : 'lock'}" data-a="nsel:${d.id}"><b>${t(d.nameKey)}</b>${on ? ` <span class="tag">${t(deep ? 'name7.deep' : 'name7.kept')}</span>` : ''}</button>`;
+  }).join('');
+  const d = N7_BY[P.nsel], know = N7knows(h, d.id), on = said.some((x) => x.id === d.id), deep = N7isDeep(h, d.id);
+  const how = !know && d.unlock.flag ? `<p class="muted"><i>${t('name7.' + d.id + '.how')}</i></p>` : '';
+  const acts = !know ? '' : `<div class="pg-acts">${on ? `<button class="btn ghost" data-a="nunsay:${d.id}">${t('name7.unsay')}</button>` : `<button class="btn" data-a="nsay:${d.id}">${t('name7.say')}</button>`}${deep ? '' : `<button class="btn ghost" data-a="ndeep:${d.id}" ${h.points >= N7_DEEP_COST ? '' : 'disabled'}>${t('name7.deepen', N7_DEEP_COST)}</button>`}</div>`;
+  const body = `<div class="pg-detail"><h3>${t(d.nameKey)}</h3><p><b>${t('name7.kept')}:</b> ${t('name7.' + d.id + '.d')}</p><p class="${deep ? '' : 'muted'}"><b>${t('name7.deep')}:</b> ${t('name7.' + d.id + '.d2')}</p>${how}${acts}</div>`;
+  const free = N7freeReady?.(h) ? `<button class="btn" data-a="nfree">${t('name7.free')}</button>` : '';
+  return `<div class="pg-top"><div><b>${t('name7.h')}</b><p class="muted">${t('name7.sub')}</p></div><div class="pg-slots">${slots}</div></div><div class="pg-grid">${tiles}</div>${body}${free}`;
+}
+const nameDone = (r) => { if (r.ok) { refreshStats(); Audio.sfx('equip'); } else { const k = N7WHY[r.why]; if (k) emit('toast', t(k)); Audio.sfx('denied'); } return true; };
+
 // ---------- actions (panels.js onClick); true when handled ----------
 export function skillsClick(a, x, y, P) {
   const h = G.hero;
   switch (a) {
     case 'ptab': P.tab = +x; P.sure = false; return true;
     case 'psel': P.sel = x; return true;
+    case 'nsel': if (x) P.nsel = x; return true;
+    case 'nsay': return nameDone(N7say(h, x, null, { town: inTown() }));
+    case 'nunsay': return nameDone(N7unsay(h, x, { town: inTown() }));
+    case 'ndeep': return nameDone(N7deepen(h, x));
+    case 'nslot': return nameDone(N7openSlot(h));
+    case 'nfree': if (respec(h, true)) { refreshStats(); emit('loadout'); emit('toast', t('prog.respecDone', h.points)); Audio.sfx('equip'); } else Audio.sfx('denied'); return true;
     case 'prank': if (rankUp(h, x)) { refreshStats(); Audio.sfx('equip'); glow(); } else Audio.sfx('denied'); return true;
     case 'pslot': {
       const sk = SKILLS[h.cls].find((s) => s.id === P.sel), was = h.loadout.includes(sk?.id);
