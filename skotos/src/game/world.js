@@ -9,7 +9,8 @@ import { genAshfield, genForge } from '../world/gen4.js';
 import { genCoast, genFarlight } from '../world/gen5.js';
 import { genDrained, genBottom, ropeSpot } from '../world/gen6.js';
 import { genThaw, genTarn } from '../world/gen7.js';
-import { firesTick, firesEnter } from './fires7.js';
+import { firesTick, firesEnter, fires7 } from './fires7.js';
+import { act7Level } from '../world/build7.js';
 import { town6, story6Zone, people6 } from './story.js';
 import { buildLevel, propMesh, runeDisc, WIND, act3Prop, setAutumn, act4Prop, setHeat, setNight, setFlueGlow, setThaw } from '../world/build.js';
 import { act5Prop } from '../world/build5.js';
@@ -27,6 +28,7 @@ import { PACKS, DIFFS, MONSTERS, PACK_LEAD, packKinds, HAZ5, monsterDmg, COOP } 
 import { NET, heroes } from '../net/state.js';
 import { startDrips, stopDrips } from './sap.js';
 import { addLightPool, removeLightPool, cradlePoint, addBeam, removeBeam, getLightPool, getBeam, snuffLamp, fireEnter, namesTick } from './light.js';
+import { sunEnter, sunTick } from './sun7.js';
 import { resetTide, floodWave } from './tide.js';
 import { resetIce, freezeCells, crackCone } from './ice.js';
 import { startFlues, stopFlues, setFlueHeat, flues, BREATH, vaultEnter } from './forge.js';
@@ -67,8 +69,8 @@ export const ZONES = {
   // them, up the Water-stair. Daylight: no ring, no Shroud (light 'sun' comes with Sun and Shade, stage B; until then they
   // are zones with no light rule, as the forest is). `day`: drawn at the lower phone resolution or not (gfx.js heavyZone).
   // (ambient: stand-ins until the act's own, the 'melt' ambient of fx.js; after the act each zone's theme is its green one)
-  thaw: { level: 40, music: 'thaw', ambient: 'forest', atmos: 'thaw', act: 7, pack: 'melt' },
-  tarn: { level: 43, music: 'tarn', ambient: 'snow', atmos: 'tarn', act: 7, pack: 'melt', heavy: true },
+  thaw: { level: 40, music: 'thaw', ambient: 'forest', atmos: 'thaw', act: 7, pack: 'melt', light: 'sun' },
+  tarn: { level: 43, music: 'tarn', ambient: 'snow', atmos: 'tarn', act: 7, pack: 'melt', heavy: true, light: 'sun' },
   gate: { level: 1, music: 'gate', ambient: 'gate', atmos: 'gate' }
 };
 // beacons that have answered Whitecliff's: Arna's hill after Act I, Deepstone after Act II, and after Act III the
@@ -181,6 +183,8 @@ function createZone(id, o = {}) {
   const HF = id === 'bottom' && L.spots?.hearth?.fire;
   if (HF) { map.over = new Uint8Array(L.w * L.h); const fx = Math.round(HF.x), fz = Math.round(HF.z); for (const [x, zz] of [[fx - 1, fz - 1], [fx, fz - 1], [fx - 1, fz], [fx, fz]]) map.over[zz * L.w + x] = 1; }
   const lvl = buildLevel(L, R.quality);
+  // (Act VII's props are build7.js's, code-built, placed at gen7's spots in their first state for the reading: lvl.act7)
+  if (ZONES[id]?.act === 7) { try { act7Level(L, lvl); } catch (e) { console.warn('act7Level', e); } }
   // (ownSeed: built from the hero's own seed, not a co-op host's: only such a zone is one she may wake in, game/wake.js)
   const z = { id, L, map, lvl, level: o.level ?? ZONES[id].level, actors: [], pickups: [], interact: [], packs: [], seed, ownSeed: o.seed == null, tier: o.tier || 0, extra: [], emit4: [], ep: ++zoneEp };
   if (id === 'coast') z.mode = coastMode(); else if (id === 'farlight') z.mode = skyMode();
@@ -2177,7 +2181,9 @@ function act7Enter(z) {
   startFlues(z.L.flues); vaultEnter(z);
   // (the place to wake: the camp, until the act's own checkpoints, flags.cp7)
   const c = z.L.spots.camp; if (c) z.checkpoint = z.map.nearestFloor(c.x, c.z, 3);
+  dress7(z);
   firesEnter(z);
+  sunEnter(z);   // Sun and Shade: the clouds for this difficulty on the zone's clock, z.sunT (sun7.js)
   act7Presence(z);
 }
 export function act7Presence(z) {
@@ -2197,7 +2203,25 @@ function goatTrack(z) {
   L.exits.push(e);
   z.interact.push({ kind: 'exit', to: e.to, x: e.x, z: e.z, r: 2.4, prompt: e.label, locked: e.locked, use: () => takeExit(z, e) });
 }
+// the props as the flags have them, on every entry (the zone is cached): each interact takes its prop (it.mesh), the weirs
+// open and the winches free as turned, the lookouts' fires at their ranks, the cornices as the chutes stand
+function dress7(z) {
+  const F = G.hero.flags, A = z.act7, P = z.lvl.act7; if (!A || !P) return;
+  const by = (list, k) => (list || []).find((p) => p.i === k)?.mesh || null;
+  for (const it of A.weirs) { it.mesh = by(P.weirs, it.k); it.mesh?.userData.setOpen?.(!!F['weir' + it.k]); }
+  for (const it of A.winches) { it.mesh = by(P.winches, it.k); const free = !!F['winch' + it.k]; it.mesh?.userData.setIce?.(free ? 0 : 1); }
+  for (const it of A.levers) it.mesh = by(P.levers, it.k);
+  const R7 = fires7(), off = z.id === 'tarn' ? 3 : 0;
+  for (const it of A.lookouts) { it.mesh = by(P.lookouts, it.k + off) || by(P.lookouts, it.k); it.mesh?.userData.setRank?.(R7[it.k + off - 1] || 0); }
+  for (const c of P.cornices || []) c.mesh?.userData.setArmed?.(true);
+}
+on('weir7', (it) => { it.mesh?.userData.setOpen?.(true, true); });
+on('winch7', (it) => { it.mesh?.userData.setIce?.(0); it.mesh?.userData.setTurn?.(1); });
+on('chuteSpent', (f) => { const c = G.zone?.lvl?.act7?.cornices?.find((q) => q.k === f.i); c?.mesh?.userData.setArmed?.(false); c?.tongue?.userData.setK?.(1); });
+on('chuteArmed', (f) => { const c = G.zone?.lvl?.act7?.cornices?.find((q) => q.k === f.i); c?.mesh?.userData.setArmed?.(true); c?.tongue?.userData.setK?.(0); });
+on('fireRank', (n, rank, before, it) => { it?.mesh?.userData.setRank?.(rank); });
 // per frame in an Act VII zone (the clouds, the chutes, the holds: systems', as they land)
 function act7Tick(z, dt) {
+  sunTick(z, dt);   // Sun and Shade: the clouds sail (sun7.js)
   firesTick(z, dt);}
 export { WIND };
