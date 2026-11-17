@@ -1690,6 +1690,8 @@ function act6Zone(z) {
   z.cold = true; z.water = true;
   // (the build's own objects, not copies: what lights one through z.act6 lights the one standing in the scene)
   z.act6 = { mere: null, shade: null, figs: {} };
+  // (its cells change with a level of their own and by ops: what co-op sends and takes for such a zone, net/coop.js)
+  z.cells = true;
   for (const k of PROPS6) z.act6[k] = A[k] || [];
   for (const k of ONE6) z.act6[k] = A[k] || null;
   // the place voices (story.js 'voice'): the Skotos's, one in each place (gen6), and the Well under the black water, heard

@@ -568,7 +568,7 @@ function hostTick(dt) {
   // (Act VI: the shards and the slush, on the same topic and terms, tide.js cells6; sent with the snapshot, just before
   // it, and where the channel bundles only while the snapshot still has 2.4 KB of room beside it, else at a later one,
   // 1.5 s at most: act6-contract, Budget)
-  const ice6 = z.act6 && !I && S.roster.length && now() - S.iceT > 500;
+  const ice6 = z.cells && !I && S.roster.length && now() - S.iceT > 500;
   // the snapshot
   if (S.roster.length && S.started && now() - S.snapT >= 1000 / (S.ch.econ?.snap || SNAP_HZ) && S.ch.ready?.() !== false) {
     S.snapT = now();
@@ -647,7 +647,7 @@ function sendSnap() {
   else if (z.gust) o.w = [0, -1, 0, z.gust.on ? 1 : 0];
   if (z.gust) o.w.push(q(z.gust.t % 40, 10));
   // (Act VI: the Mere's own level and its rate at o.w[5..6], the gusts' clock at [4] null below the ice; the names' window)
-  if (z.act6 && T) { o.w[4] = z.gust ? o.w[4] : null; o.w[5] = T.mere ? q(T.mere.h, 100) : -1; o.w[6] = T.mere ? q(T.mere.rate, 1000) : 0; }
+  if (z.cells && T) { o.w[4] = z.gust ? o.w[4] : null; o.w[5] = T.mere ? q(T.mere.h, 100) : -1; o.w[6] = T.mere ? q(T.mere.rate, 1000) : 0; }
   if (z.act6 && NAMES.on) o.n = [Math.round(NAMES.left * 10), NAMES.falls];
   // the fires on the ice, lit by a touch or put out by the dark: the cairns, the open holes' lamps (bits)
   if (z.act5 && z.id === 'farlight') o.l = [bits(z.act5.cairns, (it) => it.i), bits(z.act5.lamps, (it) => it.hole * 4 + it.i)];
@@ -843,10 +843,10 @@ function guestEvent(P, e) {
     else if (op === 'f') { if (!near(a[0], a[1]) || a[2] > 6) return reject('ice'); if (now() - (P.freezeT || 0) < 2000) return reject('rate'); P.freezeT = now(); refreezeAt(a[0], a[1], a[2]); emit('frostNova', a[0], a[1], a[2]); }
     // (Act VI: a guest's slush, Frost Nova's 5.5 m for 8 s at most, the Frozen Orb's trail; the vault's falls, as its
     // skills ask them, vaultAt, vaultLine, vaultRing: each patch still once in 4 s)
-    else if (op === 's') { if (!G.zone?.act6 || !near(a[0], a[1]) || !(a[2] > 0 && a[2] <= 6) || !(a[3] > 0 && a[3] <= 8)) return reject('ice'); slushAt(a[0], a[1], a[2], a[3]); }
-    else if (op === 'v') { if (!G.zone?.act6 || !near(a[0], a[1]) || !(a[2] >= 0 && a[2] <= 4)) return reject('ice'); vaultAt(a[0], a[1], a[2], clamp(a[3] | 0, 1, 3)); }
-    else if (op === 'vl') { if (!G.zone?.act6 || !near(a[0], a[1]) || !near(a[2], a[3]) || Math.hypot(a[2] - a[0], a[3] - a[1]) > 14 || !(a[4] > 0 && a[4] <= 2.5)) return reject('ice'); vaultLine(a[0], a[1], a[2], a[3], a[4]); }
-    else if (op === 'vr') { if (!G.zone?.act6 || !near(a[0], a[1]) || !(a[2] > 0 && a[2] <= 8)) return reject('ice'); vaultRing(a[0], a[1], a[2]); }
+    else if (op === 's') { if (!G.zone?.cells || !near(a[0], a[1]) || !(a[2] > 0 && a[2] <= 6) || !(a[3] > 0 && a[3] <= 8)) return reject('ice'); slushAt(a[0], a[1], a[2], a[3]); }
+    else if (op === 'v') { if (!G.zone?.cells || !near(a[0], a[1]) || !(a[2] >= 0 && a[2] <= 4)) return reject('ice'); vaultAt(a[0], a[1], a[2], clamp(a[3] | 0, 1, 3)); }
+    else if (op === 'vl') { if (!G.zone?.cells || !near(a[0], a[1]) || !near(a[2], a[3]) || Math.hypot(a[2] - a[0], a[3] - a[1]) > 14 || !(a[4] > 0 && a[4] <= 2.5)) return reject('ice'); vaultLine(a[0], a[1], a[2], a[3], a[4]); }
+    else if (op === 'vr') { if (!G.zone?.cells || !near(a[0], a[1]) || !(a[2] > 0 && a[2] <= 8)) return reject('ice'); vaultRing(a[0], a[1], a[2]); }
     else return reject('bad');
   } else if (type === 'u') {
     // a guest's touch on a fight's lamp or bell, done here: its stand-in within 3 m of it, the thing as the guest saw it,
@@ -1107,7 +1107,7 @@ function onSnap(o) {
   // (the look of this guest's own blows it has shown already: passed over)
   if (Array.isArray(o.f)) { const sk = o.fs && typeof o.fs === 'object' && own(o.fs, S.ch.me) && Array.isArray(o.fs[S.ch.me]) ? new Set(o.fs[S.ch.me]) : null; replayFx(sk ? o.f.filter((e, i) => !sk.has(i)) : o.f, S.hostPeer); }
 }
-function onIce(o) { if (!o || o.k !== S.zoneKey || o.k !== myKey()) return; if (o.c6 && G.zone?.act6) cells6Apply(G.zone, sane6(o.c6)); else if (o.d) netIce(G.zone, o.d); }
+function onIce(o) { if (!o || o.k !== S.zoneKey || o.k !== myKey()) return; if (o.c6 && G.zone?.cells) cells6Apply(G.zone, sane6(o.c6)); else if (o.d) netIce(G.zone, o.d); }
 // ---------- Act VI (docs/act6-contract.md, Co-op beneath the ice) ----------
 // the ring as one byte (0-12.75 m in twentieths, the Lamplight bonus, a flare and the chain inside); this page's moving
 // light pools (the wolf's lantern, a Bulwark ward) as [x, z, r, ...] in tenths, at most three; a pool list read back
@@ -1145,7 +1145,7 @@ function worldState(w) {
     if (fin(fh) && fh >= 0) T.force = { h: Math.min(fh, 1000) / 100, rate: num(w[2], 10, 1e4, 10) / 1000 };
     else if (T.force) T.force = null;
     // (Act VI: the Mere as the host has it; this page's tide.js steps its cells toward it)
-    if (z.act6 && w.length >= 7) { const mh = w[5]; T.mere = fin(mh) && mh >= 0 ? { h: Math.min(mh, 300) / 100, rate: num(w[6], 1, 1e5, 300) / 1000 } : null; }
+    if (z.cells && w.length >= 7) { const mh = w[5]; T.mere = fin(mh) && mh >= 0 ? { h: Math.min(mh, 300) / 100, rate: num(w[6], 1, 1e5, 300) / 1000 } : null; }
   }
   // (the gusts: this page's clock put right to the host's, both running the same 40 s, so its warning, its snow and its
   // Cold come with the host's and nothing else writes them; only a host that sends no clock has its 'on' laid over)

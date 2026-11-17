@@ -2,7 +2,7 @@
 // proofreaders edit the tables, never the generated file). node tools/text7-import.mjs
 import { readFileSync, writeFileSync } from 'node:fs';
 // (the story part is read last: where both give a key, the story's wording stands)
-const parts = [['docs/act7-design/30-mechanics-progression.md', '## New text keys'], ['docs/act7-design/10-story.md', '## Every new text key']];
+const parts = [['docs/act7-design/50-text-extra.md', '## Extra text keys'], ['docs/act7-design/30-mechanics-progression.md', '## New text keys'], ['docs/act7-design/10-story.md', '## Every new text key']];
 const out = new Map(), dup = [];
 const strip = (s) => { s = s.trim(); if (/^«.*»$/.test(s) && !s.slice(1, -1).includes('«')) s = s.slice(1, -1); if (/^".*"$/.test(s) && !s.slice(1, -1).includes('"')) s = s.slice(1, -1); return s.replace(/\\\|/g, '|').replace(/<br\s*\/?>/g, '\n'); };
 for (const [f, head] of parts) {

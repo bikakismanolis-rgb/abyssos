@@ -50,6 +50,8 @@ export function damage(src, target, amount, o = {}) {
   // co-op: a guest's stand-in on the host (the blow is the guest's to take, net/coop.js)
   if (target.remote) return NET.mode === 'host' ? NET.h.hurtRemote(src, target, amount, o) : 0;
   if (target.team === 'npc') return 0;
+  // (the balance bot's run C, tools/balance-act.mjs job.dmgK: what the heroes' side deals, scaled; unset in play)
+  if (G.debugDmgK && src && src.team !== 'foe') amount *= G.debugDmgK;
   // Act VI: a body that is only another's (the Ketos's head on the shore, def.share): every blow on it is that one's, with
   // its guard, its vulnerability and its floor, seen where the proxy stands
   if (target.def?.share && target.shareTo) { const to = target.shareTo; if (to.dead || to.removed) return 0; return damage(src, to, amount, Object.assign({}, o, { at: target })); }
@@ -149,6 +151,10 @@ function hurtHero(src, amount, o) {
   if (o.cold) coldAdd(o.cold);
   // the Skerry's Shell: the sea takes no life from her (a plunge, a wash-out)
   if ((o.plunge || o.wash) && s.legs.has('skerryShell')) { number(p.x, 2.3, p.z, tx('leg.skerryShell', 'Καβούκι του Σκόπελου', 'Skerry\'s Shell'), 'text', '#9ad8ff'); return 0; }
+  // Act VII's heavy blows (docs/act7-contract.md, the boss law): o.share, a blow sized as that share (%) of her max life
+  // before block and armour, whatever the monster's own numbers; o.cap, the most it may take after them (%). Not pure:
+  // toughness still pays. (the tally: heavy blows landed by move, for the balance bot)
+  if (o.share > 0) amount = p.hpMax * o.share / 100;
   // o.pure: a share of her life whatever she wears (the Forge's Breath)
   if (o.dot !== true && !o.pure && s.block > 0 && Math.random() * 100 < s.block) { amount *= 0.45; number(p.x, 2.3, p.z, t('hud.block'), 'text', '#c8d0e0'); Audio.sfx('block'); }
   const L = src?.level || p.level || G.hero.level;
@@ -164,7 +170,9 @@ function hurtHero(src, amount, o) {
   // Act VI: no boss blow takes more than 11% of her life at once (the act's rule, no blow over 12% of max life: the
   // Shade's borrowed 1.5-1.6x blows took 14-15% of a Mage's on her rolled gear)
   if (src?.boss && G.zone?.act6 && !o.dot) amount = Math.min(amount, p.hpMax * 0.11);
+  if (o.cap > 0) amount = Math.min(amount, p.hpMax * o.cap / 100);
   amount = Math.max(1, Math.round(amount));
+  if (o.share > 0 && o.move) { const T = (G.tally7 ||= {}); T[o.move] = (T[o.move] || 0) + 1; }
   if (p.shield > 0) { const a = Math.min(p.shield, amount); p.shield -= a; amount -= a; if (amount <= 0) { sparks(p.x, 1.2, p.z, 6, 0xffd080, 3); return 0; } }
   p.hp -= amount;
   p.flash = 0.6;

@@ -19,7 +19,7 @@
 //   own shadow across the fire. job.lost: the seven named lamps of the Lost at the Hearth; job.lamp: the Lamplight
 //   Mastery track's rank; job.darkStones: the Hearth's stones as she finds them, dark)
 //
-// A job: { id, zone, boss, cls, lvl, diff, packs, seed, gearK, skill, heat }. env BASE (default http://localhost:5199/), SIM (game
+// A job: { id, zone, boss, cls, lvl, diff, packs, seed, gearK, dmgK, skill, heat }. env BASE (default http://localhost:5199/), SIM (game
 // steps per frame, default 8), SKILL (the bot's chance to notice a telegraph, default 0.6), REACT (seconds before it does, 0.45),
 // HEAT (the Forge Heat of a forge zone run, 0-3, default 1; job.heat wins).
 // The bot runs inside the game: it reads the frame's input from a getter on IN.events (takeEvents in updatePlayer), so it
@@ -47,7 +47,7 @@ function jobsFromArgs() {
   if (args.plan) return JSON.parse(fs.readFileSync(args.plan, 'utf8'));
   const boss = args.boss || null, zone = boss ? BOSS_ZONE[boss] : args.zone || 'forest';
   const out = [];
-  for (let r = 0; r < +(args.runs || 1); r++) out.push({ id: `${boss || zone}-${args.cls || 'warden'}-L${args.lvl || ZONES[zone] + 1}-d${args.diff ?? 1}${args.coop > 1 ? '-c' + args.coop : ''}-r${r}`, zone, boss, cls: args.cls || 'warden', lvl: +(args.lvl || ZONES[zone] + 1), diff: +(args.diff ?? 1), packs: +(args.packs || 8), seed: 1000 + r * 7919, gearK: +(args.gearK || 4), ...(args.heat != null ? { heat: +args.heat } : {}), ...(args.coop > 1 ? { coop: +args.coop } : {}) });
+  for (let r = 0; r < +(args.runs || 1); r++) out.push({ id: `${boss || zone}-${args.cls || 'warden'}-L${args.lvl || ZONES[zone] + 1}-d${args.diff ?? 1}${args.coop > 1 ? '-c' + args.coop : ''}-r${r}`, zone, boss, cls: args.cls || 'warden', lvl: +(args.lvl || ZONES[zone] + 1), diff: +(args.diff ?? 1), packs: +(args.packs || 8), seed: 1000 + r * 7919, gearK: +(args.gearK || 4), ...(args.dmgK ? { dmgK: +args.dmgK } : {}), ...(args.heat != null ? { heat: +args.heat } : {}), ...(args.coop > 1 ? { coop: +args.coop } : {}) });
   return out;
 }
 
@@ -156,6 +156,8 @@ async function installBot(cfg) {
     }
     const zf = ZFLAGS[job.zone], bf = job.boss ? BFLAGS[job.boss] : null;
     h.diff = job.diff; h.level = job.lvl; h.xp = 0;
+    // (run C's knob: what the bot deals, scaled; the heavy blows' tally starts clean)
+    G.debugDmgK = job.dmgK || 0; G.tally7 = {};
     const R = skillRanks(h.cls, h.level); h.skills = R.sk; h.points = R.pts;
     // the progression (progression.js): job.mast spends what is left on Might and Vigor in turn (the most raw power a
     // spare point can buy); job.variant {skill: 1|2} plays those variants; job.loadout the four on the buttons
@@ -379,6 +381,8 @@ async function installBot(cfg) {
       return;
     }
     if (st.counting) st.minHp = Math.min(st.minHp, pl.hp / pl.hpMax);
+    // (Act VII's measures: seconds under 30% of her life; the largest share lost in any 3 s, from the blows' own log)
+    if (st.counting && pl.hp / pl.hpMax < 0.3) st.under30 = (st.under30 || 0) + dt;
     if (st.step) { st.step(st, pl, dt); if (st.over) return; }
     // between packs (the walk to the next one) she still steps out of the red, the Breath's included, and does nothing else
     if (st.fight && st.counting) st.ct += dt;
@@ -618,6 +622,7 @@ async function installBot(cfg) {
     const pl = G.player, amt = frac * pl.hpMax;
     st.taken += amt; st.takenN += frac; st.hits++;
     st.maxHit = Math.max(st.maxHit, frac);
+    { const W = (st.w3 ||= []); W.push([st.t, frac]); while (W.length && st.t - W[0][0] > 3) W.shift(); let sum = 0; for (const e of W) sum += e[1]; st.worst3 = Math.max(st.worst3 || 0, sum); }
     // who: the first frame of the stack outside the bus and the damage code; and the nearest foe at work
     let key = '?';
     const lines = (new Error().stack || '').split('\n');
@@ -810,7 +815,7 @@ async function installBot(cfg) {
     const res = {
       ...job, ok: !B.err && (job.boss ? !!st.killed : true), err: B.err, realS: Math.round((performance.now() - w0) / 1000),
       hero: st.hero, endLvl: G.hero.level, gear: st.gear, legs: st.legs,
-      combatS: +st.ct.toFixed(1), totalS: +st.t.toFixed(1), deaths: st.deaths, deathAt: st.deathAt, minLife: +st.minHp.toFixed(3),
+      combatS: +st.ct.toFixed(1), totalS: +st.t.toFixed(1), deaths: st.deaths, deathAt: st.deathAt, minLife: +st.minHp.toFixed(3), under30S: +(st.under30 || 0).toFixed(1), worst3: +(st.worst3 || 0).toFixed(3), heavy: { ...(G.tally7 || {}) },
       takenPerMin: Math.round(st.taken / min), lifePerMin: +(st.takenN / min).toFixed(2), dealtPerMin: Math.round(st.dealt / min), killsPerMin: +(st.kills / min).toFixed(2),
       kills: st.kills, eliteKills: st.eliteKills, potions: st.potions, dodges: st.dodges, evadingS: +st.evading.toFixed(1), touches: st.touches, stuck: st.stuck, hits: st.hits, maxHit: +st.maxHit.toFixed(3), lifeTaken: +st.takenN.toFixed(2),
       ...(light.fireOn?.() ? { fire: { outs: light.FIRE_LOG.outs, dims: light.FIRE_LOG.dims, relit: light.FIRE_LOG.relit, outS: +(st.outS || 0).toFixed(1), drains: Object.fromEntries(Object.entries(light.FIRE_LOG.drains).map(([k, v]) => [k, +v.toFixed(1)])) } } : {}), ...(st.resets ? { resets: st.resets } : {}),

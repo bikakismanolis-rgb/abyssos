@@ -204,6 +204,15 @@ export const MONSTERS = {
   reefback: { model: 'reefback', hp: 4.8, dmg: 1.9, speed: 3.4, radius: 0.6, ai: 'brute', reach: 2.6, atk: 'claw', atkTime: 1.6, flesh: 'chitin', xp: 6, big: true, swim: true, weight: 2.5, guard: { arc: 1.2, k: 0.2 }, turn: 1.8, wake: { d: 3, clip: 'wake', pose: 'rock', tide: true, sfx: 'splash', t: 2.0, speed: 1 }, look: { scale: 1.5, tint: 0x6a7080, tintAmt: 0.6 } },
   rimeBear: { model: 'rimeBear', hp: 3.6, dmg: 1.9, speed: 5.6, radius: 1.1, ai: 'charger', reach: 2.3, atk: 'smash', atkTime: 1.6, flesh: 'flesh', xp: 5.5, sfx: 'bear', big: true, iceCharge: true, frostRoar: true, look: { scale: 1.3, tint: 0xf4f2ec, tintAmt: 2.15, rim: 0xd8f0ff, rimI: 0.3 } },
   skua: { model: 'skua', hp: 0.3, dmg: 0.45, speed: 7.5, radius: 0.4, ai: 'bat', reach: 1.0, atk: 'bite', atkTime: 0.8, flesh: 'flesh', xp: 0.5, float: true, lightShy: true, coldBite: 3, feathers: true },
+  // ---- Act VII (docs/act7-contract.md, Enemies): every body a shipped one, nothing of the dark. Each kind has one heavy
+  // move that opens the fight (heavy: its id, ai.js; a share of her life from HAZ7, never x DIFFS.dmg); all else is chip ----
+  hillWolf: { model: 'warg', hp: 1.1, dmg: 0.9, speed: 6.6, radius: 0.65, ai: 'pounce', reach: 1.6, atk: 'bite', atkTime: 1.1, flesh: 'flesh', xp: 1.6, sfx: 'wolf', heavy: 'longPounce', look: { scale: 1.15, tint: 0x8a7a66, tintAmt: 0.5 } },
+  goblinMarksman: { model: 'goblinArcher', hp: 0.6, dmg: 0.7, speed: 4.0, radius: 0.45, ai: 'ranged', reach: 12, atk: 'shoot', atkTime: 1.6, flesh: 'flesh', xp: 1.5, weapon: 'crossbow', style: 'bow', hunch: 0.2, proj: 'arrow', sfx: 'goblin', heavy: 'aimedBolt', aimEvery: 3 },
+  chough: { model: 'skua', hp: 0.3, dmg: 0.45, speed: 7.5, radius: 0.4, ai: 'bat', reach: 1.0, atk: 'bite', atkTime: 0.8, flesh: 'flesh', xp: 0.6, float: true, shadeShy: true, feathers: true, heavy: 'mob', look: { tint: 0x16161c, tintAmt: 0.85 } },
+  denBear: { model: 'rimeBear', hp: 4.2, dmg: 1.5, speed: 5.6, radius: 1.05, ai: 'charger', reach: 2.3, atk: 'smash', atkTime: 1.6, flesh: 'flesh', xp: 6, sfx: 'bear', big: true, heavy: 'charge', look: { scale: 1.25, tint: 0x6a4a30, tintAmt: 0.7 } },
+  snowWorm: { model: 'deepworm', hp: 1.8, dmg: 1.2, speed: 4.4, radius: 0.85, ai: 'burrow', reach: 2.4, atk: 'bite', atkTime: 1.4, flesh: 'chitin', xp: 3, sfx: 'worm', proj: 'acid', snowOnly: true, heavy: 'burst', look: { tint: 0xeef2f6, tintAmt: 0.8 } },
+  rockRoller: { model: 'troll', hp: 7, dmg: 1.4, speed: 3.2, radius: 1.15, ai: 'brute', reach: 2.8, atk: 'smash', atkTime: 2.2, flesh: 'flesh', xp: 10, weapon: 'club', style: 'heavy', hunch: 0.25, sfx: 'troll', big: true, icebound: true, heavy: 'rolledBoulder', look: { scale: 1.2, tint: 0x8c98a6, tintAmt: 0.6 } },
+  rockScorpion: { model: 'spider', hp: 1.0, dmg: 0.8, speed: 5.2, radius: 0.6, ai: 'melee', reach: 1.5, atk: 'bite', atkTime: 1.0, flesh: 'chitin', xp: 1.5, sfx: 'spider', poison: true, burst: true, coldBlooded: 0.6, heavy: 'sting', stingEvery: 3, look: { scale: 0.8, tint: 0xb08a4a, tintAmt: 0.6 } },
   // the act's bosses (radius before look.scale: the Tower's 0.7 is 2.8 m at x4, the Skotos's 0.8 is 2.56 m at x3.2).
   // Skerry, the Walking Tower: the crab with the Skerry Light on its back, a wake through its own flood (wakeSpeed); the
   // Skotos: anchored waist-deep at the ice edge (float: nothing pushes it), its shadow under the ice in the Night
@@ -313,13 +322,28 @@ export const PACKS = {
   gateFallen: [['gateFallen', 4], ['gateFallenBow', 2]],
   drownedWood: [['faded', 3], ['falselight', 1]],
   forgotten: [['faded', 4], ['lampbearer', 1]],
-  stairCrew: [['sunken', 3], ['lampbearer', 1]]
+  stairCrew: [['sunken', 3], ['lampbearer', 1]],
+  // Act VII (the design's packs: where they stand is gen7's)
+  looters: [['goblin', 5], ['goblinMarksman', 1.2], ['goblinShaman', 0.8]],
+  hillWolves: [['hillWolf', 1]],
+  choughs: [['chough', 1]],
+  den: [['denBear', 1], ['hillWolf', 2]],
+  shoreDen: [['denBear', 1], ['hillWolf', 2]],
+  snowHunt: [['snowWorm', 2], ['hillWolf', 1.5]],
+  icebound: [['rockRoller', 1], ['goblin', 2]],
+  slabs: [['rockScorpion', 1]],
+  terrace: [['goblin', 3], ['goblinMarksman', 2], ['rockScorpion', 2]],
+  snowfield: [['hillWolf', 3], ['snowWorm', 1.5], ['chough', 2]],
+  worksMixed: [['goblin', 3], ['goblinMarksman', 2], ['rockScorpion', 2], ['chough', 1]]
 };
 // packs built around one creature: it comes first, exactly once (or the count given), and the rest are drawn without it
 export const PACK_LEAD = { weepDen: ['amberBear'], weepWeepers: ['rootwarden'], weepMourners: ['mourner'], heartWarden: ['rootwarden'], heartChoir: ['mourner', 'mourner'],
   ashLine: ['ashSpear'], snuffers: ['smokeEater', 'smokeEater'], smiths: ['ashsmith'], mouldHall: ['ashsmith'], bellowsWave: ['ashsmith'],
   tideChoir: ['iceSinger'], reefRocks: ['reefback'], strandBear: ['rimeBear'], fallHunters: ['icemaw'],
-  blackCrew: ['lampbearer'], poolHunter: ['icemaw'] };
+  blackCrew: ['lampbearer'], poolHunter: ['icemaw'],
+  den: ['denBear'], shoreDen: ['denBear'], icebound: ['rockRoller'] };
+// (Act VII's sleepers, the Den-bear in its den, the Icebound in their ice and the scorpions under their slabs, come with
+// their rules at stage B: until then those packs stand awake; and the Snow-worm spits the Deepworm's acid until its slush)
 // packs whose dead wait in disguise (Hollowed as dead trees and amber cocoons, the Ash-Fallen under the ash, the Sunken under
 // the kelp and as ice at the rails, the Reefbacks as rocks) until the hero is close
 export const PACK_DORMANT = { weepHollow: true, heartSleepers: true, ashLine: true, sunkenCrew: true, tideChoir: true, reefRocks: true, frozenCrew: true, blackCrew: true, gateFallen: true, forgotten: true };
