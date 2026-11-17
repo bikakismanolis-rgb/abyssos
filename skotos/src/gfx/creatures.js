@@ -39,7 +39,11 @@ const ACT_FILES = {
   act2: ['magmahound', 'bat', 'worm', 'golem'],
   act3: ['elk', 'bear', 'moth', 'mandrake', 'treeman'],
   act4: ['ashwing', 'smokeeater', 'embertick'],
-  act5: ['crab', 'skotos', 'tentacle', 'icemaw', 'louse', 'skua', 'bear']
+  act5: ['crab', 'skotos', 'tentacle', 'icemaw', 'louse', 'skua', 'bear'],
+  // (Act VI's own bodies were never built: the Ketos and its Ketlings stand on the Icemaw, and the Icemaw and the Hull-louse
+  // are its packs. Without this row a cold start into the Drained Sea or the Bottom loaded no creature at all (world.js
+  // READY.silt names 'act6'), and all four were drawn as their boot stand-ins)
+  act6: ['icemaw', 'louse']
 };
 const loads = {};
 function loadFile(n) {
