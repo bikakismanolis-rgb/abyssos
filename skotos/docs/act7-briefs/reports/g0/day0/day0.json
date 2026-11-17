@@ -1,0 +1,1038 @@
+{
+ "rows": [
+  {
+   "zone": "forest",
+   "row": "thaw",
+   "q": 1,
+   "groundKind": "grass",
+   "pre": {
+    "hero": {
+     "x": 51.542362859756466,
+     "z": 142
+    },
+    "day": true,
+    "bodyDay": true,
+    "mobile": true,
+    "pr": 1.5,
+    "sun": [
+     -18,
+     22,
+     10
+    ],
+    "heroI": 0,
+    "exposure": 1
+   },
+   "ground": {
+    "luma": 0.196,
+    "lin": 0.045,
+    "n": 756,
+    "frame": 0.216,
+    "max": 0.55
+   },
+   "blend": {
+    "day": 205,
+    "add": 2
+   },
+   "beamCore": true,
+   "ringUnder": true,
+   "ringK": 1,
+   "teleDay": {
+    "cr": 3.248,
+    "rim": 3.248,
+    "edge": 1.222,
+    "rimVsEdge": 4.414,
+    "ground": 0.037,
+    "n": 24
+   },
+   "teleAdd": {
+    "cr": 2.979,
+    "ground": 0.034
+   },
+   "lineDay": {
+    "cr": 10.251,
+    "rim": 10.251,
+    "edge": 1.147
+   },
+   "lineAdd": {
+    "cr": 1
+   },
+   "body": {
+    "warg": {
+     "diff": 0.004,
+     "meanAbs": 0.056,
+     "body": 0.193,
+     "behind": 0.189,
+     "cover": 0.769
+    },
+    "goblin": {
+     "diff": 0.153,
+     "meanAbs": 0.161,
+     "body": 0.384,
+     "behind": 0.232,
+     "cover": 0.507
+    },
+    "troll": {
+     "diff": 0.279,
+     "meanAbs": 0.29,
+     "body": 0.44,
+     "behind": 0.161,
+     "cover": 0.759
+    }
+   },
+   "clip": {
+    "white": 0.05,
+    "anyChannel": 0.42
+   },
+   "beam": {
+    "rare": {
+     "y": 1,
+     "dark": 0.004,
+     "bright": 0.304,
+     "crDark": 1.006,
+     "crBright": 3.079,
+     "behind": 0.121,
+     "step": 0.304
+    },
+    "legend": {
+     "y": 1,
+     "dark": 0,
+     "bright": 0.763,
+     "crDark": 1,
+     "crBright": 13.107,
+     "behind": 0.201,
+     "step": 0.763
+    }
+   },
+   "n": {
+    "tele": 3.248,
+    "teleAdd": 2.979,
+    "ground": 0.196,
+    "body": 0.004,
+    "clip": 0.05,
+    "beam": 0.763
+   },
+   "ok": {
+    "day": true,
+    "tele": true,
+    "ground": true,
+    "body": false,
+    "clip": true,
+    "beam": null
+   },
+   "pass": false
+  },
+  {
+   "zone": "pass",
+   "row": "thaw",
+   "q": 1,
+   "groundKind": "snow",
+   "pre": {
+    "hero": {
+     "x": 49.86149472403663,
+     "z": 176
+    },
+    "day": true,
+    "bodyDay": true,
+    "mobile": true,
+    "pr": 1.5,
+    "sun": [
+     -18,
+     22,
+     10
+    ],
+    "heroI": 0,
+    "exposure": 1
+   },
+   "ground": {
+    "luma": 0.427,
+    "lin": 0.169,
+    "n": 756,
+    "frame": 0.396,
+    "max": 0.8
+   },
+   "blend": {
+    "day": 205,
+    "add": 2
+   },
+   "beamCore": true,
+   "ringUnder": true,
+   "ringK": 1,
+   "teleDay": {
+    "cr": 3.768,
+    "rim": 1.042,
+    "edge": 3.768,
+    "rimVsEdge": 4.012,
+    "ground": 0.2,
+    "n": 24
+   },
+   "teleAdd": {
+    "cr": 1.723,
+    "ground": 0.232
+   },
+   "lineDay": {
+    "cr": 3.899,
+    "rim": 3.688,
+    "edge": 3.657
+   },
+   "lineAdd": {
+    "cr": 3.506
+   },
+   "body": {
+    "warg": {
+     "diff": 0.268,
+     "meanAbs": 0.268,
+     "body": 0.234,
+     "behind": 0.501,
+     "cover": 0.786
+    },
+    "goblin": {
+     "diff": 0.181,
+     "meanAbs": 0.182,
+     "body": 0.39,
+     "behind": 0.21,
+     "cover": 0.493
+    },
+    "troll": {
+     "diff": 0.007,
+     "meanAbs": 0.126,
+     "body": 0.472,
+     "behind": 0.48,
+     "cover": 0.805
+    }
+   },
+   "clip": {
+    "white": 0.6,
+    "anyChannel": 1.48
+   },
+   "beam": {
+    "rare": {
+     "y": 1,
+     "dark": 0.068,
+     "bright": 0.5,
+     "crDark": 1.28,
+     "crBright": 4.072,
+     "behind": 0.485,
+     "step": 0.5
+    },
+    "legend": {
+     "y": 2.2,
+     "dark": 0.034,
+     "bright": 0.609,
+     "crDark": 1.145,
+     "crBright": 6.388,
+     "behind": 0.253,
+     "step": 0.609
+    }
+   },
+   "n": {
+    "tele": 3.768,
+    "teleAdd": 1.723,
+    "ground": 0.427,
+    "body": 0.007,
+    "clip": 0.6,
+    "beam": 0.609
+   },
+   "ok": {
+    "day": true,
+    "tele": true,
+    "ground": true,
+    "body": false,
+    "clip": true,
+    "beam": true
+   },
+   "pass": false
+  },
+  {
+   "zone": "farlight",
+   "row": "tarn",
+   "q": 1,
+   "groundKind": "snow",
+   "pre": {
+    "hero": {
+     "x": 56,
+     "z": 166
+    },
+    "day": true,
+    "bodyDay": true,
+    "mobile": true,
+    "pr": 1.5,
+    "sun": [
+     -6,
+     32,
+     4
+    ],
+    "heroI": 0,
+    "exposure": 0.92
+   },
+   "ground": {
+    "luma": 0.772,
+    "lin": 0.563,
+    "n": 756,
+    "frame": 0.772,
+    "max": 0.8
+   },
+   "blend": {
+    "day": 205,
+    "add": 2
+   },
+   "beamCore": true,
+   "ringUnder": true,
+   "ringK": 1,
+   "teleDay": {
+    "cr": 7.169,
+    "rim": 2.406,
+    "edge": 7.169,
+    "rimVsEdge": 2.98,
+    "ground": 0.578,
+    "n": 24
+   },
+   "teleAdd": {
+    "cr": 1.206,
+    "ground": 0.568
+   },
+   "lineDay": {
+    "cr": 7.388,
+    "rim": 1.453,
+    "edge": 7.388
+   },
+   "lineAdd": {
+    "cr": 1.65
+   },
+   "body": {
+    "warg": {
+     "diff": 0.576,
+     "meanAbs": 0.576,
+     "body": 0.218,
+     "behind": 0.794,
+     "cover": 0.7
+    },
+    "goblin": {
+     "diff": 0.387,
+     "meanAbs": 0.388,
+     "body": 0.402,
+     "behind": 0.789,
+     "cover": 0.551
+    },
+    "troll": {
+     "diff": 0.349,
+     "meanAbs": 0.349,
+     "body": 0.398,
+     "behind": 0.747,
+     "cover": 0.744
+    }
+   },
+   "clip": {
+    "white": 1.55,
+    "anyChannel": 3.41
+   },
+   "beam": {
+    "rare": {
+     "y": 1,
+     "dark": 0.136,
+     "bright": 0.209,
+     "crDark": 1.466,
+     "crBright": 1.644,
+     "behind": 0.741,
+     "step": 0.209
+    },
+    "legend": {
+     "y": 1,
+     "dark": 0.132,
+     "bright": 0.2,
+     "crDark": 1.447,
+     "crBright": 1.616,
+     "behind": 0.789,
+     "step": 0.2
+    }
+   },
+   "n": {
+    "tele": 7.169,
+    "teleAdd": 1.206,
+    "ground": 0.772,
+    "body": 0.349,
+    "clip": 1.55,
+    "beam": 0.2
+   },
+   "ok": {
+    "day": true,
+    "tele": true,
+    "ground": true,
+    "body": true,
+    "clip": true,
+    "beam": true
+   },
+   "pass": true
+  },
+  {
+   "zone": "coast",
+   "row": "tarn",
+   "q": 1,
+   "groundKind": "snow",
+   "pre": {
+    "hero": {
+     "x": 56.5,
+     "z": 192.5
+    },
+    "day": true,
+    "bodyDay": true,
+    "mobile": true,
+    "pr": 1.5,
+    "sun": [
+     -6,
+     32,
+     4
+    ],
+    "heroI": 0,
+    "exposure": 0.92
+   },
+   "ground": {
+    "luma": 0.652,
+    "lin": 0.402,
+    "n": 756,
+    "frame": 0.559,
+    "max": 0.8
+   },
+   "blend": {
+    "day": 205,
+    "add": 2
+   },
+   "beamCore": true,
+   "ringUnder": true,
+   "ringK": 1,
+   "teleDay": {
+    "cr": 6.365,
+    "rim": 2.01,
+    "edge": 6.365,
+    "rimVsEdge": 3.234,
+    "ground": 0.466,
+    "n": 24
+   },
+   "teleAdd": {
+    "cr": 1.269,
+    "ground": 0.481
+   },
+   "lineDay": {
+    "cr": 5.876,
+    "rim": 2.078,
+    "edge": 5.876
+   },
+   "lineAdd": {
+    "cr": 1
+   },
+   "body": {
+    "warg": {
+     "diff": 0.509,
+     "meanAbs": 0.509,
+     "body": 0.224,
+     "behind": 0.733,
+     "cover": 0.718
+    },
+    "goblin": {
+     "diff": 0.34,
+     "meanAbs": 0.342,
+     "body": 0.397,
+     "behind": 0.738,
+     "cover": 0.551
+    },
+    "troll": {
+     "diff": 0.256,
+     "meanAbs": 0.256,
+     "body": 0.411,
+     "behind": 0.667,
+     "cover": 0.774
+    }
+   },
+   "clip": {
+    "white": 0.72,
+    "anyChannel": 2.68
+   },
+   "beam": {
+    "rare": {
+     "y": 2.2,
+     "dark": 0.117,
+     "bright": 0.274,
+     "crDark": 1.446,
+     "crBright": 2.221,
+     "behind": 0.599,
+     "step": 0.274
+    },
+    "legend": {
+     "y": 2.2,
+     "dark": 0.11,
+     "bright": 0.525,
+     "crDark": 1.399,
+     "crBright": 4.618,
+     "behind": 0.586,
+     "step": 0.525
+    }
+   },
+   "n": {
+    "tele": 6.365,
+    "teleAdd": 1.269,
+    "ground": 0.652,
+    "body": 0.256,
+    "clip": 0.72,
+    "beam": 0.525
+   },
+   "ok": {
+    "day": true,
+    "tele": true,
+    "ground": true,
+    "body": true,
+    "clip": true,
+    "beam": true
+   },
+   "pass": true
+  },
+  {
+   "zone": "forest",
+   "row": "thaw",
+   "q": 0,
+   "groundKind": "grass",
+   "pre": {
+    "hero": {
+     "x": 51.542362859756466,
+     "z": 142
+    },
+    "day": true,
+    "bodyDay": true,
+    "mobile": true,
+    "pr": 1,
+    "sun": [
+     -18,
+     22,
+     10
+    ],
+    "heroI": 0,
+    "exposure": 1
+   },
+   "ground": {
+    "luma": 0.153,
+    "lin": 0.025,
+    "n": 756,
+    "frame": 0.142,
+    "max": 0.55
+   },
+   "blend": {
+    "day": 205,
+    "add": 2
+   },
+   "beamCore": true,
+   "ringUnder": false,
+   "ringK": 1.6,
+   "teleDay": {
+    "cr": 3.337,
+    "rim": 3.337,
+    "edge": 1.312,
+    "rimVsEdge": 4.761,
+    "ground": 0.036,
+    "n": 24
+   },
+   "teleAdd": {
+    "cr": 3.224,
+    "ground": 0.067
+   },
+   "lineDay": {
+    "cr": 11.611,
+    "rim": 11.611,
+    "edge": 1.187
+   },
+   "lineAdd": {
+    "cr": 9.838
+   },
+   "body": {
+    "warg": {
+     "diff": 0.001,
+     "meanAbs": 0.039,
+     "body": 0.202,
+     "behind": 0.2,
+     "cover": 0.665
+    },
+    "goblin": {
+     "diff": 0.157,
+     "meanAbs": 0.174,
+     "body": 0.392,
+     "behind": 0.236,
+     "cover": 0.464
+    },
+    "troll": {
+     "diff": 0.336,
+     "meanAbs": 0.339,
+     "body": 0.504,
+     "behind": 0.168,
+     "cover": 0.738
+    }
+   },
+   "clip": {
+    "white": 0.42,
+    "anyChannel": 0.73
+   },
+   "beam": {
+    "rare": {
+     "y": 2.2,
+     "dark": 0.007,
+     "bright": 0.065,
+     "crDark": 1.02,
+     "crBright": 1.236,
+     "behind": 0.115,
+     "step": 0.065
+    },
+    "legend": {
+     "y": 1,
+     "dark": 0,
+     "bright": 0.39,
+     "crDark": 1,
+     "crBright": 4.196,
+     "behind": 0.056,
+     "step": 0.39
+    }
+   },
+   "n": {
+    "tele": 3.337,
+    "teleAdd": 3.224,
+    "ground": 0.153,
+    "body": 0.001,
+    "clip": 0.42,
+    "beam": 0.39
+   },
+   "ok": {
+    "day": true,
+    "tele": true,
+    "ground": true,
+    "body": false,
+    "clip": true,
+    "beam": null
+   },
+   "pass": false
+  },
+  {
+   "zone": "pass",
+   "row": "thaw",
+   "q": 0,
+   "groundKind": "snow",
+   "pre": {
+    "hero": {
+     "x": 49.86149472403663,
+     "z": 176
+    },
+    "day": true,
+    "bodyDay": true,
+    "mobile": true,
+    "pr": 1,
+    "sun": [
+     -18,
+     22,
+     10
+    ],
+    "heroI": 0,
+    "exposure": 1
+   },
+   "ground": {
+    "luma": 0.433,
+    "lin": 0.183,
+    "n": 756,
+    "frame": 0.389,
+    "max": 0.8
+   },
+   "blend": {
+    "day": 205,
+    "add": 2
+   },
+   "beamCore": true,
+   "ringUnder": false,
+   "ringK": 1.6,
+   "teleDay": {
+    "cr": 4.08,
+    "rim": 1.103,
+    "edge": 4.08,
+    "rimVsEdge": 4.068,
+    "ground": 0.232,
+    "n": 24
+   },
+   "teleAdd": {
+    "cr": 1.626,
+    "ground": 0.271
+   },
+   "lineDay": {
+    "cr": 4.209,
+    "rim": 3.288,
+    "edge": 4.115
+   },
+   "lineAdd": {
+    "cr": 3.14
+   },
+   "body": {
+    "warg": {
+     "diff": 0.335,
+     "meanAbs": 0.335,
+     "body": 0.202,
+     "behind": 0.537,
+     "cover": 0.665
+    },
+    "goblin": {
+     "diff": 0.196,
+     "meanAbs": 0.198,
+     "body": 0.406,
+     "behind": 0.21,
+     "cover": 0.436
+    },
+    "troll": {
+     "diff": 0.025,
+     "meanAbs": 0.113,
+     "body": 0.496,
+     "behind": 0.52,
+     "cover": 0.731
+    }
+   },
+   "clip": {
+    "white": 0.67,
+    "anyChannel": 1.48
+   },
+   "beam": {
+    "rare": {
+     "y": 1,
+     "dark": 0.067,
+     "bright": 0.48,
+     "crDark": 1.275,
+     "crBright": 3.796,
+     "behind": 0.508,
+     "step": 0.48
+    },
+    "legend": {
+     "y": 3.6,
+     "dark": 0.006,
+     "bright": 0.652,
+     "crDark": 1.013,
+     "crBright": 10.181,
+     "behind": 0.106,
+     "step": 0.652
+    }
+   },
+   "n": {
+    "tele": 4.08,
+    "teleAdd": 1.626,
+    "ground": 0.433,
+    "body": 0.025,
+    "clip": 0.67,
+    "beam": 0.652
+   },
+   "ok": {
+    "day": true,
+    "tele": true,
+    "ground": true,
+    "body": false,
+    "clip": true,
+    "beam": true
+   },
+   "pass": false
+  },
+  {
+   "zone": "farlight",
+   "row": "tarn",
+   "q": 0,
+   "groundKind": "snow",
+   "pre": {
+    "hero": {
+     "x": 56,
+     "z": 166
+    },
+    "day": true,
+    "bodyDay": true,
+    "mobile": true,
+    "pr": 1,
+    "sun": [
+     -6,
+     32,
+     4
+    ],
+    "heroI": 0,
+    "exposure": 0.92
+   },
+   "ground": {
+    "luma": 0.774,
+    "lin": 0.567,
+    "n": 756,
+    "frame": 0.774,
+    "max": 0.8
+   },
+   "blend": {
+    "day": 205,
+    "add": 2
+   },
+   "beamCore": true,
+   "ringUnder": false,
+   "ringK": 1.6,
+   "teleDay": {
+    "cr": 7.619,
+    "rim": 2.406,
+    "edge": 7.619,
+    "rimVsEdge": 3.166,
+    "ground": 0.58,
+    "n": 24
+   },
+   "teleAdd": {
+    "cr": 1.206,
+    "ground": 0.589
+   },
+   "lineDay": {
+    "cr": 7.388,
+    "rim": 1.453,
+    "edge": 7.388
+   },
+   "lineAdd": {
+    "cr": 1.65
+   },
+   "body": {
+    "warg": {
+     "diff": 0.6,
+     "meanAbs": 0.6,
+     "body": 0.193,
+     "behind": 0.793,
+     "cover": 0.665
+    },
+    "goblin": {
+     "diff": 0.424,
+     "meanAbs": 0.428,
+     "body": 0.365,
+     "behind": 0.789,
+     "cover": 0.471
+    },
+    "troll": {
+     "diff": 0.368,
+     "meanAbs": 0.368,
+     "body": 0.389,
+     "behind": 0.757,
+     "cover": 0.725
+    }
+   },
+   "clip": {
+    "white": 1.6,
+    "anyChannel": 3.48
+   },
+   "beam": {
+    "rare": {
+     "y": 1,
+     "dark": 0.136,
+     "bright": 0.208,
+     "crDark": 1.464,
+     "crBright": 1.641,
+     "behind": 0.751,
+     "step": 0.208
+    },
+    "legend": {
+     "y": 1,
+     "dark": 0.131,
+     "bright": 0.2,
+     "crDark": 1.444,
+     "crBright": 1.616,
+     "behind": 0.789,
+     "step": 0.2
+    }
+   },
+   "n": {
+    "tele": 7.619,
+    "teleAdd": 1.206,
+    "ground": 0.774,
+    "body": 0.368,
+    "clip": 1.6,
+    "beam": 0.2
+   },
+   "ok": {
+    "day": true,
+    "tele": true,
+    "ground": true,
+    "body": true,
+    "clip": true,
+    "beam": true
+   },
+   "pass": true
+  },
+  {
+   "zone": "coast",
+   "row": "tarn",
+   "q": 0,
+   "groundKind": "snow",
+   "pre": {
+    "hero": {
+     "x": 56.5,
+     "z": 192.5
+    },
+    "day": true,
+    "bodyDay": true,
+    "mobile": true,
+    "pr": 1,
+    "sun": [
+     -6,
+     32,
+     4
+    ],
+    "heroI": 0,
+    "exposure": 0.92
+   },
+   "ground": {
+    "luma": 0.665,
+    "lin": 0.421,
+    "n": 756,
+    "frame": 0.574,
+    "max": 0.8
+   },
+   "blend": {
+    "day": 205,
+    "add": 2
+   },
+   "beamCore": true,
+   "ringUnder": false,
+   "ringK": 1.6,
+   "teleDay": {
+    "cr": 6.997,
+    "rim": 2.077,
+    "edge": 6.997,
+    "rimVsEdge": 3.377,
+    "ground": 0.486,
+    "n": 24
+   },
+   "teleAdd": {
+    "cr": 1.252,
+    "ground": 0.52
+   },
+   "lineDay": {
+    "cr": 5.784,
+    "rim": 1.973,
+    "edge": 5.784
+   },
+   "lineAdd": {
+    "cr": 1
+   },
+   "body": {
+    "warg": {
+     "diff": 0.553,
+     "meanAbs": 0.553,
+     "body": 0.193,
+     "behind": 0.746,
+     "cover": 0.665
+    },
+    "goblin": {
+     "diff": 0.401,
+     "meanAbs": 0.403,
+     "body": 0.348,
+     "behind": 0.749,
+     "cover": 0.499
+    },
+    "troll": {
+     "diff": 0.27,
+     "meanAbs": 0.27,
+     "body": 0.412,
+     "behind": 0.682,
+     "cover": 0.734
+    }
+   },
+   "clip": {
+    "white": 0.77,
+    "anyChannel": 2.77
+   },
+   "beam": {
+    "rare": {
+     "y": 2.2,
+     "dark": 0.118,
+     "bright": 0.254,
+     "crDark": 1.457,
+     "crBright": 2.073,
+     "behind": 0.608,
+     "step": 0.254
+    },
+    "legend": {
+     "y": 2.2,
+     "dark": 0.117,
+     "bright": 0.522,
+     "crDark": 1.422,
+     "crBright": 4.56,
+     "behind": 0.609,
+     "step": 0.522
+    }
+   },
+   "n": {
+    "tele": 6.997,
+    "teleAdd": 1.252,
+    "ground": 0.665,
+    "body": 0.27,
+    "clip": 0.77,
+    "beam": 0.522
+   },
+   "ok": {
+    "day": true,
+    "tele": true,
+    "ground": true,
+    "body": true,
+    "clip": true,
+    "beam": true
+   },
+   "pass": true
+  }
+ ],
+ "shots": [
+  {
+   "file": "day0-q1-forest-thaw-plain.jpg",
+   "kb": 141
+  },
+  {
+   "file": "day0-q1-forest-thaw-tells.jpg",
+   "kb": 115
+  },
+  {
+   "file": "day0-q1-pass-thaw-plain.jpg",
+   "kb": 120
+  },
+  {
+   "file": "day0-q1-pass-thaw-tells.jpg",
+   "kb": 134
+  },
+  {
+   "file": "day0-q1-farlight-tarn-plain.jpg",
+   "kb": 41
+  },
+  {
+   "file": "day0-q1-farlight-tarn-tells.jpg",
+   "kb": 59
+  },
+  {
+   "file": "day0-q1-coast-tarn-plain.jpg",
+   "kb": 95
+  },
+  {
+   "file": "day0-q1-coast-tarn-tells.jpg",
+   "kb": 110
+  },
+  {
+   "file": "day0-q0-forest-thaw-plain.jpg",
+   "kb": 121
+  },
+  {
+   "file": "day0-q0-forest-thaw-tells.jpg",
+   "kb": 133
+  },
+  {
+   "file": "day0-q0-pass-thaw-plain.jpg",
+   "kb": 78
+  },
+  {
+   "file": "day0-q0-pass-thaw-tells.jpg",
+   "kb": 94
+  },
+  {
+   "file": "day0-q0-farlight-tarn-plain.jpg",
+   "kb": 37
+  },
+  {
+   "file": "day0-q0-farlight-tarn-tells.jpg",
+   "kb": 55
+  },
+  {
+   "file": "day0-q0-coast-tarn-plain.jpg",
+   "kb": 61
+  },
+  {
+   "file": "day0-q0-coast-tarn-tells.jpg",
+   "kb": 76
+  }
+ ]
+}

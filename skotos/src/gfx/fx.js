@@ -1,6 +1,6 @@
 // Particles, weapon trails, ground telegraphs, decals, rings and lightning.
 import * as THREE from 'three';
-import { R, addLight, shake, LIGHTS } from './gfx.js';
+import { R, addLight, shake, LIGHTS, DAY } from './gfx.js';
 import { tex } from './textures.js';
 import { rand, clamp, lerp, TAU } from '../core/util.js';
 import { BED_DRY } from '../world/genlib.js';
@@ -125,6 +125,7 @@ class Pool {
   clear() { this.n = 0; this.geo.setDrawRange(0, 0); }
 }
 
+// (FX.teleAdd: a test's switch, the additive telegraph by day too, for the day form's comparison: scenario day0)
 export const FX = { add: null, alpha: null, leaf: null, group: null, trails: [], teles: [], rings: [], decals: [], bolts: [], emitters: [], ambient: null, time: 0, q: 1, autumn: 0 };
 // FX.beat (0-1): the Heartwood's heartbeat in the lights; 0 leaves them a steady ember glow (shared with gfx.js LIGHTS)
 Object.defineProperty(FX, 'beat', { get: () => LIGHTS.beat, set: (v) => { LIGHTS.beat = v; }, enumerable: true });
@@ -222,11 +223,23 @@ export function fireStream(from, to, n = 4) {
 const ringGeo = new THREE.RingGeometry(0.85, 1, 48);
 ringGeo.rotateX(-Math.PI / 2);
 export function ring(...a) { return mir('ring', ring0, a); }
+// (Act VII, by day (gfx.js DAY): an additive ring is lost on pale ground. At quality 1 and up a dark under-ring lies under
+// it, normal-blended at 25% and a little wider, so the ring keeps an edge on snow; at quality 0 the ring's own alpha x 1.6)
+const ringGeoU = new THREE.RingGeometry(0.78, 1.06, 48);
+ringGeoU.rotateX(-Math.PI / 2);
+const RING_DAY = { underA: 0.25, lowK: 1.6 };
 function ring0(x, z, r, color = 0xffffff, life = 0.5, y = 0.12) {
   const m = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
   m.position.set(x, y, z); m.scale.setScalar(0.2);
   FX.group.add(m);
-  FX.rings.push({ m, r, life, t: 0 });
+  const ring = { m, r, life, t: 0, k: 1 };
+  if (DAY.on) {
+    if (FX.q >= 1) {
+      const u = new THREE.Mesh(ringGeoU, new THREE.MeshBasicMaterial({ color: 0x0a0c12, transparent: true, opacity: RING_DAY.underA, depthWrite: false }));
+      u.position.set(0, -0.01, 0); u.renderOrder = -1; m.add(u); ring.u = u;
+    } else ring.k = RING_DAY.lowK;
+  }
+  FX.rings.push(ring);
 }
 
 // ---------- decals ----------
@@ -315,10 +328,37 @@ void main(){
   float dark = (0.42 + 0.3 * fill) * (1.0 - edge * 0.6);
   gl_FragColor = vec4((uColor * (edge * 1.2 * pulse + front * 0.6 + fill * 0.05) + vec3(0.02, 0.008, 0.045) * dark) * uA, dark * uA);
 }`;
+// Act VII: the 'day' form of every other telegraph (gfx.js DAY: the applied atmosphere is a day row). An additive tell
+// gives pale ground nothing: on sunlit snow the red circle was a pink wash. By day the tell keeps its colour in a rim and
+// in the front of its fill, opaque, and lays them over a dark under-edge (a band wider than the rim, so the colour has
+// dark on both sides) and a dark fill of 30% where it has filled (12% ahead of the front). One pass, premultiplied,
+// TELE_DARK's blend state. Chosen in teleMat from the flag, never from the colour, so the co-op mirror sends what it
+// always sent and each page draws it in its own zone's form; a tell made by night keeps its additive form until it ends
+const TELE_DAY_FS = `
+varying vec2 vUv; uniform float uP; uniform vec3 uColor; uniform float uShape; uniform float uArc; uniform float uA;
+void main(){
+  vec2 p = vUv * 2.0 - 1.0; float under = 0.0, rim = 0.0, fill = 0.0, front = 0.0, inK = 1.0;
+  if (uShape < 0.5) { float d = length(p); if (d > 1.0) discard;
+    under = smoothstep(0.8, 0.86, d) * (1.0 - smoothstep(0.985, 1.0, d)); rim = smoothstep(0.885, 0.91, d) * (1.0 - smoothstep(0.95, 0.975, d));
+    fill = step(d, uP); front = smoothstep(uP - 0.06, uP, d) * fill; inK = 1.0 - smoothstep(0.985, 1.0, d); }
+  else if (uShape < 1.5) { float d = length(p); if (d > 1.0) discard; float ang = abs(atan(p.x, p.y)); if (ang > uArc) discard;
+    float e = max(d, 1.0 - (uArc - ang) * d * 0.9);
+    under = smoothstep(0.8, 0.86, e) * (1.0 - smoothstep(0.985, 1.0, d)); rim = smoothstep(0.885, 0.91, e) * (1.0 - smoothstep(0.95, 0.975, e));
+    fill = step(d, uP); front = smoothstep(uP - 0.06, uP, d) * fill; inK = 1.0 - smoothstep(0.985, 1.0, d); }
+  else { float y = vUv.y, ex = abs(p.x);
+    under = smoothstep(0.62, 0.72, ex); rim = smoothstep(0.76, 0.8, ex) * (1.0 - smoothstep(0.9, 0.94, ex));
+    fill = step(y, uP); front = smoothstep(uP - 0.04, uP, y) * fill; }
+  float fr = front * (1.0 - under) * 0.7;
+  float col = max(rim, fr);
+  float dark = max(under * 0.82, mix(0.12, 0.3, fill)) * inK;
+  float a = max(col, dark);
+  gl_FragColor = vec4((uColor * (col + fill * 0.06) + vec3(0.012, 0.014, 0.02) * dark * (1.0 - col)) * uA, a * uA);
+}`;
 const DARK_T = { value: 0 };
 const teleGeo = new THREE.PlaneGeometry(2, 2); teleGeo.rotateX(-Math.PI / 2);
 function teleMat(color, shape, arc = 0.5) {
   if (color === TELE_DARK) return new THREE.ShaderMaterial({ uniforms: { uP: { value: 0 }, uColor: { value: new THREE.Color(0x8a70ff) }, uShape: { value: shape }, uArc: { value: arc }, uA: { value: 1 }, uT: DARK_T }, vertexShader: TELE_VS, fragmentShader: TELE_DARK_FS, transparent: true, depthWrite: false, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor });
+  if (DAY.on && !FX.teleAdd) return new THREE.ShaderMaterial({ uniforms: { uP: { value: 0 }, uColor: { value: new THREE.Color(color) }, uShape: { value: shape }, uArc: { value: arc }, uA: { value: 1 } }, vertexShader: TELE_VS, fragmentShader: TELE_DAY_FS, transparent: true, depthWrite: false, blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor });
   return new THREE.ShaderMaterial({ uniforms: { uP: { value: 0 }, uColor: { value: new THREE.Color(color) }, uShape: { value: shape }, uArc: { value: arc }, uA: { value: 1 } }, vertexShader: TELE_VS, fragmentShader: TELE_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
 }
 // circle at x,z radius r, fills over dur seconds
@@ -641,8 +681,9 @@ export function updateFX(dt, cx, cz) {
   FX.add.update(dt); FX.alpha.update(dt); FX.leaf.update(dt);
   for (let i = FX.rings.length - 1; i >= 0; i--) {
     const r = FX.rings[i]; r.t += dt; const k = r.t / r.life;
-    if (k >= 1) { FX.group.remove(r.m); r.m.material.dispose(); FX.rings.splice(i, 1); continue; }
-    r.m.scale.setScalar(0.2 + r.r * Math.sqrt(k)); r.m.material.opacity = 1 - k;
+    if (k >= 1) { FX.group.remove(r.m); r.m.material.dispose(); r.u?.material.dispose(); FX.rings.splice(i, 1); continue; }
+    r.m.scale.setScalar(0.2 + r.r * Math.sqrt(k)); r.m.material.opacity = r.k === 1 ? 1 - k : Math.min(1, (1 - k) * r.k);
+    if (r.u) r.u.material.opacity = RING_DAY.underA * (1 - k);
   }
   for (let i = FX.decals.length - 1; i >= 0; i--) {
     const d = FX.decals[i]; d.t += dt;
@@ -666,7 +707,7 @@ export function updateFX(dt, cx, cz) {
 export function clearFX() {
   FX.add.clear(); FX.alpha.clear(); FX.leaf.clear();
   clearPrints(); FX.walk = null;
-  for (const r of FX.rings) { FX.group.remove(r.m); r.m.material.dispose(); } FX.rings = [];
+  for (const r of FX.rings) { FX.group.remove(r.m); r.m.material.dispose(); r.u?.material.dispose(); } FX.rings = [];
   for (const d of FX.decals) { FX.group.remove(d.m); d.m.material.dispose(); } FX.decals = [];
   for (const t of FX.teles) { FX.group.remove(t.m); t.m.material.dispose(); } FX.teles = [];
 }

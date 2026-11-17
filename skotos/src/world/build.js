@@ -1,7 +1,7 @@
 // Turns a layout into meshes: textured ground, instanced foliage and walls, merged static props.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { R, LIGHTS, beatPulse, setAtmosphere } from '../gfx/gfx.js';
+import { R, LIGHTS, beatPulse, setAtmosphere, DAY, onDay } from '../gfx/gfx.js';
 import { FX, puff, sapBurst, setAmbient, glowBurst } from '../gfx/fx.js';
 import { CREATURES, creatureModel, hasCreature } from '../gfx/creatures.js';
 import { heartWallH } from './gen3.js';
@@ -20,7 +20,12 @@ import { act6Level, instDef6, drownDef, drownMat } from './build6.js';
 // uWind: amplitude of all tree and grass sway (Act III's Still Wood sets 0 until the First Autumn). uEdge (z0, z1): south of
 // z1 the wind blows whatever uWind says, fading out by z0 (the Edge of Tears); (0, 0) is off. uAutumn: see setAutumn().
 // uOcc5: 1 while an Act V level draws (its ground sets it, buildLevel): the occluder's Act V form, below.
-export const WIND = { uTime: { value: 0 }, uHero: { value: new THREE.Vector3(0, 0, -999) }, uSnow: { value: 0 }, uWind: { value: 1 }, uEdge: { value: new THREE.Vector2(0, 0) }, uAutumn: { value: 0 }, uOcc5: { value: 0 } };
+// Act VII: uThaw, the thaw's own blend (a ground config's dryLayer, groundMat; setThaw(k) sets it and nothing else: the
+// First Autumn's uAutumn is never touched); uOccA, how much of a prop between the camera and the hero the screen-door
+// takes at most (0.82 as it always was; less by day, when the dither's grain shows on pale ground: OCC_DAY)
+export const WIND = { uTime: { value: 0 }, uHero: { value: new THREE.Vector3(0, 0, -999) }, uSnow: { value: 0 }, uWind: { value: 1 }, uEdge: { value: new THREE.Vector2(0, 0) }, uAutumn: { value: 0 }, uOcc5: { value: 0 }, uThaw: { value: 0 }, uOccA: { value: 0.82 } };
+const OCC_NIGHT = 0.82, OCC_DAY = 0.6;
+onDay((on) => { WIND.uOccA.value = on ? OCC_DAY : OCC_NIGHT; });
 SEA.uTime = WIND.uTime; // (Act V's sea runs on the same clock)
 const WIND_GLSL = `uniform float uWind; uniform vec2 uEdge;
 float windK(float z) { return uEdge.y > uEdge.x ? mix(uWind, 1.0, smoothstep(uEdge.x, uEdge.y, z)) : uWind; }`;
@@ -55,17 +60,17 @@ const OCC_F = `
     float occK = vOcc * mix(1.0, (1.0 - smoothstep(0.3, 0.48, length(occN))) * step(vOccP.z, vOccH.w), step(0.5, uOcc5));
     vec2 q = mod(floor(gl_FragCoord.xy), 4.0);
     float b = mod(q.x * 2.0 + q.y * 3.0 + floor(q.x / 2.0) * 1.0 + q.x * q.y, 4.0) / 4.0 + mod(q.x + q.y * 2.0, 4.0) / 16.0;
-    if (b < occK * 0.82) discard;
+    if (b < occK * uOccA) discard;
   }`;
 // (low: undergrowth, which dissolves from the ground up, so the path under a fern between the camera and the hero shows)
 export function occlude(mat, extra, low = false) {
   const prev = mat.onBeforeCompile;
   mat.onBeforeCompile = (sh, r) => {
     if (extra) extra(sh, r);
-    sh.uniforms.uHero = WIND.uHero; sh.uniforms.uOcc5 = WIND.uOcc5;
+    sh.uniforms.uHero = WIND.uHero; sh.uniforms.uOcc5 = WIND.uOcc5; sh.uniforms.uOccA = WIND.uOccA;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', (low ? '#define OCC_LOW\n' : '') + '#include <common>\nuniform vec3 uHero; uniform float uOcc5;\nvarying float vOcc; varying vec4 vOccH; varying vec3 vOccP;')
       .replace('#include <project_vertex>', OCC_V + '\n#include <project_vertex>');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uOcc5; varying float vOcc; varying vec4 vOccH; varying vec3 vOccP;')
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uOcc5; uniform float uOccA; varying float vOcc; varying vec4 vOccH; varying vec3 vOccP;')
       .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>' + OCC_F);
   };
   const key = mat.customProgramCacheKey?.() || mat.type;
@@ -1168,6 +1173,51 @@ function ground6(type) {
     hueA: own ? null : bot ? [0.5, 0.55, 0.62] : [0.55, 0.62, 0.6], hueP: own ? [1.12, 1.12, 1.1] : bot ? [0.66, 0.7, 0.76] : [0.7, 0.76, 0.74], hueB: bot ? [0.7, 0.74, 0.82] : [0.78, 0.82, 0.82],
     hueW: W === 'silt/iceWall' ? [0.8, 0.86, 0.9] : W === 'rime/ice' ? [0.3, 0.36, 0.4] : [0.5, 0.54, 0.6], wet: true, act6: true };
 }
+// Act VII (docs/act7-design/40-production.md, Ground layers): the two daylight zones, each slot a chain down to a layer
+// that is always there (the boot set's).
+// 'thaw', the Melts: open meadow and scree. A: the melt pack's meadow if it exists, or the boot leaf litter tinted to wet
+// spring grass (hueA); B: mud; P: the trail; W: the boot wall scan on the steep faces. Its thaw slot: the old snow, a
+// white fake of A (cA's own relief whitened, as ground5's fake), lying in patches that go as WIND.uThaw falls.
+// 'tarn', the Hanging Lake: the rime pack's snow, ice (the shore's stone on a layout of mode 'shore'), trodden snow and
+// sea-cliff, down to the deep's snow and the boot set. Its thaw slot: grass (the melt meadow, or the leaf litter tinted
+// green) growing in round the lake as WIND.uThaw rises.
+// dry: the extra layer; dryLayer names it (a layer id, or 'A': slot A's own read again), dryTint multiplies it, dryFake
+// whitens it to snow, dryU the WIND uniform that drives it ('uThaw'). G_WET on (wet rims as Act VI's, `rims`: quality 1
+// and up, never on a phone, so no rule may depend on it), G_GLINT on the tarn's snow; no aurora, no windows, no edge
+export const ACT7 = new Set(['thaw', 'tarn']);
+export const GROUND7 = ['thaw', 'tarn'];
+function ground7(type, mode) {
+  if (type === 'tarn') {
+    const A = lay4('rime/snow', 'snow', 'leaves'), own = A === 'rime/snow', snowy = own || A === 'snow';
+    const B = mode === 'shore' ? lay4('rime/shore', 'gravel', 'mud') : lay4('rime/ice', 'rime/shore', 'snow', 'mud');
+    const trod = lay4('rime/snowTrod', 'snow', 'trail'), W = lay4('rime/seaCliff', 'cliff', 'wall');
+    const grass = lay4('melt/meadow', 'leaves');
+    return { A, B, P: trod, W: W || undefined, s: [3.2, B === 'rime/ice' ? 7.5 : 5.0, trod === 'rime/snowTrod' ? 2.6 : 4.6], r: [0.6, 0.8, 0.85], ns: 1.6, tint: own ? 0xd4dae4 : 0xbcc4d0, dual: [1, 0], ws: 5.6, sat: own ? 0.9 : snowy ? 0.75 : 0.35,
+      hueB: B === 'rime/ice' || B === 'rime/shore' ? null : B === 'gravel' ? [0.86, 0.9, 0.96] : [0.62, 0.66, 0.74],
+      fake: !snowy, glint: true, wet: true, rims: true,
+      dry: true, dryLayer: grass, dryTint: grass === 'melt/meadow' ? 0xffffff : 0x9ed070, dryU: 'uThaw' };
+  }
+  const A = lay4('melt/meadow', 'leaves'), own = A === 'melt/meadow';
+  return { A, B: lay4('mud', 'leaves'), P: lay4('trail', 'mud', 'leaves'), W: lay4('wall') || undefined, s: [3.4, 2.1, 2.6], r: [0.95, 0.82, 0.9], ns: 1.0, tint: own ? 0xb8b8b0 : 0xaeb0a4, dual: [1, 1], ws: 4.4,
+    hueA: own ? null : [0.62, 1.0, 0.5], wet: true, rims: true,
+    dry: true, dryLayer: 'A', dryFake: true, dryU: 'uThaw' };
+}
+// The thaw, k from 0 (none of the thaw slot's layer) to 1 (all of it, off the trodden paths): 'thaw' sets 0.65 on first
+// arrival, 0.45 / 0.3 / 0.15 after each weir, 0.05 in its green reading; 'tarn' raises it as its grass grows in. It sets
+// WIND.uThaw and nothing else (not uAutumn, not uSnow, no light, no ambient). Eased: the uniform follows k at about a
+// third of the way a second while a ground that reads it draws (thawTick); snap sets it at once (a zone's build, a test)
+const THAW = { to: 0, at: -1 };
+export function setThaw(k, snap = false) {
+  THAW.to = clamp(k, 0, 1);
+  if (snap) { WIND.uThaw.value = THAW.to; THAW.at = -1; }
+}
+export const thawNow = () => WIND.uThaw.value;
+function thawTick() {
+  const t = WIND.uTime.value, dt = THAW.at < 0 ? 0 : clamp(t - THAW.at, 0, 0.1), v = WIND.uThaw.value;
+  THAW.at = t;
+  if (v === THAW.to) return;
+  WIND.uThaw.value = Math.abs(THAW.to - v) < 0.002 ? THAW.to : v + (THAW.to - v) * (1 - Math.exp(-dt * 0.45));
+}
 // the ground's beds at its corners (the wet sand, and the bed the deep water hides): the corner's cells' mean, as the
 // water's (cornerBeds), but thick ice, a window or the jetty count as dry land (the layout gives them the open sea's bed
 // for the water's colour under them); where thin ice meets tidal flats the flats' own, as the water takes it (sea.js
@@ -1430,7 +1480,7 @@ function buildGround(L, group) {
     for (let c = 0; c < w * h; c++) if (!(far && (L.ice[c] || L.sea?.[c] || pit(c) || sealedF(c)))) for (let k = 0; k < 6; k++) keep.push(ix[c * 6 + k]);
     geo.setIndex(keep);
   }
-  const cfg = GROUND[L.type] || (act5 ? ground5(L.type) : act6 ? ground6(L.type) : act4 ? ground4(L.type) : GROUND.forest);
+  const cfg = GROUND[L.type] || (ACT7.has(L.type) ? ground7(L.type, L.mode) : act5 ? ground5(L.type) : act6 ? ground6(L.type) : act4 ? ground4(L.type) : GROUND.forest);
   if (act5) cfg.frozen = L.mode === 'frozen';
   // (Act V: the ice windows' centres, the corner each 2 x 2 window's cells share: the ground cuts the round hole, G_WIN)
   if (act5 && L.window) { const wins = []; for (let z = 0; z < h - 1; z++) for (let x = 0; x < w - 1; x++) if (L.window[z * w + x] && L.window[z * w + x + 1] && L.window[(z + 1) * w + x] && L.window[(z + 1) * w + x + 1] && !(x > 0 && L.window[z * w + x - 1]) && !(z > 0 && L.window[(z - 1) * w + x])) wins.push(x + 1, z + 1); cfg.wins = wins.slice(0, 16); }
@@ -1488,15 +1538,20 @@ function groundMat(cfg, type) {
   const X = { sap: !!cfg.sap, dry: !!cfg.dry, wall: !!cfg.W, sat: cfg.sat != null };
   if (X.sat) uni.uSat = { value: cfg.sat };
   if (cfg.hueA) uni.uHueA = { value: new THREE.Vector3(...cfg.hueA) };
-  if (X.dry) { const Dr = ENV.layers.dryleaf; Object.assign(uni, { tD: { value: (Dr || A).d }, uDryTint: { value: new THREE.Color(Dr ? 0xffffff : 0xc89a70).multiplyScalar(cfg.dryK ?? 1) }, uAut: WIND.uAutumn }); }
+  // (Act VII: a config may name its own extra layer, dryLayer ('A': slot A's again), its tint, dryTint, and the uniform
+  // that drives it, dryU, a key of WIND: the thaw's uThaw. Without them: the First Autumn's dry leaves on uAutumn, as ever)
+  const DL = cfg.dryLayer != null || cfg.dryU != null;
+  if (X.dry && DL) { const Dr = cfg.dryLayer === 'A' ? A : ENV.layers[cfg.dryLayer] || A; Object.assign(uni, { tD: { value: Dr.d }, uDryTint: { value: new THREE.Color(cfg.dryTint ?? 0xffffff).multiplyScalar(cfg.dryK ?? 1) }, uAut: WIND[cfg.dryU || 'uThaw'] }); }
+  else if (X.dry) { const Dr = ENV.layers.dryleaf; Object.assign(uni, { tD: { value: (Dr || A).d }, uDryTint: { value: new THREE.Color(Dr ? 0xffffff : 0xc89a70).multiplyScalar(cfg.dryK ?? 1) }, uAut: WIND.uAutumn }); }
+  if (X.dry && DL && (cfg.dryU || 'uThaw') === 'uThaw') m.onBeforeRender = thawTick;
   if (X.wall) { const W = lay(cfg.W); Object.assign(uni, { tW: { value: W.d }, tWn: { value: W.n }, uWS: { value: 1 / (cfg.ws || 2.4) } }); }
   // Act V (sea.js): the snow's glints (not on low quality), the wet sand behind the ebb, the aurora's light on the ground
   // Act VI (the X6 set, ground6): the coast's ground with only its wet rims (on quality 1 and up; quality 0 draws the dry
   // seabed alone) and its cheaper reads (V56: the path read where a path lies, the wobbling edges, the walls' strata)
-  const X6 = !!cfg.act6;
+  const X6 = !!cfg.act6, RIM = X6 || !!cfg.rims;
   // (Act V on a phone: none of its own, sea.js safeSea)
   const ph = !!R.mobile;
-  const X5 = { glint: !!cfg.glint && R.quality >= 1 && !ph, wet: !!cfg.wet && (!X6 || R.quality >= 1) && !ph, aur: !!cfg.aur && !ph, fake: !!cfg.fake, hueB: !!cfg.hueB, edge: !!cfg.edge && !ph, v5: !!cfg.act5 && !ph, win: !!cfg.wins?.length && !ph };
+  const X5 = { glint: !!cfg.glint && R.quality >= 1 && !ph, wet: !!cfg.wet && (!RIM || R.quality >= 1) && !ph, aur: !!cfg.aur && !ph, fake: !!cfg.fake, hueB: !!cfg.hueB, edge: !!cfg.edge && !ph, v5: !!cfg.act5 && !ph, win: !!cfg.wins?.length && !ph };
   const V56 = X5.v5 || X6;
   // (Act VI: the road the floor's own layer, read once: G_PA)
   const PA = X6 && cfg.P === cfg.A;
@@ -1598,8 +1653,18 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
   gc = mix(vec3(dot(gc, vec3(0.3, 0.59, 0.11))), gc, uSat);` : '') + (X.dry ? `
   // the First Autumn: dry leaves drift over everything but the trodden paths (none before it: a uniform branch)
   if (uAut > 0.001) {
-    vec3 cD = texture2D(tD, vGP * uS.x * 0.93 + vec2(0.37, 0.11)).rgb * uDryTint;
-    float wD = uAut * smoothstep(0.32, 0.6, vLay.z * 0.8 + gH(cD) * 0.7 - wP * 0.4 - 0.01);
+    vec3 cD = texture2D(tD, vGP * uS.x * 0.93 + vec2(0.37, 0.11)).rgb * uDryTint;` + (DL ? `
+    // (Act VII: the thaw's layer lies in patches whose share of the ground is uAut itself: the layout's own slow field,
+    // vLay.z, cut near 1 - uAut, its edge ragged by the layer's relief; so the snow draws back to its hollows as the weirs
+    // open, instead of thinning everywhere at once)
+    float hD = gH(cD);` + (cfg.dryFake ? `
+    // (the old snow, a white fake of the layer under it, its relief kept: ground5's fake)
+    cD = mix(cD, vec3(0.7, 0.74, 0.8) * (0.8 + 0.34 * hD), 0.85);` : '') + `
+    // (the field stretched about its middle, where a slow noise keeps most of its values; past 0.85 the cut drops away, so
+    // 1 covers all but the trodden paths)
+    float tD = 1.0 - uAut - smoothstep(0.85, 1.0, uAut) * 0.9;
+    float wD = smoothstep(tD - 0.1, tD + 0.1, (vLay.z - 0.5) * 2.2 + 0.5 + (hD - 0.6) * 0.3 - wP * 0.4) * smoothstep(0.001, 0.04, uAut);` : `
+    float wD = uAut * smoothstep(0.32, 0.6, vLay.z * 0.8 + gH(cD) * 0.7 - wP * 0.4 - 0.01);`) + `
     gc = mix(gc, cD, wD); gh = mix(gh, gH(cD), wD);
   }` : '') + (X.sap ? `
   // amber sap: the floor shows through the resin, darkened and gold; glossy, faintly lit from within
@@ -1632,7 +1697,7 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
     gc = mix(gc, cW, steep); gh = mix(gh, gH(cW), steep);
   }` : '') + (X5.fake ? `
   // (no snow layer loaded: whiten whatever stands in for it, keeping its relief)
-  gc = mix(gc, vec3(0.7, 0.74, 0.8) * (0.8 + 0.34 * gh), 0.8 * (1.0 - wB) * (1.0 - wP * 0.4));` : '') + (X5.wet && X6 ? `
+  gc = mix(gc, vec3(0.7, 0.74, 0.8) * (0.8 + 0.34 * gh), 0.8 * (1.0 - wB) * (1.0 - wP * 0.4));` : '') + (X5.wet && RIM ? `
   // Act VI: the black water's rims, on the silt and the stone alike: dark and glossy where the water has stood within the
   // last 20 s (and under it now), its edge wandering inside the cells with the water's own (sea.js shoreN); the Mere at its
   // own level (vBay). No ripples, no pools, no frost: the black water leaves the floor as it found it
@@ -1766,7 +1831,7 @@ float gH(vec3 c) { return sqrt(dot(c, vec3(0.3, 0.55, 0.15))); }` + (X.sap ? '\n
     diffuseColor.rgb *= clamp(1.0 + (dot(nR, Lr) - dot(gN, Lr)) * rk, 0.72, 1.28); }` : '') + `
 #endif`);
   };
-  m.customProgramCacheKey = () => 'groundPBR|' + type + (nrm ? '|n' : '') + '|q' + R.quality + (cfg.fake ? '|f' : '') + (cfg.hueB ? '|b' : '') + (cfg.edge ? '|e' : '') + (X5.win ? '|w' : '') + (cfg.hueA ? '|a' : '') + (cfg.hueP ? '|p' : '') + (cfg.hueW ? '|hw' : '') + (PA ? '|pa' : '');
+  m.customProgramCacheKey = () => 'groundPBR|' + type + (nrm ? '|n' : '') + '|q' + R.quality + (cfg.fake ? '|f' : '') + (cfg.hueB ? '|b' : '') + (cfg.edge ? '|e' : '') + (X5.win ? '|w' : '') + (cfg.hueA ? '|a' : '') + (cfg.hueP ? '|p' : '') + (cfg.hueW ? '|hw' : '') + (PA ? '|pa' : '') + (DL ? '|dl' + (cfg.dryFake ? 'f' : '') : '') + (cfg.rims ? '|rim' : '');
   return m;
 }
 
@@ -1903,7 +1968,8 @@ export class Village {
         }
       }
       // (a scene's low camera looks at the world, not at her: the houses stay whole, as occlude() keeps the rest)
-      const target = hidden ? 0.28 : 1;
+      // (Act VII, by day: a house in the way keeps more of itself, its dither's grain showing on sunlit ground)
+      const target = hidden ? (DAY.on ? 0.42 : 0.28) : 1;
       if (Math.abs(H.u.value - target) > 0.005) H.u.value += (target - H.u.value) * Math.min(1, dt * 7);
     }
   }
@@ -3121,8 +3187,10 @@ const PROP4 = {
     // 0.9, where the ash's ring has its own; laid on in screen blending, so it gives what the ground underneath lacks: on
     // white snow the ash's additive decal read as a selection circle, the brightest shape on screen, while over the dark
     // wading water a decal faint enough for the snow lost the pool's edge: scenario shallowtele)
+    // (Act VII: by day as on the snow, gfx.js DAY: the shader's uSnow is this ring's own, 1 for either, set as it draws)
+    const uS5 = { value: 0 };
     mat.onBeforeCompile = (sh) => {
-      sh.uniforms.uSnow = WIND.uSnow; sh.uniforms.uTime = WIND.uTime;
+      sh.uniforms.uSnow = uS5; sh.uniforms.uTime = WIND.uTime;
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uSnow; uniform float uTime;')
         .replace('#include <map_fragment>', `#include <map_fragment>
   if (uSnow > 0.5) {
@@ -3154,7 +3222,7 @@ const PROP4 = {
     const fill = new THREE.Mesh(drapable(new THREE.PlaneGeometry(2, 2, 16, 16).rotateX(-Math.PI / 2), 0.04), fm);
     fill.renderOrder = 2; fill.visible = false;
     // (the blending follows the zone: additive elsewhere, as it always was; a GL state, no recompile)
-    m.onBeforeRender = () => { const s5 = WIND.uSnow.value > 0.5; mat.blending = s5 ? THREE.CustomBlending : THREE.AdditiveBlending; fill.visible = s5; };
+    m.onBeforeRender = () => { const s5 = WIND.uSnow.value > 0.5 || DAY.on; uS5.value = s5 ? 1 : WIND.uSnow.value; mat.blending = s5 ? THREE.CustomBlending : THREE.AdditiveBlending; fill.visible = s5; };
     const g = new THREE.Group(); g.add(m, fill);
     g.userData.setColor = (c) => { m.material.color.set(c); fm.color.set(c); };
     g.userData.setOpacity = (a) => { m.material.opacity = a; fm.opacity = a; };

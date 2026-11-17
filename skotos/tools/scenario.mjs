@@ -5666,6 +5666,161 @@ const S = {
     return { pass: beats.every((x) => x.ok), failed: beats.filter((x) => !x.ok).map((x) => x.b), beats };
   } },
 };
+// ---------- Act VII, stage 0: the daylight look gate (docs/act7-design/40-production.md, "The stage-0 look gate") ----------
+// Shipped zones drawn in the world viewer under Act VII's rows (?world=<zone>&atmos=<row>): forest and pass under `thaw`
+// (the pass with uSnow 0.45), farlight and coast under `tarn`; at quality 0 and 1, phone-emulated (915 x 412 at a pixel
+// ratio of 1.5, isMobile, &mobile=1: the phone's paths). In frame at the play camera: three monsters (a warg, a goblin, a
+// troll), a red circle and a white line in the 'day' telegraph material beside the same two additive (FX.teleAdd), a
+// light pool, a rare and a legendary loot beam. Two shots each (the zone alone; with the tells), JPEG, into
+// <out>/ (docs/act7-briefs/reports/g0/day0 by default). The five numbers, read from the drawn frame (the shot's pixels):
+//  1 tele: the day circle's rim against the ground it lies on (the same pixels without it), WCAG contrast, the better of
+//    its colour rim and its dark under-edge, the median round the circle: 3 : 1 or more; the additive one beside it
+//  2 ground: the mean luma (0-1 of white, as shown) of the floor round the hero: 0.80 or under on snow, 0.55 on grass
+//  3 body: each monster's body against what is behind it (the same pixels without it): 0.15 of white or more
+//  4 clip: the share of the frame at 0.97 of white or over: 2% or under
+//  5 beam (snow zones): the legendary beam's edge against the snow behind it: found when its dark core or its bright
+//    centre stands 0.10 of white or more off the snow (its WCAG contrast is reported beside it; 3 : 1 is out of a 35%
+//    core's reach on any ground)
+// (farlight: on the Ice Road north of the camp, the phone's plain ice and snow at noon, the worst case)
+// Env: ZONES ('forest,pass,farlight,coast'), QS ('1,0'), AT_<zone> (the viewer's own x=..&z=.. or at=..). stage '0', until 'B': daytele replaces it at G2
+S.day0 = { stage: '0', until: 'B', q: 'world=town&q=0&noenv', run: async (pg) => {
+  const fs = await import('node:fs');
+  const browser = pg.context().browser(), base = process.env.BASE || 'http://localhost:5199/';
+  const dir = process.argv[3] || 'docs/act7-briefs/reports/g0/day0';
+  fs.mkdirSync(dir, { recursive: true });
+  await pg.goto('about:blank');
+  const ALL = { forest: { row: 'thaw', ground: 'grass', snow: 0 }, pass: { row: 'thaw', ground: 'snow', snow: 0.45 }, farlight: { row: 'tarn', ground: 'snow', snow: 1, at: 'x=56&z=166' }, coast: { row: 'tarn', ground: 'snow', snow: 1 } };
+  const zones = (process.env.ZONES || 'forest,pass,farlight,coast').split(','), QS = (process.env.QS || '1,0').split(',').map(Number);
+  const rows = [], shots = [];
+  const jpeg = async (p, file) => { let buf; for (const q of [82, 70, 58, 46, 34]) { buf = await p.screenshot({ type: 'jpeg', quality: q }); if (buf.length <= 150000) break; } fs.writeFileSync(`${dir}/${file}`, buf); shots.push({ file, kb: Math.round(buf.length / 1024) }); };
+  for (const Q of QS) for (const zone of zones) {
+    const Z = ALL[zone];
+    const ctx = await browser.newContext({ viewport: { width: 915, height: 412 }, deviceScaleFactor: 1.5, isMobile: true, hasTouch: true });
+    const p = await ctx.newPage();
+    p.on('pageerror', (e) => logs.push(`pageerror(day0 ${zone} q${Q}): ` + e.message));
+    p.on('console', (m) => { if (m.type() === 'error') logs.push(`day0 ${zone} q${Q}: ` + m.text()); });
+    await p.goto(`${base}?world=${zone}&atmos=${Z.row}&q=${Q}&mobile=1&seed=3` + (process.env['AT_' + zone] || Z.at ? '&' + (process.env['AT_' + zone] || Z.at) : ''));
+    const ok = await p.waitForFunction(() => window.__ready && window.__L, null, { timeout: 300000 }).then(() => 1).catch(() => 0);
+    if (!ok) { rows.push({ zone, row: Z.row, q: Q, error: 'viewer not ready' }); await ctx.close(); continue; }
+    await p.waitForTimeout(400);
+    // the zone alone
+    const pre = await p.evaluate(async ({ snow }) => {
+      const B = await import('/src/world/build.js'), Gf = await import('/src/gfx/gfx.js');
+      B.WIND.uSnow.value = snow;
+      const R = window.__R, h = { x: R.cam.tx, z: R.cam.tz };
+      window.__view(h.x, h.z);
+      return { hero: h, day: Gf.DAY.on, bodyDay: document.body.classList.contains('day'), mobile: R.mobile, pr: R.renderer.getPixelRatio(), sun: R.sunOff.slice(), heroI: R.heroLight.userData.base, exposure: R.renderer.toneMappingExposure };
+    }, { snow: Z.snow });
+    await jpeg(p, `day0-q${Q}-${zone}-${Z.row}-plain.jpg`);
+    const r = await p.evaluate(async ({ ground }) => {
+      const FXm = await import('/src/gfx/fx.js'), Gf = await import('/src/gfx/gfx.js'), B = await import('/src/world/build.js'), M = await import('/src/gfx/models.js'), { Avatar } = await import('/src/gfx/anim.js'), PK = await import('/src/game/pickups.js');
+      const R = window.__R, L = window.__L, x = R.cam.tx, z = R.cam.tz, V = new R.camera.position.constructor();
+      const gl = R.renderer.getContext(), W = gl.drawingBufferWidth, H = gl.drawingBufferHeight;
+      // (a frame drawn and read whole: the pixels the shot shows)
+      const grab = () => { Gf.frame(0); Gf.render(); const px = new Uint8Array(W * H * 4); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px); return px; };
+      const scr = (wx, wy, wz) => { V.set(wx, wy, wz).project(R.camera); return [Math.round((V.x * 0.5 + 0.5) * (W - 1)), Math.round((V.y * 0.5 + 0.5) * (H - 1))]; };
+      const inF = ([sx, sy]) => sx >= 0 && sy >= 0 && sx < W && sy < H;
+      const at = (F, [sx, sy]) => { const i = (sy * W + sx) * 4; return [F[i], F[i + 1], F[i + 2]]; };
+      const luma = (c) => (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255;
+      const lin = (c) => { const f = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
+      const CR = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+      const med = (a) => a.slice().sort((u, v) => u - v)[a.length >> 1], avg = (a) => a.reduce((u, v) => u + v, 0) / Math.max(a.length, 1);
+      const f2 = (v) => +v.toFixed(3);
+      // 2 the ground alone
+      const F0 = grab();
+      const gl2 = [], gli = [];
+      for (let dz = -7; dz <= 3; dz += 0.5) for (let dx = -9; dx <= 9; dx += 0.5) {
+        if (Math.hypot(dx, dz) < 1.3) continue;
+        const s = scr(x + dx, 0.02, z + dz); if (!inF(s)) continue;
+        const c = at(F0, s); gl2.push(luma(c)); gli.push(lin(c));
+      }
+      let fm = 0; for (let i = 0; i < W * H; i += 7) fm += luma([F0[i * 4], F0[i * 4 + 1], F0[i * 4 + 2]]); fm /= Math.ceil((W * H) / 7);
+      const out = { ground: { luma: f2(avg(gl2)), lin: f2(avg(gli)), n: gl2.length, frame: f2(fm), max: ground === 'snow' ? 0.8 : 0.55 } };
+      // what goes in frame
+      const put = (o, px, pz, ry = 0) => { o.position.set(px, 0, pz); o.rotation.y = ry; R.scene.add(o); return o; };
+      const mons = {};
+      for (const [k, mk, px, pz, w, h] of [['warg', () => M.buildWarg(), x - 3.4, z - 2.6, 0.5, 0.95], ['goblin', () => M.buildGoblin(), x + 0.2, z - 4.2, 0.3, 1.1], ['troll', () => M.buildTroll(), x + 3.6, z - 2.4, 0.55, 2.0]]) {
+        try { const a = new Avatar(mk(), {}); put(a.group, px, pz, 0.4); a.update(0.5, { speed: 0 }); mons[k] = { g: a.group, x: px, z: pz, w, h }; } catch (e) { out['err_' + k] = e.message; }
+      }
+      const RED = 0xff3020, WHITE = 0xe8f4ff, TR = 1.5;
+      const T = {};
+      T.dayC = { m: FXm.teleCircle(x - 2.6, z + 1.9, TR, 99, RED).m, at: [x - 2.6, z + 1.9] };
+      T.dayL = { m: FXm.teleLine(x - 5.3, z - 1.3, 0, 3.4, 1.1, 99, WHITE).m, at: [x - 5.3, z - 1.3] };
+      FXm.FX.teleAdd = true;
+      T.addC = { m: FXm.teleCircle(x + 2.6, z + 1.9, TR, 99, RED).m, at: [x + 2.6, z + 1.9] };
+      T.addL = { m: FXm.teleLine(x + 5.3, z - 1.3, 0, 3.4, 1.1, 99, WHITE).m, at: [x + 5.3, z - 1.3] };
+      FXm.FX.teleAdd = false;
+      for (const k in T) T[k].m.material.uniforms.uP.value = 0.6;
+      out.blend = { day: T.dayC.m.material.blendDst, add: T.addC.m.material.blending };
+      let pool = null;
+      try { pool = B.act4Prop('lightRing'); pool.userData.setColor(0xfff0d0); pool.scale.setScalar(1.6); pool.position.set(x, 0, z + 3.4); B.drape(pool, L); R.scene.add(pool); } catch (e) { out.err_pool = e.message; }
+      const beams = {};
+      for (const [k, rar, px, pz] of [['rare', 2, x + 5.6, z - 3.2], ['legend', 3, x - 5.8, z - 3.4]]) { const b = PK.lootBeam(rar); b.position.set(px, 0, pz); b.visible = true; R.scene.add(b); beams[k] = { g: b, x: px, z: pz, core: !!b.userData.core }; }
+      out.beamCore = beams.legend.core;
+      FXm.ring(x + 0.2, z + 0.4, 1.4, 0xffffff, 99);
+      const rg = FXm.FX.rings[FXm.FX.rings.length - 1]; if (rg) { rg.m.scale.setScalar(1.4); rg.m.material.opacity = 0.8 * (rg.k || 1); if (rg.u) rg.u.material.opacity = 0.25 * 0.8; out.ringUnder = !!rg.u; out.ringK = rg.k; }
+      const hide = (list, fn) => { for (const o of list) o.visible = false; const F = fn(); for (const o of list) o.visible = true; return F; };
+      const FA = grab();
+      // 1 the telegraphs
+      const FT = hide(Object.values(T).map((t) => t.m), grab);
+      const circle = (t, rho) => { const v = []; for (let k = 0; k < 24; k++) { const an = (k / 24) * 6.283, s = scr(t.at[0] + Math.sin(an) * TR * rho, 0.06, t.at[1] + Math.cos(an) * TR * rho); if (inF(s)) v.push([lin(at(FA, s)), lin(at(FT, s))]); } return v; };
+      {
+        const rim = circle(T.dayC, 0.93), edge = circle(T.dayC, 0.85), per = rim.map((u, i) => Math.max(CR(u[0], u[1]), edge[i] ? CR(edge[i][0], edge[i][1]) : 0));
+        out.teleDay = { cr: f2(med(per)), rim: f2(med(rim.map((u) => CR(u[0], u[1])))), edge: f2(med(edge.map((u) => CR(u[0], u[1])))), rimVsEdge: f2(med(rim.map((u, i) => (edge[i] ? CR(u[0], edge[i][0]) : 1)))), ground: f2(avg(rim.map((u) => u[1]))), n: rim.length };
+        const ar = circle(T.addC, 0.97); out.teleAdd = { cr: f2(med(ar.map((u) => CR(u[0], u[1])))), ground: f2(avg(ar.map((u) => u[1]))) };
+        // (the white line: along its two edges, its rim at 0.85 of the half width and its dark edge at 0.97)
+        const line = (t, ex) => { const v = []; for (let k = 1; k <= 8; k++) for (const sd of [-1, 1]) { const s = scr(t.at[0] + sd * 0.55 * ex, 0.06, t.at[1] + (k / 9) * 3.4); if (inF(s)) v.push([lin(at(FA, s)), lin(at(FT, s))]); } return v; };
+        const lr = line(T.dayL, 0.85), le = line(T.dayL, 0.97), la = line(T.addL, 0.92);
+        out.lineDay = lr.length ? { cr: f2(med(lr.map((u, i) => Math.max(CR(u[0], u[1]), le[i] ? CR(le[i][0], le[i][1]) : 0)))), rim: f2(med(lr.map((u) => CR(u[0], u[1])))), edge: le.length ? f2(med(le.map((u) => CR(u[0], u[1])))) : null } : null;
+        out.lineAdd = la.length ? { cr: f2(med(la.map((u) => CR(u[0], u[1])))) } : null;
+      }
+      // 3 the monsters
+      const FM = hide(Object.values(mons).map((m) => m.g), grab);
+      out.body = {};
+      for (const k in mons) {
+        const m = mons[k], a = scr(m.x - m.w, m.h * 0.25, m.z), b = scr(m.x + m.w, m.h * 0.9, m.z);
+        let on = 0, off = 0, n = 0, tot = 0, abs = 0;
+        for (let sy = Math.max(0, Math.min(a[1], b[1])); sy <= Math.min(H - 1, Math.max(a[1], b[1])); sy++) for (let sx = Math.max(0, a[0]); sx <= Math.min(W - 1, b[0]); sx++) {
+          tot++; const c1 = at(FA, [sx, sy]), c0 = at(FM, [sx, sy]);
+          if (Math.max(Math.abs(c1[0] - c0[0]), Math.abs(c1[1] - c0[1]), Math.abs(c1[2] - c0[2])) <= 8) continue;
+          on += luma(c1); off += luma(c0); abs += Math.abs(luma(c1) - luma(c0)); n++;
+        }
+        out.body[k] = n ? { diff: f2(Math.abs(on - off) / n), meanAbs: f2(abs / n), body: f2(on / n), behind: f2(off / n), cover: f2(n / Math.max(tot, 1)) } : { diff: 0, cover: 0 };
+      }
+      // 4 clipped
+      { let c97 = 0, cAny = 0; for (let i = 0; i < W * H; i++) { const c = [FA[i * 4], FA[i * 4 + 1], FA[i * 4 + 2]]; if (luma(c) >= 0.97) c97++; if (Math.max(c[0], c[1], c[2]) >= 254) cAny++; } out.clip = { white: +((c97 / (W * H)) * 100).toFixed(2), anyChannel: +((cAny / (W * H)) * 100).toFixed(2) }; }
+      // 5 the beams: a profile across each at three heights, with it and without it
+      out.beam = {};
+      for (const k in beams) {
+        const b = beams[k], FB = hide([b.g], grab);
+        let best = null;
+        for (const y of [1.0, 2.2, 3.6]) {
+          let dark = 0, bright = 0, crD = 1, crB = 1, snow = 0, n = 0;
+          for (let i = -24; i <= 24; i++) { const s = scr(b.x + i * 0.035, y, b.z); if (!inF(s)) continue; const c1 = at(FA, s), c0 = at(FB, s), d = luma(c1) - luma(c0); n++; snow += luma(c0);
+            if (d < -dark) { dark = -d; crD = CR(lin(c1), lin(c0)); } if (d > bright) { bright = d; crB = CR(lin(c1), lin(c0)); } }
+          const v = { y, dark: f2(dark), bright: f2(bright), crDark: f2(crD), crBright: f2(crB), behind: f2(snow / Math.max(n, 1)), step: f2(Math.max(dark, bright)) };
+          if (!best || v.step > best.step) best = v;
+        }
+        out.beam[k] = best;
+      }
+      Gf.render();
+      return out;
+    }, { ground: Z.ground }).catch((e) => ({ error: e.message.slice(0, 300) }));
+    await jpeg(p, `day0-q${Q}-${zone}-${Z.row}-tells.jpg`);
+    const row = { zone, row: Z.row, q: Q, groundKind: Z.ground, pre, ...r };
+    if (!r.error) {
+      const bodies = Object.values(r.body || {}).map((b) => b.diff);
+      row.n = { tele: r.teleDay.cr, teleAdd: r.teleAdd.cr, ground: r.ground.luma, body: bodies.length ? Math.min(...bodies) : 0, clip: r.clip.white, beam: r.beam.legend?.step ?? null };
+      row.ok = { day: pre.day && pre.bodyDay && pre.mobile, tele: r.teleDay.cr >= 3, ground: r.ground.luma <= r.ground.max, body: bodies.length === 3 && bodies.every((d) => d >= 0.15), clip: r.clip.white <= 2, beam: Z.ground !== 'snow' ? null : (r.beam.legend?.step ?? 0) >= 0.1 };
+      row.pass = Object.values(row.ok).every((v) => v !== false);
+    } else row.pass = false;
+    rows.push(row);
+    console.log('day0', zone, Z.row, 'q' + Q, JSON.stringify(row.n || row.error), JSON.stringify(row.ok || {}));
+    await ctx.close();
+  }
+  fs.writeFileSync(`${dir}/day0.json`, JSON.stringify({ rows, shots }, null, 1));
+  return { pass: rows.length > 0 && rows.every((r) => r.pass), failed: rows.filter((r) => !r.pass).map((r) => `${r.zone}/${r.row}/q${r.q}: ` + (r.error || Object.entries(r.ok).filter(([, v]) => v === false).map(([k]) => k).join(','))), rows: rows.map((r) => ({ zone: r.zone, row: r.row, q: r.q, n: r.n, ok: r.ok, pass: r.pass, error: r.error })), shots };
+} };
 // (the contract's name for the checkpoints' scenario: wake6's, stage B)
 S.cp6 = S.wake6;
 const sc = S[name];

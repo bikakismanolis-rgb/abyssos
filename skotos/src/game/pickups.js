@@ -1,7 +1,7 @@
 // Things on the ground: gold, items (with light beams by rarity), health globes, story shards.
 import * as THREE from 'three';
 import { G } from './state.js';
-import { R, addLight, removeLight } from '../gfx/gfx.js';
+import { R, addLight, removeLight, DAY } from '../gfx/gfx.js';
 import { G as GEO, staticGeo } from '../gfx/rig.js';
 import { weaponGeo, shieldGeo } from '../gfx/models.js';
 import { kitMesh } from '../gfx/kits.js';
@@ -63,21 +63,46 @@ export function dropGold(x, z, amount) {
   const mesh = kitMesh('dungeon', amount > 60 ? 'coin_stack_medium' : 'coin_stack_small', 0.38);
   return add(Object.assign(p, { kind: 'gold', amount, mesh, t: 0 }));
 }
+// (the day core's own alpha: full across the middle of its width with soft sides, thinning slowly upward; the beam's own
+// texture, a thin bright line, would leave a core at a third of its strength a metre up)
+let coreTex = null;
+function coreTexture() {
+  if (coreTex) return coreTex;
+  const c = document.createElement('canvas'); c.width = 32; c.height = 64; const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0, 0, 0, 64); gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.45, 'rgba(255,255,255,0.75)'); gr.addColorStop(1, 'rgba(255,255,255,1)');
+  g.fillStyle = gr; g.fillRect(0, 0, 32, 64);
+  const gx = g.createLinearGradient(0, 0, 32, 0); gx.addColorStop(0, 'rgba(0,0,0,1)'); gx.addColorStop(0.22, 'rgba(0,0,0,0)'); gx.addColorStop(0.78, 'rgba(0,0,0,0)'); gx.addColorStop(1, 'rgba(0,0,0,1)');
+  g.globalCompositeOperation = 'destination-out'; g.fillStyle = gx; g.fillRect(0, 0, 32, 64);
+  coreTex = new THREE.CanvasTexture(c);
+  return coreTex;
+}
+// an item's light beam by its rarity (1 magic, 2 rare, 3 legendary: 14 m high): two crossed additive planes.
+// Act VII, by day (gfx.js DAY, read when it is made): a third plane behind them, a dark core at 35% in normal blending and
+// 1.3 x the beam's width, which keeps facing the camera's side (south) while the beam turns: on sunlit snow the additive
+// planes alone had no edge
+export function lootBeam(rar) {
+  const h = rar === 3 ? 14 : rar === 2 ? 6 : 3, w = rar === 3 ? 0.9 : 0.5;
+  const beam = new THREE.Group();
+  for (let i = 0; i < 2; i++) {
+    const pl = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: beamTexture(), color: RCOL[rar], transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, opacity: rar === 3 ? 1 : 0.7 }));
+    pl.position.y = h / 2; pl.rotation.y = i * Math.PI / 2; beam.add(pl);
+  }
+  if (DAY.on) {
+    const core = new THREE.Mesh(new THREE.PlaneGeometry(w * 1.3, h), new THREE.MeshBasicMaterial({ map: coreTexture(), color: 0x06080c, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }));
+    core.position.y = h / 2; core.renderOrder = -1;
+    // (the beam turns, pickups' tick: the core is turned back each frame, so it stays square to the play camera)
+    core.onBeforeRender = () => { core.rotation.y = -beam.rotation.y; };
+    beam.add(core); beam.userData.core = core;
+  }
+  return beam;
+}
 // (o.own: one the hero drops from her bag: it falls at her feet and waits there, taken up again only once she has walked
 // away from it and comes back; no fanfare, and a legendary she drops is not counted twice)
 export function dropItem(x, z, item, o = {}) {
   const p = o.own ? { x, z, y: 0.5, vx: 0, vz: 0, vy: 2.5 } : launch(x, z, 1.8);
   const mesh = new THREE.Group(); mesh.add(itemMesh(item));
   let beam = null, light = null;
-  if (item.rar >= 1) {
-    const h = item.rar === 3 ? 14 : item.rar === 2 ? 6 : 3;
-    beam = new THREE.Group();
-    for (let i = 0; i < 2; i++) {
-      const pl = new THREE.Mesh(new THREE.PlaneGeometry(item.rar === 3 ? 0.9 : 0.5, h), new THREE.MeshBasicMaterial({ map: beamTexture(), color: RCOL[item.rar], transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, opacity: item.rar === 3 ? 1 : 0.7 }));
-      pl.position.y = h / 2; pl.rotation.y = i * Math.PI / 2; beam.add(pl);
-    }
-    beam.visible = false;
-  }
+  if (item.rar >= 1) { beam = lootBeam(item.rar); beam.visible = false; }
   if (item.rar === 3) light = addLight({ x, y: 1.5, z, color: 0xff8a2a, intensity: 18, range: 8, flicker: 0.1 });
   if (o.own) { Audio.sfx('itemDrop', { x, z }); return add(Object.assign(p, { kind: 'item', item, mesh, beam, light, t: 0, own: true, hold: true })); }
   Audio.sfx(item.rar === 3 ? 'itemDropLegendary' : item.rar === 2 ? 'itemDropRare' : 'itemDrop', { x, z });

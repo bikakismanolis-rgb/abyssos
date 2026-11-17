@@ -60,6 +60,27 @@ ATMOS.mere = { ...ATMOS.drained, density: 0.034, hemi: 0.45 };
 ATMOS.bottom = { fog: 0x040508, density: 0.036, sky: 0x141822, ground: 0x0a0b0e, hemi: 0.4, moon: 0x6a8090, moonI: 0.25, exposure: 1.3, heroI: 24, heroRange: 9, heroColor: 0xffe0b0, zoom: 1, aur: 0, aurDark: 0, drift: 0, aurCol: [0.34, 0.27, 0.62] };
 ATMOS.hearthDark = { ...ATMOS.bottom, hemi: 0.25, moonI: 0.1 };
 ATMOS.bottomLit = { ...ATMOS.bottom, fog: 0x0e0a08, density: 0.028, hemi: 0.6, exposure: 1.2, drift: 0.5, driftCol: 0xffc890 };
+// Act VII (docs/act7-design/40-production.md, The look: daylight): the first rows of day. `thaw`, a spring morning over the
+// Melts, and `tarn`, noon on the snowfield of the Hanging Lake. New keys, read by gfx.js setAtmosphere: sun [x, y, z], the
+// directional light's offset from the hero (a row without it keeps the shipped (-12, 30, 6)); day: true, the row is
+// daylight (gfx.js DAY: the tells' day forms, fx.js, pickups.js, build.js). The hero's light stays in the scene at no
+// strength (heroI 0). mixAtmos copies sun and day whole from its second row, so a mix never swings the sun
+ATMOS.thaw = { fog: 0x9fb6c6, density: 0.012, sky: 0xbcd6f2, ground: 0x4c5e38, hemi: 1.25, moon: 0xfff0d2, moonI: 2.3, exposure: 1.0, heroI: 0, heroRange: 13, zoom: 1.05, sun: [-18, 22, 10], day: true };
+ATMOS.tarn = { fog: 0xc6d6e6, density: 0.010, sky: 0xd2e6ff, ground: 0xa2b2ca, hemi: 1.1, moon: 0xfff8ea, moonI: 2.1, exposure: 0.92, heroI: 0, heroRange: 13, zoom: 1.05, sun: [-6, 32, 4], day: true };
+// (under a cloud: less sun, a greyer sky, the same sun's place; eased to over a third of a second with mixAtmos)
+ATMOS.thawShade = { ...ATMOS.thaw, hemi: 0.95, moonI: 1.1, sky: 0xaebccc };
+ATMOS.tarnShade = { ...ATMOS.tarn, hemi: 0.95, moonI: 1.1, sky: 0xbcc8d8 };
+ATMOS.thawCine = { ...ATMOS.thaw, density: 0.006 };
+ATMOS.tarnCine = { ...ATMOS.tarn, density: 0.005 };
+ATMOS.thawFight = { ...ATMOS.thaw, zoom: 1.2 };
+ATMOS.tarnFight = { ...ATMOS.tarn, zoom: 1.25 };
+// (the ending: the sun low and gold over the lake)
+ATMOS.tarnGold = { ...ATMOS.tarn, moon: 0xffd49a, moonI: 1.7, sky: 0xe8c8a0 };
+// Whitecliff by day (the story's hook and its ending): a warm morning, and a gold dusk with the sun low in the west. From
+// the town's row: its zoom and the hero's reach; the light is the thaw's, a little under it (the town's ground is dark
+// leaf litter and cobble, its plaster pale)
+ATMOS.townMorning = { ...ATMOS.town, fog: 0xa8b8c4, density: 0.012, sky: 0xc4d8ee, ground: 0x5a5440, hemi: 1.15, moon: 0xffe8c4, moonI: 2.0, exposure: 1.0, heroI: 0, sun: [-20, 20, 8], day: true };
+ATMOS.townDusk = { ...ATMOS.town, fog: 0xb09a84, density: 0.013, sky: 0xe8c8a0, ground: 0x4a3c30, hemi: 1.0, moon: 0xffc888, moonI: 1.8, exposure: 1.0, heroI: 0, sun: [-26, 13, 6], day: true };
 // an atmosphere between a and b (k 0-1): colours in linear light, numbers straight (world.js eases with it)
 const _ca = new THREE.Color(), _cb = new THREE.Color();
 export function mixAtmos(a, b, k) {

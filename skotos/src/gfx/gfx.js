@@ -19,6 +19,9 @@ export const R = {
   hemi: null, moon: null, heroLight: null, hemiBase: new THREE.Color(), drift: 0, driftCol: new THREE.Color(0x6af0b0), driftCol2: null,
   pool: [], sources: new Set(),
   cam: { x: 0, z: 0, tx: 0, tz: 0, zoom: 1, zoomT: 1, trauma: 0, shakeT: 0, lookY: 0.9, pitch: 0.95, dist: 15, kick: { x: 0, z: 0 } },
+  // the directional light's offset from the hero (an atmosphere's `sun`, or SUN0: where it has always stood); day: the
+  // applied row is daylight (DAY below)
+  sunOff: [-12, 30, 6], day: false,
   time: 0,
   frameMs: 16, slowT: 0, fastT: 0, lastResize: 0
 };
@@ -49,7 +52,8 @@ function makeRenderer(q) {
 }
 export function initGfx(quality, o = {}) {
   R.quality = quality;
-  R.mobile = !!o.mobile;
+  // (the world viewer, which passes no options: &mobile=1 draws a phone's paths, tools/scenario.mjs day0)
+  R.mobile = o.mobile != null ? !!o.mobile : /[?&]mobile=1(&|$)/.test(location.search);
   const renderer = makeRenderer(quality);
   diagInit(renderer); reportInit(renderer);
   try { setupGfx(renderer, quality, o); } catch (e) { R.renderer = null; R.pool.length = 0; try { renderer.domElement.remove(); renderer.dispose(); renderer.forceContextLoss(); } catch (er) { /* gone anyway */ } throw e; }
@@ -93,7 +97,7 @@ function setupGfx(renderer, quality, o) {
   scene.add(R.hemi);
 
   const moon = new THREE.DirectionalLight(0xa6bcff, 1.1);
-  moon.position.set(-12, 30, 8);
+  moon.position.set(R.sunOff[0], R.sunOff[1], R.sunOff[2] + 2);
   moon.castShadow = quality >= 1;
   if (moon.castShadow) {
     // (a phone's high quality keeps the medium map: 8 MB of GPU memory instead of 32)
@@ -167,6 +171,21 @@ export function adaptResolution(dtMs) {
 }
 
 // ---------- atmosphere ----------
+// Act VII: daylight. DAY.on is true while the applied atmosphere is a day row (its `day: true`, atmos.js): fx.js draws its
+// tells in their day forms (the telegraphs' material, the rings' dark under-ring), pickups.js gives a loot beam its dark
+// core, build.js the light ring's screen blend and a softer fade dither. onDay(fn) is told when it changes (fn(on)).
+// The page's body takes the class 'day' (the DOM's numbers, names and bars: a dark text shadow, ui/style.css)
+const SUN0 = [-12, 30, 6];
+export const DAY = { on: false };
+const dayHooks = [];
+export const onDay = (fn) => { dayHooks.push(fn); fn(DAY.on); };
+export const isDay = () => DAY.on;
+function setDay(on) {
+  if (on === DAY.on) return;
+  DAY.on = R.day = on;
+  document.body.classList.toggle('day', on);
+  for (const fn of dayHooks) fn(on);
+}
 export function setAtmosphere(a) {
   const s = R.scene;
   s.background.set(a.fog);
@@ -183,6 +202,11 @@ export function setAtmosphere(a) {
   R.heroLight.userData.base = a.heroI ?? 30;
   R.heroLight.distance = a.heroRange ?? 15;
   R.cam.zoomT = a.zoom ?? 1;
+  // (the sun's place: the row's own, or where the moon has always stood; the shadow box takes it at the next camera update,
+  // and at once where no shadow is cast, quality 0, which never moved the light)
+  const so = a.sun || SUN0; R.sunOff[0] = so[0]; R.sunOff[1] = so[1]; R.sunOff[2] = so[2];
+  if (a.sun || R.sunMoved) { R.sunMoved = !!a.sun; R.moon.position.set(R.cam.x + so[0], so[1], R.cam.z + so[2]); R.moon.target.position.set(R.cam.x, 0, R.cam.z - 2); }
+  setDay(!!a.day);
   // Act V: the aurora's brightness and darkness (sea.js reads them), and the hemisphere light's slow green drift (Act VI:
   // a.driftCol the colour it wanders toward, the aurora's green through the ice, or the thaw's warmth; a.driftCol2 a
   // second one the first itself wanders toward, as the Drained Sea's green goes white and back)
@@ -318,7 +342,7 @@ export function updateCamera(dt, tx, tz, snap) {
   // shadow box follows the hero
   if (R.moon.castShadow) {
     R.moon.target.position.set(c.x, 0, c.z - 2);
-    R.moon.position.set(c.x - 12, 30, c.z + 6);
+    R.moon.position.set(c.x + R.sunOff[0], R.sunOff[1], c.z + R.sunOff[2]);
   }
 }
 
