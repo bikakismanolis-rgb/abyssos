@@ -211,3 +211,4 @@ the path goes from a v22 Warden at quest 39 through both real fights to quest 47
 scenario passes on the same tree (save16, race, slide, fires7, sun, heavy7, sleepers7, sleepers7b, chough7, rested7,
 kallisto, kelados, bossSpot7, echo7, gate7, hook7, thaw7, tarn7, ending7, catch7, cast7, play7).
 
+perf7's meadow measured again alone after every hut and slab stopped being drawn twice (build7 `NAMED7`), 5 cycles at q1: **vsField 0.974, world 0.94** (ratios 0.987, 0.927, 0.974, 1.031, 0.90): pass. All five spots now pass at quality 1.
