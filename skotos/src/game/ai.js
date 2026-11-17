@@ -984,7 +984,8 @@ function statueTick(a, dt, d, pl) {
   const av = a.avatar;
   if (av) { av.group.position.set(a.x, 0, a.z); av.group.rotation.y = a.rot; av.update(0, { speed: 0 }); }
   // (Act VII's Icebound: by unbroken sun, a blow, fire or the Cradle; never by her walking near, sunWakes)
-  let wake = (a.wakeIn != null && (a.wakeIn -= dt) <= 0) || (!a.icebound && d < 4) || a.hp < a.hpMax;
+  // (a blow wakes it: a hurt below what it had when it slept; an Icebound frozen back to sleep is already hurt, U7)
+  let wake = (a.wakeIn != null && (a.wakeIn -= dt) <= 0) || (!a.icebound && d < 4) || a.hp < (a.hpSlept ?? a.hpMax);
   if (a.icebound) wake = wake || sunWakes(a, dt);
   else if (!wake && (a.iceT = (a.iceT ?? rand.range(0, 0.25)) - dt) <= 0) { a.iceT = 0.25; for (let k = 0; k < 9 && !wake; k++) wake = stageAt(a.x + (k % 3) - 1, a.z + Math.floor(k / 3) - 1) >= 1; }
   if (!wake) return;
@@ -993,7 +994,7 @@ function statueTick(a, dt, d, pl) {
 }
 function breakStatue(a, pl) {
   const av = a.avatar;
-  a.dormant = false; a.disguised = false; a.awake = true; a.aggro = true; a.rising = 0.7; a.wakeIn = null; a.wokeAt = clock; a.sunT = 0;
+  a.dormant = false; a.disguised = false; a.awake = true; a.aggro = true; a.rising = 0.7; a.wakeIn = null; a.wokeAt = clock; a.sunT = 0; a.hpSlept = null;
   a.rot = angleTo(a.x, a.z, pl.x, pl.z);
   if (av) { av.setTint(...(a.wakeTint || [0xffffff, 0])); restoreRim(a); av.anim.stop?.(0.15); av.play('hit', 1.2); }
   for (let i = 0; i < 18; i++) P({ x: a.x + rand.range(-0.3, 0.3), y: rand.range(0.3, 1.8), z: a.z + rand.range(-0.3, 0.3), vx: rand.range(-3, 3), vy: rand.range(1, 4), vz: rand.range(-3, 3), life: rand.range(0.6, 1.1), size: rand.range(0.08, 0.16), size1: 0.05, color: 0xe8f6ff, color1: 0x7ab4e0, grav: 9.8 });
@@ -5965,7 +5966,7 @@ on('iceMelt', (it) => { if (!it) return; for (const a of G.actors) if (a.iceboun
 function refreeze7(a) {
   if (a.dormant || !(clock - (a.wokeAt ?? -99) < 3) || (a.refroze || 0) >= 2) return false;
   a.refroze = (a.refroze || 0) + 1;
-  a.dormant = true; a.disguised = true; a.awake = false; a.aggro = false; a.wakeIn = 4; a.status.freeze = 0; a.rising = 0;
+  a.dormant = true; a.disguised = true; a.awake = false; a.aggro = false; a.wakeIn = 4; a.status.freeze = 0; a.rising = 0; a.hpSlept = a.hp;
   a.h7 = null; a.state = 'chase'; killTele(a.tele); a.tele = null; a.avatar?.setTint(0x9ac8e8, 1.75);
   tally(a, 'refrozen');
   return true;

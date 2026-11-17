@@ -394,6 +394,68 @@ export const S7 = () => ({
   } },
   // the sleepers: a Den-bear not woken by her walking at 6 m, woken by a blow, by something loud 10 m off; an Icebound asleep
   // through 60 game-seconds of shade with her at 2 m, awake within HAZ7.sunWake + 1 s of sun; a slab's scorpions out at 6 m
+  // the sleeper rules sleepers7 does not walk: fire halves an Icebound's wait in shade (U6: a molten patch on its block, no
+  // blow); frost puts one woken under 3 s ago back to sleep for 4 s, twice at most, never one woken longer ago (U7, the
+  // frost's own hurt not waking it); water reaching a sleeping Den-bear wakes it, calm, and a dry one sleeps on (S11's
+  // meeting: a brook rising into a den)
+  sleepers7b: { stage: 'B', until: 'E', q: Q(fx7('thawSeen', 'thaw'), '&nopacks'), run: async (pg) => {
+    const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
+    await until(pg, () => window.__G.zone?.tide && window.__act7);
+    await setup7(pg);
+    const fire = await pg.evaluate(async () => {
+      const G = window.__G, A7 = window.__act7, m = G.zone.map, P = await import('/src/game/projectiles.js');
+      window.__clear(); const sh = window.__shadeSpot; if (!sh) return { err: 'no shade cell' };
+      const r = window.__sp('rockRoller', sh.x, sh.z, { icebound: true });
+      const hp = m.nearestFloor(sh.x + 2.5, sh.z, 1.2) || m.nearestFloor(sh.x, sh.z + 2.5, 1.2); G.player.x = hp.x; G.player.z = hp.z;
+      await window.__gwait(0.3);
+      const want = A7.H7().sunWake, asleep = r.dormant, t0 = A7.now();
+      P.area('fire', sh.x, sh.z, 0.8, 40, { team: 'foe', src: { affixes: ['molten'] }, dmg: 0 });
+      await window.__wait(() => !r.dormant, 30000);
+      const out = { asleep, dormant: r.dormant, s: +(A7.now() - t0).toFixed(2), half: +(want / 2).toFixed(2), shade: A7.shade7(r.x, r.z), hurt: r.hp < r.hpMax };
+      for (const f of G.areas) if (f.kind === 'fire') f.t = f.dur + 1;
+      window.__clear(); return out; });
+    beat('fire on its block in shade (a molten patch) halves an Icebound\'s wait, with no blow', fire.asleep && !fire.dormant && fire.shade && !fire.hurt && Math.abs(fire.s - fire.half) <= 0.6, fire);
+    const frost = await pg.evaluate(async () => {
+      const G = window.__G, A7 = window.__act7, m = G.zone.map, out = {};
+      window.__clear(); const sh = window.__shadeSpot; if (!sh) return { err: 'no shade cell' };
+      const hp = m.nearestFloor(sh.x + 2.5, sh.z, 1.2) || m.nearestFloor(sh.x, sh.z + 2.5, 1.2); G.player.x = hp.x; G.player.z = hp.z;
+      const r = window.__sp('rockRoller', sh.x, sh.z, { icebound: true }); await window.__gwait(0.3);
+      A7.damage(G.player, r, 1, { crit: false }); await window.__gwait(0.4); out.woke = !r.dormant;
+      // (frost as Frost Nova lands it: the hurt first, then the freeze)
+      const frostOn = (a) => { A7.damage(G.player, a, 1, { crit: false }); a.status.freeze = 1.5; };
+      frostOn(r); await window.__gwait(0.5); out.re1 = r.dormant;
+      const t1 = A7.now(); await window.__wait(() => !r.dormant, 15000); out.back1 = +(A7.now() - t1 + 0.5).toFixed(2);
+      frostOn(r); await window.__gwait(0.5); out.re2 = r.dormant;
+      await window.__wait(() => !r.dormant, 15000);
+      frostOn(r); await window.__gwait(0.5); out.re3 = r.dormant;
+      window.__clear(); const r2 = window.__sp('rockRoller', sh.x, sh.z, { icebound: true }); await window.__gwait(0.3);
+      A7.damage(G.player, r2, 1, { crit: false }); await window.__gwait(3.4); frostOn(r2); await window.__gwait(0.5); out.late = r2.dormant;
+      window.__clear(); return out; });
+    beat('frost on an Icebound woken under 3 s ago: asleep again for 4 s, its own hurt not waking it', frost.woke && frost.re1 && Math.abs(frost.back1 - 4) <= 0.6, frost);
+    beat('twice at most, and never on one woken more than 3 s before', frost.re2 && !frost.re3 && !frost.late, frost);
+    const water = await pg.evaluate(async () => {
+      const G = window.__G, L = G.zone.L, m = G.zone.map, T = await import('/src/game/tide.js'), p = window.__den;
+      window.__clear(); G.player.x = p.x; G.player.z = p.z;
+      let wet = null, dry = null;
+      for (let i = 0; i < L.cells.length && !wet; i++) {
+        const x = i % L.w + 0.5, z = Math.floor(i / L.w) + 0.5, dd = Math.hypot(x - p.x, z - p.z); if (dd < 14 || dd > 32) continue; // (within 38 m: the far ones are not run)
+        const w = T.waterAt(x, z);
+        // (a wading cell, on the walk grid: the Race's and the brooks' edges)
+        if (!wet && (w === 'shallow' || (w === 'deep' && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dz]) => T.waterAt(x + dx, z + dz) === 'dry' && m.walkable(x + dx, z + dz))))) wet = { x, z, w };
+      }
+      // (a dry cell as far from her as the wet one, away from the water)
+      for (let i = 0; wet && i < L.cells.length && !dry; i++) { const x = i % L.w + 0.5, z = Math.floor(i / L.w) + 0.5, dd = Math.hypot(x - p.x, z - p.z); if (dd >= 14 && dd <= 32 && m.walkable(x, z) && T.waterAt(x, z) === 'dry' && Math.hypot(x - wet.x, z - wet.z) > 6 && !L.pocket?.[i]) dry = { x, z }; }
+      if (!wet || !dry) { const n = { shallow: 0, deep: 0 }; for (let i = 0; i < L.cells.length; i++) { const w = T.waterAt(i % L.w + 0.5, Math.floor(i / L.w) + 0.5); if (n[w] != null) n[w]++; } return { err: 'no wet or dry cell', wet, dry, n }; }
+      const b1 = window.__sp('denBear', wet.x, wet.z, { dormant: true }), b2 = window.__sp('denBear', dry.x, dry.z, { dormant: true });
+      // (spawned on the nearest floor; laid where the water is: as a bear asleep on a brook's bed when it rises)
+      b1.x = wet.x; b1.z = wet.z; const inW = T.waterAt(b1.x, b1.z);
+      await window.__gwait(1.5);
+      const out = { wet: { dormant: b1.dormant, aggro: !!b1.aggro, w: wet.w, inW, dead: !!b1.dead }, dry: { dormant: b2.dormant } };
+      window.__clear(); return out; });
+    beat('water reaching a sleeping Den-bear wakes it, calm; one on dry ground sleeps on', !water.err && !water.wet.dormant && !water.wet.aggro && water.dry.dormant, water);
+    await pg.evaluate(() => clearInterval(window.__keep));
+    return out(beats);
+  } },
   sleepers7: { stage: 'B', until: 'E', q: Q(fx7('thawSeen', 'thaw'), '&nopacks'), run: async (pg) => {
     const beats = [], beat = (b, ok, x) => beats.push({ b, ok: !!ok, ...(x !== undefined ? { x } : {}) });
     await until(pg, () => window.__G.zone?.tide && window.__act7);
