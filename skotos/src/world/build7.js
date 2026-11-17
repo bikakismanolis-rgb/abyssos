@@ -268,7 +268,7 @@ const PROP7 = {
     }));
     const crown = solid7('appleBloom', () => {
       const rr = RNG(991), parts = [], C = [0xf8f0f2, 0xf2d4dc, 0xffffff, 0xe8bfcc];
-      for (let k = 0; k < 15; k++) { const a = rr.range(0, 6.28), d = rr.range(0.2, 1.15), w = rr.range(0.3, 0.48); parts.push({ geo: jitter(G.dodeca(w), w * 0.2, 992 + k), color: k % 5 === 4 ? 0x9ab868 : C[k % 4], soft: 0.6, o: { x: Math.sin(a) * d + 0.06, y: 2.05 + rr.range(-0.2, 0.5) - d * 0.15, z: Math.cos(a) * d } }); }
+      for (let k = 0; k < 15; k++) { const a = rr.range(0, 6.28), d = rr.range(0.2, 1.15), w = rr.range(0.3, 0.48); parts.push({ geo: jitter(G.dodeca(w), w * 0.2, 992 + k), color: k % 5 === 4 ? 0x78965a : C[k % 4], soft: 0.6, o: { x: Math.sin(a) * d + 0.06, y: 2.05 + rr.range(-0.2, 0.5) - d * 0.15, z: Math.cos(a) * d } }); }
       return parts;
     }, null, false);
     g.add(crown);
