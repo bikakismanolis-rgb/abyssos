@@ -582,12 +582,15 @@ const AI = {
       }
       return 0;
     }
-    if (a.upT <= 0 || d > 13) { a.state = 'dive'; a.atkT = 0; a.avatar?.play('die', 2.2); puff(a.x, 0.3, a.z, 8, 0x6a5a48, 1.2, 1.2, 1); Audio.sfx('wormRumble', { x: a.x, z: a.z }); return 0; }
+    // (Act VII: a Snow-worm up on bare ground cannot dive again; it crawls after her, slowly, until it is back on snow)
+    const bare = a.def.snowOnly && !snow7(a.x, a.z);
+    if ((a.upT <= 0 || d > 13) && !bare) { a.state = 'dive'; a.atkT = 0; a.avatar?.play('die', 2.2); puff(a.x, 0.3, a.z, 8, 0x6a5a48, 1.2, 1.2, 1); Audio.sfx('wormRumble', { x: a.x, z: a.z }); return 0; }
     face(a, pl, dt, 4);
     if (a.cd <= 0) {
-      if (d < a.def.reach + pl.radius + 0.3) { a.spit = false; startAttack(a, 'bite', { hit: 0.45, dur: 1.0 }); }
-      else if (d < 10 && G.zone.map.los(a.x, a.z, pl.x, pl.z)) { a.spit = true; startAttack(a, 'bite', { hit: 0.5, dur: 1.1 }); a.cd = 2.2; }
+      if (d < a.def.reach + pl.radius + 0.3) { a.spit = false; startAttack(a, 'bite', { hit: 0.45, dur: 1.0 }); return 0; }
+      else if (d < 10 && G.zone.map.los(a.x, a.z, pl.x, pl.z)) { a.spit = true; startAttack(a, 'bite', { hit: 0.5, dur: 1.1 }); a.cd = 2.2; return 0; }
     }
+    if (bare && d > a.def.reach + pl.radius) return seek(a, pl.x, pl.z, a.speed * 0.5, dt);
     return 0;
   },
   runepriest(a, dt, pl, d) {
@@ -5800,6 +5803,9 @@ export function snow7(x, z) {
 function snowUnder(a, dt, pl, d) {
   if (a.avatar) a.avatar.group.visible = false;
   if (!aggroCheck(a, pl, d)) return 0;
+  // (under bare ground, where it was put or where the snow went: it cannot tunnel there and comes up; it stalled a pack
+  // the balance bot fought, never to be struck)
+  if (!snow7(a.x, a.z)) { wormUp(a, false); return 0; }
   if (Math.random() < 0.5) puff(a.x + rand.range(-0.4, 0.4), 0.1, a.z + rand.range(-0.4, 0.4), 1, 0xe8eef4, 0.5, 0.3, 0.8);
   a.rumbleT = (a.rumbleT ?? 0) - dt;
   if (a.rumbleT <= 0) { a.rumbleT = 1.3; Audio.sfx('wormRumble', { x: a.x, z: a.z, vol: 0.45 }); }

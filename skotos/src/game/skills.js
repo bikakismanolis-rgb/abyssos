@@ -279,7 +279,7 @@ const SKILL_FN = {
       events: [[0.3, () => {
         pl.buffs.cry = sk.buff + rank;
         pl.res = Math.min(G.stats.resMax, pl.res + sk.gain);
-        circleHit(pl.x, pl.z, 7, (f) => { f.status.fear = Math.max(f.status.fear, 2 + rank * 0.3); });
+        circleHit(pl.x, pl.z, 7, (f) => { if (!f.boss) f.status.fear = Math.max(f.status.fear, 2 + rank * 0.3); }); // (no boss is ever afraid: combat.js's rule for a blow's fear)
         ring(pl.x, pl.z, 7, 0xff5030, 0.6); ring(pl.x, pl.z, 4, 0xffb060, 0.4);
         glowBurst(pl.x, 1.4, pl.z, 0xff6030, 30, 6, 0.4, 0.6);
         addLight({ x: pl.x, y: 2, z: pl.z, color: 0xff5020, intensity: 40, range: 12, life: 0.6, fade: 0.6 });
