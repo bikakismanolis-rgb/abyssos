@@ -764,6 +764,16 @@ export const S7 = () => ({
     const broke = !!bb && await until(pg, (i) => (window.__G.zone.L.spots.boulders || []).filter((b) => b.den)[i]?.broken, 15000, bb.i);
     const bs = bb && await pg.evaluate((q) => { const z = window.__G.zone, a = z.boss, m = (z.lvl.act7?.props?.boulder || []).find((o) => Math.hypot(o.position.x - q.x, o.position.z - q.z) < 0.8); return { open: z.map.walkable(q.x, q.z), shown: m ? m.visible : null, dazed: (a.dazeT ?? a.daze ?? 0) > 0 || a.st === 'dazed', left: z.L.spots.boulders.filter((b) => b.den && !b.broken).length }; }, bb);
     beat('her echo: a charge that ends on a Den boulder breaks it (cells open, the rock gone; the other five stand)', broke && bs.open && bs.shown === false && bs.left === bb.n - 1, { bb, bs });
+    // her third charge: a rock falls by itself in front of it (no Halda in the echo) and the charge ends on it
+    const rk = k && await pg.evaluate(() => {
+      const z = window.__G.zone, a = z.boss, m = z.map, L7 = window.__act7.AI_LOG; a.chargeN = 2; a.dazed = 0;
+      for (let k = 0; k < 400; k++) { const g = Math.random() * 6.28, ux = Math.sin(g), uz = Math.cos(g), H = { x: a.x + ux * 12, z: a.z + uz * 12 };
+        if (!m.walkable(H.x, H.z) || !m.clear(a.x, a.z, H.x, H.z)) continue;
+        window.__G.player.x = H.x; window.__G.player.z = H.z; a.mcd.charge = 0; a.wheeled = true; a.queue = ['charge']; a.cd = 0; a.status.stun = 0;
+        return { rock0: L7['kallisto:echoRock'] || 0, stone0: L7['kallisto:chargeStone'] || 0 }; }
+      return null; });
+    const rkOk = !!rk && await until(pg, (r0) => { const L7 = window.__act7.AI_LOG; return (L7['kallisto:echoRock'] || 0) > r0.rock0 && (L7['kallisto:chargeStone'] || 0) > r0.stone0; }, 15000, rk);
+    beat('her echo\'s third charge: a rock falls by itself in front of it and the charge ends on it', rkOk, { rk, log: await pg.evaluate(() => { const L7 = window.__act7.AI_LOG; return { rock: L7['kallisto:echoRock'], stone: L7['kallisto:chargeStone'], open: L7['kallisto:chargeOpen'] }; }) });
     const r1 = await pg.evaluate(async () => { const z = window.__G.zone, b = z.boss, F = await import('/src/game/forge.js'); const armed = (F.flues() || []).filter((f) => f.kind === 'snow' && f.st !== 'idle').length; window.__D.kill(b); await new Promise((ok) => setTimeout(ok, 1500)); return { echo: !!b?.echo, falling: armed, rest: !!window.__G.hero.flags.kallistoRest, q: window.__G.hero.quest }; });
     beat('the green bowl: Kallisto\'s echo rises from her place, an echo', !!e1 && k && r1.echo, { e1, r1 });
     beat('her echo falls and the story is untouched (quest 47)', r1.q === 47, r1);
@@ -771,6 +781,10 @@ export const S7 = () => ({
     const kk = !t.none && await until(pg, () => window.__G.zone.boss?.kind === 'kelados' && window.__G.zone.boss.echo && window.__G.zone.boss.awake, 30000);
     const r2 = await pg.evaluate(() => { const z = window.__G.zone; return { levers: z.act7.levers.map((l) => !l.used) }; });
     beat('the lake let down: Kelados\'s echo rises, awake, all three levers bare', kk && r2.levers.length === 3 && r2.levers.every(Boolean), { t, r2 });
+    // 25 s into his third phase with no lever pulled, the nearest bare lever pulls itself (no Halda in the echo)
+    const lv0 = kk && await pg.evaluate(() => { const a = window.__G.zone.boss; window.__immortal = true; a.hp = a.hpMax * 0.3; return { n: a.levers.size, log: window.__act7.AI_LOG['kelados:echoLever'] || 0 }; });
+    const lvOk = !!lv0 && await until(pg, (q) => (window.__act7.AI_LOG['kelados:echoLever'] || 0) > q.log && window.__G.zone.boss.levers.size > q.n, 40000, lv0);
+    beat('his echo: 25 s into his third phase with no lever pulled, a lever pulls itself', lvOk, { lv0, now: await pg.evaluate(() => ({ phase: window.__G.zone.boss?.phase, levers: window.__G.zone.boss?.levers?.size, log: window.__act7.AI_LOG['kelados:echoLever'] })) });
     return out(beats);
   } },
   // a Shadow Gate's layout is the shipped generator's for the same seed (no older layout changes with the act)

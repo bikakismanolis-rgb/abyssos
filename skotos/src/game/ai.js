@@ -6173,6 +6173,13 @@ function kCharge(a, pl, second) {
   a.avatar?.play('rear', 1, { hitIn: 1.0 }); Audio.sfx('bearRoar', { x: a.x, z: a.z });
   // (Ash, Skotos: in her last phase a Rockfall may be thrown during the Charge's wind-up)
   if (!second && a.phase >= 2 && over7(a) && (a.mcd.rockfall ?? 0) <= 0 && farHero(a, 8)) { a.mcd.rockfall = bcd7(9); a.rockN++; rockfall7(a, farHero(a, 8)); tally(a, 'rockfall'); }
+  // (her echo has no Halda: a rock falls by itself in front of her third charge, 2.5 m short of the hero, and the charge
+  // ends on it, Dazed as on any stone; contract echo rules)
+  if (a.echo && !second && (a.chargeN = (a.chargeN || 0) + 1) === 3 && d > 6.5) {
+    const k = d - 2.5, rx = a.x + Math.sin(dir) * k, rz = a.z + Math.cos(dir) * k;
+    after7(a, 0.4, () => fall(rx, rz, 0x4a4844));
+    after7(a, 0.75, () => { explosion(rx, rz, 1.6, 0x9a9080, { smoke: 0x6a6258, shake: 0.3 }); Audio.sfx('slam', { x: rx, z: rz }); rock7(rx, rz, rockT7(), { by: a }); tally(a, 'echoRock'); });
+  }
   const m = mv7(a, id, 1.0, () => {
     startDash(a, dir, 20, len, { daze: 3.5, sapDaze: 2, w: 5, dmg: 1, hitO: { push: 20, share: H.bossHeavy, cap: H.cap, move: id }, dust: 0x5a4a38, end: kChargeEnd });
     a.avatar?.play('charge', 1.5, { loop: true }); Audio.sfx('bearCharge', { x: a.x, z: a.z });
@@ -6214,7 +6221,11 @@ const KELADOS = {
     a.mcd.tremor = bcd7(4); a.mcd.iceBlock = bcd7(2);
     bareLever(a, 1); if (a.echo) { bareLever(a, 2); bareLever(a, 3); } emit('keladosPlates', 0, a); if (!a.echo) emit('boss7Phase', a.kind, 1, a);
   },
-  onPhase(a, ph, was) { for (let p = Math.max(was, 0) + 1; p <= ph; p++) { (a.queue ||= []).push(p === 1 ? 'loosed' : 'awake'); emit('boss7Phase', a.kind, p + 1, a); } },
+  onPhase(a, ph, was) {
+    for (let p = Math.max(was, 0) + 1; p <= ph; p++) { (a.queue ||= []).push(p === 1 ? 'loosed' : 'awake'); emit('boss7Phase', a.kind, p + 1, a); }
+    // (his echo has no Halda: 25 s into his third phase with no lever pulled, the nearest bare one pulls itself)
+    if (a.echo && ph >= 2 && was < 2) { const n0 = a.levers.size; after7(a, 25, () => { if (a.dead || a.levers.size !== n0) return; const z = G.zone, it = (z.act7?.levers || []).filter((l) => !a.levers.has(l.k)).sort((p, q) => Math.hypot(p.x - a.x, p.z - a.z) - Math.hypot(q.x - a.x, q.z - a.z))[0]; if (it) { emit('lever7', it, z); tally(a, 'echoLever'); } }); }
+  },
   moves: [
     // the entries: the ice falls from him (the life bar's picture), the lake drops, the next lever's ice falls; no blow
     { id: 'loosed', when: () => false, cd: 0, run: (a) => kEntry(a, 'loosed', 2, 0.9, 2) },

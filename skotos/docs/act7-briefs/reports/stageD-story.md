@@ -66,7 +66,7 @@ the world; the test is the water's). Bosses' real `bossRest`/`boss7Phase` are dr
 
 ## Props / looks the scenes wait for (all guarded with `?.`)
 
-The cub (`den.userData.setCub`); the lantern's `awake` state; one apple tree in blossom by the staff (`d.halda7.h1`);
+(17 November, later: the cub walks to her side at the rest, `story.js cub7`; the apple tree stands by the staff from the call, bare, and blossoms once the lake is let down, `world.js stream7` / `build7.js appleTree`; the stream strip is drawn.) The cub (`den.userData.setCub`); the lantern's `awake` state; one apple tree in blossom by the staff (`d.halda7.h1`);
 the stream strip at Whitecliff (brown / clear): only the sound plays, the lines stand as narration; a slide sprite on
 `FAR_BEACONS[9]` (snow particles stand in); Kallisto seated/asleep with the cub after the rest (ai.js's rest body).
 
