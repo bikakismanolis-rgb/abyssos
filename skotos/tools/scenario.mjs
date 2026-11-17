@@ -5465,7 +5465,8 @@ const S = {
     const home = await A5.until(pg, () => window.__G.hero.flags.leifHome && !!window.__G.zone.p5?.leif && window.__dlg.includes('d.leif.home'), 30000);
     const h0 = await ev(() => { const G = window.__G, F = G.hero.flags; return { leifHome: !!F.leifHome, p5: !!G.zone.p5?.leif, dlg: window.__dlg.slice(), act6: G.hero.act6, zone: G.zone.id }; });
     await A5.use(pg, 'z.p5.leif.it'); await pg.waitForTimeout(500);
-    const h1 = await ev(() => ({ bark: window.__dlg.includes('d.leif.bark') }));
+    // (the act's end brings Act VII's call at Whitecliff: from then on Leif says the new act's line, d.leif.v7 / bark7)
+    const h1 = await ev(() => ({ bark: ['d.leif.bark', 'd.leif.v7', 'd.leif.bark7'].some((k) => window.__dlg.includes(k)) }));
     // Selna's rite, after the act: her name first, the Lost, «Σκότος.», Tern's good night
     const rite = await ev(async () => { const S = await import('/src/game/story.js'); return S.rollNames6(true); });
     beat('after the act: Leif at his father\'s door (leifHome, his line), his bark; Selna\'s rite: Φέρουσα first, the seven Lost, «Σκότος.», good night', home && h1.bark && rite[0] === 'name.first6' && ['name.galini', 'name.leif', 'name.asger'].every((k) => rite.includes(k)) && rite[rite.length - 1] === 'name.goodnight', { home, h0, ...h1, rite });
