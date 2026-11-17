@@ -203,3 +203,11 @@ down to 0.3, the home scene and the act's close at quest 47) is the game's own d
 - perf7's Snowfield asks for four clouds; the layout's lines put at most one disc on that screen at any moment of the 600 s
   clock (the clock is set to the moment with the most), so the spot is drawn with one.
 - `cast7` is tagged stage B (as the contract has it) though it runs and passes now.
+
+## Later the same day (the lead)
+
+play7 run again on the day's final code: **22 of 22 beats, no todo**: the world now places both bosses (`z.bossSpot`), so
+the path goes from a v22 Warden at quest 39 through both real fights to quest 47 and the act's close. Every Act VII
+scenario passes on the same tree (save16, race, slide, fires7, sun, heavy7, sleepers7, sleepers7b, chough7, rested7,
+kallisto, kelados, bossSpot7, echo7, gate7, hook7, thaw7, tarn7, ending7, catch7, cast7, play7).
+
