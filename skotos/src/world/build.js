@@ -3194,7 +3194,8 @@ const PROP4 = {
     const fl = flameMesh(0.35, 0xffd890); fl.position.set(0.24, 1.73, 0); g.add(fl);
     g.rotation.z = -0.05;
     // (Act VI: 'frost', the dark lantern full of rime while the cold comes up out of the Gates)
-    const C = { gold: [0xffc070, 0xffa040], white: [0xfff6e8, 0xffffff], dark: [0x15130f, 0], frost: [0xcfe4f4, 0] };
+    // (Act VII: 'awake', Isarn's lantern woken at the act's end: a warm, low morning flame, paler than the beacon's gold)
+    const C = { gold: [0xffc070, 0xffa040], white: [0xfff6e8, 0xffffff], dark: [0x15130f, 0], frost: [0xcfe4f4, 0], awake: [0xffe2a8, 0xffd27a] };
     g.userData.setLantern = (k) => { const c = C[k] || C.gold; lan.userData.glass.color.set(c[0]); fl.visible = k !== 'dark' && k !== 'frost'; if (c[1]) fl.userData.halo.material.color.set(c[1]); };
     g.userData.setLantern('gold');
     return g;
