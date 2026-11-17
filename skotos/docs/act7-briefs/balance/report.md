@@ -147,3 +147,27 @@ seeds: 191, 236, 138, 338 s (median about 213) against 378, 446, 265, 222 s with
 `runs-kw-push12.jsonl`; run alone, so with less noise than the batch). The ranged classes, who are rarely swept, are not
 slowed by it. His class spread is now about 2.5× (mage 86 s, ranger 112 s, warden about 213 s): still for the full
 campaign.
+
+**Six runs a cell on the final code of the day** (Kallisto 1830, Kelados 1800, the Sweep's push 6; `mkplan6.mjs`,
+`runs-B6.jsonl`, `runs-A6.jsonl`; `node sum.mjs runs-B6.jsonl`). The bot still does not walk between packs.
+
+| boss, class | time to rest, median (range) | band | heavy blows | lowest life |
+|---|---|---|---|---|
+| Kallisto warden | 263 s (214-417) | 110-170: over | 23.5 | 78% |
+| Kallisto ranger | 121 s (51-161) | in | 10 | 80% |
+| Kallisto mage | 95 s (75-187) | under | 9.5 | 84% |
+| Kelados warden | 266 s (191-455) | 150-230: over | 31 | 66% |
+| Kelados ranger | 135 s (108-147) | under | 12 | 84% |
+| Kelados mage | 130 s (77-171) | under | 11.5 | 74% |
+
+| zone, class | lives (0.4-0.7) | lowest life (35-65%) | pack time (8-14 s) |
+|---|---|---|---|
+| thaw warden / ranger / mage | 0.51 / 0.24 / 0.43 | 90 / 95 / 90% | 8.6 / 2.1 / 1.3 s |
+| tarn warden / ranger / mage | 0.98 / 0.53 / 0.46 | 86 / 87 / 87% | 18.3 / 4.0 / 3.4 s |
+
+Wanderer (warden, L47): thaw ×0.57 of Warden's lives, tarn ×0.45 (band: at most half); lowest life 93-94%; no death in
+any of the 84 runs. **What the numbers now say:** the life is about right on average (the ranged classes sit in or near
+the bands), and the open matter is the **warden at the bosses**, 2-2.8 times slower than the ranged (Kallisto wheels
+away whenever a hero is within 5 m and charges from 9 m; at Kelados she meets the Tremor's ring and the Sweep), and
+**danger**: no fight brings a hero below about 65% (the owner is asked whether he wants the bosses harder; in Act VI he
+asked for gentler blows). The zones' danger and pack time wait for the walk between packs in the bot.
