@@ -2166,6 +2166,10 @@ function act7Zone(z) {
   turn(S.winches, 'winch', 'winch7', 'winch.thaw', A.winches);
   for (const lv of S.levers || []) { const it = { kind: 'lever7', k: lv.k, x: lv.x, z: lv.z, r: 2.2, prompt: 'lever.pull', spot: lv, used: true, use: () => emit('lever7', it, z) }; A.levers.push(it); z.interact.push(it); }
   for (const lo of S.lookouts || []) { const h = lo.hearth || lo; const it = { kind: 'lookHearth', k: lo.k, x: h.x, z: h.z, r: 2.4, prompt: 'look.light', spot: lo, used: true, use: () => emit('lookHearth', it, z) }; A.lookouts.push(it); z.interact.push(it); }
+  // the arena's own hearth (the Den's, the Dam's): lit from the start, the Call made at it; it flares once in the fight
+  // (game/fires7.js)
+  const AH = S.callHearth || S.hearth;
+  if (AH) { const it = { kind: 'callFire', k: 'arena', x: AH.x, z: AH.z, r: 2.4, prompt: 'call.prompt', spot: AH, arena: true, used: false }; A.hearth = it; z.interact.push(it); }
   // Halda at the camp (the boot smith), once she has gone up ahead of the hero
   const N = S.npcs?.halda;
   if (N) { const a = spawnNpc('smith', N.x, N.z, N.rot || 0); a.home = N.rot || 0; z.actors.push(a); A.halda = a; z.interact.push({ kind: 'npc', npc: 'smith', actor: a, x: N.x, z: N.z, r: 2.4, prompt: 'talk', use: () => emit('talk', 'smith', a) }); }
@@ -2317,6 +2321,7 @@ function dress7(z) {
   for (const it of A.weirs) { it.mesh = by(P.weirs, it.k); it.mesh?.userData.setOpen?.(!!F['weir' + it.k]); }
   for (const it of A.winches) { it.mesh = by(P.winches, it.k); const free = !!F['winch' + it.k]; it.mesh?.userData.setIce?.(free ? 0 : 1); }
   for (const it of A.levers) it.mesh = by(P.levers, it.k);
+  if (A.hearth) A.hearth.mesh = P.hearth || null;
   const R7 = fires7(), off = z.id === 'tarn' ? 3 : 0;
   for (const it of A.lookouts) { it.mesh = by(P.lookouts, it.k + off) || by(P.lookouts, it.k); it.mesh?.userData.setRank?.(R7[it.k + off - 1] || 0); }
   for (const c of P.cornices || []) c.mesh?.userData.setArmed?.(true);

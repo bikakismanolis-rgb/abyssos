@@ -12,7 +12,8 @@ import { NET } from '../net/state.js';
 import { spawnPack7 } from './world.js';
 import { refreshStats } from './stats.js';
 import { writeSave } from './save.js';
-import { N7call, N7rt, N7WHY, N7callVisit } from './names7.js';
+import { N7call, N7rt, N7WHY, N7callVisit, N7callFlare } from './names7.js';
+import { teleCircle } from '../gfx/fx.js';
 
 export const HOLD = { ring: 12, out: 6, again: 20, waves: [4, 30, 55], terrain: 20 };
 // the seven ranks as kept, a hero from before the act has none
@@ -90,6 +91,18 @@ function holdDone(z, Hd) {
   if (!all0 && firesAll(own)) { h.flags.firesAll = true; emit('toast', t('fires.all'), 'big'); }
   refreshStats(); emit('quest'); writeSave(); emit('holdHeld', it, z, n, rank); emit('hold7Done', n, h.diff | 0);
 }
+// the arena hearth flares once in each fight: Kallisto's last phase, the first time Kelados goes to his knees. A horn, a
+// blue circle round the hearth, call.again: one more Call there, whoever called before (at most two a fight)
+function flare(z) {
+  const it = z?.act7?.hearth, pl = G.player; if (!it || z.flared7) return;
+  z.flared7 = true;
+  if (pl) N7callFlare((pl.n7 ||= N7rt()).call, z.id + ':arena', { waive: true });
+  it.mesh?.userData.flare?.(); teleCircle(it.x, it.z, 2.6, 6, 0x60c0ff);
+  Audio.sfx('callHorn', { x: it.x, z: it.z }); emit('toast', t('call.again'), 'quest');
+}
+on('boss7Phase', (kind, ph) => { if (kind === 'kallisto' && ph === 3) flare(G.zone); });
+on('boss7Window', (kind) => { if (kind === 'kelados') flare(G.zone); });
+on('bossIntro', (a) => { if (G.zone?.act7 && (a?.kind === 'kallisto' || a?.kind === 'kelados')) G.zone.flared7 = false; });
 // the Call at a burning hearth: each hero's own, as a shrine is
 on('callFire', (it, z) => {
   const pl = G.player; if (!pl || pl.dead || it.st !== 'lit') return;

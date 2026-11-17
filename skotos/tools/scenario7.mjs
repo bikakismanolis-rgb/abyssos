@@ -240,6 +240,11 @@ export const S7 = () => ({
     beat('the ladder\'s bonus is in her stats (+1% for a rank-2 fire)', dmg0 > 0 && Math.abs(s2.dmg / dmg0 - 1.01) < 0.004, { ratio: +(s2.dmg / dmg0).toFixed(4) });
     const c = await pg.evaluate(() => { const G = window.__G, it = G.zone.act7.lookouts[0]; it.use(); const a = G.player.buffs.call; it.use(); return { call: a, again: G.player.buffs.call }; });
     beat('the Call at it: 20 s, once a hearth a visit', c.call === 20 && c.again <= 20, c);
+    // the arena's hearth: the Call made there, refused again, then the fight's flare gives one more
+    const ah = await pg.evaluate(async () => { const G = window.__G, z = G.zone, it = z.act7.hearth; if (!it) return null; const B = await import('/src/ui/bus.js'); G.player.buffs.call = 0; const n7 = G.player.n7; if (n7) n7.call.last = -1e9;
+      it.use(); const a = G.player.buffs.call | 0; G.player.buffs.call = 0; it.use(); const b = G.player.buffs.call | 0;
+      B.emit('bossIntro', { kind: 'kallisto' }); B.emit('boss7Phase', 'kallisto', 3); it.use(); const c = G.player.buffs.call | 0; return { kind: it.kind, a, b, c }; });
+    beat('the arena hearth: a Call, refused again, and one more after the fight\'s flare', ah && ah.kind === 'callFire' && ah.a === 20 && ah.b === 0 && ah.c === 20, ah);
     // a second lookout, left: out of the ring for 6 s loses it
     await goTo(pg, 'lookouts.1.hearth', 1.5); const u2 = await use(pg, 'lookHearth', 2);
     await goTo(pg, 'camp');
