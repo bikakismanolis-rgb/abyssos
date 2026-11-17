@@ -2254,6 +2254,7 @@ export function town7(z) {
   if (wantAn && !an) { const it = { kind: 'anvil7', x: N.smith.x, z: N.smith.z, r: 2.4, prompt: 'anvil.use', use: () => emit('anvil7', it, z) }; z.interact.push(it); }
   if (!wantAn && an) z.interact.splice(z.interact.indexOf(an), 1);
   if (F.lanternWake && z.town?.staff) z.town.staff.userData.setLantern?.('awake');
+  stream7(z);
   const T = (z.town ||= { far: [] });
   if (F.firesAll && !T.keepers7) {
     T.keepers7 = [];
@@ -2266,6 +2267,30 @@ export function town7(z) {
       T.keepers7.push({ a, it });
     }
   }
+}
+// Whitecliff's stream below the south wall (decisions rule 8: all the town sees of the thaw is its stream, brown and loud
+// while the snow comes down, clear and low once the lake is let): a strip of water over the cells nobody walks, from the
+// call on; the road crosses it dry. Its sound is the story's
+const STREAM7 = { brown: 0x6b5236, clear: 0x3f8590, z0: 65.2, z1: 67.4 };
+function stream7(z) {
+  const F = G.hero.flags; if (z?.id !== 'town' || !F.call7) return;
+  const T = (z.town ||= { far: [] }), L = z.L;
+  if (!T.stream7) {
+    const pos = [], w = L.w;
+    for (let x = 0; x < w; x++) {
+      const zc = Math.floor((STREAM7.z0 + STREAM7.z1) / 2); if (L.cells[zc * w + x]) continue;
+      // (its banks wander a little, the same curve on both vertices of a cell's edge, so it reads as one water; wound up)
+      const wa = (u) => STREAM7.z0 + Math.sin(u * 0.37) * 0.5 + Math.sin(u * 1.3) * 0.12, wb = (u) => STREAM7.z1 + Math.sin(u * 0.37) * 0.5 - Math.sin(u * 0.9) * 0.15;
+      pos.push(x, 0, wa(x), x + 1, 0, wb(x + 1), x + 1, 0, wa(x + 1), x, 0, wa(x), x, 0, wb(x), x + 1, 0, wb(x + 1));
+    }
+    if (!pos.length) return;
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.computeVertexNormals();
+    const mat = new THREE.MeshLambertMaterial({ color: STREAM7.brown, emissive: 0x140e08, transparent: true, opacity: 0.84, polygonOffset: true, polygonOffsetFactor: -2, depthWrite: false });
+    const m = new THREE.Mesh(geo, mat); m.position.y = 0.06; m.renderOrder = 1; m.name = 'stream7';
+    T.stream7 = m; z.extra.push(m); if (G.zone === z) R.scene.add(m);
+  }
+  T.stream7.material.color.set(F.lakeLet ? STREAM7.clear : STREAM7.brown);
+  T.stream7.material.opacity = F.lakeLet ? 0.72 : 0.84;
 }
 // the goat track at the Pass's camp: the way up to the Meltwaters, an interact on cells that are already walkable (no
 // older layout changes), pushed once into the layout's exits too so an arrival from above finds it; locked until Halda
