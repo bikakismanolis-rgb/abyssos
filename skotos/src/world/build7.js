@@ -474,6 +474,16 @@ const PROP7 = {
     g.userData.n = at.length;
     return g;
   },
+  // a plank bridge over a brook on the Meltwaters' causeway: planks across, two stringers along local z (o.len its cells, o.w 3)
+  plankBridge(o) {
+    const len = Math.max(2, Math.round(o.len ?? 6)), w = o.w ?? 3;
+    const g = solid7('plank' + len + '|' + w, () => [
+      { geo: G.box(0.22, 0.24, len + 0.6), color: WDD, o: { x: -w / 2 + 0.2, y: 0.12 } },
+      { geo: G.box(0.22, 0.24, len + 0.6), color: WDD, o: { x: w / 2 - 0.2, y: 0.12 } },
+      ...Array.from({ length: Math.round(len / 0.5) }, (_, k) => ({ geo: G.box(w, 0.07, 0.42), color: k % 3 === 0 ? WDL : k % 3 === 1 ? WD : GRAIN, o: { y: 0.27 + (k % 2) * 0.012, z: -len / 2 + 0.25 + k * 0.5 }, jit: 0.03 }))
+    ]);
+    return wrap(g);
+  },
   // a snow bridge over a crevasse: a sagging span of old snow along local z (o.len the crevasse's width, 5; o.w 3)
   snowBridge(o) {
     const len = (o.len ?? 5) + 2, w = o.w ?? 3, rr = RNG(881 + Math.round(len * 5));
@@ -887,6 +897,8 @@ export function act7Level(L, lvl, o = {}) {
   list(S.bridges).forEach((p) => {
     let ry = p.rot;
     if (ry == null) { const lowAt = (x, z) => { const i = cell(x, z); return i >= 0 && !!L.low?.[i] && !L.cells?.[i]; }; ry = (lowAt(p.x - 3, p.z) || lowAt(p.x + 3, p.z)) ? 0 : (lowAt(p.x, p.z - 3) || lowAt(p.x, p.z + 3)) ? Math.PI / 2 : 0; }
+    // (the Meltwaters' are plank bridges along the causeway, local z; the Hanging Lake's snow bridges over its crevasses)
+    if (thaw) { A.bridges.push({ x: p.x, z: p.z, mesh: put('plankBridge', { len: p.n ?? p.len ?? 6, w: p.w ?? 3 }, p.x, p.z, p.rot ?? 0) }); return; }
     A.bridges.push({ x: p.x, z: p.z, mesh: put('snowBridge', { len: p.len, w: p.w }, p.x, p.z, ry) });
   });
   if (list(S.piers).length) { const at = list(S.piers).map((p) => ({ x: p.x, y: gy(p.x, p.z), z: p.z, h: p.h, r: p.rot })); const m = act7Prop('piers', { at, snow: !thaw }); group.add(m); A.all.push(m); A.piers = m; }

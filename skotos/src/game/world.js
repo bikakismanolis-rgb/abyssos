@@ -68,8 +68,9 @@ export const ZONES = {
   // Act VII: the Meltwaters above the Giants' Stair, up the goat track from the Pass's camp, and the Hanging Lake above
   // them, up the Water-stair. Daylight: no ring, no Shroud (light 'sun' comes with Sun and Shade, stage B; until then they
   // are zones with no light rule, as the forest is). `day`: drawn at the lower phone resolution or not (gfx.js heavyZone).
-  // (ambient: stand-ins until the act's own, the 'melt' ambient of fx.js; after the act each zone's theme is its green one)
-  thaw: { level: 40, music: 'thaw', ambient: 'forest', atmos: 'thaw', act: 7, pack: 'melt', light: 'sun' },
+  // (ambient: the Meltwaters' own 'melt' (fx.js: pollen, petals, spray), the Hanging Lake the Pass's snow; after the act each
+  // zone's theme is its green one)
+  thaw: { level: 40, music: 'thaw', ambient: 'melt', atmos: 'thaw', act: 7, pack: 'melt', light: 'sun' },
   tarn: { level: 43, music: 'tarn', ambient: 'snow', atmos: 'tarn', act: 7, pack: 'melt', heavy: true, light: 'sun' },
   gate: { level: 1, music: 'gate', ambient: 'gate', atmos: 'gate' }
 };
@@ -2149,7 +2150,7 @@ export function raceLevel(id, F = G.hero.flags) {
   return 0;
 }
 // the snow that is left in the Meltwaters, for the ground's blend (build.js setThaw): it draws back with each weir
-const THAW_K = [0.65, 0.45, 0.3, 0.15];
+const THAW_K = [0.45, 0.32, 0.2, 0.1];   // (lowered from the design's 0.65 / 0.45 / 0.3 / 0.15: at 0.65 the meadow read as a snowfield, stage A's look)
 export const thawK = (F = G.hero.flags) => (F.act7 ? 0.05 : THAW_K[weirs7(F)]);
 // the water moved to its level now, at 0.3 m/s (a weir turned, the lake let down): tide.js mereTick steps it
 export function raceTo(z, h = raceLevel(z.id)) { if (z?.tide) z.tide.mere = { h, rate: 0.3 }; if (z?.id === 'thaw') setThaw(thawK()); Audio.mood({ race: clamp((h - 0.3) / 0.9, 0, 1) }); }

@@ -559,13 +559,20 @@ function ambient(dt, cx, cz) {
   let rate = k === 'forest' ? 0.06 : k === 'town' ? 0.05 : k === 'snow' ? 0.012 : k === 'halls' ? 0.07 : k === 'weep' ? 0.07 : k === 'weepAutumn' ? 0.045 : k === 'heart' || k === 'heartAutumn' ? 0.08
     : k === 'ashfall' ? 0.022 : k === 'ashfieldStars' ? 0.16 : k === 'ashfieldDawn' ? 0.07 : k === 'forge' ? 0.045 : k === 'forgeCold' ? 0.08
       : k === 'coast' ? 0.028 : k === 'coastFrozen' ? 0.03 : k === 'farlight' ? 0.034 : k === 'blizzard' ? 0.0045
-        : k === 'drained' ? 0.045 : k === 'bottom' ? 0.055 : k === 'thaw' ? 0.05 : 0.09;
+        : k === 'drained' ? 0.045 : k === 'bottom' ? 0.055 : k === 'thaw' ? 0.05 : k === 'melt' ? 0.07 : 0.09;
   // (Act VI's: half as many on quality 0)
   if (FX.q < 1 && AMB6.has(k)) rate *= 2;
   while (FX.ambAcc > rate) {
     FX.ambAcc -= rate;
     const x = cx + rr(-16, 16), z = cz + rr(-14, 12);
-    if (k === 'forest') {
+    if (k === 'melt') {
+      // (Act VII, the Meltwaters by day: pollen and the odd white petal on a soft wind down the valley, a little spray low
+      // over the water; nothing additive, nothing that glows in the sun)
+      const q = Math.random();
+      if (q < 0.6) P({ add: false, x, y: rr(0.4, 2.6), z, vx: rr(0.15, 0.5), vy: rr(-0.08, 0.06), vz: rr(0.1, 0.4), life: rr(3, 6), size: rr(0.04, 0.07), size1: 0.04, color: 0xf2eaa8, alpha: 0.85, alpha1: 0 });
+      else if (q < 0.8) P({ leaf: true, x: x - 2, y: rr(2, 5), z, vx: rr(0.3, 0.8), vy: rr(-0.7, -0.4), vz: rr(-0.2, 0.2), life: rr(4, 6), size: rr(0.12, 0.18), size1: 0.14, color: 0xfaf4f0, alpha: 0.95, alpha1: 0 });
+      else P({ add: false, x, y: 0.3, z, vx: rr(-0.2, 0.2), vy: 0.02, vz: rr(-0.2, 0.2), life: rr(4, 7), size: 2.4, size1: 4, color: 0xdfe8ee, alpha: 0.07, alpha1: 0 });
+    } else if (k === 'forest') {
       if (Math.random() < 0.55) P({ x, y: rr(0.3, 2.2), z, vx: rr(-0.4, 0.4), vy: rr(-0.1, 0.2), vz: rr(-0.4, 0.4), life: rr(2, 4), size: 0.12, size1: 0.12, color: 0xd8ff70, color1: 0x60a020, alpha: 1, alpha1: 0 });
       else P({ add: false, x, y: 0.25, z, vx: rr(-0.3, 0.3), vy: 0, vz: rr(-0.2, 0.2), life: rr(4, 7), size: 3, size1: 5, color: 0x8aa8a0, alpha: 0.12, alpha1: 0 });
     } else if (k === 'town') {
