@@ -1,5 +1,10 @@
-// The graphics diagnostic (gfx/diag.js): snapshots in play, the last one kept apart when the context is lost, shown on the
-// title as a box (its × lets it go) and on the no-GL boot screen. node tools/diagcheck.mjs <out>  (BASE=...)
+// The graphics diagnostic (gfx/diag.js): snapshots in play, the last one kept apart when the context is lost, and the quiet
+// graphics report (gfx/report.js, main's 9aed565): the loss noted among its events and the kept snapshot read from the
+// device at the next start, nothing shown. Act VII stage 0: the title's box and the no-GL screen's lines were taken out on
+// purpose by that change ("Nothing is shown"; diag.js diagShow has no caller), so this tool asserts the quiet behaviour now:
+// no box on the title, no diagnostic lines on the no-GL screen (its retry still there), the kept snapshot left in place for
+// the report. A lost context reproduces headless (renderer.forceContextLoss under SwiftShader): this is not a manual check.
+// node tools/diagcheck.mjs <out>  (BASE=...)
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
 const require = createRequire(import.meta.url);
@@ -18,9 +23,13 @@ r.snap = await page.evaluate(() => JSON.parse(localStorage.getItem('skotos.diag'
 await page.evaluate(() => window.__R.renderer.forceContextLoss());
 await page.waitForFunction(() => !!localStorage.getItem('skotos.diag.crash'), null, { timeout: 20000 }).catch(() => {});
 r.kept = await page.evaluate(() => JSON.parse(localStorage.getItem('skotos.diag.crash') || 'null'));
+r.lostScreen = await page.waitForSelector('#gl-lost', { timeout: 20000 }).then(() => true).catch(() => false);
+r.event = await page.evaluate(() => { const o = JSON.parse(localStorage.getItem('skotos.report') || 'null'); const e = (o?.events || []).filter((x) => x.kind === 'lost').pop(); return e ? { kind: e.kind, zone: e.zone } : null; });
 await page.goto(base, { waitUntil: 'load' });
-await page.waitForSelector('#diag', { timeout: 120000 }).catch(() => {});
+await page.waitForFunction(() => window.__ready, null, { timeout: 120000 }).catch(() => {});
+await page.waitForTimeout(1500);
 r.box = await page.evaluate(() => document.getElementById('diag')?.innerText || null);
+r.keptAfter = await page.evaluate(() => !!localStorage.getItem('skotos.diag.crash'));
 await page.screenshot({ path: out + '/title-box.png' });
 // the no-GL screen carries it too
 const p2 = await ctx.newPage();
@@ -28,14 +37,11 @@ await p2.addInitScript(() => { const o = HTMLCanvasElement.prototype.getContext;
 await p2.goto(base, { waitUntil: 'load' });
 await p2.waitForSelector('#gl-retry', { timeout: 90000 }).catch(() => {});
 r.nogl = await p2.evaluate(() => document.getElementById('boot')?.innerText.replace(/\s+/g, ' ').slice(0, 600) || null);
+r.retry = await p2.evaluate(() => !!document.getElementById('gl-retry'));
 await p2.screenshot({ path: out + '/nogl-box.png' }); await p2.close();
-// the × lets it go, for good
-const b = await page.locator('#diag button').boundingBox().catch(() => null);
-if (b) await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
-await page.waitForTimeout(300);
-r.gone = await page.evaluate(() => !document.getElementById('diag') && !localStorage.getItem('skotos.diag.crash'));
 r.menu = await page.evaluate(() => !!document.getElementById('screen') && !document.getElementById('screen').hidden);
-r.ok = !!(r.snap?.zone === 'forest' && r.snap.frames > 0 && r.snap.tex > 0 && r.kept?.phase === 'lost' && r.kept.zone === 'forest' && /forest|Δάσος/.test(r.box || '') && /tex /.test(r.box || '') && /tex /.test(r.nogl || '') && r.gone) && !errs.length;
+r.ok = !!(r.snap?.zone === 'forest' && r.snap.frames > 0 && r.snap.tex > 0 && r.kept?.phase === 'lost' && r.kept.zone === 'forest' && r.lostScreen && r.event?.zone === 'forest'
+  && r.box === null && r.keptAfter && r.menu && r.retry && !/tex \d/.test(r.nogl || '')) && !errs.length;
 r.errs = errs.slice(0, 3);
 console.log(JSON.stringify(r, null, 1));
 console.log(r.ok ? 'DIAG PASS' : 'DIAG FAIL');

@@ -3181,7 +3181,7 @@ const S = {
   // fires, the relight); the naming and the answer; the lantern room and the carving; home, the child, the act's close and
   // the blessing. A screenshot at every beat. The fights are hers with the scenarios' help (sim=4; her packs fought with
   // her life kept full, the bosses by the bot with her life real and put back under 30%); LVL (30), CLS (warden)
-  play5: { q: 'sim=4&q=' + (process.env.Q || '0') + '&norender', run: async (pg, shot) => {
+  play5: { stage: '0', until: 'E', q: 'sim=4&q=' + (process.env.Q || '0') + '&norender', run: async (pg, shot) => {
     const beats = [], t0 = Date.now(), cls = process.env.CLS || 'warden', lvl = +(process.env.LVL || 30);
     const ev = (fn, a) => pg.evaluate(fn, a);
     const beat = async (name, ok, more = {}) => { const s = await ev(() => { const G = window.__G; return { q: G.hero.quest, zone: G.zone?.id, lvl: G.hero.level, hp: Math.round(G.player.hp / G.player.hpMax * 100), deaths: G.hero.stats.deaths, fatal: document.getElementById('fatal')?.textContent?.slice(0, 200) || undefined }; }); const b = { beat: name, ok: !!ok, min: +((Date.now() - t0) / 60000).toFixed(1), ...s, ...more }; beats.push(b); console.log('play5 ' + JSON.stringify(b)); await shot(); return b; };
@@ -3269,9 +3269,13 @@ const S = {
       const near = await ev((id) => { const l = window.__G.zone.act5.lights.find((x) => x.id === id); return { x: l.x, z: l.z }; }, id);
       const f = await fight(2, near);
       await beat('packs by the ' + id + ' light', true, f);
-      await A5.use(pg, `z.act5.lights.find((l) => l.id === '${id}')`);
+      // (the light is a 1.5 s touch at its top, 'tough': a blow or the tide breaks it; Act VII stage 0: one use left the fall
+      // light unlit when it was broken, and the wait below then passed at once on the two lit before it. The touch is held
+      // as A5.hold holds a channel: taken up again when broken, the foes near her put down, until the light's flag)
+      const held = await A5.hold(pg, `z.act5.lights.find((l) => l.id === '${id}')`, `!!window.__G.hero.flags.light_${id}`, 120000);
+      if (!held) console.log('play5 light ' + id + ' not lit: ' + JSON.stringify(await ev((id) => { const G = window.__G, l = G.zone.act5.lights.find((x) => x.id === id), p = G.player; return { lit: !!l.lit, d: +Math.hypot(l.x - p.x, l.z - p.z).toFixed(1), act: p.act?.kind || null, mode: G.mode, cine: !!G.cine, water: G.zone.map.walkable(l.x, l.z + 1.2) }; }, id)));
       await cineShot(3);
-      const n = await ev(() => (window.__G.hero.flags.lights5 || []).length);
+      const n = await ev((id) => (window.__G.hero.flags.lights5 || []).length + (window.__G.hero.flags['light_' + id] ? 0 : 1), id);
       await done((n) => (window.__G.hero.flags.lights5 || []).length >= n && ['mem_i1', 'mem_i2', 'mem_i3'].filter((k) => window.__G.hero.flags[k]).length >= n && !window.__G.cine, 300000, n);
       await beat('the ' + id + ' light and its memory', await ev((id) => !!window.__G.hero.flags['light_' + id], id));
       if (id !== lights[lights.length - 1]) {

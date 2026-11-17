@@ -1,0 +1,781 @@
+{
+ "ashfield@q1": {
+  "ms": 597.7,
+  "draw": 596.1,
+  "logic": 1.6,
+  "calls": 139,
+  "tris": 598233,
+  "wet": 0,
+  "actors": 0,
+  "pools": 0,
+  "lights": 3,
+  "at": [
+   61.1,
+   161
+  ],
+  "pr": 1.5,
+  "wouldScale": "down (to 0.55 at worst)"
+ },
+ "meadow@q1": {
+  "ms": 829.5,
+  "draw": 826.3,
+  "logic": 3.4,
+  "calls": 193,
+  "tris": 250979,
+  "wet": 0.18,
+  "actors": 25,
+  "pools": 0,
+  "lights": 0,
+  "at": [
+   36.5,
+   155.5
+  ],
+  "pr": 1.5,
+  "wouldScale": "down (to 0.55 at worst)",
+  "field": 816.7,
+  "ratios": [
+   1.091,
+   1.013,
+   1.097,
+   1.012,
+   0.97
+  ],
+  "vsField": 1.013,
+  "bare": 559.5,
+  "fieldBare": 576.1,
+  "worldOf": 4,
+  "world": 0.978,
+  "vsBare": 1.388,
+  "crowd": {
+   "n": 25,
+   "padded": false,
+   "spot": 251.7,
+   "field": 240.3,
+   "ratios": [
+    1.09,
+    1.114,
+    0.926,
+    1.092,
+    0.882
+   ],
+   "term": 1.09,
+   "pooled": [
+    1.039,
+    0.919,
+    1.153
+   ],
+   "dearer": false
+  },
+  "pass": false
+ },
+ "chutes@q1": {
+  "ms": 728.7,
+  "draw": 726.1,
+  "logic": 2.5,
+  "calls": 170,
+  "tris": 223294,
+  "wet": 0,
+  "actors": 20,
+  "pools": 0,
+  "lights": 0,
+  "at": [
+   31.5,
+   73.5
+  ],
+  "pr": 1.5,
+  "wouldScale": "down (to 0.55 at worst)",
+  "field": 736.4,
+  "ratios": [
+   1.024,
+   0.851,
+   0.992,
+   0.95,
+   1.068
+  ],
+  "vsField": 0.992,
+  "bare": 522.5,
+  "fieldBare": 562.1,
+  "worldOf": 4,
+  "world": 0.93,
+  "vsBare": 1.206,
+  "crowd": {
+   "n": 20,
+   "padded": false,
+   "spot": 198,
+   "field": 185.7,
+   "ratios": [
+    1.084,
+    1.066,
+    1.21,
+    1.062,
+    1.069
+   ],
+   "term": 1.069,
+   "pooled": [
+    1.106,
+    0.931,
+    1.352
+   ],
+   "dearer": false
+  },
+  "pass": true
+ },
+ "den@q1": {
+  "ms": 570.5,
+  "draw": 569,
+  "logic": 1.5,
+  "calls": 71,
+  "tris": 118137,
+  "wet": 0.223,
+  "actors": 3,
+  "pools": 0,
+  "lights": 4,
+  "at": [
+   49.5,
+   23.5
+  ],
+  "pr": 1.5,
+  "wouldScale": "down (to 0.55 at worst)",
+  "field": 641.8,
+  "ratios": [
+   0.964,
+   0.892,
+   0.837,
+   1.006,
+   0.851
+  ],
+  "vsField": 0.892,
+  "bare": 500.1,
+  "fieldBare": 577.8,
+  "worldOf": 4,
+  "world": 0.866,
+  "vsBare": 0.976,
+  "crowd": {
+   "n": 24,
+   "padded": true,
+   "spot": 490.2,
+   "field": 459.6,
+   "ratios": [
+    1.126,
+    1.11,
+    0.965,
+    1.037,
+    1.104
+   ],
+   "term": 1.104,
+   "pooled": [
+    1.079,
+    0.964,
+    1.149
+   ],
+   "dearer": false
+  },
+  "pass": true
+ },
+ "snowfield@q1": {
+  "ms": 560.8,
+  "draw": 558.2,
+  "logic": 2.6,
+  "calls": 112,
+  "tris": 204119,
+  "wet": 0,
+  "actors": 20,
+  "pools": 0,
+  "lights": 0,
+  "at": [
+   41.5,
+   120.5
+  ],
+  "pr": 1.5,
+  "wouldScale": "down (to 0.55 at worst)",
+  "field": 723.1,
+  "ratios": [
+   0.881,
+   0.824,
+   0.74,
+   0.688,
+   0.776
+  ],
+  "vsField": 0.776,
+  "bare": 394.9,
+  "fieldBare": 557.1,
+  "worldOf": 4,
+  "world": 0.708,
+  "vsBare": 0.959,
+  "crowd": {
+   "n": 20,
+   "padded": false,
+   "spot": 168.1,
+   "field": 162,
+   "ratios": [
+    1.295,
+    1.257,
+    1.007,
+    0.846,
+    0.976
+   ],
+   "term": 1.007,
+   "pooled": [
+    1.074,
+    0.961,
+    1.275
+   ],
+   "dearer": false
+  },
+  "pass": true
+ },
+ "dam@q1": {
+  "ms": 668.1,
+  "draw": 666.7,
+  "logic": 1.4,
+  "calls": 84,
+  "tris": 136958,
+  "wet": 0.068,
+  "actors": 3,
+  "pools": 0,
+  "lights": 0,
+  "at": [
+   49.5,
+   15.5
+  ],
+  "pr": 1.5,
+  "wouldScale": "down (to 0.55 at worst)",
+  "field": 690.3,
+  "ratios": [
+   1.038,
+   1.035,
+   0.935,
+   0.971,
+   0.915
+  ],
+  "vsField": 0.971,
+  "bare": 629.5,
+  "fieldBare": 677.5,
+  "worldOf": 4,
+  "world": 0.929,
+  "vsBare": 1.142,
+  "crowd": {
+   "n": 24,
+   "padded": true,
+   "spot": 1183.4,
+   "field": 1291.6,
+   "ratios": [
+    0.928,
+    0.937,
+    0.933,
+    0.905,
+    0.869
+   ],
+   "term": 0.928,
+   "pooled": [
+    0.909,
+    0.866,
+    0.942
+   ],
+   "dearer": false
+  },
+  "pass": true
+ },
+ "ashfield@q0": {
+  "ms": 113.2,
+  "draw": 111.8,
+  "logic": 1.9,
+  "calls": 66,
+  "tris": 261979,
+  "wet": 0,
+  "actors": 0,
+  "pools": 0,
+  "lights": 3,
+  "at": [
+   61.1,
+   161
+  ],
+  "pr": 1,
+  "wouldScale": "down (to 0.55 at worst)",
+  "floor": true
+ },
+ "meadow@q0": {
+  "ms": 160,
+  "draw": 157.2,
+  "logic": 3,
+  "calls": 124,
+  "tris": 185041,
+  "wet": 0.18,
+  "actors": 25,
+  "pools": 0,
+  "lights": 0,
+  "at": [
+   36.5,
+   155.5
+  ],
+  "pr": 1,
+  "wouldScale": "down (to 0.55 at worst)",
+  "field": 178.3,
+  "ratios": [
+   0.897,
+   0.91,
+   0.957,
+   0.955,
+   0.817
+  ],
+  "vsField": 0.91,
+  "bare": 96.7,
+  "fieldBare": 109.4,
+  "worldOf": 1,
+  "world": 0.884,
+  "vsBare": 1.409,
+  "crowd": {
+   "n": 25,
+   "padded": false,
+   "spot": 57.3,
+   "field": 54.6,
+   "ratios": [
+    0.852,
+    1.347,
+    0.943,
+    1.056,
+    0.662
+   ],
+   "term": 0.943
+  },
+  "pass": true,
+  "floor": true
+ },
+ "chutes@q0": {
+  "ms": 157.1,
+  "draw": 154.9,
+  "logic": 2.2,
+  "calls": 96,
+  "tris": 152106,
+  "wet": 0,
+  "actors": 20,
+  "pools": 0,
+  "lights": 0,
+  "at": [
+   31.5,
+   73.5
+  ],
+  "pr": 1,
+  "wouldScale": "down (to 0.55 at worst)",
+  "field": 150.4,
+  "ratios": [
+   1.044,
+   1.007,
+   1.139,
+   1.072,
+   0.985
+  ],
+  "vsField": 1.044,
+  "bare": 109.8,
+  "fieldBare": 110.4,
+  "worldOf": 1,
+  "world": 0.984,
+  "vsBare": 1.432,
+  "crowd": {
+   "n": 20,
+   "padded": false,
+   "spot": 57.5,
+   "field": 37.4,
+   "ratios": [
+    1.171,
+    1.387,
+    1.769,
+    1.769,
+    1.008
+   ],
+   "term": 1.387
+  },
+  "pass": false,
+  "floor": true
+ },
+ "den@q0": {
+  "ms": 120.9,
+  "draw": 119.5,
+  "logic": 1.5,
+  "calls": 34,
+  "tris": 88087,
+  "wet": 0.223,
+  "actors": 3,
+  "pools": 0,
+  "lights": 0,
+  "at": [
+   49.5,
+   23.5
+  ],
+  "pr": 1,
+  "wouldScale": "down (to 0.55 at worst)",
+  "field": 130.3,
+  "ratios": [
+   0.893,
+   0.973,
+   0.964,
+   0.932,
+   0.928
+  ],
+  "vsField": 0.932,
+  "bare": 103,
+  "fieldBare": 105,
+  "worldOf": 1,
+  "world": 0.981,
+  "vsBare": 1.068,
+  "crowd": {
+   "n": 3,
+   "padded": false,
+   "spot": 15,
+   "field": 15.9,
+   "ratios": [
+    0.711,
+    0.868,
+    1.087,
+    0.564,
+    3.16
+   ],
+   "term": 0.868
+  },
+  "pass": true,
+  "floor": true
+ },
+ "snowfield@q0": {
+  "ms": 129.7,
+  "draw": 127.2,
+  "logic": 2.7,
+  "calls": 68,
+  "tris": 143047,
+  "wet": 0,
+  "actors": 20,
+  "pools": 0,
+  "lights": 0,
+  "at": [
+   41.5,
+   120.5
+  ],
+  "pr": 1,
+  "wouldScale": "down (to 0.55 at worst)",
+  "field": 145.2,
+  "ratios": [
+   0.804,
+   0.863,
+   0.723,
+   0.878,
+   0.939
+  ],
+  "vsField": 0.863,
+  "bare": 78.8,
+  "fieldBare": 109.3,
+  "worldOf": 1,
+  "world": 0.735,
+  "vsBare": 1.184,
+  "crowd": {
+   "n": 20,
+   "padded": false,
+   "spot": 47.6,
+   "field": 33.5,
+   "ratios": [
+    1.22,
+    1.556,
+    1.436,
+    1.069,
+    1.212
+   ],
+   "term": 1.22
+  },
+  "pass": true,
+  "floor": true
+ },
+ "dam@q0": {
+  "ms": 126.1,
+  "draw": 124.8,
+  "logic": 1.4,
+  "calls": 43,
+  "tris": 101416,
+  "wet": 0.068,
+  "actors": 3,
+  "pools": 0,
+  "lights": 0,
+  "at": [
+   49.5,
+   15.5
+  ],
+  "pr": 1,
+  "wouldScale": "down (to 0.55 at worst)",
+  "field": 146.3,
+  "ratios": [
+   0.882,
+   0.963,
+   0.924,
+   0.838,
+   0.872
+  ],
+  "vsField": 0.882,
+  "bare": 91.8,
+  "fieldBare": 109.7,
+  "worldOf": 1,
+  "world": 0.813,
+  "vsBare": 1.137,
+  "crowd": {
+   "n": 3,
+   "padded": false,
+   "spot": 37.1,
+   "field": 30.5,
+   "ratios": [
+    1.164,
+    0.773,
+    1.172,
+    1.68,
+    1.771
+   ],
+   "term": 1.172
+  },
+  "pass": true,
+  "floor": true
+ },
+ "staged": {
+  "meadow": {
+   "shot": [
+    {
+     "q": 1,
+     "f": "docs/act7-briefs/reports/stageA/perf7/perf7-meadow-q1.jpg",
+     "kb": 117
+    },
+    {
+     "q": 0,
+     "f": "docs/act7-briefs/reports/stageA/perf7/perf7-meadow-q0.jpg",
+     "kb": 51
+    }
+   ],
+   "zone": "thaw",
+   "level": {
+    "brooks": 0.6,
+    "own": 1.2
+   },
+   "slides": null,
+   "slides3": null,
+   "kinds": {
+    "goblin": 10,
+    "goblinMarksman": 4,
+    "goblinShaman": 2,
+    "hillWolf": 5,
+    "chough": 4
+   },
+   "wet": 0.18,
+   "pines": 6,
+   "clouds": {
+    "sail": 4,
+    "inView": 1,
+    "over": false,
+    "t": 33
+   },
+   "heavy": false
+  },
+  "chutes": {
+   "shot": [
+    {
+     "q": 1,
+     "f": "docs/act7-briefs/reports/stageA/perf7/perf7-chutes-q1.jpg",
+     "kb": 87
+    },
+    {
+     "q": 0,
+     "f": "docs/act7-briefs/reports/stageA/perf7/perf7-chutes-q0.jpg",
+     "kb": 40
+    }
+   ],
+   "zone": "thaw",
+   "level": {
+    "brooks": 0.6,
+    "own": 1.2
+   },
+   "slides": {
+    "flues": [
+     {
+      "i": 0,
+      "kind": "snow",
+      "area": "flank",
+      "st": "fire",
+      "t": 0.7
+     },
+     {
+      "i": 1,
+      "kind": "snow",
+      "area": "flank",
+      "st": "fire",
+      "t": 0.7
+     }
+    ],
+    "rocks": 0,
+    "after": [
+     "fire 0.55",
+     "fire 0.55"
+    ]
+   },
+   "slides3": null,
+   "kinds": {
+    "goblin": 8,
+    "goblinMarksman": 4,
+    "hillWolf": 4,
+    "rockScorpion": 4
+   },
+   "clouds": {
+    "sail": 4,
+    "inView": 2,
+    "over": true,
+    "t": 9
+   },
+   "heavy": false
+  },
+  "den": {
+   "shot": [
+    {
+     "q": 1,
+     "f": "docs/act7-briefs/reports/stageA/perf7/perf7-den-q1.jpg",
+     "kb": 72
+    },
+    {
+     "q": 0,
+     "f": "docs/act7-briefs/reports/stageA/perf7/perf7-den-q0.jpg",
+     "kb": 34
+    }
+   ],
+   "zone": "thaw",
+   "level": {
+    "brooks": 0.6,
+    "own": 1.2
+   },
+   "slides": {
+    "flues": [
+     {
+      "i": 7,
+      "kind": "snow",
+      "area": "den",
+      "st": "fire",
+      "t": 0.7
+     },
+     {
+      "i": 8,
+      "kind": "snow",
+      "area": "den",
+      "st": "fire",
+      "t": 0.7
+     }
+    ],
+    "rocks": 4,
+    "after": [
+     "fire 0.55",
+     "fire 0.55"
+    ]
+   },
+   "slides3": null,
+   "kinds": {
+    "denBear": 1,
+    "hillWolf": 2
+   },
+   "clouds": {
+    "sail": 4,
+    "inView": 0,
+    "over": false,
+    "t": 0
+   },
+   "heavy": false
+  },
+  "snowfield": {
+   "shot": [
+    {
+     "q": 1,
+     "f": "docs/act7-briefs/reports/stageA/perf7/perf7-snowfield-q1.jpg",
+     "kb": 88
+    },
+    {
+     "q": 0,
+     "f": "docs/act7-briefs/reports/stageA/perf7/perf7-snowfield-q0.jpg",
+     "kb": 45
+    }
+   ],
+   "zone": "tarn",
+   "level": {
+    "brooks": 0.6,
+    "own": 1.2
+   },
+   "slides": null,
+   "slides3": null,
+   "kinds": {
+    "hillWolf": 8,
+    "snowWorm": 5,
+    "chough": 7
+   },
+   "clouds": {
+    "sail": 5,
+    "inView": 1,
+    "over": false,
+    "t": 0
+   },
+   "heavy": true
+  },
+  "dam": {
+   "shot": [
+    {
+     "q": 1,
+     "f": "docs/act7-briefs/reports/stageA/perf7/perf7-dam-q1.jpg",
+     "kb": 88
+    },
+    {
+     "q": 0,
+     "f": "docs/act7-briefs/reports/stageA/perf7/perf7-dam-q0.jpg",
+     "kb": 46
+    }
+   ],
+   "zone": "tarn",
+   "level": {
+    "brooks": 0.6,
+    "own": 1.2
+   },
+   "slides": {
+    "flues": [
+     {
+      "i": 8,
+      "kind": "water",
+      "area": "dam",
+      "st": "fire",
+      "t": 0.7
+     },
+     {
+      "i": 6,
+      "kind": "snow",
+      "area": "dam",
+      "st": "fire",
+      "t": 0.7
+     },
+     {
+      "i": 7,
+      "kind": "snow",
+      "area": "dam",
+      "st": "fire",
+      "t": 0.7
+     }
+    ],
+    "rocks": 0,
+    "after": [
+     "fire 0.55",
+     "fire 0.55",
+     "fire 0.55"
+    ]
+   },
+   "slides3": null,
+   "kinds": {
+    "stonewarden": 1,
+    "rockRoller": 2
+   },
+   "clouds": {
+    "sail": 5,
+    "inView": 1,
+    "over": true,
+    "t": 0
+   },
+   "heavy": true
+  }
+ },
+ "minutes": 54.2,
+ "over": [
+  "meadow: vsField 1.013, world 0.978"
+ ],
+ "pass": false
+}
