@@ -38,6 +38,7 @@ import { initNet, netTick, leaveGame } from '../net/coop.js';
 import { initCoopUi } from '../ui/coopui.js';
 import { initCloud } from './cloud.js';
 import { initCloudUi } from '../ui/cloudui.js';
+import { restOnTakeUp } from './rested7.js';
 
 function fatal(msg) {
   // (soon after a wake: what the visit laid on her zone may be what fails, so this page keeps no visit, game/wake.js)
@@ -179,6 +180,8 @@ async function startHero(hero, isNew, zone = 'town', force = false, home = false
     const h = freshHero(hero, force);
     if (!h) { emit('toast', t('menu.newer'), 'big'); return; }
     hero = h;
+    // (Act VII: the time away read before anything here stamps hero.played: Rested, game/rested7.js)
+    restOnTakeUp(hero);
   }
   // (where the last save left her, read off the record as stored, before anything here changes it; none on a page whose
   // wake went wrong, game/wake.js PAGE.off)

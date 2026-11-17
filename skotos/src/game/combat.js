@@ -23,6 +23,7 @@ import { slagParts } from '../gfx/models.js';
 import { R as RR } from '../gfx/gfx.js';
 import { NET, MIRROR } from '../net/state.js';
 import { N7mods, N7ctx, N7onHit, N7dodged, N7rt } from './names7.js';
+import { restKill } from './rested7.js';
 // Act VII: the Names she says (names7.js). Nothing is read for a hero who says none
 const n7on = () => !!G.hero?.names?.said?.some(Boolean) || G.player?.buffs?.call > 0;
 const n7rt = (p) => (p.n7 ||= N7rt());
@@ -566,7 +567,7 @@ export function kill(a, src, o = {}) {
   const CK = COOP_K();
   // experience
   const em = a.boss ? 1 : a.elite === 'rare' ? 5 : a.elite === 'champion' ? 3 : a.minion ? 1.5 : 1;
-  gainXP(monsterXP(a.level) * def.xp * D.xp * em * CK.xp);
+  gainXP(restKill(monsterXP(a.level) * def.xp * D.xp * em * CK.xp));
   hero.stats.kills++;
   if (a.elite) hero.stats.elites++;
   // massacre counter

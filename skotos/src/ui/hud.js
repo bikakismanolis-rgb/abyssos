@@ -165,6 +165,8 @@ export function updateHud(dt) {
   const bf = [];
   // (Act V: Warmed, a beam's warmth, is a flame)
   for (const k in pl.buffs) if (pl.buffs[k] > 0 && k !== 'evergreen') bf.push(`<div class="bf${k === 'memory' ? ' mem' : k === 'seen' ? ' seen' : k === 'warmed' ? ' warm' : ''}"${k === 'seen' || k === 'warmed' ? ` title="${t('hud.' + k)}"` : ''}>${k === 'memory' ? TEAR : k === 'seen' ? EYE : ICON[{ cry: 'horn', shrineFury: 'flame', shrineSpeed: 'roll', shrineFortune: 'coin', shrineShield: 'shield', warmed: 'flame', challenge: 'horn', bulwark: 'bulwark', alpha: 'wolf', call: 'horn' }[k] || 'star']}<b>${Math.ceil(pl.buffs[k])}</b></div>`);
+  // (Act VII: Rested, the kills left at double Mastery experience: game/rested7.js)
+  { const rs = (h.__real || h).rest | 0; if (rs > 0) bf.push(`<div class="bf" title="${t(h.cls === 'ranger' ? 'hud.rested.r' : 'hud.rested')}">${ICON.star}<b>${rs}</b></div>`); }
   const bh = bf.join('');
   if (bh !== S.bh) { $('buffs').innerHTML = bh; S.bh = bh; }
   // amber sap: the build-up toward an amber-lock, then the lock itself (a dodge breaks it)
