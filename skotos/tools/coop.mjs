@@ -1594,7 +1594,7 @@ const SC = {
   // the host's slush reaches the guest on 'i' (cells6); a Faded lit on the host is drawn solid on the guest (bit 15)
   async act6() {
     const { host, guests: [g] } = await party('drained', 1, { lvl: 36, glvl: 36, hq: '&quest=31' });
-    ok(await ev(host, async () => (await import('/src/net/coop.js')).VER === 5), 'protocol 5');
+    ok(await ev(host, async () => (await import('/src/net/coop.js')).VER === 6), 'protocol 6 (Act VII)');
     await ev(host, () => { const z = window.__G.zone; for (const p of z.packs) p.spawned = true; for (const a of z.actors) if (a.team === 'foe' && !a.prop) { a.hp = 0; a.dead = true; a.remove?.(); } window.__immortal = true; window.__act6.NAMES.t = -999; });
     await ev(g, () => { window.__immortal = true; });
     ok(await ev(g, () => !!window.__G.zone.tide && window.__G.zone.tide.mstep === 11), 'the guest\'s Drained Sea has the black water and the Mere at 1.65 m');
@@ -1732,7 +1732,7 @@ const SC = {
       return { out, walk: z.map.walkable(pl.x, pl.z), at: [+pl.x.toFixed(1), +pl.z.toFixed(1)], was: [+p.x.toFixed(1), +p.z.toFixed(1)] };
     });
     ok(dn && !dn.none && dn.out && dn.walk, 'a guest downed in a lane is laid at its edge, on floor', dn);
-    ok(await ev(host, async () => (await import('/src/net/coop.js')).VER === 5), 'protocol still 5 (the bump is stage E\'s last commit)');
+    ok(await ev(host, async () => (await import('/src/net/coop.js')).VER === 6), 'protocol 6 (Act VII, stage E\'s last commit)');
   },
 
   // Act VI's Budget (act6-contract, Net): a party of four in the Keels (hearth 3) under the vault, a Mage host and a Mage
