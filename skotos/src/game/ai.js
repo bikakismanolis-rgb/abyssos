@@ -2348,18 +2348,18 @@ const AITHON = {
       a.avatar?.play('howl', 1); Audio.sfx('hartBellow'); ring(a.x, a.z, 8, 0xffb040, 0.8); tally(a, 'furrow');
       return { t: 0.7, fn() { fireFlue(f.i, null); }, after: 0.8 };
     } },
-    { id: 'charge', when: (a, d) => d > 5 && d < 24, phaseCd: [8, 7, 5.5], run: (a, pl) => hartCharge(a, pl, 1.0, 22, false) },
-    { id: 'wheel', when: (a, d) => d < 5 && (a.mcd.charge ?? 0) <= 0.5, cd: 5, run: (a, pl) => wheelAway(a, pl) },
+    { id: 'charge', when: (a, d) => d > 5 && d < 24, phaseCd: [11, 9.5, 8], run: (a, pl) => hartCharge(a, pl, 1.0, 22, false) },
+    { id: 'wheel', when: (a, d) => d < 5 && (a.mcd.charge ?? 0) <= 0.5, cd: 9, run: (a, pl) => wheelAway(a, pl) },
     { id: 'stamp', when: (a, d) => d < 5.2, phaseCd: [6, 5, 4], run(a, pl) {
       a.tele = teleCircle(a.x, a.z, 5, 1.0, 0xffc040);
       a.avatar?.play('attack2', 1, { hitIn: 1.0 });
-      return { t: 1.0, fn() { stampFx(a, 5); if (Math.hypot(pl.x - a.x, pl.z - a.z) < 5.2) hitHero(a, pl, 1.35, { push: 18 }); }, after: 0.7 };
+      return { t: 1.0, fn() { stampFx(a, 5); if (Math.hypot(pl.x - a.x, pl.z - a.z) < 5.2) hitHero(a, pl, 1.35, { push: 7 }); }, after: 0.7 };
     } },
     { id: 'gore', basic: true, when: (a, d) => d < 4.8, cd: 1.6, run(a, pl) {
       a.rot = angleTo(a.x, a.z, pl.x, pl.z);
       a.tele = teleCone(a.x, a.z, a.rot, 4.8, 0.9, 0.55, 0xffc040);
       a.avatar?.play('attack', 1, { hitIn: 0.55 });
-      return { t: 0.55, fn() { Audio.sfx('swingHeavy', { x: a.x, z: a.z }); if (meleeLands(a, pl, 4.8, 0.95)) hitHero(a, pl, 1.1, { push: 12 }); }, after: 0.45 };
+      return { t: 0.55, fn() { Audio.sfx('swingHeavy', { x: a.x, z: a.z }); if (meleeLands(a, pl, 4.8, 0.95)) hitHero(a, pl, 1.1, { push: 4 }); }, after: 0.45 };
     } }
   ]
 };
@@ -2397,6 +2397,7 @@ const RAGNA = {
     // in daylight she drowses
     a.sun = !!sun8(G.zone, a.x, a.z) && !(a.nightT > 0);
     a.speed = a.speed0 * (a.sun ? 0.55 : 1);
+    a.dmgTaken = a.sun ? 1.3 : 1;   // (and every blow tells more on her)
     if (a.sun) for (const k in a.mcd) a.mcd[k] += dt * 0.45;
     if (a.sun !== a.sunWas) { a.sunWas = a.sun; a.avatar?.setRim(a.sun ? 0xffd890 : 0xffffff, a.sun ? 1.1 : 0.6); if (a.sun && !a.sunSaid) { a.sunSaid = true; say('d.ragna.sun'); } }
     if (a.nightT > 0 && (a.nightT -= dt) <= 0) emit('ragnaShutter', a.shut);
@@ -2450,7 +2451,7 @@ const RAGNA = {
       a.rot = angleTo(a.x, a.z, pl.x, pl.z);
       a.tele = teleCone(a.x, a.z, a.rot, 4.4, 0.9, 0.6, 0xffffff);
       a.avatar?.play('attack', 1, { hitIn: 0.6 });
-      return { t: 0.6, fn() { Audio.sfx('swingHeavy', { x: a.x, z: a.z }); if (meleeLands(a, pl, 4.4, 0.95)) hitHero(a, pl, 1.0, { push: 9 }); }, after: 0.45 };
+      return { t: 0.6, fn() { Audio.sfx('swingHeavy', { x: a.x, z: a.z }); if (meleeLands(a, pl, 4.4, 0.95)) hitHero(a, pl, 1.0, { push: 3 }); }, after: 0.45 };
     } }
   ]
 };

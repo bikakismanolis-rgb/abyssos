@@ -216,7 +216,7 @@ export const MONSTERS = {
   // Host's bodies (the `ash` people set) in pale undyed wool with a white rim, as the Order's fire is white-cored. None is
   // fireproof: the Burn strikes them at full strength. They are not killed: a fallen student sleeps where she falls
   // (`sleeps`: the words and the tally; the body lies as any other), and a Waker (the Ashsmith's `forger`) rings her up.
-  wakeful: { model: 'ashSpear', hp: 1.5, dmg: 1.15, speed: 3.4, radius: 0.5, ai: 'melee', reach: 2.0, atk: 'heavyStab', atkTime: 1.3, flesh: 'flesh', xp: 2.2, weapon: 'spear', wlook: { len: 2.0, blade: 0xe8e0d0, glow: 0.6, wood: 0x6a5a40 }, style: 'heavy', guard: { arc: 1.05, k: 0.25 }, bashEvery: 3, shield: { face: 0xd8ccb0, rim: 0xf4ecd8, emblem: 0xffffff, r: 0.32 }, sleeps: true, look: { tint: 0xb8a888, tintAmt: 2.5, rim: 0xffffff, rimI: 0.35 } },
+  wakeful: { model: 'ashSpear', hp: 1.5, dmg: 1.15, speed: 3.4, radius: 0.5, ai: 'melee', reach: 2.0, atk: 'heavyStab', atkTime: 1.3, flesh: 'flesh', xp: 2.2, weapon: 'spear', wlook: { len: 2.0, blade: 0xe8e0d0, glow: 0.6, wood: 0x6a5a40 }, style: 'heavy', guard: { arc: 0.9, k: 0.55 }, bashEvery: 3, shield: { face: 0xd8ccb0, rim: 0xf4ecd8, emblem: 0xffffff, r: 0.32 }, sleeps: true, look: { tint: 0xb8a888, tintAmt: 2.5, rim: 0xffffff, rimI: 0.35 } },
   wakefulBow: { model: 'ashBow', hp: 0.9, dmg: 1.0, speed: 3.5, radius: 0.48, ai: 'ranged', reach: 12, atk: 'shoot', atkTime: 1.9, flesh: 'flesh', xp: 1.7, weapon: 'bow', wlook: { blade: 0x8a7850 }, style: 'bow', proj: 'fireArrow', sleeps: true, look: { tint: 0xb8a888, tintAmt: 2.5, rim: 0xffffff, rimI: 0.35 } },
   waker: { model: 'ashsmith', hp: 1.2, dmg: 1.0, speed: 3.8, radius: 0.5, ai: 'forger', reach: 9, atk: 'throw', atkTime: 1.8, flesh: 'flesh', xp: 2.6, weapon: 'hammer', style: 'none', proj: 'ember', sleeps: true, look: { tint: 0xb8a888, tintAmt: 2.5, rim: 0xffffff, rimI: 0.5 } },
   // (the drover: a big man of the school in undyed wool with an ox-goad's maul, on the Ashsmith's body; the Hammerhorn's
@@ -225,11 +225,11 @@ export const MONSTERS = {
   // Ragna the Wakeful (docs/act8-design.md, Boss 2), Master of the Vigil House, forty years without sleep: on Arna's old
   // body, in the Order's pale wool, her staff's lamp white. Not killed (`spare`): at the end the Flame is banked by hand
   // and she sleeps (ai.js RAGNA)
-  ragna: { model: 'arnaOld', hp: 1900, dmg: 1.5, speed: 3.7, radius: 0.55, ai: 'ragna', reach: 4.0, atk: 'heavyStab', atkTime: 1.5, flesh: 'flesh', xp: 420, boss: true, spare: true, weapon: 'lanternStaff', wlook: { glow: 1.0, lamp: 0xffffff }, style: 'staff', look: { scale: 1.3, tint: 0xb8a888, tintAmt: 2.5, rim: 0xffffff, rimI: 0.6 } },
+  ragna: { model: 'arnaOld', hp: 2000, dmg: 1.6, speed: 3.7, radius: 0.55, ai: 'ragna', reach: 4.0, atk: 'heavyStab', atkTime: 1.5, flesh: 'flesh', xp: 420, boss: true, spare: true, weapon: 'lanternStaff', wlook: { glow: 1.0, lamp: 0xffffff }, style: 'staff', look: { scale: 1.3, tint: 0xb8a888, tintAmt: 2.5, rim: 0xffffff, rimI: 0.6 } },
   // Aithon, the Bull of the March (docs/act8-design.md, Boss 1): on the hart's body, dark, his horns' rim white-hot. He is
   // not killed (`spare`: at 0 life he stands down and the yoke comes off). The Burn strikes him as it strikes any of the
   // Order's: slideShare % of his life and a daze, so his own furrows are the hero's weapon.
-  aithon: { model: 'aithon', hp: 1700, dmg: 1.6, speed: 6.2, radius: 1.4, ai: 'aithon', reach: 4.6, atk: 'smash', atkTime: 1.6, flesh: 'flesh', xp: 320, boss: true, big: true, spare: true, sfx: 'hart', slideShare: 6, slideDaze: 3, look: { scale: 1.35, tint: 0x2a2018, tintAmt: 0.75, rim: 0xffffff, rimI: 0.45 } },
+  aithon: { model: 'aithon', hp: 2000, dmg: 2.3, speed: 6.2, radius: 1.4, ai: 'aithon', reach: 4.6, atk: 'smash', atkTime: 1.6, flesh: 'flesh', xp: 320, boss: true, big: true, spare: true, sfx: 'hart', slideShare: 9, slideDaze: 4, look: { scale: 1.35, tint: 0x2a2018, tintAmt: 0.75, rim: 0xffffff, rimI: 0.45 } },
   hillWolf: { model: 'warg', hp: 1.1, dmg: 0.9, speed: 6.6, radius: 0.65, ai: 'pounce', reach: 1.6, atk: 'bite', atkTime: 1.1, flesh: 'flesh', xp: 1.6, sfx: 'wolf', heavy: 'longPounce', wake: { d: 5, clip: 'hit', sleep: 'die', loud: 12, sfx: 'wolfHowl', t: 0.9, speed: 1 }, look: { scale: 1.15, tint: 0x8a7a66, tintAmt: 0.5 } },
   // (the Act VII goblins: the shared goblin in a dark coat with a pale edge, so it reads on mid-tone ground in daylight)
   looter: { model: 'goblin', hp: 0.55, dmg: 0.7, speed: 4.6, radius: 0.45, ai: 'melee', reach: 1.4, atk: 'stab', atkTime: 0.9, flesh: 'flesh', xp: 1, weapon: 'dagger', style: 'sword', hunch: 0.25, sfx: 'goblin', look: { tint: 0x1c2214, tintAmt: 0.8, rim: 0xd8e0c0, rimI: 0.3 } },
@@ -358,7 +358,7 @@ export const PACKS = {
   hillWolves: [['hillWolf', 1]],
   // Act VIII, the Tindergrass (stage A: the plain's wolves stand in until the Order's own come, stage B)
   plainWolves: [['hillWolf', 1]],
-  order: [['wakeful', 4], ['wakefulBow', 1.6], ['waker', 0.8]],
+  order: [['wakeful', 4], ['wakefulBow', 1.4], ['waker', 0.4]],
   orderRoad: [['wakeful', 3], ['drover', 0.7], ['wakefulBow', 1.2], ['waker', 0.6]],
   vigil: [['wakeful', 3], ['wakefulBow', 1.6], ['waker', 1], ['drover', 0.5]],
   ragnaCall: [['wakeful', 1]],
@@ -534,10 +534,13 @@ export const LEGENDARIES = [
 // a boss's first kill drops its own legendary (combat.js kill: by its def's legKey, else its kind)
 export const LEG_FROM = { tower: 'skerryShell', skotos: 'einarLantern', ketos: 'ketosLure', shade: 'shadeRing', kallisto: 'kallistoClaw', kelados: 'mountainHeart' };
 // the act's hazard row for a rule Acts V, VI and VII share (ZONES is world's: the act number is the caller's)
-export const HAZ_ACT = { 5: HAZ5, 6: HAZ6, 7: HAZ7, 8: HAZ7 };
+// Act VIII's rows: Act VII's (the Burn reads slide, slideFoe, slideElite), its creatures' life and blows raised after the
+// first balance pass (docs/act8-briefs/reports/stageD.md: the Order's packs fell in a second or two to a hero at 52)
+export const HAZ8 = HAZ7.map((r) => ({ ...r, hp: +(r.hp * 1.4).toFixed(2), dmg: +(r.dmg * 1.25).toFixed(2) }));
+export const HAZ_ACT = { 5: HAZ5, 6: HAZ6, 7: HAZ7, 8: HAZ8 };
 export const actHaz = (act, diff) => { const H = HAZ_ACT[act] || HAZ5; return H[diff ?? 1] || H[1]; };
 // a zone object's own act for those rows (world.js sets z.act5 / z.act6 / z.act7 as it dresses the zone), 0 before Act V
-export const zoneAct = (z) => (z?.act7 ? 7 : z?.act6 ? 6 : z?.act5 ? 5 : 0);
+export const zoneAct = (z) => (z?.act8 ? 8 : z?.act7 ? 7 : z?.act6 ? 6 : z?.act5 ? 5 : 0);
 export const POTION = { cd: 18, heal: 0.6 };
 export const INV_SIZE = 32;
 export const STASH_SIZE = 48;

@@ -142,7 +142,7 @@ const T = {
     const b0 = await ev(() => { const b = window.__G.zone.boss; return b ? { kind: b.kind, hp: Math.round(b.hpMax), standIn: !!b.avatar?.standIn, awake: !!b.awake, flameUsed: window.__G.zone.act8.flame.used } : null; });
     beat('the three halls banked: Ragna stands in the Great Hall, on her own body, the Flame not yet bare', b0 && b0.kind === 'ragna' && b0.awake && !b0.standIn && b0.flameUsed, b0);
     await pg.screenshot({ path: out + '/ragna-0.png' });
-    await ev(async () => { window.__C = await import('/src/game/combat.js'); });
+    await ev(async () => { window.__C = await import('/src/game/combat.js'); window.__immortal = true; });
     const hurt = (f) => ev((f) => { const G = window.__G, b = G.zone.boss; window.__C.damage(G.player, b, b.hpMax * f, { pure: true }); G.player.hp = G.player.hpMax; return { hp: b.hp / b.hpMax, shut: G.zone.act8.shut }; }, f);
     await hurt(0.3); await pg.waitForTimeout(1500);
     const s1 = await ev(() => { const G = window.__G, P = G.zone.lvl.act8, b = G.zone.boss; return { hp: +(b.hp / b.hpMax).toFixed(3), want: Math.min(7, Math.floor((1 - b.hp / b.hpMax) * 8 + 1e-6)), shut: G.zone.act8.shut, open: P.shutters.filter((s) => s.open).length, dark: P.arenaDark.k }; });

@@ -1,7 +1,7 @@
 // Act VIII's layouts over many seeds (docs/act8-design.md): node tools/check-act8.mjs [n=300]
 // Hard faults: a spot she cannot reach from the start; a field that is not closed (a way from inside a field to the
 // road or to open ground that does not pass a gate: the fire's rule 1); fewer than 8 fields or 3 hearths; a pack in the camp.
-import { genTinder } from '../src/world/gen8.js';
+import { genTinder, genVigil } from '../src/world/gen8.js';
 const n = +(process.argv[2] || 300); let bad = 0; const why = {};
 const fail = (seed, r) => { bad++; why[r] = (why[r] || 0) + 1; if (bad <= 8) console.log('seed', seed, r); };
 for (let seed = 1; seed <= n; seed++) {
@@ -29,6 +29,21 @@ for (let seed = 1; seed <= n; seed++) {
     const seen = flood(c, shut);
     if (seen[I(L.start.x, L.start.z)] || seen[I(S.arena.x, S.arena.z)]) { fail(seed, 'fieldOpen ' + f.id); break; }
   }
+}
+// the Vigil House: every spot reached with its doors open; with them shut nothing past hall 1; three halls, three doors,
+// six packs, twelve pillars or more, eight shutters inside the Great Hall, no pack in the Yard
+for (let seed = 1; seed <= n; seed++) {
+  const L = genVigil(seed * 7717 + 3), { w, h } = L, S = L.spots, I = (x, z) => Math.floor(z) * w + Math.floor(x);
+  const flood = (from, stop) => { const seen = new Uint8Array(w * h), q = [from]; seen[from] = 1; for (let k = 0; k < q.length; k++) { const i = q[k], x = i % w, z = (i - x) / w; for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const m = (z + dz) * w + x + dx; if (L.cells[m] && !seen[m] && !(stop && stop(x + dx, z + dz))) { seen[m] = 1; q.push(m); } } } return seen; };
+  const all = flood(I(L.start.x, L.start.z));
+  for (const p of [...L.exits, { x: S.arena.x + 3, z: S.arena.z }, S.waypoint, ...S.chests, ...L.packs, ...S.fires.map((q) => ({ x: q.x + 1.6, z: q.z })), ...S.shutters, { x: S.flame.x + 1.8, z: S.flame.z }, { x: S.arena.x, z: S.arena.z - 4.5 }]) if (!all[I(p.x, p.z)]) { fail(seed, 'vigil unreached'); break; }
+  const shut = new Set(S.doors.flatMap((d) => d.cells.map(([x, z]) => z * w + x)));
+  const sh = flood(I(L.start.x, L.start.z), (x, z) => shut.has(z * w + x));
+  if (sh[I(L.halls[1].fire.x + 1.6, L.halls[1].fire.z)] || sh[I(S.arena.x + 3, S.arena.z)]) fail(seed, 'vigil doorsLeak');
+  if (!sh[I(L.halls[0].fire.x + 1.6, L.halls[0].fire.z)]) fail(seed, 'vigil hall1 shut');
+  if (L.halls.length !== 3 || S.doors.length !== 3 || L.packs.length !== 6 || S.pillars.length < 12 || S.shutters.length !== 8) fail(seed, 'vigil counts');
+  if (S.shutters.some((q) => Math.hypot(q.x - S.arena.x, q.z - S.arena.z) > S.arena.r - 3)) fail(seed, 'vigil shutterOut');
+  if (L.packs.some((p) => Math.hypot(p.x - S.camp.x, p.z - S.camp.z) < 14)) fail(seed, 'vigil packInYard');
 }
 console.log(n + ' layouts, ' + bad + ' hard faults', JSON.stringify(why));
 process.exit(bad ? 1 : 0);

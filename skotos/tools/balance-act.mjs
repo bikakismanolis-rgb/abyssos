@@ -47,10 +47,10 @@ const OUT = args.out || null;
 const GROUP = +(process.env.GROUP || 40);
 
 // the order the bosses fall in, where they live, and the story a normal hero has behind her when she meets them
-export const BOSSES = ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn', 'amaranthe', 'ivar', 'karthax', 'tower', 'skotos', 'ketos', 'shade', 'kallisto', 'kelados'];
-export const ZONES = { forest: 1, crypt: 4, pass: 10, halls: 13, weep: 16, heart: 19, ashfield: 22, forge: 25, coast: 28, farlight: 31, drained: 34, bottom: 37, thaw: 49, tarn: 49 };
-export const BOSS_ZONE = { weaver: 'forest', barrowLord: 'crypt', stonewarden: 'pass', moltenKing: 'halls', silverhorn: 'weep', amaranthe: 'heart', ivar: 'ashfield', karthax: 'forge', tower: 'coast', skotos: 'farlight', ketos: 'drained', shade: 'bottom', kallisto: 'thaw', kelados: 'tarn' };
-const ACT = { forest: 1, crypt: 1, pass: 2, halls: 2, weep: 3, heart: 3, ashfield: 4, forge: 4, coast: 5, farlight: 5, drained: 6, bottom: 6, thaw: 7, tarn: 7 };
+export const BOSSES = ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn', 'amaranthe', 'ivar', 'karthax', 'tower', 'skotos', 'ketos', 'shade', 'kallisto', 'kelados', 'aithon', 'ragna'];
+export const ZONES = { forest: 1, crypt: 4, pass: 10, halls: 13, weep: 16, heart: 19, ashfield: 22, forge: 25, coast: 28, farlight: 31, drained: 34, bottom: 37, thaw: 49, tarn: 49, tinder: 52, vigil: 54 };
+export const BOSS_ZONE = { weaver: 'forest', barrowLord: 'crypt', stonewarden: 'pass', moltenKing: 'halls', silverhorn: 'weep', amaranthe: 'heart', ivar: 'ashfield', karthax: 'forge', tower: 'coast', skotos: 'farlight', ketos: 'drained', shade: 'bottom', kallisto: 'thaw', kelados: 'tarn', aithon: 'tinder', ragna: 'vigil' };
+const ACT = { forest: 1, crypt: 1, pass: 2, halls: 2, weep: 3, heart: 3, ashfield: 4, forge: 4, coast: 5, farlight: 5, drained: 6, bottom: 6, thaw: 7, tarn: 7, tinder: 8, vigil: 8 };
 // Act VII: each run's fixture (tools/fixtures7.mjs, the last flag of the chain it stands at). A zone run starts past its gates
 // (the thaw with the three weirs open: the Race at 0.3, the whole zone in reach); a boss run at its own door
 const A7UP = { thaw: 'weir3', tarn: 'tarnSeen', kallisto: 'weir3', kelados: 'keladosWake' };
@@ -87,11 +87,12 @@ async function installBot(cfg) {
     for (const id of PRIO[cls]) { if (!sk[id]) continue; while (pts > 0 && sk[id] < 5) { sk[id]++; pts--; } }
     return { sk, pts };
   }
-  const BOSS_LV = { weaver: 3, barrowLord: 7, stonewarden: 12, moltenKing: 16, silverhorn: 18, amaranthe: 22, ivar: 24, karthax: 28, tower: 30, skotos: 33, ketos: 36, shade: 40, kallisto: 50, kelados: 50 };
+  const BOSS_LV = { weaver: 3, barrowLord: 7, stonewarden: 12, moltenKing: 16, silverhorn: 18, amaranthe: 22, ivar: 24, karthax: 28, tower: 30, skotos: 33, ketos: 36, shade: 40, kallisto: 50, kelados: 50, aithon: 52, ragna: 54 };
   const BEFORE = { forest: [], crypt: ['weaver'], pass: ['weaver', 'barrowLord'], halls: ['weaver', 'barrowLord', 'stonewarden'], weep: ['weaver', 'barrowLord', 'stonewarden', 'moltenKing'], heart: ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn'], ashfield: ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn', 'amaranthe'], forge: ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn', 'amaranthe', 'ivar'], coast: ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn', 'amaranthe', 'ivar', 'karthax'], farlight: ['weaver', 'barrowLord', 'stonewarden', 'moltenKing', 'silverhorn', 'amaranthe', 'ivar', 'karthax', 'tower'] };
   BEFORE.drained = Object.keys(BOSS_LV).slice(0, 10); BEFORE.bottom = [...BEFORE.drained, 'ketos'];
   // (Act VII: the Shade beaten before the Meltwaters, Kallisto before the Hanging Lake: her Claw worn there and never before)
   BEFORE.thaw = [...BEFORE.bottom, 'shade']; BEFORE.tarn = [...BEFORE.thaw, 'kallisto'];
+  BEFORE.tinder = [...BEFORE.tarn, 'kelados']; BEFORE.vigil = [...BEFORE.tinder, 'aithon'];
   // per slot: the best (by damage x toughness) of K drops round the item level a normal player wears there (job.ilvl, +-2;
   // default L-4..L), one of them an elite's, and the first-kill legendary of every boss already beaten (at that boss's
   // level: job.legLv, else BOSS_LV)
@@ -153,7 +154,10 @@ async function installBot(cfg) {
     bottom: { quest: 36, acts: 5, flags: ACT6.bottom },
     // Act VII (the fixtures' flags, node side: tools/fixtures7.mjs): the thaw with the three weirs open, the tarn after its
     // arrival; Act VI done (h.act6), the act not (h.act7 -1)
-    ...(cfg.act7 ? { thaw: { quest: cfg.act7.thaw.quest, acts: 6, flags: on(cfg.act7.thaw.flags) }, tarn: { quest: cfg.act7.tarn.quest, acts: 6, flags: on(cfg.act7.tarn.flags) } } : {})
+    ...(cfg.act7 ? { thaw: { quest: cfg.act7.thaw.quest, acts: 6, flags: on(cfg.act7.thaw.flags) }, tarn: { quest: cfg.act7.tarn.quest, acts: 6, flags: on(cfg.act7.tarn.flags) } } : {}),
+    // Act VIII: Act VII done; the plain with its fires still banked, the House with every hall's fire banked (its doors
+    // open: a zone run clears the whole zone) and Ragna still awake
+    ...(cfg.act7 ? { tinder: { quest: 49, acts: 7, flags: { ...on(cfg.act7.kelados.flags), keladosRest: true, call8: true, burnSeen: true } }, vigil: { quest: 53, acts: 7, flags: { ...on(cfg.act7.kelados.flags), keladosRest: true, call8: true, burnSeen: true, ember1: true, ember2: true, ember3: true, aithonRest: true, bank1: true, bank2: true, bank3: true } } } : {})
   };
   const BFLAGS = {
     tower: { quest: 27, flags: { light_grey: true, mem_i1: true, light_wreck: true, mem_i2: true, light_fall: true, mem_i3: true, lights5: ['grey', 'wreck', 'fall'], towerWake: true } },
@@ -164,7 +168,10 @@ async function installBot(cfg) {
     ivar: { quest: 19, flags: { ...Object.fromEntries(['l1', 'l2', 'l3', 'l4', 'l5'].flatMap((id) => [['lamp_' + id, true], ['mem_' + id, true]])), ivar: false, ivarDown: false } },
     karthax: { quest: 21, flags: { bellows0: true, bellows1: true, bellows2: true, heat: 3, plug: true, gifts: { throne: 'refused', forge: 'refused', unfading: 'refused' } } },
     // (Act VII: Kallisto from weir3 at the Den, Kelados from keladosWake at the Dam: the fixtures' chains)
-    ...(cfg.act7 ? { kallisto: { quest: cfg.act7.kallisto.quest, flags: on(cfg.act7.kallisto.flags) }, kelados: { quest: cfg.act7.kelados.quest, flags: on(cfg.act7.kelados.flags) } } : {})
+    ...(cfg.act7 ? { kallisto: { quest: cfg.act7.kallisto.quest, flags: on(cfg.act7.kallisto.flags) }, kelados: { quest: cfg.act7.kelados.quest, flags: on(cfg.act7.kelados.flags) } } : {}),
+    // (Act VIII: Aithon with the three fires awake; Ragna with the three halls banked)
+    aithon: { quest: 50, flags: { ember1: true, ember2: true, ember3: true, aithonRest: false } },
+    ragna: { quest: 53, flags: { ragnaRest: false } }
   };
   const BOONS = ['ember', 'forge', 'amber', 'lantern', 'einar', 'bearer'];
 
@@ -193,7 +200,7 @@ async function installBot(cfg) {
     for (const k in h.flags) if (Array.isArray(h.flags[k])) h.flags[k] = h.flags[k].slice();
     if (job.lost) h.flags.lost6 = LOST6.slice(0, job.lost === true ? 7 : job.lost);
     for (let a = 1; a <= 6; a++) { h['act' + a] = a <= zf.acts ? 1 : -1; if (a <= zf.acts) h.flags['act' + a] = true; }
-    h.act7 = -1; G.selnaBack = false; G.shadeRetry = null;
+    h.act7 = zf.acts >= 7 ? 1 : -1; if (zf.acts >= 7) h.flags.act7 = true; h.act8 = -1; G.selnaBack = false; G.shadeRetry = null; G.flame8Bare = false;
     // (no Names in runs A-C: none said, so none of their rules runs; no lookout's rank)
     if (zf.acts >= 6) { h.names = { learnt: (h.names?.learnt || []).slice(), said: [null, null, null], deep: [], slots: 1, free: 0 }; h.fires = []; h.rest = 0; }
     h.boons = BOONS.slice(0, zf.acts);
@@ -1056,6 +1063,8 @@ async function installBot(cfg) {
         // (what holds the boss from its own AI: a fear runs flee() in its place, ai.js; a freeze; a stun)
         if (st.counting) { if (b.status?.fear > 0) st.bossFearS = (st.bossFearS || 0) + dt; if (b.status?.freeze > 0) st.bossFreezeS = (st.bossFreezeS || 0) + dt; if (b.status?.stun > 0) st.bossStunS = (st.bossStunS || 0) + dt; }
         if (st.ct > cfg.bossMax || st.deaths >= cfg.maxDeaths) st.over = true;
+        // (Act VIII: Ragna at her floor: the Flame is bare, and the bot's hand goes to it as a player's would, 6 s after)
+        if (b.kind === 'ragna' && b.floored && !b.dead) { st.flameT = (st.flameT || 0) + dt; const it = G.zone.act8?.flame; if (it && !it.used && st.flameT > 6) { st.flameT = -1e9; bus.emit('flame8', it, G.zone); } }
         // the Skotos waits under the ice edge until the Farthest Light is touched (story.js: it rises in a scene)
         if (st.job.boss === 'skotos' && !st.rose && G.mode === 'play' && G.zone.act5?.farIt) { st.rose = true; G.zone.act5.farIt.use(); }
         // still asleep (the Hart before its time, Karthax under the slag): walk up to it
@@ -1125,7 +1134,7 @@ try {
     page.on('pageerror', (e) => logs.push('pageerror: ' + e.message));
     page.on('console', (m) => { if (m.type() === 'error') logs.push('console: ' + m.text().slice(0, 200)); });
     // (Act VII: the page opens on the run's own fixture, with no story scene to hold the world)
-    const q = ACT[j0.zone] === 7 ? `${fx7(A7UP[j0.boss || j0.zone], j0.zone, { lvl: j0.lvl })}&cls=${j0.cls}&diff=${j0.diff}&sim=${SIM}&q=0&norender&nostory` : `auto=${j0.zone}&lvl=${j0.lvl}&cls=${j0.cls}&diff=${j0.diff}&sim=${SIM}&q=0&norender`;
+    const q = ACT[j0.zone] === 7 ? `${fx7(A7UP[j0.boss || j0.zone], j0.zone, { lvl: j0.lvl })}&cls=${j0.cls}&diff=${j0.diff}&sim=${SIM}&q=0&norender&nostory` : `auto=${j0.zone}&lvl=${j0.lvl}&cls=${j0.cls}&diff=${j0.diff}&sim=${SIM}&q=0&norender${ACT[j0.zone] === 8 ? '&nostory&flags=act7,aithonRest,ember1,ember2,ember3,bank1,bank2,bank3' : ''}`;
     await page.goto(`${BASE}?${q}`);
     await page.waitForFunction(() => window.__ready && window.__G?.player, null, { timeout: 240000 });
     await page.evaluate(installBot, cfg);

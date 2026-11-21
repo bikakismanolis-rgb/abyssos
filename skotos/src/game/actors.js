@@ -8,7 +8,7 @@ import { Avatar } from '../gfx/anim.js';
 import { hasPerson, personModel } from '../gfx/people.js';
 import { hasCreature, creatureModel } from '../gfx/creatures.js';
 import { tex } from '../gfx/textures.js';
-import { MONSTERS, DIFFS, HAZ5, HAZ6, HAZ7, HAZ_ACT, zoneAct, monsterHP, monsterDmg, AFFIXES, CLASSES, SKILLS, PACK_DORMANT, PACK_LINE, COOP } from './data.js';
+import { MONSTERS, DIFFS, HAZ5, HAZ6, HAZ7, HAZ8, HAZ_ACT, zoneAct, monsterHP, monsterDmg, AFFIXES, CLASSES, SKILLS, PACK_DORMANT, PACK_LINE, COOP } from './data.js';
 import { NET } from '../net/state.js';
 import * as B from '../world/build.js';
 import { G, uid } from './state.js';
@@ -174,7 +174,7 @@ export function spawnMonster(id, x, z, o = {}) {
   const HZ = HAZ_ACT[zoneAct(G.zone)] || null;
   if (HZ) dmg *= HZ[G.hero.diff]?.dmg ?? 1;
   // (Act VII: its regular creatures' life too, the row's hp; a boss's life is its own, set by the balance bot)
-  if (HZ === HAZ7 && !def.boss) hp *= HZ[G.hero.diff]?.hp ?? 1;
+  if ((HZ === HAZ7 || HZ === HAZ8) && !def.boss) hp *= HZ[G.hero.diff]?.hp ?? 1;
   // (Act VI's two bosses, every form and echo of them: their own factor, softened after the balance campaign)
   if (HZ === HAZ6 && def.boss) dmg *= HZ[G.hero.diff]?.bossDmg ?? 1;
   // co-op: the host's monsters stand up to the party (data.js COOP; net/coop.js rescales them as players come and go)
