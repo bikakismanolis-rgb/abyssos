@@ -9,7 +9,7 @@ import { genAshfield, genForge } from '../world/gen4.js';
 import { genCoast, genFarlight } from '../world/gen5.js';
 import { genDrained, genBottom, ropeSpot } from '../world/gen6.js';
 import { genThaw, genTarn } from '../world/gen7.js';
-import { genTinder } from '../world/gen8.js';
+import { genTinder, genVigil } from '../world/gen8.js';
 import { N7call, N7rt, N7WHY } from './names7.js';
 import { act8Level } from '../world/build8.js';
 import { firesTick, firesEnter, fires7 } from './fires7.js';
@@ -78,6 +78,9 @@ export const ZONES = {
   // Act VIII: the Tindergrass, down the old South Road from Whitecliff (docs/act8-design.md). Daylight, on Act VII's kit.
   // (music and ambient: the Meltwaters' after-act theme and pollen until its own are written, stage D)
   tinder: { level: 46, music: 'thawGreen', ambient: 'melt', atmos: 'tinder', act: 8, pack: 'plain', light: 'sun' },
+  // (the Vigil House: the Order's school, cut into the hill south of the Threshing Floor; dark under each roof until that
+  // hall's fire is banked, act8Tick)
+  vigil: { level: 49, music: 'vigil', ambient: 'melt', atmos: 'vigil', act: 8, pack: 'plain', light: 'sun' },
   gate: { level: 1, music: 'gate', ambient: 'gate', atmos: 'gate' }
 };
 // beacons that have answered Whitecliff's: Arna's hill after Act I, Deepstone after Act II, and after Act III the
@@ -182,6 +185,7 @@ function createZone(id, o = {}) {
   else if (id === 'thaw') L = genThaw(seed, { mode: thawMode() });
   else if (id === 'tarn') L = genTarn(seed, { mode: tarnMode() });
   else if (id === 'tinder') L = genTinder(seed);
+  else if (id === 'vigil') L = genVigil(seed);
   else if (id === 'gate') L = (o.tier % 2 ? genCrypt(seed, { rooms: 12, mh: 30 }) : genForest(seed, { h: 120 }));
   // (Act V: what the story has done to the layout is laid on it before it is built: sealed leads, the skerry's state)
   if (ZONES[id]?.act === 5) act5Layout(id, L);
@@ -428,7 +432,7 @@ export function updatePacks() {
     spawnPack(z, p, D);
   }
   // Silverhorn rises only once the Long Sorrow is known (the bellow after the third Tear sets quest 13)
-  const asleep = (z.bossSpot?.kind === 'silverhorn' && G.hero.quest < 13) || (z.bossSpot?.kind === 'aithon' && embers8() < 3);
+  const asleep = (z.bossSpot?.kind === 'silverhorn' && G.hero.quest < 13) || (z.bossSpot?.kind === 'aithon' && embers8() < 3) || (z.bossSpot?.kind === 'ragna' && banks8() < 3);
   if (z.bossSpot && !z.bossSpawned && !asleep && near(z.bossSpot.x, z.bossSpot.z, 30)) spawnBoss(z);
   // Act V: at high water the flood waves walk in from the sea's edge (tide.js keeps their clock: one each 25 s while the
   // water stands at 0.75 m or more, at most two alive; the pack is combat's)
@@ -589,7 +593,7 @@ function takeExit(z, e) {
   if (e.locked && !G.hero.flags[e.locked]) {
     emit('toast', t('locked')); Audio.sfx('denied');
     // (the north road: only a hero at Act III's end is sent to Isarn about it)
-    const why = { haldaOut: 'd.trackShut', kallistoRest: 'd.waterStairShut', weaver: 'd.weaver', stonewarden: 'd.gateShut', act1: 'd.mountainShut', act2: 'd.woodShut', hart: 'd.rootShut', fireTaken: G.hero.flags.act3 ? 'd.roadShut' : 'd.northShut', ivar: 'd.anvilShut', coal: 'd.coastShut', frozen: 'd.iceShut', coal6: 'd.ropeShut', ketosDown: 'd.wellShut', herFire: 'd.gateDark' }[e.locked];
+    const why = { haldaOut: 'd.trackShut', kallistoRest: 'd.waterStairShut', aithonRest: 'd.vigilShut', weaver: 'd.weaver', stonewarden: 'd.gateShut', act1: 'd.mountainShut', act2: 'd.woodShut', hart: 'd.rootShut', fireTaken: G.hero.flags.act3 ? 'd.roadShut' : 'd.northShut', ivar: 'd.anvilShut', coal: 'd.coastShut', frozen: 'd.iceShut', coal6: 'd.ropeShut', ketosDown: 'd.wellShut', herFire: 'd.gateDark' }[e.locked];
     if (why) emit('say', why);
     return;
   }
@@ -1971,6 +1975,7 @@ export function updateAct(dt) {
   if (z?.act5 && pl) { act5Tick(z, dt); return; }
   if (z?.act6 && pl) { act6Tick(z, dt); return; }
   if (z?.act7 && pl) { act7Tick(z, dt); return; }
+  if (z?.act8 && pl) { act8Tick(z, dt); return; }
   if (!z?.act4 || !pl) return;
   const F = G.hero.flags;
   if (z.id === 'ashfield') {
@@ -2349,6 +2354,8 @@ function act8Zone(z) {
     it.use = () => emit('hearth8', it, z);
     z.act8.hearths.push(it); z.interact.push(it);
   }
+  if (z.id === 'tinder') vigilRoad(z);
+  if (z.id === 'vigil') vigilZone(z);
   // Halda at the North Camp (the boot smith), as at Act VII's camps
   const N = S.npcs?.halda;
   if (N) { const a = spawnNpc('smith', N.x, N.z, N.rot || 0); a.home = N.rot || 0; z.actors.push(a); z.act8.halda = a; z.interact.push({ kind: 'npc', npc: 'smith', actor: a, x: N.x, z: N.z, r: 2.4, prompt: 'talk', use: () => emit('talk', 'smith', a) }); }
@@ -2356,6 +2363,8 @@ function act8Zone(z) {
 function act8Enter(z) {
   setThaw(0, true);
   Audio.mood({ race: 0 });
+  if (z.id === 'tinder') vigilRoad(z);
+  if (z.id === 'vigil') { vigilEnter(z); return; }
   // (the lanes stand again on every entry, as the chutes re-arm: forge.js, the Burn)
   startFlues(z.L.flues);
   for (const l of z.lvl?.act8?.lanes || []) l?.setBurnt(false);
@@ -2395,6 +2404,95 @@ on('bossRest', (kind, a) => {
   if (kind !== 'aithon' || G.zone?.id !== 'tinder' || G.hero.__real || a?.echo) return;
   emit('toast', t('q.aithonFree'), 'big'); emit('say', 'd.aithon.rest'); Audio.music(ZONES.tinder.music);
 });
+// ---------- the Vigil House (zone 2): Bank and Wake the other way round. Each hall's fire burns; banked by hand (a touch
+// of 1.5 s, broken by a blow) its shutters fall, the hall stands in daylight and its south door opens. Flags bank1..3.
+// The Great Hall is Ragna's: eight shutters fall as her life does (ai.js RAGNA, bus 'ragnaShutter'), and at the end the
+// Flame at its centre is banked by hand (bus 'flame8'), and she sleeps ----------
+export const banks8 = (F = G.hero.flags) => [1, 2, 3].filter((k) => F['bank' + k]).length;
+// the road south from the Threshing Floor, there once Aithon rests (an interact on cells already walkable)
+function vigilRoad(z) {
+  const L = z.L, A = L.spots.arena; if (!A || L.exits.some((e) => e.to === 'vigil')) return;
+  const p = z.map.nearestFloor(A.x, A.z + A.r - 2.5, 5); if (!p) return;
+  const e = { x: p.x, z: p.z, to: 'vigil', label: 'exit.vigil', locked: 'aithonRest', act8: true };
+  L.exits.push(e);
+  z.interact.push({ kind: 'exit', to: e.to, x: e.x, z: e.z, r: 2.4, prompt: e.label, locked: e.locked, use: () => takeExit(z, e) });
+}
+function vigilZone(z) {
+  const S = z.L.spots, A = z.act8;
+  A.fires = []; A.dark = 0;
+  for (const p of S.fires || []) {
+    const it = { kind: 'bank8', k: p.k, x: p.x, z: p.z, r: 2.6, prompt: 'bank8.bank', spot: p, mesh: z.lvl?.act8?.fires?.find((q) => q.k === p.k)?.mesh };
+    it.use = () => { if (it.used) return; touch(1.5, it, 0.9, () => emit('bank8', it, z), { take: true }); };
+    A.fires.push(it); z.interact.push(it);
+  }
+  // the Flame: bare for the hand only when Ragna has nothing left (ai.js sets it.used = false and the prompt)
+  if (S.flame) {
+    const it = A.flame = { kind: 'flame8', x: S.flame.x, z: S.flame.z, r: 3.0, prompt: 'flame8.bank', used: true, mesh: z.lvl?.act8?.flame?.mesh };
+    it.use = () => { if (it.used) return; touch(2.0, it, 1.1, () => emit('flame8', it, z), { take: true, tough: true }); };
+    z.interact.push(it);
+  }
+  if (S.arena && !G.hero.flags.ragnaRest) z.bossSpot = { kind: 'ragna', ...(z.map.nearestFloor(S.arena.x, S.arena.z - 4.5, 3) || S.arena) };
+}
+// the House as the flags have it, on every entry: the fires, the doors (their cells shut on the map), the dark
+function vigilEnter(z) {
+  const F = G.hero.flags, P = z.lvl?.act8 || {}, S = z.L.spots;
+  for (const it of z.act8.fires) vigilFire(z, it, !!F['bank' + it.k], true);
+  const rest = !!F.ragnaRest;
+  const fm = P.flame?.mesh; if (fm) { fm.userData.setRank?.(rest ? 0 : 5); fm.userData.setLit?.(!rest); const lid = fm.userData.lid; if (lid) { lid.position.set(rest ? 0 : 1.25, rest ? 0 : -0.6, rest ? 0 : 0.3); lid.rotation.z = rest ? 0 : 0.5; } }
+  for (const sh of P.shutters || []) sh.setOpen(rest, false);
+  P.arenaDark?.setDark(rest ? 0 : 1);
+  z.act8.shut = rest ? 8 : 0; z.act8.dark = 0; z.act8.flame.used = true;
+  const c = S.camp; if (c) z.checkpoint = z.map.nearestFloor(c.x, c.z, 3);
+  startFlues(z.L.flues);
+  setAtmosphere(ATMOS.vigil);
+}
+function vigilFire(z, it, banked, snap) {
+  const P = z.lvl?.act8 || {}, m = it.mesh, lid = m?.userData.lid, d = (z.L.spots.doors || []).find((q) => q.k === it.k);
+  it.banked = banked; it.used = banked; it.prompt = 'bank8.bank';
+  if (m) { m.userData.setRank?.(banked ? 0 : 4); m.userData.setLit?.(!banked); if (lid) { lid.position.set(banked ? 0 : 1.25, banked ? 0 : -0.6, banked ? 0 : 0.3); lid.rotation.z = banked ? 0 : 0.5; } }
+  P.darks?.find((q) => q.hall === it.k)?.setDark(banked ? 0 : 1);
+  P.doors?.find((q) => q.k === it.k)?.setOpen(banked);
+  if (d) { if (banked) z.map.open(d.cells); else z.map.close(d.cells, false); }
+}
+on('bank8', (it, z) => {
+  const pl = G.player; if (!pl || pl.dead || !z?.act8 || it.banked) return;
+  const F = G.hero.flags; F['bank' + it.k] = true; vigilFire(z, it, true);
+  Audio.sfx('stoneCrack', { x: it.x, z: it.z, vol: 0.7 }); Audio.sfx('hearthCatch', { x: it.x, z: it.z, vol: 0.5 }); shake(0.3);
+  ring(it.x, it.z, 9, 0xfff0c0, 0.9); glowBurst(it.x, 1.2, it.z, 0xfff0c8, 18, 3, 0.4, 0.8);
+  const n = banks8(F);
+  emit('toast', t(n >= 3 ? 'bank8.all' : 'bank8.done', n), n >= 3 ? 'big' : 'quest');
+  emit('banked8', it, z, n); writeSave();
+});
+// a shutter of the Great Hall falls (n: how many are down now, 1-8)
+on('ragnaShutter', (n) => {
+  const z = G.zone, P = z?.lvl?.act8; if (!P?.shutters || !z.act8) return;
+  for (const sh of P.shutters) { const want = sh.k <= n; if (want === sh.open) continue; sh.setOpen(want); if (want) { ring(sh.x, sh.z, 4, 0xfff0c0, 0.7); Audio.sfx('stoneCrack', { x: sh.x, z: sh.z, vol: 0.5 }); } }
+  z.act8.shut = n; P.arenaDark?.setDark(1 - n / 8);
+});
+// the Flame banked by hand: she sleeps (ai.js hears 'flame8' too and lays her down)
+on('flame8', (it, z) => {
+  if (!z?.act8 || G.zone !== z) return;
+  it.used = true; const m = it.mesh, lid = m?.userData.lid;
+  if (m) { m.userData.setRank?.(0); m.userData.setLit?.(false); if (lid) { lid.position.set(0, 0, 0); lid.rotation.z = 0; } }
+  Audio.sfx('hearthCatch', { x: it.x, z: it.z, vol: 0.6 }); ring(it.x, it.z, 14, 0xfff0c0, 1.2);
+  emit('ragnaShutter', 8);
+  // (the whole hall stands in daylight now: the pools are no longer told apart)
+  later(2.5, () => { if (G.zone === z) for (const sh of z.lvl?.act8?.shutters || []) sh.setOpen(true, false); });
+});
+// is this spot under a roof still dark? (a hall whose fire burns, the Great Hall by its shutters); and is it in one of
+// the Great Hall's pools of daylight (ai.js: Ragna drowses there)
+export function dark8(z, x, zz) {
+  if (!z?.act8 || z.id !== 'vigil') return 0;
+  for (const H of z.L.halls || []) if (x >= H.x0 - 1 && x <= H.x1 + 2 && zz >= H.z0 - 1 && zz <= H.z1 + 2) return G.hero.flags['bank' + H.k] ? 0 : 1;
+  const A = z.L.spots.arena; if (A && Math.hypot(x - A.x, zz - A.z) < A.r + 1) return 1 - (z.act8.shut || 0) / 8;
+  return 0;
+}
+export function sun8(z, x, zz) { const P = z?.lvl?.act8; if (!P?.shutters) return false; for (const sh of P.shutters) if (sh.open && (sh.x - x) ** 2 + (sh.z - zz) ** 2 < sh.r * sh.r) return true; return false; }
+function act8Tick(z, dt) {
+  if (z.id !== 'vigil') { sunTick(z, dt); return; }
+  const pl = G.player, want = dark8(z, pl.x, pl.z), k0 = z.act8.dark || 0, k1 = k0 + clamp(want - k0, -dt * 1.6, dt * 1.6);
+  if (k1 !== k0) { z.act8.dark = k1; setAtmosphere(k1 <= 0.001 ? ATMOS.vigil : k1 >= 0.999 ? ATMOS.vigilDark : mixAtmos(ATMOS.vigilDark, ATMOS.vigil, 1 - k1 * k1 * (3 - 2 * k1))); }
+}
 on('burnSpent', (f) => { G.zone?.lvl?.act8?.lanes?.[f.i]?.setBurnt(true); });
 on('flueInhale', (f) => { if (f.kind === 'burn' && !G.hero.flags.burnSeen) { G.hero.flags.burnSeen = true; emit('toast', t('q.burn'), 'quest'); } });
 function goatTrack(z) {

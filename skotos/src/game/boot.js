@@ -219,6 +219,8 @@ async function startHero(hero, isNew, zone = 'town', force = false, home = false
   // and from before Act VII: an Act VI hero reads as Act VI's end (quest 39), no Name said, no fire held
   hero.act7 ??= -1;
   if (hero.act7 >= 0) hero.flags.act7 = true;
+  hero.act8 ??= -1;
+  if (hero.act8 >= 0) hero.flags.act8 = true;
   hero.gateFound ??= 0;
   hero.fmt = SAVE_FMT;
   legBack(hero);

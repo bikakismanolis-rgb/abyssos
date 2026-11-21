@@ -11,6 +11,13 @@
 //   L.flues    the Burn's lanes, kind 'burn' (forge.js): strips of standing stubble 5 wide down each field, the wind's way
 //              (from the south wall north), 6 cells of reaped ground between two; each lies wholly inside its field
 //   L.spots    camp, waypoint, npcs.halda, hearths [{ k: 1-3, x, z, field }], arena { x, z, r }, chests, sheaves [{ x, z }]
+//   genVigil(seed)    96 x 176, NORTH at the top: the Vigil House, cut into the hill and built without windows. The Yard
+//       (daylight, the waypoint, the way back to the plain), then three feeder halls one after the other, each with its
+//       fire in the middle and a shut door in its south wall, then the Great Hall (Ragna's arena, the Flame at its centre).
+//       A hall's fire banked opens that hall's south door (world.js closes the doors' cells on the map while they are shut).
+//   L.halls    [{ k: 1-3, x0, z0, x1, z1 (inner cells, inclusive), fire: { x, z } }]
+//   L.spots    camp, waypoint, fires [{ k, x, z }], doors [{ k, x, z, cells: [[x, z]] }], pillars [{ x, z }], arena, flame,
+//              shutters [{ k: 1-8, x, z }] (where the Great Hall's daylight falls as each shutter comes down), chests
 import { RNG, fbm } from '../core/util.js';
 import { base } from './gen.js';
 import { circleCells, snap, BED_DRY } from './genlib.js';
@@ -159,3 +166,68 @@ export function genTinder(seed) {
   L.refuges = [];
   return L;
 }
+
+export function genVigil(seed) {
+  const rng = RNG(seed), w = 96, h = 176, N = w * h;
+  const L = daylight7(base(w, h), 'vigil', seed), S = L.spots;
+  Object.assign(S, { hearths: [], lookouts: [], chests: [], sheaves: [], huts: [], slabs: [], vaults: [], npcs: {}, fires: [], doors: [], pillars: [], shutters: [] });
+  L.fields = []; L.walls = []; L.halls = []; L.clouds = []; L.own.level = 0;
+  const K = new Uint8Array(N), bed = new Float32Array(N).fill(BED_DRY), blk = new Uint8Array(N), res = new Uint8Array(N), own = new Uint8Array(N), T = L.trail;
+  const { blockC, reserve, paintAt } = makeDraw(L, K, blk, res, rng);
+  const I = (x, z) => Math.floor(z) * w + Math.floor(x);
+  const rect = (x0, z0, x1, z1) => { for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) K[z * w + x] = LAND; };
+  // ---- the Yard ----
+  const CP = { x: 48.5, z: 17.5, r: 9 };
+  for (const [x, z] of circleCells(L, CP.x, CP.z, CP.r)) K[z * w + x] = LAND;
+  S.camp = CP; S.waypoint = { x: CP.x + 4.5, z: CP.z - 1 }; reserve(CP.x, CP.z, CP.r); paintAt(CP.x, CP.z, 6, 0.8);
+  L.start = { x: CP.x, z: CP.z - 3 };
+  L.exits.push({ x: CP.x, z: CP.z - 7, to: 'tinder', label: 'exit.tinderBack' });
+  // ---- the three halls and the passages between them ----
+  const HZ = [36, 68, 100], HD = 25;                         // each hall's first row and its depth
+  let px = Math.floor(CP.x);                                  // the passage that comes into the hall, by its column
+  rect(px - 1, Math.floor(CP.z + CP.r) - 1, px + 1, HZ[0] - 1);
+  for (let z = Math.floor(CP.z + CP.r) - 1; z < HZ[0]; z++) for (let x = px - 1; x <= px + 1; x++) { T[z * w + x] = 1; res[z * w + x] = 1; }
+  for (let k = 0; k < 3; k++) {
+    const cx = 48 + rng.int(-5, 5), x0 = cx - 15, x1 = cx + 15, z0 = HZ[k], z1 = HZ[k] + HD;
+    rect(x0, z0, x1, z1);
+    const fire = { k: k + 1, x: cx + 0.5 + rng.int(-3, 3), z: z0 + 12.5 + rng.int(-2, 2) };
+    L.halls.push({ k: k + 1, x0, z0, x1, z1, fire }); S.fires.push(fire);
+    reserve(fire.x, fire.z, 3.5); blockC(fire.x, fire.z, 0.6); paintAt(fire.x, fire.z, 3.5, 0.9);
+    // the way in stays clear
+    for (let z = z0; z <= z0 + 3; z++) for (let x = px - 2; x <= px + 2; x++) res[z * w + x] = 1;
+    // the door out: in the south wall, a passage 3 wide and 6 deep to the next hall (or to the Great Hall's ring)
+    const dx = k === 2 ? 48 : clampI(48 + rng.int(-8, 8), x0 + 4, x1 - 4), zt = z1 + 1, zb = k === 2 ? zt + 9 : HZ[k + 1] - 1;
+    rect(dx - 1, zt, dx + 1, zb);
+    const cells = []; for (let x = dx - 1; x <= dx + 1; x++) for (let z = zt + 1; z <= zt + 2; z++) cells.push([x, z]);
+    for (let z = zt; z <= zb; z++) for (let x = dx - 1; x <= dx + 1; x++) { T[z * w + x] = 1; res[z * w + x] = 1; }
+    for (let z = z1 - 3; z <= z1; z++) for (let x = dx - 2; x <= dx + 2; x++) res[z * w + x] = 1;
+    S.doors.push({ k: k + 1, x: dx + 0.5, z: zt + 2, cells });
+    // pillars: cover in two rows, never by the fire or the doors
+    for (const pz of [z0 + 6, z0 + 19]) for (const ox of [-10, -4, 4, 10]) {
+      const p = { x: cx + ox + rng.int(-1, 1), z: pz + rng.int(-1, 1) };
+      if (res[I(p.x, p.z)] || res[I(p.x + 1, p.z + 1)] || hyp(p, fire) < 6) continue;
+      for (const [ax, az] of [[0, 0], [1, 0], [0, 1], [1, 1]]) blk[(p.z + az) * w + p.x + ax] = 1;
+      S.pillars.push({ x: p.x + 1, z: p.z + 1, hall: k + 1 });
+    }
+    // the hall's people: two packs, one each side of the fire; the last hall's second is led by a champion
+    for (const side of [-1, 1]) {
+      let p = null;
+      for (let t = 0; t < 40 && !p; t++) { const q = { x: snap(cx + side * rng.int(6, 11)), z: snap(z0 + (side < 0 ? rng.int(7, 12) : rng.int(13, 19))) }; if (!blk[I(q.x, q.z)] && hyp(q, fire) > 5) p = q; }
+      if (!p) p = { x: snap(cx + side * 8), z: snap(z0 + 12) };
+      L.packs.push({ x: p.x, z: p.z, n: rng.int(4, 5) + (k > 0 ? 1 : 0), tag: 'vigil', elite: k === 2 && side > 0 ? 'champion' : null, area: 'hall' + (k + 1) });
+    }
+    if (k > 0) { const c = { x: snap(rng.chance(0.5) ? x0 + 2 : x1 - 2), z: snap(z1 - 2) }; if (!res[I(c.x, c.z)] && !blk[I(c.x, c.z)]) { S.chests.push(c); reserve(c.x, c.z, 1.5); } }
+    px = dx;
+  }
+  // ---- the Great Hall: a ring, the Flame at its centre, eight shutters round it ----
+  const AR = { x: 48.5, z: HZ[2] + HD + 9 + 14.5, r: 15 };
+  for (const [x, z] of circleCells(L, AR.x, AR.z, AR.r)) { K[z * w + x] = LAND; res[z * w + x] = 1; }
+  S.arena = AR; L.boss = { x: AR.x, z: AR.z, r: AR.r };
+  S.flame = { x: AR.x, z: AR.z }; blockC(AR.x, AR.z, 0.6); paintAt(AR.x, AR.z, 5, 1);
+  for (let k = 0; k < 8; k++) { const a = (k + 0.5) * Math.PI / 4; S.shutters.push({ k: k + 1, x: AR.x + Math.sin(a) * 9, z: AR.z + Math.cos(a) * 9 }); }
+  finish7(L, K, bed, blk, own, (vx, vz) => 3.2 + 2.2 * fbm(vx * 0.05, vz * 0.05, seed + 41));
+  settle7(L);
+  L.refuges = [];
+  return L;
+}
+function clampI(v, a, b) { return Math.max(a, Math.min(b, v)); }

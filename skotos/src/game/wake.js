@@ -10,7 +10,7 @@ import { dropShard } from './pickups.js';
 
 // the zones she wakes in; any other (Whitecliff, a Shadow Gate, a zone this build does not know) is Whitecliff at its
 // waypoint, as before. (Act VI's two retry at their checkpoints, z.checkpoint from flags.cp6)
-export const WAKE = new Set(['forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'forge', 'coast', 'farlight', 'drained', 'bottom', 'thaw', 'tarn', 'tinder']);
+export const WAKE = new Set(['forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'forge', 'coast', 'farlight', 'drained', 'bottom', 'thaw', 'tarn', 'tinder', 'vigil']);
 // a boss that rises as she comes near is not woken beside: within its reach she wakes at the zone's retry spot. Silverhorn
 // sleeps until quest 13, or until the three verses are known (the zone's entry wakes it just after: story.js), the Tower
 // until it is woken, the Skotos until the Farthest Light is touched. Karthax stirs at 13.5 m and the Tower rises at 24 m,

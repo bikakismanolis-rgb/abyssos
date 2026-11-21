@@ -216,11 +216,11 @@ const R = {
     const h = G.hero, inTown = G.zone?.id === 'town';
     // Act IV's Field has a second waypoint, at Elati's camp at the mouth of the Lantern Graves ('ashfield@2'); Act V's and
     // Act VI's are named for their place (the Landing, the Icebound Ship; the Rope, the Well's Foot)
-    const named = new Set(['coast', 'farlight', 'drained', 'bottom', 'thaw', 'tarn', 'tinder']);
+    const named = new Set(['coast', 'farlight', 'drained', 'bottom', 'thaw', 'tarn', 'tinder', 'vigil']);
     // (the Frozen Coast from the start of Act V, before its own waypoint is lit: she arrives where the Anvil's Neck brings
     // her, so no one has to find the Neck in the Field of Ash first; and then first in the list, marked as the way on)
     const neck = !h.wps.includes('coast') && h.quest >= 25;
-    const all = ['town', 'forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'ashfield@2', 'forge', 'coast', 'farlight', 'drained', 'bottom', 'thaw', 'tarn', 'tinder'];
+    const all = ['town', 'forest', 'crypt', 'pass', 'halls', 'weep', 'heart', 'ashfield', 'ashfield@2', 'forge', 'coast', 'farlight', 'drained', 'bottom', 'thaw', 'tarn', 'tinder', 'vigil'];
     const order = neck ? ['coast', ...all.filter((z) => z !== 'coast')] : all;
     const list = order.filter((z) => h.wps.includes(z) || (z === 'coast' && neck)).map((w) => {
       const z = w.split('@')[0], sub = w.endsWith('@2') ? t('wp.graves') : named.has(z) ? t('wp.' + z) : t('zone.' + z + '.s');

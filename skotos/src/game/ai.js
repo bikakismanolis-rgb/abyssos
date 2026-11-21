@@ -24,7 +24,7 @@ import { wadeAt, waterAt, TIDE } from './tide.js';
 import { ICE, iceAt, stageAt, crackAt, crackLine, crackCone, breakAt, holeNear, FALLS, drown } from './ice.js';
 import { setShade, setWake } from '../world/sea.js';
 import { ATMOS, mixAtmos } from '../world/atmos.js';
-import { ZONES, checkpoint5, light6, storyOpenings } from './world.js';
+import { ZONES, checkpoint5, light6, storyOpenings, sun8 } from './world.js';
 import { tidal } from '../world/gen5.js';
 import { COLD, coldAdd } from './cold.js';
 import { dropGlobe } from './pickups.js';
@@ -888,6 +888,7 @@ const AI = {
   // Act VII: the two who are not killed
   kallisto: (a, dt, pl, d) => boss(a, dt, pl, d, KALLISTO),
   aithon: (a, dt, pl, d) => boss(a, dt, pl, d, AITHON),
+  ragna: (a, dt, pl, d) => boss(a, dt, pl, d, RAGNA),
   kelados: (a, dt, pl, d) => { keladosPre(a); return boss(a, dt, pl, d, KELADOS); },
   pet: null
 };
@@ -2362,6 +2363,104 @@ const AITHON = {
     } }
   ]
 };
+// ---------- Act VIII: Ragna the Wakeful, Master of the Vigil House (docs/act8-design.md, Boss 2) ----------
+// The Great Hall is dark and she is quick in it. As her life falls its eight shutters come down one by one (an eighth of
+// her life each: bus 'ragnaShutter'), and each lets a pool of daylight onto the floor. In daylight she drowses: slow on
+// her feet and slow to her next move, so a hero who fights her in the light fights half of her. Her moves: the Lesson
+// (three rings of white fire where the hero stands, one after the other), the Rule (a line of white fire the length of
+// the hall), the Rod (her staff, close), the Roll-call from the second phase (two students run in from the walls) and the
+// Long Night from the third (the hall's light goes out of every pool but two for a while). She cannot be brought below
+// a twentieth of her life by blows: there she stands by the Flame and the Flame is bare to the hand (world.js 'flame8';
+// a touch of 2 s that only a heavy blow breaks). Banked, she sleeps (`spare`). After 30 s at the floor she nods where she
+// stands (a daze of 6 s every 12), so the touch can always be made.
+const ragnaFloor = (a) => a.hp <= a.hpMax * 0.0501;
+function ragnaFire(x, z, r, a, mult, id) {
+  explosion(x, z, r, 0xffffff, { smoke: 0xd8d4c8, shake: 0.25 }); Audio.sfx('fireball', { x, z, vol: 0.7 });
+  for (const p of heroes()) if (!p.dead && Math.hypot(p.x - x, p.z - z) < r + (p.radius || 0.5) * 0.5) hitHero(a, p, mult, { target: p });
+  tally(a, id);
+}
+const RAGNA = {
+  name: 'ragna', phases: [0.62, 0.3], wake: 15,
+  intro(a) {
+    emit('bossIntro', a); say('d.ragna');
+    Audio.sfx('towerBell'); Audio.sfx('bossRoar', { vol: 0.4 }); shake(0.3);
+    a.avatar?.play('warcry'); ring(a.x, a.z, 10, 0xffffff, 0.9);
+    a.speed0 = a.speed; a.shut = 0; a.hpFloor = a.hpMax * 0.05; a.floorT = 0; a.calls = [];
+    a.mcd.lesson = 4; a.mcd.rule = 7;
+    const it = G.zone.act8?.flame; if (it) it.used = true;
+  },
+  onPhase(a, ph) { say(ph === 1 ? 'd.ragna.p2' : 'd.ragna.p3'); ring(a.x, a.z, 9, 0xffffff, 0.8); if (ph === 1) a.mcd.rollcall = 1; if (ph === 2) a.mcd.night = 2; },
+  tick(a, dt) {
+    // the shutters: one for every eighth of her life gone (the eighth with the Flame)
+    const n = Math.min(7, Math.floor((1 - a.hp / a.hpMax) * 8 + 1e-6));
+    if (n > a.shut) { a.shut = n; emit('ragnaShutter', n); tally(a, 'shutter'); }
+    // in daylight she drowses
+    a.sun = !!sun8(G.zone, a.x, a.z) && !(a.nightT > 0);
+    a.speed = a.speed0 * (a.sun ? 0.55 : 1);
+    if (a.sun) for (const k in a.mcd) a.mcd[k] += dt * 0.45;
+    if (a.sun !== a.sunWas) { a.sunWas = a.sun; a.avatar?.setRim(a.sun ? 0xffd890 : 0xffffff, a.sun ? 1.1 : 0.6); if (a.sun && !a.sunSaid) { a.sunSaid = true; say('d.ragna.sun'); } }
+    if (a.nightT > 0 && (a.nightT -= dt) <= 0) emit('ragnaShutter', a.shut);
+    // nothing left: the Flame is bare
+    if (ragnaFloor(a)) {
+      const it = G.zone.act8?.flame;
+      if (!a.floored) { a.floored = true; a.lockPhase = 2; if (it) it.used = false; say('d.ragna.floor'); emit('toast', t('flame8.bare'), 'quest'); ring(it?.x ?? a.x, it?.z ?? a.z, 6, 0xfff0c0, 1.2); emit('ragnaFloor', a); }
+      a.floorT += dt;
+      if (a.floorT > 30 && (a.nodT = (a.nodT || 0) - dt) <= 0) { a.nodT = 12; a.dazed = 6; a.move = null; killTele(a.tele); a.tele = null; a.avatar?.play('hit', 0.3); say('d.ragna.nod'); tally(a, 'nod'); }
+    }
+    return null;
+  },
+  moves: [
+    { id: 'night', when: (a) => a.phase >= 2 && a.shut >= 3 && !ragnaFloor(a), cd: 22, run(a) {
+      a.avatar?.play('warcry', 1); Audio.sfx('wraithWail', { vol: 0.5 });
+      return { t: 1.0, fn() { a.nightT = 7; emit('ragnaShutter', Math.min(2, a.shut), true); ring(a.x, a.z, 14, 0x2a2838, 1.0); }, after: 0.5 };
+    } },
+    { id: 'rollcall', when: (a) => a.phase >= 1 && alive(a.calls).length < 2 && !ragnaFloor(a), phaseCd: [99, 20, 16], run(a) {
+      a.avatar?.play('warcry', 1); Audio.sfx('towerBell', { x: a.x, z: a.z }); say('d.ragna.call');
+      return { t: 0.9, fn() {
+        const c = arena(a), n = heroes().length >= 3 ? 3 : 2;
+        a.calls = alive(a.calls);
+        for (let k = 0; k < n && a.calls.length < 4; k++) {
+          const f = rimAt(c, arenaR(15) - 2, Math.random() * 6.28); if (!f) continue;
+          const m = spawnMonster(k === 1 ? 'wakefulBow' : 'wakeful', f.x, f.z, { level: Math.max(1, a.level - 2) });
+          m.aggro = true; G.actors.push(m); a.calls.push(m); puff(f.x, 0.4, f.z, 6, 0xe8e0d0, 0.8, 0.8, 0.8);
+        }
+      }, after: 0.6 };
+    } },
+    { id: 'lesson', when: (a, d) => d < 22, phaseCd: [9, 7.5, 6], run(a, pl) {
+      a.avatar?.play('cast', 1); Audio.sfx('summon', { x: a.x, z: a.z, vol: 0.6 });
+      const n = a.phase >= 2 ? 4 : 3;
+      for (let i = 0; i < n; i++) later(0.35 + i * 0.6, inZone(a, () => {
+        const tg = heroes().filter((p) => !p.dead)[i % Math.max(1, heroes().filter((p) => !p.dead).length)] || pl, x = tg.x, z = tg.z;
+        teleCircle(x, z, 2.5, 1.0, 0xffffff);
+        later(1.0, inZone(a, () => ragnaFire(x, z, 2.5, a, 1.15, 'lessonRing')));
+      }));
+      return { t: 0.7, fn() {}, after: 0.35 + n * 0.6 };
+    } },
+    { id: 'rule', when: (a, d) => d > 4 && d < 26, phaseCd: [11, 9, 7.5], run(a, pl) {
+      const rot = a.rot = angleTo(a.x, a.z, pl.x, pl.z);
+      a.tele = teleLine(a.x, a.z, rot, 24, 2.4, 1.15, 0xffffff); a.avatar?.play('castLong', 1);
+      return { t: 1.15, noFace: true, fn() {
+        Audio.sfx('fireball', { x: a.x, z: a.z }); shake(0.3);
+        for (let u = 2; u < 24; u += 3) { const x = a.x + Math.sin(rot) * u, z = a.z + Math.cos(rot) * u; if (G.zone.map.walkable(x, z)) glowBurst(x, 1.0, z, 0xffffff, 10, 2.2, 0.3, 0.5); }
+        for (const p of heroes()) if (!p.dead && inLine(a.x, a.z, rot, 24, 2.4, p)) hitHero(a, p, 1.4, { target: p, push: 8 });
+        tally(a, 'ruleFired');
+      }, after: 0.6 };
+    } },
+    { id: 'rod', basic: true, when: (a, d) => d < 4.2, cd: 1.7, run(a, pl) {
+      a.rot = angleTo(a.x, a.z, pl.x, pl.z);
+      a.tele = teleCone(a.x, a.z, a.rot, 4.4, 0.9, 0.6, 0xffffff);
+      a.avatar?.play('attack', 1, { hitIn: 0.6 });
+      return { t: 0.6, fn() { Audio.sfx('swingHeavy', { x: a.x, z: a.z }); if (meleeLands(a, pl, 4.4, 0.95)) hitHero(a, pl, 1.0, { push: 9 }); }, after: 0.45 };
+    } }
+  ]
+};
+// the Flame banked by hand: she sleeps where she stands
+on('flame8', (it, z) => {
+  if (z !== G.zone || NET.mode === 'guest') return;
+  const a = G.actors.find((b) => b.kind === 'ragna' && b.awake && !b.dead); if (!a) return;
+  for (const m of alive(a.calls)) { m.hpFloor = 0; kill(m, G.player); }
+  a.hpFloor = 0; a.dazed = 0; kill(a, G.player);
+});
 // paw the ground behind a line that runs 4 m past the hero, then go: a wall or a stone dazes it, sap stops it dead
 function hartCharge(a, pl, wind, sp, last) {
   const dir = angleTo(a.x, a.z, pl.x, pl.z), len = Math.min(26, Math.hypot(pl.x - a.x, pl.z - a.z) + 4);

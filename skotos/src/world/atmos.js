@@ -70,6 +70,11 @@ ATMOS.tarn = { fog: 0xc6d6e6, density: 0.010, sky: 0xd2e6ff, ground: 0xa2b2ca, h
 // (under a cloud: less sun, a greyer sky, the same sun's place; eased to over a third of a second with mixAtmos)
 // Act VIII: early autumn over reaped fields, a warmer and lower sun, a dusty horizon (docs/act8-design.md)
 ATMOS.tinder = { ...ATMOS.thaw, fog: 0xd6c8a4, density: 0.011, sky: 0xc8d6e8, ground: 0x6e5e34, moon: 0xffe6b8, sun: [-20, 18, 12] };
+// the Vigil House: its Yard in the plain's daylight; under a roof whose fire still burns, a house without windows (the
+// hero's own light comes back there, warm; mixAtmos keeps the sun's place and the day flag from the second row)
+ATMOS.vigil = { ...ATMOS.tinder, fog: 0xc8c0a8, density: 0.012, ground: 0x6a6458 };
+ATMOS.vigilDark = { ...ATMOS.vigil, fog: 0x0c0a0c, density: 0.03, sky: 0x4a4658, ground: 0x16120e, hemi: 0.36, moonI: 0.22, exposure: 1.22, heroI: 22, heroRange: 12, heroColor: 0xffe0b0 };
+ATMOS.vigilFight = { ...ATMOS.vigil, zoom: 1.2 };
 ATMOS.thawShade = { ...ATMOS.thaw, hemi: 0.95, moonI: 1.1, sky: 0xaebccc };
 ATMOS.tarnShade = { ...ATMOS.tarn, hemi: 0.95, moonI: 1.1, sky: 0xbcc8d8 };
 ATMOS.thawCine = { ...ATMOS.thaw, density: 0.006 };

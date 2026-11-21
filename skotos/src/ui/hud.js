@@ -518,8 +518,7 @@ on('beamTurn', (b) => { if (G.zone?.act5 && b) Audio.sfx('beamBell', { x: b.x, z
 on('lampSnuffed', (it) => { if (G.zone?.water && it) Audio.sfx('lampSnuff', { x: it.x, z: it.z }); });
 on('louseCurl', () => hint('louse'));
 // the bosses with a theme of their own (the rest share 'boss')
-const OWN_THEME = new Set(['amaranthe', 'ivar', 'karthax', 'tower', 'skotos', 'ketos', 'shade', 'kallisto', 'kelados']);
-// (Aithon fights under the zone's own theme until his is written: stage D)
+const OWN_THEME = new Set(['amaranthe', 'ivar', 'karthax', 'tower', 'skotos', 'ketos', 'shade', 'kallisto', 'kelados', 'aithon', 'ragna']);
 // ---------- Act VI: what the deep says (the vault's groan before the black water moves, the Cradle, the bells, the names) ----------
 on('tideBell', () => { if (G.zone?.act6) Audio.sfx('iceGroan', { vol: 0.9 }); else if (G.zone?.act7) Audio.sfx('brookRoar', { vol: 0.9 }); });
 on('tideTurn', (ph) => { if (G.zone?.act6) Audio.mood({ deep: ph === 'high' ? 1 : ph === 'flood' ? 0.6 : ph === 'ebb' ? 0.4 : 0 }); });

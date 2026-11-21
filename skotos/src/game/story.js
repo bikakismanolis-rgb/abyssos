@@ -35,9 +35,11 @@ const STORY_TEARS = ['planting', 'sorrow', 'breaking'];
 const tearsSeen = () => STORY_TEARS.filter((id) => G.hero.flags['tear_' + id]).length;
 const wallsDown = () => [0, 1, 2].filter((i) => G.hero.flags['thorn' + i]).length;
 export function questText() {
-  const q = Math.min(G.hero.quest, 51), F = G.hero.flags;
+  const q = Math.min(G.hero.quest, 55), F = G.hero.flags;
   // Act VIII: the three fires counted
   if (q === 49) return t('q.49', [1, 2, 3].filter((i) => F['ember' + i]).length);
+  if (q === 52) return t('q.52', [1, 2, 3].filter((i) => F['bank' + i]).length);
+  if (q === 53) return t(G.flame8Bare ? 'q.53b' : 'q.53');
   // Act VII: the weirs and the winches counted; the way home once the lake is let down
   if (q === 41) return t('q.41', [1, 2, 3].filter((i) => F['weir' + i]).length);
   if (q === 44) return t('q.44', [1, 2, 3].filter((i) => F['winch' + i]).length);
@@ -595,6 +597,7 @@ function actComplete(act) {
   // (Act VI: its end state; the act's music, panel and blessing are the story's, docs/act6-contract.md, Story)
   else if (act === 6) { h.act6 = Math.max(h.act6 ?? -1, h.diff); h.quest = 39; h.flags.act6 = true; }
   else if (act === 7) { h.act7 = Math.max(h.act7 ?? -1, h.diff); h.quest = 47; h.flags.act7 = true; }
+  else if (act === 8) { h.act8 = Math.max(h.act8 ?? -1, h.diff); h.quest = 55; h.flags.act8 = true; }
   G.flags.actDone = act;
   emit('quest');
   writeSave();
@@ -3406,14 +3409,44 @@ function enter7(id, z) {
   }
 }
 
-// ---------- Act VIII (docs/act8-design.md): the spine's first half, quests 48-51 ----------
+// ---------- Act VIII (docs/act8-design.md): quests 48-55 ----------
 // 48 the hook (a hero who has finished Act VII, on her next morning in Whitecliff: the smoke in the south), 49 the three
-// banked fires of the Tindergrass, 50 Aithon on the Threshing Floor, 51 the road to the Vigil House (zone 2). The scenes,
-// the ember memories and the people's lines are stage D's; these are the steps and their one line each.
+// banked fires of the Tindergrass and what their embers remember, 50 Aithon on the Threshing Floor, 51 the road to the
+// Vigil House, 52 its three halls' fires banked, 53 Ragna in the Great Hall (53b: the Flame bare to the hand), 54 the
+// morning (the Flame woken), 55 the act's end state. ?nostory moves the flags and plays no scene.
+const tell8 = (lines, who = 'narrator', end) => { if (NOSTORY || G.hero.__real) { end?.(); return; } const go = () => { if (busy()) { later(1, go); return; } emit('dialog', { who, lines: who === 'narrator' ? lines.map((l) => [l, 'narrator']) : lines, end }); }; go(); };
 on('zoneEnter', (id) => {
   const h = G.hero; if (!h || h.__real) return;
   if (id === 'town' && h.quest === 47 && ((h.act7 ?? -1) >= 0 || h.flags.act7) && !h.flags.call8) later(2.5, () => { if (G.zone?.id !== 'town' || G.hero.flags.call8) return; G.hero.flags.call8 = true; emit('say', 'd.hook8'); setQuest(48); });
-  if (id === 'tinder' && h.quest === 48) later(1.5, () => { if (G.zone?.id === 'tinder') { emit('say', 'd.tinder.1'); setQuest(49); } });
+  if (id === 'tinder' && h.quest === 48) later(1.5, () => { if (G.zone?.id === 'tinder') { setQuest(49); tell8(['d.halda8.1', 'd.halda8.2', 'd.halda8.3'], 'smith', () => emit('say', 'd.tinder.1')); } });
+  if (id === 'vigil' && h.quest === 51) later(1.5, () => { if (G.zone?.id === 'vigil') { setQuest(52); tell8(['d.vigil.1', 'd.vigil.2']); } });
+  if (id === 'vigil' && h.flags.ragnaRest && (h.act8 ?? -1) < 0 && !h.flags.act8) later(1, () => morning8(G.zone));
+  if (id === 'town' && h.flags.act8 && !h.flags.home8) later(3, () => { if (G.zone?.id === 'town' && !busy()) { G.hero.flags.home8 = true; emit('say', 'd.home8'); writeSave(); } });
 });
-on('ember8', (it, z, n) => { emit('quest'); if (n >= 3 && G.hero.quest === 49) { emit('say', 'd.embers.3'); setQuest(50); } });
-on('bossRest', (kind, a) => { if (kind === 'aithon' && !a?.echo && !G.hero.__real && G.hero.quest >= 48 && G.hero.quest < 51) setQuest(51); });
+on('ember8', (it, z, n) => {
+  emit('quest');
+  if (!G.hero.__real && !G.hero.flags['mem8_' + n]) { G.hero.flags['mem8_' + n] = true; later(1.2, () => tell8(['d.mem8.' + n + 'a', 'd.mem8.' + n + 'b'], 'narrator', n >= 3 ? () => emit('say', 'd.embers.3') : undefined)); }
+  if (n >= 3 && G.hero.quest === 49) setQuest(50);
+});
+on('bossRest', (kind, a) => {
+  if (a?.echo || G.hero.__real) return;
+  if (kind === 'aithon' && G.hero.quest >= 48 && G.hero.quest < 51) { setQuest(51); later(4, () => tell8(['d.aithon.after'])); }
+  if (kind === 'ragna') { G.flame8Bare = false; if (G.hero.quest < 54) setQuest(54, true); later(2.5, () => tell8(['d.sleep8.1', 'd.sleep8.2', 'd.sleep8.3'], 'narrator', () => morning8(G.zone))); }
+});
+on('banked8', (it, z, n) => { emit('quest'); if (!NOSTORY) later(0.8, () => narr7('d.bank.' + n)); if (n >= 3 && G.hero.quest >= 51 && G.hero.quest < 53) setQuest(53); });
+on('ragnaFloor', () => { G.flame8Bare = true; emit('quest'); });
+on('bossIntro', (a) => { if (a?.kind === 'ragna' && !a.echo && G.hero.quest >= 51 && G.hero.quest < 53) setQuest(53, true); });
+// the morning after: the Flame is bare again, to be woken. Woken, the act closes
+function morning8(z) {
+  const h = G.hero; if (!z || z.id !== 'vigil' || G.zone !== z || !h.flags.ragnaRest || h.flags.act8 || h.__real) return;
+  const it = z.act8?.flame; if (!it || it.morning) return;
+  it.morning = true; it.used = false; it.prompt = 'flame8.wake';
+  if (h.quest < 54) setQuest(54); else emit('toast', t('q.54'), 'quest');
+  it.use = () => {
+    if (it.used) return; it.used = true;
+    const m = it.mesh, lid = m?.userData.lid;
+    if (m) { m.userData.setRank?.(3); m.userData.setLit?.(true); if (lid) { lid.position.set(1.25, -0.6, 0.3); lid.rotation.z = 0.5; } }
+    Audio.sfx('hearthCatch', { x: it.x, z: it.z }); h.flags.flameWoken = true;
+    tell8(['d.morning8.1', 'd.morning8.2', 'd.morning8.3'], 'narrator', () => { actComplete(8); emit('toast', t('q.55'), 'big'); });
+  };
+}

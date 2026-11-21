@@ -1195,6 +1195,9 @@ function ground8(type) {
   const co = { mobile: R.mobile };
   const A = codeLayer('meadow', co) || lay4('leaves'), own = A === 'melt/meadow';
   const B = codeLayer('gravel', co) || lay4('mud', 'leaves'), W = codeLayer('crag', co) || lay4('wall');
+  // (the Vigil House: a swept floor of grey stone, the gravel layer; worn pale where the school walks)
+  if (type === 'vigil') return { A: B, B, P: lay4('trail', 'mud', 'leaves'), W: W || undefined, s: [2.0, 2.3, 2.6], r: [0.85, 0.9, 0.9], ns: 1.0, tint: 0xb8b8b4, dual: [1, 0], ws: 5.2,
+    hueA: [1.1, 1.08, 1.04], hueB: [1.1, 1.08, 1.04], hueP: [2.2, 2.1, 1.9] };
   return { A, B, P: lay4('trail', 'mud', 'leaves'), W: W || undefined, s: [2.6, 2.3, 2.6], r: [0.95, 0.9, 0.9], ns: 1.0, tint: own ? 0xc6c6be : 0xaeb0a4, dual: [1, 0], ws: 5.2,
     hueA: own ? [2.1, 1.22, 0.78] : [1.5, 1.25, 0.5], hueB: [1.25, 1.08, 0.82], hueP: [2.5, 2.25, 1.8] };
 }

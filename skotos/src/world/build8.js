@@ -73,6 +73,49 @@ export function act8Level(L, lvl) {
     lane.setBurnt = (b) => { lane.burnt = !!b; tufts.visible = !b; black.visible = !!b; };
     A.lanes[k] = lane;
   });
+  // ---- the Vigil House (gen8 genVigil): pillars, the halls' fires, the doors, the dark under each roof, the Great
+  // Hall's Flame and the daylight its eight shutters let in ----
+  if (L?.type === 'vigil') {
+    const pp = [], pr = RNG(((L.seed || 1) ^ 0x51a7) >>> 0);
+    for (const p of S.pillars || []) {
+      const y = gy(p.x, p.z);
+      pp.push({ geo: jitter(G.box(2.1, 0.5, 2.1), 0.04, 301), color: STONE[1], o: { x: p.x, y: y + 0.25, z: p.z } });
+      for (let j = 0; j < 4; j++) pp.push({ geo: jitter(G.cyl(0.78 - j * 0.02, 0.82 - j * 0.02, 0.8, 9), 0.03, 310 + j), color: STONE[(j + (p.x | 0)) % 5], o: { x: p.x, y: y + 0.9 + j * 0.8, z: p.z, ry: pr.range(0, 3) } });
+      pp.push({ geo: jitter(G.box(1.9, 0.35, 1.9), 0.04, 320), color: STONE[4], o: { x: p.x, y: y + 3.85, z: p.z } });
+    }
+    if (pp.length) A.pillars = add(mesh8(pp));
+    A.fires = [];
+    for (const p of S.fires || []) {
+      const m = act7Prop('lookHearth', {}); m.position.set(p.x, gy(p.x, p.z), p.z); m.rotation.y = hash2(p.x, p.z) * 6.28; m.scale.setScalar(1.15);
+      const lid = mesh8([{ geo: jitter(G.cyl(0.62, 0.7, 0.14, 8), 0.04, 811), color: STONE[3], o: { y: 0.72 } }]); m.add(lid); m.userData.lid = lid;
+      add(m); A.fires.push({ k: p.k, x: p.x, z: p.z, mesh: m });
+    }
+    A.doors = [];
+    for (const d of S.doors || []) {
+      const y = gy(d.x, d.z), dp = [];
+      for (let j = 0; j < 3; j++) dp.push({ geo: jitter(G.box(1.02, 2.6, 0.5), 0.03, 400 + j), color: [0x4a4440, 0x54504a, 0x46423e][j], o: { x: (j - 1) * 1.02, y: 1.3, z: 0 } });
+      dp.push({ geo: G.box(3.3, 0.22, 0.62), color: 0x2e2a28, o: { y: 0.9 } }, { geo: G.box(3.3, 0.22, 0.62), color: 0x2e2a28, o: { y: 2.0 } });
+      dp.push({ geo: G.cyl(0.3, 0.3, 0.08, 10), color: 0xe8e0d0, o: { y: 1.45, z: 0.3, rx: Math.PI / 2 } });
+      const m = mesh8(dp); m.position.set(d.x, y, d.z - 0.5); add(m);
+      const door = { k: d.k, mesh: m, open: false }; door.setOpen = (b) => { door.open = !!b; m.visible = !b; };
+      A.doors.push(door);
+    }
+    // (the dark under a roof: a black veil just over the floor, thinner as the light comes in)
+    const veil = (geo, x, z) => { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x05060a, transparent: true, opacity: 0.62, depthWrite: false })); m.material.userData.own = true; m.rotation.x = -Math.PI / 2; m.position.set(x, 0.06, z); m.renderOrder = 2; add(m); const v = { mesh: m, k: 1 }; v.setDark = (k) => { v.k = k; m.material.opacity = 0.62 * k; m.visible = k > 0.01; }; return v; };
+    A.darks = (L.halls || []).map((H) => Object.assign(veil(new THREE.PlaneGeometry(H.x1 - H.x0 + 1.6, H.z1 - H.z0 + 1.6), (H.x0 + H.x1 + 1) / 2, (H.z0 + H.z1 + 1) / 2), { hall: H.k }));
+    const AR = S.arena;
+    if (AR) {
+      A.arenaDark = veil(new THREE.CircleGeometry(AR.r + 0.8, 40), AR.x, AR.z);
+      const fm = act7Prop('lookHearth', {}); fm.position.set(S.flame.x, gy(S.flame.x, S.flame.z), S.flame.z); fm.scale.setScalar(1.5);
+      const lid = mesh8([{ geo: jitter(G.cyl(0.62, 0.7, 0.14, 8), 0.04, 811), color: STONE[3], o: { y: 0.72 } }]); fm.add(lid); fm.userData.lid = lid;
+      add(fm); A.flame = { x: S.flame.x, z: S.flame.z, mesh: fm };
+      A.shutters = (S.shutters || []).map((p) => {
+        const m = new THREE.Mesh(new THREE.CircleGeometry(3.3, 24), new THREE.MeshBasicMaterial({ color: 0xffe9b0, transparent: true, opacity: 0.2, depthWrite: false, blending: THREE.AdditiveBlending }));
+        m.material.userData.own = true; m.rotation.x = -Math.PI / 2; m.position.set(p.x, 0.08, p.z); m.renderOrder = 3; m.visible = false; add(m);
+        const sh = { k: p.k, x: p.x, z: p.z, r: 3.3, mesh: m, open: false }; sh.setOpen = (b, show = true) => { sh.open = !!b; m.visible = !!b && show; }; return sh;
+      });
+    }
+  }
   if (lvl && !lvl.isObject3D) lvl.act8 = A;
   return A;
 }
