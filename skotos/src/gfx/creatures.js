@@ -31,7 +31,9 @@ const CAST = {
   tower: ['crab', 1], reefback: ['crab', 1],
   skotosHand: ['tentacle', 1], skotos: ['skotos', 1], icemaw: ['icemaw', 1], skua: ['skua', 1], hullLouse: ['louse', 1], rimeBear: ['bear', 1],
   // Act VII's two bosses, on shipped bodies (docs/act7-contract.md, The bosses)
-  kallisto: ['bear', 1], kelados: ['golem', 1]
+  kallisto: ['bear', 1], kelados: ['golem', 1],
+  // Act VIII: Aithon on the elk
+  aithon: ['elk', 1]
 };
 
 export const CREATURES = { tpl: {}, ready: false };
@@ -48,7 +50,9 @@ const ACT_FILES = {
   act6: ['icemaw', 'louse'],
   // Act VII's bodies are all shipped ones: Kallisto and the Den-bears on the bear, Kelados and the Rock-rollers on the
   // golem, the Snow-worm, the Choughs on the skua (the rest stand on boot bodies: wolf, goblin, troll, spider)
-  act7: ['bear', 'golem', 'worm', 'skua']
+  act7: ['bear', 'golem', 'worm', 'skua'],
+  // Act VIII: Aithon stands on the elk (the Order's people are a people set, not creatures)
+  act8: ['elk']
 };
 const loads = {};
 function loadFile(n) {

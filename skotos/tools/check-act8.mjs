@@ -13,6 +13,7 @@ for (let seed = 1; seed <= n; seed++) {
   if (L.packs.some((p) => Math.hypot(p.x - S.camp.x, p.z - S.camp.z) < 14)) fail(seed, 'packInCamp');
   // the fire's rule 1: every lane lies wholly inside its own field, on open ground, clear of the hearths and the camp
   for (const fl of L.flues) {
+    if (fl.boss) { const mx = fl.x + Math.sin(fl.dir) * fl.len / 2, mz = fl.z + Math.cos(fl.dir) * fl.len / 2; if (Math.hypot(mx - S.arena.x, mz - S.arena.z) > 10 || fl.len > 2 * S.arena.r) { fail(seed, 'floorLane'); break; } continue; }
     const f = L.fields.find((q) => q.id === fl.field), x0 = fl.x - fl.w / 2, x1 = fl.x + fl.w / 2, z0 = fl.z - fl.len, z1 = fl.z;
     if (fl.kind !== 'burn' || !f || x0 < f.x0 || x1 > f.x1 + 1 || z0 < f.z0 - 0.5 || z1 > f.z1 + 1) { fail(seed, 'laneOutside'); break; }
     if (S.hearths.some((q) => q.x > x0 - 3 && q.x < x1 + 3 && q.z > z0 && q.z < z1)) { fail(seed, 'laneAtHearth'); break; }

@@ -212,6 +212,18 @@ export const MONSTERS = {
   skua: { model: 'skua', hp: 0.3, dmg: 0.45, speed: 7.5, radius: 0.4, ai: 'bat', reach: 1.0, atk: 'bite', atkTime: 0.8, flesh: 'flesh', xp: 0.5, float: true, lightShy: true, coldBite: 3, feathers: true },
   // ---- Act VII (docs/act7-contract.md, Enemies): every body a shipped one, nothing of the dark. Each kind has one heavy
   // move that opens the fight (heavy: its id, ai.js; a share of her life from HAZ7, never x DIFFS.dmg); all else is chip ----
+  // Act VIII, the Order of the Flame (docs/act8-design.md): a school on the march. Its people stand on the Ashen
+  // Host's bodies (the `ash` people set) in pale undyed wool with a white rim, as the Order's fire is white-cored. None is
+  // fireproof: the Burn strikes them at full strength. They are not killed: a fallen student sleeps where she falls
+  // (`sleeps`: the words and the tally; the body lies as any other), and a Waker (the Ashsmith's `forger`) rings her up.
+  wakeful: { model: 'ashSpear', hp: 1.5, dmg: 1.15, speed: 3.4, radius: 0.5, ai: 'melee', reach: 2.0, atk: 'heavyStab', atkTime: 1.3, flesh: 'flesh', xp: 2.2, weapon: 'spear', wlook: { len: 2.0, blade: 0xe8e0d0, glow: 0.6, wood: 0x6a5a40 }, style: 'heavy', guard: { arc: 1.05, k: 0.25 }, bashEvery: 3, shield: { face: 0xd8ccb0, rim: 0xf4ecd8, emblem: 0xffffff, r: 0.32 }, sleeps: true, look: { tint: 0xe4d8bc, tintAmt: 0.75, rim: 0xffffff, rimI: 0.35 } },
+  wakefulBow: { model: 'ashBow', hp: 0.9, dmg: 1.0, speed: 3.5, radius: 0.48, ai: 'ranged', reach: 12, atk: 'shoot', atkTime: 1.9, flesh: 'flesh', xp: 1.7, weapon: 'bow', wlook: { blade: 0x8a7850 }, style: 'bow', proj: 'fireArrow', sleeps: true, look: { tint: 0xe4d8bc, tintAmt: 0.75, rim: 0xffffff, rimI: 0.35 } },
+  waker: { model: 'ashsmith', hp: 1.2, dmg: 1.0, speed: 3.8, radius: 0.5, ai: 'forger', reach: 9, atk: 'throw', atkTime: 1.8, flesh: 'flesh', xp: 2.6, weapon: 'hammer', style: 'none', proj: 'ember', sleeps: true, look: { tint: 0xf0e8d4, tintAmt: 0.8, rim: 0xffffff, rimI: 0.5 } },
+  drover: { model: 'hammerhorn', hp: 4.6, dmg: 1.9, speed: 3.6, radius: 1.0, ai: 'brute', reach: 2.8, atk: 'smash', atkTime: 2.0, flesh: 'flesh', xp: 6.5, big: true, weapon: 'hammer', wlook: { len: 1.4 }, style: 'heavy', sfx: 'troll', sleeps: true, look: { scale: 1.1, tint: 0xd8ccb0, tintAmt: 0.7, rim: 0xffffff, rimI: 0.3 } },
+  // Aithon, the Bull of the March (docs/act8-design.md, Boss 1): on the hart's body, dark, his horns' rim white-hot. He is
+  // not killed (`spare`: at 0 life he stands down and the yoke comes off). The Burn strikes him as it strikes any of the
+  // Order's: slideShare % of his life and a daze, so his own furrows are the hero's weapon.
+  aithon: { model: 'aithon', hp: 1700, dmg: 1.6, speed: 6.2, radius: 1.4, ai: 'aithon', reach: 4.6, atk: 'smash', atkTime: 1.6, flesh: 'flesh', xp: 320, boss: true, big: true, spare: true, sfx: 'hart', slideShare: 6, slideDaze: 3, look: { scale: 1.35, tint: 0x2a2018, tintAmt: 0.75, rim: 0xffffff, rimI: 0.45 } },
   hillWolf: { model: 'warg', hp: 1.1, dmg: 0.9, speed: 6.6, radius: 0.65, ai: 'pounce', reach: 1.6, atk: 'bite', atkTime: 1.1, flesh: 'flesh', xp: 1.6, sfx: 'wolf', heavy: 'longPounce', wake: { d: 5, clip: 'hit', sleep: 'die', loud: 12, sfx: 'wolfHowl', t: 0.9, speed: 1 }, look: { scale: 1.15, tint: 0x8a7a66, tintAmt: 0.5 } },
   // (the Act VII goblins: the shared goblin in a dark coat with a pale edge, so it reads on mid-tone ground in daylight)
   looter: { model: 'goblin', hp: 0.55, dmg: 0.7, speed: 4.6, radius: 0.45, ai: 'melee', reach: 1.4, atk: 'stab', atkTime: 0.9, flesh: 'flesh', xp: 1, weapon: 'dagger', style: 'sword', hunch: 0.25, sfx: 'goblin', look: { tint: 0x1c2214, tintAmt: 0.8, rim: 0xd8e0c0, rimI: 0.3 } },
@@ -340,6 +352,8 @@ export const PACKS = {
   hillWolves: [['hillWolf', 1]],
   // Act VIII, the Tindergrass (stage A: the plain's wolves stand in until the Order's own come, stage B)
   plainWolves: [['hillWolf', 1]],
+  order: [['wakeful', 4], ['wakefulBow', 1.6], ['waker', 0.8]],
+  orderRoad: [['wakeful', 3], ['drover', 0.7], ['wakefulBow', 1.2], ['waker', 0.6]],
   choughs: [['chough', 1]],
   den: [['denBear', 1], ['hillWolf', 2]],
   shoreDen: [['denBear', 1], ['hillWolf', 2]],

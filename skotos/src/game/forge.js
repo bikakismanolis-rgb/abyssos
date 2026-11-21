@@ -73,7 +73,7 @@ export function tickFlues(dt) {
       // a chute waits to be kicked; spent, its cornice grows back (f.grow 0-1, for its prop)
       if (f.kind === 'snow' && !f.armed) { f.rearm -= dt; f.grow = 1 - Math.max(0, f.rearm) / (f.rearm0 || 1); if (f.rearm <= 0) { f.armed = true; f.grow = 1; emit('chuteArmed', f); } }
       // the Burn: a gust takes an armed lane once a hero has stood in it half a second (never a guest's own count)
-      if (f.kind === 'burn') { if (f.armed && NET.mode !== 'guest' && heroes().some((h) => h && !h.dead && inLane8(f, h.x, h.z))) { f.wait = (f.wait || 0) + dt; if (f.wait >= BURN.wait) { f.wait = 0; TALLY8.gusts++; inhale(f); } } else f.wait = 0; }
+      if (f.kind === 'burn') { if (f.armed && !f.boss && NET.mode !== 'guest' && heroes().some((h) => h && !h.dead && inLane8(f, h.x, h.z))) { f.wait = (f.wait || 0) + dt; if (f.wait >= BURN.wait) { f.wait = 0; TALLY8.gusts++; inhale(f); } } else f.wait = 0; }
       f.t = 0;
     } else if (f.st === 'idle') {
       // a pump starting or the heat rising shortens the wait, never the inhale
@@ -148,7 +148,7 @@ function burn(f, front) {
 // and a short burn. A foe: HAZ's slideFoe / slideElite share of its own life (a boss its own slideShare), never carried.
 // Nothing outside a field's walls is ever a lane: the layout's rule, checked by tools/check-act8.mjs.
 export const BURN = { wait: 0.5 };
-export const TALLY8 = { gusts: 0, burnt: 0, hits: 0, safe: 0 };
+export const TALLY8 = { gusts: 0, burnt: 0, hits: 0, safe: 0, boss: 0 };
 // in the lane's strip, by its geometry alone (sight does not matter to stubble)
 export function inLane8(f, x, z, pad = 0) { const ux = Math.sin(f.dir), uz = Math.cos(f.dir), dx = x - f.x, dz = z - f.z, u = dx * ux + dz * uz, v = -dx * uz + dz * ux; return u >= -0.3 && u <= f.len && Math.abs(v) <= f.w / 2 + pad; }
 export const onBlack = (x, z, but) => !!F.list && F.list.some((q) => q !== but && q.kind === 'burn' && q.spent && inLane8(q, x, z));
@@ -166,7 +166,8 @@ function burn8(f, front) {
     if (!reached(a.x, a.z) || !inLane8(f, a.x, a.z, a.radius * 0.5) || onBlack(a.x, a.z, f)) continue;
     f.hit.add(a);
     const heavy = a.elite || a.def.big || a.boss, share = a.boss ? (a.def.slideShare ?? 5) : heavy ? H.slideElite : H.slideFoe;
-    damage(heavy ? null : pl, a, a.hpMax * share / 100, { crit: false, dot: true, noLoh: true, noRes: true, burn: a.hpMax * 0.02 });
+    damage(heavy ? null : pl, a, a.hpMax * share / 100, { crit: false, dot: true, noLoh: true, noRes: true, burn: a.boss ? 0 : a.hpMax * 0.02 });
+    if (a.boss && !a.dead) { TALLY8.boss++; emit('dazeFoe', a, a.def.slideDaze ?? 2); }
   }
 }
 // ---------- Act VII: the Slide and the sluices (docs/act7-contract.md, the Slide) ----------
@@ -216,7 +217,7 @@ export function loud(x, z, r, by) {
   return n;
 }
 // a sluice or a chute run by the story or a boss (a lever pulled, Kelados's call): armed or not
-export function fireFlue(i, by) { const f = F.list?.[i]; if (!f || f.st !== 'idle') return false; f.by = by || null; if (f.kind === 'snow') { f.armed = true; TALLY7.slides++; } inhale(f); return true; }
+export function fireFlue(i, by) { const f = F.list?.[i]; if (!f || f.st !== 'idle' || (f.kind === 'burn' && !f.armed)) return false; f.by = by || null; if (f.kind === 'snow') { f.armed = true; TALLY7.slides++; } inhale(f); return true; }
 // the heroes' skills that are loud (data.js LOUD; a variant is its base skill): where it lands, or where she stands
 on('skillUsed', (i, id, aim) => {
   const r = LOUD[id]; if (!r || !F.list || !F.list.some((f) => f.kind === 'snow')) return;

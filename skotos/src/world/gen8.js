@@ -96,7 +96,7 @@ export function genTinder(seed) {
   L.start = { x: CP.x, z: CP.z - 2 };
   L.exits.push({ x: CP.x, z: CP.z - 6, to: 'town', label: 'exit.town' });
   for (const [x, z] of circleCells(L, AR.x, AR.z, AR.r)) { K[z * w + x] = LAND; res[z * w + x] = 1; }
-  paintAt(AR.x, AR.z, AR.r + 2, 1);
+  paintAt(AR.x, AR.z, 4.5, 1);
   S.arena = AR; L.boss = { x: AR.x, z: AR.z };
   S.hearth = { x: AR.x, z: AR.z - AR.r + 2.5 };
   // ---- the three banked hearths: in fields off the road, rows 1, 3 and 5, sides alternating ----
@@ -134,6 +134,13 @@ export function genTinder(seed) {
     }
   }
   S.sheaves = S.sheaves.filter((q) => !q.gone);
+  // the Floor's own strips (`boss`: Aithon's Furrow takes them, never a gust): three down it and three across, so that
+  // what has burnt crosses what has not, and the black is somewhere to stand
+  for (const o of [-9, 0, 9]) {
+    const half = Math.floor(Math.sqrt(AR.r * AR.r - o * o)) - 1;
+    L.flues.push({ id: 'floor.n' + o, kind: 'burn', boss: true, field: 'floor', x: AR.x + o, z: AR.z + half, dir: Math.PI, len: half * 2, w: 5, cover: [] });
+    L.flues.push({ id: 'floor.e' + o, kind: 'burn', boss: true, field: 'floor', x: AR.x - half, z: AR.z + o, dir: Math.PI / 2, len: half * 2, w: 5, cover: [] });
+  }
   finish7(L, K, bed, blk, own, (vx, vz) => 2.2 + 2.6 * fbm(vx * 0.05, vz * 0.05, seed + 41));
   // ---- the packs: one or two a field, never in the hearth's ring, and two on the road ----
   const openAt = (x, z) => !!L.cells[I(x, z)];
@@ -141,10 +148,13 @@ export function genTinder(seed) {
     for (let k = 0, n = f.hearth ? 1 : 2; k < n; k++) for (let a = 0; a < 80; a++) {
       const p = { x: snap(rng.range(f.x0 + 3, f.x1 - 3)), z: snap(rng.range(f.z0 + 3, f.z1 - 3)) };
       if (!openAt(p.x, p.z) || res[I(p.x, p.z)] || L.packs.some((q) => hyp(q, p) < 11) || S.hearths.some((q) => hyp(q, p) < 8)) continue;
-      L.packs.push({ x: p.x, z: p.z, n: rng.int(4, 6), tag: 'plainWolves', elite: rng.chance(0.15) ? 'champion' : null, area: f.id });
+      // (the first row is the plain's own wolves; from the second the Order's students hold the fields)
+      L.packs.push({ x: p.x, z: p.z, n: rng.int(4, 6), tag: f.row === 0 ? 'plainWolves' : 'order', elite: rng.chance(0.15) ? 'champion' : null, area: f.id });
       break;
     }
   }
+  // (and the Procession's rearguard on the road itself, by the last two rows and before the Floor)
+  for (const zr of [Z0 + 3 * RH + 8, Z0 + 4 * RH + 10, AR.z - AR.r - 7]) { const p = { x: snap(roadX(zr)), z: snap(zr) }; if (openAt(p.x, p.z) && L.packs.every((q) => hyp(q, p) > 9)) L.packs.push({ x: p.x, z: p.z, n: rng.int(4, 5), tag: 'orderRoad', elite: null, area: 'road', trail: true }); }
   settle7(L);
   L.refuges = [];
   return L;

@@ -60,6 +60,30 @@ const T = {
     const h1 = await ev(() => window.__G.zone.act8.hearths.map((it) => ({ awake: !!it.awake, lit: !!it.mesh?.userData.lit })));
     beat('after leaving and coming back they still burn', h1.length === 3 && h1.every((h) => h.awake && h.lit), h1);
   },
+  async aithon() {
+    await pg.setViewportSize({ width: 960, height: 540 });
+    await open('auto=tinder&lvl=50&flags=act7&q=0&nopacks');
+    await pg.waitForTimeout(4000);
+    const at = (dx, dz) => ev(([dx, dz]) => { const G = window.__G, A = G.zone.L.spots.arena; G.player.x = A.x + dx; G.player.z = A.z + dz; G.player.iframes = 0; }, [dx, dz]);
+    await ev(async () => { window.__F = await import('/src/game/forge.js'); });
+    await at(0, 4); await pg.waitForTimeout(2500);
+    beat('with the fires banked he is not on the Floor', await ev(() => !window.__G.zone.boss && !window.__G.zone.bossSpawned));
+    await ev(() => { const G = window.__G; for (const k of [1, 2, 3]) G.hero.flags['ember' + k] = true; });
+    await pg.waitForFunction(() => !!window.__G.zone.boss, null, { timeout: 30000 }).catch(() => {});
+    const b0 = await ev(() => { const b = window.__G.zone.boss; return b ? { kind: b.kind, hp: Math.round(b.hpMax), model: b.avatar?.modelName, standIn: !!b.avatar?.standIn, lanes: window.__F.flues().filter((f) => f.boss).length } : null; });
+    beat('the three fires awake: Aithon stands on the Floor, on the elk, six strips round him', b0 && b0.kind === 'aithon' && b0.lanes === 6 && !b0.standIn, b0);
+    // keep her alive and near him until he has called a Furrow and it has burnt
+    const t0 = Date.now(); let fur = null;
+    while (Date.now() - t0 < 180000) { fur = await ev(() => { const G = window.__G, pl = G.player, b = G.zone.boss; pl.hp = pl.hpMax; const A = G.zone.L.spots.arena; if (Math.hypot(pl.x - A.x, pl.z - A.z) > 13) { pl.x = A.x; pl.z = A.z + 3; } return { awake: !!b.awake || !!b.fight || b.hp < b.hpMax || true, spent: window.__F.flues().filter((f) => f.boss && f.spent).length, T: { ...window.__F.TALLY8 } }; }); if (fur.spent >= 1) break; await pg.waitForTimeout(250); }
+    await pg.screenshot({ path: out + '/aithon-fight.png' });
+    beat('he calls a Furrow: a strip of the Floor burns and stays black', fur && fur.spent >= 1, fur);
+    // brought to 0 life he rests: the flag, the body stays, the page lives
+    await ev(async () => { const C = await import('/src/game/combat.js'); const G = window.__G, b = G.zone.boss; C.damage(G.player, b, b.hp + 10, { pure: true }); });
+    await pg.waitForTimeout(3500);
+    const r = await ev(() => { const G = window.__G, b = G.zone.boss; return { rest: !!G.hero.flags.aithonRest, spared: !!b?.spared, body: !!b?.avatar?.group?.visible }; });
+    await pg.screenshot({ path: out + '/aithon-rest.png' });
+    beat('at 0 life he stands down: aithonRest, spared, his body stays', r.rest && r.spared && r.body, r);
+  },
   async road() {
     await open('auto=town&lvl=30&q=1');
     beat('no South Road before Act VII is done', !(await ev(() => window.__G.zone.interact.some((i) => i.to === 'tinder'))));

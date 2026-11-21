@@ -6,7 +6,7 @@ import { FIRE, fireOn, fireDrain, removeLightPool as dropPool6, ringOf } from '.
 import { rebuildHash, foes, near, spawnMonster, restoreRim, spawnNpc, lieDown } from './actors.js';
 import { damage, kill, tickStatus, moveMul, heroHit, seeHero, clingHero, shakeOff, rootHero, REMAINS, remainsNear, takeRemains, addVuln, clearVuln, vuln, vulnOf } from './combat.js';
 import { LIGHT, lightOn, shroudOn, lightAt, lampAt, lampNear, snuffLamp, isLamp, halveCradle, heroLightR, setHeroLight, setLightDark, addLightPool, getLightPool, shrinkPool, lightPools, addBeam, removeBeam, beams, inBeam, beamHas, lampLightAt, warmAt, cradlePoint } from './light.js';
-import { setFluePumping, startFlues, flues, fluePeriod, setFlueHeat, vaultAt, loud, fireFlue, inFlue, BREATH } from './forge.js';
+import { setFluePumping, startFlues, flues, fluePeriod, setFlueHeat, vaultAt, loud, fireFlue, inFlue, inLane8, BREATH } from './forge.js';
 import { writeSave } from './save.js';
 import { refreshStats } from './stats.js';
 import { fire, area } from './projectiles.js';
@@ -887,6 +887,7 @@ const AI = {
   shade: (a, dt, pl, d) => { shadePre(a, dt, pl, d); if (a.removed) return 0; return boss(a, dt, pl, d, SHADE_FORM[a.def.form]); },
   // Act VII: the two who are not killed
   kallisto: (a, dt, pl, d) => boss(a, dt, pl, d, KALLISTO),
+  aithon: (a, dt, pl, d) => boss(a, dt, pl, d, AITHON),
   kelados: (a, dt, pl, d) => { keladosPre(a); return boss(a, dt, pl, d, KELADOS); },
   pet: null
 };
@@ -2310,6 +2311,44 @@ const HART = {
       }
       return { t: 0.6, fn() {}, after: 0.5 };
     } },
+    { id: 'stamp', when: (a, d) => d < 5.2, phaseCd: [6, 5, 4], run(a, pl) {
+      a.tele = teleCircle(a.x, a.z, 5, 1.0, 0xffc040);
+      a.avatar?.play('attack2', 1, { hitIn: 1.0 });
+      return { t: 1.0, fn() { stampFx(a, 5); if (Math.hypot(pl.x - a.x, pl.z - a.z) < 5.2) hitHero(a, pl, 1.35, { push: 18 }); }, after: 0.7 };
+    } },
+    { id: 'gore', basic: true, when: (a, d) => d < 4.8, cd: 1.6, run(a, pl) {
+      a.rot = angleTo(a.x, a.z, pl.x, pl.z);
+      a.tele = teleCone(a.x, a.z, a.rot, 4.8, 0.9, 0.55, 0xffc040);
+      a.avatar?.play('attack', 1, { hitIn: 0.55 });
+      return { t: 0.55, fn() { Audio.sfx('swingHeavy', { x: a.x, z: a.z }); if (meleeLands(a, pl, 4.8, 0.95)) hitHero(a, pl, 1.1, { push: 12 }); }, after: 0.45 };
+    } }
+  ]
+};
+// ---------- Act VIII: Aithon, the Bull of the March (docs/act8-design.md, Boss 1) ----------
+// The hart's charge, wheel, stamp and gore, and one move of his own: the Furrow. He bellows and the wind takes one of the
+// Floor's standing strips (forge.js's Burn, the lanes gen8 lays across the Floor, `boss: true`: never taken by a gust of
+// their own): the one the hero stands in, else the nearest. 2.8 s to leave it; what it burns stays black, and the black
+// is safe. The fire strikes him too (his slideShare and a daze), so a hero who draws him into a strip he has just called
+// turns it on him. Each strip burns once: the Floor gets safer as the fight goes, and when none is left he has only his horns.
+const floorLanes = () => (flues() || []).filter((f) => f.kind === 'burn' && f.boss && f.armed && f.st === 'idle');
+const AITHON = {
+  name: 'aithon', phases: [0.6, 0.3], wake: 14,
+  intro(a) {
+    emit('bossIntro', a); say('d.aithon');
+    Audio.sfx('hartBellow'); Audio.sfx('bossRoar', { vol: 0.6 }); shake(0.5);
+    a.avatar?.play('howl'); ring(a.x, a.z, 10, 0xfff4e0, 0.9);
+    a.mcd.furrow = 6; a.mcd.stamp = 2;
+  },
+  onPhase(a, ph) { say(ph === 1 ? 'd.aithon.p2' : 'd.aithon.p3'); a.mcd.furrow = 0; ring(a.x, a.z, 9, 0xffffff, 0.8); },
+  tick: (a, dt) => HART.tick(a, dt),
+  moves: [
+    { id: 'furrow', when: () => floorLanes().length > 0, phaseCd: [12, 9.5, 7.5], run(a, pl) {
+      const L8 = floorLanes(), f = L8.find((q) => inLane8(q, pl.x, pl.z)) || L8.sort((p, q) => Math.hypot(p.x + Math.sin(p.dir) * p.len / 2 - pl.x, p.z + Math.cos(p.dir) * p.len / 2 - pl.z) - Math.hypot(q.x + Math.sin(q.dir) * q.len / 2 - pl.x, q.z + Math.cos(q.dir) * q.len / 2 - pl.z))[0];
+      a.avatar?.play('howl', 1); Audio.sfx('hartBellow'); ring(a.x, a.z, 8, 0xffb040, 0.8); tally(a, 'furrow');
+      return { t: 0.7, fn() { fireFlue(f.i, null); }, after: 0.8 };
+    } },
+    { id: 'charge', when: (a, d) => d > 5 && d < 24, phaseCd: [8, 7, 5.5], run: (a, pl) => hartCharge(a, pl, 1.0, 22, false) },
+    { id: 'wheel', when: (a, d) => d < 5 && (a.mcd.charge ?? 0) <= 0.5, cd: 5, run: (a, pl) => wheelAway(a, pl) },
     { id: 'stamp', when: (a, d) => d < 5.2, phaseCd: [6, 5, 4], run(a, pl) {
       a.tele = teleCircle(a.x, a.z, 5, 1.0, 0xffc040);
       a.avatar?.play('attack2', 1, { hitIn: 1.0 });

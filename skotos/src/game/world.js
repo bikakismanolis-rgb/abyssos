@@ -77,7 +77,7 @@ export const ZONES = {
   tarn: { level: 43, music: 'tarn', ambient: 'snow', atmos: 'tarn', act: 7, pack: 'melt', heavy: true, light: 'sun' },
   // Act VIII: the Tindergrass, down the old South Road from Whitecliff (docs/act8-design.md). Daylight, on Act VII's kit.
   // (music and ambient: the Meltwaters' after-act theme and pollen until its own are written, stage D)
-  tinder: { level: 46, music: 'thawGreen', ambient: 'melt', atmos: 'tinder', act: 8, pack: 'melt', light: 'sun' },
+  tinder: { level: 46, music: 'thawGreen', ambient: 'melt', atmos: 'tinder', act: 8, pack: 'plain', light: 'sun' },
   gate: { level: 1, music: 'gate', ambient: 'gate', atmos: 'gate' }
 };
 // beacons that have answered Whitecliff's: Arna's hill after Act I, Deepstone after Act II, and after Act III the
@@ -118,7 +118,9 @@ export function farFire(p, color = 0xffa040, o = {}) {
 const READY = { deep: { folk: ['folk'], creatures: 'act2' }, wood: { folk: ['grove'], creatures: 'act3' }, cinder: { folk: ['ash', 'folk', 'grove'], creatures: 'act4' }, rime: { folk: ['frost'], creatures: 'act5' }, silt: { folk: ['frost'], creatures: 'act6' },
   // Act VII loads no people set (Halda is the boot smith, the keepers boot villagers) and no pack of its own: `melt` is
   // a name for this row only (the Hanging Lake draws on the rime, the Meltwaters on the boot layers)
-  melt: { folk: [], creatures: 'act7' } };
+  melt: { folk: [], creatures: 'act7' },
+  // Act VIII: the Order stands on the Ashen Host's people set; its one beast (Aithon) on the elk
+  plain: { folk: ['ash'], creatures: 'act8' } };
 const zonePacks = (id) => { const p = ZONES[id]?.pack; return p ? (id === 'forge' ? [p, 'deep'] : ZONES[id].act === 6 ? ['rime', p] : ZONES[id].act >= 7 ? (id === 'tarn' ? ['rime'] : []) : [p]) : []; };
 function zoneFolk(id) {
   const h = G.hero, F = h?.flags || {}, out = [...(READY[ZONES[id]?.pack]?.folk || [])];
@@ -426,7 +428,7 @@ export function updatePacks() {
     spawnPack(z, p, D);
   }
   // Silverhorn rises only once the Long Sorrow is known (the bellow after the third Tear sets quest 13)
-  const asleep = z.bossSpot?.kind === 'silverhorn' && G.hero.quest < 13;
+  const asleep = (z.bossSpot?.kind === 'silverhorn' && G.hero.quest < 13) || (z.bossSpot?.kind === 'aithon' && embers8() < 3);
   if (z.bossSpot && !z.bossSpawned && !asleep && near(z.bossSpot.x, z.bossSpot.z, 30)) spawnBoss(z);
   // Act V: at high water the flood waves walk in from the sea's edge (tide.js keeps their clock: one each 25 s while the
   // water stands at 0.75 m or more, at most two alive; the pack is combat's)
@@ -490,7 +492,7 @@ function spawnPack(z, p, D) {
   const nAff = G.hero.diff >= 3 ? 3 : G.hero.diff >= 2 ? 2 : 1;
   if (elite === 'champion') {
     let kind = pick() === 'spiderling' ? 'spider' : pick();
-    if (MONSTERS[kind].big) kind = z.id === 'pass' || z.id === 'halls' ? 'stoneborn' : z.id === 'weep' || z.id === 'heart' ? 'rootsworn' : z.id === 'ashfield' || z.id === 'forge' ? 'ashSpear' : z.id === 'coast' || z.id === 'farlight' || ZONES[z.id]?.act === 6 ? 'sunken' : ZONES[z.id]?.act === 7 ? 'hillWolf' : 'ash';
+    if (MONSTERS[kind].big) kind = z.id === 'pass' || z.id === 'halls' ? 'stoneborn' : z.id === 'weep' || z.id === 'heart' ? 'rootsworn' : z.id === 'ashfield' || z.id === 'forge' ? 'ashSpear' : z.id === 'coast' || z.id === 'farlight' || ZONES[z.id]?.act === 6 ? 'sunken' : ZONES[z.id]?.act === 7 ? 'hillWolf' : ZONES[z.id]?.act === 8 ? 'wakeful' : 'ash';
     const aff = rollAffixes(nAff + 1);
     const cnt = aff.includes('horde') ? 5 : 3;
     for (let i = 0; i < cnt; i++) { const s = place(); z.actors.push(spawnMonster(kind, s.x, s.z, Object.assign({ elite: 'champion', affixes: aff }, opts))); }
@@ -2339,6 +2341,8 @@ function southRoad(z) {
 function act8Zone(z) {
   const S = z.L.spots;
   z.cells = true; z.act8 = { hearths: [] };
+  // Aithon on the Threshing Floor, once the three fires are awake (updatePacks holds him back till then), until he rests
+  if (z.id === 'tinder' && S.arena && !G.hero.flags.aithonRest) z.bossSpot = { kind: 'aithon', ...(z.map.nearestFloor(S.arena.x, S.arena.z - 6, 4) || S.arena) };
   // the three banked hearths (Bank and Wake): each is woken once, by hand; awake, the Call is made at it as at Act VII's fires
   for (const p of S.hearths || []) {
     const it = { kind: 'hearth8', k: p.k, x: p.x, z: p.z, r: 2.4, prompt: 'hearth8.wake', spot: p, mesh: z.lvl?.act8?.hearths?.find((q) => q.k === p.k)?.mesh };
@@ -2385,6 +2389,11 @@ on('hearth8', (it, z) => {
   Audio.sfx('callHorn', { x: it.x, z: it.z });
   if (!first) emit('toast', t(r.none ? 'call.none' : 'call.on'), 'quest');
   emit('called', it, z);
+});
+// Aithon stands down: the yoke is off (ai.js has saved aithonRest). The road south opens with zone 2 (stage A, part 2)
+on('bossRest', (kind, a) => {
+  if (kind !== 'aithon' || G.zone?.id !== 'tinder' || G.hero.__real || a?.echo) return;
+  emit('toast', t('q.aithonFree'), 'big'); emit('say', 'd.aithon.rest'); Audio.music(ZONES.tinder.music);
 });
 on('burnSpent', (f) => { G.zone?.lvl?.act8?.lanes?.[f.i]?.setBurnt(true); });
 on('flueInhale', (f) => { if (f.kind === 'burn' && !G.hero.flags.burnSeen) { G.hero.flags.burnSeen = true; emit('toast', t('q.burn'), 'quest'); } });

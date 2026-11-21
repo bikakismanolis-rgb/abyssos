@@ -1208,7 +1208,7 @@ function hurtOpts(oo) {
 // own claim, as a guest's is (bounded by the game's top): never a number past what a hero of that level meets
 const zoneTop = () => { const z = G.zone, H = S.peers.get(S.hostPeer), hl = clamp(H?.lk?.l | 0 || MAX_LEVEL, 1, MAX_LEVEL); return Math.min(MAX_ILVL, Math.max(z?.level | 0, hl + 2) + 3); };
 // each zone's boss (the story's, and its echo): the only boss a kill there is paid as (in a Shadow Gate, its guardian)
-const ZONE_BOSS = { forest: 'weaver', crypt: 'barrowLord', pass: 'stonewarden', halls: 'moltenKing', weep: 'silverhorn', heart: 'amaranthe', ashfield: 'ivar', forge: 'karthax', coast: 'tower', farlight: 'skotos' , drained: 'ketos', bottom: 'shade', thaw: 'kallisto', tarn: 'kelados' };
+const ZONE_BOSS = { forest: 'weaver', crypt: 'barrowLord', pass: 'stonewarden', halls: 'moltenKing', weep: 'silverhorn', heart: 'amaranthe', ashfield: 'ivar', forge: 'karthax', coast: 'tower', farlight: 'skotos' , drained: 'ketos', bottom: 'shade', thaw: 'kallisto', tarn: 'kelados', tinder: 'aithon' };
 const GUARDS = new Set(['barrowLord', 'weaver', 'troll']);
 // a monster as the host's snapshots showed it (its kind, level and rank; where and when it was seen dead): what a kill of
 // it can be paid. One the host never showed, or never showed dead, is paid nothing

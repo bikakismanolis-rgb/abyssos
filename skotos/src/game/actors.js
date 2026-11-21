@@ -63,7 +63,7 @@ const STAND_IN = {
   falselight: ['spider'], ketling: ['icemaw', 'warg'], ketos: ['icemaw', 'warg'],
   sunken: 'villager0', icesinger: 'healer', alkyone: 'healer', selna: 'smith', tern: 'villager0', tamarisk: 'ranger', glaukos: 'wayfarer',
   // Act VII's two bosses
-  kallisto: ['amberBear', 'troll'], kelados: ['stonewarden', 'troll']
+  kallisto: ['amberBear', 'troll'], kelados: ['stonewarden', 'troll'], aithon: ['silverhorn', 'warg']
 };
 // a stand-in drawn at another size than the model it stands for (model>stand-in)
 const STAND_SCALE = { 'ashwing>caveBat': 2.6, 'smokeEater>spider': 0.75, 'isarnBoy>wayfarer': 0.62,
