@@ -338,6 +338,8 @@ export const PACKS = {
   // Act VII (the design's packs: where they stand is gen7's)
   looters: [['looter', 5], ['goblinMarksman', 1.2], ['goblinShaman', 0.8]],
   hillWolves: [['hillWolf', 1]],
+  // Act VIII, the Tindergrass (stage A: the plain's wolves stand in until the Order's own come, stage B)
+  plainWolves: [['hillWolf', 1]],
   choughs: [['chough', 1]],
   den: [['denBear', 1], ['hillWolf', 2]],
   shoreDen: [['denBear', 1], ['hillWolf', 2]],
@@ -510,7 +512,7 @@ export const LEGENDARIES = [
 // a boss's first kill drops its own legendary (combat.js kill: by its def's legKey, else its kind)
 export const LEG_FROM = { tower: 'skerryShell', skotos: 'einarLantern', ketos: 'ketosLure', shade: 'shadeRing', kallisto: 'kallistoClaw', kelados: 'mountainHeart' };
 // the act's hazard row for a rule Acts V, VI and VII share (ZONES is world's: the act number is the caller's)
-export const HAZ_ACT = { 5: HAZ5, 6: HAZ6, 7: HAZ7 };
+export const HAZ_ACT = { 5: HAZ5, 6: HAZ6, 7: HAZ7, 8: HAZ7 };
 export const actHaz = (act, diff) => { const H = HAZ_ACT[act] || HAZ5; return H[diff ?? 1] || H[1]; };
 // a zone object's own act for those rows (world.js sets z.act5 / z.act6 / z.act7 as it dresses the zone), 0 before Act V
 export const zoneAct = (z) => (z?.act7 ? 7 : z?.act6 ? 6 : z?.act5 ? 5 : 0);

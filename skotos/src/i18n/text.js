@@ -1,5 +1,6 @@
 // Every string in the game: key -> [Greek, English]. {0}, {1} are filled by t().
 import { TEXT7 } from './text7.js';
+import { TEXT8 } from './text8.js';
 export const TEXT = {
   // ---------- titles ----------
   'game.title': ['ΣΚΟΤΟΣ', 'SKOTOS'],
@@ -1426,3 +1427,4 @@ export const TEXT = {
 };
 // Act VII's strings are generated from the design's tables (tools/text7-import.mjs); they replace `act6.next`
 Object.assign(TEXT, TEXT7);
+Object.assign(TEXT, TEXT8);

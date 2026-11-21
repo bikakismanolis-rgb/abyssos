@@ -1187,6 +1187,17 @@ function ground6(type) {
 // and up, never on a phone, so no rule may depend on it), G_GLINT on the tarn's snow; no aurora, no windows, no edge
 export const ACT7 = new Set(['thaw', 'tarn']);
 export const GROUND7 = ['thaw', 'tarn'];
+// Act VIII (docs/act8-design.md): daylight again. 'tinder', the Tindergrass: reaped fields in early autumn. A: the
+// code-made meadow read as straw-gold stubble (hueA); B: the code-made gravel as dry earth (hueB); P: the trail, the
+// road's pale dust (hueP); W: the code-made crag. No water, no thaw slot.
+export const ACT8 = new Set(['tinder', 'vigil']);
+function ground8(type) {
+  const co = { mobile: R.mobile };
+  const A = codeLayer('meadow', co) || lay4('leaves'), own = A === 'melt/meadow';
+  const B = codeLayer('gravel', co) || lay4('mud', 'leaves'), W = codeLayer('crag', co) || lay4('wall');
+  return { A, B, P: lay4('trail', 'mud', 'leaves'), W: W || undefined, s: [2.6, 2.3, 2.6], r: [0.95, 0.9, 0.9], ns: 1.0, tint: own ? 0xc6c6be : 0xaeb0a4, dual: [1, 0], ws: 5.2,
+    hueA: own ? [2.1, 1.22, 0.78] : [1.5, 1.25, 0.5], hueB: [1.25, 1.08, 0.82], hueP: [2.5, 2.25, 1.8] };
+}
 function ground7(type, mode) {
   if (type === 'tarn') {
     const A = lay4('rime/snow', 'snow', 'leaves'), own = A === 'rime/snow', snowy = own || A === 'snow';
@@ -1322,7 +1333,7 @@ function buildGround(L, group) {
       tB[kk] = s / sw;
     }
   }
-  const day7 = ACT7.has(L.type);
+  const day7 = ACT7.has(L.type) || ACT8.has(L.type);
   // (a level that is not Act VII's: the code-made layers' GPU copies go, gfx/env.js)
   if (!day7) freeCodeLayers();
   for (let i = 0; i < n; i++) {
@@ -1499,7 +1510,7 @@ function buildGround(L, group) {
     for (let c = 0; c < w * h; c++) if (!(far && (L.ice[c] || L.sea?.[c] || pit(c) || sealedF(c)))) for (let k = 0; k < 6; k++) keep.push(ix[c * 6 + k]);
     geo.setIndex(keep);
   }
-  const cfg = GROUND[L.type] || (ACT7.has(L.type) ? ground7(L.type, L.mode) : act5 ? ground5(L.type) : act6 ? ground6(L.type) : act4 ? ground4(L.type) : GROUND.forest);
+  const cfg = GROUND[L.type] || (ACT7.has(L.type) ? ground7(L.type, L.mode) : ACT8.has(L.type) ? ground8(L.type) : act5 ? ground5(L.type) : act6 ? ground6(L.type) : act4 ? ground4(L.type) : GROUND.forest);
   if (act5) cfg.frozen = L.mode === 'frozen';
   // (Act V: the ice windows' centres, the corner each 2 x 2 window's cells share: the ground cuts the round hole, G_WIN)
   if (act5 && L.window) { const wins = []; for (let z = 0; z < h - 1; z++) for (let x = 0; x < w - 1; x++) if (L.window[z * w + x] && L.window[z * w + x + 1] && L.window[(z + 1) * w + x] && L.window[(z + 1) * w + x + 1] && !(x > 0 && L.window[z * w + x - 1]) && !(z > 0 && L.window[(z - 1) * w + x])) wins.push(x + 1, z + 1); cfg.wins = wins.slice(0, 16); }

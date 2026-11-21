@@ -1068,3 +1068,5 @@ export function tarnFaults(L) {
   { let n = 0, bare = 0; for (let i = 0; i < L.cells.length; i++) if (L.cells[i] && !L.pocket[i]) { n++; if (!L.snow[i]) bare++; } if (bare < 0.4 * n) out.push('bare40'); }
   return out;
 }
+// (Act VIII's layouts, gen8.js, stand on the same daylight frame)
+export { daylight as daylight7, finish7, settle as settle7 };

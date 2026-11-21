@@ -178,3 +178,15 @@ kill by PIDs from `ps`.
 **Next, in order:** (1) the owner's word on the eight questions (`owner-questions-el.md`; every default is built, sent to him again on 17 November); (2) his phone in the thaw and the tarn (daylight, snow, the meadow's frame time); (3) the full balance campaign at 6 runs a cell with the walk between packs played (the zone levers, Kelados's class spread, the bosses' lowest life); (4) stage E: every scenario, both builds, the strict CSP, then `VER` 6 and `SAVE_FMT` 2 as the last commit, and publishing only on his word.
 
 **Traps met while building:** `map.path` does not exist (use `map.reaches`); a test that measures life after a hit must take the lowest value (she regenerates); a quad pushed as (x,a),(x+1,a),(x+1,b) faces down and is culled from the play camera; a guest's first placement beside the host lands with the host's first snapshots (place it until it holds); the FX ambient key `'thaw'` is Act VI's lit Bottom; `light.js` exports `NAMES` (the Names' module is `names7.js`, prefix `N7`); `text7.js` is generated (edit the design's tables, run `node tools/text7-import.mjs`; the lead's `50-text-extra.md` wins); the Kallisto scenario's "every move played" beat depends on her random choices and can miss once. A gen7 layout prop's `r` is its turn, never a size: build7's `act7Level` passes each kind its own size (`SIZE7`); the kinds drawn from a named spot of their own (S.huts, S.slabs) are skipped in the layout-props loop (`NAMED7`: every hut and slab was drawn twice, the fold as a hut), and a hut's kind is `p.kind`, its door on +z; passed as the size, the cover boulders stood up to 12 m wide (perf7's chutes failed at 1.19 of the Field on them, 0.94 after). A statue wakes when hurt below `a.hpSlept ?? a.hpMax` (an Icebound frozen back to sleep is already hurt). An actor more than 38 m from the hero is not run at all (a far den's bear is not woken by water until she comes near). War Cry now spares bosses like a blow's fear (it frightened Kelados off his seat); a Snow-worm under bare ground surfaces and crawls.
+
+
+## Act VIII: where it stands (21 November, kept up as the work goes)
+
+The owner chose Act VIII on 21 November («Πάμε στο 2. Ό,τι προτείνεις εσύ κάνε») and will judge it in the playable game,
+not on paper («Θα τα τσεκάρουμε όλα μετά στο κανονικό παιχνίδι»). It is the Order of the Flame story that Act VII's
+rulings kept: `docs/act8-design.md` (read its section "The fire: the rules" before touching anything that burns), his
+five questions in `docs/act8-briefs/owner-questions-el.md` (every default is built). Stage A's first part is in: zone
+`tinder` walkable from Whitecliff (`docs/act8-briefs/reports/stageA-part1.md`, with the stand-ins and the next steps).
+**Nothing of Act VIII is on `main` or published.** `VER` and `SAVE_FMT` are unchanged. In this session sub-agents were
+not used (the owner had not asked for them): one session did the work in turn.
+

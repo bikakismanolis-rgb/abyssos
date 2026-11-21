@@ -1,0 +1,135 @@
+// Act VIII's layouts as plain data (docs/act8-design.md). Daylight, on gen7's frame (the same fields a gen7 layout
+// carries, so build.js's ground, the Slide's lanes and Sun and Shade read it as they read the Meltwaters).
+//   genTinder(seed)   112 x 184, NORTH at the top: the hero comes down from Whitecliff and walks south. The North Camp
+//       (Halda, the waypoint), the South Road wandering down the middle, five pairs of stubble fields between dry-stone
+//       walls (each with one gate on the road and one to the next field), three banked hearths in fields off the road,
+//       the Threshing Floor at the south end (Aithon's arena).
+// The fire's rule is in the layout: every field is closed by walls, the road and the frame's rock; no field touches the
+// camp, and nothing that burns stands outside a field (docs/act8-design.md, The fire: the rules, 1).
+//   L.fields   [{ id, x0, z0, x1, z1 (inner cells, inclusive), side: -1 west | 1 east, row, gate: { x, z }, hearth }]
+//   L.walls    [{ x0, z0, x1, z1 }] runs of wall cells (one cell thick), for build8.js
+//   L.spots    camp, waypoint, npcs.halda, hearths [{ k: 1-3, x, z, field }], arena { x, z, r }, chests, sheaves [{ x, z }]
+import { RNG, fbm } from '../core/util.js';
+import { base } from './gen.js';
+import { circleCells, snap, BED_DRY } from './genlib.js';
+import { makeDraw } from './gen5.js';
+import { daylight7, finish7, settle7 } from './gen7.js';
+
+const ROCK = 0, LAND = 1;
+const hyp = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+
+export function genTinder(seed) {
+  const rng = RNG(seed), w = 112, h = 184, N = w * h;
+  const L = daylight7(base(w, h), 'tinder', seed), S = L.spots;
+  Object.assign(S, { hearths: [], lookouts: [], chests: [], sheaves: [], huts: [], slabs: [], vaults: [], npcs: {} });
+  L.fields = []; L.walls = []; L.own.level = 0;
+  const K = new Uint8Array(N), bed = new Float32Array(N).fill(BED_DRY), blk = new Uint8Array(N), res = new Uint8Array(N), own = new Uint8Array(N), T = L.trail;
+  const { blockC, reserve, paintAt } = makeDraw(L, K, blk, res, rng);
+  const I = (x, z) => Math.floor(z) * w + Math.floor(x);
+  const XL = (z) => Math.floor(8.5 + 3 * fbm(z * 0.06, 0.5, seed + 3)), XR = (z) => Math.floor(103.5 - 3 * fbm(z * 0.06, 9.5, seed + 4));
+  // ---- the floor: one long plain inside the frame ----
+  for (let z = 8; z <= 176; z++) for (let x = XL(z); x <= XR(z); x++) K[z * w + x] = LAND;
+  // ---- the landmarks ----
+  const CP = { x: snap(56 + rng.range(-5, 5)), z: 17.5, r: 8 };
+  const AR = { x: snap(56 + rng.range(-4, 4)), z: 158.5, r: 15 };
+  // the road's bends, one per row of fields
+  const ROWS = 5, Z0 = 32, RH = 21;                       // rows z 32..136, each 21 deep with its wall
+  const bends = [{ x: CP.x, z: CP.z + 4 }];
+  for (let r = 0; r <= ROWS; r++) bends.push({ x: snap(56 + rng.range(-7, 7)), z: Z0 + r * RH - 1.5 });
+  bends.push({ x: AR.x, z: AR.z - AR.r + 2 });
+  const road = [];
+  for (let k = 1; k < bends.length; k++) { const a = bends[k - 1], b = bends[k], n = Math.ceil(hyp(a, b)); for (let j = k === 1 ? 0 : 1; j <= n; j++) road.push({ x: a.x + ((b.x - a.x) * j) / n, z: a.z + ((b.z - a.z) * j) / n }); }
+  const roadX = (z) => { let best = road[0]; for (const p of road) if (Math.abs(p.z - z) < Math.abs(best.z - z)) best = p; return best.x; };
+  for (const p of road) { for (const [x, z] of circleCells(L, p.x, p.z, 1.6)) T[z * w + x] = 1; paintAt(p.x, p.z, 2.1, 1); }
+  L.road = road;
+  // ---- the fields and their walls ----
+  const wallRun = (x0, z0, x1, z1, gaps = []) => {
+    // a run of wall cells along x or z, left open at its gaps ({ x, z } cells, each 3 wide along the run)
+    const alongX = z0 === z1, cellsOf = [];
+    for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) {
+      if (K[z * w + x] !== LAND || T[z * w + x]) continue;
+      if (gaps.some((g) => (alongX ? Math.abs(x - g.x) <= 1 : Math.abs(z - g.z) <= 1))) continue;
+      cellsOf.push([x, z]);
+    }
+    // split into unbroken runs for the builder
+    let run = null;
+    for (const [x, z] of cellsOf) {
+      if (run && (alongX ? x === run.x1 + 1 : z === run.z1 + 1)) { run.x1 = x; run.z1 = z; } else { run = { x0: x, z0: z, x1: x, z1: z }; L.walls.push(run); }
+      blk[z * w + x] = 1; res[z * w + x] = 1;
+    }
+  };
+  // every row's two fields' wall columns first (a row's north wall closes the row above it too)
+  const EXT = [];
+  for (let r = 0; r < ROWS; r++) {
+    const zt = Z0 + r * RH, zb = zt + RH - 1, row = {};
+    let rx0 = 1e9, rx1 = -1e9; for (let z = zt; z <= zb + 1; z++) { rx0 = Math.min(rx0, roadX(z)); rx1 = Math.max(rx1, roadX(z)); }
+    let xl = 0, xr = 1e9; for (let z = zt; z <= zb + 1; z++) { xl = Math.max(xl, XL(z)); xr = Math.min(xr, XR(z)); }
+    row[-1] = { xi: xl + 1, xo: Math.floor(rx0) - 5 }; row[1] = { xi: Math.ceil(rx1) + 5, xo: xr - 1 };
+    EXT.push(row);
+    // (a field's far side is the hill itself: rock from its last furrow to the frame, wandering a cell or two)
+    for (let z = zt; z <= zb + (r === ROWS - 1 ? 1 : 0); z++) { const j = Math.round(1.6 * fbm(z * 0.3, 2.5, seed + 9)); for (let x = 0; x < w; x++) if (x < row[-1].xi + j || x > row[1].xo - j) K[z * w + x] = ROCK; }
+  }
+  for (let r = 0; r < ROWS; r++) {
+    const zt = Z0 + r * RH, zb = zt + RH - 1;                // the row's wall rows: zt (north); zb + 1 is the next row's north
+    for (const side of [-1, 1]) {
+      const { xi, xo } = EXT[r][side], up = r > 0 ? EXT[r - 1][side] : null, dn = r < ROWS - 1 ? EXT[r + 1][side] : null;
+      const prev = L.fields.find((f) => f.row === r - 1 && f.side === side);
+      const road = side < 0 ? xo : xi;
+      const gate = { x: road, z: zt + 6 + rng.int(0, RH - 13) };                           // onto the road
+      const px0 = Math.max(xi, dn ? dn.xi : xi) + 4, px1 = Math.min(xo, dn ? dn.xo : xo) - 4;
+      const pass = dn && px1 > px0 ? { x: rng.int(px0, px1), z: zb + 1 } : null;           // to the next row's field
+      wallRun(Math.min(xi, up ? up.xi : xi), zt, Math.max(xo, up ? up.xo : xo), zt, prev?.pass ? [prev.pass] : []);
+      wallRun(road, zt + 1, road, zb, [gate]);
+      if (r === ROWS - 1) wallRun(xi, zb + 1, xo, zb + 1, []);
+      L.fields.push({ id: (side < 0 ? 'w' : 'e') + (r + 1), x0: xi + 1, z0: zt + 1, x1: xo - 1, z1: zb, side, row: r, gate, pass, hearth: 0 });
+      paintAt(gate.x + 0.5, gate.z + 0.5, 2.2, 0.7);
+    }
+  }
+  // ---- the camp, the arena ----
+  for (const [x, z] of circleCells(L, CP.x, CP.z, CP.r)) K[z * w + x] = LAND;
+  S.camp = CP; S.waypoint = { x: CP.x + 4, z: CP.z - 1 };
+  S.npcs.halda = { x: CP.x - 2.5, z: CP.z - 0.5, rot: 1.9 }; S.npcs.fire = { x: CP.x - 4, z: CP.z + 1 };
+  blockC(S.npcs.fire.x, S.npcs.fire.z, 0.45); reserve(CP.x, CP.z, CP.r);
+  paintAt(CP.x, CP.z, 6, 0.8);
+  L.start = { x: CP.x, z: CP.z - 2 };
+  L.exits.push({ x: CP.x, z: CP.z - 6, to: 'town', label: 'exit.town' });
+  for (const [x, z] of circleCells(L, AR.x, AR.z, AR.r)) { K[z * w + x] = LAND; res[z * w + x] = 1; }
+  paintAt(AR.x, AR.z, AR.r + 2, 1);
+  S.arena = AR; L.boss = { x: AR.x, z: AR.z };
+  S.hearth = { x: AR.x, z: AR.z - AR.r + 2.5 };
+  // ---- the three banked hearths: in fields off the road, rows 1, 3 and 5, sides alternating ----
+  const first = rng.chance(0.5) ? -1 : 1;
+  [0, 2, 4].forEach((r, k) => {
+    const f = L.fields.find((q) => q.row === r && q.side === (k % 2 ? -first : first)) || L.fields.find((q) => q.row === r);
+    if (!f) return;
+    const p = { k: k + 1, x: snap(f.side < 0 ? f.x0 + 4 + rng.range(0, 3) : f.x1 - 4 - rng.range(0, 3)), z: snap((f.z0 + f.z1) / 2 + rng.range(-3, 3)), field: f.id };
+    f.hearth = p.k; S.hearths.push(p); reserve(p.x, p.z, 3); blockC(p.x, p.z, 0.6); paintAt(p.x, p.z, 3, 0.9);
+  });
+  // ---- sheaves (cover, and what the fields were reaped into), chests ----
+  for (const f of L.fields) {
+    const n = rng.int(3, 5);
+    for (let a = 0, got = 0; a < 60 && got < n; a++) {
+      const p = { x: snap(rng.range(f.x0 + 2, f.x1 - 2)), z: snap(rng.range(f.z0 + 2, f.z1 - 2)) }, i = I(p.x, p.z);
+      if (res[i] || blk[i] || S.sheaves.some((q) => hyp(q, p) < 5) || Math.hypot(p.x - f.gate.x, p.z - f.gate.z) < 4) continue;
+      S.sheaves.push({ ...p, field: f.id }); blk[i] = 1; reserve(p.x, p.z, 1.2); got++;
+    }
+  }
+  for (const f of [L.fields[1], L.fields[4], L.fields[L.fields.length - 2]]) if (f) {
+    const p = { x: snap(f.side < 0 ? f.x0 + 2 : f.x1 - 2), z: snap(f.z1 - 2) };
+    if (!res[I(p.x, p.z)] && !blk[I(p.x, p.z)]) { S.chests.push(p); reserve(p.x, p.z, 1.5); }
+  }
+  finish7(L, K, bed, blk, own, (vx, vz) => 2.2 + 2.6 * fbm(vx * 0.05, vz * 0.05, seed + 41));
+  // ---- the packs: one or two a field, never in the hearth's ring, and two on the road ----
+  const openAt = (x, z) => !!L.cells[I(x, z)];
+  for (const f of L.fields) {
+    for (let k = 0, n = f.hearth ? 1 : 2; k < n; k++) for (let a = 0; a < 80; a++) {
+      const p = { x: snap(rng.range(f.x0 + 3, f.x1 - 3)), z: snap(rng.range(f.z0 + 3, f.z1 - 3)) };
+      if (!openAt(p.x, p.z) || res[I(p.x, p.z)] || L.packs.some((q) => hyp(q, p) < 11) || S.hearths.some((q) => hyp(q, p) < 8)) continue;
+      L.packs.push({ x: p.x, z: p.z, n: rng.int(4, 6), tag: 'plainWolves', elite: rng.chance(0.15) ? 'champion' : null, area: f.id });
+      break;
+    }
+  }
+  settle7(L);
+  L.refuges = [];
+  return L;
+}

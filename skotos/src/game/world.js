@@ -9,6 +9,8 @@ import { genAshfield, genForge } from '../world/gen4.js';
 import { genCoast, genFarlight } from '../world/gen5.js';
 import { genDrained, genBottom, ropeSpot } from '../world/gen6.js';
 import { genThaw, genTarn } from '../world/gen7.js';
+import { genTinder } from '../world/gen8.js';
+import { act8Level } from '../world/build8.js';
 import { firesTick, firesEnter, fires7 } from './fires7.js';
 import { act7Level, act7Prop } from '../world/build7.js';
 import { town6, story6Zone, people6 } from './story.js';
@@ -72,6 +74,9 @@ export const ZONES = {
   // zone's theme is its green one)
   thaw: { level: 40, music: 'thaw', ambient: 'melt', atmos: 'thaw', act: 7, pack: 'melt', light: 'sun' },
   tarn: { level: 43, music: 'tarn', ambient: 'snow', atmos: 'tarn', act: 7, pack: 'melt', heavy: true, light: 'sun' },
+  // Act VIII: the Tindergrass, down the old South Road from Whitecliff (docs/act8-design.md). Daylight, on Act VII's kit.
+  // (music and ambient: the Meltwaters' after-act theme and pollen until its own are written, stage D)
+  tinder: { level: 46, music: 'thawGreen', ambient: 'melt', atmos: 'tinder', act: 8, pack: 'melt', light: 'sun' },
   gate: { level: 1, music: 'gate', ambient: 'gate', atmos: 'gate' }
 };
 // beacons that have answered Whitecliff's: Arna's hill after Act I, Deepstone after Act II, and after Act III the
@@ -113,7 +118,7 @@ const READY = { deep: { folk: ['folk'], creatures: 'act2' }, wood: { folk: ['gro
   // Act VII loads no people set (Halda is the boot smith, the keepers boot villagers) and no pack of its own: `melt` is
   // a name for this row only (the Hanging Lake draws on the rime, the Meltwaters on the boot layers)
   melt: { folk: [], creatures: 'act7' } };
-const zonePacks = (id) => { const p = ZONES[id]?.pack; return p ? (id === 'forge' ? [p, 'deep'] : ZONES[id].act === 6 ? ['rime', p] : ZONES[id].act === 7 ? (id === 'tarn' ? ['rime'] : []) : [p]) : []; };
+const zonePacks = (id) => { const p = ZONES[id]?.pack; return p ? (id === 'forge' ? [p, 'deep'] : ZONES[id].act === 6 ? ['rime', p] : ZONES[id].act >= 7 ? (id === 'tarn' ? ['rime'] : []) : [p]) : []; };
 function zoneFolk(id) {
   const h = G.hero, F = h?.flags || {}, out = [...(READY[ZONES[id]?.pack]?.folk || [])];
   if (id === 'farlight' && h.quest >= 29 && !F.seaLit) out.push('folk', 'grove');
@@ -173,6 +178,7 @@ function createZone(id, o = {}) {
   else if (id === 'bottom') L = genBottom(seed, { mode: bottomMode() });
   else if (id === 'thaw') L = genThaw(seed, { mode: thawMode() });
   else if (id === 'tarn') L = genTarn(seed, { mode: tarnMode() });
+  else if (id === 'tinder') L = genTinder(seed);
   else if (id === 'gate') L = (o.tier % 2 ? genCrypt(seed, { rooms: 12, mh: 30 }) : genForest(seed, { h: 120 }));
   // (Act V: what the story has done to the layout is laid on it before it is built: sealed leads, the skerry's state)
   if (ZONES[id]?.act === 5) act5Layout(id, L);
@@ -186,6 +192,7 @@ function createZone(id, o = {}) {
   const lvl = buildLevel(L, R.quality);
   // (Act VII's props are build7.js's, code-built, placed at gen7's spots in their first state for the reading: lvl.act7)
   if (ZONES[id]?.act === 7) { try { act7Level(L, lvl); } catch (e) { console.warn('act7Level', e); } }
+  if (ZONES[id]?.act === 8) { try { act8Level(L, lvl); } catch (e) { console.warn('act8Level', e); } }
   // (ownSeed: built from the hero's own seed, not a co-op host's: only such a zone is one she may wake in, game/wake.js)
   const z = { id, L, map, lvl, level: o.level ?? ZONES[id].level, actors: [], pickups: [], interact: [], packs: [], seed, ownSeed: o.seed == null, tier: o.tier || 0, extra: [], emit4: [], ep: ++zoneEp };
   if (id === 'coast') z.mode = coastMode(); else if (id === 'farlight') z.mode = skyMode();
@@ -247,7 +254,9 @@ function createZone(id, o = {}) {
   if (ZONES[id].act === 5) act5Zone(z);
   if (ZONES[id].act === 6) act6Zone(z);
   if (ZONES[id].act === 7) act7Zone(z);
+  if (ZONES[id].act === 8) act8Zone(z);
   if (id === 'pass') goatTrack(z);
+  if (id === 'town') southRoad(z);
   // town people and the stash
   if (id === 'town') {
     const N = L.spots.npcs;
@@ -319,6 +328,7 @@ export function enterZone(id, o = {}) {
   else if (Z.act === 5) act5Enter(z);
   else if (Z.act === 6) act6Enter(z);
   else if (Z.act === 7) act7Enter(z);
+  else if (Z.act === 8) act8Enter(z);
   else if (id === 'town') { townFires(z); if (G.hero.flags.seaLit) { setAtmosphere(ATMOS.townAurora); SEA.sky = true; } }
   // (a phone draws Act V's zones at a lower resolution: gfx.js heavyZone)
   heavyZone(Z.act === 5 || !!Z.heavy);
@@ -467,7 +477,7 @@ function spawnPack(z, p, D) {
   let elite = p.elite;
   if (!elite && Math.random() < 0.06 * D.elite * COOP.elite[ci]) elite = 'champion';
   // (an Act VI pack whose tag combat's PACKS does not hold yet: the Sunken stand in, never Act I's goblins)
-  const weights = PACKS[tag] || (ZONES[z.id]?.act === 6 ? PACKS.sunkenCrew : ZONES[z.id]?.act === 7 ? PACKS.hillWolves : PACKS.goblins);
+  const weights = PACKS[tag] || (ZONES[z.id]?.act === 6 ? PACKS.sunkenCrew : ZONES[z.id]?.act >= 7 ? PACKS.hillWolves : PACKS.goblins);
   const pick = () => rand.weighted(weights);
   // Act III packs are built round a lead creature (the den's bear, the grove's Rootwarden, the Mourners): it comes first
   const lead = PACK_LEAD[tag];
@@ -2313,6 +2323,32 @@ function stream7(z) {
 // the goat track at the Pass's camp: the way up to the Meltwaters, an interact on cells that are already walkable (no
 // older layout changes), pushed once into the layout's exits too so an arrival from above finds it; locked until Halda
 // has gone up (haldaOut)
+// ---------- Act VIII (docs/act8-design.md) ----------
+// the old South Road at Whitecliff's east wall: the way down to the Tindergrass, an interact on cells that are already
+// walkable (the town's layout does not change), pushed once into the layout's exits so an arrival from the plain finds
+// it. There once Act VII is done on any difficulty
+function southRoad(z) {
+  const L = z.L; if (L.exits.some((e) => e.to === 'tinder')) return;
+  if (!((G.hero.act7 ?? -1) >= 0 || G.hero.flags.act7 || G.hero.flags.call8)) return;
+  const p = z.map.nearestFloor(50.5, 44.5, 6); if (!p) return;
+  const e = { x: p.x, z: p.z, to: 'tinder', label: 'exit.tinder', act8: true };
+  L.exits.push(e);
+  z.interact.push({ kind: 'exit', to: e.to, x: e.x, z: e.z, r: 2.4, prompt: e.label, locked: e.locked, use: () => takeExit(z, e) });
+}
+function act8Zone(z) {
+  const S = z.L.spots;
+  z.cells = true; z.act8 = { hearths: [] };
+  // Halda at the North Camp (the boot smith), as at Act VII's camps
+  const N = S.npcs?.halda;
+  if (N) { const a = spawnNpc('smith', N.x, N.z, N.rot || 0); a.home = N.rot || 0; z.actors.push(a); z.act8.halda = a; z.interact.push({ kind: 'npc', npc: 'smith', actor: a, x: N.x, z: N.z, r: 2.4, prompt: 'talk', use: () => emit('talk', 'smith', a) }); }
+}
+function act8Enter(z) {
+  setThaw(0, true);
+  Audio.mood({ race: 0 });
+  startFlues(z.L.flues);
+  const c = z.L.spots.camp; if (c) z.checkpoint = z.map.nearestFloor(c.x, c.z, 3);
+  sunEnter(z);
+}
 function goatTrack(z) {
   const L = z.L; if (L.exits.some((e) => e.to === 'thaw')) return;
   if (!((G.hero.act6 ?? -1) >= 0 || G.hero.flags.call7)) return;

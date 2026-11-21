@@ -68,6 +68,8 @@ ATMOS.bottomLit = { ...ATMOS.bottom, fog: 0x0e0a08, density: 0.028, hemi: 0.6, e
 ATMOS.thaw = { fog: 0x9fb6c6, density: 0.012, sky: 0xbcd6f2, ground: 0x4c5e38, hemi: 1.25, moon: 0xfff0d2, moonI: 2.3, exposure: 1.0, heroI: 0, heroRange: 13, zoom: 1.05, sun: [-18, 22, 10], day: true };
 ATMOS.tarn = { fog: 0xc6d6e6, density: 0.010, sky: 0xd2e6ff, ground: 0xa2b2ca, hemi: 1.1, moon: 0xfff8ea, moonI: 2.1, exposure: 0.92, heroI: 0, heroRange: 13, zoom: 1.05, sun: [-6, 32, 4], day: true };
 // (under a cloud: less sun, a greyer sky, the same sun's place; eased to over a third of a second with mixAtmos)
+// Act VIII: early autumn over reaped fields, a warmer and lower sun, a dusty horizon (docs/act8-design.md)
+ATMOS.tinder = { ...ATMOS.thaw, fog: 0xd6c8a4, density: 0.011, sky: 0xc8d6e8, ground: 0x6e5e34, moon: 0xffe6b8, sun: [-20, 18, 12] };
 ATMOS.thawShade = { ...ATMOS.thaw, hemi: 0.95, moonI: 1.1, sky: 0xaebccc };
 ATMOS.tarnShade = { ...ATMOS.tarn, hemi: 0.95, moonI: 1.1, sky: 0xbcc8d8 };
 ATMOS.thawCine = { ...ATMOS.thaw, density: 0.006 };
