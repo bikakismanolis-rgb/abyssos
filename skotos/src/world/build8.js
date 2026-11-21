@@ -7,19 +7,20 @@
 // field's walls.
 import * as THREE from 'three';
 import { G } from '../gfx/rig.js';
+import { R } from '../gfx/gfx.js';
 import { RNG } from '../core/util.js';
 import { groundY } from './genlib.js';
 import { bake, jitter, occlude, hash2 } from './build.js';
 import { act7Prop } from './build7.js';
 
 const STONE = [0x8a857c, 0x7a766e, 0x96918a, 0x6e6a64, 0xa09a90], STRAW = [0xd8b860, 0xc8a850, 0xe4c878, 0xb89844], TWINE = 0x7a6448;
-let MAT8 = null;
+let MAT8 = null, BLACK8 = null;
 const mat8 = () => (MAT8 ||= occlude(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true })));
 const mesh8 = (parts) => { const m = new THREE.Mesh(bake(parts), mat8()); m.castShadow = true; m.receiveShadow = true; return m; };
 
 export function act8Level(L, lvl) {
   const group = lvl?.isObject3D ? lvl : lvl?.group || new THREE.Group(), S = L?.spots || {};
-  const A = { walls: null, sheaves: null, hearths: [], all: [] };
+  const A = { walls: null, sheaves: null, hearths: [], lanes: [], all: [] };
   const gy = (x, z) => { try { return L?.hgt ? groundY(L, x, z) : 0; } catch (e) { return 0; } };
   const add = (m) => { group.add(m); A.all.push(m); return m; };
   // ---- the walls: two courses of field stones a cell, a cope stone on every other; a run's ends a little lower ----
@@ -52,6 +53,26 @@ export function act8Level(L, lvl) {
     const lid = mesh8([{ geo: jitter(G.cyl(0.62, 0.7, 0.14, 8), 0.04, 811), color: STONE[3], o: { y: 0.72 } }]); m.add(lid); m.userData.lid = lid;
     add(m); A.hearths.push({ k: p.k, x: p.x, z: p.z, mesh: m });
   }
+  // ---- the Burn's lanes (L.flues, kind 'burn'), by index: the standing stubble, and the black it leaves (hidden) ----
+  (L?.flues || []).forEach((f, k) => {
+    if (f.kind !== 'burn') return;
+    const ux = Math.sin(f.dir), uz = Math.cos(f.dir), tp = [], lr = RNG((L.seed || 1) * 131 + k * 17 + 5), n = Math.round(f.len * f.w * (R.quality >= 1 ? 1.5 : 0.8));
+    for (let j = 0; j < n; j++) {
+      const u = lr.range(0.3, f.len - 0.3), v = lr.range(-f.w / 2 + 0.2, f.w / 2 - 0.2), x = f.x + ux * u - uz * v, z = f.z + uz * u + ux * v, hh = lr.range(0.45, 0.8);
+      tp.push({ geo: G.cone(lr.range(0.1, 0.16), hh, 4), color: STRAW[j % 4], o: { x, y: gy(x, z) + hh / 2, z, rx: lr.range(-0.2, 0.2), rz: lr.range(-0.2, 0.2), ry: lr.range(0, 3) } });
+    }
+    const tufts = new THREE.Mesh(bake(tp), mat8()); tufts.receiveShadow = true; add(tufts);
+    const geo = new THREE.PlaneGeometry(f.w + 0.6, f.len + 0.4, 6, Math.max(4, Math.round(f.len / 2))); geo.rotateX(-Math.PI / 2);
+    // (a ragged edge: the rim's vertices pulled in and out a little, their colour thinner)
+    const pos = geo.attributes.position, col = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i++) { const ex = Math.abs(pos.getX(i)) > f.w / 2, ez = Math.abs(pos.getZ(i)) > f.len / 2 - 0.1, e = ex || ez; if (ex) pos.setX(i, pos.getX(i) + lr.range(-0.45, 0.25) * Math.sign(pos.getX(i))); const c = e ? 0.16 : lr.range(0.045, 0.085); col[i * 3] = c * 1.05; col[i * 3 + 1] = c; col[i * 3 + 2] = c * 0.95; }
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const black = new THREE.Mesh(geo, (BLACK8 ||= new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.92, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })));
+    black.position.set(f.x + ux * f.len / 2, 0.035, f.z + uz * f.len / 2); black.rotation.y = f.dir; black.receiveShadow = true; black.visible = false; black.renderOrder = 1; add(black);
+    const lane = { k, id: f.id, tufts, black, burnt: false };
+    lane.setBurnt = (b) => { lane.burnt = !!b; tufts.visible = !b; black.visible = !!b; };
+    A.lanes[k] = lane;
+  });
   if (lvl && !lvl.isObject3D) lvl.act8 = A;
   return A;
 }

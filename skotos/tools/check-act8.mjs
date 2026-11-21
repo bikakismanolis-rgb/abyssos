@@ -11,6 +11,15 @@ for (let seed = 1; seed <= n; seed++) {
   for (const p of [...L.exits, S.arena, S.waypoint, ...S.chests, ...L.packs, ...S.hearths.map((q) => ({ x: q.x + 1.5, z: q.z }))]) if (!all[I(p.x, p.z)]) { fail(seed, 'unreached'); break; }
   if (L.fields.length < 8) fail(seed, 'fields'); if (S.hearths.length < 3) fail(seed, 'hearths');
   if (L.packs.some((p) => Math.hypot(p.x - S.camp.x, p.z - S.camp.z) < 14)) fail(seed, 'packInCamp');
+  // the fire's rule 1: every lane lies wholly inside its own field, on open ground, clear of the hearths and the camp
+  for (const fl of L.flues) {
+    const f = L.fields.find((q) => q.id === fl.field), x0 = fl.x - fl.w / 2, x1 = fl.x + fl.w / 2, z0 = fl.z - fl.len, z1 = fl.z;
+    if (fl.kind !== 'burn' || !f || x0 < f.x0 || x1 > f.x1 + 1 || z0 < f.z0 - 0.5 || z1 > f.z1 + 1) { fail(seed, 'laneOutside'); break; }
+    if (S.hearths.some((q) => q.x > x0 - 3 && q.x < x1 + 3 && q.z > z0 && q.z < z1)) { fail(seed, 'laneAtHearth'); break; }
+    let blocked = 0; for (let z = Math.ceil(z0); z < z1; z++) for (let x = Math.floor(x0); x < x1; x++) if (!L.cells[z * w + x]) blocked++;
+    if (blocked) { fail(seed, 'laneBlocked'); break; }
+  }
+  if (L.flues.length < 6) fail(seed, 'fewLanes');
   for (const f of L.fields) {
     // with the field's gates shut (its road gate and the passes on its north and south walls), nothing leaves it
     const gates = [f.gate, f.pass, L.fields.find((q) => q.row === f.row - 1 && q.side === f.side)?.pass].filter(Boolean);

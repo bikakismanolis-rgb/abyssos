@@ -10,6 +10,7 @@ import { genCoast, genFarlight } from '../world/gen5.js';
 import { genDrained, genBottom, ropeSpot } from '../world/gen6.js';
 import { genThaw, genTarn } from '../world/gen7.js';
 import { genTinder } from '../world/gen8.js';
+import { N7call, N7rt, N7WHY } from './names7.js';
 import { act8Level } from '../world/build8.js';
 import { firesTick, firesEnter, fires7 } from './fires7.js';
 import { act7Level, act7Prop } from '../world/build7.js';
@@ -2338,6 +2339,12 @@ function southRoad(z) {
 function act8Zone(z) {
   const S = z.L.spots;
   z.cells = true; z.act8 = { hearths: [] };
+  // the three banked hearths (Bank and Wake): each is woken once, by hand; awake, the Call is made at it as at Act VII's fires
+  for (const p of S.hearths || []) {
+    const it = { kind: 'hearth8', k: p.k, x: p.x, z: p.z, r: 2.4, prompt: 'hearth8.wake', spot: p, mesh: z.lvl?.act8?.hearths?.find((q) => q.k === p.k)?.mesh };
+    it.use = () => emit('hearth8', it, z);
+    z.act8.hearths.push(it); z.interact.push(it);
+  }
   // Halda at the North Camp (the boot smith), as at Act VII's camps
   const N = S.npcs?.halda;
   if (N) { const a = spawnNpc('smith', N.x, N.z, N.rot || 0); a.home = N.rot || 0; z.actors.push(a); z.act8.halda = a; z.interact.push({ kind: 'npc', npc: 'smith', actor: a, x: N.x, z: N.z, r: 2.4, prompt: 'talk', use: () => emit('talk', 'smith', a) }); }
@@ -2345,10 +2352,42 @@ function act8Zone(z) {
 function act8Enter(z) {
   setThaw(0, true);
   Audio.mood({ race: 0 });
+  // (the lanes stand again on every entry, as the chutes re-arm: forge.js, the Burn)
   startFlues(z.L.flues);
+  for (const l of z.lvl?.act8?.lanes || []) l?.setBurnt(false);
+  for (const it of z.act8?.hearths || []) hearth8Look(it, !!G.hero.flags['ember' + it.k]);
   const c = z.L.spots.camp; if (c) z.checkpoint = z.map.nearestFloor(c.x, c.z, 3);
   sunEnter(z);
 }
+// a hearth as it stands: banked (the cover stone on, no flame) or awake (the stone laid by, the fire burning)
+function hearth8Look(it, awake) {
+  const m = it.mesh, lid = m?.userData.lid;
+  it.awake = awake; it.prompt = awake ? 'call.prompt' : 'hearth8.wake';
+  if (!m) return;
+  m.userData.setRank?.(awake ? 3 : 0); m.userData.setLit?.(awake);
+  if (lid) { lid.position.set(awake ? 1.25 : 0, awake ? -0.6 : 0, awake ? 0.3 : 0); lid.rotation.z = awake ? 0.5 : 0; }
+}
+export const embers8 = (F = G.hero.flags) => [1, 2, 3].filter((k) => F['ember' + k]).length;
+on('hearth8', (it, z) => {
+  const pl = G.player; if (!pl || pl.dead || !z?.act8) return;
+  const F = G.hero.flags, first = !F['ember' + it.k];
+  if (first) {
+    F['ember' + it.k] = true; hearth8Look(it, true);
+    Audio.sfx('hearthCatch', { x: it.x, z: it.z });
+    const n = embers8(F);
+    emit('toast', t(n >= 3 ? 'hearth8.all' : 'hearth8.woke', n), n >= 3 ? 'big' : 'quest');
+    emit('ember8', it, z, n); writeSave();
+  }
+  // the Call, as at a lit lookout: the hero's Names for its twenty seconds, once a hearth a visit
+  const st = (pl.n7 ||= N7rt()).call, r = N7call(st, G.time, z.id + ':h' + it.k, G.hero);
+  if (!r.ok) { if (!first) { const k = N7WHY[r.why]; if (k) emit('toast', t(k, Math.ceil(r.wait || 0))); Audio.sfx('denied', { vol: 0.5 }); } return; }
+  pl.buffs.call = r.dur; if (r.flaskReady) pl.potionCd = 0;
+  Audio.sfx('callHorn', { x: it.x, z: it.z });
+  if (!first) emit('toast', t(r.none ? 'call.none' : 'call.on'), 'quest');
+  emit('called', it, z);
+});
+on('burnSpent', (f) => { G.zone?.lvl?.act8?.lanes?.[f.i]?.setBurnt(true); });
+on('flueInhale', (f) => { if (f.kind === 'burn' && !G.hero.flags.burnSeen) { G.hero.flags.burnSeen = true; emit('toast', t('q.burn'), 'quest'); } });
 function goatTrack(z) {
   const L = z.L; if (L.exits.some((e) => e.to === 'thaw')) return;
   if (!((G.hero.act6 ?? -1) >= 0 || G.hero.flags.call7)) return;

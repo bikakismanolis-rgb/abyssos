@@ -8,6 +8,8 @@
 // camp, and nothing that burns stands outside a field (docs/act8-design.md, The fire: the rules, 1).
 //   L.fields   [{ id, x0, z0, x1, z1 (inner cells, inclusive), side: -1 west | 1 east, row, gate: { x, z }, hearth }]
 //   L.walls    [{ x0, z0, x1, z1 }] runs of wall cells (one cell thick), for build8.js
+//   L.flues    the Burn's lanes, kind 'burn' (forge.js): strips of standing stubble 5 wide down each field, the wind's way
+//              (from the south wall north), 6 cells of reaped ground between two; each lies wholly inside its field
 //   L.spots    camp, waypoint, npcs.halda, hearths [{ k: 1-3, x, z, field }], arena { x, z, r }, chests, sheaves [{ x, z }]
 import { RNG, fbm } from '../core/util.js';
 import { base } from './gen.js';
@@ -118,6 +120,20 @@ export function genTinder(seed) {
     const p = { x: snap(f.side < 0 ? f.x0 + 2 : f.x1 - 2), z: snap(f.z1 - 2) };
     if (!res[I(p.x, p.z)] && !blk[I(p.x, p.z)]) { S.chests.push(p); reserve(p.x, p.z, 1.5); }
   }
+  // ---- the Burn's lanes: strips of standing stubble, south wall to north wall, never through a hearth's ring or a gate ----
+  for (const f of L.fields) {
+    const span = f.x1 - f.x0 + 1, n = Math.max(1, Math.floor((span - 4) / 11)), x0 = f.x0 + 2 + Math.floor((span - 4 - (n * 11 - 6)) / 2);
+    for (let k = 0; k < n; k++) {
+      const cx = x0 + k * 11 + 2.5, hz = S.hearths.find((q) => q.field === f.id);
+      if (hz && Math.abs(hz.x - cx) < 6.5) continue;
+      if (Math.abs(f.gate.x - cx) < 5) continue;
+      if ([f.pass, L.fields.find((q) => q.row === f.row - 1 && q.side === f.side)?.pass].some((g) => g && Math.abs(g.x + 0.5 - cx) < 4.5)) continue;
+      // (the sheaves in a lane move out of it: nothing blocks the fire's sight down its own lane)
+      for (const sh of S.sheaves) if (sh.field === f.id && Math.abs(sh.x - cx) < 3.2) { blk[I(sh.x, sh.z)] = 0; sh.x = snap(cx + (sh.x < cx ? -4.5 : 4.5)); if (!blk[I(sh.x, sh.z)] && sh.x > f.x0 && sh.x < f.x1) blk[I(sh.x, sh.z)] = 1; else sh.gone = true; }
+      L.flues.push({ id: f.id + '.' + (k + 1), kind: 'burn', field: f.id, x: cx, z: f.z1 + 0.5, dir: Math.PI, len: f.z1 - f.z0, w: 5, cover: [] });
+    }
+  }
+  S.sheaves = S.sheaves.filter((q) => !q.gone);
   finish7(L, K, bed, blk, own, (vx, vz) => 2.2 + 2.6 * fbm(vx * 0.05, vz * 0.05, seed + 41));
   // ---- the packs: one or two a field, never in the hearth's ring, and two on the road ----
   const openAt = (x, z) => !!L.cells[I(x, z)];
