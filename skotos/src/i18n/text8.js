@@ -18,5 +18,12 @@ export const TEXT8 = {
   'd.aithon.p3': ['Δεν του έμεινε καλαμιά. Μόνο τα κέρατα.', 'He has no stubble left. Only the horns.'],
   'd.aithon.rest': ['Ο ζυγός έπεσε. Ο Αίθων ξάπλωσε στο αλώνι και, για πρώτη φορά, δεν σηκώθηκε.', 'The yoke fell. Aithon lay down on the threshing floor and, for the first time, did not get up.'],
   'q.aithonFree': ['Ο Αίθων ξεζεύτηκε', 'Aithon is unyoked'],
+  'q.48': ['Καπνός στον νότιο κάμπο. Πάρε τον Παλιό Νότιο Δρόμο από τον Λευκόβραχο', 'Smoke on the southern plain. Take the Old South Road out of Whitecliff'],
+  'q.49': ['Ξύπνα τις τρεις σκεπασμένες φωτιές του Ξερόκαμπου ({0}/3)', 'Wake the three banked fires of the Tindergrass ({0}/3)'],
+  'q.50': ['Πήγαινε στο Αλώνι και ξέζεψε τον Αίθωνα', 'Go to the Threshing Floor and unyoke Aithon'],
+  'q.51': ['Ο δρόμος για τον Οίκο της Αγρύπνιας είναι ανοιχτός. (Η συνέχεια έρχεται.)', 'The road to the Vigil House lies open. (More is coming.)'],
+  'd.hook8': ['Ξύπνησες ξεκούραστος. Στον νότο, πάνω από τον κάμπο, στέκει ένας καπνός που χτες δεν ήταν εκεί.', 'You woke rested. In the south, over the plain, stands a smoke that was not there yesterday.'],
+  'd.tinder.1': ['Κάποιος έθαψε φωτιές σε αυτά τα χωράφια για να μη σβήσουν. Τρεις. Βρες τες.', 'Someone banked fires in these fields so they would not die. Three. Find them.'],
+  'd.embers.3': ['Οι τρεις φωτιές καίνε ξανά. Στο Αλώνι, κάτι μεγάλο σέρνει ακόμα τον ζυγό του.', 'The three fires burn again. On the Threshing Floor, something large still drags its yoke.'],
   'q.burn': ['Ο αέρας παίρνει την καλαμιά. Βγες από τη λωρίδα: το καμένο δεν ξανακαίγεται.', 'The wind takes the stubble. Step out of the strip: what has burnt does not burn twice.']
 };

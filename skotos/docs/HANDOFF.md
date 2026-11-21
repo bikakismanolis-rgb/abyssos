@@ -185,8 +185,10 @@ kill by PIDs from `ps`.
 The owner chose Act VIII on 21 November («Πάμε στο 2. Ό,τι προτείνεις εσύ κάνε») and will judge it in the playable game,
 not on paper («Θα τα τσεκάρουμε όλα μετά στο κανονικό παιχνίδι»). It is the Order of the Flame story that Act VII's
 rulings kept: `docs/act8-design.md` (read its section "The fire: the rules" before touching anything that burns), his
-five questions in `docs/act8-briefs/owner-questions-el.md` (every default is built). Stage A's first part is in: zone
-`tinder` walkable from Whitecliff (`docs/act8-briefs/reports/stageA-part1.md`, with the stand-ins and the next steps).
+five questions in `docs/act8-briefs/owner-questions-el.md` (every default is built). **The first half plays end to end**
+(quests 48-51: the hook, zone `tinder`, the Burn, the three hearths, the Order's people, Aithon): read
+`docs/act8-briefs/reports/stageA-part2.md` first (what is built, the tests, the known faults, what is next), then `stageA-part1.md`.
+The owner asked on 21 November why the work had stopped to wait for him: do not stop to ask; go on to the next step and report.
 **Nothing of Act VIII is on `main` or published.** `VER` and `SAVE_FMT` are unchanged. In this session sub-agents were
 not used (the owner had not asked for them): one session did the work in turn.
 

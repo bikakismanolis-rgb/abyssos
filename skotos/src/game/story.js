@@ -35,7 +35,9 @@ const STORY_TEARS = ['planting', 'sorrow', 'breaking'];
 const tearsSeen = () => STORY_TEARS.filter((id) => G.hero.flags['tear_' + id]).length;
 const wallsDown = () => [0, 1, 2].filter((i) => G.hero.flags['thorn' + i]).length;
 export function questText() {
-  const q = Math.min(G.hero.quest, 47), F = G.hero.flags;
+  const q = Math.min(G.hero.quest, 51), F = G.hero.flags;
+  // Act VIII: the three fires counted
+  if (q === 49) return t('q.49', [1, 2, 3].filter((i) => F['ember' + i]).length);
   // Act VII: the weirs and the winches counted; the way home once the lake is let down
   if (q === 41) return t('q.41', [1, 2, 3].filter((i) => F['weir' + i]).length);
   if (q === 44) return t('q.44', [1, 2, 3].filter((i) => F['winch' + i]).length);
@@ -3403,3 +3405,15 @@ function enter7(id, z) {
     else later(2, () => nextStone(z));
   }
 }
+
+// ---------- Act VIII (docs/act8-design.md): the spine's first half, quests 48-51 ----------
+// 48 the hook (a hero who has finished Act VII, on her next morning in Whitecliff: the smoke in the south), 49 the three
+// banked fires of the Tindergrass, 50 Aithon on the Threshing Floor, 51 the road to the Vigil House (zone 2). The scenes,
+// the ember memories and the people's lines are stage D's; these are the steps and their one line each.
+on('zoneEnter', (id) => {
+  const h = G.hero; if (!h || h.__real) return;
+  if (id === 'town' && h.quest === 47 && ((h.act7 ?? -1) >= 0 || h.flags.act7) && !h.flags.call8) later(2.5, () => { if (G.zone?.id !== 'town' || G.hero.flags.call8) return; G.hero.flags.call8 = true; emit('say', 'd.hook8'); setQuest(48); });
+  if (id === 'tinder' && h.quest === 48) later(1.5, () => { if (G.zone?.id === 'tinder') { emit('say', 'd.tinder.1'); setQuest(49); } });
+});
+on('ember8', (it, z, n) => { emit('quest'); if (n >= 3 && G.hero.quest === 49) { emit('say', 'd.embers.3'); setQuest(50); } });
+on('bossRest', (kind, a) => { if (kind === 'aithon' && !a?.echo && !G.hero.__real && G.hero.quest >= 48 && G.hero.quest < 51) setQuest(51); });

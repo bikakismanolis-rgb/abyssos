@@ -84,6 +84,23 @@ const T = {
     await pg.screenshot({ path: out + '/aithon-rest.png' });
     beat('at 0 life he stands down: aithonRest, spared, his body stays', r.rest && r.spared && r.body, r);
   },
+  async spine() {
+    // a hero at Act VII's end: the hook in Whitecliff, the road, the three fires, Aithon, quest 51
+    await pg.setViewportSize({ width: 960, height: 540 });
+    await open('auto=town&lvl=50&flags=act7&quest=47&q=0&nopacks');
+    await pg.waitForFunction(() => window.__G.hero.quest === 48, null, { timeout: 60000 }).catch(() => {});
+    beat('the hook: in Whitecliff after Act VII, quest 48 and call8', await ev(() => window.__G.hero.quest === 48 && !!window.__G.hero.flags.call8));
+    await ev(() => window.__G.zone.interact.find((i) => i.to === 'tinder').use());
+    await pg.waitForFunction(() => window.__G.zone.id === 'tinder' && window.__G.hero.quest === 49, null, { timeout: 90000 }).catch(() => {});
+    beat('on the plain: quest 49', await ev(() => window.__G.zone.id === 'tinder' && window.__G.hero.quest === 49));
+    const Story = await ev(async () => { const S = await import('/src/game/story.js'); const G = window.__G; const out = []; for (const k of [1, 2, 3]) { const it = G.zone.act8.hearths.find((h) => h.k === k); G.player.x = it.x + 1.5; G.player.z = it.z; it.use(); out.push({ q: G.hero.quest, text: S.questText() }); } return out; });
+    beat('each fire counted in the quest line; the third gives quest 50', Story[0].q === 49 && /1\/3/.test(Story[0].text) && /2\/3/.test(Story[1].text) && Story[2].q === 50, Story);
+    await ev(() => { const G = window.__G, A = G.zone.L.spots.arena; G.player.x = A.x; G.player.z = A.z + 3; });
+    await pg.waitForFunction(() => !!window.__G.zone.boss, null, { timeout: 60000 }).catch(() => {});
+    await ev(async () => { const C = await import('/src/game/combat.js'); const G = window.__G, b = G.zone.boss; C.damage(G.player, b, b.hp + 10, { pure: true }); });
+    await pg.waitForFunction(() => window.__G.hero.quest === 51, null, { timeout: 30000 }).catch(() => {});
+    beat('Aithon unyoked: quest 51, aithonRest', await ev(() => window.__G.hero.quest === 51 && !!window.__G.hero.flags.aithonRest));
+  },
   async road() {
     await open('auto=town&lvl=30&q=1');
     beat('no South Road before Act VII is done', !(await ev(() => window.__G.zone.interact.some((i) => i.to === 'tinder'))));
