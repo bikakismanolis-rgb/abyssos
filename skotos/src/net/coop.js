@@ -42,7 +42,7 @@ import { cells6, cells6Apply, slushAt } from '../game/tide.js';
 import { vaultAt, vaultLine, vaultRing, flues, fireFlue, loud } from '../game/forge.js';
 import { inLane } from '../world/gen7.js';
 // Act VII (docs/act7-contract.md, Co-op, protocol 6)
-import { act7Presence, thawK } from '../game/world.js';
+import { act7Presence, thawK, act8Presence, hall8 } from '../game/world.js';
 import { setThaw } from '../world/build.js';
 import { setSunT } from '../game/sun7.js';
 import { firesSync } from '../game/fires7.js';
@@ -603,7 +603,7 @@ function hostTick(dt) {
 }
 function worldOf() {
   const h = G.hero;
-  return { flags: h.flags, quest: h.quest, diff: h.diff, wps: h.wps, a: [h.act1, h.act2, h.act3, h.act4, h.act5, h.act6 ?? -1, h.act7 ?? -1], gb: h.gateBest | 0, gate: G.gate ? { tier: G.gate.tier } : null, clips: [...S.clips] };
+  return { flags: h.flags, quest: h.quest, diff: h.diff, wps: h.wps, a: [h.act1, h.act2, h.act3, h.act4, h.act5, h.act6 ?? -1, h.act7 ?? -1, h.act8 ?? -1], gb: h.gateBest | 0, gate: G.gate ? { tier: G.gate.tier } : null, clips: [...S.clips] };
 }
 function worldKey() { const h = G.hero, f = JSON.stringify(h.flags); return f.length + ':' + h.quest + ':' + h.diff + ':' + hashStr(f); }
 function hashStr(s) { let x = 0; for (let i = 0; i < s.length; i++) x = (x * 31 + s.charCodeAt(i)) | 0; return x; }
@@ -661,6 +661,13 @@ function sendSnap() {
   if (z.act7) {
     if (o.w) { while (o.w.length < 7) o.w.push(null); o.w[7] = z.sunT != null ? q(z.sunT, 10) : -1; }
     const fl = flues(); if (fl) { let ar = 0, fa = 0; fl.forEach((f, i) => { if (f.kind !== 'snow' || i > 30) return; if (f.armed) ar |= 1 << i; if (f.st !== 'idle') fa |= 1 << i; }); o.c7 = [ar, fa, bits7(G.zone.L.spots?.boulders)]; }
+  }
+  // (Act VIII, protocol 7: the Burn's lanes armed and burning, two bit masks; the Great Hall's shutters down and whether
+  // the Flame is bare)
+  if (z.act8) {
+    const fl = flues(); let ar = 0, fa = 0;
+    if (fl) fl.forEach((f, i) => { if (f.kind !== 'burn' || i > 30) return; if (f.armed) ar |= 1 << i; if (f.st !== 'idle') fa |= 1 << i; });
+    o.c8 = [ar, fa, z.act8.shut | 0, z.act8.flame && !z.act8.flame.used && !z.act8.flame.morning ? 1 : 0];
   }
   // the fires on the ice, lit by a touch or put out by the dark: the cairns, the open holes' lamps (bits)
   if (z.act5 && z.id === 'farlight') o.l = [bits(z.act5.cairns, (it) => it.i), bits(z.act5.lamps, (it) => it.hole * 4 + it.i)];
@@ -875,7 +882,9 @@ function guestEvent(P, e) {
     if (Math.hypot(me.x - it.x, me.z - it.z) > Math.max(3, (it.r || 2) + 0.6)) return reject('far');
     if ((it.lit ? 1 : 0) !== seen) return reject('state');
     P.useT = now();
-    if (!useDone(it)) { if (!USE7.has(kind) || typeof it.use !== 'function') return reject('use'); it.use(); }
+    // (Act VIII: a guest's finished touch on a hall's fire or on the Flame is the deed itself here, not the host hero's touch)
+    if (kind === 'bank8' || kind === 'flame8') { if (it.used) return reject('use'); if (it.morning) it.use(); else emit(kind, it, G.zone); }
+    else if (!useDone(it)) { if (!USE7.has(kind) || typeof it.use !== 'function') return reject('use'); it.use(); }
     S.stats.uses = (S.stats.uses || 0) + 1;
   } else if (type === 'rv') {
     // a revive: the reviver (this guest) has stood by another hero, down a moment, as long as a raise takes (the host's
@@ -969,7 +978,7 @@ function guestTick(dt) {
   guestPresence();
 }
 // the host's world on this page: G.hero becomes a view of the guest's own record with the host's story laid over it
-const WORLD = new Set(['flags', 'quest', 'diff', 'wps', 'act1', 'act2', 'act3', 'act4', 'act5', 'act6', 'act7', 'gateBest', 'seeds']);
+const WORLD = new Set(['flags', 'quest', 'diff', 'wps', 'act1', 'act2', 'act3', 'act4', 'act5', 'act6', 'act7', 'act8', 'gateBest', 'seeds']);
 // (the flags that are the hero's own, not the story's: a later skill seen in the panel, the hint given once; read and
 // written in the guest's own record)
 const OWN_FLAG = /^(seen_|tickHint$)/;
@@ -998,7 +1007,7 @@ function onWorld(w) {
   // (the blessings' multipliers stay the guest's own: Unbound, Remembered)
   const flags = Object.assign({}, w.flags, { unbound: own.unbound, remembered: own.remembered, lostAll: own.lostAll });
   const act = (v) => num(v, -1, DIFFS.length - 1, -1) | 0;
-  const W = { flags, quest: num(w.quest, 0, 99), diff: clamp(w.diff | 0, 0, DIFFS.length - 1), wps: Array.isArray(w.wps) ? w.wps.filter((z) => typeof z === 'string' && z.length < 24).slice(0, 40) : ['town'], act1: act(a[0]), act2: act(a[1]), act3: act(a[2]), act4: act(a[3]), act5: act(a[4]), act6: act(a[5]), act7: act(a[6]), gateBest: num(w.gb, 0, 999) | 0, seeds: {} };
+  const W = { flags, quest: num(w.quest, 0, 99), diff: clamp(w.diff | 0, 0, DIFFS.length - 1), wps: Array.isArray(w.wps) ? w.wps.filter((z) => typeof z === 'string' && z.length < 24).slice(0, 40) : ['town'], act1: act(a[0]), act2: act(a[1]), act3: act(a[2]), act4: act(a[3]), act5: act(a[4]), act6: act(a[5]), act7: act(a[6]), act8: act(a[7]), gateBest: num(w.gb, 0, 999) | 0, seeds: {} };
   const key = JSON.stringify(W);
   if (key === S.wkey) return;
   const first = !S.world;
@@ -1019,7 +1028,7 @@ function presenceAgain(z) {
     const sk = z.id === 'coast' && G.hero.flags.towerDown && z.L.spots.skerry;
     if (sk && sk.cells.some(([x, zz]) => z.map.walkable(x + 0.5, zz + 0.5))) skerryClose(z, sk);
     const act = ZONES[z.id]?.act;
-    if (act === 7) { act7Presence(z); firesSync(z); if (z.id === 'thaw') setThaw(thawK()); } else if (act === 6) act6Presence(z); else if (act === 5) act5Presence(z); else if (act === 4) act4Presence(z); else if (act === 3) act3Presence(z); else if (z.id === 'town') townFires(z);
+    if (act === 8) act8Presence(z); else if (act === 7) { act7Presence(z); firesSync(z); if (z.id === 'thaw') setThaw(thawK()); } else if (act === 6) act6Presence(z); else if (act === 5) act5Presence(z); else if (act === 4) act4Presence(z); else if (act === 3) act3Presence(z); else if (z.id === 'town') townFires(z);
   } catch (e) { console.error(e); }
 }
 async function guestEnter(Z) {
@@ -1118,6 +1127,7 @@ function onSnap(o) {
   if (Array.isArray(o.l)) lit5(o.l);
   if (Array.isArray(o.l6)) lit6(o.l6);
   if (Array.isArray(o.c7) && G.zone?.act7) chutes7(o.c7);
+  if (Array.isArray(o.c8) && G.zone?.act8) lanes8(o.c8);
   if (Array.isArray(o.n) && G.zone?.act6) namesFromHost(num(o.n[0], 0, 600) / 10, o.n[1] | 0);
   // the monsters
   if (Array.isArray(o.a)) for (const e of o.a) if (Array.isArray(e)) puppetEntry(e);
@@ -1555,9 +1565,9 @@ function reviveTick(dt) {
 // a guest's interactables: its own chests, shrines and stash; the shops; nothing that moves the host's story
 const GUEST_OK = new Set(['chest', 'shrine', 'stash', 'callFire']);
 // (the fights' lamps and bells, and Act V's cairns and hole lamps: the guest's own touch, done on the host's world, 'u')
-const USE_U = new Set(['hearthStone', 'wreckLantern', 'shipBell', 'cairn', 'holeLamp', 'weir7', 'winch7', 'lever7', 'lookHearth']);
+const USE_U = new Set(['hearthStone', 'wreckLantern', 'shipBell', 'cairn', 'holeLamp', 'weir7', 'winch7', 'lever7', 'lookHearth', 'hearth8', 'bank8', 'flame8']);
 // (Act VII's: the guest's touch done here by the thing's own use, which raises the story's event on the host)
-const USE7 = new Set(['weir7', 'winch7', 'lever7', 'lookHearth']);
+const USE7 = new Set(['weir7', 'winch7', 'lever7', 'lookHearth', 'hearth8']);
 NET.h.canUse = (it) => {
   if (NET.mode !== 'guest') return true;
   if (GUEST_OK.has(it.kind) || USE_U.has(it.kind)) return true;
@@ -1765,6 +1775,19 @@ function chutes7(c7) {
   // (the Den's boulders Kallisto's echo has broken on the host: broken here too)
   const bb = c7[2] | 0, den = (G.zone?.L?.spots?.boulders || []).filter((b) => b.den);
   den.forEach((b, i) => { if ((bb & (1 << i)) && !b.broken) breakBoulder7(b); });
+}
+// Act VIII (protocol 7): the host's lanes on this page. One the host has set burning burns here too (its warning, its
+// front, this page's own hero's hit; what it does to the Order is the host's alone); one spent on the host is black here
+function lanes8(c8) {
+  const fl = flues(), ar = c8[0] | 0, fa = c8[1] | 0, was = S.c8f | 0;
+  if (fl) fl.forEach((f, i) => {
+    if (f.kind !== 'burn' || i > 30) return;
+    const bit = 1 << i;
+    if ((fa & bit) && !(was & bit) && f.st === 'idle' && f.armed) { fireFlue(i, null); return; }
+    if (f.st === 'idle' && !(ar & bit) && f.armed) { f.armed = false; f.spent = true; emit('burnSpent', f); }
+  });
+  S.c8f = fa;
+  hall8(G.zone, clamp(c8[2] | 0, 0, 8), !!c8[3]);
 }
 // the Den's boulders broken, one bit each in their order
 const bits7 = (list) => (list || []).filter((b) => b.den).reduce((m, b, i) => (b.broken ? m | (1 << i) : m), 0);

@@ -1662,6 +1662,54 @@ const SC = {
   // Act VII, protocol 6 (docs/act7-contract.md, Co-op): the Race's level, a guest's weir and lookout touched through the
   // host, the clouds' clock, the host's chutes falling on the guest, a guest's loud skill asking for a kick, the hold's
   // rank on the guest's own record, the guest's Names in its look
+  async act8() {
+    // Act VIII with a friend: the Burn on the guest's page, a guest's hand on a banked fire, a hall's fire and its door,
+    // the Great Hall's shutters and the Flame bare
+    {
+      const { host, guests: [g] } = await party('tinder', 1, { lvl: 50, glvl: 50, hq: '&flags=act7&quest=49&nopacks&nostory' });
+      await ev(host, () => { window.__immortal = true; }); await ev(g, () => { window.__immortal = true; });
+      await sleep(2500);
+      const fi = await ev(host, async () => { const F = await import('/src/game/forge.js'), fl = F.flues(); const i = fl.findIndex((f) => f.kind === 'burn' && !f.boss && f.armed && f.st === 'idle'); if (i < 0) return -1; F.fireFlue(i, null); return i; });
+      const gf = fi >= 0 && await until(g, async (i) => { const fl = (await import('/src/game/forge.js')).flues(); return fl && fl[i] && fl[i].st !== 'idle'; }, fi, 12000, 'lane on guest');
+      ok(gf, 'a lane the host\'s gust takes burns on the guest\'s page too (o.c8)', { fi });
+      const spent = fi >= 0 && await until(g, async (i) => { const fl = (await import('/src/game/forge.js')).flues(); return fl[i].st === 'idle' && !fl[i].armed && !!window.__G.zone.lvl.act8.lanes[i]?.burnt; }, fi, 25000, 'black on guest');
+      ok(spent, 'and is spent and black there as on the host');
+      // a guest's hand on a banked fire wakes it on the host; the flag comes back
+      const h1 = await ev(host, () => { const it = window.__G.zone.act8.hearths[0]; return { x: it.x, z: it.z, k: it.k }; });
+      const put = async (pg, x, z) => { for (let k = 0; k < 4; k++) { const f = await place(pg, x, z); await sleep(1200); const p = await ev(pg, () => ({ x: window.__G.player.x, z: window.__G.player.z })); if (Math.hypot(p.x - f.x, p.z - f.z) < 1.5) return true; } return false; };
+      await put(g, h1.x + 1.5, h1.z);
+      await until(host, async (w) => { const N = await import('/src/net/state.js'), a = N.NET.remotes[0]; return a && Math.hypot(a.x - w.x, a.z - w.z) < 3; }, h1, 25000, 'stand-in by hearth');
+      await ev(g, (k) => window.__G.zone.act8.hearths.find((h) => h.k === k).use(), h1.k);
+      const woke = await until(host, (k) => !!window.__G.hero.flags['ember' + k], h1.k, 15000, 'ember on host');
+      const seen = woke && await until(g, (k) => !!window.__G.hero.flags['ember' + k] && window.__G.zone.act8.hearths.find((h) => h.k === k).awake, h1.k, 20000, 'ember on guest');
+      ok(woke && seen, 'the guest\'s hand on a banked fire wakes it on the host, and the guest sees it burn', { why: await ev(host, () => window.__NET.S.stats.why) });
+      for (const pg of pages.splice(0)) await pg.close().catch(() => {});
+    }
+    {
+      const { host, guests: [g] } = await party('vigil', 1, { lvl: 52, glvl: 52, hq: '&flags=act7,aithonRest,ember1,ember2,ember3&quest=52&nopacks&nostory' });
+      await ev(host, () => { window.__immortal = true; }); await ev(g, () => { window.__immortal = true; });
+      await sleep(2500);
+      const g0 = await ev(g, () => { const z = window.__G.zone, P = z.lvl.act8; return { doors: P.doors.map((d) => d.open), darks: P.darks.map((d) => d.k) }; });
+      ok(g0.doors.every((d) => !d) && g0.darks.every((k) => k === 1), 'on the guest the House stands as on the host: doors shut, halls dark', g0);
+      // the host banks hall 1's fire: the guest's door opens, its hall is lit
+      await ev(host, () => { const z = window.__G.zone, it = z.act8.fires[0]; window.__G.player.x = it.x + 1.6; window.__G.player.z = it.z; });
+      await ev(host, async () => { const B = await import('/src/ui/bus.js'); const z = window.__G.zone; B.emit('bank8', z.act8.fires[0], z); });
+      const d1 = await until(g, () => { const z = window.__G.zone, P = z.lvl.act8, d = z.L.spots.doors[0]; return P.doors[0].open && P.darks[0].k === 0 && d.cells.every(([x, zz]) => z.map.walkable(x + 0.5, zz + 0.5)); }, null, 20000, 'door on guest');
+      ok(d1, 'the host banks a hall\'s fire: on the guest its door opens (the map too) and the hall is in daylight');
+      // the guest banks hall 2's by its own touch
+      const f2 = await ev(host, () => { const it = window.__G.zone.act8.fires[1]; return { x: it.x, z: it.z }; });
+      const put = async (pg, x, z) => { for (let k = 0; k < 4; k++) { const f = await place(pg, x, z); await sleep(1200); const p = await ev(pg, () => ({ x: window.__G.player.x, z: window.__G.player.z })); if (Math.hypot(p.x - f.x, p.z - f.z) < 1.5) return true; } return false; };
+      await put(g, f2.x + 1.6, f2.z);
+      await until(host, async (w) => { const N = await import('/src/net/state.js'), a = N.NET.remotes[0]; return a && Math.hypot(a.x - w.x, a.z - w.z) < 3; }, f2, 25000, 'stand-in by fire 2');
+      await ev(g, () => window.__G.zone.act8.fires[1].use());
+      const b2 = await until(host, () => !!window.__G.hero.flags.bank2, null, 25000, 'bank2 on host');
+      ok(b2, 'the guest\'s own touch on a hall\'s fire banks it on the host', { why: await ev(host, () => window.__NET.S.stats.why) });
+      // the Great Hall's shutters and the bare Flame reach the guest
+      await ev(host, async () => { const B = await import('/src/ui/bus.js'); B.emit('ragnaShutter', 5); const it = window.__G.zone.act8.flame; it.used = false; });
+      const sh = await until(g, () => { const z = window.__G.zone; return z.act8.shut === 5 && z.lvl.act8.shutters.filter((s) => s.open).length === 5 && !z.act8.flame.used; }, null, 15000, 'shutters on guest');
+      ok(sh, 'five shutters down on the host are five on the guest, and the Flame is bare there too', await ev(g, () => ({ shut: window.__G.zone.act8.shut, bare: !window.__G.zone.act8.flame.used })));
+    }
+  },
   async act7() {
     const { fx7 } = await import('./fixtures7.mjs');
     const hq = '&' + fx7('thawSeen', 'thaw').replace(/^auto=[^&]*&/, '').replace(/&lvl=\d+/, '');

@@ -2384,7 +2384,9 @@ export const embers8 = (F = G.hero.flags) => [1, 2, 3].filter((k) => F['ember' +
 on('hearth8', (it, z) => {
   const pl = G.player; if (!pl || pl.dead || !z?.act8) return;
   const F = G.hero.flags, first = !F['ember' + it.k];
-  if (first) {
+  // (co-op: the story is the host's. A guest's hand on a banked fire asks the host to wake it; the guest's own Call below)
+  if (first && NET.mode === 'guest') NET.h.useOp?.(it);
+  else if (first) {
     F['ember' + it.k] = true; hearth8Look(it, true);
     Audio.sfx('hearthCatch', { x: it.x, z: it.z });
     const n = embers8(F);
@@ -2416,6 +2418,20 @@ on('ember8', () => Audio.mood({ hearth: 1 }));
 // of 1.5 s, broken by a blow) its shutters fall, the hall stands in daylight and its south door opens. Flags bank1..3.
 // The Great Hall is Ragna's: eight shutters fall as her life does (ai.js RAGNA, bus 'ragnaShutter'), and at the end the
 // Flame at its centre is banked by hand (bus 'flame8'), and she sleeps ----------
+// (co-op: the act as the host's flags have it, laid on this page's zone again: net/coop.js presenceAgain)
+export function act8Presence(z) {
+  if (!z?.act8) return;
+  if (z.id === 'tinder') { for (const it of z.act8.hearths || []) hearth8Look(it, !!G.hero.flags['ember' + it.k]); return; }
+  const F = G.hero.flags;
+  for (const it of z.act8.fires || []) if (!!F['bank' + it.k] !== !!it.banked) vigilFire(z, it, !!F['bank' + it.k]);
+  if (F.ragnaRest && z.act8.shut !== 8) { emit('ragnaShutter', 8); const it = z.act8.flame, m = it?.mesh; if (it && !it.morning) it.used = true; if (m && !F.flameWoken) { m.userData.setRank?.(0); m.userData.setLit?.(false); } }
+}
+// (co-op: what a guest's page is told of the Great Hall, net/coop.js: the shutters down, the Flame bare)
+export function hall8(z, shut, bare) {
+  if (!z?.act8 || z.id !== 'vigil') return;
+  if (shut !== z.act8.shut) emit('ragnaShutter', shut);
+  const it = z.act8.flame; if (it && !it.morning && !G.hero.flags.ragnaRest) it.used = !bare;
+}
 export const banks8 = (F = G.hero.flags) => [1, 2, 3].filter((k) => F['bank' + k]).length;
 // the road south from the Threshing Floor, there once Aithon rests (an interact on cells already walkable)
 function vigilRoad(z) {
