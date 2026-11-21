@@ -77,7 +77,7 @@ export const ZONES = {
   tarn: { level: 43, music: 'tarn', ambient: 'snow', atmos: 'tarn', act: 7, pack: 'melt', heavy: true, light: 'sun' },
   // Act VIII: the Tindergrass, down the old South Road from Whitecliff (docs/act8-design.md). Daylight, on Act VII's kit.
   // (music and ambient: the Meltwaters' after-act theme and pollen until its own are written, stage D)
-  tinder: { level: 46, music: 'thawGreen', ambient: 'melt', atmos: 'tinder', act: 8, pack: 'plain', light: 'sun' },
+  tinder: { level: 46, music: 'tinder', ambient: 'melt', atmos: 'tinder', act: 8, pack: 'plain', light: 'sun' },
   // (the Vigil House: the Order's school, cut into the hill south of the Threshing Floor; dark under each roof until that
   // hall's fire is banked, act8Tick)
   vigil: { level: 49, music: 'vigil', ambient: 'melt', atmos: 'vigil', act: 8, pack: 'plain', light: 'sun' },
@@ -2402,8 +2402,16 @@ on('hearth8', (it, z) => {
 // Aithon stands down: the yoke is off (ai.js has saved aithonRest). The road south opens with zone 2 (stage A, part 2)
 on('bossRest', (kind, a) => {
   if (kind !== 'aithon' || G.zone?.id !== 'tinder' || G.hero.__real || a?.echo) return;
-  emit('toast', t('q.aithonFree'), 'big'); emit('say', 'd.aithon.rest'); Audio.music(ZONES.tinder.music);
+  emit('toast', t('q.aithonFree'), 'big'); emit('say', 'd.aithon.rest'); Audio.mood({ rest: 1 });
+  later(9, () => { Audio.mood({ rest: 0 }); if (G.zone?.id === 'tinder') Audio.music(ZONES.tinder.music); });
 });
+on('bossRest', (kind, a) => {
+  if (kind !== 'ragna' || G.zone?.id !== 'vigil' || a?.echo) return;
+  Audio.mood({ rest: 1 }); sunAtmosOff8();
+  later(10, () => { Audio.mood({ rest: 0 }); if (G.zone?.id === 'vigil') Audio.music(ZONES.vigil.music); });
+});
+const sunAtmosOff8 = () => {};
+on('ember8', () => Audio.mood({ hearth: 1 }));
 // ---------- the Vigil House (zone 2): Bank and Wake the other way round. Each hall's fire burns; banked by hand (a touch
 // of 1.5 s, broken by a blow) its shutters fall, the hall stands in daylight and its south door opens. Flags bank1..3.
 // The Great Hall is Ragna's: eight shutters fall as her life does (ai.js RAGNA, bus 'ragnaShutter'), and at the end the

@@ -33,6 +33,7 @@ export async function startCreatureView(q) {
   // &skin: the Skotos's skin (sea.js skotosSkin, as the game patches keepMat creatures), &rough= its roughness, &aur= the aurora
   const S = q.has('skin') ? await import('../world/sea.js') : null;
   if (S) { S.SEA.uAur.value = +(q.get('aur') ?? 0.7); S.SEA.uAurDark.value = 0; }
+  const A8 = list.includes('aithon') ? await import('../game/actors.js') : null;   // (Aithon as the game dresses him)
   items.forEach(([m, clip, ft], i) => {
     const a = m === 'ref' ? new Avatar(personModel('warden'), { style: 'sword' }) : m.startsWith('p:') ? new Avatar(personModel(m.slice(2)), { animSet: 'npc' }) : new Avatar(creatureModel(m), { style: 'none' });
     if (m !== 'ref' && q.get('weapon') !== 'none' && (q.get('weapon') || W[m])) a.hold('R', q.get('weapon') || W[m], {});
@@ -51,6 +52,7 @@ export async function startCreatureView(q) {
     if (m !== 'ref' && q.get('z')) a.group.position.z = +q.get('z'); // how far off (the Skotos stands out in the sea)
     // (the Skotos's hood void, 'skotos_void', keeps its own black fully rough material, unpatched)
     if (S && m !== 'ref') for (const mt of a.model.mats || []) if (!/_void$/.test(mt.name)) { S.skotosSkin(mt); mt.roughness = +(q.get('rough') || 0.26); mt.envMapIntensity = 1; }
+    if (m === 'aithon') A8?.dressAithon(a);
     R.scene.add(a.group); avs.push(a);
     let d = 1, at = ft ?? +(q.get('t') || 0);
     if (clip) { d = a.play(clip, 1) || 1; if (!q.get('t') && ft == null) at = a.anim.hitAt?.(clip) ?? 0.5; }

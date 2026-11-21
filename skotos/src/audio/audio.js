@@ -3439,6 +3439,88 @@ const THEMES = {
   tarn: tarnDef(false),
   tarnGreen: tarnDef(true),
 
+  // ---------- Act VIII ----------
+  // the Tindergrass: 4/4 at 84 bpm, D Dorian. Reaped fields in early autumn: a plucked string in slow chords, a frame
+  // drum at a walking pace, a flute's phrase every eight bars. In a fight the drum fills in and a low string enters. A
+  // banked fire woken (MOOD.hearth): the hearth motif, rising.
+  tinder: {
+    bpm: 84, beats: 4, sub: 2, bpc: 2, gain: 1.2, order: [0], scale: [2, 4, 5, 7, 9, 11, 0],
+    progs: [['Dm', 'G', 'Dm', 'C'], ['Dm', 'Am', 'G', 'Dm'], ['F', 'G', 'Dm', 'Dm'], ['Dm', 'C', 'G', 'Dm']],
+    bar(S) {
+      const { th, t, bd, ch, sd } = S, st = th.st;
+      if (S.nc) { st.pv = voicing(ch, 53, 70, st.pv, 4); st.pv.forEach((m, k) => INS.pluck(nv(th), t + k * 0.05, m, { vel: 0.13, dec: 2.8, bright: 4, saw: 0.3, wet: 0.4 })); }
+      INS.pluck(nv(th), t, bassNote(ch, 38) + (S.nc ? 0 : 7), { vel: 0.2, dec: 2.0, bright: 3, saw: 0.35 });
+      if (S.bar % 8 === 2 && th.prog) phrase(th, t, genMelody([0, 1, 2, 3].map((k) => chordOf(th.prog[k])), 2, S.d.scale, 69, 86, 77, 0.18), bd / 2, { vel: 0.1, wet: 0.55 });
+      if (MOOD.hearth) { MOOD.hearth = 0; hearthMotif(th, t, sd * 2, { major: true, vel: 0.16, bright: 900 }); }
+    },
+    step(S) {
+      const { th, i, lvl, t } = S;
+      if (i === 0) handDrum(nv(th), t, 0.26); else if (i === 4) handDrum(nv(th), t, 0.16); else if (i === 3 || i === 6) handDrum(nv(th), t, 0.09, true);
+      if (lvl > 0.3) { if (i === 2 || i === 5 || i === 7) handDrum(nv(th), t, 0.2 * lvl, i !== 2); if (i % 2 === 0) INS.ost(nv(th), t, bassNote(S.ch, 38), S.sd * 1.7, 0.1 * lvl, { br: 6 }); }
+    },
+  },
+  // the Vigil House: 54 bpm, no beat, A Phrygian. A school that does not sleep: one bell on the hour of each chord, a low
+  // drone under it, single high notes like a lamp guttering. In a fight a slow low string and a far drum.
+  vigil: {
+    bpm: 54, beats: 4, sub: 2, bpc: 2, gain: 2.6, order: [0], scale: [9, 10, 0, 2, 4, 5, 7],
+    progs: [['Am', 'Bb', 'Am', 'Dm'], ['Am', 'Gm', 'Bb', 'Am'], ['Dm', 'Bb', 'Am', 'Am']],
+    bar(S) {
+      const { th, t, ch, bd } = S, r = bassNote(ch, 45);
+      if (S.nc) { INS.bell(nv(th), t, r + 12, { vel: 0.1, dec: 7, wet: 0.8 }); INS.brass(nv(th), t, [r - 12, r - 5], bd * 1.9, { vel: 0.12, att: 0.6, rel: 1.2, bright: 500, wet: 0.5 }); }
+    },
+    step(S) {
+      const { th, t, lvl } = S;
+      if (chance(0.16)) glass(nv(th), t, pick(chance(0.7) ? tones(S.ch, 72, 90) : scaleTones(S.d.scale, 72, 90)), rand(0.04, 0.065));
+      if (lvl > 0.3 && S.i % 4 === 0) INS.ost(nv(th), t, bassNote(S.ch, 45), S.sd * 3, 0.09 * lvl, { br: 5 });
+      if (lvl > 0.5 && S.i === 0) INS.taiko(nv(th), t, 0.3 * lvl, { f: 62, dec: 1.2 });
+    },
+  },
+  // Aithon: 4/4 at 120 bpm, D Dorian. A beast at work, not a villain: a heavy drum on the yoke's step, low horns in
+  // fifths, the frame drum driving from the second phase. When he lies down (MOOD.rest) the drums stop on the beat and
+  // the rest motif plays alone.
+  aithon: {
+    bpm: 120, beats: 4, sub: 4, gain: 1.25, int: 'always', order: [0], scale: [2, 4, 5, 7, 9, 11, 0],
+    progs: [['Dm', 'C', 'Dm', 'G'], ['Dm', 'F', 'G', 'Dm'], ['Dm', 'C', 'G', 'Dm']],
+    bar(S) {
+      const { th, t, bd, ch } = S, st = th.st, r = bassNote(ch, 38);
+      if (MOOD.rest) return;
+      INS.brass(nv(th), t, [r, r + 7], bd * 0.9, { vel: 0.28, att: 0.1, rel: 0.6, bright: 1000, wet: 0.4 });
+      st.pv = voicing(ch, 50, 65, st.pv, 3);
+      if (S.bar % 2 === 0) st.pv.forEach((m, k) => INS.pluck(nv(th), t + k * 0.02, m, { vel: 0.13, dec: 1.4, bright: 5, saw: 0.4, wet: 0.3 }));
+    },
+    step(S) {
+      const { th, i, t } = S, st = th.st, ph = MOOD.phase;
+      if (MOOD.rest) { if (!st.sat && i % 4 === 0) { st.sat = true; INS.taiko(nv(th), t, 0.5, { f: 58, dec: 1.4 }); restMotif(() => nv(th), t + S.sd * 4, S.sd * 5, { vel: 0.2 }); } return; }
+      st.sat = false;
+      if (i === 0 || i === 8) INS.taiko(nv(th), t, 0.5, { f: 60, dec: 0.9 });
+      if (i === 6 || i === 14) INS.taiko(nv(th), t, 0.28, { f: 72, dec: 0.6 });
+      if (ph >= 1) { if (KD_LO[i]) handDrum(nv(th), t + rand(0, 0.005), KD_LO[i] * 0.4); if (KD_HI[i]) handDrum(nv(th), t + rand(0, 0.005), KD_HI[i] * 0.26, true); }
+      if (ph >= 2 && i % 2 === 0) INS.ost(nv(th), t, bassNote(S.ch, 38), S.sd * 1.6, 0.11, { br: 6 });
+    },
+  },
+  // Ragna: 3/4 at 126 bpm, A Phrygian. A lesson that will not end: a bell on every bar line, a low string figure that
+  // never rests, a drum from her second phase, brass in her third. When she sleeps (MOOD.rest) one last bell and the
+  // rest motif, alone.
+  ragna: {
+    bpm: 126, beats: 3, sub: 2, gain: 1.15, int: 'always', order: [0], scale: [9, 10, 0, 2, 4, 5, 7],
+    progs: [['Am', 'Bb', 'Am', 'Dm'], ['Am', 'Gm', 'Bb', 'Am'], ['Dm', 'Bb', 'Gm', 'Am']],
+    bar(S) {
+      const { th, t, bd, ch } = S, r = bassNote(ch, 45), ph = MOOD.phase;
+      if (MOOD.rest) return;
+      INS.bell(nv(th), t, r + 24, { vel: 0.11, dec: 2.4, wet: 0.6 });
+      if (ph >= 2) INS.brass(nv(th), t, [r, r + 7], bd * 0.95, { vel: 0.24, att: 0.1, rel: 0.5, bright: 1100, wet: 0.4 });
+      if (S.bar % 4 === 2 && th.prog) phrase(th, t, genMelody([ch, ch], 3, S.d.scale, 69, 84, 76, 0.12), bd / 3, { vel: 0.085, wet: 0.5 });
+    },
+    step(S) {
+      const { th, i, t } = S, st = th.st, ph = MOOD.phase;
+      if (MOOD.rest) { if (!st.sat) { st.sat = true; INS.bell(nv(th), t, 69, { vel: 0.14, dec: 6, wet: 0.8 }); restMotif(() => nv(th), t + S.sd * 3, S.sd * 4, { vel: 0.2 }); } return; }
+      st.sat = false;
+      const tn3 = tones(S.ch, 45, 64);
+      INS.ost(nv(th), t, tn3[[0, 1, 2, 1, 0, 2][i] % tn3.length], S.sd * 0.9, 0.1, { br: 6 });
+      if (ph >= 1) { if (i === 0) INS.taiko(nv(th), t, 0.42, { f: 62, dec: 0.9 }); else if (i === 2 || i === 4) handDrum(nv(th), t, 0.2, i === 4); }
+    },
+  },
+
   // Kallisto: 4/4 at 132 bpm, E Dorian. Hand drums and one low horn; no melody but the horn's two notes (E, B). She is no
   // villain: urgent, never evil. The drums drop out while she is dazed (MOOD.daze), so the opening the player made is
   // heard. Phase 2 adds the water figure, fast. On her sitting down (MOOD.rest): the drums stop on the beat and the rest

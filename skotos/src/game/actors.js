@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { R, addLight, removeLight } from '../gfx/gfx.js';
-import { makeCharMat, staticGeo } from '../gfx/rig.js';
+import { makeCharMat, staticGeo, G as GEO } from '../gfx/rig.js';
 import * as M from '../gfx/models.js';
 import { Avatar } from '../gfx/anim.js';
 import { hasPerson, personModel } from '../gfx/people.js';
@@ -249,6 +249,7 @@ function actSpawn(id, def, a, av, o) {
   act4Spawn(id, def, a, av, o);
   act5Spawn(id, def, a, av, o, pk);
   act7Spawn(id, def, a, av, o, pk, dorm);
+  if (id === 'aithon') dressAithon(av);
   // Act VI: the Shade's forms wear the Skotos's skin over their near-black regrade (each body's own materials)
   if (def.keepSkin) for (const m of av.model.mats || []) if (!/void/i.test(m.name || '')) skotosSkin(m);
 }
@@ -376,6 +377,44 @@ function battleLine(a, packId) {
   const px = Math.cos(lead.rot), pz = -Math.sin(lead.rot), x = lead.x + px * k * side, z = lead.z + pz * k * side;
   a.rot = lead.rot;
   if (G.zone?.map?.walkable(x, z)) { a.x = x; a.z = z; a.home = { x, z }; if (a.mesh) a.mesh.position.set(x, 0, z); }
+}
+// ---------- Act VIII: Aithon, a dark bull under a yoke, on the hart's body (docs/act8-design.md, the look gate) ----------
+// The hart's antlers are hidden and its ghost-glow put out; the hide goes near black (the tint, on a body drained of its
+// white first); two short thick horns sweep out and up from the poll, pale with dark tips; a wooden yoke lies across the
+// withers with its two bows down the neck and an iron ring under it. The horns and the yoke keep their own colours (a
+// material of their own: the body's tint would blacken them)
+let aithonMat = null;
+export function dressAithon(av) {
+  if (!av?.model || av.model.kind !== 'creature' || av.standIn || av.aithon) return;
+  av.aithon = true;
+  av.model.mesh.traverse((o) => { if (o.isMesh && /chifre/i.test(o.material?.name || '')) o.visible = false; });
+  for (const m of av.model.mats || []) { if (m.emissive) m.emissive.setRGB(0, 0, 0); if (/eye|^material$/i.test(m.name || '')) { m.color?.setRGB(0.05, 0.03, 0.02); } }
+  av.setTint(0x241a14, 1.95); av.setRim(0xffc890, 0.2);
+  // (a bull is broad where a hart is narrow: the body a third wider, its legs' length kept)
+  av.model.mesh.scale.x *= 1.32;
+  const mat = (aithonMat ||= makeCharMat({ rim: 0xffffff, rimI: 0.15 }));
+  const horn = 0xe8dcc0, tip = 0x2a2420, wood = 0x7a5a36, woodD = 0x5a4026, iron = 0x3a3836;
+  const hp = [];
+  for (const sg of [-1, 1]) {
+    // out from the poll, then forward and up to a dark point
+    const pts = [[0.07, 0.06, 0.0], [0.24, 0.1, 0.03], [0.36, 0.2, 0.12], [0.4, 0.34, 0.2]], rr = [0.058, 0.048, 0.034, 0.012];
+    for (let k = 0; k < 3; k++) { const p0 = pts[k], p1 = pts[k + 1]; hp.push({ geo: GEO.segTo(sg * (p1[0] - p0[0]), p1[1] - p0[1], p1[2] - p0[2], rr[k], rr[k + 1], 7), color: k === 2 ? tip : horn, o: { x: sg * p0[0], y: p0[1], z: p0[2] } }); }
+  }
+  hp.push({ geo: GEO.box(0.2, 0.07, 0.1), color: 0x1e1814, o: { y: 0.07, z: 0.0 } });
+  const horns = new THREE.Mesh(staticGeo(hp), mat);
+  if (attachUpright(av, 'RigHead_00', horns, 0, 0.1, -0.02)) av.held.horns = { mesh: horns };
+  const yp = [];
+  const beam = GEO.cyl(0.07, 0.07, 0.95, 8); beam.rotateZ(Math.PI / 2);
+  yp.push({ geo: beam, color: wood, o: { y: 0.3 } });
+  for (const sg of [-1, 1]) {
+    yp.push({ geo: GEO.box(0.1, 0.16, 0.16), color: woodD, o: { x: sg * 0.47, y: 0.3 } });
+    yp.push({ geo: GEO.segTo(sg * 0.05, -0.56, 0, 0.032, 0.03, 6), color: woodD, o: { x: sg * 0.2, y: 0.28 } });
+  }
+  const bow = GEO.torus(0.26, 0.03, 5, 12, Math.PI); bow.rotateZ(Math.PI);
+  yp.push({ geo: bow, color: woodD, o: { y: -0.27 } });
+  yp.push({ geo: GEO.torus(0.07, 0.016, 5, 10), color: iron, o: { y: 0.2, z: 0.1, metal: 0.8 } });
+  const yoke = new THREE.Mesh(staticGeo(yp), mat);
+  if (attachUpright(av, 'RigNeck1_019', yoke, 0, -0.02, 0.1)) av.held.yoke = { mesh: yoke };
 }
 // ---------- Act VII: how its sleepers wait (docs/act7-contract.md, Enemies; ai.js statueTick, scorpion) ----------
 function act7Spawn(id, def, a, av, o, pk, dorm) {
