@@ -10,54 +10,54 @@
     40.5,
     154.5
    ],
-   "thawK": 0.45,
+   "thawK": 0.65,
    "uSnow": 0,
    "clouds": 2,
    "ground": {
-    "luma": 0.478,
+    "luma": 0.491,
     "n": 551,
     "trail": null,
     "max": 0.55
    },
    "body": {
     "hillWolf": {
-     "diff": 0.192,
-     "body": 0.223,
-     "behind": 0.415,
-     "meanAbs": 0.2,
-     "px": 2523
+     "diff": 0.211,
+     "body": 0.215,
+     "behind": 0.426,
+     "meanAbs": 0.218,
+     "px": 1862
     },
     "goblin": {
-     "diff": 0.112,
-     "body": 0.319,
-     "behind": 0.431,
-     "meanAbs": 0.135,
-     "px": 825
+     "diff": 0.127,
+     "body": 0.327,
+     "behind": 0.454,
+     "meanAbs": 0.14,
+     "px": 657
     },
     "rockRoller": {
-     "diff": 0.229,
-     "body": 0.19,
-     "behind": 0.418,
-     "meanAbs": 0.229,
-     "px": 12490
+     "diff": 0.181,
+     "body": 0.239,
+     "behind": 0.419,
+     "meanAbs": 0.182,
+     "px": 9544
     },
     "rockScorpion": {
-     "diff": 0.215,
-     "body": 0.223,
-     "behind": 0.438,
-     "meanAbs": 0.215,
-     "px": 947
+     "diff": 0.197,
+     "body": 0.239,
+     "behind": 0.437,
+     "meanAbs": 0.198,
+     "px": 674
     },
     "chough": {
      "diff": 0,
      "px": 0
     },
     "denBear": {
-     "diff": 0.22,
-     "body": 0.194,
-     "behind": 0.415,
-     "meanAbs": 0.239,
-     "px": 4468
+     "diff": 0.186,
+     "body": 0.196,
+     "behind": 0.382,
+     "meanAbs": 0.196,
+     "px": 3380
     }
    },
    "blend": {
@@ -66,23 +66,23 @@
    },
    "beamCore": true,
    "teleDay": {
-    "cr": 4.245,
-    "rim": 1.089,
-    "edge": 4.245
+    "cr": 4.195,
+    "rim": 1.103,
+    "edge": 4.195
    },
    "teleAdd": {
-    "cr": 1.596
+    "cr": 1.601
    },
-   "clip": 0.05,
+   "clip": 0.1,
    "beam": {
     "y": 1,
-    "dark": 0.09,
-    "bright": 0.525,
-    "cr": 4.643,
-    "step": 0.525
+    "dark": 0.091,
+    "bright": 0.716,
+    "cr": 11.416,
+    "step": 0.716
    },
    "fails": [
-    "goblin 0.112",
+    "goblin 0.127",
     "chough 0"
    ],
    "ok": {
@@ -93,12 +93,12 @@
     "beam": null
    },
    "n": {
-    "tele": 4.245,
-    "teleAdd": 1.596,
-    "ground": 0.478,
+    "tele": 4.195,
+    "teleAdd": 1.601,
+    "ground": 0.491,
     "body": 0,
-    "clip": 0.05,
-    "beam": 0.525
+    "clip": 0.1,
+    "beam": 0.716
    },
    "pass": false
   },
@@ -116,54 +116,54 @@
    "uSnow": 0,
    "clouds": 2,
    "ground": {
-    "luma": 0.484,
+    "luma": 0.481,
     "n": 551,
     "trail": null,
     "max": 0.55
    },
    "body": {
     "hillWolf": {
-     "diff": 0.196,
+     "diff": 0.195,
      "body": 0.218,
-     "behind": 0.413,
-     "meanAbs": 0.206,
-     "px": 2309
+     "behind": 0.412,
+     "meanAbs": 0.204,
+     "px": 1746
     },
     "goblin": {
-     "diff": 0.126,
-     "body": 0.323,
-     "behind": 0.45,
-     "meanAbs": 0.139,
-     "px": 859
+     "diff": 0.104,
+     "body": 0.314,
+     "behind": 0.418,
+     "meanAbs": 0.126,
+     "px": 469
     },
     "rockRoller": {
-     "diff": 0.223,
-     "body": 0.192,
+     "diff": 0.18,
+     "body": 0.237,
      "behind": 0.416,
-     "meanAbs": 0.224,
-     "px": 12870
+     "meanAbs": 0.18,
+     "px": 9497
     },
     "rockScorpion": {
-     "diff": 0.216,
-     "body": 0.221,
-     "behind": 0.437,
-     "meanAbs": 0.216,
-     "px": 904
+     "diff": 0.195,
+     "body": 0.238,
+     "behind": 0.433,
+     "meanAbs": 0.196,
+     "px": 682
     },
     "chough": {
      "diff": 0,
      "px": 0
     },
     "denBear": {
-     "diff": 0.251,
-     "body": 0.156,
-     "behind": 0.406,
-     "meanAbs": 0.252,
-     "px": 4248
+     "diff": 0.222,
+     "body": 0.186,
+     "behind": 0.408,
+     "meanAbs": 0.234,
+     "px": 3283
     }
    },
    "fails": [
-    "goblin 0.126",
+    "goblin 0.104",
     "chough 0"
    ],
    "ok": {
@@ -171,7 +171,7 @@
     "ground": true
    },
    "n": {
-    "ground": 0.484,
+    "ground": 0.481,
     "body": 0
    },
    "pass": false
@@ -190,39 +190,39 @@
    "uSnow": 0,
    "clouds": 2,
    "ground": {
-    "luma": 0.711,
+    "luma": 0.714,
     "n": 551,
     "trail": null,
     "max": 0.8
    },
    "body": {
     "hillWolf": {
-     "diff": 0.448,
-     "body": 0.232,
-     "behind": 0.68,
-     "meanAbs": 0.448,
-     "px": 2012
+     "diff": 0.476,
+     "body": 0.247,
+     "behind": 0.724,
+     "meanAbs": 0.476,
+     "px": 1730
     },
     "goblin": {
-     "diff": 0.32,
-     "body": 0.343,
-     "behind": 0.663,
-     "meanAbs": 0.32,
-     "px": 635
+     "diff": 0.301,
+     "body": 0.351,
+     "behind": 0.653,
+     "meanAbs": 0.301,
+     "px": 457
     },
     "rockRoller": {
-     "diff": 0.442,
-     "body": 0.201,
-     "behind": 0.642,
-     "meanAbs": 0.442,
-     "px": 9700
+     "diff": 0.404,
+     "body": 0.243,
+     "behind": 0.647,
+     "meanAbs": 0.405,
+     "px": 6913
     },
     "rockScorpion": {
-     "diff": 0.396,
-     "body": 0.287,
-     "behind": 0.684,
-     "meanAbs": 0.396,
-     "px": 715
+     "diff": 0.366,
+     "body": 0.319,
+     "behind": 0.685,
+     "meanAbs": 0.366,
+     "px": 538
     },
     "chough": {
      "diff": 0,
@@ -230,10 +230,10 @@
     },
     "denBear": {
      "diff": 0.411,
-     "body": 0.17,
-     "behind": 0.581,
-     "meanAbs": 0.411,
-     "px": 3141
+     "body": 0.193,
+     "behind": 0.604,
+     "meanAbs": 0.414,
+     "px": 2298
     }
    },
    "fails": [
@@ -244,7 +244,7 @@
     "ground": true
    },
    "n": {
-    "ground": 0.711,
+    "ground": 0.714,
     "body": 0
    },
    "pass": false
@@ -267,52 +267,52 @@
    ],
    "clouds": 3,
    "ground": {
-    "luma": 0.438,
+    "luma": 0.533,
     "n": 501,
-    "trail": 0.438,
+    "trail": 0.533,
     "max": 0.55
    },
    "body": {
     "hillWolf": {
-     "diff": 0.224,
-     "body": 0.233,
-     "behind": 0.457,
-     "meanAbs": 0.232,
-     "px": 1050
+     "diff": 0.426,
+     "body": 0.245,
+     "behind": 0.671,
+     "meanAbs": 0.426,
+     "px": 786
     },
     "goblin": {
-     "diff": 0.021,
-     "body": 0.33,
-     "behind": 0.351,
-     "meanAbs": 0.171,
-     "px": 700
+     "diff": 0.048,
+     "body": 0.312,
+     "behind": 0.264,
+     "meanAbs": 0.127,
+     "px": 485
     },
     "rockRoller": {
-     "diff": 0.193,
-     "body": 0.196,
-     "behind": 0.389,
-     "meanAbs": 0.197,
-     "px": 10934
+     "diff": 0.11,
+     "body": 0.25,
+     "behind": 0.359,
+     "meanAbs": 0.123,
+     "px": 7351
     },
     "rockScorpion": {
-     "diff": 0.126,
-     "body": 0.214,
-     "behind": 0.34,
-     "meanAbs": 0.126,
-     "px": 105
+     "diff": 0.204,
+     "body": 0.288,
+     "behind": 0.491,
+     "meanAbs": 0.204,
+     "px": 114
     }
    },
    "fails": [
-    "goblin 0.021",
-    "rockScorpion 0.126"
+    "goblin 0.048",
+    "rockRoller 0.11"
    ],
    "ok": {
     "body": false,
     "ground": null
    },
    "n": {
-    "ground": 0.438,
-    "body": 0.021
+    "ground": 0.533,
+    "body": 0.048
    },
    "pass": false
   },
@@ -334,51 +334,54 @@
    ],
    "clouds": 3,
    "ground": {
-    "luma": 0.446,
+    "luma": 0.547,
     "n": 501,
-    "trail": 0.446,
+    "trail": 0.547,
     "max": 0.55
    },
    "body": {
     "denBear": {
-     "diff": 0.306,
-     "body": 0.17,
-     "behind": 0.476,
-     "meanAbs": 0.306,
-     "px": 1480
+     "diff": 0.393,
+     "body": 0.225,
+     "behind": 0.618,
+     "meanAbs": 0.394,
+     "px": 1173
     },
     "chough": {
-     "diff": 0.346,
-     "body": 0.151,
-     "behind": 0.497,
-     "meanAbs": 0.346,
-     "px": 730
+     "diff": 0.317,
+     "body": 0.155,
+     "behind": 0.472,
+     "meanAbs": 0.317,
+     "px": 284
     },
     "rockScorpion": {
-     "diff": 0.154,
-     "body": 0.212,
-     "behind": 0.365,
-     "meanAbs": 0.155,
-     "px": 582
+     "diff": 0.145,
+     "body": 0.242,
+     "behind": 0.387,
+     "meanAbs": 0.145,
+     "px": 492
     },
     "rockRoller": {
-     "diff": 0.206,
-     "body": 0.204,
-     "behind": 0.41,
-     "meanAbs": 0.207,
-     "px": 7713
+     "diff": 0.149,
+     "body": 0.254,
+     "behind": 0.403,
+     "meanAbs": 0.154,
+     "px": 5518
     }
    },
-   "fails": [],
+   "fails": [
+    "rockRoller 0.149",
+    "rockScorpion 0.145"
+   ],
    "ok": {
-    "body": true,
+    "body": false,
     "ground": null
    },
    "n": {
-    "ground": 0.446,
-    "body": 0.154
+    "ground": 0.547,
+    "body": 0.145
    },
-   "pass": true
+   "pass": false
   },
   {
    "zone": "thaw",
@@ -390,54 +393,54 @@
     25.5,
     126.5
    ],
-   "thawK": 0.45,
+   "thawK": 0.65,
    "uSnow": 0,
    "clouds": 2,
    "ground": {
-    "luma": 0.458,
+    "luma": 0.481,
     "n": 401,
-    "trail": 0.507,
+    "trail": 0.529,
     "max": 0.55
    },
    "body": {
     "hillWolf": {
-     "diff": 0.219,
-     "body": 0.24,
-     "behind": 0.459,
-     "meanAbs": 0.219,
-     "px": 1617
+     "diff": 0.252,
+     "body": 0.236,
+     "behind": 0.488,
+     "meanAbs": 0.252,
+     "px": 1263
     },
     "goblin": {
-     "diff": 0.025,
-     "body": 0.311,
-     "behind": 0.336,
-     "meanAbs": 0.062,
-     "px": 373
+     "diff": 0.024,
+     "body": 0.308,
+     "behind": 0.332,
+     "meanAbs": 0.054,
+     "px": 280
     },
     "rockRoller": {
-     "diff": 0.238,
-     "body": 0.192,
-     "behind": 0.43,
-     "meanAbs": 0.238,
-     "px": 7140
+     "diff": 0.211,
+     "body": 0.236,
+     "behind": 0.447,
+     "meanAbs": 0.212,
+     "px": 5220
     },
     "rockScorpion": {
-     "diff": 0.195,
-     "body": 0.237,
-     "behind": 0.433,
-     "meanAbs": 0.196,
-     "px": 459
+     "diff": 0.188,
+     "body": 0.258,
+     "behind": 0.445,
+     "meanAbs": 0.188,
+     "px": 346
     },
     "chough": {
      "diff": 0,
      "px": 0
     },
     "denBear": {
-     "diff": 0.169,
-     "body": 0.232,
-     "behind": 0.401,
-     "meanAbs": 0.192,
-     "px": 3276
+     "diff": 0.187,
+     "body": 0.207,
+     "behind": 0.395,
+     "meanAbs": 0.189,
+     "px": 2110
     }
    },
    "blend": {
@@ -446,23 +449,23 @@
    },
    "beamCore": true,
    "teleDay": {
-    "cr": 4.259,
-    "rim": 1.089,
-    "edge": 4.259
+    "cr": 4.056,
+    "rim": 1.086,
+    "edge": 4.056
    },
    "teleAdd": {
-    "cr": 1.703
+    "cr": 1.709
    },
-   "clip": 0.17,
+   "clip": 0.19,
    "beam": {
     "y": 1,
-    "dark": 0.081,
-    "bright": 0.514,
-    "cr": 4.425,
-    "step": 0.514
+    "dark": 0.076,
+    "bright": 0.493,
+    "cr": 4.087,
+    "step": 0.493
    },
    "fails": [
-    "goblin 0.025",
+    "goblin 0.024",
     "chough 0"
    ],
    "ok": {
@@ -473,12 +476,12 @@
     "beam": null
    },
    "n": {
-    "tele": 4.259,
-    "teleAdd": 1.703,
-    "ground": 0.458,
+    "tele": 4.056,
+    "teleAdd": 1.709,
+    "ground": 0.481,
     "body": 0,
-    "clip": 0.17,
-    "beam": 0.514
+    "clip": 0.19,
+    "beam": 0.493
    },
    "pass": false
   },
@@ -492,57 +495,57 @@
     49.5,
     62.5
    ],
-   "thawK": 0.45,
+   "thawK": 0.65,
    "uSnow": 0,
    "clouds": 3,
    "ground": {
-    "luma": 0.533,
+    "luma": 0.572,
     "n": 296,
-    "trail": 0.49,
+    "trail": 0.501,
     "max": 0.8
    },
    "body": {
     "hillWolf": {
-     "diff": 0.202,
-     "body": 0.224,
-     "behind": 0.426,
-     "meanAbs": 0.217,
-     "px": 1354
+     "diff": 0.192,
+     "body": 0.23,
+     "behind": 0.422,
+     "meanAbs": 0.21,
+     "px": 1304
     },
     "goblin": {
-     "diff": 0.048,
-     "body": 0.321,
-     "behind": 0.369,
-     "meanAbs": 0.097,
-     "px": 289
+     "diff": 0.041,
+     "body": 0.303,
+     "behind": 0.343,
+     "meanAbs": 0.122,
+     "px": 314
     },
     "rockRoller": {
-     "diff": 0.322,
-     "body": 0.178,
-     "behind": 0.499,
-     "meanAbs": 0.322,
-     "px": 5403
+     "diff": 0.233,
+     "body": 0.243,
+     "behind": 0.476,
+     "meanAbs": 0.234,
+     "px": 4377
     },
     "rockScorpion": {
-     "diff": 0.195,
-     "body": 0.234,
+     "diff": 0.187,
+     "body": 0.241,
      "behind": 0.429,
-     "meanAbs": 0.198,
-     "px": 430
+     "meanAbs": 0.192,
+     "px": 244
     },
     "chough": {
-     "diff": 0.444,
-     "body": 0.207,
-     "behind": 0.652,
-     "meanAbs": 0.444,
-     "px": 261
+     "diff": 0.471,
+     "body": 0.211,
+     "behind": 0.683,
+     "meanAbs": 0.471,
+     "px": 109
     },
     "denBear": {
-     "diff": 0.284,
-     "body": 0.216,
-     "behind": 0.5,
-     "meanAbs": 0.294,
-     "px": 2579
+     "diff": 0.386,
+     "body": 0.178,
+     "behind": 0.564,
+     "meanAbs": 0.386,
+     "px": 1860
     }
    },
    "blend": {
@@ -551,23 +554,23 @@
    },
    "beamCore": true,
    "teleDay": {
-    "cr": 4.086,
+    "cr": 3.308,
     "rim": 1.1,
-    "edge": 4.086
+    "edge": 3.308
    },
    "teleAdd": {
-    "cr": 1.711
+    "cr": 1.551
    },
-   "clip": 0.16,
+   "clip": 0.17,
    "beam": {
     "y": 2.2,
-    "dark": 0.035,
-    "bright": 0.399,
-    "cr": 2.892,
-    "step": 0.399
+    "dark": 0.031,
+    "bright": 0.715,
+    "cr": 10.663,
+    "step": 0.715
    },
    "fails": [
-    "goblin 0.048"
+    "goblin 0.041"
    ],
    "ok": {
     "body": false,
@@ -577,14 +580,29 @@
     "beam": true
    },
    "n": {
-    "tele": 4.086,
-    "teleAdd": 1.711,
-    "ground": 0.533,
-    "body": 0.048,
-    "clip": 0.16,
-    "beam": 0.399
+    "tele": 3.308,
+    "teleAdd": 1.551,
+    "ground": 0.572,
+    "body": 0.041,
+    "clip": 0.17,
+    "beam": 0.715
    },
    "pass": false
+  },
+  {
+   "zone": "thaw",
+   "q": 1,
+   "spot": "meadow",
+   "on": "snow - grass",
+   "n": {
+    "grass": 0.481,
+    "snow": 0.714,
+    "diff": 0.233
+   },
+   "ok": {
+    "snowOverGrass": true
+   },
+   "pass": true
   },
   {
    "zone": "tarn",
@@ -600,53 +618,50 @@
    "uSnow": 1,
    "clouds": 3,
    "ground": {
-    "luma": 0.695,
+    "luma": 0.616,
     "n": 565,
-    "trail": 0.683,
+    "trail": 0.482,
     "max": 0.8
    },
    "body": {
     "hillWolf": {
-     "diff": 0.389,
-     "body": 0.219,
-     "behind": 0.608,
-     "meanAbs": 0.389,
-     "px": 1114
+     "diff": 0.304,
+     "body": 0.228,
+     "behind": 0.532,
+     "meanAbs": 0.304,
+     "px": 859
     },
     "goblin": {
-     "diff": 0.276,
-     "body": 0.345,
-     "behind": 0.621,
-     "meanAbs": 0.276,
-     "px": 355
+     "diff": 0.194,
+     "body": 0.335,
+     "behind": 0.53,
+     "meanAbs": 0.196,
+     "px": 362
     },
     "rockRoller": {
-     "diff": 0.422,
-     "body": 0.193,
-     "behind": 0.615,
-     "meanAbs": 0.422,
-     "px": 5034
+     "diff": 0.384,
+     "body": 0.233,
+     "behind": 0.617,
+     "meanAbs": 0.384,
+     "px": 5176
     },
     "rockScorpion": {
-     "diff": 0.34,
-     "body": 0.294,
-     "behind": 0.634,
-     "meanAbs": 0.34,
-     "px": 354
+     "diff": 0.253,
+     "body": 0.288,
+     "behind": 0.542,
+     "meanAbs": 0.253,
+     "px": 378
     },
     "chough": {
-     "diff": 0.431,
-     "body": 0.293,
-     "behind": 0.724,
-     "meanAbs": 0.431,
-     "px": 135
+     "diff": 0,
+     "px": 0
     },
     "denBear": {
-     "diff": 0.407,
-     "body": 0.19,
-     "behind": 0.598,
-     "meanAbs": 0.408,
-     "px": 2445
+     "diff": 0.4,
+     "body": 0.187,
+     "behind": 0.587,
+     "meanAbs": 0.4,
+     "px": 2390
     }
    },
    "blend": {
@@ -655,38 +670,40 @@
    },
    "beamCore": true,
    "teleDay": {
-    "cr": 6.364,
-    "rim": 2.127,
-    "edge": 6.364
+    "cr": 5.416,
+    "rim": 2.114,
+    "edge": 5.416
    },
    "teleAdd": {
     "cr": 1.593
    },
-   "clip": 0.27,
+   "clip": 0.25,
    "beam": {
     "y": 1,
-    "dark": 0.124,
+    "dark": 0.107,
     "bright": 0.306,
     "cr": 2.189,
     "step": 0.306
    },
-   "fails": [],
+   "fails": [
+    "chough 0"
+   ],
    "ok": {
-    "body": true,
+    "body": false,
     "ground": true,
     "tele": true,
     "clip": true,
     "beam": true
    },
    "n": {
-    "tele": 6.364,
+    "tele": 5.416,
     "teleAdd": 1.593,
-    "ground": 0.695,
-    "body": 0.276,
-    "clip": 0.27,
+    "ground": 0.616,
+    "body": 0,
+    "clip": 0.25,
     "beam": 0.306
    },
-   "pass": true
+   "pass": false
   },
   {
    "zone": "tarn",
@@ -707,32 +724,32 @@
    ],
    "clouds": 4,
    "ground": {
-    "luma": 0.526,
+    "luma": 0.528,
     "n": 58,
-    "trail": 0.514,
+    "trail": 0.509,
     "max": 0.8
    },
    "body": {
     "hillWolf": {
-     "diff": 0.37,
-     "body": 0.305,
-     "behind": 0.675,
-     "meanAbs": 0.37,
-     "px": 1111
+     "diff": 0.341,
+     "body": 0.313,
+     "behind": 0.655,
+     "meanAbs": 0.342,
+     "px": 1028
     },
     "goblin": {
-     "diff": 0.008,
-     "body": 0.306,
-     "behind": 0.315,
-     "meanAbs": 0.071,
-     "px": 212
+     "diff": 0.019,
+     "body": 0.313,
+     "behind": 0.333,
+     "meanAbs": 0.07,
+     "px": 255
     },
     "rockRoller": {
-     "diff": 0.238,
-     "body": 0.189,
-     "behind": 0.427,
-     "meanAbs": 0.239,
-     "px": 5431
+     "diff": 0.189,
+     "body": 0.236,
+     "behind": 0.425,
+     "meanAbs": 0.193,
+     "px": 5547
     }
    },
    "blend": {
@@ -741,23 +758,23 @@
    },
    "beamCore": true,
    "teleDay": {
-    "cr": 4.177,
+    "cr": 4.323,
     "rim": 1.462,
-    "edge": 3.912
+    "edge": 4.323
    },
    "teleAdd": {
-    "cr": 2.03
+    "cr": 2.018
    },
-   "clip": 0.74,
+   "clip": 0.77,
    "beam": {
     "y": 1,
-    "dark": 0.008,
-    "bright": 0.443,
-    "cr": 3.137,
-    "step": 0.443
+    "dark": 0.004,
+    "bright": 0.441,
+    "cr": 3.125,
+    "step": 0.441
    },
    "fails": [
-    "goblin 0.008"
+    "goblin 0.019"
    ],
    "ok": {
     "body": false,
@@ -767,12 +784,12 @@
     "beam": true
    },
    "n": {
-    "tele": 4.177,
-    "teleAdd": 2.03,
-    "ground": 0.526,
-    "body": 0.008,
-    "clip": 0.74,
-    "beam": 0.443
+    "tele": 4.323,
+    "teleAdd": 2.018,
+    "ground": 0.528,
+    "body": 0.019,
+    "clip": 0.77,
+    "beam": 0.441
    },
    "pass": false
   },
@@ -786,54 +803,54 @@
     40.5,
     154.5
    ],
-   "thawK": 0.45,
+   "thawK": 0.65,
    "uSnow": 0,
    "clouds": 2,
    "ground": {
-    "luma": 0.408,
+    "luma": 0.421,
     "n": 551,
     "trail": null,
     "max": 0.55
    },
    "body": {
     "hillWolf": {
-     "diff": 0.19,
-     "body": 0.209,
-     "behind": 0.4,
-     "meanAbs": 0.2,
-     "px": 966
+     "diff": 0.177,
+     "body": 0.215,
+     "behind": 0.392,
+     "meanAbs": 0.189,
+     "px": 921
     },
     "goblin": {
-     "diff": 0.131,
-     "body": 0.306,
-     "behind": 0.436,
-     "meanAbs": 0.142,
-     "px": 295
+     "diff": 0.116,
+     "body": 0.307,
+     "behind": 0.423,
+     "meanAbs": 0.14,
+     "px": 330
     },
     "rockRoller": {
-     "diff": 0.241,
-     "body": 0.185,
-     "behind": 0.425,
-     "meanAbs": 0.241,
-     "px": 5239
+     "diff": 0.199,
+     "body": 0.227,
+     "behind": 0.426,
+     "meanAbs": 0.2,
+     "px": 5809
     },
     "rockScorpion": {
-     "diff": 0.273,
-     "body": 0.161,
-     "behind": 0.433,
-     "meanAbs": 0.273,
-     "px": 337
+     "diff": 0.258,
+     "body": 0.182,
+     "behind": 0.441,
+     "meanAbs": 0.259,
+     "px": 349
     },
     "chough": {
      "diff": 0,
      "px": 0
     },
     "denBear": {
-     "diff": 0.227,
-     "body": 0.21,
-     "behind": 0.438,
-     "meanAbs": 0.25,
-     "px": 431
+     "diff": 0.308,
+     "body": 0.172,
+     "behind": 0.48,
+     "meanAbs": 0.317,
+     "px": 855
     }
    },
    "blend": {
@@ -842,23 +859,23 @@
    },
    "beamCore": true,
    "teleDay": {
-    "cr": 4.05,
-    "rim": 1.092,
-    "edge": 4.05
+    "cr": 4.212,
+    "rim": 1.1,
+    "edge": 4.212
    },
    "teleAdd": {
-    "cr": 1.58
+    "cr": 1.595
    },
-   "clip": 0.05,
+   "clip": 0.11,
    "beam": {
-    "y": 1,
-    "dark": 0.078,
-    "bright": 0.519,
-    "cr": 4.491,
-    "step": 0.519
+    "y": 2.2,
+    "dark": 0.076,
+    "bright": 0.48,
+    "cr": 3.953,
+    "step": 0.48
    },
    "fails": [
-    "goblin 0.131",
+    "goblin 0.116",
     "chough 0"
    ],
    "ok": {
@@ -869,12 +886,12 @@
     "beam": null
    },
    "n": {
-    "tele": 4.05,
-    "teleAdd": 1.58,
-    "ground": 0.408,
+    "tele": 4.212,
+    "teleAdd": 1.595,
+    "ground": 0.421,
     "body": 0,
-    "clip": 0.05,
-    "beam": 0.519
+    "clip": 0.11,
+    "beam": 0.48
    },
    "pass": false
   },
@@ -899,47 +916,47 @@
    },
    "body": {
     "hillWolf": {
-     "diff": 0.229,
-     "body": 0.22,
-     "behind": 0.449,
-     "meanAbs": 0.231,
-     "px": 1266
+     "diff": 0.191,
+     "body": 0.211,
+     "behind": 0.403,
+     "meanAbs": 0.2,
+     "px": 921
     },
     "goblin": {
-     "diff": 0.146,
-     "body": 0.313,
-     "behind": 0.459,
-     "meanAbs": 0.156,
-     "px": 362
+     "diff": 0.121,
+     "body": 0.31,
+     "behind": 0.431,
+     "meanAbs": 0.139,
+     "px": 300
     },
     "rockRoller": {
-     "diff": 0.23,
-     "body": 0.187,
-     "behind": 0.417,
-     "meanAbs": 0.23,
-     "px": 5167
+     "diff": 0.19,
+     "body": 0.231,
+     "behind": 0.421,
+     "meanAbs": 0.191,
+     "px": 5323
     },
     "rockScorpion": {
-     "diff": 0.264,
-     "body": 0.167,
-     "behind": 0.431,
-     "meanAbs": 0.264,
-     "px": 339
+     "diff": 0.249,
+     "body": 0.184,
+     "behind": 0.433,
+     "meanAbs": 0.249,
+     "px": 337
     },
     "chough": {
      "diff": 0,
      "px": 0
     },
     "denBear": {
-     "diff": 0.279,
-     "body": 0.146,
-     "behind": 0.425,
-     "meanAbs": 0.279,
-     "px": 379
+     "diff": 0.29,
+     "body": 0.148,
+     "behind": 0.437,
+     "meanAbs": 0.292,
+     "px": 601
     }
    },
    "fails": [
-    "goblin 0.146",
+    "goblin 0.121",
     "chough 0"
    ],
    "ok": {
@@ -973,43 +990,43 @@
    },
    "body": {
     "hillWolf": {
-     "diff": 0.418,
-     "body": 0.207,
-     "behind": 0.625,
-     "meanAbs": 0.418,
-     "px": 654
+     "diff": 0.417,
+     "body": 0.217,
+     "behind": 0.634,
+     "meanAbs": 0.417,
+     "px": 701
     },
     "goblin": {
-     "diff": 0.386,
-     "body": 0.311,
-     "behind": 0.698,
-     "meanAbs": 0.386,
-     "px": 274
+     "diff": 0.336,
+     "body": 0.301,
+     "behind": 0.637,
+     "meanAbs": 0.336,
+     "px": 205
     },
     "rockRoller": {
-     "diff": 0.483,
-     "body": 0.19,
-     "behind": 0.673,
-     "meanAbs": 0.483,
-     "px": 4140
+     "diff": 0.426,
+     "body": 0.243,
+     "behind": 0.669,
+     "meanAbs": 0.426,
+     "px": 4012
     },
     "rockScorpion": {
-     "diff": 0.517,
-     "body": 0.165,
-     "behind": 0.682,
-     "meanAbs": 0.517,
-     "px": 256
+     "diff": 0.484,
+     "body": 0.187,
+     "behind": 0.671,
+     "meanAbs": 0.484,
+     "px": 245
     },
     "chough": {
      "diff": 0,
      "px": 0
     },
     "denBear": {
-     "diff": 0.515,
-     "body": 0.157,
-     "behind": 0.672,
-     "meanAbs": 0.518,
-     "px": 426
+     "diff": 0.591,
+     "body": 0.142,
+     "behind": 0.733,
+     "meanAbs": 0.592,
+     "px": 477
     }
    },
    "fails": [
@@ -1043,51 +1060,52 @@
    ],
    "clouds": 2,
    "ground": {
-    "luma": 0.439,
+    "luma": 0.529,
     "n": 501,
-    "trail": 0.439,
+    "trail": 0.529,
     "max": 0.55
    },
    "body": {
     "hillWolf": {
-     "diff": 0.227,
+     "diff": 0.452,
      "body": 0.226,
-     "behind": 0.453,
-     "meanAbs": 0.238,
-     "px": 445
+     "behind": 0.679,
+     "meanAbs": 0.453,
+     "px": 469
     },
     "goblin": {
-     "diff": 0.04,
-     "body": 0.322,
-     "behind": 0.362,
-     "meanAbs": 0.191,
-     "px": 298
+     "diff": 0.033,
+     "body": 0.311,
+     "behind": 0.279,
+     "meanAbs": 0.136,
+     "px": 302
     },
     "rockRoller": {
-     "diff": 0.192,
-     "body": 0.195,
-     "behind": 0.386,
-     "meanAbs": 0.197,
-     "px": 5135
+     "diff": 0.116,
+     "body": 0.249,
+     "behind": 0.365,
+     "meanAbs": 0.132,
+     "px": 4654
     },
     "rockScorpion": {
-     "diff": 0.333,
-     "body": 0.149,
-     "behind": 0.482,
-     "meanAbs": 0.333,
-     "px": 33
+     "diff": 0.337,
+     "body": 0.178,
+     "behind": 0.516,
+     "meanAbs": 0.337,
+     "px": 22
     }
    },
    "fails": [
-    "goblin 0.04"
+    "goblin 0.033",
+    "rockRoller 0.116"
    ],
    "ok": {
     "body": false,
     "ground": null
    },
    "n": {
-    "ground": 0.439,
-    "body": 0.04
+    "ground": 0.529,
+    "body": 0.033
    },
    "pass": false
   },
@@ -1109,39 +1127,39 @@
    ],
    "clouds": 2,
    "ground": {
-    "luma": 0.45,
+    "luma": 0.552,
     "n": 501,
-    "trail": 0.45,
+    "trail": 0.552,
     "max": 0.55
    },
    "body": {
     "denBear": {
-     "diff": 0.332,
-     "body": 0.15,
-     "behind": 0.481,
-     "meanAbs": 0.332,
-     "px": 878
+     "diff": 0.414,
+     "body": 0.204,
+     "behind": 0.618,
+     "meanAbs": 0.414,
+     "px": 657
     },
     "chough": {
-     "diff": 0.327,
-     "body": 0.114,
-     "behind": 0.441,
-     "meanAbs": 0.332,
-     "px": 502
+     "diff": 0.489,
+     "body": 0.113,
+     "behind": 0.602,
+     "meanAbs": 0.489,
+     "px": 288
     },
     "rockScorpion": {
-     "diff": 0.207,
-     "body": 0.17,
-     "behind": 0.377,
-     "meanAbs": 0.208,
-     "px": 344
+     "diff": 0.196,
+     "body": 0.188,
+     "behind": 0.384,
+     "meanAbs": 0.196,
+     "px": 247
     },
     "rockRoller": {
-     "diff": 0.24,
-     "body": 0.193,
-     "behind": 0.433,
-     "meanAbs": 0.24,
-     "px": 5574
+     "diff": 0.161,
+     "body": 0.249,
+     "behind": 0.41,
+     "meanAbs": 0.164,
+     "px": 3269
     }
    },
    "fails": [],
@@ -1150,8 +1168,8 @@
     "ground": null
    },
    "n": {
-    "ground": 0.45,
-    "body": 0.207
+    "ground": 0.552,
+    "body": 0.161
    },
    "pass": true
   },
@@ -1165,54 +1183,54 @@
     25.5,
     126.5
    ],
-   "thawK": 0.45,
+   "thawK": 0.65,
    "uSnow": 0,
    "clouds": 2,
    "ground": {
-    "luma": 0.464,
+    "luma": 0.485,
     "n": 401,
-    "trail": 0.516,
+    "trail": 0.536,
     "max": 0.55
    },
    "body": {
     "hillWolf": {
-     "diff": 0.209,
-     "body": 0.232,
-     "behind": 0.441,
-     "meanAbs": 0.213,
-     "px": 612
+     "diff": 0.226,
+     "body": 0.22,
+     "behind": 0.446,
+     "meanAbs": 0.23,
+     "px": 616
     },
     "goblin": {
-     "diff": 0.119,
-     "body": 0.312,
-     "behind": 0.431,
-     "meanAbs": 0.14,
-     "px": 179
+     "diff": 0.131,
+     "body": 0.311,
+     "behind": 0.442,
+     "meanAbs": 0.141,
+     "px": 150
     },
     "rockRoller": {
-     "diff": 0.246,
-     "body": 0.189,
-     "behind": 0.434,
-     "meanAbs": 0.246,
-     "px": 2907
+     "diff": 0.211,
+     "body": 0.248,
+     "behind": 0.459,
+     "meanAbs": 0.212,
+     "px": 2822
     },
     "rockScorpion": {
-     "diff": 0.279,
-     "body": 0.16,
-     "behind": 0.44,
-     "meanAbs": 0.279,
-     "px": 154
+     "diff": 0.261,
+     "body": 0.179,
+     "behind": 0.441,
+     "meanAbs": 0.262,
+     "px": 160
     },
     "chough": {
      "diff": 0,
-     "px": 12
+     "px": 7
     },
     "denBear": {
-     "diff": 0.224,
+     "diff": 0.239,
      "body": 0.182,
-     "behind": 0.405,
-     "meanAbs": 0.224,
-     "px": 1031
+     "behind": 0.421,
+     "meanAbs": 0.241,
+     "px": 1175
     }
    },
    "blend": {
@@ -1221,23 +1239,23 @@
    },
    "beamCore": true,
    "teleDay": {
-    "cr": 3.81,
-    "rim": 1.089,
-    "edge": 3.81
+    "cr": 3.79,
+    "rim": 1.096,
+    "edge": 3.79
    },
    "teleAdd": {
-    "cr": 1.661
+    "cr": 1.652
    },
-   "clip": 0.17,
+   "clip": 0.18,
    "beam": {
     "y": 1,
-    "dark": 0.087,
+    "dark": 0.088,
     "bright": 0.434,
-    "cr": 3.305,
+    "cr": 3.306,
     "step": 0.434
    },
    "fails": [
-    "goblin 0.119",
+    "goblin 0.131",
     "chough 0"
    ],
    "ok": {
@@ -1248,11 +1266,11 @@
     "beam": null
    },
    "n": {
-    "tele": 3.81,
-    "teleAdd": 1.661,
-    "ground": 0.464,
+    "tele": 3.79,
+    "teleAdd": 1.652,
+    "ground": 0.485,
     "body": 0,
-    "clip": 0.17,
+    "clip": 0.18,
     "beam": 0.434
    },
    "pass": false
@@ -1267,57 +1285,57 @@
     49.5,
     62.5
    ],
-   "thawK": 0.45,
+   "thawK": 0.65,
    "uSnow": 0,
    "clouds": 2,
    "ground": {
-    "luma": 0.444,
+    "luma": 0.499,
     "n": 296,
-    "trail": 0.495,
+    "trail": 0.511,
     "max": 0.8
    },
    "body": {
     "hillWolf": {
-     "diff": 0.207,
-     "body": 0.217,
-     "behind": 0.424,
-     "meanAbs": 0.231,
-     "px": 750
+     "diff": 0.218,
+     "body": 0.211,
+     "behind": 0.429,
+     "meanAbs": 0.234,
+     "px": 574
     },
     "goblin": {
-     "diff": 0.06,
-     "body": 0.31,
-     "behind": 0.37,
-     "meanAbs": 0.115,
-     "px": 148
+     "diff": 0,
+     "body": 0.322,
+     "behind": 0.322,
+     "meanAbs": 0.114,
+     "px": 114
     },
     "rockRoller": {
-     "diff": 0.282,
-     "body": 0.188,
-     "behind": 0.47,
-     "meanAbs": 0.282,
-     "px": 2687
+     "diff": 0.241,
+     "body": 0.23,
+     "behind": 0.471,
+     "meanAbs": 0.243,
+     "px": 1964
     },
     "rockScorpion": {
-     "diff": 0.193,
-     "body": 0.166,
-     "behind": 0.359,
-     "meanAbs": 0.216,
-     "px": 185
+     "diff": 0.241,
+     "body": 0.181,
+     "behind": 0.422,
+     "meanAbs": 0.255,
+     "px": 86
     },
     "chough": {
-     "diff": 0.598,
-     "body": 0.126,
-     "behind": 0.724,
-     "meanAbs": 0.598,
-     "px": 134
+     "diff": 0.596,
+     "body": 0.153,
+     "behind": 0.749,
+     "meanAbs": 0.596,
+     "px": 57
     },
     "denBear": {
-     "diff": 0.034,
-     "body": 0.206,
-     "behind": 0.24,
-     "meanAbs": 0.258,
-     "px": 1330
+     "diff": 0.257,
+     "body": 0.181,
+     "behind": 0.438,
+     "meanAbs": 0.414,
+     "px": 602
     }
    },
    "blend": {
@@ -1326,41 +1344,55 @@
    },
    "beamCore": true,
    "teleDay": {
-    "cr": 3.794,
-    "rim": 1.129,
-    "edge": 3.794
+    "cr": 2.9,
+    "rim": 1.102,
+    "edge": 2.9
    },
    "teleAdd": {
-    "cr": 1.638
+    "cr": 1.388
    },
-   "clip": 0.15,
+   "clip": 0.16,
    "beam": {
     "y": 2.2,
-    "dark": 0.015,
-    "bright": 0.722,
-    "cr": 10.938,
-    "step": 0.722
+    "dark": 0.053,
+    "bright": 0.729,
+    "cr": 11.851,
+    "step": 0.729
    },
    "fails": [
-    "goblin 0.06",
-    "denBear 0.034"
+    "goblin 0"
    ],
    "ok": {
     "body": false,
     "ground": true,
-    "tele": true,
+    "tele": false,
     "clip": true,
     "beam": true
    },
    "n": {
-    "tele": 3.794,
-    "teleAdd": 1.638,
-    "ground": 0.444,
-    "body": 0.034,
-    "clip": 0.15,
-    "beam": 0.722
+    "tele": 2.9,
+    "teleAdd": 1.388,
+    "ground": 0.499,
+    "body": 0,
+    "clip": 0.16,
+    "beam": 0.729
    },
    "pass": false
+  },
+  {
+   "zone": "thaw",
+   "q": 0,
+   "spot": "meadow",
+   "on": "snow - grass",
+   "n": {
+    "grass": 0.406,
+    "snow": 0.612,
+    "diff": 0.206
+   },
+   "ok": {
+    "snowOverGrass": true
+   },
+   "pass": true
   },
   {
    "zone": "tarn",
@@ -1376,50 +1408,50 @@
    "uSnow": 1,
    "clouds": 2,
    "ground": {
-    "luma": 0.706,
+    "luma": 0.641,
     "n": 565,
-    "trail": 0.719,
+    "trail": 0.549,
     "max": 0.8
    },
    "body": {
     "hillWolf": {
-     "diff": 0.433,
-     "body": 0.193,
-     "behind": 0.627,
-     "meanAbs": 0.433,
-     "px": 451
+     "diff": 0.377,
+     "body": 0.211,
+     "behind": 0.588,
+     "meanAbs": 0.377,
+     "px": 412
     },
     "goblin": {
-     "diff": 0.315,
-     "body": 0.304,
-     "behind": 0.619,
-     "meanAbs": 0.317,
-     "px": 118
+     "diff": 0.324,
+     "body": 0.302,
+     "behind": 0.626,
+     "meanAbs": 0.324,
+     "px": 112
     },
     "rockRoller": {
-     "diff": 0.43,
-     "body": 0.182,
-     "behind": 0.612,
-     "meanAbs": 0.43,
-     "px": 2033
+     "diff": 0.413,
+     "body": 0.219,
+     "behind": 0.632,
+     "meanAbs": 0.414,
+     "px": 2177
     },
     "rockScorpion": {
-     "diff": 0.476,
-     "body": 0.155,
-     "behind": 0.631,
-     "meanAbs": 0.476,
-     "px": 121
+     "diff": 0.458,
+     "body": 0.171,
+     "behind": 0.629,
+     "meanAbs": 0.458,
+     "px": 110
     },
     "chough": {
      "diff": 0,
-     "px": 0
+     "px": 10
     },
     "denBear": {
-     "diff": 0.365,
-     "body": 0.201,
-     "behind": 0.566,
-     "meanAbs": 0.373,
-     "px": 1109
+     "diff": 0.406,
+     "body": 0.165,
+     "behind": 0.571,
+     "meanAbs": 0.406,
+     "px": 954
     }
    },
    "blend": {
@@ -1428,20 +1460,20 @@
    },
    "beamCore": true,
    "teleDay": {
-    "cr": 7.046,
+    "cr": 5.259,
     "rim": 2.213,
-    "edge": 7.046
+    "edge": 5.259
    },
    "teleAdd": {
     "cr": 1.535
    },
-   "clip": 0.29,
+   "clip": 0.26,
    "beam": {
     "y": 1,
-    "dark": 0.119,
-    "bright": 0.413,
-    "cr": 4.87,
-    "step": 0.413
+    "dark": 0.114,
+    "bright": 0.28,
+    "cr": 2.035,
+    "step": 0.28
    },
    "fails": [
     "chough 0"
@@ -1454,12 +1486,12 @@
     "beam": true
    },
    "n": {
-    "tele": 7.046,
+    "tele": 5.259,
     "teleAdd": 1.535,
-    "ground": 0.706,
+    "ground": 0.641,
     "body": 0,
-    "clip": 0.29,
-    "beam": 0.413
+    "clip": 0.26,
+    "beam": 0.28
    },
    "pass": false
   },
@@ -1482,32 +1514,32 @@
    ],
    "clouds": 2,
    "ground": {
-    "luma": 0.523,
+    "luma": 0.521,
     "n": 58,
-    "trail": 0.533,
+    "trail": 0.534,
     "max": 0.8
    },
    "body": {
     "hillWolf": {
-     "diff": 0.304,
-     "body": 0.329,
-     "behind": 0.633,
-     "meanAbs": 0.306,
-     "px": 331
+     "diff": 0.385,
+     "body": 0.295,
+     "behind": 0.68,
+     "meanAbs": 0.385,
+     "px": 434
     },
     "goblin": {
-     "diff": 0.007,
-     "body": 0.305,
-     "behind": 0.312,
-     "meanAbs": 0.064,
-     "px": 90
+     "diff": 0.037,
+     "body": 0.301,
+     "behind": 0.338,
+     "meanAbs": 0.073,
+     "px": 96
     },
     "rockRoller": {
-     "diff": 0.26,
-     "body": 0.182,
-     "behind": 0.442,
-     "meanAbs": 0.261,
-     "px": 2375
+     "diff": 0.212,
+     "body": 0.229,
+     "behind": 0.441,
+     "meanAbs": 0.215,
+     "px": 2379
     }
    },
    "blend": {
@@ -1518,21 +1550,21 @@
    "teleDay": {
     "cr": 3.805,
     "rim": 1.633,
-    "edge": 2.732
+    "edge": 2.939
    },
    "teleAdd": {
     "cr": 2.028
    },
-   "clip": 0.86,
+   "clip": 0.82,
    "beam": {
     "y": 1,
     "dark": 0.014,
-    "bright": 0.439,
-    "cr": 3.1,
-    "step": 0.439
+    "bright": 0.44,
+    "cr": 3.103,
+    "step": 0.44
    },
    "fails": [
-    "goblin 0.007"
+    "goblin 0.037"
    ],
    "ok": {
     "body": false,
@@ -1544,116 +1576,13 @@
    "n": {
     "tele": 3.805,
     "teleAdd": 2.028,
-    "ground": 0.523,
-    "body": 0.007,
-    "clip": 0.86,
-    "beam": 0.439
+    "ground": 0.521,
+    "body": 0.037,
+    "clip": 0.82,
+    "beam": 0.44
    },
    "pass": false
-  },
-  {
-   "zone": "thaw",
-   "q": 1,
-   "spot": "meadow",
-   "on": "snow - grass",
-   "n": {
-    "grass": 0.484,
-    "snow": 0.711,
-    "diff": 0.227
-   },
-   "ok": {
-    "snowOverGrass": true
-   },
-   "pass": true
-  },
-  {
-   "zone": "thaw",
-   "q": 0,
-   "spot": "meadow",
-   "on": "snow - grass",
-   "n": {
-    "grass": 0.406,
-    "snow": 0.612,
-    "diff": 0.206
-   },
-   "ok": {
-    "snowOverGrass": true
-   },
-   "pass": true
   }
  ],
- "shots": [
-  {
-   "file": "stageA/day/day-q1-thaw-meadow.jpg",
-   "kb": 136
-  },
-  {
-   "file": "stageA/day/day-q1-thaw-meadow-on-grass.jpg",
-   "kb": 126
-  },
-  {
-   "file": "stageA/day/day-q1-thaw-meadow-on-snow.jpg",
-   "kb": 108
-  },
-  {
-   "file": "stageA/day/day-q1-thaw-meadow-on-trail.jpg",
-   "kb": 115
-  },
-  {
-   "file": "stageA/day/day-q1-thaw-meadow-on-trail2.jpg",
-   "kb": 115
-  },
-  {
-   "file": "stageA/day/day-q1-thaw-raceBank.jpg",
-   "kb": 123
-  },
-  {
-   "file": "stageA/day/day-q1-thaw-chutes.jpg",
-   "kb": 122
-  },
-  {
-   "file": "stageA/day/day-q1-tarn-snowfield.jpg",
-   "kb": 90
-  },
-  {
-   "file": "stageA/day/day-q1-tarn-shore.jpg",
-   "kb": 134
-  },
-  {
-   "file": "stageA/day/day-q0-thaw-meadow.jpg",
-   "kb": 114
-  },
-  {
-   "file": "stageA/day/day-q0-thaw-meadow-on-grass.jpg",
-   "kb": 104
-  },
-  {
-   "file": "stageA/day/day-q0-thaw-meadow-on-snow.jpg",
-   "kb": 89
-  },
-  {
-   "file": "stageA/day/day-q0-thaw-meadow-on-trail.jpg",
-   "kb": 105
-  },
-  {
-   "file": "stageA/day/day-q0-thaw-meadow-on-trail2.jpg",
-   "kb": 105
-  },
-  {
-   "file": "stageA/day/day-q0-thaw-raceBank.jpg",
-   "kb": 105
-  },
-  {
-   "file": "stageA/day/day-q0-thaw-chutes.jpg",
-   "kb": 106
-  },
-  {
-   "file": "stageA/day/day-q0-tarn-snowfield.jpg",
-   "kb": 90
-  },
-  {
-   "file": "stageA/day/day-q0-tarn-shore.jpg",
-   "kb": 122
-  }
- ]
+ "note": "thaw rows from the official runs; tarn rows re-run after the cliff tone (hueW)"
 }
