@@ -224,3 +224,15 @@ file names of the two `artifact/assets` folders (the hashed names are stable).
 House); (2) what the report lists as not done: the eighth Name, an echo and a legendary for each boss, the Whitecliff
 exit, an ambient of the act's own, the Seven Good Nights; (3) a balance campaign at full counts on every difficulty;
 (4) `echo7`'s two misses in seven runs, looked into.
+
+**22 November, afternoon: the owner's phone and the Frozen Coast.** He reported a black screen after "Φόρτωση περιοχής"
+(his words: «το πεδίο του αμονιού»: he had gone from the Field of Ash through the Anvil's Neck). It was not Act VIII: his
+phone's quiet report (the artifact's db, `data/users/<his id>/gpu`: Android 10, Adreno 618, 4 GB, quality 1) showed zone
+`coast`, phase `warmed` at 25 s, **0 frames**, no script error, twice that day. So the 8 November mending (compileAsync,
+then textures four a frame) ran out its 25 s on that phone and the first frame then never came. `gfx.js warmZone` now
+brings the zone in as walking does: everything hidden, then a few things shown and a real frame drawn after each
+handful, the handful growing while frames are quick; past the 25 s the rest keeps arriving during play. Checked only in
+a phone-shaped browser on SwiftShader (coast, Farthest Light, Hanging Lake: 6-20 s under the fade, then drawn whole);
+**not confirmed on his phone**. Published as artifact version id 1795367019-148a from `main` at 21f1dc3. If it still
+freezes: read that db document again after he next opens the game (`prev.gl` names the last shader linked or used, and
+`diag.phase` now says `warm i/n`, how far the warming got).
