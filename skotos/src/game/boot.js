@@ -314,7 +314,7 @@ function travel(zone, o = {}) {
 // 25 s: gfx.js warmZone)
 async function warm() {
   const m = G.mode; G.mode = 'warm'; diagStep('warm');
-  try { await Promise.race([warmZone(), new Promise((ok) => setTimeout(ok, 25000))]); } catch (e) { console.error(e); }
+  try { await Promise.race([warmZone((i, n) => diagStep('warm ' + i + '/' + n)), new Promise((ok) => setTimeout(ok, 25000))]); } catch (e) { console.error(e); }
   R.warm = false; if (G.mode === 'warm') G.mode = m; diagStep('warmed');
 }
 // (the fade's bar while a zone's first-visit assets load, shown if that takes a while: part() moves it, hide() takes it off)

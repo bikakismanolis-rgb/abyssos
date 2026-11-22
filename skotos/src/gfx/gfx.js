@@ -354,22 +354,37 @@ export function frame(dt) {
 
 // (R.skyHook: sea.js shows the aurora dome when a cine lowers the camera, and runs its freeze waves)
 export function render() { if (R.lost || R.warm) return; R.skyHook?.(); R.renderer.render(R.scene, R.camera); }
-// Act V on a phone: its shaders compiled (in the background where the GPU allows it) and its textures sent to the GPU a
-// few a frame, under the fade, before its first frame is drawn. The owner's phone froze two frames into the Frozen Coast
-// when the whole coast arrived in one frame, and held when she walked into it bit by bit, the same spot included
-export async function warmZone() {
-  const r = R.renderer; R.warm = true;
+// Act V on a phone: the zone is brought to the GPU a few things a frame, under the fade, before its first frame is shown.
+// The owner's phone (Adreno 618) froze when the whole Frozen Coast arrived in one frame, and held when she walked into it
+// bit by bit, the same spot included. The first mending (shaders through compileAsync, then the textures four a frame)
+// did not hold there: on 22 November its report showed the 25 s limit reached and then no frame at all. So the zone is
+// now walked into in place: everything that draws is hidden, then shown a few at a time with a real frame drawn after
+// each handful (what a frame needs of shaders, buffers and textures is exactly what the driver is given, never more than
+// a handful's worth). The handful grows while frames stay quick (things out of sight cost nothing) and shrinks when one
+// is slow. If the caller's limit passes first (boot.js warm, 25 s) the rest keeps arriving the same way during play:
+// nothing is ever shown all at once. `step` is told how far it has come now and then (the device's quiet report).
+export async function warmZone(step) {
+  const r = R.renderer, hid = []; let i = 0; R.warm = true;
+  const raf = () => new Promise((ok) => requestAnimationFrame(ok));
   try {
-    if (r.compileAsync) await r.compileAsync(R.scene, R.camera);
-    const tex = new Set(), add = (t) => { if (t && t.isTexture && !t.isRenderTargetTexture) tex.add(t); };
-    R.scene.traverse((o) => {
-      const ms = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
-      for (const m of ms) { for (const k in m) add(m[k]); if (m.uniforms) for (const k in m.uniforms) add(m.uniforms[k]?.value); }
-    });
-    let n = 0;
-    for (const t of tex) { try { r.initTexture(t); } catch (e) { /* one that cannot go yet goes at its first frame */ } if (++n % 4 === 0) await new Promise((ok) => requestAnimationFrame(ok)); }
-    return n;
-  } finally { R.warm = false; }
+    R.scene.traverse((o) => { if ((o.isMesh || o.isPoints || o.isLine || o.isSprite) && o.visible) { hid.push(o); o.visible = false; } });
+    let n = 2, f = 0;
+    while (i < hid.length && !R.lost) {
+      for (let k = 0; k < n && i < hid.length; k++) hid[i++].visible = true;
+      // (the caller's limit has passed and the game is drawing: its own frames bring the rest, four things a frame)
+      if (!R.warm) n = 4;
+      else {
+        const t0 = performance.now();
+        R.skyHook?.(); r.render(R.scene, R.camera);
+        const ms = performance.now() - t0;
+        n = ms < 14 ? Math.min(256, n * 2) : ms > 50 ? Math.max(1, n >> 1) : n;
+      }
+      if (++f % 40 === 0) step?.(i, hid.length);
+      await raf();
+    }
+    return hid.length;
+  // (only what was never reached is shown here: a thing the game has hidden since is left hidden)
+  } finally { for (; i < hid.length; i++) hid[i].visible = true; R.warm = false; }
 }
 
 // A lost GL context (a phone out of memory, a GPU reset). The decoded images were let go once uploaded (gltf.js), so it
