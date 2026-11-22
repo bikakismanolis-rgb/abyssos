@@ -182,13 +182,32 @@ kill by PIDs from `ps`.
 
 ## Act VIII: where it stands (21 November, kept up as the work goes)
 
-The owner chose Act VIII on 21 November («Πάμε στο 2. Ό,τι προτείνεις εσύ κάνε») and will judge it in the playable game,
-not on paper («Θα τα τσεκάρουμε όλα μετά στο κανονικό παιχνίδι»). It is the Order of the Flame story that Act VII's
-rulings kept: `docs/act8-design.md` (read its section "The fire: the rules" before touching anything that burns), his
-five questions in `docs/act8-briefs/owner-questions-el.md` (every default is built). **The first half plays end to end**
-(quests 48-51: the hook, zone `tinder`, the Burn, the three hearths, the Order's people, Aithon): read
-`docs/act8-briefs/reports/stageA-part2.md` first (what is built, the tests, the known faults, what is next), then `stageA-part1.md`.
-The owner asked on 21 November why the work had stopped to wait for him: do not stop to ask; go on to the next step and report.
-**Nothing of Act VIII is on `main` or published.** `VER` and `SAVE_FMT` are unchanged. In this session sub-agents were
-not used (the owner had not asked for them): one session did the work in turn.
+The owner chose Act VIII on 21 November («Πάμε στο 2. Ό,τι προτείνεις εσύ κάνε») and judges it in the playable game,
+not on paper («Θα τα τσεκάρουμε όλα μετά στο κανονικό παιχνίδι»). His standing rule for this act: **do not stop to ask;
+go on to the next step and write at the end what was done, what works, what does not, what was not checked**; and
+publish to the live game when the act plays whole and the tests pass. He reads short plain Greek with no technical
+words.
 
+**The act plays from the hook to its panel** (quests 48-55): Whitecliff, the Tindergrass (`tinder`: the Burn, three
+banked fires and their ember memories, Aithon), the Vigil House (`vigil`: three dark halls, each fire banked by hand
+lets the day in and opens the next door; Ragna in the Great Hall, eight shutters by her life, drowsy in daylight, the
+Flame banked by hand at her floor, the morning). Read `docs/act8-design.md` ("The fire: the rules" before touching
+anything that burns), then `docs/act8-briefs/reports/stageB-E.md` (what was built in the second half, the balance
+numbers, every test, **and the list of what is not done**), then `stageA-part2.md` and `stageA-part1.md`.
+
+**How to run it.** The dev server as for Act VII (`npx vite --config .nohmr.local.mjs --port 5311 --strictPort`; the
+untracked `.nohmr.local.mjs` is `import base from './vite.config.js'; export default (env) => ({ ...base(env), server:
+{ hmr: false } });`). `BASE=http://localhost:5311/ node tools/act8.mjs <burn|hearth|road|aithon|spine|vigil|ragna|play8>`
+(`play8` walks the whole act with its story on); `node tools/check-act8.mjs 300` (both layouts); `node tools/coop.mjs
+act8 /tmp/coop8`; `node tools/audio8.mjs`; the bot: `node tools/balance-act.mjs --boss ragna --cls warden --lvl 52 --diff
+1 --mlvl 4 --mast --runs 3`. Open a spot by hand: `?auto=vigil&lvl=52&flags=act7,aithonRest,ember1,ember2,ember3&quest=51`
+(add `bank1,bank2,bank3&quest=53` for Ragna). `?cview&only=aithon&lit=day` shows the bull as the game dresses him.
+
+**Traps met:** the creature viewer draws one frame, so anything dressed after an `await` is not in the picture; in
+`actors.js` `G` is the game's state and the geometry kit is `GEO`; a tint above 1 drains a body's colour first and
+above 2 lifts it toward pale (how the Order's dark bodies became wool); a test that waits on the game must click the
+story's dialogs through (`act8.mjs open` does) and keep its hero alive (`window.__immortal`), or a death or an open
+dialog reads as a hang; `questText` caps the quest number (now 55): raise it with every new quest; a zone's music name
+that `THEMES` does not know is silently ignored.
+
+**Release:** see the line at the end of this chapter once the publish is done.

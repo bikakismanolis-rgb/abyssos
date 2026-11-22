@@ -3,6 +3,7 @@
 //          black; standing in it again nothing comes; stepping out of a second lane during the inhale she is not touched
 //   vigil  the Vigil House: dark halls, shut doors; each fire banked opens the next and lets the day in
 //   ragna  Ragna: shutters by her life, the drowse in daylight, the floor, the Flame by hand, the sleep, the morning
+//   play8  the whole act with its story on, from the hook to the act's panel
 //   road   Whitecliff's South Road is there after Act VII, takes her to the Tindergrass and back; absent before
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
@@ -12,7 +13,7 @@ require('node:fs').mkdirSync(out, { recursive: true });
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'] });
 const pg = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const errs = []; pg.on('pageerror', (e) => errs.push(e.message));
-const open = async (q) => { await pg.goto(BASE + '?' + q, { waitUntil: 'load' }); await pg.waitForFunction(() => window.__ready, null, { timeout: 90000 }); await pg.waitForTimeout(1200); await pg.evaluate(async () => { const H = await import('/src/ui/hud.js'); clearInterval(window.__dlg); window.__dlg = setInterval(() => { try { if (H.dialogOpen()) H.advanceDialog(); } catch (e) {} }, 250); }); };
+const open = async (q) => { await pg.goto(BASE + '?' + q, { waitUntil: 'load' }); await pg.waitForFunction(() => window.__ready, null, { timeout: 90000 }); await pg.waitForTimeout(1200); await pg.evaluate(async () => { const H = await import('/src/ui/hud.js'); clearInterval(window.__dlg); window.__dlg = setInterval(() => { try { if (H.dialogOpen()) H.advanceDialog(); } catch (e) {} }, 250); clearInterval(window.__imm); window.__imm = setInterval(() => { const pl = window.__G?.player; if (window.__immortal && pl && !pl.dead && pl.hp < pl.hpMax * 0.5) pl.hp = pl.hpMax; }, 50); }); };
 const ev = (f, a) => pg.evaluate(f, a);
 const beats = [], beat = (b, ok, info) => beats.push({ b, ok: !!ok, ...(info ? { info } : {}) });
 const T = {
@@ -170,6 +171,48 @@ const T = {
     const s4 = await ev(() => { const G = window.__G; return { q: G.hero.quest, act8: G.hero.act8, flag: !!G.hero.flags.act8, lit: !!G.zone.lvl.act8.flame.mesh.userData.lit }; });
     await pg.waitForTimeout(800); await pg.screenshot({ path: out + '/ragna-end.png' });
     beat('in the morning the Flame is woken and burns: quest 55, the act closed', s4.q === 55 && s4.act8 >= 0 && s4.flag && s4.lit, s4);
+  },
+  async play8() {
+    // the whole act with its story on, from the morning after Act VII to the act's panel and the line at home
+    await pg.setViewportSize({ width: 960, height: 540 });
+    await open('auto=town&lvl=52&flags=act7&quest=47&q=0');
+    await ev(async () => { window.__C = await import('/src/game/combat.js'); window.__immortal = true; });
+    const W = (f, a, ms = 90000) => pg.waitForFunction(f, a, { timeout: ms }).then(() => true).catch(() => false);
+    const fell = (kind) => ev((kind) => { const G = window.__G, b = G.zone.boss; if (b && b.kind === kind && !b.dead) window.__C.damage(G.player, b, b.hpMax * 0.34, { pure: true }); return b ? b.hp / b.hpMax : -1; }, kind);
+    beat('the hook in Whitecliff: quest 48', await W(() => window.__G.hero.quest === 48));
+    await ev(() => window.__G.zone.interact.find((i) => i.to === 'tinder').use());
+    beat('the Tindergrass, Halda\'s lid: quest 49', await W(() => window.__G.zone.id === 'tinder' && window.__G.hero.quest === 49));
+    for (const k of [1, 2, 3]) {
+      await W(() => window.__G.mode === 'play' && !document.querySelector('#dialog:not([hidden])'), null, 30000);
+      await ev((k) => { const G = window.__G, it = G.zone.act8.hearths.find((h) => h.k === k); G.player.x = it.x + 1.5; G.player.z = it.z; it.use(); }, k);
+      await W((k) => !!window.__G.hero.flags['mem8_' + k], k, 20000);
+      await pg.waitForTimeout(2500);
+    }
+    beat('three fires woken, three memories told: quest 50', await W(() => window.__G.hero.quest === 50 && [1, 2, 3].every((k) => window.__G.hero.flags['mem8_' + k])), await ev(() => window.__G.hero.quest));
+    await ev(() => { const G = window.__G, A = G.zone.L.spots.arena; G.player.x = A.x; G.player.z = A.z + 4; });
+    await W(() => !!window.__G.zone.boss?.awake, null, 60000);
+    for (let i = 0; i < 40 && !(await ev(() => !!window.__G.hero.flags.aithonRest)); i++) { await ev(() => { const G = window.__G, A = G.zone.L.spots.arena; if (Math.hypot(G.player.x - A.x, G.player.z - A.z) > 13) { G.player.x = A.x; G.player.z = A.z + 3; } }); await fell('aithon'); await pg.waitForTimeout(700); }
+    beat('Aithon unyoked: quest 51', await W(() => window.__G.hero.quest === 51 && !!window.__G.hero.flags.aithonRest, null, 20000));
+    await pg.waitForTimeout(7000);
+    const road = await ev(() => { const it = window.__G.zone.interact.find((i) => i.to === 'vigil'); if (it) it.use(); return !!it; });
+    beat('the road south: the Vigil House, quest 52', road && await W(() => window.__G.zone.id === 'vigil' && window.__G.hero.quest === 52));
+    for (const k of [1, 2, 3]) {
+      await W(() => window.__G.mode === 'play' && !document.querySelector('#dialog:not([hidden])'), null, 30000);
+      for (let i = 0; i < 60 && !(await ev((k) => !!window.__G.hero.flags['bank' + k], k)); i++) { await ev((k) => { const G = window.__G, it = G.zone.act8.fires.find((f) => f.k === k), pl = G.player; pl.iframes = 3; if (!pl.act || pl.act.name !== 'touch') { pl.x = it.x + 1.6; pl.z = it.z; it.use(); } }, k); await pg.waitForTimeout(400); }
+    }
+    beat('three halls banked: quest 53', await W(() => window.__G.hero.quest === 53, null, 20000), await ev(() => window.__G.hero.quest));
+    await ev(() => { const G = window.__G, A = G.zone.L.spots.arena; G.player.x = A.x; G.player.z = A.z - 9; });
+    await W(() => !!window.__G.zone.boss?.awake, null, 60000);
+    for (let i = 0; i < 40 && !(await ev(() => !!window.__G.zone.boss?.floored)); i++) { await fell('ragna'); await pg.waitForTimeout(700); }
+    beat('Ragna brought to her floor: the Flame bare', await ev(() => !!window.__G.zone.boss?.floored && !window.__G.zone.act8.flame.used));
+    for (let i = 0; i < 200 && !(await ev(() => !!window.__G.hero.flags.ragnaRest)); i++) { await ev(() => { const G = window.__G, it = G.zone.act8.flame, pl = G.player; pl.iframes = 3; if (!pl.act || pl.act.name !== 'touch') { pl.x = it.x + 1.8; pl.z = it.z; if (!it.used) it.use(); } }); await pg.waitForTimeout(300); }
+    beat('the Flame banked: she sleeps, quest 54', await W(() => !!window.__G.hero.flags.ragnaRest && window.__G.hero.quest === 54, null, 20000));
+    const morn = await W(() => window.__G.zone.act8.flame.prompt === 'flame8.wake' && !window.__G.zone.act8.flame.used, null, 60000);
+    await ev(() => { const G = window.__G, it = G.zone.act8.flame; G.player.x = it.x + 1.8; G.player.z = it.z; it.use(); });
+    beat('the morning: the Flame woken, the act closed, its panel shown', morn && await W(() => window.__G.hero.quest === 55 && window.__G.hero.act8 >= 0 && window.__G.panel === 'act', null, 60000), await ev(() => ({ q: window.__G.hero.quest, act8: window.__G.hero.act8, panel: window.__G.panel })));
+    await pg.screenshot({ path: out + '/play8-end.png' });
+    const txt = await ev(() => document.querySelector('.act-h')?.textContent || '');
+    beat('the panel says Act VIII', /VIII/.test(txt), txt);
   },
   async road() {
     await open('auto=town&lvl=30&q=1');

@@ -83,9 +83,9 @@ export const LOUD = { leap: 10, quake: 10, charge: 10, bulwark: 10, dawn: 10, cr
   bearWall: 10, rollerSlam: 10, rolledBoulder: 10, thunder: 10, kallistoRoar: 10, keladosTremor: 10 };
 // the save format this build reads and writes (save.js heroFits refuses a hero of a higher one as 'newer'; every hero this
 // build makes or takes up is stamped with it, boot.js startHero): 1 for Acts I-VI (a hero without `fmt` is 1; Act VI shipped at 1), 2 with Act
-// VII's fields. (No public build may write 2 before a public build refuses it: the bump waits for one that carries
+// VII's fields, 3 with Act VIII's (`act8`, the act's flags and its zones). (No public build may write 2 before a public build refuses it: the bump waits for one that carries
 // this check, docs/act6-contract.md, Saves. Here, not in save.js: data.js imports nothing, so state.js reads it too)
-export const SAVE_FMT = 2;
+export const SAVE_FMT = 3;
 
 // ---------- classes ----------
 // resource: fury builds on hit and fades; energy and mana regenerate
