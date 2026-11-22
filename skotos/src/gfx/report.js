@@ -62,7 +62,8 @@ export async function reportBind() {
     if (!window.claude?.use) return;
     const [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]);
     const uid = await user.id(); if (!db || typeof uid !== 'string' || !uid) return;
-    const d = db.collection('data/users/' + uid).doc('gpu');
+    // (a document for each kind of device: on 22 November the laptop's report overwrote the phone's, the one that was needed)
+    const d = db.collection('data/users/' + uid).doc(/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? 'gpu-phone' : 'gpu');
     send = (o) => Promise.resolve(d.set(o)).catch(() => {});
     flush();
   } catch (e) { /* no cloud: nothing sent */ }
