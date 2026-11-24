@@ -80,7 +80,10 @@ export function damage(src, target, amount, o = {}) {
   let crit = !!(o.net && o.crit);
   if (own) {
     const s = G.stats;
-    if (o.crit ?? (!o.dot && heroCrit())) { crit = true; amount *= 1 + s.critD / 100; }
+    // the Vigil Ring: a blow after 4 s without striking is a certain critical (every target of that one blow shares it)
+    let rested = false;
+    if (!o.dot && s.legs.has('vigilRing')) { const p = G.player; if (p.strikeT === G.time) rested = !!p.restedHit; else { rested = G.time - (p.strikeT ?? -Infinity) >= 4; p.strikeT = G.time; p.restedHit = rested; } }
+    if (o.crit ?? (!o.dot && (rested || heroCrit()))) { crit = true; amount *= 1 + s.critD / 100; }
     if (target.elite || target.boss) { amount *= 1 + s.eliteDmg / 100; if (s.legs.has('kingslayer')) amount *= 1.3; }
     // Einar's Lantern: the Skotos's creatures it strikes stand in the light for 2 s (Revealed: nothing more on what is worse off)
     if (s.legs.has('einarLantern') && !o.dot && target.def.unlit) addVuln(target, 'revealed', 2, { quiet: true });
@@ -188,6 +191,8 @@ function hurtHero(src, amount, o) {
   // a Challenge (skillsx.js): a third less, and what is turned aside goes back at the one who struck
   if (p.buffs.challenge > 0) { amount *= 0.65; if (src && src.team === 'foe' && src.status && !src.dead && !o.dot) damage(p, src, amount * 0.9 + s.thorns, { noFx: true, quiet: true, noLoh: true, noRes: true, crit: false }); }
   if (s.legs.has('stoneborn') && p.hp < p.hpMax * 0.5) amount *= 0.8;
+  // Blacksoles: fire on the ground (a blow that carries a burn) a third less, nearly
+  if (o.burn > 0 && s.legs.has('blacksoles')) amount *= 0.7;
   // Seen by the dead (a Lampless alarm, Ivar's lantern): +15%
   if (p.buffs.seen > 0) amount *= 1.15;
   // Act VI: no boss blow takes more than 11% of her life at once (the act's rule, no blow over 12% of max life: the
@@ -210,7 +215,7 @@ function hurtHero(src, amount, o) {
     if (o.slow) { p.status.slow = Math.max(p.status.slow, o.slow.t); p.status.slowK = Math.max(p.status.slowK, o.slow.k); }
     if (o.freeze) p.status.freeze = Math.max(p.status.freeze, o.freeze * 0.5);
     if (o.poison) { p.status.poison = 3; p.status.poisonDps = Math.max(p.status.poisonDps, o.poison / 3); }
-    if (o.burn) { p.status.burn = 3; p.status.burnDps = Math.max(p.status.burnDps, o.burn / 3); }
+    if (o.burn) { p.status.burn = 3; p.status.burnDps = Math.max(p.status.burnDps, o.burn * (s.legs.has('blacksoles') ? 0.7 : 1) / 3); }
     // Act III: amber roots (capped), blows that throw the hero back, shrieks that break a channel
     if (o.root) rootHero(o.root);
     if (o.push && src) { const dx = o.kx ?? p.x - src.x, dz = o.kz ?? p.z - src.z, l = Math.hypot(dx, dz) || 1; p.kx += (dx / l) * o.push; p.kz += (dz / l) * o.push; }

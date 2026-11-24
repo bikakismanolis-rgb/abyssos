@@ -26,6 +26,8 @@ export function computeStats(hero, equip = hero.equip) {
   // Act VII's two: Kallisto's Claw, +8% attack speed; the Mountain's Heart, +10% armour
   if (s.legs.has('kallistoClaw')) s.atkSpd += 8;
   if (s.legs.has('mountainHeart')) s.armorPct += 10;
+  if (s.legs.has('blacksoles')) s.move += 10;
+  if (s.legs.has('vigilRing')) s.critDmg += 25;
   // the beacons' blessings; the fire lit by hand is worth half again to a hero the crown never held (Unbound), the lights of
   // the sea a quarter again to one who lit the four Name-stones (Remembered)
   const F = hero.flags || {};

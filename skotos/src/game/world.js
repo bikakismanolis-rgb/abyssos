@@ -701,7 +701,7 @@ function act3Zone(z) {
 }
 // a fallen boss's tree keeps the memory of the fight: touched, it lets an amber echo of the boss rise to be fought again
 // (story.js 'echo'); like the small Tears, once a day
-const ECHO_PROMPT = { kallisto: 'echo.kallisto', kelados: 'echo.kelados', silverhorn: 'echo.hart', amaranthe: 'echo.lady', ivar: 'echo.ivar', karthax: 'echo.karthax', tower: 'echo.tower', skotos: 'echo.skotos', ketos: 'echo.ketos', shade1: 'echo.shade' };
+const ECHO_PROMPT = { aithon: 'echo.aithon', ragna: 'echo.ragna', kallisto: 'echo.kallisto', kelados: 'echo.kelados', silverhorn: 'echo.hart', amaranthe: 'echo.lady', ivar: 'echo.ivar', karthax: 'echo.karthax', tower: 'echo.tower', skotos: 'echo.skotos', ketos: 'echo.ketos', shade1: 'echo.shade' };
 export function echoAt(z, boss, x, zz) {
   const it = { kind: 'echo', boss, x, z: zz, r: 2.8, prompt: ECHO_PROMPT[boss] };
   it.use = () => emit('echo', it, z);
@@ -2364,13 +2364,49 @@ function act8Enter(z) {
   setThaw(0, true);
   Audio.mood({ race: 0 });
   if (z.id === 'tinder') vigilRoad(z);
-  if (z.id === 'vigil') { vigilEnter(z); return; }
+  if (z.id === 'vigil') { vigilEnter(z); echoes8(z); return; }
   // (the lanes stand again on every entry, as the chutes re-arm: forge.js, the Burn)
   startFlues(z.L.flues);
   for (const l of z.lvl?.act8?.lanes || []) l?.setBurnt(false);
   for (const it of z.act8?.hearths || []) hearth8Look(it, !!G.hero.flags['ember' + it.k]);
   const c = z.L.spots.camp; if (c) z.checkpoint = z.map.nearestFloor(c.x, c.z, 3);
+  echoes8(z);
   sunEnter(z);
+}
+// the two echoes after the act (once a day each, story.js 'echo'): Aithon by the fallen yoke on the Threshing Floor, Ragna
+// at the basin of the Flame. They rest again; nothing of the story is touched
+function echoes8(z) {
+  const F = G.hero.flags, S = z.L.spots;
+  if (!F.act8 || z.interact.some((it) => it.kind === 'echo')) return;
+  if (z.id === 'tinder' && S.arena && F.aithonRest) { const p = z.map.nearestFloor(S.arena.x + 3, S.arena.z + 3, 4); if (p) echoAt(z, 'aithon', p.x, p.z); }
+  if (z.id === 'vigil' && S.flame && F.ragnaRest) { const p = z.map.nearestFloor(S.flame.x, S.flame.z + 3.5, 3); if (p) echoAt(z, 'ragna', p.x, p.z); }
+}
+// an echo's fight laid out as the first one was, and put back after (story.js 'echo' and its kill):
+// Aithon's six strips on the Floor stand again; the Great Hall goes dark with its shutters up and the Flame burning, bare
+// to the hand only at her floor (ai.js RAGNA), and banked there (bus 'flame8') lays the echo down
+export function echo8Set(z, k) {
+  if (!z?.act8) return;
+  if (k === 'aithon') {
+    for (const f of flues() || []) if (f.kind === 'burn' && f.boss) { f.armed = true; f.spent = false; f.st = 'idle'; f.t = 0; f.hit = new Set(); z.lvl?.act8?.lanes?.[f.i]?.setBurnt(false); }
+    return;
+  }
+  const P = z.lvl?.act8 || {}, it = z.act8.flame;
+  for (const sh of P.shutters || []) sh.setOpen(false, false);
+  P.arenaDark?.setDark(1); z.act8.shut = 0;
+  if (it) {
+    const m = it.mesh, lid = m?.userData.lid;
+    if (m) { m.userData.setRank?.(5); m.userData.setLit?.(true); if (lid) { lid.position.set(1.25, -0.6, 0.3); lid.rotation.z = 0.5; } }
+    it.morning = false; it.used = true; it.prompt = 'flame8.bank';
+    it.use = () => { if (it.used) return; touch(2.0, it, 1.1, () => emit('flame8', it, z), { take: true, tough: true }); };
+  }
+}
+export function echo8Clear(z, k) {
+  if (!z?.act8 || k !== 'ragna') return;
+  const P = z.lvl?.act8 || {}, it = z.act8.flame;
+  for (const sh of P.shutters || []) sh.setOpen(true, false);
+  P.arenaDark?.setDark(0); z.act8.shut = 8;
+  // (the Flame burns again as the morning left it)
+  if (it) { const m = it.mesh, lid = m?.userData.lid; it.used = true; if (m) { m.userData.setRank?.(3); m.userData.setLit?.(true); if (lid) { lid.position.set(1.25, -0.6, 0.3); lid.rotation.z = 0.5; } } }
 }
 // a hearth as it stands: banked (the cover stone on, no flame) or awake (the stone laid by, the fire burning)
 function hearth8Look(it, awake) {

@@ -25,7 +25,7 @@ import { angleTo } from '../core/util.js';
 import { openDeepGate, FAR_BEACONS, farFire, openRootGate, witherWall, firstAutumn, growProp, zoneEmitters, setFar, setBeacon, townFires, townPresence, walkTo, stopWalk, vanish, release,
   act4Presence, isarnLantern, setLastLamp, openAnvilGate, meltPlug, forgeCold, bellowsDone, echoAt,
   act5Presence, people5, scene5, npc5, spawnNpc5, light5, iceMemOf, ICE_WHO, LIGHTS5, touch, spawnBoss, checkpoint5,
-  act6Presence, light6, checkpoint6, openings6, echo6Set, echo6Clear, act7Presence, raceTo, weirs7, winches7, town7 } from './world.js';
+  act6Presence, light6, checkpoint6, openings6, echo6Set, echo6Clear, act7Presence, raceTo, weirs7, winches7, town7, echo8Set, echo8Clear } from './world.js';
 import { act7Prop } from '../world/build7.js';
 import { N7learn, N7_BY } from './names7.js';
 import { fires7 } from './fires7.js';
@@ -269,11 +269,12 @@ on('kill', (a) => {
     // (its tree's echo fought to its end: a wake into this visit finds it spent, game/wake.js)
     if (a.echoOf) a.echoOf.fought = true;
     emit('bossDown', a);
-    const ash = a.kind === 'ivar' || a.kind === 'karthax', ice = a.kind === 'tower' || a.kind === 'skotos', deep = a.kind === 'ketos' || a.def?.legKey === 'shade', c = ash ? 0xd8d0c0 : ice ? 0xd8ecff : deep ? 0xd0d8e8 : 0xffc060;
+    const ash = a.kind === 'ivar' || a.kind === 'karthax', ice = a.kind === 'tower' || a.kind === 'skotos', deep = a.kind === 'ketos' || a.def?.legKey === 'shade', melt = a.kind === 'kallisto' || a.kind === 'kelados', ember = a.kind === 'aithon' || a.kind === 'ragna', c = ash ? 0xd8d0c0 : ice ? 0xd8ecff : deep ? 0xd0d8e8 : ember ? 0xfff0d8 : 0xffc060;
     if (ash) dismiss(G.zone, a);
     if (deep) { const z = G.zone; dismiss5(z, a); later(2.4, () => { if (G.zone === z) echo6Clear(z); }); }
+    if (ember) { const z = G.zone, k = a.kind; later(2.4, () => { if (G.zone === z) echo8Clear(z, k); }); }
     later(1.2, () => { if (G.zone?.actors.includes(a)) { glowBurst(a.x, 1.2, a.z, c, 40, 3, 0.3, 1); ring(a.x, a.z, 3, c, 0.7); } });
-    later(2.2, () => emit('toast', t(ash ? 'echo.done4' : ice ? 'echo.done5' : deep ? 'echo.done6' : 'echo.done'), 'quest'));
+    later(2.2, () => emit('toast', t(ash ? 'echo.done4' : ice ? 'echo.done5' : deep ? 'echo.done6' : melt ? 'echo.done7' : ember ? 'echo.done8' : 'echo.done'), 'quest'));
     // (Act VII: Ivar's echo fought to its end with the Names open gives his: ivarEcho7, names7.js)
     { const own = G.hero.__real || G.hero; if (a.kind === 'ivar' && own.quest >= 40 && !own.flags.ivarEcho7) { own.flags.ivarEcho7 = true; learn7(); } }
     writeSave();
@@ -495,24 +496,26 @@ on('echo', (it, z) => {
   const k = it.boss, pl = G.player, away = Math.atan2(it.x - pl.x, it.z - pl.z), d = k === 'silverhorn' || k === 'tower' ? 8 : k === 'karthax' ? 6 : 5;
   // Act V's rise out of ice: the Tower at its island, the Skotos at the ice edge, where it stood
   // (Act VI's rise out of the deep: the Ketos in its Mere filled again, the Shade by the Gate ring, echo6Set)
-  const ash = k === 'ivar' || k === 'karthax', ice = k === 'tower' || k === 'skotos', deep = k === 'ketos' || k === 'shade1', melt = k === 'kallisto' || k === 'kelados', c = ash ? 0xd8d0c0 : ice ? 0xd8ecff : deep ? 0xd0d8e8 : melt ? 0xe4eef2 : 0xffc060;
+  // (Act VIII's out of embers: Aithon on his Floor, its strips standing again; Ragna in her Great Hall, dark again: echo8Set)
+  const ash = k === 'ivar' || k === 'karthax', ice = k === 'tower' || k === 'skotos', deep = k === 'ketos' || k === 'shade1', melt = k === 'kallisto' || k === 'kelados', ember = k === 'aithon' || k === 'ragna', c = ash ? 0xd8d0c0 : ice ? 0xd8ecff : deep ? 0xd0d8e8 : melt ? 0xe4eef2 : ember ? 0xfff0d8 : 0xffc060;
   const across = (a) => z.map.nearestFloor(it.x + Math.sin(away + a) * d, it.z + Math.cos(away + a) * d, 4);
   // straight across, or a little to the side where something solid stands between (the Last Lamp, the Anvil): it must see her
   const s = [0, 0.7, -0.7, 1.3, -1.3].map(across).find((p) => z.map.los(p.x, p.z, pl.x, pl.z)) || across(0);
   Audio.sting('memory');
   glowBurst(it.x, 1.7, it.z, c, 40, 3, 0.3, 1); ring(it.x, it.z, 3, c, 0.8);
-  emit('toast', t(ash ? 'echo.rise4' : ice ? 'echo.rise5' : deep ? 'echo.rise6' : melt ? 'echo.rise7' : 'echo.rise'), 'quest');
+  emit('toast', t(ash ? 'echo.rise4' : ice ? 'echo.rise5' : deep ? 'echo.rise6' : melt ? 'echo.rise7' : ember ? 'echo.rise8' : 'echo.rise'), 'quest');
   if (deep) echo6Set(z, k);
+  if (ember) echo8Set(z, k);
   // Ivar's braziers burn again for his echo (after the Unmaking the plaza is dark)
   if (k === 'ivar') for (const b of z.act4?.braziers || []) if (!b.lit) b.relight();
   later(1.4, () => {
     if (G.zone !== z) { it.used = false; return; }
     glowBurst(s.x, 1.5, s.z, c, 50, 4, 0.35, 1); ring(s.x, s.z, 5, ash ? 0xe8e0d0 : 0xffd080, 1); shake(0.3);
     // (Act VII's: Kallisto in her bowl, Kelados at his seat, both as they stood)
-    const at = k === 'kallisto' ? z.map.nearestFloor(z.L.spots.arena.x, z.L.spots.arena.z, 4) : k === 'kelados' ? z.map.nearestFloor(z.L.spots.seat.x, z.L.spots.seat.z, 4) : k === 'skotos' ? z.L.spots.skotos : k === 'ketos' ? z.L.spots.mere : k === 'shade1' ? z.map.nearestFloor(z.L.spots.hearth.ring.x, z.L.spots.hearth.ring.z - 1.5, 3) : s;
+    const at = k === 'aithon' ? z.map.nearestFloor(z.L.spots.arena.x, z.L.spots.arena.z - 6, 4) : k === 'ragna' ? z.map.nearestFloor(z.L.spots.arena.x, z.L.spots.arena.z - 4.5, 3) : k === 'kallisto' ? z.map.nearestFloor(z.L.spots.arena.x, z.L.spots.arena.z, 4) : k === 'kelados' ? z.map.nearestFloor(z.L.spots.seat.x, z.L.spots.seat.z, 4) : k === 'skotos' ? z.L.spots.skotos : k === 'ketos' ? z.L.spots.mere : k === 'shade1' ? z.map.nearestFloor(z.L.spots.hearth.ring.x, z.L.spots.hearth.ring.z - 1.5, 3) : s;
     const b = spawnMonster(k, at.x, at.z, { level: Math.max(z.level + (k === 'silverhorn' || k === 'ivar' || k === 'tower' ? 2 : 3), G.hero.level + 1) });
     b.echo = true; b.echoOf = it; b.rot = Math.atan2(G.player.x - b.x, G.player.z - b.z);
-    const T = melt ? [0xd8e4e8, 1.1, 0xe8f4ff] : ash ? [0x9a9690, 1.2, 0xffa040] : k === 'tower' ? [0xbcd8f0, 1.2, 0x9ad8ff] : k === 'skotos' ? [0x1a1424, 2.0, 0xb090ff] : k === 'ketos' ? [0xd0d8e8, 1.2, 0xe0e8ff] : k === 'shade1' ? [0x1a1c24, 2.0, 0xd0d8ff] : [0xffc870, 0.4, 0xffd070];
+    const T = ember ? [0xfff0e0, 0.9, 0xffffff] : melt ? [0xd8e4e8, 1.1, 0xe8f4ff] : ash ? [0x9a9690, 1.2, 0xffa040] : k === 'tower' ? [0xbcd8f0, 1.2, 0x9ad8ff] : k === 'skotos' ? [0x1a1424, 2.0, 0xb090ff] : k === 'ketos' ? [0xd0d8e8, 1.2, 0xe0e8ff] : k === 'shade1' ? [0x1a1c24, 2.0, 0xd0d8ff] : [0xffc870, 0.4, 0xffd070];
     b.baseTint = T[0]; b.baseTintAmt = T[1]; b.avatar?.setTint(b.baseTint, b.baseTintAmt); b.avatar?.setRim?.(T[2], 1.4);
     z.actors.push(b); z.boss = b;
   });

@@ -259,13 +259,13 @@ async function startHero(hero, isNew, zone = 'town', force = false, home = false
   // a hero taken up again: any blessing still owed
   if (!isNew) later(1.5, offerBoons);
 }
-// Act VI's two bosses' legendaries, once each: a page of a build from before Act VI writes every stored hero back made
+// Acts VI-VIII's bosses' legendaries, once each: a page of a build from before Act VI writes every stored hero back made
 // whole for it, and cleanItem makes a legendary it does not know a rare; the first kill (flags.legFrom_<boss>) never drops
 // it again. One the hero has nowhere (bag, stash, worn) is rolled again into the stash's first free slot (else the bag),
 // at most once (flags.legBack_<boss>: one sold or salvaged comes back no more than that)
 function legBack(hero) {
   const F = hero.flags, all = [...(hero.inv || []), ...(hero.stash || []), ...Object.values(hero.equip || {})];
-  for (const k of ['ketos', 'shade', 'kallisto', 'kelados']) {
+  for (const k of ['ketos', 'shade', 'kallisto', 'kelados', 'aithon', 'ragna']) {
     const leg = LEG_FROM[k];
     if (!leg || !F['legFrom_' + k] || F['legBack_' + k] || all.some((it) => it?.leg === leg)) continue;
     const list = hero.stash.includes(null) ? hero.stash : hero.inv, i = list.indexOf(null);

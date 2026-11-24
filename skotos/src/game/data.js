@@ -529,10 +529,16 @@ export const LEGENDARIES = [
   // her next blow +50% and a 1 s Daze, once each 6 s; +8% attack speed (stats.js, combat.js, player.js). The Mountain's
   // Heart: a slide or a wash-out takes no life from her; +10% armour (combat.js, stats.js)
   { id: 'kallistoClaw', base: 'gloves', cls: null, v: 0.5, drop: false },
-  { id: 'mountainHeart', base: 'chest', cls: null, v: 0.1, drop: false }
+  { id: 'mountainHeart', base: 'chest', cls: null, v: 0.1, drop: false },
+  // Act VIII's two, each from its boss's first fall (neither is killed). Blacksoles: fire on the ground (what carries a
+  // burn: the Burn's lanes, the Forge's breath and vents, a fire's area) and the burning it leaves hurt her 30% less;
+  // +10% move speed. The Vigil Ring: after 4 s without striking, her next blow is a certain critical (the pause pays);
+  // +25% critical damage (stats.js, combat.js)
+  { id: 'blacksoles', base: 'boots', cls: null, v: 0.3, drop: false },
+  { id: 'vigilRing', base: 'ring', cls: null, v: 4, drop: false }
 ];
 // a boss's first kill drops its own legendary (combat.js kill: by its def's legKey, else its kind)
-export const LEG_FROM = { tower: 'skerryShell', skotos: 'einarLantern', ketos: 'ketosLure', shade: 'shadeRing', kallisto: 'kallistoClaw', kelados: 'mountainHeart' };
+export const LEG_FROM = { tower: 'skerryShell', skotos: 'einarLantern', ketos: 'ketosLure', shade: 'shadeRing', kallisto: 'kallistoClaw', kelados: 'mountainHeart', aithon: 'blacksoles', ragna: 'vigilRing' };
 // the act's hazard row for a rule Acts V, VI and VII share (ZONES is world's: the act number is the caller's)
 // Act VIII's rows: Act VII's (the Burn reads slide, slideFoe, slideElite), its creatures' life and blows raised after the
 // first balance pass (docs/act8-briefs/reports/stageD.md: the Order's packs fell in a second or two to a hero at 52)

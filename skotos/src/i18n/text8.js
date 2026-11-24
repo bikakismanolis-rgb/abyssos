@@ -79,5 +79,15 @@ export const TEXT8 = {
   'd.hook8': ['Ξύπνησες ξεκούραστος. Στον νότο, πάνω από τον κάμπο, στέκει ένας καπνός που χτες δεν ήταν εκεί.', 'You woke rested. In the south, over the plain, stands a smoke that was not there yesterday.'],
   'd.tinder.1': ['Κάποιος έθαψε φωτιές σε αυτά τα χωράφια για να μη σβήσουν. Τρεις. Βρες τες.', 'Someone banked fires in these fields so they would not die. Three. Find them.'],
   'd.embers.3': ['Οι τρεις φωτιές καίνε ξανά. Στο Αλώνι, κάτι μεγάλο σέρνει ακόμα τον ζυγό του.', 'The three fires burn again. On the Threshing Floor, something large still drags its yoke.'],
+  // the two echoes after the act (world.js echoes8, story.js 'echo')
+  'echo.aithon': ['Θυμήσου τον Αίθωνα', 'Remember Aithon'],
+  'echo.ragna': ['Ξύπνα τη μνήμη της Άγρυπνης', 'Wake the memory of the Wakeful'],
+  'echo.rise8': ['Η θράκα θυμάται τη μάχη...', 'The embers remember the fight...'],
+  'echo.done8': ['Η ηχώ σβήνει. Η θράκα θα θυμηθεί ξανά αύριο.', 'The echo fades. The embers will remember again tomorrow.'],
+  // the bosses' first-fall legendaries (data.js LEG_FROM)
+  'leg.blacksoles': ['Τα Μαυροπάτια', 'Blacksoles'],
+  'leg.blacksoles.d': ['Η φωτιά στο έδαφος και το κάψιμο που αφήνει σε πονάνε 30% λιγότερο. +10% ταχύτητα κίνησης.', 'Fire on the ground and the burning it leaves hurt you 30% less. +10% move speed.'],
+  'leg.vigilRing': ['Το Δαχτυλίδι της Αγρύπνιας', 'The Vigil Ring'],
+  'leg.vigilRing.d': ['Αν περάσουν 4 δευτ. χωρίς να χτυπήσεις, το επόμενο χτύπημα είναι σίγουρα κρίσιμο. +25% κρίσιμη ζημιά.', 'After 4 s without striking, your next hit is a certain critical. +25% critical damage.'],
   'q.burn': ['Ο αέρας παίρνει την καλαμιά. Βγες από τη λωρίδα: το καμένο δεν ξανακαίγεται.', 'The wind takes the stubble. Step out of the strip: what has burnt does not burn twice.']
 };

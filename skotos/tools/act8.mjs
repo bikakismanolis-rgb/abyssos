@@ -5,6 +5,8 @@
 //   ragna  Ragna: shutters by her life, the drowse in daylight, the floor, the Flame by hand, the sleep, the morning
 //   play8  the whole act with its story on, from the hook to the act's panel
 //   road   Whitecliff's South Road is there after Act VII, takes her to the Tindergrass and back; absent before
+//   echo8  after the act: Aithon's and Ragna's echoes rise, fight, fade; the story untouched; each first fall (an echo's too,
+//          for a v24 hero) drops its legendary; Blacksoles and the Vigil Ring do what they say
 //   founder the eighth Name: learnt at the second ember memory, shown in the panel; said, a blow on the last foe awake
 //          within 12 m is +25% (none with a second foe near or asleep there), Deep its blows hurt 15% less
 import { createRequire } from 'node:module';
@@ -215,6 +217,67 @@ const T = {
     await pg.screenshot({ path: out + '/play8-end.png' });
     const txt = await ev(() => document.querySelector('.act-h')?.textContent || '');
     beat('the panel says Act VIII', /VIII/.test(txt), txt);
+  },
+  async echo8() {
+    const F8 = 'act7,act8,aithonRest,ember1,ember2,ember3,bank1,bank2,bank3,ragnaRest,flameWoken';
+    const fight = async (zone, kind) => {
+      await open(`auto=${zone}&lvl=52&flags=${F8}&quest=55&nopacks`);
+      await ev(() => { window.__immortal = true; });
+      const e = await ev((kind) => { const z = window.__G.zone, it = z.interact.find((i) => i.kind === 'echo'); return it ? { boss: it.boss, prompt: it.prompt } : null; }, kind);
+      beat(kind + ': its echo stands after the act', e && e.boss === kind && e.prompt === 'echo.' + kind, e);
+      await ev(() => { const G = window.__G, it = G.zone.interact.find((i) => i.kind === 'echo'); G.player.x = it.x + 1; G.player.z = it.z; it.use(); });
+      await pg.waitForFunction(() => window.__G.zone.boss?.echo && !window.__G.zone.boss.dead, null, { timeout: 90000 }).catch(() => {});
+      const b = await ev(async () => { const G = window.__G, z = G.zone, b = z.boss, Fg = await import('/src/game/forge.js'); return b ? { kind: b.kind, echo: !!b.echo, lanes: (Fg.flues() || []).filter((f) => f.kind === 'burn' && f.boss && f.armed && !f.spent).length, shut: z.act8.shut, flame: z.act8.flame ? { used: z.act8.flame.used, prompt: z.act8.flame.prompt } : null } : null; });
+      return b;
+    };
+    // Aithon
+    const a = await fight('tinder', 'aithon');
+    beat('Aithon\'s echo rises, the Floor\'s six strips standing again', a && a.kind === 'aithon' && a.echo && a.lanes === 6, a);
+    const q0 = await ev(() => ({ q: window.__G.hero.quest, rest: !!window.__G.hero.flags.aithonRest }));
+    await ev(async () => { const G = window.__G, C = await import('/src/game/combat.js'), b = G.zone.boss; b.hp = 5; b.hpFloor = 0; C.damage(G.player, b, 999, { crit: false }); });
+    await pg.waitForFunction(() => window.__G.hero.flags.legFrom_aithon, null, { timeout: 60000 }).catch(() => {});
+    await pg.waitForTimeout(2500);
+    const a1 = await ev(() => { const G = window.__G; return { q: G.hero.quest, leg: !!G.hero.flags.legFrom_aithon, drop: G.pickups.some((p) => p.item?.leg === 'blacksoles'), boss: !!G.zone.boss && !G.zone.boss.dead }; });
+    beat('the echo fades: the quest untouched, the first fall drops Blacksoles', a1.q === q0.q && a1.leg && a1.drop && !a1.boss, { ...a1, q0 });
+    // Ragna
+    const r = await fight('vigil', 'ragna');
+    beat('Ragna\'s echo rises in a dark hall, shutters up, the Flame burning and not yet bare', r && r.kind === 'ragna' && r.echo && r.shut === 0 && r.flame?.used && r.flame.prompt === 'flame8.bank', r);
+    await ev(() => { const b = window.__G.zone.boss; b.hp = b.hpMax * 0.04; });
+    await pg.waitForFunction(() => window.__G.zone.act8.flame.used === false, null, { timeout: 60000 }).catch(() => {});
+    const r1 = await ev(() => ({ bare: window.__G.zone.act8.flame.used === false, shut: window.__G.zone.act8.shut }));
+    beat('at her floor the Flame is bare, the shutters down by her life', r1.bare && r1.shut >= 7, r1);
+    await ev(async () => { const { emit } = await import('/src/ui/bus.js'), z = window.__G.zone; emit('flame8', z.act8.flame, z); });
+    await pg.waitForFunction(() => window.__G.hero.flags.legFrom_ragna, null, { timeout: 60000 }).catch(() => {});
+    await pg.waitForFunction(() => window.__G.zone.act8.shut === 8 && window.__G.zone.act8.flame.mesh?.userData && window.__G.zone.act8.flame.used, null, { timeout: 90000 }).catch(() => {});
+    await pg.waitForTimeout(3000);
+    const r2 = await ev(() => { const G = window.__G, z = G.zone; return { q: G.hero.quest, leg: !!G.hero.flags.legFrom_ragna, drop: G.pickups.some((p) => p.item?.leg === 'vigilRing'), shut: z.act8.shut, act: G.hero.act8, flamePrompt: z.act8.flame.prompt, used: z.act8.flame.used }; });
+    beat('banked, the echo fades: the hall light again, the quest and the act untouched, the Vigil Ring dropped', r2.q === 55 && r2.leg && r2.drop && r2.shut === 8 && r2.used, r2);
+    // the two legendaries worn
+    const L = await ev(async () => {
+      const G = window.__G, I = await import('/src/game/items.js'), S = await import('/src/game/stats.js'), C = await import('/src/game/combat.js'), A = await import('/src/game/actors.js'), pl = G.player;
+      // (the legendary's own lines only: the items' rolled stats cleared, the same two worn without their powers first;
+      // no Name said, Arna's first-blow +40% would read as the ring's)
+      const ring = I.makeItem(52, { rar: 3, leg: 'vigilRing', cls: G.hero.cls }), boots = I.makeItem(52, { rar: 3, leg: 'blacksoles', cls: G.hero.cls });
+      ring.stats = {}; boots.stats = {}; G.hero.names.said = [null, null, null];
+      G.hero.equip.ring1 = { ...ring, leg: undefined, rar: 2 }; G.hero.equip.boots = { ...boots, leg: undefined, rar: 2 }; S.refreshStats();
+      const before = { critD: G.stats.critD, move: G.stats.move };
+      G.hero.equip.ring1 = ring; G.hero.equip.boots = boots; S.refreshStats();
+      const after = { critD: G.stats.critD, move: G.stats.move, legs: [...G.stats.legs] };
+      const f = A.spawnMonster('goblin', pl.x + 3, pl.z); G.actors.push(f); f.hp = f.hpMax = 1e7; f.aggro = false; f.speed = 0;
+      G.stats.critC = 0;
+      const hit = () => { const b = f.hp; C.damage(pl, f, 1000, {}); return Math.round(b - f.hp); };
+      pl.strikeT = G.time - 5; const rested = hit();
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const next = hit();
+      pl.hp = pl.hpMax; pl.iframes = 0; const bl = G.stats.block; G.stats.block = 0;
+      let h0 = pl.hp; C.damage(null, pl, 400, { pure: true, burn: 10 }); const burnHit = h0 - pl.hp; pl.hp = pl.hpMax;
+      h0 = pl.hp; C.damage(null, pl, 400, { pure: true }); const plain = h0 - pl.hp; pl.hp = pl.hpMax; G.stats.block = bl;
+      return { before, after, rested, next, burnHit, plain, ringName: I.itemName(ring), bootsName: I.itemName(boots) };
+    });
+    beat('worn: +25% critical damage, +10% move speed', L.after.critD === L.before.critD + 25 && L.after.move === L.before.move + 10 && L.after.legs.includes('vigilRing') && L.after.legs.includes('blacksoles'), L);
+    beat('the Vigil Ring: after 4 s still, a certain critical; the next blow at once is not', L.rested > L.next * 1.5 && Math.abs(L.rested / L.next - (1 + L.after.critD / 100)) < 0.02, { rested: L.rested, next: L.next, critD: L.after.critD });
+    beat('Blacksoles: a blow that carries a burn hurts 30% less', Math.abs(L.burnHit / L.plain - 0.7) < 0.02, { burnHit: L.burnHit, plain: L.plain });
+    beat('their names in Greek', /Μαυροπάτια/.test(L.bootsName) && /Αγρύπνιας/.test(L.ringName), { boots: L.bootsName, ring: L.ringName });
   },
   async founder() {
     await open('auto=tinder&lvl=50&flags=act7&quest=49&nopacks');
