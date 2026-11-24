@@ -50,8 +50,8 @@ import { N7nm, N7blowCap } from '../game/names7.js';
 import { actHaz } from '../game/data.js';
 
 // (the game's version: pages of another do not list or join each other's games. 4: the Supabase wire of the economy
-// (docs/coop/diet.md), which a page of 3 cannot read nor be read by; 6: Act VII's fields, docs/act7-contract.md; 7: Act VIII's, `o.c8` and its guests' touches)
-export const VER = 7;
+// (docs/coop/diet.md), which a page of 3 cannot read nor be read by; 6: Act VII's fields, docs/act7-contract.md; 7: Act VIII's, `o.c8` and its guests' touches; 8: the eighth Name, the act's blessing, its echoes and Good Nights)
+export const VER = 8;
 const SNAP_HZ = 10, SNAP_MAX = 3900, REL_MAX = 1700, REL_Q = 200, FX_MAX = 900, FX_MIN = 500, FX_RATE = 600, NEAR = 40, NEAREST = 10, OVERDUE = 1000, CHUNK = 3300, HOST_LOST = 25000, HOST_GONE = 10000, STALL = 6000, DOWNED = 30, REVIVE = 2.5, LAG = 130, WAIT_MAX = 300000, NO_WORLD = 15000;
 const CODE_CH = 'abcdefghjkmnpqrstuvwxyz23456789';
 const KINDS = Object.keys(MONSTERS), KIDX = new Map(KINDS.map((k, i) => [k, i]));
