@@ -103,3 +103,52 @@ All on this tree, one at a time (two cores), on the no-HMR dev server; then both
 - The Burn re-arms on every entry (by the design: "spent for the visit").
 - The balance is a first pass at one difficulty; the class gap at Aithon (the mage about a minute, the warden four or
   five) is the widest thing left.
+
+## 24 November: the not-done list, built (two sessions)
+
+The owner asked to go on with what this report lists as not done («πάμε στο 2»). Two sessions split it; one kept the
+branch and the commits, the other sent its part as a patch (checked by the files' hashes on 49eed6e) and reviewed.
+
+- **The eighth Name, «Γρηγορία» / "Grigoria"** (names7.js `founder`; 2c6b408). The girl of the second ember memory, now
+  named there (`d.mem8.2c`), learnt with `mem8_2`. Kept: when one foe alone is left awake within 12 m of her, her blows on
+  it +25% (asleep, under the ground, hidden or a prop: not counted; combat.js counts once a frame). Deep: that last foe
+  hurts her 15% less. The Call: every foe is the last. Co-op byte 16 (+8 Deep), so a v23/v24 page reads no Name there
+  (its blow cap only lower) and never another Name. The name is a default the owner can change (one text row).
+- **The Names' clock** (boot.js; 2c6b408). `G.time` never advanced from v23 on: after one Call every Name's condition held
+  (the Call's `until` was 20 on a clock standing at 0) and no second Call came (its 90 s never passed); Asger's weave never
+  fell, Isarn's Deep window never shut. It now advances by the game's dt. The balance runs A-C say no Name
+  (balance-act.mjs), so the measured numbers stand; players who used the Call were stronger than meant.
+- **The echoes** (world.js `echoes8`, `echo8Set`, `echo8Clear`; story.js 'echo'; 5aeb5b8). After `act8`, once a day each:
+  Aithon by the fallen yoke, his Floor's six strips armed again; Ragna at the Flame's basin, the Great Hall dark with its
+  shutters up and the Flame burning, bare at her floor, banked to lay her down, then the hall light as the morning left it.
+  Nothing of the story moves. Act VII's echoes now end with their own line (`echo.done7`; they said the amber's).
+- **The first-fall legendaries** (data.js `LEG_FROM`; 5aeb5b8). **Blacksoles** (boots, Aithon): a blow that carries a burn
+  and the burning it leaves x0.7, +10% move. **The Vigil Ring** (ring, Ragna): after 4 s without striking, a certain
+  critical, +25% critical damage (thorns and a Challenge's return neither spend nor end the pause). An echo's first fall
+  drops it too, so a v24 hero who beat them before gets it from the echo. `legBack` covers both.
+- **Act VIII's blessing** (data.js `BOONS[8]`; 7743219): the act had none. «Το Καπάκι της Χάλντα» (life 12%, armour 12%),
+  «Η Μικρή Φωτιά» (damage 10%, area 12%; the proposal's «Αντιπύρ» renamed by the act's rule 4), «Το Πρώτο Πρωί» (cooldowns
+  8%, resource regeneration 15). Offered once `act8` is done, to a hero who finished the act in v24 as well. **A v24 page
+  refuses a hero holding one** (save.js: `newer`), as it would a new save format.
+- **The Seven Good Nights** (world.js `GN8`, `gnTick`, `gnSleep`; story.js 'gnSay'; 7743219). After the act, beside each of
+  seven people a touch of a second («Σκέπασε τη φωτιά του / της»): one line each (the proposal's), and they lie down where
+  they stand until the hero leaves the zone. Halda, Leif's father and Elianthe in Whitecliff; Brokka in the Halls; Elati in
+  the Lanternglade; Glaukos at the Rope camp; Selna at the Farthest Light, last, once the other six sleep (Tern takes her
+  watch). `gn_<who>`, the count as a toast; all seven, `gnAll`: the act's blessing x1.25 (`REMEMBERED`). Left out: the
+  proposal's sleeping coals from side hearths (the act built no side hearths).
+- **The South Road's lane** (the second session; bc67c69): out of Whitecliff's east street between the Stilt house and the
+  Long house, through the palisade (gen.js, cut last with no draws), a signpost and a lamp, the exit at its end.
+- **The act's own ambient** (the second session; bc67c69): 'tinder' (chaff and straw on the wind, dust over the stubble;
+  nothing additive, no spark, no smoke), 'vigil' (dust in the light) and 'vigilDark' (soot, white motes), switched in the
+  House by its dark.
+
+**Tests** (dev server, no hot reload, one browser at a time, on the merged tree): `check-names7` (700); act8 `founder`,
+`echo8`, `gn8` (new), `aithon`, `ragna`, `vigil`, `burn`, `road`, `spine` and `play8` (the whole act with its story):
+pass; `coop.mjs act8`: pass; scenarios `save14`, `save16`, `title`, `panels`, `shop`: pass; `resume` failed its later
+parts in one long run after the rest, and each part passed alone (crypt, pass, act4, act5, tower, act6). `act8 hearth`
+fails on 49eed6e as on this tree (the town and back is too slow on SwiftShader for its waits): a test matter. The second
+session's review: the Vigil Ring no longer counts what goes back at a striker by itself; a Good Night's touch stands at
+their side (their talk, a shop for two of them, still wins straight in front), with a hint the first time; one asleep
+keeps no talk whatever a presence pass writes. **Not checked in a browser:** the Good Nights outside Whitecliff (that
+Brokka, Elati, Glaukos and Selna stand in their zones after the act with these kinds), the builds and the strict CSP.
+

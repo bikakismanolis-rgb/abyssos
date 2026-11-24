@@ -236,3 +236,22 @@ a phone-shaped browser on SwiftShader (coast, Farthest Light, Hanging Lake: 6-20
 **not confirmed on his phone**. Published as artifact version id 1795367019-148a from `main` at 21f1dc3. If it still
 freezes: read that db document again after he next opens the game (`prev.gl` names the last shader linked or used, and
 `diag.phase` now says `warm i/n`, how far the warming got).
+
+**24 November: the act's not-done list, built (not published).** The owner asked to go on («πάμε στο 2»: the report's
+not-done list). Two sessions worked at once: this branch's (the commits) and a second that sent its part as a patch and
+reviewed. On `claude/sleepy-tesla-4030vd`, not on `main` and not in the artifact: the eighth Name «Γρηγορία» (2c6b408),
+the Names' clock (`G.time` stood at 0 from v23: after one Call every Name's condition held; now it runs), Aithon's and
+Ragna's echoes and their first-fall legendaries Blacksoles and the Vigil Ring (5aeb5b8), Act VIII's blessing (the act had
+none) and the Seven Good Nights (7743219), the South Road's lane, signpost and lamp in Whitecliff and the act's own
+ambient (bc67c69, the second session's). Every detail, the tests and what was not checked: the last section of
+`docs/act8-briefs/reports/stageB-E.md`. New tests: `act8.mjs founder | echo8 | gn8`.
+
+**Before publishing these:** the save format and co-op protocol: a v24 page refuses a hero holding Act VIII's blessing
+(save.js `newer`), so bump `SAVE_FMT` to 4 in the release commit as before; co-op can stay protocol 7 (the eighth Name's
+byte reads as none on a v24 page) or go to 8 to keep the versions apart, the lead's call. Then both builds, the strict
+CSP (desktop and touch), the regression set, and the owner's word. Next after that, in order: (1) the owner plays Act
+VIII and says what he wants changed; (2) the Good Nights checked outside Whitecliff (Brokka in the Halls, Elati in the
+Lanternglade, Glaukos at the Rope camp, Selna at the Farthest Light); (3) a balance campaign at full counts on every
+difficulty; (4) `echo7`'s two misses in seven runs; (5) the phone report `gpu-phone` read once he opens the game on the
+phone (none yet on 24 November: the phone has not opened it since the 22 November fix).
+

@@ -80,9 +80,11 @@ export function damage(src, target, amount, o = {}) {
   let crit = !!(o.net && o.crit);
   if (own) {
     const s = G.stats;
-    // the Vigil Ring: a blow after 4 s without striking is a certain critical (every target of that one blow shares it)
+    // the Vigil Ring: a blow after 4 s without striking is a certain critical (every target of that one blow shares it).
+    // What goes back at a striker by itself (thorns, a Challenge's return: quiet, or told it cannot be critical) is not
+    // her striking: it neither spends the pause nor ends it
     let rested = false;
-    if (!o.dot && s.legs.has('vigilRing')) { const p = G.player; if (p.strikeT === G.time) rested = !!p.restedHit; else { rested = G.time - (p.strikeT ?? -Infinity) >= 4; p.strikeT = G.time; p.restedHit = rested; } }
+    if (!o.dot && !o.quiet && o.crit !== false && s.legs.has('vigilRing')) { const p = G.player; if (p.strikeT === G.time) rested = !!p.restedHit; else { rested = G.time - (p.strikeT ?? -Infinity) >= 4; p.strikeT = G.time; p.restedHit = rested; } }
     if (o.crit ?? (!o.dot && (rested || heroCrit()))) { crit = true; amount *= 1 + s.critD / 100; }
     if (target.elite || target.boss) { amount *= 1 + s.eliteDmg / 100; if (s.legs.has('kingslayer')) amount *= 1.3; }
     // Einar's Lantern: the Skotos's creatures it strikes stand in the light for 2 s (Revealed: nothing more on what is worse off)

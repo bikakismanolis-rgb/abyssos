@@ -96,6 +96,7 @@ export const TEXT8 = {
   // the Seven Good Nights (world.js GN8, story.js 'gnSay'; docs/act7-briefs/proposal-story.md §7)
   'gn.bankHis': ['Σκέπασε τη φωτιά του', 'Bank his fire'],
   'gn.bankHer': ['Σκέπασε τη φωτιά της', 'Bank her fire'],
+  'gn.hint': ['Ξέρεις πια να σκεπάζεις μια φωτιά. Στάσου στο πλάι όσων ξέρεις, και πες τους καληνύχτα.', 'You know how to bank a fire now. Stand at the side of those you know, and say good night.'],
   'q.goodnight': ['Καληνύχτες: {0}/7', 'Good nights: {0}/7'],
   'q.gnAll': ['Εφτά καληνύχτες: η ευλογία του πρωινού δυναμώνει', 'Seven good nights: the morning\'s blessing grows stronger'],
   'd.gn.halda': ['Εγώ; Εγώ κοιμάμαι όρθια στο αμόνι, σαν άλογο. ...Καλά. Μια φορά.', 'Me? I sleep standing at the anvil, like a horse. ...All right. Once.'],

@@ -268,7 +268,8 @@ const T = {
       const f = A.spawnMonster('goblin', pl.x + 3, pl.z); G.actors.push(f); f.hp = f.hpMax = 1e7; f.aggro = false; f.speed = 0;
       G.stats.critC = 0;
       const hit = () => { const b = f.hp; C.damage(pl, f, 1000, {}); return Math.round(b - f.hp); };
-      pl.strikeT = G.time - 5; const rested = hit();
+      // (thorns and a Challenge's return are not her striking: the pause is kept through them)
+      pl.strikeT = G.time - 5; C.damage(pl, f, 50, { quiet: true, noFx: true, noLoh: true, noRes: true }); C.damage(pl, f, 50, { crit: false, quiet: true }); const rested = hit();
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
       const next = hit();
       pl.hp = pl.hpMax; pl.iframes = 0; const bl = G.stats.block; G.stats.block = 0;
@@ -293,6 +294,9 @@ const T = {
     await pg.waitForFunction(() => window.__G.zone.interact.filter((i) => i.kind === 'gn8').length >= 3, null, { timeout: 30000 }).catch(() => {});
     const g0 = await ev(() => window.__G.zone.interact.filter((i) => i.kind === 'gn8').map((i) => ({ who: i.g.who, prompt: i.prompt, d: +Math.hypot(i.x - i.a.x, i.z - i.a.z).toFixed(2) })));
     beat('in Whitecliff: Halda, Leif\'s father, Elianthe, each a touch beside them', ['halda', 'father', 'elianthe'].every((w) => g0.some((g) => g.who === w)) && g0.every((g) => g.d > 0.8 && g.d < 2), g0);
+    // where she stands decides: at the side, the good night; straight in front, their talk (Halda's anvil, Elianthe's shop)
+    const pick = await ev(async () => { const W = await import('/src/game/world.js'), G = window.__G, pl = G.player, it = G.zone.interact.find((i) => i.kind === 'gn8' && i.g.who === 'halda'), a = it.a, f = a.home ?? a.rot; pl.x = it.x; pl.z = it.z; const side = W.nearestInteract()?.kind; pl.x = a.x + Math.sin(f) * 1.1; pl.z = a.z + Math.cos(f) * 1.1; const front = W.nearestInteract()?.kind; return { side, front, hint: !!G.hero.flags.gnHint }; });
+    beat('at her side the good night, in front her talk; the hint given once', pick.side === 'gn8' && pick.front === 'npc' && pick.hint, pick);
     // Halda by hand: the touch of a second, her line, and she lies down
     await ev(() => { const G = window.__G, it = G.zone.interact.find((i) => i.kind === 'gn8' && i.g.who === 'halda'); G.player.x = it.x; G.player.z = it.z; it.use(); });
     await pg.waitForFunction(() => window.__G.hero.flags.gn_halda && window.__G.actors.some((a) => a.kind === 'smith' && a.gnAsleep), null, { timeout: 60000 }).catch(() => {});

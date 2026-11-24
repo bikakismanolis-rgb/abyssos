@@ -525,7 +525,8 @@ export function nearestInteract() {
   const z = G.zone, pl = G.player; if (!z || !pl) return null;
   let best = null, bd = 1e9;
   for (const it of z.interact) {
-    if (it.used) continue;
+    // (one asleep for the night, a Good Night's, keeps no talk, whatever a presence pass wrote in its used)
+    if (it.used || it.actor?.gnAsleep) continue;
     // (it.prio: one that wins over a nearer one without it, the Ketos's bells in its blind phase: combat's)
     const d = Math.hypot(it.x - pl.x, it.z - pl.z), s = d - (it.prio || 0) * 100;
     if (d < it.r && s < bd) { bd = s; best = it; }
@@ -2436,10 +2437,16 @@ function gnTick(z, dt) {
     if (g.zone !== z.id || !gnOpen(g, F)) continue;
     const a = G.actors.find((b) => b.team === 'npc' && b.kind === g.kind && !b.dead && !b.gnAsleep && (g.bark == null || (b.bark || 0) % 4 === g.bark));
     if (!a || z.interact.some((it) => it.kind === 'gn8' && it.a === a)) continue;
-    const r = (a.home ?? a.rot ?? 0) + Math.PI / 2, p = z.map.nearestFloor(a.x + Math.sin(r) * 1.3, a.z + Math.cos(r) * 1.3, 1.5) || { x: a.x + 1.3, z: a.z };
+    // (her right, her left, then in front: the first with floor near it; none, and no touch this time)
+    const f = a.home ?? a.rot ?? 0;
+    let p = null;
+    for (const r of [f + Math.PI / 2, f - Math.PI / 2, f]) { const q = z.map.nearestFloor(a.x + Math.sin(r) * 1.3, a.z + Math.cos(r) * 1.3, 0.9); if (q && Math.hypot(q.x - a.x, q.z - a.z) > 0.8) { p = q; break; } }
+    if (!p) continue;
     const it = { kind: 'gn8', g, a, x: p.x, z: p.z, r: 1.4, prompt: g.her ? 'gn.bankHer' : 'gn.bankHis' };
     it.use = () => { if (it.used) return; touch(1.0, it, 0.9, () => emit('goodnight8', it, z)); };
     z.interact.push(it);
+    // (the first time one is offered: how, once; walking straight up to them is still their talk, a shop for two of them)
+    if (!F.gnHint) { F.gnHint = true; later(1.5, () => emit('toast', t('gn.hint'), 'quest')); }
   }
 }
 on('goodnight8', (it, z) => {
