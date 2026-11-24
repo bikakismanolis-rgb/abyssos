@@ -253,7 +253,7 @@ the Names' clock (`G.time` stood at 0 from v23: after one Call every Name's cond
 Ragna's echoes and their first-fall legendaries Blacksoles and the Vigil Ring (5aeb5b8), Act VIII's blessing (the act had
 none) and the Seven Good Nights (7743219), the South Road's lane, signpost and lamp in Whitecliff and the act's own
 ambient (bc67c69, the second session's). Every detail, the tests and what was not checked: the last section of
-`docs/act8-briefs/reports/stageB-E.md`. New tests: `act8.mjs founder | echo8 | gn8`.
+`docs/act8-briefs/reports/stageB-E.md`. New tests: `act8.mjs founder | echo8 | gn8` (and `gnfar`, the four outside Whitecliff).
 
 **(Done at v25:)** the save format and co-op protocol: a v24 page refuses a hero holding Act VIII's blessing
 (save.js `newer`), so bump `SAVE_FMT` to 4 in the release commit as before; co-op can stay protocol 7 (the eighth Name's
@@ -263,4 +263,20 @@ VIII and says what he wants changed; (2) the Good Nights checked outside Whitecl
 Lanternglade, Glaukos at the Rope camp, Selna at the Farthest Light); (3) a balance campaign at full counts on every
 difficulty; (4) `echo7`'s two misses in seven runs; (5) the phone report `gpu-phone` read once he opens the game on the
 phone (none yet on 24 November: the phone has not opened it since the 22 November fix).
+
+**24 November, later: the list after v25, items 2 to 5** (the owner: «συνέχισε το σκότος, πάμε στα επόμενα»). This session
+was given the branch `claude/confident-knuth-ydsr4d` (from `main` at 342b63a): the work is there, **not on `main` and not
+in the artifact** (a session may push only its own branch; publishing waits for the owner's word and a session that may
+push `main`). Every detail: the last two sections of `docs/act8-briefs/reports/stageB-E.md`.
+- (2) The Good Nights outside Whitecliff: checked in a browser, all four pass (`act8.mjs gnfar`, new). A sleeper no
+  longer wears a "!".
+- (4) `echo7`: three causes found and mended, 40 passes in 40. One was the game's: a swimmer exactly on a blocked cell's
+  edge was put back every step (ai.js `swimCollide`), so a charge along that line never left its spot.
+- (5) The phone's report: none yet (no `gpu-phone` document on 24 November).
+- (3) The balance campaign: run at full counts on all six difficulties (432 runs, `docs/act8-briefs/balance/summary.md`). No
+  number changed. Wanderer and Warden: no death; the warden class two to four times slower than the mage everywhere
+  (8-9 minutes a boss on Hero); the ranged classes clear a pack in 1-3 s; from Nightmare up a level-52 hero is
+  under-levelled (the warden class cannot lay Aithon to rest in 15 minutes).
+**Next:** the owner's word on the campaign's findings and on publishing these fixes (both builds, the strict CSP and the
+regression set first, as always); the owner plays Act VIII; the phone's report once the phone opens the game.
 

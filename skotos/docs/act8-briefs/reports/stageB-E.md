@@ -152,3 +152,65 @@ their side (their talk, a shop for two of them, still wins straight in front), w
 keeps no talk whatever a presence pass writes. **Not checked in a browser:** the Good Nights outside Whitecliff (that
 Brokka, Elati, Glaukos and Selna stand in their zones after the act with these kinds), the builds and the strict CSP.
 
+
+## 24 November, later: the next items of the list (after v25)
+
+The owner asked to go on («πάμε στα επόμενα»): the handoff's list after v25, items 2 to 5. On the branch
+`claude/confident-knuth-ydsr4d` (from `main` at 342b63a); **not on `main`, not in the artifact.**
+
+- **The Good Nights outside Whitecliff: checked, all four pass** (`act8.mjs gnfar`, new). Each zone is opened as a hero
+  who finished the act finds it (`fixtures7.mjs` `fx7('act7', zone)` plus the act's flags): Brokka in the Halls, Elati in
+  the Lanternglade, Glaukos at the Rope camp, Selna at the Farthest Light (with the other six asleep). Each stands
+  there, one of the kind; the touch is offered 1.3 m at their side, on open floor the hero can walk to, with its Greek
+  prompt and line; made by hand they say the line, lie down, their talk is put away; Selna's makes seven and `gnAll`.
+  Found on the way: Brokka asleep still wore her "!" (she has news in the Halls for this hero): `npcHasNews` now says
+  none for a sleeper.
+- **`echo7`'s misses: found, three causes, mended; 40 passes in 40 runs after** (before: 2 in 7, then 5 in 10, 3 in 15).
+  1. **The game's** (ai.js `swimCollide`): a swimmer (Kallisto is one, `swim: true`) whose centre is exactly on the edge
+     of a blocked cell was taken for "inside it" and put back where it was, every step. The test sets her down 6 m from
+     a boulder on a whole-number x, and when a cliff cell touched that line her charge ran its whole time on the spot
+     and ended "in the open" (`chargeOpen`), the boulder never reached. Now only a centre truly inside the cell is put
+     back; one on the edge is pushed off it by its radius, as off any wall. In play a body is almost never exactly on a
+     grid line, so nobody is likely to have seen it; the tower, the Ketos, the Sunken and the others who swim share the
+     rule.
+  2. **The test's:** it reached for `a.mcd` before her first waking step made it, and threw (the run printed
+     `echo7 undefined`).
+  3. **The test's:** she wakes only on seeing the hero, and the test stood her behind the boulder before she woke: she
+     slept on, or woke later and her intro emptied the queued charge. The test now leaves her until she is awake, then
+     sets the line again every few ms until her rear is aimed down it.
+- **The phone's report:** read on 24 November. The owner's documents in the artifact's db hold `gpu` (the laptop: three
+  starts, no error) and four heroes; **no `gpu-phone`**: the phone has not opened the game since the 22 November fix.
+- **The balance campaign at full counts, every difficulty: run** (432 runs of the bot; `docs/act8-briefs/balance/`:
+  `mkplan.mjs`, `plan.json`, `runs.jsonl`, `sum.mjs`, `summary.md` with every cell). The rules are Act VII's contract's:
+  level 52 (49 and no Mastery on Wanderer), gear four levels behind, Mastery 4 / 6 / 8 / 10 at the Tindergrass, Aithon,
+  the House, Ragna, no Names; 12 runs a cell on Wanderer, 6 on Warden, Hero and Ash, 3 on Nightmare and Skotos (a run
+  there takes the bot half a minute and more). A boss run stops at 900 s. **No number of the game was changed: these are
+  the owner's to judge.** What they say (medians; Act VII's bands: a boss 110-230 s, a pack 8-14 s):
+
+  | | warden | ranger | mage |
+  |---|---|---|---|
+  | Aithon, Wanderer | 202 s | 79 s | 48 s |
+  | Aithon, Warden | 144 s | 117 s | 90 s |
+  | Aithon, Hero | 536 s | 264 s | 138 s |
+  | Ragna, Wanderer | 210 s | 86 s | 70 s |
+  | Ragna, Warden | 245 s | 135 s | 96 s |
+  | Ragna, Hero | 499 s | 193 s | 191 s |
+  | a pack in the Tindergrass, Warden | 7.5 s | 1.8 s | 1.2 s |
+  | a pack in the House, Warden | 8.1 s | 2.1 s | 1.2 s |
+  | a pack in the House, Hero | 22.5 s | 2.8 s | 2.2 s |
+
+  1. **Wanderer and Warden are safe:** no death in 216 runs; the lowest life of a run is seldom under 50%.
+  2. **The class gap is the widest thing, on every difficulty:** the warden class takes two to four times the mage's
+     time. On Hero it is 8-9 minutes a boss (the band's top is under 4), and 22 s a pack in the House.
+  3. **The ranged classes clear the two zones' packs in 1-3 s** up to Hero: under the 8-14 s band, as the first pass
+     said. The zones cost little there (lowest life 75-95%).
+  4. **Hero costs life but nobody is stuck:** two runs in 36 at the bosses had deaths (Ragna: a warden, a mage), every
+     boss was laid to rest.
+  5. **Nightmare and above, a level-52 hero is under-levelled,** as in the earlier acts' runs: on Nightmare the warden
+     class does not lay Aithon to rest in 900 s (3 of 3), the others do with life at 10-20%; on Ash and Skotos almost
+     no boss run ends at the rest and every run has deaths. A hero who has really reached those difficulties has many
+     more Mastery levels than this profile, so these rows say "not at 52", not "too hard".
+  The first pass's Warden numbers stand (its bosses were all at Mastery 4; here 6 and 10, so the warden's Aithon went
+  from 281 s to 144 s). Not run: co-op (`--coop 2`, `4`), the Names' runs, a build with three Names.
+- **Regression after the swimmers' fix:** `echo7` 40 of 40, `kallisto`, `coast`, `tower`, `act8.mjs gn8` and `gnfar`:
+  pass. **Not run:** the rest of the set, both builds and the strict CSP (nothing is published from this branch).
