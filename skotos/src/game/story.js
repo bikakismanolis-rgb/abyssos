@@ -84,6 +84,7 @@ function setQuest(n, quiet) {
   writeSave();
 }
 export function npcHasNews(kind, a) {
+  if (a?.gnAsleep) return false; // (asleep after a Good Night: no "!" over a sleeper)
   const q = G.hero.quest, F = G.hero.flags, zid = G.zone?.id, a4 = zid === 'ashfield' || zid === 'forge';
   const n7 = news7(kind, a, zid); if (n7 != null) return n7;
   const n6 = news6(kind, a, zid); if (n6 != null) return n6;

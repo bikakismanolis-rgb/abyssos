@@ -9,6 +9,8 @@
 //          for a v24 hero) drops its legendary; Blacksoles and the Vigil Ring do what they say
 //   gn8    after the act: Act VIII's blessing offered; the Seven Good Nights in Whitecliff (Halda by hand, Leif's father,
 //          Elianthe), each a line and asleep; Selna only after the other six; all seven raise the blessing x1.25
+//   gnfar  the four Good Nights outside Whitecliff: Brokka in the Halls, Elati in the Lanternglade, Glaukos at the Rope camp,
+//          Selna at the Farthest Light (the other six asleep): each stands there, the touch at their side, asleep after it
 //   founder the eighth Name: learnt at the second ember memory, shown in the panel; said, a blow on the last foe awake
 //          within 12 m is +25% (none with a second foe near or asleep there), Deep its blows hurt 15% less
 import { createRequire } from 'node:module';
@@ -320,6 +322,31 @@ const T = {
     await pg.waitForFunction(() => window.__G.zone.id === 'town', null, { timeout: 90000 }).catch(() => {}); await pg.waitForTimeout(2500);
     const back = await ev(() => { const G = window.__G, a = G.actors.find((x) => x.kind === 'smith'), talk = G.zone.interact.find((i) => i.kind === 'npc' && i.actor === a); return { zone: G.zone.id, asleep: !!a?.gnAsleep, clip: a?.avatar?.actName ?? a?.avatar?.anim?.actName, talk: talk ? !talk.used : null, gn: G.zone.interact.filter((i) => i.kind === 'gn8').length }; });
     beat('back in Whitecliff: Halda up again at her anvil, no touch left to make', back.zone === 'town' && !back.asleep && back.clip !== 'lie' && back.talk && back.gn === 0, back);
+  },
+  async gnfar() {
+    // the four Good Nights outside Whitecliff, each in their own zone as a hero who finished the act finds it
+    const { fx7 } = await import('./fixtures7.mjs');
+    const six = ['halda', 'father', 'elianthe', 'brokka', 'elati', 'glaukos'].map((w) => 'gn_' + w);
+    for (const [who, zone, kind] of [['brokka', 'halls', 'brokka'], ['elati', 'weep', 'elati'], ['glaukos', 'drained', 'glaukos'], ['selna', 'farlight', 'selna']]) {
+      const extra = ['act8', 'aithonRest', 'ragnaRest', 'flameWoken', 'leifName', ...(who === 'selna' ? six : [])];
+      await open(fx7('act7', zone, { flags: extra, quest: 55, lvl: 52 }) + '&nopacks');
+      await pg.waitForFunction((w) => window.__G.zone.interact.some((i) => i.kind === 'gn8' && i.g.who === w), who, { timeout: 30000 }).catch(() => {});
+      const s0 = await ev(async ([who, kind]) => { const W = await import('/src/game/world.js'), T = await import('/src/i18n/i18n.js'), G = window.__G, z = G.zone, pl = G.player;
+        const as = G.actors.filter((a) => a.team === 'npc' && a.kind === kind), it = z.interact.find((i) => i.kind === 'gn8' && i.g.who === who);
+        if (!it) return { zone: z.id, people: as.length, offered: false, npcs: G.actors.filter((a) => a.team === 'npc').map((a) => a.kind) };
+        const from = { x: pl.x, z: pl.z }, reach = z.map.reaches ? !!z.map.reaches(from.x, from.z, [{ x: it.x, z: it.z }]) : null;
+        pl.x = it.x; pl.z = it.z; const near = W.nearestInteract()?.kind;
+        return { zone: z.id, people: as.length, offered: true, d: +Math.hypot(it.x - it.a.x, it.z - it.a.z).toFixed(2), floor: !z.map.solid(Math.floor(it.x), Math.floor(it.z)), reach, near, prompt: T.t(it.prompt), line: T.t('d.gn.' + who), clip0: W.avAct(it.a.avatar) }; }, [who, kind]);
+      beat(who + ': stands in ' + zone + ', one of the kind, the touch offered at the side on open floor', s0.zone === zone && s0.people === 1 && s0.offered && s0.d > 0.8 && s0.d < 2.3 && s0.floor !== false && s0.reach !== false && s0.near === 'gn8' && s0.prompt && !/^gn\./.test(s0.prompt) && s0.line && !/^d\.gn\./.test(s0.line), s0);
+      if (!s0.offered) continue;
+      await pg.screenshot({ path: out + '/gnfar-' + who + '-0.png' });
+      await ev((who) => { const G = window.__G, it = G.zone.interact.find((i) => i.kind === 'gn8' && i.g.who === who); G.player.x = it.x; G.player.z = it.z; it.use(); }, who);
+      await pg.waitForFunction(([who, kind]) => window.__G.hero.flags['gn_' + who] && window.__G.actors.some((a) => a.kind === kind && a.gnAsleep), [who, kind], { timeout: 90000 }).catch(() => {});
+      await pg.waitForTimeout(1500);
+      const s1 = await ev(async ([who, kind]) => { const W = await import('/src/game/world.js'), G = window.__G, a = G.actors.find((x) => x.kind === kind), talk = G.zone.interact.find((i) => i.kind === 'npc' && i.actor === a); return { flag: !!G.hero.flags['gn_' + who], asleep: !!a?.gnAsleep, clip: W.avAct(a?.avatar), talkShut: talk ? !!talk.used : true, left: G.zone.interact.some((i) => i.kind === 'gn8' && i.g.who === who), n: W.gnCount(), all: !!G.hero.flags.gnAll }; }, [who, kind]);
+      await pg.screenshot({ path: out + '/gnfar-' + who + '-1.png' });
+      beat(who + ': the touch by hand, the line, lying asleep, the talk put away', s1.flag && s1.asleep && s1.clip === 'lie' && s1.talkShut && !s1.left && (who !== 'selna' || (s1.n === 7 && s1.all)), s1);
+    }
   },
   async founder() {
     await open('auto=tinder&lvl=50&flags=act7&quest=49&nopacks');

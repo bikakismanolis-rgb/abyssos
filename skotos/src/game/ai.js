@@ -147,7 +147,7 @@ export function updateActors(dt) {
       if (a.affixes.length && !(a.under && a.def.burst) && !a.hidden && !a.cling && !a.airborne && !(a.def.ai === 'rooted' && !a.awake)) elite(a, dt, pl, d);
     }
     // knockback, separation, walls
-    if (a.kx || a.kz) { a.x += a.kx * dt; a.z += a.kz * dt; const k = Math.exp(-dt * 7); a.kx *= k; a.kz *= k; if (Math.abs(a.kx) + Math.abs(a.kz) < 0.05) a.kx = a.kz = 0; }
+      if (a.kx || a.kz) { a.x += a.kx * dt; a.z += a.kz * dt; const k = Math.exp(-dt * 7); a.kx *= k; a.kz *= k; if (Math.abs(a.kx) + Math.abs(a.kz) < 0.05) a.kx = a.kz = 0; }
     if (!a.airborne && !a.cling) for (const b of near(a.x, a.z, a.radius + 1)) {
       if (b === a || b.dead || b.prop || b.airborne || b.cling) continue;
       const ex = a.x - b.x, ez = a.z - b.z, l = Math.hypot(ex, ez), min = (a.radius + b.radius) * 0.9;
@@ -155,7 +155,7 @@ export function updateActors(dt) {
     }
     if (a.def.ai === 'bat') { if (map.blocks(Math.floor(a.x), Math.floor(a.z)) && !map.blocks(Math.floor(a.px), Math.floor(a.pz))) { a.x = a.px; a.z = a.pz; } }
     else if (!a.under && !a.cling && !a.airborne && !(a.flounder > 0) && (!a.def.float || !a.boss)) { if (a.swim) swimCollide(a, Math.min(a.radius, 0.9)); else map.collide(a, Math.min(a.radius, 0.9)); }
-    // visuals
+      // visuals
     const av = a.avatar;
     if (av) {
       av.group.position.set(a.x, a.y || 0, a.z);
@@ -937,7 +937,15 @@ function swimCollide(a, r) {
     if (!map.blocks(ix, iz)) continue;
     const cx = clamp(a.x, ix, ix + 1), cz = clamp(a.z, iz, iz + 1), dx = a.x - cx, dz = a.z - cz, d2 = dx * dx + dz * dz;
     if (d2 >= r * r) continue;
-    if (d2 < 1e-8) { a.x = a.px; a.z = a.pz; return; }
+    if (d2 < 1e-8) {
+      // (inside the cell: back where it was. Exactly on the cell's edge, as a body set down on a grid line is: off it by
+      // r like off any wall; taken for "inside", it was put back every step and a charge along that line never left its
+      // spot, Kallisto's two runs in ten of `echo7`)
+      const inX = a.x > ix && a.x < ix + 1, inZ = a.z > iz && a.z < iz + 1;
+      if (inX && inZ) { a.x = a.px; a.z = a.pz; return; }
+      if (!inX) a.x += a.x <= ix ? -r : r; else a.z += a.z <= iz ? -r : r;
+      continue;
+    }
     const dd = Math.sqrt(d2), k = (r - dd) / dd; a.x += dx * k; a.z += dz * k;
   }
 }

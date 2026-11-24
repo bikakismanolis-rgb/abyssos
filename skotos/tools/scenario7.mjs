@@ -761,8 +761,17 @@ export const S7 = () => ({
       for (const b of den) for (let g = 0; g < 6.28; g += 0.2) {
         const ux = Math.sin(g), uz = Math.cos(g), A = { x: b.x - ux * 6, z: b.z - uz * 6 }, H = { x: b.x + ux * 3.5, z: b.z + uz * 3.5 };
         if (!m.walkable(A.x, A.z) || !m.walkable(H.x, H.z) || !m.clear(A.x, A.z, b.x - ux * 1.6, b.z - uz * 1.6)) continue;
-        a.x = A.x; a.z = A.z; window.__G.player.x = H.x; window.__G.player.z = H.z; a.mcd.charge = 0; a.wheeled = true; a.queue = ['charge']; a.cd = 0;
-        return { i: den.indexOf(b), x: b.x, z: b.z, n: den.length };
+        // (set again every few ms until her rear is aimed down that line: set once, some runs in ten came before she
+        // woke, where `mcd` is made and her intro empties the queue: the test threw, or she slept on behind the boulder)
+        const dir = Math.atan2(ux, uz), pl = window.__G.player;
+        return new Promise((ok) => { const t0 = performance.now(), iv = setInterval(() => {
+          const aimed = a.move && a.tele && Math.hypot(a.x - A.x, a.z - A.z) < 0.5 && Math.abs(Math.atan2(Math.sin(a.rot - dir), Math.cos(a.rot - dir))) < 0.06;
+          if (aimed || performance.now() - t0 > 25000) { clearInterval(iv); ok({ i: den.indexOf(b), x: b.x, z: b.z, n: den.length, aimed: !!aimed }); return; }
+          // (she wakes only on seeing the hero, and the boulder stands between A and H: not moved before she is awake)
+          if (!a.awake) { if (Math.hypot(pl.x - a.x, pl.z - a.z) > 8 || !m.los(a.x, a.z, pl.x, pl.z)) for (let q = 0; q < 6.28; q += 0.4) { const X = a.x + Math.sin(q) * 3, Z = a.z + Math.cos(q) * 3; if (m.walkable(X, Z) && m.los(a.x, a.z, X, Z)) { pl.x = X; pl.z = Z; break; } } return; }
+          a.move = null; a.dash = null;
+          a.x = A.x; a.z = A.z; pl.x = H.x; pl.z = H.z; (a.mcd ||= {}).charge = 0; a.wheel = 0; a.wheeled = true; a.dazed = 0; a.queue = ['charge']; a.cd = 0;
+        }, 15); });
       }
       return null;
     });
