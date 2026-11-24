@@ -25,7 +25,7 @@ import { angleTo } from '../core/util.js';
 import { openDeepGate, FAR_BEACONS, farFire, openRootGate, witherWall, firstAutumn, growProp, zoneEmitters, setFar, setBeacon, townFires, townPresence, walkTo, stopWalk, vanish, release,
   act4Presence, isarnLantern, setLastLamp, openAnvilGate, meltPlug, forgeCold, bellowsDone, echoAt,
   act5Presence, people5, scene5, npc5, spawnNpc5, light5, iceMemOf, ICE_WHO, LIGHTS5, touch, spawnBoss, checkpoint5,
-  act6Presence, light6, checkpoint6, openings6, echo6Set, echo6Clear, act7Presence, raceTo, weirs7, winches7, town7, echo8Set, echo8Clear } from './world.js';
+  act6Presence, light6, checkpoint6, openings6, echo6Set, echo6Clear, act7Presence, raceTo, weirs7, winches7, town7, echo8Set, echo8Clear, GN8, gnCount, gnSleep } from './world.js';
 import { act7Prop } from '../world/build7.js';
 import { N7learn, N7_BY } from './names7.js';
 import { fires7 } from './fires7.js';
@@ -573,7 +573,7 @@ export function offerBoons() {
   h.boons ||= [];
   // never over a cinematic or another panel: try again in a moment
   if (G.mode !== 'play' || G.panel) { later(2, offerBoons); return false; }
-  for (const act of [1, 2, 3, 4, 5, 6, 7]) {
+  for (const act of [1, 2, 3, 4, 5, 6, 7, 8]) {
     const done = act === 1 ? h.act1 >= 0 : (h['act' + act] ?? -1) >= 0;
     if (done && !h.boons[act - 1] && BOONS[act]) { emit('openPanel', 'boon', { act }); return true; }
   }
@@ -3431,6 +3431,17 @@ on('ember8', (it, z, n) => {
   // (the second memory names the girl and teaches her Name, the eighth: names7.js 'founder', learnt by mem8_2)
   if (!G.hero.__real && !G.hero.flags['mem8_' + n]) { G.hero.flags['mem8_' + n] = true; later(1.2, () => tell8(n === 2 ? ['d.mem8.2a', 'd.mem8.2b', 'd.mem8.2c'] : ['d.mem8.' + n + 'a', 'd.mem8.' + n + 'b'], 'narrator', n >= 3 ? () => emit('say', 'd.embers.3') : n === 2 ? () => learn7() : undefined)); }
   if (n >= 3 && G.hero.quest === 49) setQuest(50);
+});
+// the Seven Good Nights (world.js GN8): each says one line and lies down; Selna's watch is taken by Tern
+on('gnSay', (g, a, z) => {
+  const lines = g.who === 'selna' ? [['d.gn.tern', 'tern'], ['d.gn.selna', 'selna']] : [['d.gn.' + g.who, g.kind]];
+  const n = gnCount(), done = () => {
+    gnSleep(a, z);
+    later(0.8, () => emit('toast', t('q.goodnight', n), 'quest'));
+    if (n >= GN8.length && !G.hero.flags.gnAll) { G.hero.flags.gnAll = true; writeSave(); refreshStats(); later(3.2, () => { emit('toast', t('q.gnAll'), 'big'); Audio.sting('memory'); }); }
+  };
+  if (NOSTORY) { done(); return; }
+  emit('dialog', { who: g.kind, lines, end: done });
 });
 on('bossRest', (kind, a) => {
   if (a?.echo || G.hero.__real) return;

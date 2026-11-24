@@ -432,6 +432,12 @@ export const BOONS = {
     { id: 'thaw', icon: 'roll', stats: { atkSpd: 8, move: 6 } },
     { id: 'den', icon: 'shield', stats: { lifePct: 12, regen: 15 } },
     { id: 'sluice', icon: 'star', stats: { area: 12, cdr: 8 } }
+  ],
+  // Act VIII («Η φωτιά που κοιμάται»): x1.25 with the Seven Good Nights (gnAll, stats.js)
+  8: [
+    { id: 'ashlid', icon: 'shield', stats: { lifePct: 12, armorPct: 12 } },
+    { id: 'smallfire', icon: 'flame', stats: { dmgPct: 10, area: 12 } },
+    { id: 'morning', icon: 'star', stats: { cdr: 8, resRegen: 15 } }
   ]
 };
 export const UNBOUND = 1.5;

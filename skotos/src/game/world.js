@@ -1972,6 +1972,7 @@ const _fg = [0, 0, 0];
 export function updateAct(dt) {
   tickWalks(dt); tickFades(dt);
   const z = G.zone, pl = G.player;
+  if (z && pl) gnTick(z, dt);
   if (z?.act5 && pl) { act5Tick(z, dt); return; }
   if (z?.act6 && pl) { act6Tick(z, dt); return; }
   if (z?.act7 && pl) { act7Tick(z, dt); return; }
@@ -2408,6 +2409,60 @@ export function echo8Clear(z, k) {
   // (the Flame burns again as the morning left it)
   if (it) { const m = it.mesh, lid = m?.userData.lid; it.used = true; if (m) { m.userData.setRank?.(3); m.userData.setLit?.(true); if (lid) { lid.position.set(1.25, -0.6, 0.3); lid.rotation.z = 0.5; } } }
 }
+// ---------- Act VIII, optional: the Seven Good Nights (docs/act7-briefs/proposal-story.md §7, as Act VIII builds it) ----------
+// After the act the hero knows how a fire is banked. Seven people she knows, none of whom sleeps well, each in their own
+// place: beside each a touch of 1 s banks their fire («Σκέπασε τη φωτιά του / της»); they say one line and lie down,
+// asleep until she leaves the zone. Flag gn_<who>; all seven, gnAll, and Act VIII's blessing counts x1.25 (stats.js,
+// REMEMBERED). Selna is offered last, once the other six sleep, and Tern takes her watch. (The proposal's sleeping coals
+// from side hearths are left out: the act built no side hearths)
+export const GN8 = [
+  { who: 'halda', zone: 'town', kind: 'smith', her: true },
+  { who: 'father', zone: 'town', kind: 'villager', bark: 2 },
+  { who: 'elianthe', zone: 'town', kind: 'healer', her: true },
+  { who: 'brokka', zone: 'halls', kind: 'brokka', her: true },
+  { who: 'elati', zone: 'weep', kind: 'elati', her: true },
+  { who: 'glaukos', zone: 'drained', kind: 'glaukos' },
+  { who: 'selna', zone: 'farlight', kind: 'selna', her: true, last: true }
+];
+export const gnCount = (F = G.hero.flags) => GN8.filter((g) => F['gn_' + g.who]).length;
+export const gnOpen = (g, F) => !!F.act8 && !F['gn_' + g.who] && (!g.last || GN8.every((q) => q.last || F['gn_' + q.who]));
+// twice a second: a touch beside each of them who is here and awake (1.3 m to their side, clear of their own talk)
+function gnTick(z, dt) {
+  if ((z.gnT = (z.gnT || 0) - dt) > 0) return; z.gnT = 0.5;
+  const F = G.hero.flags;
+  for (let i = z.interact.length - 1; i >= 0; i--) { const it = z.interact[i]; if (it.kind === 'gn8' && (F['gn_' + it.g.who] || it.a.dead || it.a.removed || !G.actors.includes(it.a))) z.interact.splice(i, 1); }
+  if (!F.act8 || G.hero.__real) return;
+  for (const g of GN8) {
+    if (g.zone !== z.id || !gnOpen(g, F)) continue;
+    const a = G.actors.find((b) => b.team === 'npc' && b.kind === g.kind && !b.dead && !b.gnAsleep && (g.bark == null || (b.bark || 0) % 4 === g.bark));
+    if (!a || z.interact.some((it) => it.kind === 'gn8' && it.a === a)) continue;
+    const r = (a.home ?? a.rot ?? 0) + Math.PI / 2, p = z.map.nearestFloor(a.x + Math.sin(r) * 1.3, a.z + Math.cos(r) * 1.3, 1.5) || { x: a.x + 1.3, z: a.z };
+    const it = { kind: 'gn8', g, a, x: p.x, z: p.z, r: 1.4, prompt: g.her ? 'gn.bankHer' : 'gn.bankHis' };
+    it.use = () => { if (it.used) return; touch(1.0, it, 0.9, () => emit('goodnight8', it, z)); };
+    z.interact.push(it);
+  }
+}
+on('goodnight8', (it, z) => {
+  const F = G.hero.flags, g = it.g, a = it.a; if (F['gn_' + g.who] || G.zone !== z) return;
+  F['gn_' + g.who] = true; it.used = true; writeSave();
+  { const i = z.interact.indexOf(it); if (i >= 0) z.interact.splice(i, 1); }
+  Audio.sfx('hearthCatch', { x: a.x, z: a.z, vol: 0.5 });
+  emit('gnSay', g, a, z);
+});
+// she lies down where she stands (or he), her own talk put away until the hero comes back to this zone. (Two kinds of
+// figure: the frost set's people.js avatar holds its action itself, the KayKit rig's in av.anim)
+export const avAct = (av) => av?.actName ?? av?.anim?.actName ?? null;
+const avStop = (av) => (typeof av?.stop === 'function' ? av.stop() : av?.anim?.stop?.());
+export function gnSleep(a, z) {
+  if (!a || a.dead) return;
+  a.gnAsleep = true; a.gnStill = a.still; a.still = true; a.home = a.rot; a.gnAct = avAct(a.avatar);
+  a.avatar?.play('lie', 1, { loop: true, fade: 0.6 });
+  for (const it of z?.interact || []) if (it.actor === a && it.kind === 'npc') { it.gnUsed = it.used; it.used = true; }
+}
+on('zoneEnter', () => {
+  const z = G.zone; if (!z) return;
+  for (const a of G.actors || []) if (a.gnAsleep) { a.gnAsleep = false; a.still = a.gnStill; if (a.gnAct) a.avatar?.play(a.gnAct, 1, { loop: true }); else avStop(a.avatar); for (const it of z.interact) if (it.actor === a && it.kind === 'npc') it.used = !!it.gnUsed; }
+});
 // a hearth as it stands: banked (the cover stone on, no flame) or awake (the stone laid by, the fire burning)
 function hearth8Look(it, awake) {
   const m = it.mesh, lid = m?.userData.lid;

@@ -7,6 +7,8 @@
 //   road   Whitecliff's South Road is there after Act VII, takes her to the Tindergrass and back; absent before
 //   echo8  after the act: Aithon's and Ragna's echoes rise, fight, fade; the story untouched; each first fall (an echo's too,
 //          for a v24 hero) drops its legendary; Blacksoles and the Vigil Ring do what they say
+//   gn8    after the act: Act VIII's blessing offered; the Seven Good Nights in Whitecliff (Halda by hand, Leif's father,
+//          Elianthe), each a line and asleep; Selna only after the other six; all seven raise the blessing x1.25
 //   founder the eighth Name: learnt at the second ember memory, shown in the panel; said, a blow on the last foe awake
 //          within 12 m is +25% (none with a second foe near or asleep there), Deep its blows hurt 15% less
 import { createRequire } from 'node:module';
@@ -278,6 +280,42 @@ const T = {
     beat('the Vigil Ring: after 4 s still, a certain critical; the next blow at once is not', L.rested > L.next * 1.5 && Math.abs(L.rested / L.next - (1 + L.after.critD / 100)) < 0.02, { rested: L.rested, next: L.next, critD: L.after.critD });
     beat('Blacksoles: a blow that carries a burn hurts 30% less', Math.abs(L.burnHit / L.plain - 0.7) < 0.02, { burnHit: L.burnHit, plain: L.plain });
     beat('their names in Greek', /Μαυροπάτια/.test(L.bootsName) && /Αγρύπνιας/.test(L.ringName), { boots: L.bootsName, ring: L.ringName });
+  },
+  async gn8() {
+    await open('auto=town&lvl=52&flags=act7,act8,aithonRest,ragnaRest,flameWoken,leifName&quest=55&nopacks');
+    // the act's blessing: offered once the act is done (hero.act8), three cards under its own header
+    const b = await ev(async () => { const G = window.__G, S = await import('/src/game/story.js'); G.hero.act8 = 0; G.hero.boons = (G.hero.boons || []).slice(0, 7); S.offerBoons(); await new Promise((r) => setTimeout(r, 600)); const cards = [...document.querySelectorAll('[data-a^="boon:"]')].map((e) => e.dataset.a); const head = document.querySelector('.act-h')?.textContent; return { cards, head }; });
+    beat('Act VIII\'s blessing offered: three, under «Η φωτιά που κοιμάται»', b.cards.length === 3 && b.cards.includes('boon:ashlid') && /κοιμάται|sleeps/.test(b.head || ''), b);
+    await ev(() => { document.querySelector('[data-a="boon:ashlid"]')?.click(); });
+    await pg.waitForTimeout(800);
+    const lp0 = await ev(() => ({ boon: window.__G.hero.boons[7], lifePct: window.__G.stats.lifePct }));
+    // the three in Whitecliff, each with a touch beside them
+    await pg.waitForFunction(() => window.__G.zone.interact.filter((i) => i.kind === 'gn8').length >= 3, null, { timeout: 30000 }).catch(() => {});
+    const g0 = await ev(() => window.__G.zone.interact.filter((i) => i.kind === 'gn8').map((i) => ({ who: i.g.who, prompt: i.prompt, d: +Math.hypot(i.x - i.a.x, i.z - i.a.z).toFixed(2) })));
+    beat('in Whitecliff: Halda, Leif\'s father, Elianthe, each a touch beside them', ['halda', 'father', 'elianthe'].every((w) => g0.some((g) => g.who === w)) && g0.every((g) => g.d > 0.8 && g.d < 2), g0);
+    // Halda by hand: the touch of a second, her line, and she lies down
+    await ev(() => { const G = window.__G, it = G.zone.interact.find((i) => i.kind === 'gn8' && i.g.who === 'halda'); G.player.x = it.x; G.player.z = it.z; it.use(); });
+    await pg.waitForFunction(() => window.__G.hero.flags.gn_halda && window.__G.actors.some((a) => a.kind === 'smith' && a.gnAsleep), null, { timeout: 60000 }).catch(() => {});
+    const h1 = await ev(() => { const G = window.__G, a = G.actors.find((x) => x.kind === 'smith'), talk = G.zone.interact.find((i) => i.kind === 'npc' && i.actor === a); return { flag: !!G.hero.flags.gn_halda, asleep: !!a?.gnAsleep, clip: a?.avatar?.actName ?? a?.avatar?.anim?.actName, talkShut: !!talk?.used, left: G.zone.interact.some((i) => i.kind === 'gn8' && i.g.who === 'halda') }; });
+    beat('Halda: banked by hand, a line, asleep on the ground, her anvil shut till next time', h1.flag && h1.asleep && h1.clip === 'lie' && h1.talkShut && !h1.left, h1);
+    // the other two, and three more elsewhere (their zones' own touches: here only the flags)
+    await ev(async () => { const { emit } = await import('/src/ui/bus.js'), G = window.__G, z = G.zone; for (const w of ['father', 'elianthe']) { const it = z.interact.find((i) => i.kind === 'gn8' && i.g.who === w); if (it) emit('goodnight8', it, z); } });
+    await pg.waitForFunction(() => window.__G.hero.flags.gn_father && window.__G.hero.flags.gn_elianthe, null, { timeout: 60000 }).catch(() => {});
+    const W = await ev(async () => { const W = await import('/src/game/world.js'), G = window.__G, F = G.hero.flags; const sel = W.GN8.find((g) => g.who === 'selna'); const five = W.gnOpen(sel, F); F.gn_brokka = F.gn_elati = true; const still = W.gnOpen(sel, F); F.gn_glaukos = true; const six = W.gnOpen(sel, F); return { n: W.gnCount(), five, still, six }; });
+    beat('Selna waits for the other six', !W.five && !W.still && W.six && W.n === 6, W);
+    // the seventh (as at the Farthest Light): Tern takes her watch; gnAll; the blessing x1.25
+    await ev(async () => { const { emit } = await import('/src/ui/bus.js'), W = await import('/src/game/world.js'), G = window.__G, z = G.zone; const a = G.actors.find((x) => x.kind === 'healer'); emit('goodnight8', { g: W.GN8.find((g) => g.who === 'selna'), a, x: a.x, z: a.z }, z); });
+    await pg.waitForFunction(() => window.__G.hero.flags.gnAll, null, { timeout: 60000 }).catch(() => {});
+    await pg.waitForTimeout(800);
+    const lp1 = await ev(() => ({ all: !!window.__G.hero.flags.gnAll, lifePct: window.__G.stats.lifePct }));
+    beat('seven: gnAll, and Halda\'s Lid from +12% to +15% life', lp0.boon === 'ashlid' && lp1.all && lp1.lifePct - lp0.lifePct === 3, { lp0, lp1 });
+    // she wakes when the hero comes back
+    await ev(() => window.__G.zone.interact.find((i) => i.kind === 'exit' && i.to === 'tinder')?.use());
+    await pg.waitForFunction(() => window.__G.zone.id === 'tinder', null, { timeout: 90000 }).catch(() => {}); await pg.waitForTimeout(1500);
+    await ev(() => window.__G.zone.interact.find((i) => i.kind === 'exit' && i.to === 'town')?.use());
+    await pg.waitForFunction(() => window.__G.zone.id === 'town', null, { timeout: 90000 }).catch(() => {}); await pg.waitForTimeout(2500);
+    const back = await ev(() => { const G = window.__G, a = G.actors.find((x) => x.kind === 'smith'), talk = G.zone.interact.find((i) => i.kind === 'npc' && i.actor === a); return { zone: G.zone.id, asleep: !!a?.gnAsleep, clip: a?.avatar?.actName ?? a?.avatar?.anim?.actName, talk: talk ? !talk.used : null, gn: G.zone.interact.filter((i) => i.kind === 'gn8').length }; });
+    beat('back in Whitecliff: Halda up again at her anvil, no touch left to make', back.zone === 'town' && !back.asleep && back.clip !== 'lie' && back.talk && back.gn === 0, back);
   },
   async founder() {
     await open('auto=tinder&lvl=50&flags=act7&quest=49&nopacks');
