@@ -76,11 +76,11 @@ export const ZONES = {
   thaw: { level: 40, music: 'thaw', ambient: 'melt', atmos: 'thaw', act: 7, pack: 'melt', light: 'sun' },
   tarn: { level: 43, music: 'tarn', ambient: 'snow', atmos: 'tarn', act: 7, pack: 'melt', heavy: true, light: 'sun' },
   // Act VIII: the Tindergrass, down the old South Road from Whitecliff (docs/act8-design.md). Daylight, on Act VII's kit.
-  // (music and ambient: the Meltwaters' after-act theme and pollen until its own are written, stage D)
-  tinder: { level: 46, music: 'tinder', ambient: 'melt', atmos: 'tinder', act: 8, pack: 'plain', light: 'sun' },
+  // (ambient: its own 'tinder' (fx.js: chaff and straw on the wind up the road, dust low over the stubble))
+  tinder: { level: 46, music: 'tinder', ambient: 'tinder', atmos: 'tinder', act: 8, pack: 'plain', light: 'sun' },
   // (the Vigil House: the Order's school, cut into the hill south of the Threshing Floor; dark under each roof until that
-  // hall's fire is banked, act8Tick)
-  vigil: { level: 49, music: 'vigil', ambient: 'melt', atmos: 'vigil', act: 8, pack: 'plain', light: 'sun' },
+  // hall's fire is banked, act8Tick; ambient: 'vigil' in the Yard and under a roof in daylight, 'vigilDark' under a dark one)
+  vigil: { level: 49, music: 'vigil', ambient: 'vigil', atmos: 'vigil', act: 8, pack: 'plain', light: 'sun' },
   gate: { level: 1, music: 'gate', ambient: 'gate', atmos: 'gate' }
 };
 // beacons that have answered Whitecliff's: Arna's hill after Act I, Deepstone after Act II, and after Act III the
@@ -2333,13 +2333,13 @@ function stream7(z) {
 // older layout changes), pushed once into the layout's exits too so an arrival from above finds it; locked until Halda
 // has gone up (haldaOut)
 // ---------- Act VIII (docs/act8-design.md) ----------
-// the old South Road at Whitecliff's east wall: the way down to the Tindergrass, an interact on cells that are already
-// walkable (the town's layout does not change), pushed once into the layout's exits so an arrival from the plain finds
-// it. There once Act VII is done on any difficulty
+// the old South Road at Whitecliff's east wall: the way down to the Tindergrass, at the end of the lane the town's layout
+// cuts through the palisade (gen.js: L.spots.southRoad, its signpost and lamp), pushed once into the layout's exits so an
+// arrival from the plain finds it. There once Act VII is done on any difficulty
 function southRoad(z) {
   const L = z.L; if (L.exits.some((e) => e.to === 'tinder')) return;
   if (!((G.hero.act7 ?? -1) >= 0 || G.hero.flags.act7 || G.hero.flags.call8)) return;
-  const p = z.map.nearestFloor(50.5, 44.5, 6); if (!p) return;
+  const sr = L.spots.southRoad || { x: 50.5, z: 44.5 }, p = z.map.nearestFloor(sr.x, sr.z, 6); if (!p) return;
   const e = { x: p.x, z: p.z, to: 'tinder', label: 'exit.tinder', act8: true };
   L.exits.push(e);
   z.interact.push({ kind: 'exit', to: e.to, x: e.x, z: e.z, r: 2.4, prompt: e.label, locked: e.locked, use: () => takeExit(z, e) });
@@ -2606,6 +2606,7 @@ export function sun8(z, x, zz) { const P = z?.lvl?.act8; if (!P?.shutters) retur
 function act8Tick(z, dt) {
   if (z.id !== 'vigil') { sunTick(z, dt); return; }
   const pl = G.player, want = dark8(z, pl.x, pl.z), k0 = z.act8.dark || 0, k1 = k0 + clamp(want - k0, -dt * 1.6, dt * 1.6);
+  const amb = k1 > 0.5 ? 'vigilDark' : 'vigil'; if (FX.ambient !== amb) setAmbient(amb);
   if (k1 !== k0) { z.act8.dark = k1; setAtmosphere(k1 <= 0.001 ? ATMOS.vigil : k1 >= 0.999 ? ATMOS.vigilDark : mixAtmos(ATMOS.vigilDark, ATMOS.vigil, 1 - k1 * k1 * (3 - 2 * k1))); }
 }
 on('burnSpent', (f) => { G.zone?.lvl?.act8?.lanes?.[f.i]?.setBurnt(true); });

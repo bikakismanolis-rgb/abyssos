@@ -873,6 +873,13 @@ function addProp(B, I, p, L, rng, out) {
       B.add('glow', [{ geo: G.box(0.18, 0.25, 0.18), color: 0xffc070, o: { y: 2.15, x: 0.4 } }], x, z);
       break;
     }
+    // a road's signpost: a post and two boards, the long one along the road (local +x), a short one back toward the village
+    case 'signpost': B.add('lam', [
+      { geo: G.cyl(0.07, 0.1, 2.3, 6), color: DWOOD, o: { y: 1.15 } },
+      { geo: G.box(1.0, 0.24, 0.05), color: 0x8a6a40, o: { y: 1.95, x: 0.42, z: 0.09 } },
+      { geo: G.box(0.7, 0.2, 0.05), color: 0x7a5c36, o: { y: 1.6, x: -0.28, z: 0.09 } },
+      { geo: G.cone(0.1, 0.14, 6), color: DWOOD, o: { y: 2.37 } }
+    ], x, z, r); break;
     case 'lantern': I.add('env:lantern', x, z, r, s, p.y || 0); break;
     case 'candlestick': {
       // scanned candlesticks, set in small groups; their flames are tiny glowing cones

@@ -481,6 +481,22 @@ export function genTown() {
   L.props = L.props.filter((p) => !clearR[p.t] || !north.some(([x, z]) => Math.hypot(p.x - x, p.z - z) < clearR[p.t]));
   L.dist = distField(L, 12);
   L.exits.push({ x: CX - 14, z: 4, to: 'ashfield', label: 'exit.ashfield', locked: 'act3' });
+  // the old South Road (Act VIII): from the east street, between the Stilt house and the Long house, out through the
+  // palisade and round toward the plain. Cut last as the two before it: only the stakes, trees and clutter on it go.
+  // Its exit is put there by the world once Act VII is done (world.js southRoad, at L.spots.southRoad)
+  const before8 = L.cells.slice(), paint8 = L.paint.slice();
+  carveLine(L, 44, 36, 51, 37.2, 1.3, 0.9);
+  carveLine(L, 51, 37.2, 56, 37.4, 1.4, 0.9);
+  carveLine(L, 56, 37.4, 60.5, 38.6, 1.5, 0.9);
+  const south = [];
+  for (let i = 0; i < w * h; i++) if ((L.cells[i] && !before8[i]) || L.paint[i] > paint8[i] + 0.3) south.push([i % w + 0.5, Math.floor(i / w) + 0.5]);
+  const clear8 = { ...clearR, barrel: 1.0, crate: 1.0 };
+  L.props = L.props.filter((p) => !clear8[p.t] || !south.some(([x, z]) => Math.hypot(p.x - x, p.z - z) < clear8[p.t]));
+  L.dist = distField(L, 12);
+  L.spots.southRoad = { x: 58.2, z: 38 };
+  L.props.push({ t: 'signpost', x: 54.6, z: 35.5, r: -0.25 });
+  L.props.push({ t: 'lamp', x: 55.6, z: 39.6 });
+  L.lights.push({ x: 55.6, y: 2.2, z: 39.6, color: 0xffb060, intensity: 9, range: 9, flicker: 0.2 });
   L.spots.npcs = { wayfarer: { x: CX - 2.6, z: 20.5, r: 0.4 }, smith: { x: 24.6, z: 33.4, r: -1.2 }, healer: { x: 41.2, z: 35.6, r: 0.8 }, villagers: [{ x: 27, z: 43, r: 0.8 }, { x: 38, z: 45, r: -0.6 }, { x: 34, z: 27, r: 2.8 }] };
   return L;
 }

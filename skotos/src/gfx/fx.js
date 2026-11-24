@@ -559,7 +559,7 @@ function ambient(dt, cx, cz) {
   let rate = k === 'forest' ? 0.06 : k === 'town' ? 0.05 : k === 'snow' ? 0.012 : k === 'halls' ? 0.07 : k === 'weep' ? 0.07 : k === 'weepAutumn' ? 0.045 : k === 'heart' || k === 'heartAutumn' ? 0.08
     : k === 'ashfall' ? 0.022 : k === 'ashfieldStars' ? 0.16 : k === 'ashfieldDawn' ? 0.07 : k === 'forge' ? 0.045 : k === 'forgeCold' ? 0.08
       : k === 'coast' ? 0.028 : k === 'coastFrozen' ? 0.03 : k === 'farlight' ? 0.034 : k === 'blizzard' ? 0.0045
-        : k === 'drained' ? 0.045 : k === 'bottom' ? 0.055 : k === 'thaw' ? 0.05 : k === 'melt' ? 0.07 : 0.09;
+        : k === 'drained' ? 0.045 : k === 'bottom' ? 0.055 : k === 'thaw' ? 0.05 : k === 'melt' ? 0.07 : k === 'tinder' ? 0.04 : k === 'vigil' ? 0.11 : k === 'vigilDark' ? 0.075 : 0.09;
   // (Act VI's: half as many on quality 0)
   if (FX.q < 1 && AMB6.has(k)) rate *= 2;
   while (FX.ambAcc > rate) {
@@ -572,6 +572,26 @@ function ambient(dt, cx, cz) {
       if (q < 0.6) P({ add: false, x, y: rr(0.4, 2.6), z, vx: rr(0.15, 0.5), vy: rr(-0.08, 0.06), vz: rr(0.1, 0.4), life: rr(3, 6), size: rr(0.04, 0.07), size1: 0.04, color: 0xf2eaa8, alpha: 0.85, alpha1: 0 });
       else if (q < 0.8) P({ leaf: true, x: x - 2, y: rr(2, 5), z, vx: rr(0.3, 0.8), vy: rr(-0.7, -0.4), vz: rr(-0.2, 0.2), life: rr(4, 6), size: rr(0.12, 0.18), size1: 0.14, color: 0xfaf4f0, alpha: 0.95, alpha1: 0 });
       else P({ add: false, x, y: 0.3, z, vx: rr(-0.2, 0.2), vy: 0.02, vz: rr(-0.2, 0.2), life: rr(4, 7), size: 2.4, size1: 4, color: 0xdfe8ee, alpha: 0.07, alpha1: 0 });
+    } else if (k === 'tinder') {
+      // (Act VIII, the Tindergrass in early autumn: chaff and the odd straw blown up the road on the wind out of the south
+      // she walks against, dust lifting low off the stubble in the gusts; nothing additive, no spark and no smoke: the
+      // act's fire is only where its rules put it, docs/act8-design.md)
+      const q = Math.random(), g = 0.6 + Math.sin(FX.time * 0.33) * 0.4;
+      if (q < 0.62) P({ add: false, x, y: rr(0.3, 2.8), z: z + 3, vx: rr(-0.25, 0.25), vy: rr(-0.1, 0.12), vz: rr(-1.5, -0.7) * (0.6 + g), life: rr(3, 5.5), size: rr(0.07, 0.12), size1: 0.06, color: Math.random() < 0.6 ? 0xfaf0c8 : 0x8a6c34, alpha: 0.95, alpha1: 0 });
+      else if (q < 0.8) P({ leaf: true, x, y: rr(0.5, 2.2), z: z + 4, vx: rr(-0.3, 0.3), vy: rr(-0.35, 0.1), vz: rr(-2.0, -1.1) * (0.6 + g), life: rr(3, 5), size: rr(0.22, 0.34), size1: 0.24, color: Math.random() < 0.5 ? 0xf0dc98 : 0x94742e, alpha: 1, alpha1: 0 });
+      else P({ add: false, x, y: rr(0.15, 0.5), z: z + 5, vx: rr(-0.2, 0.2), vy: 0.03, vz: rr(-2.4, -1.3) * g, life: rr(2, 3.5), size: rr(1.2, 1.8), size1: rr(3, 4.2), color: 0xe4d6ac, alpha: 0.17 * g, alpha1: 0 });
+    } else if (k === 'vigil') {
+      // (the Vigil House by day, the Yard and a hall let into daylight: a little dust turning slowly in still air, pale in
+      // the sun; the wind does not come in here)
+      if (Math.random() < 0.85) P({ add: false, x, y: rr(0.3, 3.2), z, vx: rr(-0.05, 0.05), vy: rr(-0.03, 0.03), vz: rr(-0.05, 0.05), life: rr(4, 7), size: rr(0.03, 0.055), size1: 0.03, color: 0xf0e6c8, alpha: 0.7, alpha1: 0 });
+      else P({ add: false, x, y: rr(0.5, 1.4), z, vx: rr(-0.04, 0.04), vy: 0, vz: rr(-0.04, 0.04), life: rr(5, 8), size: 2.2, size1: 3.2, color: 0xd8ccb0, alpha: 0.05, alpha1: 0 });
+    } else if (k === 'vigilDark') {
+      // (under a roof whose fire still burns: soot settling out of the dark, a few white motes hanging where the Order's
+      // still fire reaches them (white and cold, never a spark: the act's rule 5), a dark haze on the floor)
+      const q = Math.random();
+      if (q < 0.5) P({ add: false, x, y: rr(1, 4.5), z, vx: rr(-0.04, 0.04), vy: rr(-0.16, -0.05), vz: rr(-0.04, 0.04), life: rr(5, 8), size: rr(0.04, 0.07), size1: 0.04, color: 0x1a1816, alpha: 0.7, alpha1: 0 });
+      else if (q < 0.84) P({ x: cx + rr(-6, 6), y: rr(0.3, 2.8), z: cz + rr(-5, 5), vx: rr(-0.02, 0.02), vy: rr(-0.01, 0.02), vz: rr(-0.02, 0.02), life: rr(3, 6), size: rr(0.025, 0.045), size1: 0.02, color: 0xf4f6ff, color1: 0x9098b0, alpha: 0.45, alpha1: 0 });
+      else P({ add: false, x, y: rr(0.2, 0.7), z, vx: rr(-0.04, 0.04), vy: 0, vz: rr(-0.04, 0.04), life: rr(6, 9), size: 2.6, size1: 4, color: 0x0c0c10, alpha: 0.12, alpha1: 0 });
     } else if (k === 'forest') {
       if (Math.random() < 0.55) P({ x, y: rr(0.3, 2.2), z, vx: rr(-0.4, 0.4), vy: rr(-0.1, 0.2), vz: rr(-0.4, 0.4), life: rr(2, 4), size: 0.12, size1: 0.12, color: 0xd8ff70, color1: 0x60a020, alpha: 1, alpha1: 0 });
       else P({ add: false, x, y: 0.25, z, vx: rr(-0.3, 0.3), vy: 0, vz: rr(-0.2, 0.2), life: rr(4, 7), size: 3, size1: 5, color: 0x8aa8a0, alpha: 0.12, alpha1: 0 });
