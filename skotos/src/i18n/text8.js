@@ -60,6 +60,7 @@ export const TEXT8 = {
   'd.mem8.1b': ['Όλες οι άλλες φωτιές του κάμπου έχουν σβήσει από τη βροχή. Η δική της είναι η μόνη.', 'Every other fire on the plain has been put out by the rain. Hers is the only one.'],
   'd.mem8.2a': ['Η μητέρα της τής λέει να σκεπάσει τα κάρβουνα και να πάει να κοιμηθεί. Το κορίτσι κουνάει το κεφάλι.', 'Her mother tells her to bank the coals and go to sleep. The girl shakes her head.'],
   'd.mem8.2b': ['«Είναι η τελευταία», λέει. «Αν τη σκεπάσω και δεν ξυπνήσει;» Κάθεται δίπλα της όλη νύχτα. Και την επόμενη.', '"It is the last," she says. "What if I bank it and it does not wake?" She sits by it all night. And the next.'],
+  'd.mem8.2c': ['Τη λένε Γρηγορία. Στον Οίκο κανείς δεν θυμάται πια τ\' όνομά της. Εσύ τώρα το ξέρεις.', 'Her name is Grigoria. In the House nobody remembers her name any more. Now you know it.'],
   'd.mem8.3a': ['Το κορίτσι γέρασε δίπλα στη φωτιά. Άλλοι ήρθαν να φυλάνε μαζί της. Έγιναν σχολή, και η σχολή έγινε Τάγμα.', 'The girl grew old beside the fire. Others came to keep it with her. They became a school, and the school became an Order.'],
   'd.mem8.3b': ['Κανείς δεν θυμόταν πια ότι όλα άρχισαν από ένα παιδί που φοβόταν να κοιμηθεί.', 'Nobody remembered any more that it all began with a child afraid to go to sleep.'],
   'd.aithon.after': ['Κάποιος μαθητής είχε σκεπάσει κρυφά αυτές τις τρεις φωτιές. Και ξύπνησαν. Στον νότο, ο Οίκος δεν το ξέρει ακόμα.', 'Some student had banked these three fires in secret. And they woke. In the south, the House does not know it yet.'],

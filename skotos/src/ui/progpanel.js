@@ -98,7 +98,7 @@ function mastery(P) {
   return `${top}<div class="pg-mg">${tiles}</div>`;
 }
 
-// ---------- the Names (Act VII, game/names7.js): seven, three said at a time ----------
+// ---------- the Names (Acts VII-VIII, game/names7.js): eight, three said at a time ----------
 function names(P) {
   const h = G.hero, said = N7said(h), n = N7slots(h), cost = N7slotCost(h);
   const slots = [0, 1, 2].map((i) => {

@@ -16,7 +16,7 @@ const done = (name, r) => is(name, [r.ok, r.why], [true, null]);
 
 // a level-50 hero of her own game at quest q with these flags and Mastery levels (points: all free)
 const hero = (q = 40, flags = {}, mlvl = 0) => { const h = { cls: 'warden', level: 50, mlvl, quest: q, flags, points: 49 + mlvl }; migrate7(h); return h; };
-const ALL = { remembered: true, landing6: true, asgerRest: true, ivarEcho7: true };
+const ALL = { remembered: true, landing6: true, asgerRest: true, ivarEcho7: true, mem8_2: true };
 const earned = (h) => Math.max(0, h.level - 1) + (h.mlvl || 0);
 // a hero saying these Names (deep: all of them Deep), paid for from her points
 function build(ids, deep = true, mlvl = 10) {
@@ -28,9 +28,9 @@ function build(ids, deep = true, mlvl = 10) {
 }
 
 // ---------- the table ----------
-is('seven Names', N7_IDS, ['arna', 'isarn', 'pherousa', 'einar', 'keyx', 'asger', 'ivar']);
-const UNLOCK = { arna: { quest: 40 }, isarn: { quest: 40 }, pherousa: { quest: 40 }, einar: { flag: 'remembered' }, keyx: { flag: 'landing6' }, asger: { flag: 'asgerRest' }, ivar: { flag: 'ivarEcho7' } };
-const PLAY = { arna: 'open', isarn: 'drink', pherousa: 'hold', einar: 'far', keyx: 'dodge', asger: 'weave', ivar: 'stand' };
+is('eight Names', N7_IDS, ['arna', 'isarn', 'pherousa', 'einar', 'keyx', 'asger', 'ivar', 'founder']);
+const UNLOCK = { arna: { quest: 40 }, isarn: { quest: 40 }, pherousa: { quest: 40 }, einar: { flag: 'remembered' }, keyx: { flag: 'landing6' }, asger: { flag: 'asgerRest' }, ivar: { flag: 'ivarEcho7' }, founder: { flag: 'mem8_2' } };
+const PLAY = { arna: 'open', isarn: 'drink', pherousa: 'hold', einar: 'far', keyx: 'dodge', asger: 'weave', ivar: 'stand', founder: 'last' };
 for (const N of N7) {
   yes(N.id + ' has a Kept rule', N.kept && typeof N.kept.when === 'string');
   yes(N.id + ' has a Deep rule', N.deep && typeof N.deep.when === 'string');
@@ -51,6 +51,7 @@ is('Einar', [N7_BY.einar.kept.over, N7_BY.einar.kept.dmg, N7_BY.einar.deep.revea
 is('Keyx', [N7_BY.keyx.kept.within, N7_BY.keyx.kept.dmg, N7_BY.keyx.call.dodgeCdK], [2, 1.6, 0.5]);
 is('Asger', [N7_BY.asger.kept.per, N7_BY.asger.kept.max, N7_BY.asger.kept.fall, N7_BY.asger.deep.basicResK], [0.1, 3, 6, 2]);
 is('Ivar', [N7_BY.ivar.kept.per, N7_BY.ivar.kept.hurtPer, N7_BY.ivar.kept.max, N7_BY.ivar.kept.hold, N7_BY.ivar.kept.end], [0.06, 0.05, 4, 1, 3]);
+is('the founder', [N7_BY.founder.kept.within, N7_BY.founder.kept.dmg, N7_BY.founder.deep.hurt, N7_BY.founder.call.lastFoe], [12, 1.25, 0.85, true]);
 // the shipped flask is still 18 s (a warning only: data.js is another builder's)
 try { if (!/POTION\s*=\s*\{\s*cd:\s*18\b/.test(readFileSync(new URL('../src/game/data.js', import.meta.url), 'utf8'))) console.log('note: data.js POTION.cd is no longer 18; N7_FLASK says 18'); } catch (e) { /* not there */ }
 
@@ -58,7 +59,7 @@ try { if (!/POTION\s*=\s*\{\s*cd:\s*18\b/.test(readFileSync(new URL('../src/game
 is('slot costs', N7_SLOT_COST, [0, 6, 12]);
 is('Deep cost', N7_DEEP_COST, 8);
 is('three Deep Names said', N7spent(build(['arna', 'isarn', 'pherousa'])), 42);
-{ const h = hero(40, ALL, 30); N7openSlot(h); N7openSlot(h); for (const id of N7_IDS) N7deepen(h, id); is('every Name Deep', N7spent(h), 74); is('points left', h.points, 79 - 74); }
+{ const h = hero(40, ALL, 33); N7openSlot(h); N7openSlot(h); for (const id of N7_IDS) N7deepen(h, id); is('every Name Deep', N7spent(h), 82); is('points left', h.points, 82 - 82); }
 is('nothing bought', N7spent(hero()), 0);
 is('no names field', N7spent({}), 0);
 
@@ -130,7 +131,7 @@ is('haldaOut gives the three', N7learned({ quest: 39, flags: { haldaOut: true } 
 // ---------- the modifiers: each Name alone, under its condition and not under its negation ----------
 const solo = (id, deep = false) => { const h = hero(40, ALL, 10); done('solo ' + id, N7say(h, id, 0, { town: true })); if (deep) done('solo deep ' + id, N7deepen(h, id)); return h; };
 const NEUTRAL = { dmg: 1, parts: {}, hurt: 1, flaskCd: null, flaskReady: false, costK: 1, resFloor: 0, refund: 0, reveal: 0, dodgeBack: false, dodgeCdK: 1, basicResK: 1, planted: false, arnaCall: false, stacks: { weave: 0, stand: 0 } };
-const AGAINST = { foeFull: false, res: 69, dist: 9, afterDodgeS: 2.01, weave: 0, standingS: 0.99, afterDrinkS: 4.01, sinceOpenS: 4.01, crit: true, inSun: true, inShade: true, wading: true, lifeFrac: 0.1, nearHearth: true };
+const AGAINST = { foeFull: false, res: 69, dist: 9, afterDodgeS: 2.01, weave: 0, standingS: 0.99, afterDrinkS: 4.01, sinceOpenS: 4.01, crit: true, lastFoe: false, inSun: true, inShade: true, wading: true, lifeFrac: 0.1, nearHearth: true };
 for (const id of N7_IDS) for (const deep of [false, true]) {
   const m = N7mods(solo(id, deep), AGAINST), want = Object.assign({}, NEUTRAL, id === 'isarn' ? { flaskCd: 12 } : {}, id === 'keyx' && deep ? { dodgeBack: true } : {});
   is(id + (deep ? ' Deep' : ' Kept') + ' played the wrong way: nothing', m, want);
@@ -180,6 +181,14 @@ is('Ivar: hurt by the second', [0, 1, 2, 3, 4, 60].map((s) => N7mods(solo('ivar'
 is('Ivar Kept: can be moved', N7mods(solo('ivar'), { standingS: 4 }).planted, false);
 is('Ivar Deep at four', N7mods(solo('ivar', true), { standingS: 4 }).planted, true);
 is('Ivar Deep at three', N7mods(solo('ivar', true), { standingS: 3.9 }).planted, false);
+// the founder (Act VIII): the last foe awake within 12 m
+is('founder: the last one', N7mods(solo('founder'), { lastFoe: true }).dmg, 1.25);
+is('founder: more than one', N7mods(solo('founder'), { lastFoe: false }).dmg, 1);
+is('founder Kept: hurt as ever', N7mods(solo('founder'), { lastFoe: true }).hurt, 1);
+is('founder Deep: the last one hurts less', N7mods(solo('founder', true), { lastFoe: true }).hurt, 0.85);
+is('founder Deep: not while more stand', N7mods(solo('founder', true), { lastFoe: false }).hurt, 1);
+is('founder: the Call makes every foe the last', [N7mods(solo('founder'), { called: true }).dmg, N7mods(solo('founder', true), { called: true }).hurt], [1.25, 0.85]);
+is('the count: one alone is the last, none is not', [M.N7lastFoe(0), M.N7lastFoe(1), M.N7lastFoe(2)], [false, true, false]);
 // a Name learnt and not said does nothing
 { const h = solo('arna'); is('unsaid Names are silent', N7mods(h, { res: 100, dist: 30, afterDodgeS: 0, weave: 3, standingS: 4 }), NEUTRAL); }
 // a Name in a slot she has not opened does nothing
@@ -271,7 +280,7 @@ is('the Call: 20 s, 90 s apart, +30% with no Name', [N7_CALL.dur, N7_CALL.gap, N
   const i = solo('isarn', true); N7onDrink(rt, 30); is('drink window', [N7mods(i, N7ctx(rt, 34)).hurt, N7mods(i, N7ctx(rt, 34.1)).hurt], [0.7, 1]); }
 
 // ---------- co-op: the blow cap's table and the look's three bytes ----------
-is('ceilings', Object.fromEntries(N7.map((x) => [x.id, x.cap])), { arna: 1.4, isarn: 1, pherousa: 1.18, einar: 1.2, keyx: 1.6, asger: 1.3, ivar: 1.24 });
+is('ceilings', Object.fromEntries(N7.map((x) => [x.id, x.cap])), { arna: 1.4, isarn: 1, pherousa: 1.18, einar: 1.2, keyx: 1.6, asger: 1.3, ivar: 1.24, founder: 1.25 });
 for (const N of N7) is('cap alone: ' + N.id, N7blowCap(solo(N.id, true)), N.cap);
 { let top = 0, who = null; for (const a of N7_IDS) for (const b of N7_IDS) for (const c of N7_IDS) if (a < b && b < c) { const k = N7_BY[a].cap * N7_BY[b].cap * N7_BY[c].cap; if (k > top) { top = k; who = [a, b, c]; } }
   is('the highest three', who.sort(), ['arna', 'asger', 'keyx']); is('at most 2.912', top, 2.912); yes('under the contract\'s 2.92', top <= 2.92); }
@@ -279,9 +288,15 @@ for (const N of N7) is('cap alone: ' + N.id, N7blowCap(solo(N.id, true)), N.cap)
   is('nm bytes', nm, [5 + 8, 1 + 8, 6 + 8]); is('nm read back', N7fromNm(nm), [{ id: 'keyx', deep: true }, { id: 'arna', deep: true }, { id: 'asger', deep: true }]);
   is('cap from nm', N7blowCap(nm), 2.912); is('cap from the hero', N7blowCap(h), 2.912);
   is('the Call adds nothing', N7blowCap(h), N7blowCap(nm));
-  is('a guest cannot send more', [N7blowCap([5, 5, 5]), N7blowCap([255, 99, -1]), N7blowCap([5, 1, 6, 7, 4]), N7blowCap('x'), N7blowCap([0, 0, 0])], [1.6, N7blowCap([7, 3, 0]), 2.912, 1, 1]);
+  is('a guest cannot send more', [N7blowCap([5, 5, 5]), N7blowCap([255, 99, -1]), N7blowCap([5, 1, 6, 7, 4]), N7blowCap('x'), N7blowCap([0, 0, 0])], [1.6, N7blowCap([3, 0, 0]), 2.912, 1, 1]);
   is('Kept and Deep: the same ceiling', N7blowCap([5, 1, 6]), N7blowCap([13, 9, 14])); }
 is('nm of a hero with no Names', N7nm({}), [0, 0, 0]);
+// the eighth Name's byte: 16 (+8 Deep), so a v23/v24 page (which reads b & 7, b & 8) sees no Name there, never another
+{ const h = build(['founder', 'arna', 'keyx'], true), nm = N7nm(h), old = (b) => [null, ...['arna', 'isarn', 'pherousa', 'einar', 'keyx', 'asger', 'ivar']][(b | 0) & 7];
+  is('founder nm bytes', nm, [16 + 8, 1 + 8, 5 + 8]); is('founder nm read back', N7fromNm(nm), [{ id: 'founder', deep: true }, { id: 'arna', deep: true }, { id: 'keyx', deep: true }]);
+  is('an older page reads no Name for it', nm.map(old), [null, 'arna', 'keyx']);
+  is('Kept: 16', N7nm(build(['founder'], false)), [16, 0, 0]);
+  is('cap with the founder', N7blowCap(nm), 1.25 * 1.4 * 1.6); }
 
 // ---------- the text table: every key the module names is in docs/act7-design/60-text-names.md ----------
 try {

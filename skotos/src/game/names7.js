@@ -48,7 +48,14 @@ export const N7 = [
   { id: 'ivar', nameKey: 'npc.ivar', unlock: { flag: 'ivarEcho7' }, play: 'stand', cap: 1.24,
     kept: { when: 'stand', per: 0.06, hurtPer: 0.05, max: 4, hold: 1, end: 3 },
     deep: { when: 'standFull', at: 4, planted: true },
-    call: { stacks: 4 } }
+    call: { stacks: 4 } },
+  // Act VIII: the Order's founder, the girl who would not bank the last coals («Είναι η τελευταία»), learnt at the
+  // Tindergrass's second ember memory (story.js sets mem8_2). The last one: when a single foe is left awake within 12 m
+  // of her, her blows on it are raised; Deep, its blows hurt her less. The Call: every foe counts as the last.
+  { id: 'founder', nameKey: 'name7.founder.n', unlock: { flag: 'mem8_2' }, play: 'last', cap: 1.25,
+    kept: { when: 'lastFoe', within: 12, dmg: 1.25 },
+    deep: { when: 'lastFoe', hurt: 0.85 },
+    call: { lastFoe: true } }
 ];
 for (const n of N7) { n.d = 'name7.' + n.id + '.d'; n.d2 = 'name7.' + n.id + '.d2'; n.how = n.unlock.flag ? 'name7.' + n.id + '.how' : null; }
 export const N7_BY = Object.fromEntries(N7.map((n) => [n.id, n]));
@@ -264,13 +271,15 @@ export function N7ctx(rt, now, more) {
 //   weave        Asger's stacks now, 0-3 (N7weave)                                            (Asger)
 //   standingS    seconds she has not moved, 0-4 (N7stand)                                     (Ivar)
 //   afterDrinkS  seconds since she drank                                                      (Isarn, Deep)
-//   inSun, inShade, wading, lifeFrac, nearHearth: taken and not read; no Name of the seven turns on them.
+//   lastFoe      one foe alone is left awake within 12 m of her (N7lastFoe counts them)       (the founder)
+//   inSun, inShade, wading, lifeFrac, nearHearth: taken and not read; no Name turns on them.
 // The result (a key at its neutral value changes nothing):
 //   dmg        × her blow. The product of: Arna 1.4 (foeFull); Pherousa 1.18 (res ≥ 70); Einar 1.2 (dist > 9);
 //              Keyx 1.6 (afterDodgeS ≤ 2); Asger 1 + 0.1 × weave; Ivar 1 + 0.06 × whole seconds stood (≤ 4);
-//              or 1.3 when she says no Name and the Call runs
+//              the founder 1.25 (lastFoe); or 1.3 when she says no Name and the Call runs
 //   parts      { id: its factor } for each Name that raised dmg (tests, the balance bot, N7onHit)
-//   hurt       × what she takes. Ivar 1 − 0.05 × whole seconds stood; Isarn Deep 0.7 (afterDrinkS ≤ 4)
+//   hurt       × what she takes. Ivar 1 − 0.05 × whole seconds stood; Isarn Deep 0.7 (afterDrinkS ≤ 4);
+//              the founder Deep 0.85 (lastFoe)
 //   flaskCd    the flask's refill in seconds, or null (the shipped 18). Isarn 12; in the Call 6
 //   flaskReady the Call with Isarn said: the flask is ready at once (N7call's result carries it too)
 //   costK      × a skill's cost. Pherousa Deep 0.85 (res ≥ 70)
@@ -335,10 +344,16 @@ export function N7mods(hero, ctx = {}) {
         if (s.deep && w >= D.at) m.planted = true;
         break;
       }
+      case 'founder':
+        if (called || c.lastFoe) { up('founder', K.dmg); if (s.deep) m.hurt *= D.hurt; }
+        break;
     }
   }
   return m;
 }
+// the founder's count: n, the foes awake within 12 m of her (the caller counts them; a foe asleep, under the ground,
+// hidden or a prop is not counted). One alone is the last; none is not (a blow from beyond the 12 m, a trap's).
+export const N7lastFoe = (n) => n === 1;
 
 // ---------- the Call (C1-C7): pure transitions on rt.call given a clock ----------
 // st = { until, last, spent: { hearthId: true } }. now: the game's clock in seconds. hearth: the hearth's id in this
@@ -369,15 +384,19 @@ export function N7callFlare(st, hearth, o = {}) { delete st.spent[hearth]; if (o
 export function N7callVisit(st) { st.spent = {}; }
 
 // ---------- co-op: the presence look's three bytes and the blow cap's ceiling ----------
-// a byte: 0 empty; else the Name's place in N7 (1-7), plus 8 when it is Deep
+// a byte: 0 empty; else the Name's place in N7, plus 8 when it is Deep. The first seven are 1-7 as v23 and v24 send
+// them; the eighth on is 16 + (place - 7), so an older page reads it as no Name (its blow cap only lower) and never as
+// another Name, and this page reads an older page's bytes as they were meant.
+const nmCode = (i) => (i < 7 ? i + 1 : 16 + (i - 7));
+const nmIndex = (b) => ((b & 16) ? 7 + (b & 7) : (b & 7) - 1);
 export function N7nm(hero) {
   const out = [0, 0, 0];
-  for (const s of N7said(hero)) out[s.slot] = N7_IDS.indexOf(s.id) + 1 + (s.deep ? 8 : 0);
+  for (const s of N7said(hero)) out[s.slot] = nmCode(N7_IDS.indexOf(s.id)) + (s.deep ? 8 : 0);
   return out;
 }
 export function N7fromNm(nm) {
   const out = [];
-  for (const b of Array.isArray(nm) ? nm.slice(0, N7_SLOTS) : []) { const n = N7[((b | 0) & 7) - 1]; if (n && !out.some((s) => s.id === n.id)) out.push({ id: n.id, deep: !!((b | 0) & 8) }); }
+  for (const b of Array.isArray(nm) ? nm.slice(0, N7_SLOTS) : []) { const n = N7[nmIndex(b | 0)]; if (n && !out.some((s) => s.id === n.id)) out.push({ id: n.id, deep: !!((b | 0) & 8) }); }
   return out;
 }
 // the factor the host multiplies blowCap by: the product of the ceilings of the Names said, from this table and never

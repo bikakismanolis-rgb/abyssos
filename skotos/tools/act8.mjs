@@ -5,6 +5,8 @@
 //   ragna  Ragna: shutters by her life, the drowse in daylight, the floor, the Flame by hand, the sleep, the morning
 //   play8  the whole act with its story on, from the hook to the act's panel
 //   road   Whitecliff's South Road is there after Act VII, takes her to the Tindergrass and back; absent before
+//   founder the eighth Name: learnt at the second ember memory, shown in the panel; said, a blow on the last foe awake
+//          within 12 m is +25% (none with a second foe near or asleep there), Deep its blows hurt 15% less
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { chromium } = require('/opt/node22/lib/node_modules/playwright');
@@ -213,6 +215,48 @@ const T = {
     await pg.screenshot({ path: out + '/play8-end.png' });
     const txt = await ev(() => document.querySelector('.act-h')?.textContent || '');
     beat('the panel says Act VIII', /VIII/.test(txt), txt);
+  },
+  async founder() {
+    await open('auto=tinder&lvl=50&flags=act7&quest=49&nopacks');
+    // (the Names' clock, G.time: it stood at 0 in v23-v24)
+    const c0 = await ev(() => window.__G.time); await pg.waitForTimeout(1500); const c1 = await ev(() => window.__G.time);
+    beat('the game clock runs', c1 > c0 + 0.05, { c0, c1 });
+    const use = (k) => ev((k) => { const G = window.__G, it = G.zone.act8.hearths.find((h) => h.k === k); G.player.x = it.x + 1.5; G.player.z = it.z; it.use(); }, k);
+    const n0 = await ev(() => ({ learnt: [...(window.__G.hero.names?.learnt || [])] }));
+    beat('before the fires: the eighth Name is not known', !n0.learnt.includes('founder'), n0);
+    await use(1); await pg.waitForTimeout(2500);
+    beat('the first memory teaches nothing', !(await ev(() => window.__G.hero.names.learnt.includes('founder'))));
+    await use(2);
+    await pg.waitForFunction(() => window.__G.hero.names?.learnt?.includes('founder'), null, { timeout: 30000 }).catch(() => {});
+    const n1 = await ev(() => ({ flag: !!window.__G.hero.flags.mem8_2, learnt: [...window.__G.hero.names.learnt] }));
+    beat('the second memory: mem8_2 and the Name learnt', n1.flag && n1.learnt.includes('founder'), n1);
+    // the panel shows her tile, lit
+    const tile = await ev(async () => { const { emit } = await import('/src/ui/bus.js'); emit('openPanel', 'skills'); await new Promise((r) => setTimeout(r, 400)); const b = [...document.querySelectorAll('[data-a="ptab:2"], [data-a^="ptab"]')].pop(); b?.click(); await new Promise((r) => setTimeout(r, 400)); const t = document.querySelector('[data-a="nsel:founder"]'); const r = t ? { text: t.textContent, lock: t.classList.contains('lock') } : null; (await import('/src/ui/panels.js')).close(); return r; });
+    beat('her tile in the Names tab, lit', tile && /Γρηγορία|Grigoria/.test(tile.text) && !tile.lock, tile);
+    // said (in the village a Name is said; here it is written as the panel would), two goblins near, then one
+    // (sleepB: the second one lies asleep for this blow; set after the frames, as standing beside her it would wake)
+    const hit = (sleepB) => ev(async (sleepB) => {
+      const G = window.__G, C = await import('/src/game/combat.js'), a = window.__A;
+      a.hp = a.hpMax = 1e7; const before = a.hp; G.player.buffs.call = 0; if (G.player.n7) G.player.n7.call.until = -Infinity;
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      if (sleepB) window.__B.dormant = true;
+      C.damage(G.player, a, 1000, { crit: false }); window.__B.dormant = false; return Math.round(before - a.hp);
+    }, sleepB);
+    await ev(async () => { const G = window.__G, A = await import('/src/game/actors.js'), pl = G.player; G.hero.names.said = ['founder', null, null]; for (const a of G.actors) if (a.team === 'foe' && !a.prop) a.dead = true; window.__A = A.spawnMonster('goblin', pl.x + 3, pl.z); window.__B = A.spawnMonster('goblin', pl.x - 4, pl.z + 2); G.actors.push(window.__A, window.__B); window.__immortal = true; for (const a of [window.__A, window.__B]) { a.aggro = false; a.speed = 0; } });
+    await pg.waitForTimeout(600);
+    const two = await hit();
+    const asleep = await hit(true);
+    await ev(() => { window.__B.dead = true; });
+    const one = await hit();
+    const near = await ev(async () => { const A = await import('/src/game/actors.js'), pl = window.__G.player; return A.foes(pl.x, pl.z, 12).map((a) => a.kind + (a.dead ? ' dead' : '')); });
+    beat('one foe awake within 12 m: +25%; a second awake: nothing; a second asleep does not count', Math.abs(one / two - 1.25) < 0.02 && Math.abs(asleep / two - 1.25) < 0.02, { two, asleep, one, near });
+    await ev(() => { window.__G.hero.names.said = [null, null, null]; });
+    const none = await hit();
+    beat('unsaid, nothing', Math.abs(none / two - 1) < 0.02, { none, two });
+    // Deep: the last one's blows hurt her 15% less
+    const hurt = (deep) => ev(async (deep) => { const G = window.__G, C = await import('/src/game/combat.js'), pl = G.player; G.hero.names.said = ['founder', null, null]; G.hero.names.deep = deep ? ['founder'] : []; pl.hp = pl.hpMax; pl.iframes = 0; const s = G.stats.block; G.stats.block = 0; const b = pl.hp; C.damage(window.__A, pl, 500, { pure: true }); G.stats.block = s; const lost = b - pl.hp; pl.hp = pl.hpMax; return lost; }, deep);
+    const kept = await hurt(false), deep = await hurt(true);
+    beat('Deep: the last foe hurts 15% less', kept > 0 && Math.abs(deep / kept - 0.85) < 0.02, { kept, deep });
   },
   async road() {
     await open('auto=town&lvl=30&q=1');

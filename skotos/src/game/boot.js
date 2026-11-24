@@ -469,6 +469,9 @@ function tick(dt, noDraw) {
   if (G.slowT > 0) { G.slowT -= dt; gdt *= G.slow; }
   if (G.mode === 'cine') cineTick(dt);
   if (!paused) {
+    // the game's clock in seconds (the Names' windows and the Call's 20 s and 90 s read it: names7.js). It stood at 0
+    // from v23 to v24, so after one Call every Name's condition held and no second Call came (the player's pl.n7)
+    G.time += gdt;
     // (co-op: what her hero does is told to the others, the timers it sets going included: net/coop.js)
     const t0 = G.timers.length;
     if (G.mode === 'play') { MIRROR.hero = true; try { updatePlayer(party && (panelOpen() || dialogOpen()) ? 0 : gdt); } finally { MIRROR.hero = false; } }

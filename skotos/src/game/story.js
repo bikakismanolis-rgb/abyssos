@@ -3425,7 +3425,8 @@ on('zoneEnter', (id) => {
 });
 on('ember8', (it, z, n) => {
   emit('quest');
-  if (!G.hero.__real && !G.hero.flags['mem8_' + n]) { G.hero.flags['mem8_' + n] = true; later(1.2, () => tell8(['d.mem8.' + n + 'a', 'd.mem8.' + n + 'b'], 'narrator', n >= 3 ? () => emit('say', 'd.embers.3') : undefined)); }
+  // (the second memory names the girl and teaches her Name, the eighth: names7.js 'founder', learnt by mem8_2)
+  if (!G.hero.__real && !G.hero.flags['mem8_' + n]) { G.hero.flags['mem8_' + n] = true; later(1.2, () => tell8(n === 2 ? ['d.mem8.2a', 'd.mem8.2b', 'd.mem8.2c'] : ['d.mem8.' + n + 'a', 'd.mem8.' + n + 'b'], 'narrator', n >= 3 ? () => emit('say', 'd.embers.3') : n === 2 ? () => learn7() : undefined)); }
   if (n >= 3 && G.hero.quest === 49) setQuest(50);
 });
 on('bossRest', (kind, a) => {

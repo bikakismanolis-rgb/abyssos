@@ -50,6 +50,7 @@ rows and the three drafted rows are only here.
 | `name7.keyx.d` | Μετά από κάθε αποφυγή, το επόμενο χτύπημα μέσα σε 2 δευτ.: +60%. | After each dodge, your next hit within 2 s: +60%. |
 | `name7.asger.d` | Κάθε δεξιότητα που δεν είναι η προηγούμενη: +10%. Ως τρεις. | Each skill that is not the one before it: +10%. Up to three. |
 | `name7.ivar.d` | Κάθε δευτερόλεπτο που δεν κουνιέσαι: +6% ζημιά, −5% πόνος. Ως τέσσερις φορές. | Each second you do not move: +6% damage, −5% hurt. Up to four times. |
+| `name7.founder.d` | Όταν μένει ένας μόνο εχθρός ξύπνιος γύρω σου, ως 12 μ., τον χτυπάς +25%. | When only one foe is left awake around you, within 12 m, you hit it +25%. |
 
 **The Deep rules** (`name7.<id>.d2`)
 
@@ -62,6 +63,7 @@ rows and the three drafted rows are only here.
 | `name7.keyx.d2` | Αποφυγή που περνά μέσα από χτύπημα γυρίζει αμέσως. | A dodge that passes through a blow comes back at once. |
 | `name7.asger.d2` | Στις τρεις, η απλή σου επίθεση δίνει διπλό πόρο. | At three, your basic attack gives twice the resource. |
 | `name7.ivar.d2` | Στις τέσσερις, τίποτα δεν σε σπρώχνει και κανένα χτύπημα δεν κόβει ό,τι κάνεις. | At four, nothing moves you and no blow breaks what you are doing. |
+| `name7.founder.d2` | Κι ο τελευταίος σε πονάει 15% λιγότερο. | And the last one hurts you 15% less. |
 
 **The deeds, as the dark tiles say them** (`name7.<id>.how`; the three given at quest 40 have none)
 
@@ -71,6 +73,8 @@ rows and the three drafted rows are only here.
 | `name7.keyx.how` | Κρέμασε το φανάρι του στη Σκάλα της Ακτής. | Hang his lantern at the Landing. |
 | `name7.asger.how` | Βρες τον ανάμεσα στους Χαμένους, κάτω από τον πάγο. | Find him among the Lost, beneath the ice. |
 | `name7.ivar.how` | Νίκησε την ηχώ του στο Τελευταίο Λυχνάρι. | Beat his echo at the Last Lamp. |
+| `name7.founder.how` | Ξύπνα τη δεύτερη σκεπασμένη φωτιά του Ξερόκαμπου και δες τι θυμάται. | Wake the second banked fire of the Tindergrass and see what it remembers. |
+| `name7.founder.n` | Γρηγορία | Grigoria |
 
 **The Call**
 
