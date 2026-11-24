@@ -5,7 +5,7 @@ Read this first when picking the project up in a new session.
 ## Where things are
 
 - Repo `bikakismanolis-rgb/abyssos`, game in `skotos/`. **Merged into `main` on 26 October** (pull requests #2 and #1); keep working on `claude/sleepy-tesla-4030vd`, restarted from `main` after each merge, and never touch Abyssos (the repo outside `skotos/`) beyond the two Pages lines below.
-- The playable build is a claude.ai artifact: https://claude.ai/artifact/74dKQSTSnJmPAyDHBz4BRP, pinned in the owner's sidebar and shared as "anyone with the link". **Version 24 (22 November) is Acts I-VIII** (artifact version id 1795306557-0669, from `main` at 83d8fb9; see "Act VIII: where it stands" at the end). Before it: **Version 21 (4 November, evening) is version 20 plus the owner's asks: item panels in two panes, Sell many, a Buy tab, dropped items stay on the ground, the way easier to see in the Whisperwood, the Weeping Woods and the Barrow** (Open items below), built from `main` at 9ef455e (artifact version id 1793821477-fed3). Version 20 (4 November) was version 19 plus a hotfix: the three great Tears of Act III stand out from the small ones, and Continue wakes the hero in the zone and at the spot of the last save, with that visit's progress** (`src/game/wake.js`), built from `main` at 84d5d15 (artifact version id 1793768099-ec83). Version 19 (2 November, 1793601758-ad74, from this branch at 65bbb0f) was Acts I-V + the progression + co-op + cloud saves on the claude.ai account + Move heroes (a file out and in between the claude.ai and web versions; v18 1793105667-bf36 on 27 October was the cloud saves; contract 0.2.90; capabilities room with topics s, w, i, f, c at `interact`, user with the `profile` scope, `db: {}` and `downloads: true`). Version 14 (24 October, 1792826525-f04b) was Acts I-V + the progression + co-op. Update it in place (same URL), never publish a new one; a later publish without `capabilities` keeps them.
+- The playable build is a claude.ai artifact: https://claude.ai/artifact/74dKQSTSnJmPAyDHBz4BRP, pinned in the owner's sidebar and shared as "anyone with the link". **Version 25 (24 November) is Acts I-VIII with the act's not-done list built** (the eighth Name, the echoes and their legendaries, the act's blessing, the Seven Good Nights, the South Road's lane, the act's ambient, the Names' clock; artifact version 46, id 1795505195-0fb0, from `main` at 6a9a25c; save format 4, co-op protocol 8). Version 24 (22 November) was Acts I-VIII (artifact version id 1795306557-0669, from `main` at 83d8fb9; see "Act VIII: where it stands" at the end). Before it: **Version 21 (4 November, evening) is version 20 plus the owner's asks: item panels in two panes, Sell many, a Buy tab, dropped items stay on the ground, the way easier to see in the Whisperwood, the Weeping Woods and the Barrow** (Open items below), built from `main` at 9ef455e (artifact version id 1793821477-fed3). Version 20 (4 November) was version 19 plus a hotfix: the three great Tears of Act III stand out from the small ones, and Continue wakes the hero in the zone and at the spot of the last save, with that visit's progress** (`src/game/wake.js`), built from `main` at 84d5d15 (artifact version id 1793768099-ec83). Version 19 (2 November, 1793601758-ad74, from this branch at 65bbb0f) was Acts I-V + the progression + co-op + cloud saves on the claude.ai account + Move heroes (a file out and in between the claude.ai and web versions; v18 1793105667-bf36 on 27 October was the cloud saves; contract 0.2.90; capabilities room with topics s, w, i, f, c at `interact`, user with the `profile` scope, `db: {}` and `downloads: true`). Version 14 (24 October, 1792826525-f04b) was Acts I-V + the progression + co-op. Update it in place (same URL), never publish a new one; a later publish without `capabilities` keeps them.
 - The owner writes in Greek; answer in Greek. The game text is Greek and English (`src/i18n/text.js`).
 - Act V: its plan is `docs/act5-design.md`, its contract `docs/act5-contract.md` (the owner's decisions, the stages, file ownership, every shared name), the briefs and asset report in `docs/act5-briefs/`, every stage's and review's reports in `docs/act5-briefs/reports/`. The progression: `docs/progression/` (README, port-act5.md). Co-op: `docs/coop/` (README, release.md, review-fixes.md).
 - Design and contracts of earlier acts: `docs/act4-design.md` (the Act IV plan), `docs/act4-contract.md`, `docs/act3-contract.md`. README.md describes every act (in Greek). CREDITS.txt, `src/ui/credits.js` and `src/assets/*/CREDITS.txt` list every third-party asset.
@@ -104,6 +104,7 @@ the discard.
 
 | line | branch | state |
 |---|---|---|
+| Live v25 (Act VIII whole) | `main` 6a9a25c | published 24 November (artifact version 46, id 1795505195-0fb0, the Pages build from `main`); v24 (Act VIII) 22 November |
 | Live v23 (Act VII) | `main` 0cbc634 | published 18 November (artifact version 1794986367-9af6, the Pages build from `main`); v22 (Act VI) 17 November |
 | Live v21 | `main` 9ef455e (the owner's asks; merged into this branch on 4 November) | published 4 November evening (two-pane item panels, Sell many, Buy, drops stay, the way reads); v20 the same morning (`main` 84d5d15: great Tears, Continue in place); v19 on 2 November (Move heroes, this branch); v18 on 27 October (cloud saves; v15-v17 the same day); v14 on 24 October |
 | v13 (Acts I-IV + progression) | `claude/skotos-progression` ff37476 | live 23-24 October |
@@ -237,7 +238,15 @@ a phone-shaped browser on SwiftShader (coast, Farthest Light, Hanging Lake: 6-20
 freezes: read that db document again after he next opens the game (`prev.gl` names the last shader linked or used, and
 `diag.phase` now says `warm i/n`, how far the warming got).
 
-**24 November: the act's not-done list, built (not published).** The owner asked to go on («πάμε στο 2»: the report's
+**24 November: the act's not-done list, built and published as v25** (the owner's word: «ναι ανέβασε το παιχνίδι»).
+`main` fast-forwarded to 6a9a25c (the release commit: `SAVE_FMT` 4, co-op `VER` 8) and the artifact updated in place
+(version 46, id 1795505195-0fb0: 18 changed files sent, 18 removed, the capabilities kept). **The publisher now wraps
+the page in its own skeleton** (`<!doctype html><html><head><meta charset><meta viewport ... viewport-fit=cover><style>`
+then the build's page in `<body>`): v24 was served without it, so it had no viewport at all (`make-artifact.mjs` strips
+the build's charset and viewport, expecting the host's). The game's CSS overrides the skeleton's body rules; the wrapped
+page was checked under the strict CSP on a desktop and a touch phone (title, Whitecliff, the Tindergrass, the Vigil
+House) before and after. Heroes are written as format 4: v24 refuses them, it does not damage them.
+The rest of this paragraph is as it was written before publishing. The owner asked to go on («πάμε στο 2»: the report's
 not-done list). Two sessions worked at once: this branch's (the commits) and a second that sent its part as a patch and
 reviewed. On `claude/sleepy-tesla-4030vd`, not on `main` and not in the artifact: the eighth Name «Γρηγορία» (2c6b408),
 the Names' clock (`G.time` stood at 0 from v23: after one Call every Name's condition held; now it runs), Aithon's and
@@ -246,7 +255,7 @@ none) and the Seven Good Nights (7743219), the South Road's lane, signpost and l
 ambient (bc67c69, the second session's). Every detail, the tests and what was not checked: the last section of
 `docs/act8-briefs/reports/stageB-E.md`. New tests: `act8.mjs founder | echo8 | gn8`.
 
-**Before publishing these:** the save format and co-op protocol: a v24 page refuses a hero holding Act VIII's blessing
+**(Done at v25:)** the save format and co-op protocol: a v24 page refuses a hero holding Act VIII's blessing
 (save.js `newer`), so bump `SAVE_FMT` to 4 in the release commit as before; co-op can stay protocol 7 (the eighth Name's
 byte reads as none on a v24 page) or go to 8 to keep the versions apart, the lead's call. Then both builds, the strict
 CSP (desktop and touch), the regression set, and the owner's word. Next after that, in order: (1) the owner plays Act
